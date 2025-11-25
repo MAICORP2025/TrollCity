@@ -22,13 +22,13 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
+    "@square/web-sdk": "^1.6.1",
     "tailwind-merge": "^3.0.2",
     "zustand": "^5.0.3",
     "express": "^4.21.2",
     "sonner": "^1.7.0",
     "agora-token": "^2.0.4",
-    "@ffmpeg/ffmpeg": "^0.12.6",
-    "@square/web-sdk": "^1.6.1"
+    "@ffmpeg/ffmpeg": "^0.12.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",
