@@ -17,6 +17,9 @@ export const API_ENDPOINTS = {
   stream: {
     create: '/stream/create',      // 👈 You’ll use this soon
   },
+  rtmp: {
+    start: '/rtmp-relay',
+  },
   admin: {
     trollDrop: '/admin/troll-drop',
   },
@@ -120,6 +123,10 @@ export async function createMuxStream() {
   return await response.json()
 }
 
-const api = { get, post, put, patch, delete: del, request, createMuxStream };
+export async function startRtmpRelay(roomName: string, streamKey: string) {
+  return await post(API_ENDPOINTS.rtmp.start, { roomName, streamKey })
+}
+
+const api = { get, post, put, patch, delete: del, request, createMuxStream, startRtmpRelay };
 
 export default api;

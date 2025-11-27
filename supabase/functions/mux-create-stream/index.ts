@@ -23,11 +23,25 @@ serve(async (req) => {
         playback_policy: ["public"],
         new_asset_settings: { playback_policy: ["public"] },
         low_latency: true,
+        advanced_audio: {
+          codec: "opus",
+          bitrate: 64000,
+        },
+        advanced_video: {
+          codec: "h264",
+          bitrate: 2500000,
+        },
       }),
     })
 
     const json = await response.json()
-    return new Response(JSON.stringify(json), {
+    const data = json.data
+    const result = {
+      stream_key: data.stream_key,
+      playback_ids: data.playback_ids.map((p: any) => p.id),
+      id: data.id,
+    }
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (e) {
