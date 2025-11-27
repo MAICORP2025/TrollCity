@@ -277,6 +277,12 @@ function App() {
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/terms" element={<TermsAgreement />} />
 
+                {/* Applications */}
+                <Route path="/apply" element={<Application />} />
+                <Route path="/apply/officer" element={<OfficerApplication />} />
+                <Route path="/apply/troller" element={<TrollerApplication />} />
+                <Route path="/apply/family" element={<FamilyApplication />} />
+
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
