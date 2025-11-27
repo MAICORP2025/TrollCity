@@ -1,148 +1,22 @@
-import { useEffect } from 'react'
-import api from './lib/api' // Make sure this import exists
-
-useEffect(() => {
-  const initializeAuth = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const currentUser = session?.user ?? null
-
-      useAuthStore.setState({ user: currentUser })
-
-      if (session?.user) {
-        const adminCandidate = isAdminEmail(session.user.email)
-
-        // Try admin fixer (doesn’t block loading)
-        if (adminCandidate) {
-          const cached = localStorage.getItem('admin-profile-cache')
-          if (cached) {
-            try {
-              useAuthStore.setState({ profile: JSON.parse(cached), isAdmin: true })
-            } catch {}
-          }
-
-          try {
-            const result = await api.post('/auth/fix-admin-role')
-            if (result?.success && result.profile) {
-              useAuthStore.setState({ profile: result.profile, isAdmin: true })
-              localStorage.setItem('admin-profile-cache', JSON.stringify(result.profile))
-              return // Initialization complete
-            }
-          } catch (err) {
-            console.warn('Admin fixer failed:', err)
-          }
-        }
-
-        // Normal profile fetch
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle()
-
-        if (profileData) {
-          useAuthStore.setState({ profile: profileData })
-          if (profileData.role === 'admin') {
-            useAuthStore.setState({ isAdmin: true })
-          }
-        } else {
-          console.warn('No profile row found, forcing logout')
-          await supabase.auth.signOut()
-          useAuthStore.setState({ user: null, profile: null })
-        }
-      } else {
-        useAuthStore.setState({ profile: null })
-      }
-    } catch (err) {
-      console.error('Auth Init Error:', err)
-    } finally {
-      useAuthStore.setState({ isLoading: false }) // Always done
-    }
-  }
-
-  initializeAuth()
-}, [])
-import { useEffect } from 'react'
-import api from './lib/api' // Make sure this import exists
-
-useEffect(() => {
-  const initializeAuth = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const currentUser = session?.user ?? null
-
-      useAuthStore.setState({ user: currentUser })
-
-      if (session?.user) {
-        const adminCandidate = isAdminEmail(session.user.email)
-
-        // Try admin fixer (doesn’t block loading)
-        if (adminCandidate) {
-          const cached = localStorage.getItem('admin-profile-cache')
-          if (cached) {
-            try {
-              useAuthStore.setState({ profile: JSON.parse(cached), isAdmin: true })
-            } catch {}
-          }
-
-          try {
-            const result = await api.post('/auth/fix-admin-role')
-            if (result?.success && result.profile) {
-              useAuthStore.setState({ profile: result.profile, isAdmin: true })
-              localStorage.setItem('admin-profile-cache', JSON.stringify(result.profile))
-              return // Initialization complete
-            }
-          } catch (err) {
-            console.warn('Admin fixer failed:', err)
-          }
-        }
-
-        // Normal profile fetch
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle()
-
-        if (profileData) {
-          useAuthStore.setState({ profile: profileData })
-          if (profileData.role === 'admin') {
-            useAuthStore.setState({ isAdmin: true })
-          }
-        } else {
-          console.warn('No profile row found, forcing logout')
-          await supabase.auth.signOut()
-          useAuthStore.setState({ user: null, profile: null })
-        }
-      } else {
-        useAuthStore.setState({ profile: null })
-      }
-    } catch (err) {
-      console.error('Auth Init Error:', err)
-    } finally {
-      useAuthStore.setState({ isLoading: false }) // Always done
-    }
-  }
-
-  initializeAuth()
-}, [])
 // src/App.tsx
-import React, { useState, useEffect, Suspense, lazy } from 'react'
-import { useLocation, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import React, { useEffect, Suspense, lazy } from 'react'
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuthStore } from './lib/store'
 import { supabase, isAdminEmail } from './lib/supabase'
 import api from './lib/api'
 import { Toaster } from 'sonner'
 
-// COMPONENTS
+// UI
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
+
+// Static pages
 import Home from './pages/Home'
 import Auth from './pages/Auth'
 import AuthCallback from './pages/AuthCallback'
 import TermsAgreement from './pages/TermsAgreement'
 
-// LAZY IMPORTS
+// Lazy-loaded pages
 const GoLive = lazy(() => import('./pages/GoLive'))
 const StreamRoom = lazy(() => import('./pages/StreamRoom'))
 const StreamSummary = lazy(() => import('./pages/StreamSummary'))
@@ -154,7 +28,9 @@ const Application = lazy(() => import('./pages/Application'))
 const TrollOfficerLounge = lazy(() => import('./pages/TrollOfficerLounge'))
 const TrollFamily = lazy(() => import('./pages/TrollFamily'))
 const TrollFamilyCity = lazy(() => import('./pages/TrollFamilyCity'))
-const Profile = lazy(() => import('./pages/Profile'))
+const FamilyProfilePage = lazy(() => import('./pages/FamilyProfilePage'))
+const FamilyWarsPage = lazy(() => import('./pages/FamilyWarsPage'))
+const FamilyChatPage = lazy(() => import('./pages/FamilyChatPage'))
 const Leaderboard = lazy(() => import('./pages/Leaderboard'))
 const EarningsPayout = lazy(() => import('./pages/EarningsPayout'))
 const TransactionHistory = lazy(() => import('./pages/TransactionHistory'))
@@ -165,55 +41,54 @@ const TrollerApplication = lazy(() => import('./pages/TrollerApplication'))
 const CoinStore = lazy(() => import('./pages/CoinStore'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const Support = lazy(() => import('./pages/Support'))
+const Profile = lazy(() => import('./pages/Profile'))
 
 function App() {
-  const { user, profile, isLoading, setAuth, setProfile, setLoading, setIsAdmin } = useAuthStore()
+  const { user, profile, isLoading, setAuth, setProfile, setIsAdmin, setLoading } = useAuthStore()
   const location = useLocation()
 
-  // 🔹 AUTH & PROFILE INITIALIZATION — REQUIRED!
+  // 🔹 One clean, correct authentication initializer
   useEffect(() => {
     const initSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         setAuth(session?.user || null, session)
 
-        if (session?.user) {
-          const isAdmin = isAdminEmail(session.user.email)
+        if (!session?.user) {
+          setProfile(null)
+          return
+        }
 
-          if (isAdmin) {
-            const cached = localStorage.getItem('admin-profile-cache')
-            if (cached) {
-              setProfile(JSON.parse(cached))
-              setIsAdmin(true)
-            }
+        // Admin handling (faster load from cache)
+        const isAdmin = isAdminEmail(session.user.email)
+        if (isAdmin) {
+          setIsAdmin(true)
 
+          const cached = localStorage.getItem('admin-profile-cache')
+          if (cached) {
             try {
-              const result = await api.post('/auth/fix-admin-role')
-              if (result?.success && result.profile) {
-                setProfile(result.profile)
-                setIsAdmin(true)
-                localStorage.setItem('admin-profile-cache', JSON.stringify(result.profile))
-                return
-              }
+              setProfile(JSON.parse(cached))
             } catch {}
           }
 
-          const { data: profileData } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .maybeSingle()
-
-          if (profileData) {
-            setProfile(profileData)
-            if (profileData.role === 'admin') setIsAdmin(true)
-          } else {
-            await supabase.auth.signOut()
-            setProfile(null)
-          }
-        } else {
-          setProfile(null)
+          try {
+            const result = await api.post('/auth/fix-admin-role')
+            if (result?.success && result.profile) {
+              setProfile(result.profile)
+              localStorage.setItem('admin-profile-cache', JSON.stringify(result.profile))
+              return
+            }
+          } catch {}
         }
+
+        // Normal user profile load
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        setProfile(profileData || null)
       } catch (err) {
         console.error('Auth Init Error:', err)
       } finally {
@@ -223,20 +98,23 @@ function App() {
     initSession()
   }, [])
 
-  // 🔹 LOADING SCREEN
+  // 🔹 Standard loading screen
   const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
       <div className="animate-pulse px-6 py-3 rounded bg-[#121212] border border-[#2C2C2C]">Loading…</div>
     </div>
   )
 
-  // 🔹 AUTH GUARD
+  // 🔹 Route guard
   const RequireAuth = () => {
     if (isLoading) return <LoadingScreen />
+
     if (!user) return <Navigate to="/auth" replace />
 
-    const needsTerms = profile && profile.terms_accepted === false && profile.role !== 'admin'
-    if (needsTerms && location.pathname !== '/terms') return <Navigate to="/terms" replace />
+    if (profile && profile.terms_accepted === false &&
+        profile.role !== 'admin' && location.pathname !== '/terms') {
+      return <Navigate to="/terms" replace />
+    }
 
     return <Outlet />
   }
@@ -251,36 +129,40 @@ function App() {
           <main className="flex-1 overflow-y-auto bg-[#121212]">
             <Suspense fallback={<LoadingScreen />}>
               <Routes>
-
-                {/* 🚪 Auth Routes */}
+                
+                {/* 🚪 Non-protected routes */}
                 <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/terms" element={<TermsAgreement />} />
 
-                {/* 🔒 Protected Routes */}
+                {/* 🔐 Auth-required pages */}
                 <Route element={<RequireAuth />}>
-
-                  {/* 🌍 Main */}
                   <Route path="/" element={<Home />} />
                   <Route path="/messages" element={<Messages />} />
+                  <Route path="/notifications" element={<Notifications />} />
                   <Route path="/following" element={<Following />} />
+                  <Route path="/trollifications" element={<Trollifications />} />
+                  <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/profile/:username" element={<Profile />} />
 
-                  {/* 💰 Economy */}
-                  <Route path="/store" element={<CoinStore />} />
-                  <Route path="/transactions" element={<TransactionHistory />} />
-                  <Route path="/earnings" element={<EarningsPayout />} />
-
-                  {/* 📺 Streaming */}
+                  {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLive />} />
                   <Route path="/stream/:streamId" element={<StreamRoom />} />
                   <Route path="/stream/:id/summary" element={<StreamSummary />} />
 
-                  {/* 🎭 Community */}
-                  <Route path="/trollifications" element={<Trollifications />} />
+                  {/* 💰 Coins & Earnings */}
+                  <Route path="/store" element={<CoinStore />} />
+                  <Route path="/transactions" element={<TransactionHistory />} />
+                  <Route path="/earnings" element={<EarningsPayout />} />
                   <Route path="/wheel" element={<TrollWheel />} />
-                  <Route path="/leaderboard" element={<Leaderboard />} />
+
+                  {/* 👨‍👩‍👧 Family */}
+                  <Route path="/family" element={<TrollFamily />} />
+                  <Route path="/family/city" element={<TrollFamilyCity />} />
+                  <Route path="/family/profile/:id" element={<FamilyProfilePage />} />
+                  <Route path="/family/chat" element={<FamilyChatPage />} />
+                  <Route path="/family/wars" element={<FamilyWarsPage />} />
 
                   {/* 📝 Applications */}
                   <Route path="/apply" element={<Application />} />
@@ -288,28 +170,28 @@ function App() {
                   <Route path="/apply/officer" element={<OfficerApplication />} />
                   <Route path="/apply/troller" element={<TrollerApplication />} />
 
-                  {/* 🛡 Officer */}
+                  {/* 👮 Officer */}
                   <Route
                     path="/officer/lounge"
-                    element={profile?.role === 'admin' || profile?.role === 'troll_officer'
-                      ? <TrollOfficerLounge />
-                      : <Navigate to="/" replace />}
+                    element={
+                      profile?.role === 'admin' || profile?.role === 'troll_officer'
+                        ? <TrollOfficerLounge />
+                        : <Navigate to="/" replace />
+                    }
                   />
 
-                  {/* 👑 Family */}
-                  <Route path="/family" element={<TrollFamily />} />
-                  <Route path="/family/city" element={<TrollFamilyCity />} />
-
-                  {/* 👨‍💻 Admin */}
+                  {/* 👑 Admin */}
                   <Route
                     path="/admin"
-                    element={profile?.role === 'admin'
-                      ? <AdminDashboard />
-                      : <Navigate to="/" replace />}
+                    element={
+                      profile?.role === 'admin'
+                        ? <AdminDashboard />
+                        : <Navigate to="/" replace />
+                    }
                   />
                 </Route>
 
-                {/* 🌫 Catch-all */}
+                {/* 🧹 Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>
@@ -317,7 +199,7 @@ function App() {
         </div>
       </div>
 
-      {/* 🔔 Toast system */}
+      {/* Toast system */}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -325,7 +207,7 @@ function App() {
             background: '#2e1065',
             color: '#fff',
             border: '1px solid #22c55e',
-          }
+          },
         }}
       />
     </div>
