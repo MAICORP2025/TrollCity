@@ -68,17 +68,14 @@ const GoLive: React.FC = () => {
       // Build unique room name
       const roomName = `${profile.username}-${Date.now()}`.toLowerCase();
 
-      // CALL EDGE FUNCTION USING API SYSTEM
-      const result = await api.post(API_ENDPOINTS.livekit.token, {
-        channelName: roomName,
-        uid: String(profile.id),
+      // CALL EDGE FUNCTION USING SUPABASE
+      const { data, error } = await supabase.functions.invoke('livekit', {
+        body: { identity: String(profile.id), room: roomName },
       });
 
-      if (!result?.success || !result?.token) {
-        throw new Error(result?.error || "Failed to obtain LiveKit token");
-      }
+      if (error) throw error;
 
-      const token = result.token;
+      const token = data.token;
 
       // Create LiveKit room
       room.current = new Room();

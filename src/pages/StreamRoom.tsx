@@ -821,13 +821,12 @@ const StreamRoom = () => {
       client.current = new Room()
 
       // Get token
-      const j = await api.post(API_ENDPOINTS.livekit.token, {
-        channelName: stream.livekit_room,
-        uid: user?.id,
-        role: 'subscriber'
-      })
-      if (!j?.success || !j?.token) throw new Error(j?.error || 'Failed to get token')
-      const token = j.token as string
+      const { data, error } = await supabase.functions.invoke('livekit', {
+        body: { identity: user?.id, room: stream.livekit_room },
+      });
+
+      if (error) throw error;
+      const token = data.token;
 
       // Connect to room
       await client.current.connect(LIVEKIT_URL, token)

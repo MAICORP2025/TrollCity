@@ -604,14 +604,16 @@ export default function AdminDashboard() {
 
   const testLiveKitStreaming = async () => {
     try {
-      const body = { channelName: 'admin-test', uid: profile?.id || 'admin' }
-      const json = await (await import('../lib/api')).default.post((await import('../lib/api')).API_ENDPOINTS.livekit.token, body)
-      if (json?.success && json?.token) {
+      const { data, error } = await supabase.functions.invoke('livekit', {
+        body: { identity: profile?.id || 'admin', room: 'admin-test' },
+      });
+
+      if (error) {
+        setAgoraStatus({ ok: false, error: error.message || 'Token generation failed' })
+        toast.error('LiveKit test failed')
+      } else {
         setAgoraStatus({ ok: true })
         toast.success('LiveKit token generated')
-      } else {
-        setAgoraStatus({ ok: false, error: json?.error || 'Token generation failed', details: json?.details })
-        toast.error('LiveKit test failed')
       }
     } catch (e: any) {
       setAgoraStatus({ ok: false, error: e?.message || 'LiveKit request failed' })
