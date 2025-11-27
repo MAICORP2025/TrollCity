@@ -1,22 +1,18 @@
 // src/App.tsx
-import React, { useState, useEffect, Suspense, lazy } from 'react'
+import React, { useState, Suspense, lazy } from 'react'
 import { useLocation, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from './lib/store'
 import { supabase, isAdminEmail } from './lib/supabase'
-import { Toaster, toast } from 'sonner'
+import { Toaster } from 'sonner'
 
-// COMPONENTS
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
-import ProfileSetupModal from './components/ProfileSetupModal'
-
-// STATIC
 import Home from './pages/Home'
 import Auth from './pages/Auth'
 import AuthCallback from './pages/AuthCallback'
 import TermsAgreement from './pages/TermsAgreement'
 
-// LAZY LOADED
+// Lazy pages
 const GoLive = lazy(() => import('./pages/GoLive'))
 const StreamRoom = lazy(() => import('./pages/StreamRoom'))
 const StreamSummary = lazy(() => import('./pages/StreamSummary'))
@@ -37,8 +33,6 @@ const Cashouts = lazy(() => import('./pages/Cashouts'))
 const EarningsPayout = lazy(() => import('./pages/EarningsPayout'))
 const Support = lazy(() => import('./pages/Support'))
 const AccountWallet = lazy(() => import('./pages/AccountWallet'))
-const AccountPaymentsSuccess = lazy(() => import('./pages/AccountPaymentsSuccess'))
-const AccountPaymentLinkedSuccess = lazy(() => import('./pages/AccountPaymentLinkedSuccess'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const AdminRFC = lazy(() => import('./components/AdminRFC'))
 const Profile = lazy(() => import('./pages/Profile'))
@@ -52,11 +46,14 @@ const CoinStore = lazy(() => import('./pages/CoinStore'))
 const FamilyCityMap = lazy(() => import('./FamilyCityMap'))
 
 function App() {
-  const { user, profile, setAuth, setProfile, setLoading, setIsAdmin, isLoading } = useAuthStore()
+  const { user, profile, isLoading } = useAuthStore()
   const location = useLocation()
-  const [profileModalOpen, setProfileModalOpen] = useState(false)
-  const [profileModalLoading, setProfileModalLoading] = useState(false)
-  const [installPrompt, setInstallPrompt] = useState<any>(null)
+
+  const LoadingScreen = () => (
+    <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
+      <div className="animate-pulse px-6 py-3 rounded bg-[#121212] border border-[#2C2C2C]">Loading…</div>
+    </div>
+  )
 
   const RequireAuth = () => {
     if (isLoading) return <LoadingScreen />
@@ -66,12 +63,6 @@ function App() {
     }
     return <Outlet />
   }
-
-  const LoadingScreen = () => (
-    <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
-      <div className="animate-pulse px-6 py-3 rounded bg-[#121212] border border-[#2C2C2C]">Loading…</div>
-    </div>
-  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
@@ -83,22 +74,28 @@ function App() {
           <main className="flex-1 overflow-y-auto bg-[#121212]">
             <Suspense fallback={<LoadingScreen />}>
               <Routes>
-                <Route element={<RequireAuth />}>
-                  <Route path="/" element={<Home />} />
+                {/* AUTH */}
+                <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/terms" element={<TermsAgreement />} />
 
-                  {/* CORE PAGES */}
+                {/* PROTECTED ROUTES */}
+                <Route element={<RequireAuth />}>
+                  
+                  {/* CORE */}
+                  <Route path="/" element={<Home />} />
                   <Route path="/messages" element={<Messages />} />
                   <Route path="/following" element={<Following />} />
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/support" element={<Support />} />
 
-                  {/* STORE & ECONOMY */}
+                  {/* STORE */}
                   <Route path="/store" element={<CoinStore />} />
                   <Route path="/transactions" element={<TransactionHistory />} />
                   <Route path="/earnings" element={<EarningsPayout />} />
 
-                  {/* LIVE STREAMS */}
+                  {/* LIVE STREAM */}
                   <Route path="/go-live" element={<GoLive />} />
                   <Route path="/stream/:streamId" element={<StreamRoom />} />
                   <Route path="/stream/:id/summary" element={<StreamSummary />} />
@@ -119,7 +116,7 @@ function App() {
                   {/* PROFILE */}
                   <Route path="/profile/:username" element={<Profile />} />
 
-                  {/* TROLL WHEEL */}
+                  {/* WHEEL */}
                   <Route path="/wheel" element={<TrollWheel />} />
 
                   {/* SETTINGS */}
@@ -134,26 +131,17 @@ function App() {
                   />
 
                   {/* ADMIN */}
-                 <Route element={<RequireAuth />}>
-  <Route
-    path="/admin"
-    element={
-      profile?.role === 'admin'
-        ? (
-            <Suspense fallback={<LoadingScreen />}>
-              <AdminDashboard />
-            </Suspense>
-          )
-        : <Navigate to="/" replace />
-    }
-  />
-</Route>
+                  <Route
+                    path="/admin"
+                    element={
+                      profile?.role === 'admin'
+                        ? <AdminDashboard />
+                        : <Navigate to="/" replace />
+                    }
+                  />
 
-
-                {/* AUTH & TERMS */}
-                <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
-                <Route path="/auth/callback" element={<AuthCallback />} />
-                <Route path="/terms" element={<TermsAgreement />} />
+                  <Route path="/changelog" element={<Changelog />} />
+                </Route>
 
                 {/* CATCH-ALL */}
                 <Route path="*" element={<Navigate to="/" replace />} />
