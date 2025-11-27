@@ -1,5 +1,36 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { RtcTokenBuilder, RtcRole } from "https://esm.sh/agora-token@2.0.4";
+
+// Simple Agora token generation for Deno
+async function generateAgoraToken(appId: string, appCertificate: string, channelName: string, uid: number, role: string, expireTime: number) {
+  const version = 6;
+  const roleValue = role === 'publisher' ? 1 : 2; // 1 for publisher, 2 for subscriber
+
+  // Create the signature content
+  const timestamp = Math.floor(Date.now() / 1000);
+  const randomInt = Math.floor(Math.random() * 0xFFFFFFFF);
+
+  const content = `${appId}${channelName}${uid}${roleValue}${timestamp}${expireTime}${randomInt}`;
+
+  // Generate HMAC-SHA256 signature using Web Crypto API
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(appCertificate),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(content));
+  const signatureHex = Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  // Build the token
+  const token = `006${appId}${timestamp.toString(16).padStart(8, '0')}${randomInt.toString(16).padStart(8, '0')}${expireTime.toString(16).padStart(8, '0')}${signatureHex}`;
+
+  return token;
+}
 
 Deno.serve(async (req) => {
   const corsHeaders = {
@@ -40,21 +71,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Convert role string to RtcRole enum
-    const rtcRole = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER;
-
     // Token valid for 24 hours
-    const expirationTimeInSeconds = Math.floor(Date.now() / 1000) + 86400;
-    const currentTimestamp = Math.floor(Date.now() / 1000);
-    const privilegeExpiredTs = currentTimestamp + 86400;
+    const expireTime = Math.floor(Date.now() / 1000) + 86400;
 
-    const token = RtcTokenBuilder.buildTokenWithUid(
+    const token = await generateAgoraToken(
       appId,
       appCertificate,
       channelName,
       parseInt(uid),
-      rtcRole,
-      privilegeExpiredTs
+      role,
+      expireTime
     );
 
     return new Response(JSON.stringify({
@@ -62,7 +88,7 @@ Deno.serve(async (req) => {
       appId,
       channelName,
       uid,
-      expiresAt: new Date(expirationTimeInSeconds * 1000).toISOString()
+      expiresAt: new Date(expireTime * 1000).toISOString()
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
