@@ -90,7 +90,7 @@ const GoLive: React.FC = () => {
       await room.current.localParticipant.publishTrack(localAudioTrack);
 
       // Save stream session in Supabase
-      const { data: streamRow, error } = await supabase
+      const { data: streamRow, error: insertError } = await supabase
         .from("streams")
         .insert({
           broadcaster_id: profile.id,
@@ -104,7 +104,7 @@ const GoLive: React.FC = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
       setIsLive(true);
       toast.success("🎉 You are LIVE!");
