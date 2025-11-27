@@ -1,8 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import AgoraRTC, {
-  ICameraVideoTrack,
-  IMicrophoneAudioTrack,
-} from "agora-rtc-sdk-ng";
+import { Room, createLocalVideoTrack, createLocalAudioTrack } from "livekit-client";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -10,10 +7,10 @@ import { supabase } from "../lib/supabase";
 import api, { API_ENDPOINTS } from "../lib/api";
 import ClickableUsername from "../components/ClickableUsername";
 
-const APP_ID = import.meta.env.VITE_AGORA_APP_ID;
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL;
 const EDGE_FUNCTION_URL = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
 
-console.log("🟢 Agora APP_ID:", APP_ID);
+console.log("🟢 LiveKit URL:", LIVEKIT_URL);
 console.log("🟢 Edge Function URL:", EDGE_FUNCTION_URL);
 
 const GoLive: React.FC = () => {
@@ -29,10 +26,8 @@ const GoLive: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  console.log("Agora App ID:", import.meta.env.VITE_AGORA_APP_ID);
-  const client = useRef(AgoraRTC.createClient({ mode: "live", codec: "vp8" }));
-  const localVideoTrack = useRef<ICameraVideoTrack | null>(null);
-  const localAudioTrack = useRef<IMicrophoneAudioTrack | null>(null);
+  console.log("LiveKit URL:", import.meta.env.VITE_LIVEKIT_URL);
+  const room = useRef<Room | null>(null);
 
   const navigate = useNavigate();
 
@@ -40,18 +35,17 @@ const GoLive: React.FC = () => {
     if (!user) return;
     startPreview();
     return () => {
-      localVideoTrack.current?.stop();
-      localVideoTrack.current?.close();
-      localAudioTrack.current?.close();
+      if (room.current) {
+        room.current.disconnect();
+      }
     };
   }, [user]);
 
   const startPreview = async () => {
     try {
-      localVideoTrack.current = await AgoraRTC.createCameraVideoTrack();
-      localAudioTrack.current = await AgoraRTC.createMicrophoneAudioTrack();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       if (videoRef.current) {
-        localVideoTrack.current.play(videoRef.current, { fit: "contain" });
+        videoRef.current.srcObject = stream;
       }
     } catch {
       toast.error("Camera/Mic blocked.");
@@ -59,8 +53,8 @@ const GoLive: React.FC = () => {
   };
 
   const handleGoLive = async () => {
-    console.log("Agora App ID:", import.meta.env.VITE_AGORA_APP_ID);
-    if (!APP_ID) return toast.error("Missing Agora App ID.");
+    console.log("LiveKit URL:", import.meta.env.VITE_LIVEKIT_URL);
+    if (!LIVEKIT_URL) return toast.error("Missing LiveKit URL.");
     if (!title.trim()) return toast.error("Enter a stream title.");
     if (!profile?.id) return toast.error("Profile not loaded.");
 
@@ -71,27 +65,32 @@ const GoLive: React.FC = () => {
       const jwt = sessionData?.session?.access_token;
       if (!jwt) throw new Error("User session not found.");
 
-      // Build unique channel name
-      const channelName = `${profile.username}-${Date.now()}`.toLowerCase();
+      // Build unique room name
+      const roomName = `${profile.username}-${Date.now()}`.toLowerCase();
 
       // CALL EDGE FUNCTION USING API SYSTEM
       const result = await api.post(API_ENDPOINTS.agora.token, {
-        channelName,
+        channelName: roomName,
         uid: String(profile.id),
-        role: "publisher",
       });
 
       if (!result?.success || !result?.token) {
-        throw new Error(result?.error || "Failed to obtain Agora token");
+        throw new Error(result?.error || "Failed to obtain LiveKit token");
       }
 
       const token = result.token;
-      client.current.setClientRole("host");
-      await client.current.join(APP_ID, channelName, token, String(profile.id));
-      await client.current.publish([
-        localVideoTrack.current!,
-        localAudioTrack.current!,
-      ]);
+
+      // Create LiveKit room
+      room.current = new Room();
+      await room.current.connect(LIVEKIT_URL, token);
+
+      // Get local tracks
+      const localVideoTrack = await createLocalVideoTrack();
+      const localAudioTrack = await createLocalAudioTrack();
+
+      // Publish tracks
+      await room.current.localParticipant.publishTrack(localVideoTrack);
+      await room.current.localParticipant.publishTrack(localAudioTrack);
 
       // Save stream session in Supabase
       const { data: streamRow, error } = await supabase
@@ -102,8 +101,8 @@ const GoLive: React.FC = () => {
           category,
           multi_beam: multiBeam,
           status: "live",
-          agora_channel: channelName,
-          agora_token: token,
+          livekit_room: roomName,
+          livekit_token: token,
         })
         .select()
         .single();

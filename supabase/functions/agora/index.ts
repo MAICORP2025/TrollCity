@@ -1,35 +1,45 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-// Simple Agora token generation for Deno
-async function generateAgoraToken(appId: string, appCertificate: string, channelName: string, uid: number, role: string, expireTime: number) {
-  const version = 6;
-  const roleValue = role === 'publisher' ? 1 : 2; // 1 for publisher, 2 for subscriber
+// Simple LiveKit token generation for Deno
+async function generateLiveKitToken(apiKey: string, apiSecret: string, roomName: string, identity: string) {
+  // Simple JWT generation for LiveKit
+  const header = {
+    alg: 'HS256',
+    typ: 'JWT'
+  };
 
-  // Create the signature content
-  const timestamp = Math.floor(Date.now() / 1000);
-  const randomInt = Math.floor(Math.random() * 0xFFFFFFFF);
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: apiKey,
+    exp: now + 3600, // 1 hour
+    nbf: now,
+    sub: identity,
+    name: identity,
+    video: {
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true
+    }
+  };
 
-  const content = `${appId}${channelName}${uid}${roleValue}${timestamp}${expireTime}${randomInt}`;
-
-  // Generate HMAC-SHA256 signature using Web Crypto API
   const encoder = new TextEncoder();
+  const headerB64 = btoa(JSON.stringify(header));
+  const payloadB64 = btoa(JSON.stringify(payload));
+  const message = `${headerB64}.${payloadB64}`;
+
   const key = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(appCertificate),
+    encoder.encode(apiSecret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
   );
 
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(content));
-  const signatureHex = Array.from(new Uint8Array(signature))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
 
-  // Build the token
-  const token = `006${appId}${timestamp.toString(16).padStart(8, '0')}${randomInt.toString(16).padStart(8, '0')}${expireTime.toString(16).padStart(8, '0')}${signatureHex}`;
-
-  return token;
+  return `${headerB64}.${payloadB64}.${signatureB64}`;
 }
 
 Deno.serve(async (req) => {
@@ -61,34 +71,27 @@ Deno.serve(async (req) => {
       });
     }
 
-    const APP_ID = Deno.env.get('AGORA_APP_ID')!;
-    const APP_CERTIFICATE = Deno.env.get('AGORA_APP_CERTIFICATE')!;
+    const API_KEY = Deno.env.get('LIVEKIT_API_KEY')!;
+    const API_SECRET = Deno.env.get('LIVEKIT_API_SECRET')!;
 
-    if (!APP_ID || !APP_CERTIFICATE) {
-      return new Response(JSON.stringify({ error: 'Agora app ID and certificate not configured' }), {
+    if (!API_KEY || !API_SECRET) {
+      return new Response(JSON.stringify({ error: 'LiveKit API key and secret not configured' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Token valid for 24 hours
-    const expireTime = Math.floor(Date.now() / 1000) + 86400;
-
-    const token = await generateAgoraToken(
-      APP_ID,
-      APP_CERTIFICATE,
+    const token = await generateLiveKitToken(
+      API_KEY,
+      API_SECRET,
       channelName,
-      parseInt(uid),
-      role,
-      expireTime
+      uid
     );
 
     return new Response(JSON.stringify({
       token,
-      appId: APP_ID,
       channelName,
-      uid,
-      expiresAt: new Date(expireTime * 1000).toISOString()
+      uid
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

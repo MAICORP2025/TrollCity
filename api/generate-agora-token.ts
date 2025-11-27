@@ -1,4 +1,4 @@
-import { RtcTokenBuilder, RtcRole } from "agora-token";
+import { AccessToken } from "livekit-server-sdk";
 
 export default async function handler(req, res) {
   const { channelName, uid } = req.body;
@@ -7,25 +7,26 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing channelName or uid" });
   }
 
-  const appId = process.env.AGORA_APP_ID;
-  const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+  const apiKey = process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LIVEKIT_API_SECRET;
 
-  if (!appId || !appCertificate) {
-    return res.status(500).json({ error: "Agora app ID or certificate not configured" });
+  if (!apiKey || !apiSecret) {
+    return res.status(500).json({ error: "LiveKit API key or secret not configured" });
   }
 
-  const expireTime = Math.floor(Date.now() / 1000) + 3600; // 1hr
-  const role = RtcRole.PUBLISHER;
+  const at = new AccessToken(apiKey, apiSecret, {
+    identity: uid,
+    name: uid,
+  });
 
-  const token = RtcTokenBuilder.buildTokenWithUid(
-    appId,
-    appCertificate,
-    channelName,
-    Number(uid),
-    role,
-    expireTime,
-    expireTime
-  );
+  at.addGrant({
+    roomJoin: true,
+    room: channelName,
+    canPublish: true,
+    canSubscribe: true,
+  });
+
+  const token = at.toJwt();
 
   res.status(200).json({ token });
 }

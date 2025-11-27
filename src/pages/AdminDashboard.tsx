@@ -602,20 +602,20 @@ export default function AdminDashboard() {
     }
   }
 
-  const testAgoraStreaming = async () => {
+  const testLiveKitStreaming = async () => {
     try {
-      const body = { channelName: 'admin-test', uid: profile?.id || 'admin', role: 'publisher' }
+      const body = { channelName: 'admin-test', uid: profile?.id || 'admin' }
       const json = await (await import('../lib/api')).default.post((await import('../lib/api')).API_ENDPOINTS.agora.token, body)
       if (json?.success && json?.token) {
-        setAgoraStatus({ ok: true, appId: json.appId, expiresAt: json.expiresAt })
-        toast.success('Agora token generated')
+        setAgoraStatus({ ok: true })
+        toast.success('LiveKit token generated')
       } else {
         setAgoraStatus({ ok: false, error: json?.error || 'Token generation failed', details: json?.details })
-        toast.error('Agora test failed')
+        toast.error('LiveKit test failed')
       }
     } catch (e: any) {
-      setAgoraStatus({ ok: false, error: e?.message || 'Agora request failed' })
-      toast.error('Agora test failed')
+      setAgoraStatus({ ok: false, error: e?.message || 'LiveKit request failed' })
+      toast.error('LiveKit test failed')
     }
   }
 
@@ -1805,7 +1805,7 @@ export default function AdminDashboard() {
             </div>
 
             <SystemTests
-              testAgoraStreaming={testAgoraStreaming}
+              testLiveKitStreaming={testLiveKitStreaming}
               testSquare={testSquare}
               testSupabase={testSupabase}
               cleanupStreams={cleanupStreams}
@@ -2514,7 +2514,7 @@ const UserTable = ({
   )
 
 const SystemTests = ({
-  testAgoraStreaming,
+  testLiveKitStreaming,
   testSquare,
   testSupabase,
   cleanupStreams,
@@ -2522,7 +2522,7 @@ const SystemTests = ({
   agoraStatus,
   supabaseStatus
 }: {
-  testAgoraStreaming: () => void
+  testLiveKitStreaming: () => void
   testSquare: () => void
   testSupabase: () => void
   cleanupStreams: () => void
@@ -2532,9 +2532,9 @@ const SystemTests = ({
 }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
     <TestBox
-      title="Agora Streaming"
-      vars={['AGORA_APP_ID', 'AGORA_APP_CERTIFICATE']}
-      onClick={testAgoraStreaming}
+      title="LiveKit Streaming"
+      vars={['LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET']}
+      onClick={testLiveKitStreaming}
       result={agoraStatus}
     />
     <TestBox
