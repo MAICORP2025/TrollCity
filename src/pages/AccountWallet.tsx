@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import api from '../lib/api';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
 
@@ -78,25 +79,14 @@ export default function AccountWallet() {
     try {
       // In development we create a mock token; in production, use Square Web Payments SDK
       const cardToken = `mock_${last4}`
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token || ''
-      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/save-card`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ 
-          userId: user.id, 
-          cardToken, 
-          saveAsDefault: false,
-          postalCode: zipCode,
-          cardDetails: {
-            number: cardNumber,
-            exp,
-            cvv
-          }
-        })
+      const j = await api.post('/square/save-card', { 
+        userId: user.id,
+        cardToken,
+        saveAsDefault: false,
+        postalCode: zipCode,
+        cardDetails: { number: cardNumber, exp, cvv }
       })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) {
+      if (!j.success) {
         console.error('Save card failed', j)
         toast.error(j?.error || 'Failed to save card')
       } else {

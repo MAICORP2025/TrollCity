@@ -7,6 +7,7 @@ import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import api from "../lib/api";
 import ClickableUsername from "../components/ClickableUsername";
 
 const APP_ID = import.meta.env.VITE_AGORA_APP_ID;
@@ -84,15 +85,8 @@ const GoLive: React.FC = () => {
       const base = (profile?.username || "stream").replace(/[^a-z0-9_-]/gi, "").toLowerCase();
       const channelName = `${base}-${Date.now()}`;
 
-      const { data: sessionData } = await supabase.auth.getSession()
-      const tokenHeader = sessionData?.session?.access_token || ''
-      const resp = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/agora/agora-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(tokenHeader ? { Authorization: `Bearer ${tokenHeader}` } : {}) },
-        body: JSON.stringify({ channelName, userId: String(profile?.id), role: 'publisher' })
-      })
-      const j = await resp.json()
-      if (!resp.ok || !j?.token) {
+      const j = await api.post('/agora/agora-token', { channelName, userId: String(profile?.id), role: 'publisher' })
+      if (!j?.success || !j?.token) {
         throw new Error(j?.error || 'Failed to get Agora token')
       }
 

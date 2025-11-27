@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import api from '../lib/api'
 import { toast } from 'sonner'
 import { TestTube, Users, RotateCcw, Power, PowerOff, Info } from 'lucide-react'
 
@@ -34,15 +35,7 @@ export function TestingModeControl() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
 
-      const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/admin/testing-mode/status`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      })
-
-      if (!response.ok) throw new Error('Failed to fetch testing mode status')
-
-      const data = await response.json()
+      const data = await api.get('/admin/testing-mode/status')
       if (data.success) {
         setTestingMode(data.testingMode)
         setBenefits(data.benefits)
@@ -68,18 +61,7 @@ export function TestingModeControl() {
         return
       }
 
-      const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/admin/testing-mode/toggle`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ enabled, resetCounter })
-      })
-
-      if (!response.ok) throw new Error('Failed to toggle testing mode')
-
-      const data = await response.json()
+      const data = await api.post('/admin/testing-mode/toggle', { enabled, resetCounter })
       if (data.success) {
         setTestingMode(data.testingMode)
         toast.success(`Testing mode ${enabled ? 'enabled' : 'disabled'}${resetCounter ? ' and counter reset' : ''}`)
@@ -100,16 +82,7 @@ export function TestingModeControl() {
         return
       }
 
-      const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/admin/testing-mode/reset-counter`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      })
-
-      if (!response.ok) throw new Error('Failed to reset counter')
-
-      const data = await response.json()
+      const data = await api.post('/admin/testing-mode/reset-counter')
       if (data.success) {
         setTestingMode(data.testingMode)
         toast.success('Signup counter reset to 0')

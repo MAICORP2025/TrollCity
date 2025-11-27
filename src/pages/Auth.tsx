@@ -119,15 +119,8 @@ const Auth = () => {
         
         // Use our API endpoint to create user without sending confirmation email
         console.log('Creating new user account...')
-        const tokenLs = (typeof window !== 'undefined' ? localStorage.getItem('supabase_token') || '' : '')
-        const signUpResponse = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/auth/signup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(tokenLs ? { Authorization: `Bearer ${tokenLs}` } : {}) },
-          body: JSON.stringify({ email, password, username: username.trim() })
-        })
-        const signUpData = await signUpResponse.json()
-        
-        if (!signUpResponse.ok || !signUpData.success) {
+        const signUpData = await (await import('../lib/api')).default.post('/auth/signup', { email, password, username: username.trim() })
+        if (!signUpData.success) {
           console.error('Signup failed:', signUpData)
           throw new Error(signUpData.error || 'Signup failed')
         }

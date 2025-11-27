@@ -273,29 +273,13 @@ export default function CoinStore() {
     })
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token || ''
-      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/payments/create-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({
-          userId: user.id,
-          packageId: pkg.id
-          // Backend will use the user's default saved card
-        })
-      })
-
-      const data = await res.json().catch(() => ({} as any))
-
-      if (!res.ok) {
-        const errorMsg = (data as any)?.details ||
-          (data as any)?.error ||
-          (res.status === 503 ? 'Server is temporarily unavailable. Please try again.' : 'Payment failed')
-        console.error('Purchase failed:', { status: res.status, error: errorMsg, data })
+      const data = await (await import('../lib/api')).default.post('/payments/create-payment', { userId: user.id, packageId: pkg.id })
+      if (!data.success) {
+        const errorMsg = data?.details || data?.error || 'Payment failed'
+        console.error('Purchase failed:', { error: errorMsg, data })
         toast.error(errorMsg)
         return
       }
-      
       console.log('Purchase successful:', data)
 
       // Refresh user profile coin balances

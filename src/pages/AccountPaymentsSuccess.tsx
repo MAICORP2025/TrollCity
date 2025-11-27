@@ -2,6 +2,7 @@ import React from 'react'
 import { useAuthStore } from '../lib/store'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import api from '../lib/api'
 import { recordAppEvent } from '../lib/progressionEngine'
 import { toast } from 'sonner'
 
@@ -34,15 +35,8 @@ const AccountPaymentsSuccess = () => {
       try {
         setSaving(true)
 
-        const { data: sessionData } = await supabase.auth.getSession()
-        const token = sessionData?.session?.access_token || ''
-        const saveRes = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/save-card`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ userId: user.id, cardToken: tokenId, saveAsDefault: true })
-        })
-        const saved = await saveRes.json().catch(() => null)
-        if (!saveRes.ok) throw new Error(saved?.error || 'Failed to save card')
+        const saved = await api.post('/square/save-card', { userId: user.id, cardToken: tokenId, saveAsDefault: true })
+        if (!saved.success) throw new Error(saved?.error || 'Failed to save card')
 
         // 2) Mark user as fully payment-enabled
         

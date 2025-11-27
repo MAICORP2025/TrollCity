@@ -399,14 +399,8 @@ export default function AdminDashboard() {
   const loadEconomySummary = async () => {
     try {
       setEconomyLoading(true)
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token || ''
-      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/admin/economy/summary`, {
-        credentials: 'include',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' }
-      })
-      if (!res.ok) throw new Error('Failed to load economy summary')
-      const json = await res.json()
+      const json = await (await import('../lib/api')).default.get('/admin/economy/summary')
+      if (!json.success) throw new Error(json?.error || 'Failed to load economy summary')
       setEconomySummary(json)
     } catch (err: any) {
       console.error('Failed to load economy summary:', err)
@@ -474,11 +468,8 @@ export default function AdminDashboard() {
     const fetchRisk = async () => {
       if (profile?.role !== 'admin') return
       try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const token = sessionData?.session?.access_token || ''
-        const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/admin/risk/overview`, { credentials: 'include', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' } })
-        if (!res.ok) throw new Error('Failed risk')
-        const json = await res.json()
+        const json = await (await import('../lib/api')).default.get('/admin/risk/overview')
+        if (!json.success) throw new Error(json?.error || 'Failed risk')
         setRisk(json)
       } catch (e) {
         console.error(e)
@@ -614,11 +605,8 @@ export default function AdminDashboard() {
   const testAgoraStreaming = async () => {
     try {
       const body = { channelName: 'admin-test', userId: profile?.id || 'admin', role: 'publisher' }
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token || ''
-      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/agora/agora-token`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
-      const json = await res.json()
-      if (res.ok && json?.token) {
+      const json = await (await import('../lib/api')).default.post('/agora/agora-token', body)
+      if (json?.success && json?.token) {
         setAgoraStatus({ ok: true, appId: json.appId, expiresAt: json.expiresAt })
         toast.success('Agora token generated')
       } else {
@@ -633,10 +621,7 @@ export default function AdminDashboard() {
 
   const testSquare = async () => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token || ''
-      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/payments/status`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' } })
-      const json = await res.json()
+      const json = await (await import('../lib/api')).default.get('/payments/status')
       setSquareStatus(json)
       if (json.apiOk) {
         toast.success(`Square reachable (${json.env})`)

@@ -28,17 +28,8 @@ const ProfitSummary = () => {
 
   const fetchProfitSummary = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/admin/profit-summary`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('supabase_token')}`
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch profit summary')
-      }
-      
-      const data = await response.json()
+      const data = await api.get('/admin/profit-summary')
+      if (!data.success) throw new Error(data?.error || 'Failed to fetch profit summary')
       setSummary(data)
       setLastUpdate(new Date())
     } catch (error) {
@@ -150,3 +141,4 @@ const ProfitSummary = () => {
 }
 
 export default ProfitSummary
+import api from '../lib/api'

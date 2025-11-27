@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Sparkles, Coins, Shield, Zap, Crown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import api from '../lib/api'
 import type { UserProfile as BaseUserProfile } from '../lib/supabase'
 type WheelUserProfile = BaseUserProfile & { badge?: string }
 import { recordAppEvent } from '../lib/progressionEngine'
@@ -171,26 +172,9 @@ const TrollWheel = () => {
       
       console.log('[Wheel] Checking daily spins with token:', token.substring(0, 20) + '...')
       
-      const resp = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/wheel/spins/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ userId: profile.id })
-      })
-      
-      const j = await resp.json().catch(() => ({}))
-      
-      if (!resp.ok) {
-        console.error('[Wheel] Status check failed:', resp.status, j)
-        if (resp.status === 401) {
-          toast.error('Session expired. Please refresh the page.')
-        }
-        const fallback = profile?.role === 'troll_officer' ? 15 : DEFAULT_DAILY_SPINS
-        setDailySpinsLeft(fallback)
-        return
-      }
-      
+      const j = await api.post('/wheel/spins/status', { userId: profile.id })
       if (!j.success) {
-        console.log('[Wheel] Status check unsuccessful:', j)
+        console.error('[Wheel] Status check failed:', j)
         const fallback = profile?.role === 'troll_officer' ? 15 : DEFAULT_DAILY_SPINS
         setDailySpinsLeft(fallback)
         return
@@ -224,12 +208,7 @@ const TrollWheel = () => {
         return
       }
       
-      const resp = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/wheel/spins/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ userId: profile.id })
-      })
-      await resp.json().catch(() => ({}))
+      await api.post('/wheel/spins/register', { userId: profile.id })
     } catch (e) {
       console.error('[Wheel] registerSpin error', e)
     }
@@ -282,42 +261,18 @@ const TrollWheel = () => {
       console.log('[Wheel] Initiating spin:', { userId: profile.id, balance: profile.free_coin_balance, cost: SPIN_COST })
       console.log('[Wheel] Using token:', token.substring(0, 20) + '...')
       
-      const resp = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/wheel/spin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ userId: profile.id, spinCost: SPIN_COST, prizes: WHEEL_PRIZES.map(p => ({ id: p.id, name: p.name, type: p.type === 'vip' ? 'bankrupt' : p.type, value: p.value, probability: p.probability })) })
-      })
-      
-      console.log('[Wheel] API response status:', resp.status)
-      
-      let j: { success?: boolean; prize?: { id: string; name: string; type: WheelPrize['type'] | 'bankrupt'; value: number; probability: number }; profile?: { free_coin_balance?: number; badge?: string }; error?: string; details?: string } = { success: false }
-      
-      try {
-        const jRaw = await resp.json()
-        if (jRaw && typeof jRaw === 'object') {
-          j = jRaw as typeof j
-        }
-      } catch (parseErr) {
-        console.error('[Wheel] JSON parse error:', parseErr)
-        const textResponse = await resp.text().catch(() => 'Unable to read response')
-        console.error('[Wheel] Response text:', textResponse)
-        toast.error('Server returned invalid response. Please try again.')
-        return
-      }
+      const j = await api.post<{ prize: { id: string; name: string; type: WheelPrize['type'] | 'bankrupt'; value: number; probability: number }; profile: { free_coin_balance?: number; badge?: string }; details?: string }>(
+        '/wheel/spin',
+        { userId: profile.id, spinCost: SPIN_COST, prizes: WHEEL_PRIZES.map(p => ({ id: p.id, name: p.name, type: p.type === 'vip' ? 'bankrupt' : p.type, value: p.value, probability: p.probability })) }
+      )
       
       console.log('[Wheel] API response:', j)
       
-      if (!resp.ok || !j.success || !j.prize) {
+      if (!j.success || !j.prize) {
         const errorMsg = j?.error || 'Spin failed'
         const errorDetails = j?.details || ''
         console.error('[Wheel] Spin failed:', errorMsg, errorDetails)
-        
-        // Special handling for auth errors
-        if (resp.status === 401 || errorMsg.includes('token') || errorMsg.includes('Invalid token')) {
-          toast.error('Session expired. Please refresh the page and sign in again.')
-        } else {
-          toast.error(`${errorMsg}${errorDetails ? ': ' + errorDetails : ''}`)
-        }
+        toast.error(`${errorMsg}${errorDetails ? ': ' + errorDetails : ''}`)
         return
       }
       

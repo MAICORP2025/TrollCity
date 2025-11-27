@@ -50,17 +50,8 @@ const PlatformWallet = () => {
 
   const fetchWallet = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/admin/platform-wallet`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('supabase_token')}`
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch platform wallet')
-      }
-      
-      const data = await response.json()
+      const data = await api.get('/admin/platform-wallet')
+      if (!data.success) throw new Error(data?.error || 'Failed to fetch platform wallet')
       setWallet(data)
       setLastUpdate(new Date())
     } catch (err) {
@@ -183,3 +174,4 @@ const PlatformWallet = () => {
 }
 
 export default PlatformWallet
+import api from '../lib/api'

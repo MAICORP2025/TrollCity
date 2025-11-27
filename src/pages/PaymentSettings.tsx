@@ -213,11 +213,8 @@ export default function PaymentSettings() {
     setMethods(old => old.filter(m => m.id !== id))
 
     try {
-      const { data: sessionData2 } = await supabase.auth.getSession()
-      const tokenHeader2 = sessionData2?.session?.access_token || ''
-      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/delete-method/${id}?userId=${profile.id}`, { method: 'DELETE', headers: { ...(tokenHeader2 ? { Authorization: `Bearer ${tokenHeader2}` } : {}) } })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) {
+      const j = await (await import('../lib/api')).default.delete(`/square/delete-method/${id}?userId=${profile.id}`)
+      if (!j.success) {
         // Restore on failure
         setMethods(backup)
         return toast.error(j?.error || 'Remove failed')

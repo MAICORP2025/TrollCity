@@ -315,16 +315,14 @@ const ProfileSetup = () => {
                     try {
                       const { data: sessionData } = await supabase.auth.getSession()
                       const authToken = sessionData?.session?.access_token || ''
-                      const cRes = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/create-customer`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) }, body: JSON.stringify({ userId: user.id }) })
-                      const cJson = await cRes.json().catch(() => ({}))
-                      if (!cRes.ok) { toast.error(cJson?.error || 'Customer create failed'); return }
+                      const cJson = await (await import('../lib/api')).default.post('/square/create-customer', { userId: user.id })
+                      if (!cJson.success) { toast.error(cJson?.error || 'Customer create failed'); return }
                       if (!card) { toast.error('Card form not ready'); return }
                       setLinking('card')
                       const cardToken = await card.tokenize()
                       if (!cardToken || cardToken.status !== 'OK' || !cardToken.token) throw new Error('Card tokenize failed')
-                      const sRes = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/save-card`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) }, body: JSON.stringify({ userId: user.id, cardToken: cardToken.token, saveAsDefault: true }) })
-                      const sJson = await sRes.json().catch(() => ({}))
-                      if (!sRes.ok) { toast.error(sJson?.error || 'Save card failed'); return }
+                      const sJson = await (await import('../lib/api')).default.post('/square/save-card', { userId: user.id, cardToken: cardToken.token, saveAsDefault: true })
+                      if (!sJson.success) { toast.error(sJson?.error || 'Save card failed'); return }
                       toast.success('Card saved')
                       
                       // Instant UI update if method is returned
@@ -386,9 +384,8 @@ const ProfileSetup = () => {
                           if (!user) return
                           const { data: s2 } = await supabase.auth.getSession()
                           const authToken2 = s2?.session?.access_token || ''
-                          const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/delete-method/${m.id}?userId=${user.id}`, { method: 'DELETE', headers: { ...(authToken2 ? { Authorization: `Bearer ${authToken2}` } : {}) } })
-                          const j = await res.json().catch(() => ({}))
-                          if (!res.ok) { toast.error(j?.error || 'Remove failed'); return }
+                          const j = await (await import('../lib/api')).default.delete(`/square/delete-method/${m.id}?userId=${user.id}`)
+                          if (!j.success) { toast.error(j?.error || 'Remove failed'); return }
                           await loadMethods()
                         }}
                         className="px-3 py-1 rounded bg-red-600 text-white text-xs"

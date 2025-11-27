@@ -14,6 +14,7 @@ import {
   ShieldOff
 } from 'lucide-react'
 import { supabase, Stream, UserProfile } from '../lib/supabase'
+import api from '../lib/api'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { recordAppEvent } from '../lib/progressionEngine'
@@ -886,21 +887,13 @@ const StreamRoom = () => {
       } catch (tokenError: any) {
         console.log('Token required, falling back to token authentication:', tokenError.message)
         
-        const { data: sessionData } = await supabase.auth.getSession()
-        const tokenHeader = sessionData?.session?.access_token || ''
-        const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/agora/agora-token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(tokenHeader ? { Authorization: `Bearer ${tokenHeader}` } : {}) },
-          body: JSON.stringify({
-            channelName: stream.agora_channel,
-            userId: user?.id,
-            role: 'subscriber'
-          })
+        const j = await api.post('/agora/agora-token', {
+          channelName: stream.agora_channel,
+          userId: user?.id,
+          role: 'subscriber'
         })
-
-        if (!response.ok) throw new Error('Failed to get token')
-        
-        const { token } = await response.json()
+        if (!j?.success || !j?.token) throw new Error(j?.error || 'Failed to get token')
+        const token = j.token as string
         await client.current.join(APP_ID, stream.agora_channel, token, user?.id)
         console.log('Joined channel with token')
       }

@@ -196,18 +196,7 @@ function App() {
                 } catch {}
               }
 
-              const { data: { session: currentSession } } = await supabase.auth.getSession()
-              const token = currentSession?.access_token
-              
-              if (token) {
-                const response = await fetch(API_ENDPOINTS.auth.fixAdminRole, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                })
-                const result = await response.json()
+              const result = await (await import('./lib/api')).default.post('/auth/fix-admin-role')
                 console.log('Fix admin role result:', result)
                 
                 if (result.success && result.profile) {
@@ -221,7 +210,7 @@ function App() {
                   setLoading(false)
                   return
                 }
-              }
+              
             } catch (err) {
               console.error('Failed to fix admin role:', err)
             }

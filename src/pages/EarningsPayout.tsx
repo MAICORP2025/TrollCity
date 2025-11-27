@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import api from '../lib/api'
 import { toast } from 'sonner'
 import { DollarSign, Banknote, Send, History } from 'lucide-react'
 
@@ -79,16 +80,8 @@ export default function CashoutRequest() {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token || ''
-      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/payouts/cashouts/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(j?.error || 'Cancel failed')
+      const j = await api.delete(`/payouts/cashouts/${id}`)
+      if (!j.success) throw new Error(j?.error || 'Delete failed')
         return
       }
       toast.success('Cashout request cancelled')

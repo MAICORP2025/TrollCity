@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import api from '../lib/api'
 import { recordAppEvent } from '../lib/progressionEngine'
 import { toast } from 'sonner'
 
@@ -32,23 +33,13 @@ const AccountPaymentLinkedSuccess = () => {
         const { data: sessionData } = await supabase.auth.getSession()
         const authToken = sessionData?.session?.access_token || ''
         if (p === 'card') {
-          const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/save-card`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
-            body: JSON.stringify({ userId: user.id, cardToken: token, saveAsDefault: true })
-          })
-          const saved = await res.json().catch(() => null)
-          if (!res.ok) throw new Error(saved?.error || 'Failed to save card')
+          const saved = await api.post('/square/save-card', { userId: user.id, cardToken: token, saveAsDefault: true })
+          if (!saved.success) throw new Error(saved?.error || 'Failed to save card')
 
         // 🔹 Save wallet providers (CashApp, ApplePay, GooglePay, Venmo)
         } else {
-          const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/square/wallet-bind`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
-            body: JSON.stringify({ userId: user.id, provider: p, tokenId: token })
-          })
-          const bound = await res.json().catch(() => null)
-          if (!res.ok) throw new Error(bound?.error || 'Failed to link wallet')
+          const bound = await api.post('/square/wallet-bind', { userId: user.id, provider: p, tokenId: token })
+          if (!bound.success) throw new Error(bound?.error || 'Failed to link wallet')
         }
 
         // 🔄 Fetch updated payment methods from Supabase
