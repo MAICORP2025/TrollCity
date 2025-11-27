@@ -604,8 +604,8 @@ export default function AdminDashboard() {
 
   const testAgoraStreaming = async () => {
     try {
-      const body = { channelName: 'admin-test', userId: profile?.id || 'admin', role: 'publisher' }
-      const json = await (await import('../lib/api')).default.post('/agora/agora-token', body)
+      const body = { channelName: 'admin-test', uid: profile?.id || 'admin', role: 'publisher' }
+      const json = await (await import('../lib/api')).default.post((await import('../lib/api')).API_ENDPOINTS.agora.token, body)
       if (json?.success && json?.token) {
         setAgoraStatus({ ok: true, appId: json.appId, expiresAt: json.expiresAt })
         toast.success('Agora token generated')
