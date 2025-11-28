@@ -120,7 +120,7 @@ const handleGoLive = async () => {
       const { data: streamRow, error: insertError } = await supabase
         .from("streams")
         .insert({
-          user_id: profile.id,
+          broadcaster_id: profile.id,
           title,
           room_name: roomName,
           livekit_url: url,
