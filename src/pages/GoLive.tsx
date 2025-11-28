@@ -108,13 +108,18 @@ const handleGoLive = async () => {
         room.localParticipant.publishTrack(track);
       });
 
-      // Attach video track to video element
-      if (videoRef.current) {
-        const videoTrack = tracks.find((t) => t.kind === 'video');
-        if (videoTrack) {
-          videoTrack.attach(videoRef.current);
+      // Attach local video
+      room.localParticipant.trackPublications.forEach((publication) => {
+        if (publication.kind === 'video') {
+          const element = publication.track?.attach();
+          if (element) {
+            element.style.width = "100%";
+            element.style.height = "100%";
+            element.style.objectFit = "cover";
+            document.getElementById("live-video-container")?.appendChild(element);
+          }
         }
-      }
+      });
 
       // Save stream session in Supabase
       const { data: streamRow, error: insertError } = await supabase
@@ -176,13 +181,16 @@ const handleGoLive = async () => {
               ))}
             </div>
           ) : (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-contain"
-            />
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-contain"
+              />
+              <div id="live-video-container" style={{ width: '100%', height: '100%' }}></div>
+            </>
           )}
         </div>
 
