@@ -42,102 +42,102 @@ interface WheelPrize {
 const WHEEL_PRIZES: WheelPrize[] = [
   {
     id: '1',
-    name: '750 Coins',
+    name: '200 Coin Bonus Pack',
     type: 'coins',
-    value: 750,
-    probability: 28,
-    icon: <Coins />,
+    value: 200,
+    probability: 22,
+    icon: '🟢',
     color: '#064e3b',
     glow: '#22c55e',
-    description: '750 FREE coins'
+    description: 'Green pack: 200 FREE coins!'
   },
   {
     id: '2',
-    name: 'Nothing',
+    name: 'Nothing (Trolled)',
     type: 'nothing',
     value: 0,
-    probability: 23,
+    probability: 20,
     icon: '💀',
     color: '#111827',
     glow: '#6b7280',
-    description: 'Trolled hard. You won nothing.'
+    description: 'The trolls laugh at your misfortune...'
   },
   {
     id: '3',
-    name: 'Insurance',
+    name: 'Insurance Pass',
     type: 'insurance',
     value: 1,
     probability: 10,
-    icon: <Shield />,
+    icon: '🛡️',
     color: '#1d4ed8',
     glow: '#60a5fa',
-    description: 'Kick / penalty protection'
+    description: 'Protect yourself from penalties'
   },
   {
     id: '4',
-    name: '200 Coins',
+    name: '500 Coin Bonus Pack',
     type: 'coins',
-    value: 200,
+    value: 500,
     probability: 14,
-    icon: <Coins />,
-    color: '#065f46',
-    glow: '#22c55e',
-    description: '200 FREE coins'
+    icon: '💰',
+    color: '#15803d',
+    glow: '#4ade80',
+    description: 'Solid win: 500 FREE coins'
   },
   {
     id: '5',
-    name: '2x Multiplier',
+    name: 'DOUBLE REWARDS for 30min',
     type: 'multiplier',
     value: 2,
-    probability: 9,
-    icon: <Zap />,
+    probability: 10,
+    icon: '⚡',
     color: '#b45309',
     glow: '#facc15',
-    description: '2x rewards for 30 minutes'
+    description: 'All gift earnings multiplied by 2x'
   },
   {
     id: '6',
-    name: 'BANKRUPT (Free Coins)',
-    type: 'vip', // keep type but treat as bankrupt in logic
+    name: 'Bankrupt',
+    type: 'vip',
     value: 0,
-    probability: 5,
+    probability: 6,
     icon: '💸',
     color: '#7f1d1d',
     glow: '#f97316',
-    description: 'Lose ALL free coins (paid coins safe)'
+    description: 'Lose ALL FREE coins (paid coins safe)'
   },
   {
     id: '7',
-    name: '5000 Coins',
+    name: '5,000 Coin Bonus Pack',
     type: 'coins',
     value: 5000,
-    probability: 7,
-    icon: <Coins />,
-    color: '#15803d',
-    glow: '#4ade80',
-    description: 'BIG WIN: 5000 FREE coins'
-  },
-  {
-    id: '8',
-    name: '1,000,000 Coins',
-    type: 'coins',
-    value: 1_000_000,
-    probability: 2, // ~1 in 50
+    probability: 6,
     icon: '🤑',
     color: '#22c55e',
     glow: '#bbf7d0',
-    description: 'MEGA WIN: 1,000,000 FREE coins!'
+    description: 'BIG WIN: 5,000 FREE coins!'
+  },
+  {
+    id: '8',
+    name: 'Diamond Bonus: 25,000 Coins',
+    type: 'coins',
+    value: 25000,
+    probability: 2,
+    icon: '💎',
+    color: '#7e22ce',
+    glow: '#e879f9',
+    description: 'Diamond-level win: 25,000 FREE coins!'
   },
   {
     id: '9',
-    name: 'Troll Crown (Jackpot)',
+    name: 'Troll Crown Jackpot',
     type: 'jackpot',
     value: 1,
-    probability: 2,
-    icon: <Crown />,
-    color: '#7e22ce',
-    glow: '#e879f9',
-    description: 'Ultra rare crown badge'
+    probability: 1,
+    icon: '👑',
+    color: '#facc15',
+    glow: '#fde047',
+    description: 'Unlock Troll Royal Crown (rare badge)'
   }
 ]
 

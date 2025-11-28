@@ -815,46 +815,43 @@ const StreamRoom = () => {
         return
       }
 
+      const EDGE_FUNCTION_URL = (import.meta as any).env.VITE_EDGE_FUNCTIONS_URL
+      const { data: sessionData } = await supabase.auth.getSession()
+      const jwt = sessionData?.session?.access_token
+
+      if (!jwt) throw new Error('No auth token')
+
+      const response = await fetch(`${EDGE_FUNCTION_URL}/livekit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${jwt}`
+        },
+        body: JSON.stringify({
+          identity: user?.id,
+          roomName: stream.livekit_room
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Function error: ${errorText}`)
+      }
+
+      const { token } = await response.json()
+
       const { Room, RoomEvent } = await import('livekit-client')
 
       // Create LiveKit room
       client.current = new Room()
 
-      // Get token
-      const EDGE_FUNCTION_URL = (import.meta as any).env.VITE_EDGE_FUNCTIONS_URL;
-      const { data: sessionData } = await supabase.auth.getSession();
-      const jwt = sessionData?.session?.access_token;
-
-      if (!jwt) throw new Error('No auth token');
-
-      const response = await fetch(`${EDGE_FUNCTION_URL}/livekit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({
-          identity: user?.id,
-          roomName: stream.livekit_room,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Function error: ${errorText}`);
-      }
-
-      const { token } = await response.json();
-
-      // Connect to room
-      await client.current.connect(LIVEKIT_URL, token)
-      console.log('Connected to LiveKit room')
-
-      // Handle participant tracks
+      // Handle participant tracks BEFORE connecting so we don't miss events
       client.current.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === 'video') {
           const videoElement = track.attach()
           if (remoteVideoRef.current && !stream?.multi_beam) {
+            // Clear previous video(s) so we only show the active one
+            remoteVideoRef.current.innerHTML = ''
             remoteVideoRef.current.appendChild(videoElement)
           }
         } else if (track.kind === 'audio') {
@@ -866,6 +863,9 @@ const StreamRoom = () => {
         track.detach()
       })
 
+      // Connect to room AFTER handlers are registered
+      await client.current.connect(LIVEKIT_URL, token)
+      console.log('Connected to LiveKit room')
     } catch (error: any) {
       console.error('LiveKit viewer initialization error:', error)
       toast.error('Failed to connect to stream')
@@ -1456,8 +1456,8 @@ const StreamRoom = () => {
                   />
                 )}
 
-                {/* Overlay when not joined / loading */}
-                {!joining && (
+                {/* Overlay when joining / loading */}
+                {joining && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 pointer-events-none">
                     <Radio className="w-16 h-16 text-troll-purple animate-pulse mb-3" />
                     <p className="text-sm text-gray-300">

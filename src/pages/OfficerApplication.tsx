@@ -41,21 +41,10 @@ export default function OfficerApplication() {
       
       const applicationData = {
         user_id: profile.id,
-        type: 'officer',
+        username: profile.username,
+        role_requested: 'troll_officer',
+        experience: formData.experience,
         reason: formData.whyApplying,
-        goals: JSON.stringify({
-          fullName: formData.fullName,
-          email: formData.email,
-          phone: formData.phone,
-          timezone: formData.timezone,
-          availableHours: formData.availableHours,
-          experience: formData.experience,
-          conflictScenario: formData.conflictScenario,
-          strengths: formData.strengths,
-          weeklyCommitment: formData.weeklyCommitment,
-          startDate: formData.startDate,
-          references: formData.references
-        }),
         status: 'pending'
       }
       

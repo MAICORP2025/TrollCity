@@ -19,7 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 })
 
-export type UserRole = 'user' | 'moderator' | 'admin' | 'troll_officer'
+export type UserRole = 'user' | 'moderator' | 'admin' | 'troll_officer' | 'troll_family' | 'troller'
 export type UserTier = string // Now dynamic based on XP
 export type StreamStatus = 'live' | 'ended'
 export type TransactionType = 'purchase' | 'gift' | 'spin' | 'insurance' | 'cashout'
@@ -54,6 +54,8 @@ export interface UserProfile {
   sav_bonus_coins?: number
   vived_bonus_coins?: number
   payment_methods?: Array<any>
+  payout_method?: string
+  payout_details?: string
 
 }
 

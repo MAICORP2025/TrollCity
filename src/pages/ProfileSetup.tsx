@@ -300,6 +300,71 @@ const ProfileSetup = () => {
           </div>
         </details>
 
+        {/* 💸 Payout Information Section */}
+        <details className="bg-[#1A1A1A] rounded-lg border border-[#2C2C2C] mt-6" open>
+          <summary className="cursor-pointer px-6 py-4 flex items-center justify-between">
+            <span className="font-semibold">Payout Information (Required for Cashouts)</span>
+            <span className="text-sm bg-[#7C3AED] text-white px-3 py-1 rounded">Edit</span>
+          </summary>
+
+          <div className="px-6 pb-6 space-y-4">
+            <label className="block text-sm text-gray-300 mb-1">
+              Select Payout Method
+            </label>
+            <select
+              value={profile?.payout_method || ''}
+              onChange={(e) => {
+                const updated = { ...profile, payout_method: e.target.value };
+                setProfile(updated as any);
+              }}
+              className="w-full bg-[#23232b] text-white p-2 rounded border border-gray-600"
+            >
+              <option value="">Choose one...</option>
+              <option value="CashApp">CashApp (Cashtag)</option>
+              <option value="PayPal">PayPal Email</option>
+              <option value="Venmo">Venmo @username</option>
+            </select>
+
+            <label className="block text-sm text-gray-300 mb-1">
+              Enter Your Payout Details
+            </label>
+            <input
+              type="text"
+              value={profile?.payout_details || ''}
+              onChange={(e) => {
+                const updated = { ...profile, payout_details: e.target.value };
+                setProfile(updated as any);
+              }}
+              placeholder="$Cashtag, PayPal email, or Venmo handle"
+              className="w-full bg-[#23232b] text-white p-2 rounded border border-gray-600"
+            />
+
+            <button
+              type="button"
+              onClick={async () => {
+                const { error } = await supabase
+                  .from('user_profiles')
+                  .update({
+                    payout_method: profile?.payout_method,
+                    payout_details: profile?.payout_details,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', profile?.id);
+
+                if (error) toast.error('Failed to save payout info');
+                else toast.success('Payout information saved');
+              }}
+              className="w-full py-2 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] text-white rounded"
+            >
+              Save Payout Info
+            </button>
+
+            <p className="text-xs text-gray-400 mt-2">
+              This information is used only when you cash out coins. You only need to set it once.
+            </p>
+          </div>
+        </details>
+
         {/* Payment Methods */}
         <details className="bg-[#1A1A1A] rounded-lg border border-[#2C2C2C] mt-4">
           <summary className="cursor-pointer px-6 py-4 font-semibold">Payment Methods</summary>

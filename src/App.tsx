@@ -1,6 +1,6 @@
 // src/App.tsx
 import React, { useEffect, Suspense, lazy, useState } from "react";
-import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
 import { supabase, isAdminEmail } from "./lib/supabase";
 import api from "./lib/api";
@@ -10,6 +10,7 @@ import { Toaster, toast } from "sonner";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import ProfileSetupModal from "./components/ProfileSetupModal";
+import RequireRole from "./components/RequireRole";
 
 // Static pages (fast load)
 import Home from "./pages/Home";
@@ -36,11 +37,15 @@ const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const EarningsPayout = lazy(() => import("./pages/EarningsPayout"));
 const TransactionHistory = lazy(() => import("./pages/TransactionHistory"));
 const TrollWheel = lazy(() => import("./pages/TrollWheel"));
+const TrollCityWall = lazy(() => import("./pages/TrollCityWall"));
+const ReelFeed = lazy(() => import("./pages/ReelFeed"));
+const CashoutPage = lazy(() => import("./pages/CashoutPage"));
 const FamilyApplication = lazy(() => import("./pages/FamilyApplication"));
 const OfficerApplication = lazy(() => import("./pages/OfficerApplication"));
 const TrollerApplication = lazy(() => import("./pages/TrollerApplication"));
 const CoinStore = lazy(() => import("./pages/CoinStore"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminPayoutMobile = lazy(() => import("./pages/admin/AdminPayoutMobile"));
 const Support = lazy(() => import("./pages/Support"));
 const Profile = lazy(() => import("./pages/Profile"));
 
@@ -56,8 +61,20 @@ function App() {
   } = useAuthStore();
 
   const location = useLocation();
+  const navigate = useNavigate();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalLoading] = useState(false);
+
+  // 🔹 Auto-routing after approval
+  useEffect(() => {
+    if (profile?.role === 'troll_officer') {
+      navigate('/officer/lounge');
+    } else if (profile?.role === 'troll_family') {
+      navigate('/family');
+    } else if (profile?.role === 'troller') {
+      navigate('/');
+    }
+  }, [profile?.role, navigate]);
 
   // 🔹 Authentication Initialization
   useEffect(() => {
@@ -149,6 +166,8 @@ function App() {
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/support" element={<Support />} />
+                  <Route path="/wall" element={<TrollCityWall />} />
+                  <Route path="/reels" element={<ReelFeed />} />
                   <Route path="/profile/:username" element={<Profile />} />
 
                   {/* 🎥 Streaming */}
@@ -159,6 +178,7 @@ function App() {
                   {/* 💰 Earnings & Coins */}
                   <Route path="/store" element={<CoinStore />} />
                   <Route path="/earnings" element={<EarningsPayout />} />
+                  <Route path="/cashout" element={<CashoutPage />} />
                   <Route path="/transactions" element={<TransactionHistory />} />
                   <Route path="/wheel" element={<TrollWheel />} />
 
@@ -179,9 +199,9 @@ function App() {
                   <Route
                     path="/officer/lounge"
                     element={
-                      profile?.role === "admin" || profile?.role === "troll_officer"
-                        ? <TrollOfficerLounge />
-                        : <Navigate to="/" replace />
+                      <RequireRole roles={['troll_officer', 'admin']}>
+                        <TrollOfficerLounge />
+                      </RequireRole>
                     }
                   />
 
@@ -189,9 +209,17 @@ function App() {
                   <Route
                     path="/admin"
                     element={
-                      profile?.role === "admin"
-                        ? <AdminDashboard />
-                        : <Navigate to="/" replace />
+                      <RequireRole roles={['admin']}>
+                        <AdminDashboard />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/admin/payouts-mobile"
+                    element={
+                      <RequireRole roles={['admin']}>
+                        <AdminPayoutMobile />
+                      </RequireRole>
                     }
                   />
                 </Route>

@@ -30,11 +30,12 @@ export default function FamilyApplication() {
       
       if (coinErr) throw coinErr
       
-      const { error } = await supabase.from('applications').insert([{ 
-        user_id: profile.id, 
-        type: 'family', 
-        reason, 
-        goals: commitment, 
+      const { error } = await supabase.from('applications').insert([{
+        user_id: profile.id,
+        username: profile.username,
+        role_requested: 'troll_family',
+        experience: commitment,
+        reason,
         status: 'pending'
       }])
       

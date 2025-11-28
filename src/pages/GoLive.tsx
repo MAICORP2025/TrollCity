@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Room, createLocalTracks } from "livekit-client";
+import { Room, createLocalTracks, RoomEvent } from "livekit-client";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -24,27 +24,24 @@ const GoLive: React.FC = () => {
   const [beamBoxes, setBeamBoxes] = useState<
     { id: string; userId?: string; username?: string }[]
   >([]);
-  const [previewUser, setPreviewUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
+  const previewRef = useRef<HTMLVideoElement>(null);
   const navigate = useNavigate();
 
+  // 🎥 Show preview BEFORE going live (without LiveKit)
   useEffect(() => {
     if (!user) return;
     startPreview();
-    return () => {
-      if (room) {
-        room.disconnect();
-      }
-    };
-  }, [user, room]);
+    return () => stopPreview();
+  }, [user]);
 
+  // 👋 Clean LiveKit + Supabase when closing tab or ending stream
   useEffect(() => {
     const cleanup = async () => {
       if (room) {
         room.disconnect();
+        setRoom(null);
       }
       if (currentStreamId) {
         await supabase
@@ -58,7 +55,6 @@ const GoLive: React.FC = () => {
     };
 
     window.addEventListener("beforeunload", cleanup);
-
     return () => {
       window.removeEventListener("beforeunload", cleanup);
       cleanup();
@@ -67,104 +63,93 @@ const GoLive: React.FC = () => {
 
   const startPreview = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+      if (previewRef.current) {
+        previewRef.current.srcObject = stream;
       }
     } catch {
       toast.error("Camera/Mic blocked.");
     }
   };
 
-  
-const handleEndStream = async () => {
-  if (room) {
-    room.disconnect();
-    setRoom(null);
-  }
-  setIsLive(false);
-  if (currentStreamId) {
-    await supabase
-      .from("streams")
-      .update({
-        is_live: false,
-        ended_at: new Date().toISOString(),
-      })
-      .eq("id", currentStreamId);
-  }
-  setCurrentStreamId(null);
-};
+  const stopPreview = () => {
+    const mediaStream = previewRef.current?.srcObject as MediaStream;
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((t) => t.stop());
+      previewRef.current!.srcObject = null;
+    }
+  };
 
-const handleGoLive = async () => {
-    console.log("LiveKit URL:", import.meta.env.VITE_LIVEKIT_URL);
+  const handleEndStream = async () => {
+    if (room) {
+      room.disconnect();
+      setRoom(null);
+    }
+    setIsLive(false);
+    stopPreview();
+    if (currentStreamId) {
+      await supabase
+        .from("streams")
+        .update({
+          is_live: false,
+          ended_at: new Date().toISOString(),
+        })
+        .eq("id", currentStreamId);
+    }
+    setCurrentStreamId(null);
+  };
+
+  const handleGoLive = async () => {
     if (!LIVEKIT_URL) return toast.error("Missing LiveKit URL.");
     if (!title.trim()) return toast.error("Enter a stream title.");
     if (!profile?.id) return toast.error("Profile not loaded.");
 
     setLoading(true);
+    stopPreview(); // 👈 stop preview before starting LiveKit
+
     try {
-      // Build unique room name
       const roomName = `${profile.username}-${Date.now()}`.toLowerCase();
-
-      // CALL LIVEKIT TOKEN API (Vercel serverless)
       const endpoint = `${LIVEKIT_TOKEN_ENDPOINT}?room=${roomName}&identity=${profile.username}`;
-      console.log("Calling LiveKit Token API:", endpoint);
 
-      const response = await fetch(endpoint, { method: "GET" });
-
+      const response = await fetch(endpoint);
       const raw = await response.text();
-      console.log("LiveKit token raw response:", raw);
 
-      if (!response.ok) {
-        throw new Error(`LiveKit token API error ${response.status}: ${raw.slice(0, 200)}`);
-      }
+      if (!response.ok) throw new Error(raw);
+      const { token, url } = JSON.parse(raw);
 
-      let parsed: { token?: string; url?: string };
-      try {
-        parsed = JSON.parse(raw);
-      } catch (e) {
-        console.error("Failed to parse LiveKit token JSON:", e);
-        throw new Error("LiveKit token endpoint did not return valid JSON.");
-      }
+      const newRoom = new Room({ adaptiveStream: true });
+      await newRoom.connect(url, token);
 
-      const { token, url } = parsed;
-
-      if (!token || !url) {
-        throw new Error("LiveKit token endpoint returned missing token or URL.");
-      }
-
-      console.log("🔐 Final Stream Connect Values:", {
-        url,
-        token: token.slice(0, 25) + "...",
-        identity: profile.username,
-        roomName,
-      });
-
-      const room = new Room({ adaptiveStream: true });
-      await room.connect(url, token);
-
-      // Get local tracks
       const tracks = await createLocalTracks({ audio: true, video: true });
-
-      // Publish tracks
       tracks.forEach((track) => {
-        room.localParticipant.publishTrack(track);
+        newRoom.localParticipant.publishTrack(track);
       });
 
-      // Attach local video
-      room.localParticipant.trackPublications.forEach((publication) => {
-        if (publication.kind === 'video') {
+      newRoom.on(RoomEvent.Disconnected, () => {
+        console.log("LiveKit disconnected");
+      });
+
+      // 🧹 Clear previous video elements
+      const videoContainer = document.getElementById("live-video-container");
+      if (videoContainer) videoContainer.innerHTML = "";
+
+      // 🎯 Attach LiveKit video track
+      newRoom.localParticipant.trackPublications.forEach((publication) => {
+        if (publication.kind === "video") {
           const element = publication.track?.attach();
-          if (element) {
+          if (element && videoContainer) {
             element.style.width = "100%";
             element.style.height = "100%";
             element.style.objectFit = "cover";
-            document.getElementById("live-video-container")?.appendChild(element);
+            videoContainer.appendChild(element);
           }
         }
       });
 
-      // Save stream session in Supabase
+      // 📦 Save Live stream in Supabase
       const { data: streamRow, error: insertError } = await supabase
         .from("streams")
         .insert({
@@ -181,14 +166,15 @@ const handleGoLive = async () => {
       if (insertError) throw insertError;
 
       setCurrentStreamId(streamRow.id);
-      setRoom(room);
+      setRoom(newRoom);
       setIsLive(true);
       toast.success("🎉 You are LIVE!");
-      navigate(`/stream/${streamRow.id}`, { state: { stream: streamRow } });
 
+      navigate(`/stream/${streamRow.id}`, { state: { stream: streamRow } });
     } catch (err: any) {
       toast.error(err?.message || "Failed to Go Live");
-      console.error("GoLive Error:", err);
+      console.error(err);
+      startPreview(); // fallback to preview
     } finally {
       setLoading(false);
     }
@@ -198,108 +184,67 @@ const handleGoLive = async () => {
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#0f0f1a] via-[#1a0f2a] to-[#082016] text-white px-6">
       <div className="flex flex-col md:flex-row items-center gap-8 w-full max-w-6xl">
 
-        {/* 🎥 VIDEO PREVIEW */}
+        {/* 🎥 VIDEO PREVIEW / LIVE FEED */}
         <div className="relative w-[620px] h-[420px] bg-black/70 rounded-xl border border-purple-500/40 shadow-[0_0_25px_rgba(128,0,128,0.5)] overflow-hidden">
-          {multiBeam ? (
-            <div className="grid grid-cols-4 grid-rows-4 gap-1 w-full h-full p-1">
-              <div className="col-span-2 row-span-2 bg-black/80 rounded-lg border border-green-400 overflow-hidden relative flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-contain"
-                />
-                <span className="absolute bottom-1 left-2 text-[10px] bg-green-600/70 px-2 py-1 rounded">
-                  You (Host)
-                </span>
-              </div>
-
-              {beamBoxes.slice(1).map((b) => (
-                <div
-                  key={b.id}
-                  className="bg-black/50 border border-purple-600 rounded-lg flex items-center justify-center text-gray-400 text-xs"
-                >
-                  {b.username || "+"}
-                </div>
-              ))}
-            </div>
+          {!isLive ? (
+            <video
+              ref={previewRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-contain"
+            />
           ) : (
-            <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-contain"
-              />
-              <div id="live-video-container" style={{ width: '100%', height: '100%' }}></div>
-            </>
+            <div
+              id="live-video-container"
+              style={{
+                width: "100%",
+                height: "100%",
+                position: "relative",
+              }}
+            />
           )}
         </div>
 
         {/* ⚙️ SETTINGS PANEL */}
-        <div className="bg-black/60 backdrop-blur-xl p-6 rounded-xl border border-purple-500/50 shadow-[0_0_30px_rgba(0,255,170,0.4)] w-[350px]">
+        <div className="bg-black/60 p-6 rounded-xl border border-purple-500/50 shadow-[0_0_30px_rgba(0,255,170,0.4)] w-[350px]">
           <h2 className="text-xl font-semibold text-purple-300 mb-4">
             Go Live Settings
           </h2>
-          <label className="text-sm">Stream Title</label>
-          <input
-            className="w-full bg-gray-900 text-white p-2 rounded mb-3 border border-purple-600"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <label className="text-sm">Category</label>
-          <select
-            className="w-full bg-gray-900 text-white p-2 rounded mb-5 border border-purple-600"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option>Just Chatting</option>
-            <option>Gaming</option>
-            <option>Music</option>
-            <option>IRL / Vlog</option>
-            <option>Networking</option>
-            <option>Flirting Only (No Nudes)</option>
-          </select>
 
-          <div className="flex items-center justify-between mb-3">
-            <label className="text-sm">Enable Multi Beams (14 seats)</label>
-            <button
-              onClick={() => {
-                const next = !multiBeam;
-                setMultiBeam(next);
-                if (next && beamBoxes.length === 0) {
-                  setBeamBoxes(Array.from({ length: 14 }, (_, i) => ({ id: `b${i + 1}` })));
-                }
-              }}
-              className={`px-3 py-1 rounded ${multiBeam ? "bg-green-700" : "bg-gray-700"} text-white text-xs`}
-            >
-              {multiBeam ? "On" : "Off"}
-            </button>
-          </div>
+          {!isLive ? (
+            <>
+              <input
+                className="w-full bg-gray-900 text-white p-2 rounded mb-3 border border-purple-600"
+                placeholder="Enter stream title..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
 
-          <button
-            onClick={handleGoLive}
-            disabled={loading}
-            className="w-full py-2 rounded-md font-semibold bg-gradient-to-r from-green-400 to-purple-500"
-          >
-            {loading ? "Starting..." : "Go Live"}
-          </button>
-          {isLive && (
+              <select
+                className="w-full bg-gray-900 text-white p-2 rounded mb-5 border border-purple-600"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option>Just Chatting</option>
+                <option>Gaming</option>
+                <option>Music</option>
+                <option>Flirting Only</option>
+                <option>Networking</option>
+              </select>
+
+              <button
+                onClick={handleGoLive}
+                disabled={loading}
+                className="w-full py-2 rounded-md font-semibold bg-gradient-to-r from-green-400 to-purple-500"
+              >
+                {loading ? "Starting..." : "Go Live"}
+              </button>
+            </>
+          ) : (
             <button
               onClick={handleEndStream}
-              style={{
-                backgroundColor: "#ff3b30",
-                color: "white",
-                padding: "10px 20px",
-                borderRadius: "8px",
-                border: "none",
-                cursor: "pointer",
-                fontWeight: "bold",
-                marginTop: "10px",
-                width: "100%",
-              }}
+              className="w-full py-2 bg-red-600 rounded-md font-semibold"
             >
               End Live
             </button>
