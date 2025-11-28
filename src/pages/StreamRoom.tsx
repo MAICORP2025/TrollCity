@@ -482,7 +482,7 @@ const StreamRoom = () => {
       // Decrement viewer count
       if (stream?.id) {
         void supabase
-          .from('streams')
+          .from('troll_streams')
           .update({ current_viewers: Math.max(0, (stream.current_viewers || 1) - 1) })
           .eq('id', stream.id)
       }
@@ -528,7 +528,7 @@ const StreamRoom = () => {
       
       // Load stream with broadcaster info
       const { data: streamData, error: streamError } = await supabase
-        .from('streams')
+        .from('troll_streams')
         .select(`
           *,
           user_profiles!broadcaster_id (*)
@@ -612,7 +612,7 @@ const StreamRoom = () => {
           {
             event: '*',
             schema: 'public',
-            table: 'streams',
+            table: 'troll_streams',
             filter: `id=eq.${streamId}`
           },
           (payload: any) => {
@@ -737,7 +737,7 @@ const StreamRoom = () => {
 
       // Increment viewer count
       await supabase
-        .from('streams')
+        .from('troll_streams')
         .update({ current_viewers: (stream.current_viewers || 0) + 1 })
         .eq('id', streamId)
 
@@ -898,7 +898,7 @@ const StreamRoom = () => {
   const startRandomBattle = async () => {
     try {
       const { data } = await supabase
-        .from('streams')
+        .from('troll_streams')
         .select('id, title, broadcaster_id, current_viewers, total_gifts_coins')
         .eq('status', 'live')
         .neq('id', stream.id)
@@ -924,7 +924,7 @@ const StreamRoom = () => {
       const b = battle
       if (!b) return
       const { data: latestOpp } = await supabase
-        .from('streams')
+        .from('troll_streams')
         .select('id, total_gifts_coins')
         .eq('id', b.opponent.id)
         .maybeSingle()
@@ -1094,7 +1094,7 @@ const StreamRoom = () => {
 
       // Update stream stats
       await supabase
-        .from('streams')
+        .from('troll_streams')
         .update({
           total_gifts_coins: (stream.total_gifts_coins || 0) + gift.coin_cost,
           total_unique_gifters: (stream.total_unique_gifters || 0) + 1
@@ -1306,7 +1306,7 @@ const StreamRoom = () => {
 
       // Mark stream as ended so all listeners redirect
       await supabase
-        .from('streams')
+        .from('troll_streams')
         .update({
           status: 'ended',
           end_time: new Date().toISOString()
