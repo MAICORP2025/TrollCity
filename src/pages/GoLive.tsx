@@ -120,13 +120,12 @@ const handleGoLive = async () => {
       const { data: streamRow, error: insertError } = await supabase
         .from("streams")
         .insert({
-          broadcaster_id: profile.id,
-          title: title.trim(),
-          category,
-          multi_beam: multiBeam,
-          status: "live",
-          livekit_room: roomName,
-          livekit_token: token,
+          user_id: profile.id,
+          title,
+          room_name: roomName,
+          livekit_url: url,
+          is_live: true,
+          created_at: new Date().toISOString(),
         })
         .select()
         .single();
