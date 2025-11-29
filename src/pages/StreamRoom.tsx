@@ -17,8 +17,9 @@ const StreamRoom = () => {
   const location = useLocation()
   const { user, profile } = useAuthStore()
 
-  const livekitUrl = location.state?.serverUrl
-  const livekitToken = location.state?.token
+  const roomNameFromState = location.state?.roomName
+  const livekitUrlFromState = location.state?.serverUrl
+  const livekitTokenFromState = location.state?.token
   const isHost = location.state?.isHost || false
 
   const remoteVideoRef = useRef<HTMLDivElement>(null)
@@ -32,13 +33,235 @@ const StreamRoom = () => {
   const [isEndingStream, setIsEndingStream] = useState(false)
 
   /** ────────────────────────────────────────────────
+   🔄 Convert HTTP URL to WebSocket URL
+  ───────────────────────────────────────────────────*/
+  const convertToWebSocketUrl = (url: string): string => {
+    if (!url) return url
+    // If already a WebSocket URL, return as is
+    if (url.startsWith('ws://') || url.startsWith('wss://')) {
+      return url
+    }
+    // Convert HTTP/HTTPS to WebSocket
+    if (url.startsWith('http://')) {
+      return url.replace('http://', 'ws://')
+    }
+    if (url.startsWith('https://')) {
+      return url.replace('https://', 'wss://')
+    }
+    // If no protocol, assume HTTPS and convert to WSS
+    return `wss://${url}`
+  }
+
+  /** ────────────────────────────────────────────────
    📡 Initialize LiveKit - Handles BOTH host & viewer
   ───────────────────────────────────────────────────*/
   const initializeLiveKit = async () => {
-    if (!livekitUrl || !livekitToken) {
-      console.warn('Missing LiveKit credentials')
+    if (!user) {
+      console.warn('User not authenticated')
       return
     }
+
+    let livekitUrl = livekitUrlFromState
+    let livekitToken = livekitTokenFromState
+    let roomName = roomNameFromState
+
+    // Ensure token is a string, not an object
+    if (livekitToken) {
+      if (typeof livekitToken !== 'string') {
+        console.warn('Token from state is not a string, extracting:', { type: typeof livekitToken, value: livekitToken })
+        // Try to extract from nested object
+        if (typeof livekitToken === 'object' && livekitToken !== null) {
+          livekitToken = livekitToken.token || livekitToken.value || String(livekitToken)
+        } else {
+          livekitToken = String(livekitToken)
+        }
+      }
+      // Validate it's not an empty string or invalid
+      if (livekitToken === 'undefined' || livekitToken === 'null' || livekitToken === '[object Object]' || livekitToken.trim().length === 0) {
+        console.warn('Token from state is invalid, will fetch new one:', livekitToken)
+        livekitToken = null // Force fetching a new token
+      }
+    }
+
+    // If credentials are missing (e.g., page refresh), fetch them
+    if (!livekitUrl || !livekitToken) {
+      try {
+        // Always use streamId as room name for consistency
+        // This matches what GoLive.tsx uses when creating the stream
+        const roomNameForToken = streamId || roomName || 'default-room'
+        
+        console.log('Fetching LiveKit token for room:', roomNameForToken)
+        
+        const tokenResp = await api.post('/livekit-token', {
+          room: roomNameForToken,
+          identity: user.email || user.id,
+          isHost: isHost,
+        })
+
+        // Check if the API call failed
+        if (!tokenResp) {
+          throw new Error('No response from LiveKit token API')
+        }
+
+        // Check for API errors (error property takes precedence)
+        if (tokenResp.error) {
+          console.error('API returned error:', tokenResp.error)
+          throw new Error(tokenResp.error)
+        }
+
+        // Check if success flag explicitly indicates failure
+        // Note: success might be undefined, which is OK if there's no error
+        if (tokenResp.success === false) {
+          throw new Error(tokenResp.error || 'Token API returned failure status')
+        }
+
+        // Log the full response for debugging
+        console.log('🔍 Token response structure:', {
+          success: tokenResp?.success,
+          hasToken: !!tokenResp?.token,
+          tokenType: typeof tokenResp?.token,
+          tokenValue: tokenResp?.token,
+          tokenPreview: tokenResp?.token && typeof tokenResp?.token === 'string' 
+            ? tokenResp.token.substring(0, 50) + '...' 
+            : (tokenResp?.token ? JSON.stringify(tokenResp.token).substring(0, 100) : 'missing'),
+          hasLivekitUrl: !!tokenResp?.livekitUrl,
+          hasServerUrl: !!tokenResp?.serverUrl,
+          allKeys: Object.keys(tokenResp || {}),
+          fullResponse: JSON.stringify(tokenResp, null, 2)
+        })
+        
+        // Extract URL first
+        livekitUrl = tokenResp?.livekitUrl || tokenResp?.serverUrl || tokenResp?.url
+        
+        // Extract token - simplified since we know the new function returns it directly
+        let extractedToken: string | null = null
+        
+        // Method 1: Direct token property (should work with new manual JWT function)
+        if (tokenResp?.token) {
+          if (typeof tokenResp.token === 'string') {
+            const trimmed = tokenResp.token.trim()
+            if (trimmed.length > 0 && trimmed !== 'undefined' && trimmed !== 'null' && trimmed !== '[object Object]') {
+              extractedToken = trimmed
+              console.log('✅ Token found in tokenResp.token (direct)')
+            }
+          } else if (typeof tokenResp.token === 'object' && tokenResp.token !== null) {
+            // If it's still an object (shouldn't happen with new function, but handle it)
+            console.warn('⚠️ Token is an object, attempting extraction:', tokenResp.token)
+            const objToken = tokenResp.token as any
+            if (objToken.token && typeof objToken.token === 'string') {
+              extractedToken = objToken.token.trim()
+              console.log('✅ Token extracted from nested object')
+            } else if (objToken.value && typeof objToken.value === 'string') {
+              extractedToken = objToken.value.trim()
+              console.log('✅ Token extracted from value property')
+            }
+          }
+        }
+        
+        // Method 2: Check data.token (if response is wrapped)
+        if (!extractedToken && tokenResp?.data?.token) {
+          if (typeof tokenResp.data.token === 'string') {
+            const trimmed = tokenResp.data.token.trim()
+            if (trimmed.length > 0) {
+              extractedToken = trimmed
+              console.log('✅ Token found in tokenResp.data.token')
+            }
+          }
+        }
+
+        // Method 3: Last resort - scan all string properties for JWT-like values
+        if (!extractedToken) {
+          const allKeys = Object.keys(tokenResp || {})
+          console.log('🔍 Scanning all keys for JWT-like values:', allKeys)
+          for (const key of allKeys) {
+            const value = (tokenResp as any)[key]
+            if (typeof value === 'string' && value.length > 50) {
+              // Check if it looks like a JWT (has at least 2 dots)
+              const dotCount = (value.match(/\./g) || []).length
+              if (dotCount >= 2) {
+                extractedToken = value.trim()
+                console.log(`✅ Found JWT-like token in key: ${key} (${dotCount} dots, ${value.length} chars)`)
+                break
+              }
+            }
+          }
+        }
+
+        // Validate extracted token
+        if (!extractedToken) {
+          console.error('❌ Token extraction failed - no valid token found')
+          console.error('📋 Full response:', JSON.stringify(tokenResp, null, 2))
+          console.error('🔑 Available keys:', Object.keys(tokenResp || {}))
+          throw new Error('Failed to extract valid token from response. Check console for details.')
+        }
+        
+        if (extractedToken === 'undefined' || extractedToken === 'null' || extractedToken === '[object Object]') {
+          console.error('❌ Token has invalid value:', extractedToken)
+          throw new Error('Token has invalid value. Check console for details.')
+        }
+        
+        if (extractedToken.trim().length === 0) {
+          console.error('❌ Token is empty string')
+          throw new Error('Token is empty. Check console for details.')
+        }
+        
+        // Validate it looks like a JWT
+        const dotCount = (extractedToken.match(/\./g) || []).length
+        if (dotCount < 2) {
+          console.error('❌ Token does not look like a JWT (expected 2+ dots, found', dotCount, ')')
+          console.error('Token preview:', extractedToken.substring(0, 100))
+          throw new Error('Token does not appear to be a valid JWT format.')
+        }
+        
+        console.log('✅ Token extracted successfully:', {
+          length: extractedToken.length,
+          dots: dotCount,
+          preview: extractedToken.substring(0, 30) + '...'
+        })
+
+        livekitToken = extractedToken
+
+        if (!livekitUrl || !livekitToken) {
+          console.error('Token response missing data:', { livekitUrl, hasToken: !!livekitToken, tokenResp })
+          throw new Error('Failed to get LiveKit credentials - missing URL or token')
+        }
+
+        // Final validation - ensure token is a non-empty string
+        if (typeof livekitToken !== 'string' || livekitToken.trim().length === 0) {
+          console.error('Token validation failed:', { type: typeof livekitToken, length: livekitToken?.length, preview: String(livekitToken).substring(0, 50) })
+          throw new Error('Invalid token format - token must be a non-empty string')
+        }
+        
+        console.log('Token extracted successfully:', { length: livekitToken.length, preview: livekitToken.substring(0, 30) + '...' })
+      } catch (err: any) {
+        console.error('Failed to fetch LiveKit token:', err)
+        toast.error(err.message || 'Failed to get LiveKit credentials')
+        return
+      }
+    }
+
+    // Final validation - ensure token is a string before connecting
+    if (typeof livekitToken !== 'string' || livekitToken.trim().length === 0) {
+      console.error('Token validation failed:', { 
+        type: typeof livekitToken, 
+        value: livekitToken,
+        length: livekitToken?.length,
+        isEmpty: livekitToken?.trim().length === 0
+      })
+      toast.error('Invalid token format - please try again')
+      return
+    }
+    
+    // Additional check for common invalid values
+    if (livekitToken === 'undefined' || livekitToken === 'null' || livekitToken === '[object Object]') {
+      console.error('Token contains invalid value:', livekitToken)
+      toast.error('Invalid token - please refresh and try again')
+      return
+    }
+
+    // Convert URL to WebSocket format if needed
+    const wsUrl = convertToWebSocketUrl(livekitUrl)
+    console.log('Connecting to LiveKit:', { wsUrl, roomName, isHost })
 
     try {
       const { Room, RoomEvent, createLocalTracks } = await import('livekit-client')
@@ -66,21 +289,88 @@ const StreamRoom = () => {
         track.detach()
       })
 
+      client.current.on(RoomEvent.Disconnected, () => {
+        console.log('LiveKit disconnected')
+      })
+
+      client.current.on(RoomEvent.Connected, () => {
+        console.log('LiveKit connected successfully')
+      })
+
       // 3. Connect viewer or host
-      await client.current.connect(livekitUrl, livekitToken)
+      // Final check - ensure token is definitely a string at this point
+      if (!livekitToken) {
+        console.error('Token is null/undefined at connection time')
+        throw new Error('Token is missing - please try refreshing the page')
+      }
+      
+      // Convert to string and validate
+      let tokenString: string
+      if (typeof livekitToken === 'string') {
+        tokenString = livekitToken.trim()
+      } else if (typeof livekitToken === 'object' && livekitToken !== null) {
+        // Try to extract from object
+        tokenString = (livekitToken as any).token || (livekitToken as any).value || JSON.stringify(livekitToken)
+        tokenString = String(tokenString).trim()
+      } else {
+        tokenString = String(livekitToken).trim()
+      }
+      
+      // Validate the token string
+      if (!tokenString || 
+          tokenString.length === 0 || 
+          tokenString === 'undefined' || 
+          tokenString === 'null' || 
+          tokenString === '[object Object]' ||
+          tokenString.startsWith('{') || // JSON object stringified
+          tokenString.startsWith('[')) { // Array stringified
+        console.error('Invalid token string:', { 
+          original: livekitToken, 
+          converted: tokenString,
+          type: typeof livekitToken,
+          length: tokenString.length
+        })
+        throw new Error('Invalid token format - token must be a valid JWT string')
+      }
+
+      console.log('Attempting to connect with:', { 
+        url: wsUrl, 
+        hasToken: !!tokenString, 
+        tokenLength: tokenString.length,
+        tokenPreview: tokenString.substring(0, 20) + '...',
+        roomName: roomName || streamId,
+        isHost 
+      })
+      
+      await client.current.connect(wsUrl, tokenString)
 
       // 4. If host, publish local mic/camera tracks
       if (isHost) {
-        const tracks = await createLocalTracks({ audio: true, video: true })
-        for (const track of tracks) {
-          await client.current.localParticipant.publishTrack(track)
+        try {
+          const tracks = await createLocalTracks({ audio: true, video: true })
+          for (const track of tracks) {
+            await client.current.localParticipant.publishTrack(track)
+          }
+          console.log('Published local tracks as host')
+        } catch (trackErr: any) {
+          console.error('Failed to publish tracks:', trackErr)
+          // Don't fail the connection if track publishing fails
         }
       }
 
       console.log('LiveKit connected', isHost ? 'as Host' : 'as Viewer')
-    } catch (err) {
+      toast.success('Connected to stream')
+    } catch (err: any) {
       console.error('LiveKit init failed:', err)
-      toast.error('Failed to connect to LiveKit')
+      console.error('Error details:', {
+        message: err.message,
+        code: err.code,
+        stack: err.stack,
+        wsUrl,
+        hasToken: !!livekitToken,
+        roomName: roomName || streamId
+      })
+      toast.error(err.message || 'Failed to connect to LiveKit')
     }
   }
 
@@ -94,7 +384,7 @@ const StreamRoom = () => {
   const loadStreamData = async () => {
     try {
       const { data: s } = await supabase
-        .from('troll_streams')
+        .from('streams')
         .select('*')
         .eq('id', streamId)
         .single()
@@ -124,21 +414,28 @@ const StreamRoom = () => {
    🚪 Join LiveKit when stream & user ready
   ───────────────────────────────────────────────────*/
   useEffect(() => {
-    if (stream && user) {
+    if (stream && user && !loading) {
       joinStream()
       initializeLiveKit()
     }
 
     return () => {
-      try { client.current?.disconnect() } catch {}
+      try { 
+        if (client.current) {
+          client.current.disconnect()
+          client.current = null
+        }
+      } catch (err) {
+        console.error('Error disconnecting LiveKit:', err)
+      }
     }
-  }, [stream, user])
+  }, [stream, user, loading])
 
   const joinStream = async () => {
     try {
       setJoining(true)
       await supabase
-        .from('troll_streams')
+        .from('streams')
         .update({ current_viewers: (stream?.current_viewers || 0) + 1 })
         .eq('id', streamId)
     } catch {}
@@ -156,7 +453,7 @@ const StreamRoom = () => {
     try {
       setIsEndingStream(true)
       await supabase
-        .from('troll_streams')
+        .from('streams')
         .update({
           is_live: false,
           status: 'ended',

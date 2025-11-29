@@ -30,7 +30,8 @@ const GoLive: React.FC<GoLiveProps> = ({ className = '' }) => {
   }, [roomName]);
 
   const handleStartStream = async () => {
-    if (!user || !roomName.trim() || !streamTitle.trim()) {
+    const { profile } = useAuthStore.getState();
+    if (!user || !profile || !roomName.trim() || !streamTitle.trim()) {
       setError('Please fill in all required fields');
       return;
     }
@@ -39,44 +40,73 @@ const GoLive: React.FC<GoLiveProps> = ({ className = '' }) => {
     setError(null);
 
     try {
+      // Generate a UUID for the stream ID (using crypto.randomUUID if available, otherwise fallback)
+      const streamId = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? crypto.randomUUID() 
+        : `${Date.now()}-${Math.random().toString(36).substring(2, 11)}-${Math.random().toString(36).substring(2, 11)}`;
+
       // 1️⃣ Save or update stream in Supabase
       const { data: streamRecord, error: dbError } = await supabase
         .from('streams')
-        .upsert(
-          {
-            id: roomName, // roomName is used as ID
-            user_id: user.id,
-            title: streamTitle,
-            livekit_room: roomName,
-            is_live: true,
-            start_time: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        )
+        .insert({
+          id: streamId,
+          broadcaster_id: profile.id, // Use profile.id instead of user.id
+          title: streamTitle,
+          is_live: true,
+          status: 'live',
+          start_time: new Date().toISOString(),
+        })
         .select()
         .single();
 
       if (dbError || !streamRecord) {
-        throw new Error('Failed to create/update stream in Supabase');
+        console.error('Stream creation error:', dbError);
+        throw new Error(dbError?.message || 'Failed to create/update stream in Supabase');
       }
 
       // 2️⃣ Get LiveKit token using Edge function
+      // Use streamId as room name for consistency (so it's available on page refresh)
       const tokenResp = await api.post('/livekit-token', {
-        room: roomName,
+        room: streamId, // Use streamId instead of roomName for consistency
         identity: user.email || user.id,
         isHost: true,
       });
 
-      if (!tokenResp?.token || !tokenResp?.serverUrl) {
-        throw new Error('LiveKit token missing token or serverUrl');
+      // Check if the request was successful
+      if (!tokenResp?.success && tokenResp?.error) {
+        console.error('LiveKit token error:', tokenResp);
+        throw new Error(tokenResp.error);
       }
 
-      // 3️⃣ Navigate to StreamRoom — no Room object passed
-      navigate('/stream-room', {
+      // The API returns 'livekitUrl' but we need to check for it
+      const serverUrl = tokenResp?.livekitUrl || tokenResp?.serverUrl;
+      let token = tokenResp?.token;
+      
+      // Ensure token is a string, not an object
+      if (token && typeof token !== 'string') {
+        console.warn('Token is not a string, extracting:', token);
+        token = typeof token === 'object' && token?.token 
+          ? token.token 
+          : String(token);
+      }
+      
+      if (!token || !serverUrl) {
+        console.error('LiveKit token response:', tokenResp);
+        throw new Error(tokenResp?.error || 'LiveKit token missing token or serverUrl');
+      }
+
+      // Validate token is a proper JWT string
+      if (typeof token !== 'string' || token.length < 10) {
+        console.error('Invalid token format:', typeof token, token);
+        throw new Error('Invalid token format received from server');
+      }
+
+      // 3️⃣ Navigate to StreamRoom with the streamId in the URL
+      navigate(`/stream/${streamId}`, {
         state: {
-          roomName,
-          serverUrl: tokenResp.serverUrl,
-          token: tokenResp.token,
+          roomName: streamId, // Use streamId as roomName for consistency
+          serverUrl: serverUrl,
+          token: token, // Ensure it's a string
           streamTitle,
           isHost: true,
         },
