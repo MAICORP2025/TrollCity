@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Room, RoomConnectOptions, createLocalTracks } from 'livekit-client';
 import api from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 
 interface GoLiveProps {
@@ -11,11 +11,23 @@ interface GoLiveProps {
 const GoLive: React.FC<GoLiveProps> = ({ className = '' }) => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isLive, setIsLive] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [streamTitle, setStreamTitle] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Auto cleanup if host closes tab
+  useEffect(() => {
+    return () => {
+      if (roomName) {
+        supabase
+          .from('streams')
+          .update({ is_live: false, end_time: new Date().toISOString() })
+          .eq('id', roomName);
+      }
+    };
+  }, [roomName]);
 
   const handleStartStream = async () => {
     if (!user || !roomName.trim() || !streamTitle.trim()) {
@@ -27,53 +39,52 @@ const GoLive: React.FC<GoLiveProps> = ({ className = '' }) => {
     setError(null);
 
     try {
-      // Get LiveKit token via Supabase Edge Function
-      const { data: tokenData, error: tokenError } = await api.post('/livekit-token', {
-        roomName,
-        identity: user.id,
-        isHost: true
-      });
+      // 1️⃣ Save or update stream in Supabase
+      const { data: streamRecord, error: dbError } = await supabase
+        .from('streams')
+        .upsert(
+          {
+            id: roomName, // roomName is used as ID
+            user_id: user.id,
+            title: streamTitle,
+            livekit_room: roomName,
+            is_live: true,
+            start_time: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        )
+        .select()
+        .single();
 
-      if (tokenError || !tokenData?.token) {
-        throw new Error(tokenError || 'Failed to get LiveKit token');
+      if (dbError || !streamRecord) {
+        throw new Error('Failed to create/update stream in Supabase');
       }
 
-      // Create local tracks
-      const tracks = await createLocalTracks({
-        audio: true,
-        video: true
+      // 2️⃣ Get LiveKit token using Edge function
+      const tokenResp = await api.post('/livekit-token', {
+        room: roomName,
+        identity: user.email || user.id,
+        isHost: true,
       });
 
-      // Create room instance
-      const room = new Room();
-      
-      const connectOptions: RoomConnectOptions = {
-        autoSubscribe: true,
-      };
-
-      // Connect to LiveKit room
-      await room.connect(tokenData.serverUrl, tokenData.token, connectOptions);
-
-      // Publish local tracks
-      for (const track of tracks) {
-        await room.localParticipant.publishTrack(track);
+      if (!tokenResp?.token || !tokenResp?.serverUrl) {
+        throw new Error('LiveKit token missing token or serverUrl');
       }
 
-      setIsLive(true);
-      
-      // Navigate to stream room with room info
-      navigate('/stream-room', { 
-        state: { 
-          roomName, 
+      // 3️⃣ Navigate to StreamRoom — no Room object passed
+      navigate('/stream-room', {
+        state: {
+          roomName,
+          serverUrl: tokenResp.serverUrl,
+          token: tokenResp.token,
           streamTitle,
-          tokenData,
-          room 
-        } 
+          isHost: true,
+        },
       });
 
-    } catch (err) {
-      console.error('Failed to start stream:', err);
-      setError(err instanceof Error ? err.message : 'Failed to start stream');
+    } catch (err: any) {
+      console.error('Stream start error:', err);
+      setError(err.message || 'Failed to start stream');
     } finally {
       setIsConnecting(false);
     }
@@ -87,9 +98,7 @@ const GoLive: React.FC<GoLiveProps> = ({ className = '' }) => {
           
           <div className="bg-gray-800 rounded-lg p-6 space-y-6">
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Stream Title *
-              </label>
+              <label className="block text-sm font-medium mb-2">Stream Title *</label>
               <input
                 type="text"
                 value={streamTitle}
@@ -101,9 +110,7 @@ const GoLive: React.FC<GoLiveProps> = ({ className = '' }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Room Name *
-              </label>
+              <label className="block text-sm font-medium mb-2">Room Name *</label>
               <input
                 type="text"
                 value={roomName}
