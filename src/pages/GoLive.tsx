@@ -125,7 +125,7 @@ const GoLive: React.FC = () => {
       }
 
       // Insert into streams table
-      const { error: insertError } = await supabase.from('streams').insert({
+      const { error: insertError, data: insertedStream } = await supabase.from('streams').insert({
         id: streamId,
         broadcaster_id: profile.id,
         title: streamTitle,
@@ -139,13 +139,17 @@ const GoLive: React.FC = () => {
         current_viewers: 0,
         total_gifts_coins: 0,
         popularity: 0,
-      });
+      }).select().single();
 
       if (insertError) {
         console.error(insertError);
         toast.error('Failed to start stream.');
+        setIsConnecting(false);
         return;
       }
+
+      // Wait a moment to ensure database commit
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // LiveKit token
       const tokenResponse = await api.post('/livekit-token', {
@@ -163,11 +167,13 @@ const GoLive: React.FC = () => {
 
       if (!token || !serverUrl) {
         toast.error('LiveKit token error.');
+        setIsConnecting(false);
         return;
       }
 
       setIsStreaming(true);
 
+      // Navigate to stream room
       navigate(`/stream/${streamId}`, {
         state: {
           roomName: streamId,
@@ -176,6 +182,7 @@ const GoLive: React.FC = () => {
           streamTitle,
           isHost: true,
         },
+        replace: false, // Don't replace so user can go back if needed
       });
     } catch (err) {
       console.error(err);

@@ -37,7 +37,7 @@ export default function StreamRoom() {
       return;
     }
 
-    const loadStream = async () => {
+    const loadStream = async (retryCount = 0) => {
       try {
         const { data, error: streamError } = await supabase
           .from('streams')
@@ -53,65 +53,19 @@ export default function StreamRoom() {
           .eq('id', actualStreamId)
           .single();
 
-        if (streamError) {
-          console.error('Stream load error:', streamError);
-          setError('Stream not found');
-          setIsConnecting(false);
-          return;
+        // If stream not found and we haven't retried too many times, wait and retry
+        if ((streamError || !data) && retryCount < 3) {
+          console.log(`Stream not found (attempt ${retryCount + 1}/3), retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 1500 * (retryCount + 1))); // Exponential backoff
+          return loadStream(retryCount + 1);
         }
 
-        if (!data) {
-          // Stream might not be found immediately after creation, wait a bit and retry
-          console.log('Stream not found, retrying...');
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          const { data: retryData, error: retryError } = await supabase
-            .from('streams')
-            .select(`
-              *,
-              user_profiles!broadcaster_id (
-                id,
-                username,
-                avatar_url,
-                is_broadcaster
-              )
-            `)
-            .eq('id', actualStreamId)
-            .single();
-
-          if (retryError || !retryData || !retryData.is_live) {
-            setError('Stream not found or not live');
-            setIsConnecting(false);
-            toast.error('Stream not found. Please try again.');
-            navigate('/live', { replace: true });
-            return;
-          }
-          
-          setStream(retryData);
-          setIsTestingMode(retryData.is_testing_mode || false);
-          
-          // Check if user is the host
-          const isUserHost = user && profile && retryData.broadcaster_id === profile.id;
-          setIsHost(isUserHost);
-
-          // Get LiveKit token
-          const tokenResponse = await api.post('/livekit-token', {
-            room: retryData.room_name || actualStreamId,
-            identity: user?.email || user?.id || 'anonymous',
-            isHost: isUserHost,
-          });
-
-          if (tokenResponse.error || !tokenResponse.token) {
-            throw new Error(tokenResponse.error || 'Failed to get LiveKit token');
-          }
-
-          const serverUrl = tokenResponse.livekitUrl || tokenResponse.serverUrl;
-          if (!serverUrl) {
-            throw new Error('LiveKit server URL not found');
-          }
-
-          setLivekitUrl(serverUrl);
-          setToken(tokenResponse.token);
+        if (streamError || !data) {
+          console.error('Stream load error after retries:', streamError);
+          setError('Stream not found');
+          setIsConnecting(false);
+          // Don't redirect immediately - let user see the error
+          toast.error('Stream not found. Please try starting the stream again.');
           return;
         }
 
