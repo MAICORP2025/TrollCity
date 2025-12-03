@@ -137,14 +137,38 @@ const Auth = () => {
         console.log('User created, signing in...')
 
         // Now sign in the user
-        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
         if (signInErr) {
           console.error('Sign in error:', signInErr)
           throw new Error(signInErr.message || 'Login failed')
         }
+
+        // Ensure session is available - wait for it if needed
+        let session = signInData?.session
+        if (!session) {
+          // Try to get session, with retries
+          for (let i = 0; i < 3; i++) {
+            const { data: sessionData } = await supabase.auth.getSession()
+            if (sessionData?.session) {
+              session = sessionData.session
+              break
+            }
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        }
+
+        if (!session) {
+          throw new Error('Failed to establish session after signup')
+        }
+
+        // Refresh the session to ensure it's fully established
+        await supabase.auth.refreshSession()
         
-        const { data: { session } } = await supabase.auth.getSession()
-        setAuth(session?.user ?? null, session ?? null)
+        // Get the refreshed session
+        const { data: { session: refreshedSession } } = await supabase.auth.getSession()
+        const finalSession = refreshedSession || session
+        
+        setAuth(finalSession?.user ?? null, finalSession ?? null)
         
         if (session?.user) {
           console.log('Session established, loading profile...')

@@ -75,8 +75,18 @@ async function request<T = any>(
     }
 
     // Supabase session token - always get fresh session
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
+    // If session is not immediately available, wait a bit and retry (for signup flow)
+    let sessionData = await supabase.auth.getSession();
+    let token = sessionData?.data?.session?.access_token;
+    
+    // If no token and this might be right after signup, wait and retry once
+    if (!token) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      sessionData = await supabase.auth.getSession();
+      token = sessionData?.data?.session?.access_token;
+    }
+    
+    const sessionError = sessionData?.error;
     
     // Enhanced logging for Square endpoints and wheel
     const isSquareEndpoint = endpoint.includes('square') || endpoint.includes('payments') || endpoint.includes('add-card') || endpoint.includes('charge-stored-card') || endpoint.includes('create-square')
