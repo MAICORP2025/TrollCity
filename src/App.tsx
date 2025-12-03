@@ -35,6 +35,7 @@ const MyEarnings = lazy(() => import("./pages/MyEarnings"));
 // Lazy-loaded pages
 const GoLive = lazy(() => import("./pages/GoLive"));
 const StreamRoom = lazy(() => import("./pages/StreamRoom"));
+const Stream = lazy(() => import("./pages/stream"));
 const StreamSummary = lazy(() => import("./pages/StreamSummary"));
 const Messages = lazy(() => import("./pages/Messages"));
 const Notifications = lazy(() => import("./pages/Notifications"));
@@ -389,6 +390,7 @@ function App() {
 
                   {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLive />} />
+                  <Route path="/stream/:id" element={<Stream />} />
                   <Route path="/stream/:streamId" element={<StreamRoom />} />
                   <Route path="/stream/:id/summary" element={<StreamSummary />} />
                   <Route path="/stream-ended" element={<StreamEnded />} />
