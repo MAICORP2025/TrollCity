@@ -107,9 +107,18 @@ async function request<T = any>(
       })
     }
 
+    // Don't require auth for signup endpoint (user doesn't exist yet)
+    const isSignupEndpoint = endpoint.includes('/auth/signup');
+    
     const requestHeaders = {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // Only add auth header if we have a token AND it's not a signup endpoint
+      ...(token && !isSignupEndpoint ? { Authorization: `Bearer ${token}` } : {}),
+      // For signup, use anon key if available
+      ...(isSignupEndpoint && !token ? { 
+        'apikey': supabaseAnonKey || '',
+        'x-client-info': 'trollcity-web'
+      } : {}),
       ...headers,
     }
 
