@@ -189,11 +189,30 @@ const GoLive: React.FC = () => {
   // Camera preview
   // -------------------------------
   useEffect(() => {
+    let previewStream: MediaStream | null = null;
+
     if (videoRef.current && !isStreaming) {
       navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-        videoRef.current!.srcObject = stream;
+        previewStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }).catch((err) => {
+        console.error('Error accessing camera/microphone:', err);
       });
     }
+
+    // Cleanup: Stop all tracks when component unmounts or when streaming starts
+    return () => {
+      if (previewStream) {
+        previewStream.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
   }, [isStreaming]);
 
   return (

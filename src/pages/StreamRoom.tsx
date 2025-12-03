@@ -60,7 +60,62 @@ export default function StreamRoom() {
           return;
         }
 
-        if (!data || !data.is_live) {
+        if (!data) {
+          // Stream might not be found immediately after creation, wait a bit and retry
+          console.log('Stream not found, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          const { data: retryData, error: retryError } = await supabase
+            .from('streams')
+            .select(`
+              *,
+              user_profiles!broadcaster_id (
+                id,
+                username,
+                avatar_url,
+                is_broadcaster
+              )
+            `)
+            .eq('id', actualStreamId)
+            .single();
+
+          if (retryError || !retryData || !retryData.is_live) {
+            setError('Stream not found or not live');
+            setIsConnecting(false);
+            toast.error('Stream not found. Please try again.');
+            navigate('/live', { replace: true });
+            return;
+          }
+          
+          setStream(retryData);
+          setIsTestingMode(retryData.is_testing_mode || false);
+          
+          // Check if user is the host
+          const isUserHost = user && profile && retryData.broadcaster_id === profile.id;
+          setIsHost(isUserHost);
+
+          // Get LiveKit token
+          const tokenResponse = await api.post('/livekit-token', {
+            room: retryData.room_name || actualStreamId,
+            identity: user?.email || user?.id || 'anonymous',
+            isHost: isUserHost,
+          });
+
+          if (tokenResponse.error || !tokenResponse.token) {
+            throw new Error(tokenResponse.error || 'Failed to get LiveKit token');
+          }
+
+          const serverUrl = tokenResponse.livekitUrl || tokenResponse.serverUrl;
+          if (!serverUrl) {
+            throw new Error('LiveKit server URL not found');
+          }
+
+          setLivekitUrl(serverUrl);
+          setToken(tokenResponse.token);
+          return;
+        }
+
+        if (!data.is_live) {
           setError('Stream is not live');
           setIsConnecting(false);
           navigate('/live', { replace: true });
@@ -238,7 +293,21 @@ export default function StreamRoom() {
     // Cleanup
     return () => {
       if (newRoom) {
-        newRoom.disconnect();
+        try {
+          // Stop all local tracks before disconnecting
+          const trackPublications = newRoom.localParticipant?.trackPublications;
+          if (trackPublications) {
+            Array.from(trackPublications.values()).forEach((pub) => {
+              if (pub.track) {
+                pub.track.stop();
+                newRoom.localParticipant?.unpublishTrack(pub.track);
+              }
+            });
+          }
+          newRoom.disconnect();
+        } catch (cleanupError) {
+          console.error('Error during room cleanup:', cleanupError);
+        }
       }
       // Decrement viewer count
       if (stream?.id) {
