@@ -1,43 +1,30 @@
 {
-  "name": "TrollCity",
+  "name": "Troll City",
   "short_name": "TrollCity",
-  "description": "Live streaming and social platform for creators and viewers",
+  "description": "Live streaming, Battles, TrollTract, Creator Earnings, and more.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0A0814",
-  "theme_color": "#9333EA",
-  "orientation": "portrait-primary",
+  "background_color": "#000000",
+  "theme_color": "#6a00ff",
+  "orientation": "portrait",
+  "scope": "/",
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ],
-  "categories": ["entertainment", "social", "productivity"],
-  "shortcuts": [
-    {
-      "name": "Go Live",
-      "short_name": "Live",
-      "description": "Start streaming",
-      "url": "/go-live",
-      "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "src": "/icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
     },
     {
-      "name": "Store",
-      "short_name": "Store",
-      "description": "Purchase coins",
-      "url": "/store",
-      "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "src": "/icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
     },
     {
-      "name": "Wallet",
-      "short_name": "Wallet",
-      "description": "View earnings",
-      "url": "/wallet",
-      "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "src": "/icons/maskable-icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ]
 }
-
