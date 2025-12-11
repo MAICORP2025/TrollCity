@@ -1,35 +1,36 @@
  import React, { useEffect, useState } from 'react'
  import { Link, useLocation, useNavigate } from 'react-router-dom'
  import CourtEntryModal from './CourtEntryModal'
-import {
-  Home,
-  MessageSquare,
-  Radio,
-  Gift,
-  Coins,
-  Users,
-  Shield,
-  LayoutDashboard,
-  Banknote,
-  FileText,
-  UserCheck,
-  ListChecks,
-  Receipt,
-  Sword,
-  UserPlus,
-  Bug,
-  Store,
-  Crown,
-  Mic,
-  Trophy,
-  FerrisWheel,
-  MessageCircle,
-  Headphones,
-  Package,
-  Scale,
-} from 'lucide-react'
-import { useAuthStore } from '../lib/store'
-import { supabase, isAdminEmail } from '../lib/supabase'
+ import ExpandedStatsPanel from './ExpandedStatsPanel'
+ import {
+   Home,
+   MessageSquare,
+   Radio,
+   Gift,
+   Coins,
+   Users,
+   Shield,
+   LayoutDashboard,
+   Banknote,
+   FileText,
+   UserCheck,
+   ListChecks,
+   Receipt,
+   Sword,
+   UserPlus,
+   Bug,
+   Store,
+   Crown,
+   Mic,
+   Trophy,
+   FerrisWheel,
+   MessageCircle,
+   Headphones,
+   Package,
+   Scale,
+ } from 'lucide-react'
+ import { useAuthStore } from '../lib/store'
+ import { supabase, isAdminEmail } from '../lib/supabase'
 
 export default function Sidebar() {
   const { profile, user } = useAuthStore()
@@ -53,6 +54,7 @@ export default function Sidebar() {
   const [canSeeOfficer, setCanSeeOfficer] = useState(false)
   const [canSeeFamilyLounge, setCanSeeFamilyLounge] = useState(false)
   const [showCourtModal, setShowCourtModal] = useState(false)
+  const [showStatsPanel, setShowStatsPanel] = useState(false)
   const isAdmin = profile?.role === 'admin'
 
   // Real-time wallet updates
@@ -193,10 +195,13 @@ export default function Sidebar() {
           />
         </div>
 
-        <p className="mt-3 font-bold text-lg flex items-center justify-center gap-2">
+        <button
+          onClick={() => setShowStatsPanel(true)}
+          className="mt-3 font-bold text-lg flex items-center justify-center gap-2 hover:text-purple-300 transition-colors cursor-pointer"
+        >
           @{profile?.username || 'Guest'}
           {badge && <span className="text-yellow-400">{badge}</span>}
-        </p>
+        </button>
 
         <p className="text-xs text-gray-400">
           {profile?.role === 'admin' ? 'Admin' : profile?.role === 'troll_officer' ? 'Troll Officer' : 'Member'}
@@ -330,6 +335,12 @@ export default function Sidebar() {
       <CourtEntryModal
         isOpen={showCourtModal}
         onClose={() => setShowCourtModal(false)}
+      />
+
+      {/* Expanded Stats Panel */}
+      <ExpandedStatsPanel
+        isOpen={showStatsPanel}
+        onClose={() => setShowStatsPanel(false)}
       />
     </div>
   )

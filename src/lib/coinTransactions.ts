@@ -282,7 +282,7 @@ export async function addCoins(params: {
       return { success: false, newBalance: 0, transaction: null, error: 'Profile not found' }
     }
 
-    const currentBalance = coinType === 'paid' 
+    const currentBalance = coinType === 'paid'
       ? (profile.paid_coin_balance || 0)
       : (profile.free_coin_balance || 0)
 
@@ -311,6 +311,55 @@ export async function addCoins(params: {
       balanceAfter: newBalance,
       supabaseClient: sb
     })
+
+    // Family coin earning hook: Allocate 10% of paid coins to family stats
+    if (coinType === 'paid' && amount > 0) {
+      try {
+        // Check if user is in a family
+        const { data: familyMember } = await sb
+          .from('family_members')
+          .select('family_id')
+          .eq('user_id', userId)
+          .single()
+
+        if (familyMember?.family_id) {
+          const familyBonus = Math.floor(amount * 0.10) // 10% of earned paid coins
+          if (familyBonus > 0) {
+            // Use RPC function to atomically update family stats
+            const { data: familyResult, error: familyError } = await sb.rpc('increment_family_stats', {
+              p_family_id: familyMember.family_id,
+              p_coin_bonus: familyBonus,
+              p_xp_bonus: 0
+            })
+
+            if (familyError) {
+              console.warn('Failed to update family stats for coin earning:', familyError)
+            } else {
+              console.log(`Allocated ${familyBonus} family coins to family ${familyMember.family_id}`)
+            }
+          }
+
+          // Track coin earning for family tasks
+          try {
+            const { trackCoinEarning } = await import('./familyTasks')
+            await trackCoinEarning(userId, amount)
+          } catch (taskErr) {
+            console.warn('Failed to track coin earning for tasks:', taskErr)
+          }
+
+          // Track coin earning for active wars
+          try {
+            const { trackWarActivity } = await import('./familyWars')
+            await trackWarActivity(userId, 'coin_earned', amount)
+          } catch (warErr) {
+            console.warn('Failed to track coin earning for wars:', warErr)
+          }
+        }
+      } catch (familyErr) {
+        console.warn('Family coin allocation failed:', familyErr)
+        // Don't fail the main transaction for family allocation errors
+      }
+    }
 
     return {
       success: true,

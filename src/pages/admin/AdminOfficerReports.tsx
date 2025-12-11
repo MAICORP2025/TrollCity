@@ -21,6 +21,41 @@ interface WeeklyReport {
   }
 }
 
+function ReportBodyDisplay({ body }: { body: string }) {
+  try {
+    const parsed = typeof body === "string" ? JSON.parse(body) : body;
+
+    return (
+      <div className="space-y-4 text-purple-200">
+        <Section title="📝 Work Summary" text={parsed.work_summary} />
+        <Section title="⚠️ Challenges Faced" text={parsed.challenges_faced} />
+        <Section title="🏆 Achievements" text={parsed.achievements} />
+        <Section title="🎥 Streams Moderated" text={parsed.streams_moderated} />
+        <Section title="🛡️ Actions Taken" text={parsed.actions_taken} />
+        <Section title="💡 Recommendations" text={parsed.recommendations} />
+      </div>
+    );
+  } catch (error) {
+    // Fallback for malformed JSON
+    return (
+      <div className="rounded-xl border border-purple-700 bg-black/40 p-4 text-purple-100 whitespace-pre-wrap font-mono text-sm">
+        {body}
+      </div>
+    );
+  }
+}
+
+function Section({ title, text }: { title: string; text: string | number }) {
+  return (
+    <div className="border border-purple-500/30 rounded-lg p-4 bg-black/20">
+      <p className="text-purple-400 font-semibold mb-2">{title}</p>
+      <p className="text-white/90 whitespace-pre-line">
+        {text && text !== "" ? text : "No information provided"}
+      </p>
+    </div>
+  );
+}
+
 export default function AdminOfficerReports() {
   const [reports, setReports] = useState<WeeklyReport[]>([])
   const [loading, setLoading] = useState(true)
@@ -158,12 +193,10 @@ export default function AdminOfficerReports() {
                 {/* Expanded Content */}
                 {expandedReport === report.id && (
                   <div className="border-t border-purple-800 p-6 space-y-4">
-                    {/* Body */}
+                    {/* Formatted Report Body */}
                     <div>
-                      <h4 className="text-sm font-semibold text-purple-300 mb-2">Report Body</h4>
-                      <div className="rounded-xl border border-purple-700 bg-black/40 p-4 text-purple-100 whitespace-pre-wrap font-mono text-sm">
-                        {report.body}
-                      </div>
+                      <h4 className="text-sm font-semibold text-purple-300 mb-4">Report Details</h4>
+                      <ReportBodyDisplay body={report.body} />
                     </div>
 
                     {/* Incidents */}
