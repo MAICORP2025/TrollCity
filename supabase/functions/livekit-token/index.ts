@@ -14,9 +14,10 @@ const LIVEKIT_URL = Deno.env.get("LIVEKIT_URL")!;
 
 // 2️⃣ Build a manual JWT (Deno native) - works around SDK compatibility issues
 async function generateLiveKitToken(
-  identity: string, 
-  room: string, 
-  isHost: boolean = false
+  identity: string,
+  room: string,
+  isHost: boolean = false,
+  allowPublish: boolean = false
 ) {
   const header = {
     alg: "HS256",
@@ -24,6 +25,9 @@ async function generateLiveKitToken(
   };
 
   const now = Math.floor(Date.now() / 1000);
+
+  // Allow publishing for hosts or Tromody battle participants
+  const canPublish = isHost || allowPublish || room === 'tromody-show';
 
   const payload = {
     iss: LIVEKIT_API_KEY,
@@ -34,9 +38,10 @@ async function generateLiveKitToken(
     video: {
       room,
       roomJoin: true,
-      canPublish: isHost, // Only hosts can publish
+      canPublish, // Hosts and Tromody participants can publish
       canSubscribe: true, // Everyone can subscribe
       canPublishData: true, // Allow data messages
+      canUpdateOwnMetadata: true, // Allow updating own metadata
     },
   };
 
@@ -99,6 +104,7 @@ serve(async (req: Request) => {
     const room = payload?.room || 'default-room';
     const identity = (payload?.identity || '').trim();
     const isHost = payload?.isHost === true || payload?.isHost === 'true';
+    const allowPublish = payload?.allowPublish === true || payload?.allowPublish === 'true';
 
     // Validate credentials
     if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
@@ -123,11 +129,11 @@ serve(async (req: Request) => {
     }
 
     // Generate token
-    console.log(`Generating token for identity: ${identity}, room: ${room}, isHost: ${isHost}`);
-    
+    console.log(`Generating token for identity: ${identity}, room: ${room}, isHost: ${isHost}, allowPublish: ${allowPublish}`);
+
     let token: string;
     try {
-      token = await generateLiveKitToken(identity, room, isHost);
+      token = await generateLiveKitToken(identity, room, isHost, allowPublish);
       
       // Validate token is a string
       if (!token || typeof token !== 'string') {

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { AuthApiError } from '@supabase/supabase-js'
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -238,9 +239,34 @@ async function request<T = any>(
       url: `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`,
       apiBaseUrl: API_BASE_URL,
     }
-    
+
     console.error(`[Square Debug ${requestId}] ❌ Network/Request Error:`, errorDetails)
-    
+
+    // Handle Supabase AuthApiError (invalid refresh token)
+    if (error instanceof AuthApiError) {
+      console.error(`[Auth Error ${requestId}] AuthApiError detected:`, error.message)
+      if (error.message.includes('Invalid Refresh Token') || error.message.includes('Refresh Token Not Found')) {
+        console.log(`[Auth Error ${requestId}] Invalid refresh token - logging out user`)
+        // Import the store dynamically to avoid circular imports
+        import('./store').then(({ useAuthStore }) => {
+          useAuthStore.getState().logout()
+        }).catch(storeError => {
+          console.error('Failed to import store for logout:', storeError)
+          // Fallback: clear local storage and reload
+          localStorage.removeItem('troll-city-auth')
+          window.location.href = '/auth'
+        })
+        return {
+          success: false,
+          error: 'Your session has expired. Please sign in again.',
+          debug: {
+            requestId,
+            ...errorDetails,
+          },
+        };
+      }
+    }
+
     // Check for specific error types
     if (error instanceof TypeError && error.message.includes('fetch')) {
       const fullUrl = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
@@ -260,7 +286,7 @@ async function request<T = any>(
         envVar: import.meta.env.VITE_EDGE_FUNCTIONS_URL || 'NOT SET',
       })
     }
-    
+
     // Provide more helpful error message
     let errorMessage = error instanceof Error ? error.message : 'Network error occurred'
     if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -269,10 +295,10 @@ async function request<T = any>(
 1. Edge function is deployed: npx supabase functions deploy add-card
 2. VITE_EDGE_FUNCTIONS_URL is set correctly
 3. Your internet connection is working
-      
+
 URL: ${fullUrl}`
     }
-    
+
     return {
       success: false,
       error: errorMessage,

@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { MessageSquarePlus } from 'lucide-react'
-import MessagesSidebar from './messages/components/MessagesSidebar'
-import ConversationList from './messages/components/ConversationList'
-import ChatPanel from './messages/components/ChatPanel'
+import InboxSidebar from './messages/components/InboxSidebar'
+import ChatWindow from './messages/components/ChatWindow'
 import NewMessageModal from './messages/components/NewMessageModal'
+import MessageInput from './messages/components/MessageInput'
 import IncomingCallPopup from '../components/IncomingCallPopup'
 import { supabase } from '../lib/supabase'
 
@@ -16,7 +16,7 @@ export default function Messages() {
 
   const [activeConversation, setActiveConversation] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<'inbox' | 'requests'>('inbox')
+  const [activeTab, setActiveTab] = useState<string>('inbox')
   const [showNewMessageModal, setShowNewMessageModal] = useState(false)
 
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({})
@@ -184,25 +184,21 @@ export default function Messages() {
 
   return (
     <div className="h-screen flex bg-gradient-to-br from-[#0b0b12] via-[#0d0d1a] to-[#14061a] overflow-hidden">
-      {/* Column 1: Sidebar */}
-      <MessagesSidebar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
-
-      {/* Column 2: Conversation List */}
-      <ConversationList
+      {/* Column 1: Sidebar with Conversations */}
+      <InboxSidebar
         activeConversation={activeConversation}
         onSelectConversation={handleSelectConversation}
         activeTab={activeTab}
+        onTabChange={setActiveTab}
         onlineUsers={onlineUsers}
       />
 
-      {/* Column 3: Chat Panel */}
-      <ChatPanel
-        activeConversation={activeConversation}
-        otherUserInfo={otherUserInfo}
-        onNewMessage={() => setShowNewMessageModal(true)}
+      {/* Column 2: Chat Window */}
+      <ChatWindow
+        otherUserId={activeConversation}
+        otherUserUsername={otherUserInfo?.username}
+        otherUserAvatar={otherUserInfo?.avatar_url}
+        isOnline={otherUserInfo?.is_online}
       />
 
       <NewMessageModal

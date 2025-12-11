@@ -340,6 +340,63 @@ function App() {
     initSession();
   }, []);
 
+  // 🔹 Auth State Change Listener (handles token refresh failures)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔄 Auth state changed:', event, !!session);
+
+        if (event === 'SIGNED_OUT' || !session) {
+          console.log('🚪 User signed out or session expired');
+          setAuth(null, null);
+          setProfile(null);
+          // Clear any cached admin profile
+          localStorage.removeItem("admin-profile-cache");
+          return;
+        }
+
+        if (event === 'TOKEN_REFRESHED') {
+          console.log('🔑 Token refreshed successfully');
+          setAuth(session?.user || null, session);
+        }
+
+        if (event === 'SIGNED_IN') {
+          console.log('✅ User signed in');
+          setAuth(session?.user || null, session);
+
+          // Load profile for new sign in
+          if (session?.user) {
+            const isAdmin = isAdminEmail(session.user.email);
+            if (isAdmin) {
+              try {
+                const result = await api.post("/auth/fix-admin-role");
+                if (result?.success && result.profile) {
+                  setProfile(result.profile);
+                  localStorage.setItem("admin-profile-cache", JSON.stringify(result.profile));
+                  return;
+                }
+              } catch (apiErr) {
+                console.error('❌ Admin fix API failed on sign in:', apiErr);
+              }
+            }
+
+            // Normal user profile
+            const { data: profileData } = await supabase
+              .from("user_profiles")
+              .select("*")
+              .eq("id", session.user.id)
+              .maybeSingle();
+            setProfile(profileData || null);
+          }
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // 🔹 Loading state
   const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">

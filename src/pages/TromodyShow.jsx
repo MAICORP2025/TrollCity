@@ -26,8 +26,8 @@ export default function TromodyShow() {
   // allowed: viewer, officer, admin
 
   const [currentUser, setCurrentUser] = useState(null);
-  const [leftLoaded, setLeftLoaded] = useState(false);
-  const [rightLoaded, setRightLoaded] = useState(false);
+  const [audioContextResumed, setAudioContextResumed] = useState(false);
+  const [hasAudio, setHasAudio] = useState(false);
 
   // Determine winner function
   const determineWinner = () => {
@@ -85,13 +85,68 @@ export default function TromodyShow() {
     })();
   }, []);
 
+  // Handle AudioContext resumption for browser security
+  useEffect(() => {
+    const resumeAudioContext = async () => {
+      if (audioContextResumed) return;
+
+      try {
+        if (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          const audioContext = new AudioContextClass();
+
+          console.log('AudioContext state before resume:', audioContext.state);
+
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+            console.log('AudioContext resumed, new state:', audioContext.state);
+          }
+
+          setAudioContextResumed(true);
+          console.log('AudioContext setup completed successfully');
+
+          // If user is in a battle but doesn't have audio, try to add it now
+          if (room && room.state === 'connected' && !hasAudio && currentUser) {
+            tryAddAudio();
+          }
+        }
+      } catch (error) {
+        console.error('Failed to resume AudioContext:', error);
+      }
+    };
+
+    // Resume on any user interaction
+    const handleUserInteraction = async () => {
+      console.log('User interaction detected, attempting AudioContext resume...');
+      await resumeAudioContext();
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+
+    if (!audioContextResumed) {
+      console.log('Setting up AudioContext listeners...');
+      document.addEventListener('click', handleUserInteraction);
+      document.addEventListener('touchstart', handleUserInteraction);
+      document.addEventListener('keydown', handleUserInteraction);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, [audioContextResumed]);
+
   // Handle user streams when they join
   useEffect(() => {
     if (leftUser && leftUser.id === currentUser?.id) {
-      setLeftLoaded(false);
+      console.log('Starting left stream for user:', currentUser.username);
       leftStream.startStream().then(() => {
-        // Stream started, wait for loaded
+        console.log('Left stream started successfully');
       }).catch(err => {
+        console.error('Failed to start left camera:', err);
         toast.error('Failed to start camera: ' + err.message);
         removeUser(currentUser.id);
       });
@@ -100,10 +155,11 @@ export default function TromodyShow() {
 
   useEffect(() => {
     if (rightUser && rightUser.id === currentUser?.id) {
-      setRightLoaded(false);
+      console.log('Starting right stream for user:', currentUser.username);
       rightStream.startStream().then(() => {
-        // Stream started, wait for loaded
+        console.log('Right stream started successfully');
       }).catch(err => {
+        console.error('Failed to start right camera:', err);
         toast.error('Failed to start camera: ' + err.message);
         removeUser(currentUser.id);
       });
@@ -114,14 +170,12 @@ export default function TromodyShow() {
   useEffect(() => {
     if (!leftUser) {
       leftStream.stopStream();
-      setLeftLoaded(false);
     }
   }, [leftUser, leftStream]);
 
   useEffect(() => {
     if (!rightUser) {
       rightStream.stopStream();
-      setRightLoaded(false);
     }
   }, [rightUser, rightStream]);
 
@@ -184,9 +238,31 @@ export default function TromodyShow() {
     }
   };
 
+  // Try to add audio track after AudioContext is resumed
+  const tryAddAudio = async () => {
+    if (!room || room.state !== 'connected' || hasAudio) return;
+
+    try {
+      console.log('Attempting to add audio track...');
+      const audioTrack = await createLocalAudioTrack();
+      await room.localParticipant.publishTrack(audioTrack);
+      setHasAudio(true);
+      toast.success('Audio enabled! You can now speak in the battle.');
+      console.log('Audio track added successfully');
+    } catch (error) {
+      console.warn('Failed to add audio track:', error);
+    }
+  };
+
   // Joining the queue
   const joinBattle = async (side) => {
     if (!currentUser) return;
+
+    // Check if AudioContext needs to be resumed first
+    if (!audioContextResumed) {
+      toast.error('Please interact with the page first (click anywhere) to enable audio');
+      return;
+    }
 
     // Connect to LiveKit room if not already connected
     if (!room) {
@@ -197,21 +273,44 @@ export default function TromodyShow() {
 
     if (room && room.state === 'connected') {
       try {
-        // Publish tracks to LiveKit
-        const [videoTrack, audioTrack] = await Promise.all([
-          createLocalVideoTrack({ facingMode: 'user' }),
-          createLocalAudioTrack()
-        ]);
+        // Wait a bit for connection to stabilize
+        await new Promise(resolve => setTimeout(resolve, 500));
 
+        // Publish video track first (usually doesn't need AudioContext)
+        const videoTrack = await createLocalVideoTrack({ facingMode: 'user' });
         await room.localParticipant.publishTrack(videoTrack);
-        await room.localParticipant.publishTrack(audioTrack);
 
-        // Set metadata for side
-        room.localParticipant.setMetadata(JSON.stringify({
+        // Try to create and publish audio track with better error handling
+        try {
+          const audioTrack = await createLocalAudioTrack();
+          await room.localParticipant.publishTrack(audioTrack);
+          setHasAudio(true);
+          console.log('Audio track published successfully');
+        } catch (audioError) {
+          console.warn('Audio track creation failed (likely AudioContext issue):', audioError);
+          setHasAudio(false);
+          // Continue without audio - video will still work
+          toast.warning('Joined battle with video only - click anywhere to enable audio');
+        }
+
+        // Set metadata for side with timeout and retry
+        const metadata = JSON.stringify({
           side: side,
           user_id: currentUser.id,
           role: role
-        }));
+        });
+
+        try {
+          await Promise.race([
+            room.localParticipant.setMetadata(metadata),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Metadata update timeout')), 5000)
+            )
+          ]);
+        } catch (metadataError) {
+          console.warn('Metadata update failed, continuing without it:', metadataError);
+          // Don't fail the whole join process for metadata issues
+        }
 
         const userWithStreams = {
           ...currentUser,
@@ -310,14 +409,10 @@ export default function TromodyShow() {
           <div className="bg-gray-800 flex-1 w-full max-w-lg rounded-lg mb-4 flex items-center justify-center overflow-hidden relative">
             <video
               ref={leftStream.videoRef}
-              className={`w-full h-full object-cover transition-opacity duration-300 ${leftLoaded ? 'opacity-100' : 'opacity-0'}`}
+              className="w-full h-full object-cover"
               autoPlay
               muted
               playsInline
-              onLoadedMetadata={() => {
-                console.log('Left video loaded');
-                setLeftLoaded(true);
-              }}
             />
             {!leftUser && (
               <button
@@ -359,14 +454,10 @@ export default function TromodyShow() {
           <div className="bg-gray-800 flex-1 w-full max-w-lg rounded-lg mb-4 flex items-center justify-center overflow-hidden relative">
             <video
               ref={rightStream.videoRef}
-              className={`w-full h-full object-cover transition-opacity duration-300 ${rightLoaded ? 'opacity-100' : 'opacity-0'}`}
+              className="w-full h-full object-cover"
               autoPlay
               muted
               playsInline
-              onLoadedMetadata={() => {
-                console.log('Right video loaded');
-                setRightLoaded(true);
-              }}
             />
             {!rightUser && (
               <button
