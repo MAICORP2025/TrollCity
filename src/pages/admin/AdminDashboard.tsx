@@ -49,6 +49,7 @@ import CreateSchedulePanel from './components/CreateSchedulePanel'
 import { AdminGrantCoins } from './components/AdminGrantCoins'
 import AdminControlPanel from './components/AdminControlPanel'
 import TestDiagnostics from './components/TestDiagnostics'
+import WeeklyReportsView from './WeeklyReportsView'
 
 type StatState = {
   totalUsers: number
@@ -103,6 +104,7 @@ type TabId =
   | 'streams'
   | 'paypal'
   | 'reports'
+  | 'officer_reports'
   | 'monitor'
   | 'payouts'
   | 'purchases'
@@ -1887,6 +1889,7 @@ export default function AdminDashboard() {
     { id: 'reset', label: 'Reset & Maintenance' },
     { id: 'paypal', label: 'PayPal Payments' },
     { id: 'reports', label: 'Reports' },
+    { id: 'officer_reports', label: 'Officer Reports' },
     { id: 'monitor', label: 'Stream Monitor' },
     { id: 'referrals', label: 'Referral Bonuses' },
     { id: 'empire_applications', label: 'Empire Applications' },
@@ -1956,6 +1959,9 @@ export default function AdminDashboard() {
 
       case 'reports':
         return <ReportsPanel />
+
+      case 'officer_reports':
+        return <WeeklyReportsView />
 
       case 'monitor':
         return <StreamMonitor />

@@ -13,6 +13,10 @@ export default function CoinStore() {
   const [loading, setLoading] = useState(true);
   const [loadingPackage, setLoadingPackage] = useState(null);
   const [walletData, setWalletData] = useState(null);
+  const [tab, setTab] = useState('coins');
+  const [effects, setEffects] = useState([]);
+  const [perks, setPerks] = useState([]);
+  const [plans, setPlans] = useState([]);
 
   useEffect(() => {
     if (!user || !profile) {
@@ -24,6 +28,7 @@ export default function CoinStore() {
   }, [user, profile, navigate]);
 
   const loadWalletData = async () => {
+    console.log('🔄 Loading wallet data for user:', user?.id);
     try {
       setLoading(true);
 
@@ -36,21 +41,77 @@ export default function CoinStore() {
 
       if (profileError) throw profileError;
 
+      console.log('✅ Profile data loaded:', profileData);
       setWalletData({
         paidCoins: profileData.paid_coin_balance || 0,
         freeCoins: profileData.free_coin_balance || 0,
         totalCoins: (profileData.paid_coin_balance || 0) + (profileData.free_coin_balance || 0)
       });
+      const [effRes, perkRes, planRes] = await Promise.all([
+        supabase.from('entrance_effects').select('*').order('created_at', { ascending: false }),
+        supabase.from('perks').select('*').order('created_at', { ascending: false }),
+        supabase.from('insurance_plans').select('*').order('created_at', { ascending: false })
+      ])
+      console.log('✅ Effects, perks, plans loaded:', { effects: effRes.data?.length, perks: perkRes.data?.length, plans: planRes.data?.length });
+      setEffects(effRes.data || [])
+      setPerks(perkRes.data || [])
+      setPlans(planRes.data || [])
 
     } catch (err) {
-      console.error('Error loading wallet data:', err);
+      console.error('❌ Error loading wallet data:', err);
       toast.error('Failed to load wallet data');
     } finally {
       setLoading(false);
+      console.log('🏁 Wallet data loading complete');
     }
   };
 
+  const buyEffect = async (effect) => {
+    try {
+      const price = effect.price_paid_coins || effect.coin_cost || 0
+      const { error: deductErr } = await supabase.rpc('deduct_coins', { p_user_id: user.id, p_amount: price, p_coin_type: 'paid' })
+      if (deductErr) throw deductErr
+      const { error } = await supabase.from('user_entrance_effects').insert([{ user_id: user.id, effect_id: effect.id }])
+      if (error) throw error
+      toast.success('Entrance effect purchased')
+      await loadWalletData()
+    } catch (err) {
+      toast.error('Purchase failed')
+    }
+  }
+
+  const buyPerk = async (perk) => {
+    try {
+      const price = perk.price_paid_coins || 0
+      const { error: deductErr } = await supabase.rpc('deduct_coins', { p_user_id: user.id, p_amount: price, p_coin_type: 'paid' })
+      if (deductErr) throw deductErr
+      const { error } = await supabase.from('user_perks').insert([{ user_id: user.id, perk_id: perk.id }])
+      if (error) throw error
+      toast.success('Perk purchased')
+      await loadWalletData()
+    } catch (err) {
+      toast.error('Purchase failed')
+    }
+  }
+
+  const buyInsurance = async (plan) => {
+    try {
+      const price = plan.price_paid_coins || 0
+      const { error: deductErr } = await supabase.rpc('deduct_coins', { p_user_id: user.id, p_amount: price, p_coin_type: 'paid' })
+      if (deductErr) throw deductErr
+      const endDate = new Date()
+      endDate.setDate(endDate.getDate() + (plan.duration_days || 0))
+      const { error } = await supabase.from('user_insurance').insert([{ user_id: user.id, plan_id: plan.id, end_date: endDate.toISOString() }])
+      if (error) throw error
+      toast.success('Insurance purchased')
+      await loadWalletData()
+    } catch (err) {
+      toast.error('Purchase failed')
+    }
+  }
+
   const handleBuy = async (pkg) => {
+    console.log('🛒 Starting PayPal checkout for package:', pkg.id);
     setLoadingPackage(pkg.id);
     try {
       const res = await fetch('/api/paypal/create-order', {
@@ -59,18 +120,39 @@ export default function CoinStore() {
         body: JSON.stringify({ packageId: pkg.id })
       });
 
-      const data = await res.json();
+      console.log('📡 PayPal API response status:', res.status);
+
+      if (!res.ok) {
+        console.error('❌ API response not ok:', res.status, res.statusText);
+        throw new Error(`API Error: ${res.status} ${res.statusText}`);
+      }
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        console.error('❌ Failed to parse JSON response:', jsonErr);
+        throw new Error('Invalid API response format');
+      }
+
+      console.log('📦 PayPal API response data:', data);
 
       if (!data.approvalUrl) {
         throw new Error("Missing PayPal URL");
       }
 
+      console.log('✅ Redirecting to PayPal:', data.approvalUrl);
       window.location.href = data.approvalUrl;
     } catch (err) {
-      console.error("Failed to start PayPal checkout:", err);
-      toast.error("Unable to start checkout.");
+      console.error("❌ Failed to start PayPal checkout:", err);
+      if (err.message.includes('API Error') || err.message.includes('Invalid API response')) {
+        toast.error("Payment service is currently unavailable. Please try again later.");
+      } else {
+        toast.error("Unable to start checkout.");
+      }
     } finally {
       setLoadingPackage(null);
+      console.log('🏁 PayPal checkout attempt complete');
     }
   };
 
@@ -126,6 +208,12 @@ export default function CoinStore() {
               <Coins className="w-8 h-8 text-purple-400" />
               Troll City Coin Store
             </h1>
+            <div className="flex gap-2">
+              <button className={`px-3 py-2 rounded ${tab==='coins'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('coins')}>Coin Packages</button>
+              <button className={`px-3 py-2 rounded ${tab==='effects'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('effects')}>Entrance Effects</button>
+              <button className={`px-3 py-2 rounded ${tab==='perks'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('perks')}>Perks</button>
+              <button className={`px-3 py-2 rounded ${tab==='insurance'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('insurance')}>Insurance</button>
+            </div>
           </div>
 
           {/* Wallet Summary */}
@@ -145,15 +233,15 @@ export default function CoinStore() {
                 <p className="text-2xl font-bold text-purple-400">
                   {formatCoins(walletData.totalCoins)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">paid + free combined</p>
+                <p className="text-xs text-gray-500 mt-1">Troll Coins + Trollmonds combined</p>
               </div>
 
               {/* Paid Coins */}
               <div className="bg-zinc-900 rounded-lg p-4 border border-yellow-500/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Coins className="w-5 h-5 text-yellow-400" />
-                  <span className="text-sm text-gray-400">Paid Coins</span>
-                </div>
+              <div className="flex items-center gap-2 mb-2">
+                <Coins className="w-5 h-5 text-yellow-400" />
+                <span className="text-sm text-gray-400">Troll Coins</span>
+              </div>
                 <p className="text-2xl font-bold text-yellow-400">
                   {formatCoins(walletData.paidCoins)}
                 </p>
@@ -162,10 +250,10 @@ export default function CoinStore() {
 
               {/* Free Coins */}
               <div className="bg-zinc-900 rounded-lg p-4 border border-green-500/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Coins className="w-5 h-5 text-green-400" />
-                  <span className="text-sm text-gray-400">Free Coins</span>
-                </div>
+              <div className="flex items-center gap-2 mb-2">
+                <Coins className="w-5 h-5 text-green-400" />
+                <span className="text-sm text-gray-400">Trollmonds</span>
+              </div>
                 <p className="text-2xl font-bold text-green-400">
                   {formatCoins(walletData.freeCoins)}
                 </p>
@@ -174,71 +262,103 @@ export default function CoinStore() {
             </div>
           </div>
 
-          {/* Coin Packages Grid */}
           <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl p-6 border border-purple-500/30 shadow-lg">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-purple-400" />
-              Available Coin Packages
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {coinPackages.map((pkg) => (
-                <div
-                  key={pkg.id}
-                  className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20 hover:border-purple-500/40 transition-all"
-                >
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-lg font-bold text-purple-300">
-                        {pkg.name}
-                      </span>
-                      <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full">
-                        {pkg.id}
-                      </span>
+            {tab === 'coins' && (
+              <>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-purple-400" />
+                  Available Coin Packages
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {coinPackages.map((pkg) => (
+                    <div key={pkg.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20 hover:border-purple-500/40 transition-all">
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-lg font-bold text-purple-300">{pkg.name}</span>
+                          <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full">{pkg.id}</span>
+                        </div>
+                        <p className="text-xs text-gray-400 mb-2">Package</p>
+                      </div>
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-sm text-gray-400">Coins</span>
+                        </div>
+                        <p className="text-2xl font-bold text-yellow-400">{formatCoins(pkg.coins)}</p>
+                      </div>
+                      <div className="mb-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <DollarSign className="w-4 h-4 text-green-400" />
+                          <span className="text-sm text-gray-400">Price</span>
+                        </div>
+                        <p className="text-xl font-bold text-green-400">{formatUSD(pkg.price)}</p>
+                      </div>
+                      <button onClick={() => handleBuy(pkg)} disabled={loadingPackage === pkg.id} className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        {loadingPackage === pkg.id ? (<><Loader2 className="w-4 h-4 animate-spin" />Starting Checkout...</>) : (<><ShoppingCart className="w-4 h-4" />Buy with PayPal</>)}
+                      </button>
                     </div>
-                    <p className="text-xs text-gray-400 mb-2">Package</p>
-                  </div>
-
-                  <div className="mb-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Coins className="w-4 h-4 text-yellow-400" />
-                      <span className="text-sm text-gray-400">Coins</span>
-                    </div>
-                    <p className="text-2xl font-bold text-yellow-400">
-                      {formatCoins(pkg.coins)}
-                    </p>
-                  </div>
-
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <DollarSign className="w-4 h-4 text-green-400" />
-                      <span className="text-sm text-gray-400">Price</span>
-                    </div>
-                    <p className="text-xl font-bold text-green-400">
-                      {formatUSD(pkg.price)}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => handleBuy(pkg)}
-                    disabled={loadingPackage === pkg.id}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {loadingPackage === pkg.id ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Starting Checkout...
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingCart className="w-4 h-4" />
-                        Buy with PayPal
-                      </>
-                    )}
-                  </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
+
+            {tab === 'effects' && (
+              <>
+                <h2 className="text-xl font-bold mb-4">Entrance Effects</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {effects.map((e) => (
+                    <div key={e.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
+                      <div className="font-semibold mb-2">{e.name}</div>
+                      <div className="text-sm text-gray-400 mb-3">{e.description}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-yellow-400 font-bold">{(e.price_paid_coins || e.coin_cost || 0).toLocaleString()} Troll Coins</div>
+                        <button onClick={() => buyEffect(e)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
+                      </div>
+                    </div>
+                  ))}
+                  {effects.length === 0 && <div className="text-gray-400">No effects available</div>}
+                </div>
+              </>
+            )}
+
+            {tab === 'perks' && (
+              <>
+                <h2 className="text-xl font-bold mb-4">Perks</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {perks.map((p) => (
+                    <div key={p.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
+                      <div className="font-semibold mb-2">{p.name}</div>
+                      <div className="text-sm text-gray-400 mb-3">{p.description}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-yellow-400 font-bold">{(p.price_paid_coins || 0).toLocaleString()} Troll Coins</div>
+                        <button onClick={() => buyPerk(p)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
+                      </div>
+                    </div>
+                  ))}
+                  {perks.length === 0 && <div className="text-gray-400">No perks available</div>}
+                </div>
+              </>
+            )}
+
+            {tab === 'insurance' && (
+              <>
+                <h2 className="text-xl font-bold mb-4">Insurance</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {plans.map((p) => (
+                    <div key={p.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
+                      <div className="font-semibold mb-2">{p.name}</div>
+                      <div className="text-sm text-gray-400 mb-2">{p.description}</div>
+                      <div className="text-xs text-gray-500 mb-3">{p.coverage_description}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-yellow-400 font-bold">{(p.price_paid_coins || 0).toLocaleString()} Troll Coins</div>
+                        <button onClick={() => buyInsurance(p)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
+                      </div>
+                    </div>
+                  ))}
+                  {plans.length === 0 && <div className="text-gray-400">No plans available</div>}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Purchase Information */}

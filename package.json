@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.6",
+    "@paypal/paypal-server-sdk": "^2.1.0",
     "@paypal/react-paypal-js": "^8.9.2",
     "@supabase/supabase-js": "^2.45.4",
     "agora-rtc-sdk-ng": "^4.24.1",

@@ -200,7 +200,7 @@ export default function EarningsPage() {
             <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl p-6 border border-yellow-500/30 shadow-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Coins className="w-5 h-5 text-yellow-400" />
-                <span className="text-sm text-gray-400">Paid Coins</span>
+                <span className="text-sm text-gray-400">Troll Coins</span>
               </div>
               <p className="text-3xl font-bold text-yellow-400">
                 {formatCoins(earningsData.paid_coin_balance || 0)}
@@ -212,7 +212,7 @@ export default function EarningsPage() {
             <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl p-6 border border-green-500/30 shadow-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Coins className="w-5 h-5 text-green-400" />
-                <span className="text-sm text-gray-400">Free Coins</span>
+                <span className="text-sm text-gray-400">Trollmonds</span>
               </div>
               <p className="text-3xl font-bold text-green-400">
                 {formatCoins(earningsData.free_coin_balance || 0)}

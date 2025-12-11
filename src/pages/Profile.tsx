@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { Camera, Edit, Star, Settings, ChevronDown, ChevronUp, Crown, Shield, UserPlus, UserMinus, MessageCircle, Ban, Gift, AlertTriangle } from 'lucide-react'
+import { Camera, Edit, Star, Settings, ChevronDown, ChevronUp, Crown, Shield, UserPlus, UserMinus, MessageCircle, Ban, Gift, AlertTriangle, Sword, Trophy, TrendingUp, Users, DollarSign, Calendar, BarChart3, Award, Target, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { getTierFromXP, getLevelFromXP } from '../lib/tierSystem'
@@ -10,6 +10,23 @@ import SendGiftModal from '../components/SendGiftModal'
 import GiftersModal from '../components/GiftersModal'
 import ReportModal from '../components/ReportModal'
 import { EmpireBadge } from '../components/EmpireBadge'
+import ClickableUsername from '../components/ClickableUsername'
+
+// Import recharts for creator dashboard charts
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts'
 
 export default function Profile() {
   const { profile, user } = useAuthStore()
@@ -19,7 +36,8 @@ export default function Profile() {
   const [viewed, setViewed] = useState<any | null>(null)
   const [expandedSections, setExpandedSections] = useState<string[]>([
     'profile_info',
-    'stats', 
+    'stats',
+    'creator_dashboard',
     'entrance_effects',
     'account_settings'
   ])
@@ -48,6 +66,29 @@ export default function Profile() {
   const [newPostImage, setNewPostImage] = useState<File | null>(null)
   const [hasAccess, setHasAccess] = useState<boolean>(true)
   const [checkingAccess, setCheckingAccess] = useState<boolean>(false)
+  
+  // Battle history state
+  const [battles, setBattles] = useState<any[]>([])
+  const [battleStats, setBattleStats] = useState({
+    totalBattles: 0,
+    wins: 0,
+    losses: 0,
+    ties: 0,
+    winRate: 0,
+    totalCoinsReceived: 0,
+    totalCoinsSent: 0,
+  })
+  const [battlesLoading, setBattlesLoading] = useState(false)
+
+  // Creator Dashboard state
+  const [creatorOverview, setCreatorOverview] = useState<any>(null)
+  const [dailySeries, setDailySeries] = useState<any[]>([])
+  const [hourly, setHourly] = useState<any[]>([])
+  const [topGifters, setTopGifters] = useState<any[]>([])
+  const [battleEvent, setBattleEvent] = useState<any[]>([])
+  const [bonusSummary, setBonusSummary] = useState<any>(null)
+  const [creatorLoading, setCreatorLoading] = useState(false)
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d')
 
   // Initialize view price from profile
   useEffect(() => {
@@ -66,12 +107,127 @@ export default function Profile() {
   }, [location.search])
 
   const toggleSection = (section: string) => {
-    setExpandedSections(prev => 
-      prev.includes(section) 
+    setExpandedSections(prev =>
+      prev.includes(section)
         ? prev.filter(s => s !== section)
         : [...prev, section]
     )
   }
+
+  const loadBattleHistory = async (targetUserId: string) => {
+    setBattlesLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('battle_history')
+        .select(`
+          *,
+          opponent:opponent_id (username, avatar_url),
+          battle:battle_id (
+            host_id,
+            challenger_id,
+            winner_id,
+            host_paid_coins,
+            challenger_paid_coins,
+            host_free_coins,
+            challenger_free_coins
+          )
+        `)
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) throw error
+
+      const battleHistory = data || []
+      setBattles(battleHistory)
+
+      // Calculate stats
+      const wins = battleHistory.filter((b: any) => b.won).length
+      const losses = battleHistory.filter((b: any) => !b.won && b.battle?.winner_id !== null).length
+      const ties = battleHistory.filter((b: any) => b.battle?.winner_id === null).length
+      
+      // Get total coins (paid + free) from battle data
+      const totalCoinsReceived = battleHistory.reduce((sum: number, b: any) => {
+        if (!b.battle) return sum
+        const userTotal = b.battle.host_id === b.user_id
+          ? (b.battle.host_paid_coins || 0) + (b.battle.host_free_coins || 0)
+          : (b.battle.challenger_paid_coins || 0) + (b.battle.challenger_free_coins || 0)
+        return sum + userTotal
+      }, 0)
+      
+      const totalCoinsSent = battleHistory.reduce((sum: number, b: any) => sum + (b.paid_coins_sent || 0), 0)
+      const winRate = battleHistory.length > 0 ? Math.round((wins / battleHistory.length) * 100) : 0
+
+      setBattleStats({
+        totalBattles: battleHistory.length,
+        wins,
+        losses,
+        ties,
+        winRate,
+        totalCoinsReceived,
+        totalCoinsSent,
+      })
+    } catch (err: any) {
+      console.error('Error loading battle history:', err)
+    } finally {
+      setBattlesLoading(false)
+    }
+  }
+
+  // Creator Dashboard data loading functions
+  const loadCreatorDashboardData = async () => {
+    setCreatorLoading(true)
+    try {
+      await Promise.all([
+        loadEarningsOverview(),
+        loadDailyEarningsSeries(),
+        loadHourlyActivity(),
+        loadTopGifters(),
+        loadBattleEventEarnings(),
+        loadTrollTractBonusSummary()
+      ])
+    } catch (error) {
+      console.error('Error loading creator dashboard data:', error)
+    } finally {
+      setCreatorLoading(false)
+    }
+  }
+
+  const loadEarningsOverview = async () => {
+    const { data, error } = await supabase.rpc('get_earnings_overview')
+    if (error) throw error
+    setCreatorOverview(data?.[0] || null)
+  }
+
+  const loadDailyEarningsSeries = async () => {
+    const daysBack = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90
+    const { data, error } = await supabase.rpc('get_daily_earnings_series', {
+      days_back: daysBack
+    })
+    if (error) throw error
+    setDailySeries(data || [])
+  }
+
+  const loadHourlyActivity = async () => {
+    const { data, error } = await supabase.rpc('get_hourly_activity')
+    if (error) throw error
+    setHourly(data || [])
+  }
+
+  const loadTopGifters = async () => {
+    const { data, error } = await supabase.rpc('get_top_gifters', {
+      limit_count: 10
+    })
+    if (error) throw error
+    setTopGifters(data || [])
+  }
+
+  const loadBattleEventEarnings = async () => {
+    const { data, error } = await supabase.rpc('get_battle_and_event_earnings')
+    if (error) throw error
+    setBattleEvent(data || [])
+  }
+
 
   const handleSaveProfile = async () => {
     if (!profile) return
@@ -365,6 +521,13 @@ export default function Profile() {
           // Table doesn't exist yet, that's okay
           console.log('Entrance effects table not available:', err)
         }
+        
+        // Load battle history
+        try {
+          await loadBattleHistory(target.id)
+        } catch (err) {
+          console.error('Error loading battle history:', err)
+        }
       } catch (err) {
         console.error('Error in loadStats:', err)
         toast.error('Failed to load profile data')
@@ -385,6 +548,13 @@ export default function Profile() {
     } catch {}
 
   }, [profile?.id, user?.id, routeUsername])
+
+  // Load creator dashboard data
+  useEffect(() => {
+    if (user && profile?.id === user.id) {
+      loadCreatorDashboardData()
+    }
+  }, [user?.id, timeRange])
 
   const viewedPrice = () => {
     const p = Number(viewed?.profile_view_price || localStorage.getItem(`tc-profile-view-price-${viewed?.id}`) || 0)
@@ -935,51 +1105,184 @@ export default function Profile() {
       icon: <div className="w-5 h-5 flex items-center justify-center">📊</div>,
       badge: null,
       content: (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-[#0D0D0D] rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Streams Created</div>
-            <div className="text-white text-2xl font-bold">{streamsCreated}</div>
-          </div>
-          <div className="bg-[#0D0D0D] rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Followers</div>
-            <div className="text-white text-2xl font-bold">{followersCount}</div>
-          </div>
-          <div className="bg-[#0D0D0D] rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Following</div>
-            <div className="text-white text-2xl font-bold">{followingCount}</div>
-          </div>
-          <div className="bg-[#0D0D0D] rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Level</div>
-            <div className="text-white text-2xl font-bold">
-              {getLevelFromXP((viewed?.xp || profile?.xp) || 0, (viewed?.role || profile?.role) === 'admin')}
+        <div className="space-y-6">
+          {/* Basic Stats */}
+          <div>
+            <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+              General Stats
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-[#0D0D0D] rounded-lg p-4">
+                <div className="text-gray-400 text-sm">Streams Created</div>
+                <div className="text-white text-2xl font-bold">{streamsCreated}</div>
+              </div>
+              <div className="bg-[#0D0D0D] rounded-lg p-4">
+                <div className="text-gray-400 text-sm">Followers</div>
+                <div className="text-white text-2xl font-bold">{followersCount}</div>
+              </div>
+              <div className="bg-[#0D0D0D] rounded-lg p-4">
+                <div className="text-gray-400 text-sm">Following</div>
+                <div className="text-white text-2xl font-bold">{followingCount}</div>
+              </div>
+              <div className="bg-[#0D0D0D] rounded-lg p-4">
+                <div className="text-gray-400 text-sm">Level</div>
+                <div className="text-white text-2xl font-bold">
+                  {getLevelFromXP((viewed?.xp || profile?.xp) || 0, (viewed?.role || profile?.role) === 'admin')}
+                </div>
+              </div>
+              <div
+                className="bg-[#0D0D0D] rounded-lg p-4 cursor-pointer hover:bg-[#1A1A1A] transition-colors"
+                onClick={() => {
+                  setGiftersModalType('received')
+                  setShowGiftersModal(true)
+                }}
+                title="Click to see gifters"
+              >
+                <div className="text-gray-400 text-sm">Coins Received</div>
+                <div className="text-white text-2xl font-bold">{coinsReceived.toLocaleString()}</div>
+              </div>
+              <div
+                className="bg-[#0D0D0D] rounded-lg p-4 cursor-pointer hover:bg-[#1A1A1A] transition-colors"
+                onClick={() => {
+                  setGiftersModalType('sent')
+                  setShowGiftersModal(true)
+                }}
+                title="Click to see recipients"
+              >
+                <div className="text-gray-400 text-sm">Coins Sent</div>
+                <div className="text-white text-2xl font-bold">{coinsSent.toLocaleString()}</div>
+              </div>
+              <div className="bg-[#0D0D0D] rounded-lg p-4">
+                <div className="text-gray-400 text-sm">Total Earned</div>
+                <div className="text-white text-2xl font-bold">{(viewed?.total_earned_coins || profile?.total_earned_coins || 0).toLocaleString()}</div>
+              </div>
             </div>
           </div>
-          <div 
-            className="bg-[#0D0D0D] rounded-lg p-4 cursor-pointer hover:bg-[#1A1A1A] transition-colors"
-            onClick={() => {
-              setGiftersModalType('received')
-              setShowGiftersModal(true)
-            }}
-            title="Click to see gifters"
-          >
-            <div className="text-gray-400 text-sm">Coins Received</div>
-            <div className="text-white text-2xl font-bold">{coinsReceived.toLocaleString()}</div>
+
+          {/* Battle Stats */}
+          <div>
+            <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+              <Sword className="w-4 h-4 text-orange-500" />
+              Battle Stats
+            </h3>
+            {battlesLoading ? (
+              <div className="text-center py-4 text-gray-400">Loading battle history...</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">Total Battles</div>
+                  <div className="text-white text-2xl font-bold">{battleStats.totalBattles}</div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">Win Rate</div>
+                  <div className="text-white text-2xl font-bold">{battleStats.winRate}%</div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm flex items-center gap-1">
+                    <Trophy className="w-3 h-3 text-green-400" />
+                    Wins
+                  </div>
+                  <div className="text-green-400 text-2xl font-bold">{battleStats.wins}</div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm flex items-center gap-1">
+                    <Sword className="w-3 h-3 text-red-400" />
+                    Losses
+                  </div>
+                  <div className="text-red-400 text-2xl font-bold">{battleStats.losses}</div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">Coins from Battles</div>
+                  <div className="text-yellow-400 text-2xl font-bold">{battleStats.totalCoinsReceived.toLocaleString()}</div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">Ties</div>
+                  <div className="text-gray-400 text-2xl font-bold">{battleStats.ties}</div>
+                </div>
+              </div>
+            )}
           </div>
-          <div 
-            className="bg-[#0D0D0D] rounded-lg p-4 cursor-pointer hover:bg-[#1A1A1A] transition-colors"
-            onClick={() => {
-              setGiftersModalType('sent')
-              setShowGiftersModal(true)
-            }}
-            title="Click to see recipients"
-          >
-            <div className="text-gray-400 text-sm">Coins Sent</div>
-            <div className="text-white text-2xl font-bold">{coinsSent.toLocaleString()}</div>
-          </div>
-          <div className="bg-[#0D0D0D] rounded-lg p-4">
-            <div className="text-gray-400 text-sm">Total Earned</div>
-            <div className="text-white text-2xl font-bold">{(viewed?.total_earned_coins || profile?.total_earned_coins || 0).toLocaleString()}</div>
-          </div>
+        </div>
+      )
+    },
+    
+    {
+      id: 'battle_history',
+      title: 'Battle History',
+      icon: <Sword className="w-5 h-5 text-orange-500" />,
+      badge: null,
+      content: (
+        <div className="space-y-4">
+          {battlesLoading ? (
+            <div className="text-center py-8 text-gray-400">Loading battle history...</div>
+          ) : battles.length === 0 ? (
+            <div className="text-center py-8 bg-[#0D0D0D] rounded-lg border border-gray-700">
+              <Sword className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400">No battles yet. Start your first battle from a live stream!</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {battles.map((battle: any) => {
+                const totalCoins = battle.battle
+                  ? (battle.battle.host_id === battle.user_id
+                      ? (battle.battle.host_paid_coins || 0) + (battle.battle.host_free_coins || 0)
+                      : (battle.battle.challenger_paid_coins || 0) + (battle.battle.challenger_free_coins || 0))
+                  : 0
+                const opponentTotalCoins = battle.battle
+                  ? (battle.battle.host_id === battle.opponent_id
+                      ? (battle.battle.host_paid_coins || 0) + (battle.battle.host_free_coins || 0)
+                      : (battle.battle.challenger_paid_coins || 0) + (battle.battle.challenger_free_coins || 0))
+                  : 0
+
+                return (
+                  <div
+                    key={battle.id}
+                    className={`p-4 rounded-lg border ${
+                      battle.won
+                        ? 'bg-green-500/5 border-green-500/30'
+                        : 'bg-[#0D0D0D] border-[#2C2C2C]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {battle.won ? (
+                          <Trophy className="w-4 h-4 text-yellow-400" />
+                        ) : (
+                          <Sword className="w-4 h-4 text-gray-500" />
+                        )}
+                        <div>
+                          <div className="text-white font-medium">
+                            vs <ClickableUsername username={battle.opponent?.username || 'Unknown'} />
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {new Date(battle.created_at).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-400">Duration</div>
+                        <div className="text-sm text-gray-300">
+                          {Math.floor((battle.battle_duration_seconds || 120) / 60)}:
+                          {String((battle.battle_duration_seconds || 120) % 60).padStart(2, '0')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-xs text-gray-400 mb-1">Your Coins</div>
+                        <div className="text-yellow-400 font-semibold">{totalCoins.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-400 mb-1">Opponent Coins</div>
+                        <div className="text-gray-400 font-semibold">{opponentTotalCoins.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )
     },
@@ -1012,6 +1315,24 @@ export default function Profile() {
       icon: <Settings className="w-5 h-5" />,
       content: (
         <div className="space-y-3">
+          {/* Earnings and Transactions Links */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              onClick={() => navigate('/earnings')}
+              className="p-4 bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg hover:bg-[#1A1A1A] transition-colors text-left"
+            >
+              <div className="text-white font-semibold mb-1">Earnings</div>
+              <div className="text-gray-400 text-sm">View your earnings history</div>
+            </button>
+            <button
+              onClick={() => navigate('/transactions')}
+              className="p-4 bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg hover:bg-[#1A1A1A] transition-colors text-left"
+            >
+              <div className="text-white font-semibold mb-1">Transactions</div>
+              <div className="text-gray-400 text-sm">View your transaction history</div>
+            </button>
+          </div>
+
           {user?.email && (!viewed || viewed.id === profile?.id || profile?.role === 'admin') && (
             <div className="p-3 rounded-lg bg-[#0D0D0D] border border-[#2C2C2C]">
               <div className="text-xs text-gray-500 mb-1">Account Email</div>
@@ -1049,9 +1370,9 @@ export default function Profile() {
                   try {
                     const { error } = await supabase
                       .from('user_profiles')
-                      .update({ 
-                        profile_view_price: Math.floor(priceValue), 
-                        updated_at: new Date().toISOString() 
+                      .update({
+                        profile_view_price: Math.floor(priceValue),
+                        updated_at: new Date().toISOString()
                       })
                       .eq('id', profile.id)
                     
@@ -1062,9 +1383,9 @@ export default function Profile() {
                     }
                     
                     // Update local profile state
-                    useAuthStore.getState().setProfile({ 
-                      ...(profile as any), 
-                      profile_view_price: Math.floor(priceValue) 
+                    useAuthStore.getState().setProfile({
+                      ...(profile as any),
+                      profile_view_price: Math.floor(priceValue)
                     } as any)
                     
                     toast.success(`Profile view price saved: ${Math.floor(priceValue)} coins`)
@@ -1123,6 +1444,147 @@ export default function Profile() {
           >
             Delete Account
           </button>
+        </div>
+      )
+    },
+    {
+      id: 'creator_dashboard',
+      title: 'Creator Analytics',
+      icon: <BarChart3 className="w-5 h-5 text-purple-500" />,
+      badge: null,
+      content: (
+        <div className="space-y-6">
+          {creatorLoading ? (
+            <div className="text-center py-8 text-gray-400">Loading creator analytics...</div>
+          ) : (
+            <>
+              {/* TOP METRICS */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">Total Coins Earned</div>
+                  <div className="text-white text-2xl font-bold">
+                    {(creatorOverview?.total_coins_earned ?? 0).toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">TrollTract Bonus</div>
+                  <div className="text-green-400 text-2xl font-bold">
+                    {(creatorOverview?.total_bonus_coins ?? 0).toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">Payouts (USD)</div>
+                  <div className="text-blue-400 text-2xl font-bold">
+                    ${(creatorOverview?.total_payouts_usd ?? 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="bg-[#0D0D0D] rounded-lg p-4">
+                  <div className="text-gray-400 text-sm">Pending Payouts</div>
+                  <div className="text-yellow-400 text-2xl font-bold">
+                    ${(creatorOverview?.pending_payouts_usd ?? 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              {/* DAILY EARNINGS CHART */}
+              <div className="bg-[#0D0D0D] rounded-lg p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-white font-semibold">Earnings Analytics</h3>
+                  <div className="flex gap-2">
+                    {(['7d', '30d', '90d'] as const).map((range) => (
+                      <button
+                        key={range}
+                        onClick={() => setTimeRange(range)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                          timeRange === range
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        }`}
+                      >
+                        {range}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ width: "100%", height: 260 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={dailySeries || []}>
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      />
+                      <YAxis />
+                      <Tooltip
+                        labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                        formatter={(value, name) => [
+                          typeof value === 'number' ? value.toLocaleString() : value,
+                          name === 'coins' ? 'Coins' : name === 'bonus_coins' ? 'Bonus Coins' : 'Payouts (USD)'
+                        ]}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="coins"
+                        name="Coins"
+                        stroke="#ff2e92"
+                        dot={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="bonus_coins"
+                        name="Bonus"
+                        stroke="#7CFC00"
+                        dot={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="payouts_usd"
+                        name="Payouts (USD)"
+                        stroke="#ffd54f"
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* TOP GIFTERS + TROLLTRACT ANALYTICS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* TOP GIFTERS */}
+                <div className="bg-[#0D0D0D] rounded-lg p-6">
+                  <h3 className="text-white font-semibold mb-4">Top Gifters</h3>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {(topGifters || []).map((g, i) => (
+                      <div key={g.sender_id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 text-sm w-6">#{i + 1}</span>
+                          {g.sender_avatar_url && (
+                            <img
+                              src={g.sender_avatar_url}
+                              alt={g.sender_username}
+                              className="w-6 h-6 rounded-full"
+                            />
+                          )}
+                          <span className="text-white text-sm">{g.sender_username}</span>
+                        </div>
+                        <span className="text-yellow-400 text-sm font-semibold">
+                          {g.total_coins.toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                    {(!topGifters || topGifters.length === 0) && (
+                      <div className="text-center py-4 text-gray-500">
+                        No gifts yet. Start going live to build your leaderboard.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                
+              </div>
+            </>
+          )}
         </div>
       )
     }

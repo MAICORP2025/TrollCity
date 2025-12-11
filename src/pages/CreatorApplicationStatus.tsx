@@ -92,7 +92,7 @@ export function CreatorApplicationStatus() {
       description: 'Congratulations! Your creator application has been approved.',
       action: {
         label: 'Go to Creator Dashboard',
-        onClick: () => navigate('/creator-dashboard'),
+        onClick: () => navigate('/profile'),
         variant: 'default'
       }
     },

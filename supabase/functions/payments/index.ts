@@ -35,6 +35,7 @@ async function handleSaveCard(req: Request, supabase: any, requestId: string) {
 
     const SQUARE_API_URL = SQUARE_ENVIRONMENT === 'production'
       ? 'https://connect.squareup.com'
+      : 'https://connect.squareupsandbox.com'
      
 
     // Parse request body
@@ -211,7 +212,7 @@ async function handleSaveCard(req: Request, supabase: any, requestId: string) {
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   const requestId = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   
   console.log(`[Payments ${requestId}] Request received:`, {
@@ -300,6 +301,7 @@ Deno.serve(async (req) => {
         // Use correct Square API URL based on environment
         const squareBaseUrl = SQUARE_ENVIRONMENT === 'production' 
           ? 'https://connect.squareup.com'
+          : 'https://connect.squareupsandbox.com'
           
         
         const testUrl = `${squareBaseUrl}/v2/locations`

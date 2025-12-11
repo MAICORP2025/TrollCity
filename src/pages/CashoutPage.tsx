@@ -19,8 +19,8 @@ const CashoutPage: React.FC = () => {
   const { user, profile } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [existingRequest, setExistingRequest] = useState<CashoutRequest | null>(null);
-  const [payoutMethod, setPayoutMethod] = useState('CashApp');
-  const [payoutDetails, setPayoutDetails] = useState(''); // e.g. $cashtag, PayPal email
+  const [payoutMethod] = useState('PayPal');
+  const [payoutDetails, setPayoutDetails] = useState(''); // PayPal email
 
   const balance = Number(profile?.paid_coin_balance || 0);
 
@@ -50,7 +50,7 @@ const CashoutPage: React.FC = () => {
       return;
     }
     if (!payoutDetails.trim()) {
-      toast.error('Enter payout details (CashApp tag, PayPal email, etc.)');
+      toast.error('Enter your PayPal email');
       return;
     }
     if (existingRequest) {
@@ -126,15 +126,9 @@ const CashoutPage: React.FC = () => {
 
         <div className="mb-4">
           <label className="block text-xs mb-1 text-gray-300">Payout method</label>
-          <select
-            value={payoutMethod}
-            onChange={e => setPayoutMethod(e.target.value)}
-            className="w-full bg-black/70 border border-purple-500/60 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="CashApp">CashApp</option>
-            <option value="PayPal">PayPal</option>
-            <option value="Venmo">Venmo</option>
-          </select>
+          <div className="w-full bg-black/70 border border-purple-500/60 rounded-lg px-3 py-2 text-sm">
+            PayPal (only)
+          </div>
         </div>
 
         <div className="mb-6">
@@ -142,7 +136,7 @@ const CashoutPage: React.FC = () => {
           <input
             value={payoutDetails}
             onChange={e => setPayoutDetails(e.target.value)}
-            placeholder="$yourcashtag or PayPal/Venmo email"
+            placeholder="PayPal email"
             className="w-full bg-black/70 border border-purple-500/60 rounded-lg px-3 py-2 text-sm"
           />
         </div>

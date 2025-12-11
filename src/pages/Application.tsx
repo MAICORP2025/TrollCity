@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { Shield, Users, Skull, Crown, CheckCircle, XCircle } from 'lucide-react'
+import { Shield, Users, Skull, Crown, Store, CheckCircle, XCircle } from 'lucide-react'
 
-type ApplicationType = 'troll_officer' | 'troll_family' | 'troller' | 'lead_officer' | null
+type ApplicationType = 'troll_officer' | 'troll_family' | 'troller' | 'lead_officer' | 'seller' | null
 
 export default function Application() {
   const { user, profile, refreshProfile } = useAuthStore()
@@ -46,6 +46,9 @@ export default function Application() {
       } else if (type === 'lead_officer') {
         // Navigate to lead officer application page (if exists) or show form
         navigate('/apply/lead-officer')
+      } else if (type === 'seller') {
+        // Navigate to seller application - go to sell page
+        navigate('/sell')
       }
     } catch (error: any) {
       console.error('Error starting application:', error)
@@ -107,6 +110,15 @@ export default function Application() {
       color: 'yellow',
       disabled: profile?.is_lead_officer,
       disabledText: 'You are already a Lead Officer'
+    },
+    {
+      type: 'seller' as ApplicationType,
+      title: 'Sell on Troll City',
+      icon: Store,
+      description: 'Create a shop and sell items to other users',
+      color: 'green',
+      disabled: false,
+      disabledText: ''
     }
   ]
 
@@ -126,7 +138,8 @@ export default function Application() {
               purple: 'border-purple-600 bg-purple-900/20',
               blue: 'border-blue-600 bg-blue-900/20',
               red: 'border-red-600 bg-red-900/20',
-              yellow: 'border-yellow-600 bg-yellow-900/20'
+              yellow: 'border-yellow-600 bg-yellow-900/20',
+              green: 'border-green-600 bg-green-900/20'
             }
 
             return (

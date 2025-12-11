@@ -81,7 +81,7 @@ export default function StreamRoom() {
         setIsTestingMode(data.is_testing_mode || false);
 
         // Check if user is the host
-        const isUserHost = user && profile && data.broadcaster_id === profile.id;
+        const isUserHost = !!(user && profile && data.broadcaster_id === profile.id);
         setIsHost(isUserHost);
 
         // Get LiveKit token
@@ -222,13 +222,10 @@ export default function StreamRoom() {
         // Update viewer count
         if (stream.id) {
           try {
-            const viewerResult = supabase.rpc('update_viewer_count', {
+            await supabase.rpc('update_viewer_count', {
               p_stream_id: stream.id,
               p_delta: 1,
             });
-            if (viewerResult && typeof viewerResult.catch === 'function') {
-              await viewerResult;
-            }
           } catch (viewerError: any) {
             if (viewerError.code !== 'PGRST202') {
               console.warn('Viewer count update error:', viewerError);
@@ -266,17 +263,14 @@ export default function StreamRoom() {
       }
       // Decrement viewer count
       if (stream?.id) {
-        try {
-          const viewerResult = supabase.rpc('update_viewer_count', {
-            p_stream_id: stream.id,
-            p_delta: -1,
-          });
-          if (viewerResult && typeof viewerResult.catch === 'function') {
-            viewerResult.catch(() => {});
-          }
-        } catch (err) {
-          // Silently ignore cleanup errors
-        }
+        void (async () => {
+          try {
+            await supabase.rpc('update_viewer_count', {
+              p_stream_id: stream.id,
+              p_delta: -1,
+            });
+          } catch {}
+        })();
       }
     };
   }, [livekitUrl, token, stream, isHost, isTestingMode, profile, navigate]);

@@ -119,9 +119,11 @@ async function request<T = any>(
       requestHeaders['apikey'] = supabaseAnonKey;
     }
     
-    // For signup endpoint, don't require user auth token
-    // For other endpoints, add auth token if available
-    if (!isSignupEndpoint && token) {
+    // For signup endpoint, use anon key as auth token since user doesn't exist yet
+    // For other endpoints, add user auth token if available
+    if (isSignupEndpoint) {
+      requestHeaders['Authorization'] = `Bearer ${supabaseAnonKey}`;
+    } else if (token) {
       requestHeaders['Authorization'] = `Bearer ${token}`;
     }
     

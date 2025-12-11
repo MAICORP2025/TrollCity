@@ -71,6 +71,9 @@ const OfficerApplication = lazy(() => import("./pages/OfficerApplication"));
 const TrollerApplication = lazy(() => import("./pages/TrollerApplication"));
 const LeadOfficerApplication = lazy(() => import("./pages/LeadOfficerApplication"));
 const CoinStore = lazy(() => import("./pages/CoinStore"));
+const TrollmondsStore = lazy(() => import("./pages/TrollmondsStore"));
+const SellOnTrollCity = lazy(() => import("./pages/SellOnTrollCity"));
+const ShopEarnings = lazy(() => import("./pages/ShopEarnings"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminPayoutMobile = lazy(() => import("./pages/admin/AdminPayoutMobile"));
 const MobileAdminDashboard = lazy(() => import("./pages/admin/MobileAdminDashboard"));
@@ -84,7 +87,6 @@ const PayoutSetupPage = lazy(() => import("./pages/PayoutSetupPage"));
 const Withdraw = lazy(() => import("./pages/Withdraw"));
 const Support = lazy(() => import("./pages/Support"));
 const Profile = lazy(() => import("./pages/Profile"));
-const BattleHistory = lazy(() => import("./pages/BattleHistory"));
 const Changelog = lazy(() => import("./pages/Changelog"));
 const AccountWallet = lazy(() => import("./pages/AccountWallet"));
 const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
@@ -122,9 +124,6 @@ const ApplicationsPage = lazy(() => import("./pages/admin/Applications"));
 const AdminOfficerReports = lazy(() => import("./pages/admin/AdminOfficerReports"));
 const StoreDebug = lazy(() => import("./pages/admin/StoreDebug"));
 const ShopPartnerPage = lazy(() => import("./pages/ShopPartnerPage"));
-const ShopDashboard = lazy(() => import("./pages/ShopDashboard"));
-const CreatorContractPage = lazy(() => import("./pages/CreatorContractPage"));
-const CreatorDashboard = lazy(() => import("./pages/CreatorDashboard"));
 const TromodyShow = lazy(() => import("./pages/TromodyShow"));
 const CommandBattleGoLive = lazy(() => import("./pages/CommandBattleGoLive"));
 const OfficerLoungeStream = lazy(() => import("./pages/OfficerLoungeStream"));
@@ -284,38 +283,54 @@ function App() {
   // 🔹 Authentication Initialization
   useEffect(() => {
     const initSession = async () => {
+      console.log('🔐 Initializing auth session...');
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        console.log('📋 Session retrieved:', !!session);
         setAuth(session?.user || null, session);
 
-        if (!session?.user) return setProfile(null);
+        if (!session?.user) {
+          console.log('❌ No user session, setting profile to null');
+          return setProfile(null);
+        }
 
         const isAdmin = isAdminEmail(session.user.email);
+        console.log('👑 Is admin:', isAdmin);
 
         if (isAdmin) {
           const cached = localStorage.getItem("admin-profile-cache");
-          if (cached) setProfile(JSON.parse(cached));
+          if (cached) {
+            console.log('📦 Using cached admin profile');
+            setProfile(JSON.parse(cached));
+          }
           try {
+            console.log('🔧 Calling admin fix API...');
             const result = await api.post("/auth/fix-admin-role");
+            console.log('🔧 Admin fix result:', result);
             if (result?.success && result.profile) {
               setProfile(result.profile);
               localStorage.setItem("admin-profile-cache", JSON.stringify(result.profile));
               return;
             }
-          } catch {}
+          } catch (apiErr) {
+            console.error('❌ Admin fix API failed:', apiErr);
+          }
         }
 
         // Normal user profile
+        console.log('👤 Loading normal user profile...');
         const { data: profileData } = await supabase
           .from("user_profiles")
           .select("*")
           .eq("id", session.user.id)
           .maybeSingle();
+        console.log('👤 Profile data loaded:', !!profileData);
         setProfile(profileData || null);
       } catch (err) {
-        console.error("Auth Init Error:", err);
+        console.error("❌ Auth Init Error:", err);
       } finally {
         setLoading(false);
+        console.log('🏁 Auth initialization complete');
       }
     };
     initSession();
@@ -414,9 +429,6 @@ function App() {
                     </RequireRole>
                   } />
                   
-                  {/* ⚔️ Battles */}
-                  <Route path="/battles" element={<BattleHistory />} />
-                  
                   {/* 👥 Empire Partner Program */}
                   <Route path="/empire-partner" element={<EmpirePartnerDashboard />} />
                   <Route path="/empire-partner/apply" element={<EmpirePartnerApply />} />
@@ -433,6 +445,7 @@ function App() {
                   {/* 💰 Earnings & Coins */}
                   <Route path="/store" element={<CoinStore />} />
                   <Route path="/coins" element={<CoinStore />} />
+                  <Route path="/trollmonds-store" element={<TrollmondsStore />} />
                   <Route path="/coins/complete" element={<CoinsComplete />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/payouts/setup" element={<PayoutSetupPage />} />
@@ -444,9 +457,8 @@ function App() {
                   <Route path="/withdraw" element={<Withdraw />} />
                   <Route path="/transactions" element={<TransactionHistory />} />
                   <Route path="/shop-partner" element={<ShopPartnerPage />} />
-                  <Route path="/shop-dashboard" element={<ShopDashboard />} />
-                  <Route path="/creator-contract" element={<CreatorContractPage />} />
-                  <Route path="/creator-dashboard" element={<CreatorDashboard />} />
+                  <Route path="/sell" element={<SellOnTrollCity />} />
+                  <Route path="/seller/earnings" element={<ShopEarnings />} />
 
                   {/* 👨‍👩‍👧 Family */}
                   <Route path="/family" element={<TrollFamily />} />
@@ -720,6 +732,7 @@ function App() {
       {/* Toast system */}
       <Toaster
         position="top-right"
+        duration={5000}
         toastOptions={{
           style: {
             background: "#2e1065",

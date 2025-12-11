@@ -198,8 +198,8 @@ export function CreatorApplication() {
             )}
             {applicationStatus.status === 'approved' && (
               <div className="space-y-2">
-                <Button 
-                  onClick={() => navigate('/creator-dashboard')}
+                <Button
+                  onClick={() => navigate('/profile')}
                   className="bg-purple-600 hover:bg-purple-700 w-full"
                 >
                   Go to Creator Dashboard

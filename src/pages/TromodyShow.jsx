@@ -1,37 +1,59 @@
 // src/pages/TromodyShow.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import TromodyInstructions from "../components/tromody/TromodyInstructions";
 import TromodyChat from "../components/tromody/TromodyChat";
 import TromodyGiftBox from "../components/tromody/TromodyGiftBox";
 import TromodyLikeButton from "../components/tromody/TromodyLikeButton";
 import TromodyVideoBox from "../components/tromody/TromodyVideoBox";
+import { useMediaStream } from "../hooks/useMediaStream";
+import { useBattleQueue } from "../hooks/useBattleQueue";
+import { useBattleTimer } from "../hooks/useBattleTimer";
 import { supabase } from "../lib/supabase";
 import { createNotification } from "../lib/notifications";
 import api from "../lib/api";
 import { toast } from "sonner";
 
 export default function TromodyShow() {
+  const navigate = useNavigate();
   const [showInstructions, setShowInstructions] = useState(true);
-  const [timer, setTimer] = useState(180); // 3 minutes = 180 seconds
   const [winner, setWinner] = useState(null);
 
   // MOCK roles until connected to Supabase
   const [role, setRole] = useState("viewer");
   // allowed: viewer, officer, admin
 
-  const [leftUser, setLeftUser] = useState({
-    id: null,
-    username: null,
-    gifts: 0,
-  });
-
-  const [rightUser, setRightUser] = useState({
-    id: null,
-    username: null,
-    gifts: 0,
-  });
-
   const [currentUser, setCurrentUser] = useState(null);
+  const [leftLoaded, setLeftLoaded] = useState(false);
+  const [rightLoaded, setRightLoaded] = useState(false);
+
+  // Determine winner function
+  const determineWinner = () => {
+    if (leftUser?.gifts > rightUser?.gifts) setWinner(leftUser.username);
+    else if (rightUser?.gifts > leftUser?.gifts) setWinner(rightUser.username);
+    else setWinner("Tie");
+  };
+
+  // Battle queue and media hooks
+  const {
+    queue,
+    leftUser,
+    rightUser,
+    joinQueue,
+    removeUser,
+    updateGift,
+    rotateBattle
+  } = useBattleQueue(determineWinner);
+
+  // Timer hook
+  const { timer, isRunning } = useBattleTimer(leftUser, rightUser, () => {
+    determineWinner();
+    rotateBattle();
+  });
+
+  // Media streams for left and right
+  const leftStream = useMediaStream();
+  const rightStream = useMediaStream();
 
   // Load logged-in user
   useEffect(() => {
@@ -45,7 +67,7 @@ export default function TromodyShow() {
 
         // Fetch role
         const { data: profile } = await supabase
-          .from("profiles")
+          .from("user_profiles")
           .select("troll_role")
           .eq("id", data.user.id)
           .single();
@@ -55,26 +77,57 @@ export default function TromodyShow() {
     })();
   }, []);
 
-  // 3-minute countdown timer
+  // Handle user streams when they join
   useEffect(() => {
-    if (showInstructions) return;
-    if (timer <= 0) {
-      determineWinner();
-      return;
+    if (leftUser && leftUser.id === currentUser?.id) {
+      setLeftLoaded(false);
+      leftStream.startStream().then(() => {
+        // Stream started, wait for loaded
+      }).catch(err => {
+        toast.error('Failed to start camera: ' + err.message);
+        removeUser(currentUser.id);
+      });
     }
+  }, [leftUser, currentUser, leftStream, removeUser]);
 
-    const interval = setInterval(() => {
-      setTimer((t) => t - 1);
-    }, 1000);
+  useEffect(() => {
+    if (rightUser && rightUser.id === currentUser?.id) {
+      setRightLoaded(false);
+      rightStream.startStream().then(() => {
+        // Stream started, wait for loaded
+      }).catch(err => {
+        toast.error('Failed to start camera: ' + err.message);
+        removeUser(currentUser.id);
+      });
+    }
+  }, [rightUser, currentUser, rightStream, removeUser]);
 
-    return () => clearInterval(interval);
-  }, [showInstructions, timer]);
+  // Cleanup streams when users leave
+  useEffect(() => {
+    if (!leftUser) {
+      leftStream.stopStream();
+      setLeftLoaded(false);
+    }
+  }, [leftUser, leftStream]);
 
-  const determineWinner = () => {
-    if (leftUser.gifts > rightUser.gifts) setWinner(leftUser.username);
-    if (rightUser.gifts > leftUser.gifts) setWinner(rightUser.username);
-    if (leftUser.gifts === rightUser.gifts) setWinner("Tie");
-  };
+  useEffect(() => {
+    if (!rightUser) {
+      rightStream.stopStream();
+      setRightLoaded(false);
+    }
+  }, [rightUser, rightStream]);
+
+  // Handle page unload to cleanup streams
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (currentUser) {
+        removeUser(currentUser.id);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentUser, removeUser]);
 
   // Get followers of a user and send notifications
   const notifyFollowersUserJoined = async (user, side) => {
@@ -123,44 +176,49 @@ export default function TromodyShow() {
     }
   };
 
-  // Joining a box
-  const joinLeft = async () => {
+  // Joining the queue
+  const joinBattle = async (side) => {
     if (!currentUser) return;
-    if (leftUser.id) return;
-    const newLeftUser = { ...currentUser, gifts: 0 };
-    setLeftUser(newLeftUser);
-    
-    // Notify followers that user joined
-    await notifyFollowersUserJoined(currentUser, 'left');
-    toast.success(`${currentUser.username} joined the left side!`);
-  };
 
-  const joinRight = async () => {
-    if (!currentUser) return;
-    if (rightUser.id) return;
-    const newRightUser = { ...currentUser, gifts: 0 };
-    setRightUser(newRightUser);
-    
-    // Notify followers that user joined
-    await notifyFollowersUserJoined(currentUser, 'right');
-    toast.success(`${currentUser.username} joined the right side!`);
+    const userWithStreams = {
+      ...currentUser,
+      gifts: 0,
+      startStream: side === 'left' ? leftStream.startStream : rightStream.startStream,
+      stopStream: side === 'left' ? leftStream.stopStream : rightStream.stopStream,
+    };
+
+    const joined = joinQueue(userWithStreams, side);
+    if (joined) {
+      // Notify followers that user joined
+      await notifyFollowersUserJoined(currentUser, side);
+      toast.success(`${currentUser.username} joined the battle!`);
+    } else {
+      toast.error('You are already in the battle or queue');
+    }
   };
 
   // Admin/Officer KICK user
   const kickLeft = () => {
-    setLeftUser({ id: null, username: null, gifts: 0 });
+    if (leftUser) {
+      removeUser(leftUser.id);
+    }
   };
 
   const kickRight = () => {
-    setRightUser({ id: null, username: null, gifts: 0 });
+    if (rightUser) {
+      removeUser(rightUser.id);
+    }
+  };
+
+  const leaveBattle = () => {
+    if (currentUser) {
+      removeUser(currentUser.id);
+    }
+    navigate('/live');
   };
 
   const addGift = (side, amount) => {
-    if (side === "left" && leftUser.id) {
-      setLeftUser((p) => ({ ...p, gifts: p.gifts + amount }));
-    } else if (side === "right" && rightUser.id) {
-      setRightUser((p) => ({ ...p, gifts: p.gifts + amount }));
-    }
+    updateGift(side, amount);
   };
 
   return (
@@ -205,27 +263,46 @@ export default function TromodyShow() {
       <div className="grid grid-cols-2 flex-1 border-b border-gray-800">
 
         {/* LEFT PLAYER */}
-        <div className="flex flex-col items-center justify-center relative border-r border-gray-700">
+        <div className="flex flex-col items-center justify-center relative border-r border-gray-700 p-4">
 
-          {/* Live Video Placeholder */}
-          <div className="bg-gray-800 w-80 h-52 rounded-lg mb-4 flex items-center justify-center">
-            {!leftUser.id ? (
+          {/* Live Video */}
+          <div className="bg-gray-800 flex-1 w-full max-w-lg rounded-lg mb-4 flex items-center justify-center overflow-hidden relative">
+            <video
+              ref={leftStream.videoRef}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${leftLoaded ? 'opacity-100' : 'opacity-0'}`}
+              autoPlay
+              muted
+              playsInline
+              onLoadedMetadata={() => {
+                console.log('Left video loaded');
+                setLeftLoaded(true);
+              }}
+            />
+            {!leftUser && (
               <button
-                onClick={joinLeft}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
+                onClick={() => joinBattle('left')}
+                disabled={!currentUser || queue.some(u => u.id === currentUser.id)}
+                className="absolute inset-0 flex items-center justify-center px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg"
               >
-                Join Left
+                {queue.some(u => u.id === currentUser?.id) ? 'In Queue' : 'Join Left'}
               </button>
-            ) : (
-              <div className="text-gray-300">🎥 {leftUser.username} Live</div>
             )}
           </div>
 
           <div className="text-green-400 font-bold text-lg">
-            Gifts: {leftUser.gifts}
+            Gifts: {leftUser?.gifts || 0}
           </div>
 
-          {role === "admin" || role === "officer" ? (
+          {leftUser?.id === currentUser?.id && (
+            <button
+              onClick={leaveBattle}
+              className="mt-2 px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
+            >
+              Leave Battle
+            </button>
+          )}
+
+          {leftUser && (role === "admin" || role === "officer") ? (
             <button
               onClick={kickLeft}
               className="mt-2 text-red-400 underline text-sm"
@@ -236,26 +313,45 @@ export default function TromodyShow() {
         </div>
 
         {/* RIGHT PLAYER */}
-        <div className="flex flex-col items-center justify-center relative">
+        <div className="flex flex-col items-center justify-center relative p-4">
 
-          <div className="bg-gray-800 w-80 h-52 rounded-lg mb-4 flex items-center justify-center">
-            {!rightUser.id ? (
+          <div className="bg-gray-800 flex-1 w-full max-w-lg rounded-lg mb-4 flex items-center justify-center overflow-hidden relative">
+            <video
+              ref={rightStream.videoRef}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${rightLoaded ? 'opacity-100' : 'opacity-0'}`}
+              autoPlay
+              muted
+              playsInline
+              onLoadedMetadata={() => {
+                console.log('Right video loaded');
+                setRightLoaded(true);
+              }}
+            />
+            {!rightUser && (
               <button
-                onClick={joinRight}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
+                onClick={() => joinBattle('right')}
+                disabled={!currentUser || queue.some(u => u.id === currentUser.id)}
+                className="absolute inset-0 flex items-center justify-center px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg"
               >
-                Join Right
+                {queue.some(u => u.id === currentUser?.id) ? 'In Queue' : 'Join Right'}
               </button>
-            ) : (
-              <div className="text-gray-300">🎥 {rightUser.username} Live</div>
             )}
           </div>
 
           <div className="text-orange-400 font-bold text-lg">
-            Gifts: {rightUser.gifts}
+            Gifts: {rightUser?.gifts || 0}
           </div>
 
-          {(role === "admin" || role === "officer") && rightUser.id ? (
+          {rightUser?.id === currentUser?.id && (
+            <button
+              onClick={leaveBattle}
+              className="mt-2 px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
+            >
+              Leave Battle
+            </button>
+          )}
+
+          {rightUser && (role === "admin" || role === "officer") ? (
             <button
               onClick={kickRight}
               className="mt-2 text-red-400 underline text-sm"

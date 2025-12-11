@@ -67,7 +67,7 @@ const Header = () => {
         try {
           const { data: count, error: rpcError } = await supabase
             .rpc('get_unread_notification_count', { p_user_id: user.id })
-          
+           
           if (!rpcError && count !== null && count !== undefined) {
             setUnreadNotifications(Number(count) || 0)
             return // Success, exit early
@@ -105,7 +105,7 @@ const Header = () => {
     const channel = supabase
       .channel('notifications')
       .on(
-        'postgres_changes',
+        'postgres_changes', 
         { 
           event: 'INSERT', 
           schema: 'public', 
@@ -123,7 +123,7 @@ const Header = () => {
         }
       )
       .on(
-        'postgres_changes',
+        'postgres_changes', 
         { 
           event: 'UPDATE', 
           schema: 'public', 
@@ -139,7 +139,7 @@ const Header = () => {
         }
       )
       .on(
-        'postgres_changes',
+        'postgres_changes', 
         { 
           event: 'DELETE', 
           schema: 'public', 
@@ -233,7 +233,7 @@ const Header = () => {
       <div className="absolute inset-0 bg-gradient-to-r from-troll-neon-pink/5 via-transparent to-troll-neon-green/5"></div>
       <div className="relative z-10 flex items-center space-x-6 flex-1">
         <div className="relative flex-1 max-w-lg">
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-troll-neon-blue/60 z-10" />
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-blue-400 z-10" />
           <input
             type="text"
             value={searchQuery}
@@ -280,7 +280,7 @@ const Header = () => {
       <div className="relative z-10 flex items-center space-x-6">
         <Link 
           to="/trollifications"
-          className="relative p-3 text-troll-neon-blue/70 hover:text-troll-neon-green transition-all duration-300 group"
+          className="relative p-3 text-purple-400 hover:text-purple-300 transition-all duration-300 group"
         >
           <Bell className="w-6 h-6" />
           {unreadNotifications > 0 && (
@@ -292,7 +292,7 @@ const Header = () => {
         
         <Link 
           to={profile?.username ? `/profile/${profile.username}` : '/profile/me'}
-          className={`p-3 text-troll-neon-blue/70 hover:text-troll-neon-green transition-all duration-300 group ${!profile?.username ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`p-3 text-green-400 hover:text-green-300 transition-all duration-300 group ${!profile?.username ? 'cursor-not-allowed opacity-50' : ''}`}
           onClick={(e) => {
             // allow navigation even if username not set (routes handle 'me')
           }}

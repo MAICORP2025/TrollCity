@@ -4,6 +4,8 @@ import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
 import { X, CheckCircle, XCircle, Award, User, Clock, FileText, AlertTriangle, Calendar } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
+import WeeklyReportForm from '../../components/WeeklyReportForm'
+import WeeklyReportsList from '../../components/WeeklyReportsList'
 import '../../styles/LeadOfficerDashboard.css'
 
 type Applicant = {
@@ -79,12 +81,14 @@ export function LeadOfficerDashboard() {
   const [selectedIncidents, setSelectedIncidents] = useState<string[]>([])
   const [submittingReport, setSubmittingReport] = useState(false)
   const [lastReportDate, setLastReportDate] = useState<string | null>(null)
+  const [weeklyReports, setWeeklyReports] = useState<any[]>([])
+  const [showReportForm, setShowReportForm] = useState(false)
 
   useEffect(() => {
     const init = async () => {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setCurrentUserId(authUser?.id ?? null)
-      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadLiveStreams()])
+      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadLiveStreams(), loadWeeklyReports()])
     }
     init()
 
@@ -166,6 +170,7 @@ export function LeadOfficerDashboard() {
         .in('id', userIds)
         .eq('is_troll_officer', true)
         .eq('is_officer_active', false)
+        .neq('role', 'admin') // Exclude admin users from applicant list
 
       if (profilesError) throw profilesError
 
@@ -190,6 +195,33 @@ export function LeadOfficerDashboard() {
     }
   }
 
+  const loadPendingApplications = async () => {
+    try {
+      // Load applications that need Lead Officer approval
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          user_profiles!user_id (
+            username,
+            email
+          )
+        `)
+        .is('lead_officer_approved', null)
+        .neq('user_profiles.role', 'admin') // Exclude admin users from application list
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      
+      // For now, we'll handle officer applications in the existing applicants section
+      // and show other applications in a separate section below
+      return data || []
+    } catch (error: any) {
+      console.error('Error loading pending applications:', error)
+      return []
+    }
+  }
+
   const loadOfficers = async () => {
     try {
       const { data, error } = await supabase
@@ -197,6 +229,7 @@ export function LeadOfficerDashboard() {
         .select('id, username, email, is_lead_officer, is_troll_officer')
         .or('is_troll_officer.eq.true,is_lead_officer.eq.true')
         .eq('is_officer_active', true)
+        .neq('role', 'admin') // Exclude admin users from officer list
 
       if (error) throw error
 
@@ -436,6 +469,131 @@ export function LeadOfficerDashboard() {
     }
   }
 
+  // New functions for Lead Officer application approval
+  const approveApplication = async (applicationId: string, userId: string) => {
+    if (!currentUserId) {
+      toast.error('Not authenticated')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .update({
+          lead_officer_approved: true,
+          lead_officer_reviewed_by: currentUserId,
+          lead_officer_reviewed_at: new Date().toISOString()
+        })
+        .eq('id', applicationId)
+
+      if (error) throw error
+
+      toast.success('Application approved for admin review')
+      await loadApplicants()
+    } catch (error: any) {
+      console.error('Error approving application:', error)
+      toast.error('Failed to approve application')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const rejectApplication = async (applicationId: string) => {
+    if (!currentUserId) {
+      toast.error('Not authenticated')
+      return
+    }
+
+    const rejectReason = prompt('Enter rejection reason:') || 'No reason provided'
+    
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .update({
+          lead_officer_approved: false,
+          lead_officer_reviewed_by: currentUserId,
+          lead_officer_reviewed_at: new Date().toISOString(),
+          status: 'rejected'
+        })
+        .eq('id', applicationId)
+
+      if (error) throw error
+
+      toast.success('Application rejected')
+      await loadApplicants()
+    } catch (error: any) {
+      console.error('Error rejecting application:', error)
+      toast.error('Failed to reject application')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Weekly Report Functions
+  const loadWeeklyReports = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('weekly_officer_reports')
+        .select('*')
+        .eq('lead_officer_id', currentUserId)
+        .order('week_start', { ascending: false })
+        .limit(10)
+
+      if (error) throw error
+      setWeeklyReports(data || [])
+    } catch (error: any) {
+      console.error('Error loading weekly reports:', error)
+    }
+  }
+
+  const submitWeeklyReport = async (reportData: any) => {
+    if (!currentUserId) {
+      toast.error('Not authenticated')
+      return
+    }
+
+    setSubmittingReport(true)
+    try {
+      const result = await supabase.rpc('submit_weekly_report', {
+        p_lead_officer_id: currentUserId,
+        p_week_start: reportData.weekStart,
+        p_week_end: reportData.weekEnd,
+        p_title: `Weekly Report - ${reportData.weekStart} to ${reportData.weekEnd}`,
+        p_body: JSON.stringify({
+          work_summary: reportData.workSummary,
+          challenges_faced: reportData.challenges,
+          achievements: reportData.achievements,
+          streams_moderated: reportData.streamsModerated,
+          actions_taken: reportData.actionsTaken,
+          recommendations: reportData.recommendations
+        }),
+        p_incidents: selectedIncidents
+      })
+
+      if (result.error) throw result.error
+
+      if (result.data?.success) {
+        toast.success('Weekly report submitted successfully!')
+        setShowReportForm(false)
+        setReportTitle('')
+        setReportBody('')
+        setWeekStart('')
+        setWeekEnd('')
+        setSelectedIncidents([])
+        await loadWeeklyReports()
+      } else {
+        throw new Error(result.data?.error || 'Failed to submit report')
+      }
+    } catch (error: any) {
+      console.error('Error submitting weekly report:', error)
+      toast.error('Failed to submit weekly report')
+    } finally {
+      setSubmittingReport(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6 space-y-8">
       <div>
@@ -443,7 +601,7 @@ export function LeadOfficerDashboard() {
           Troll Officer Command Center
         </h1>
         <p className="text-sm text-purple-400">
-          Lead Officers + Owner can review tests, hire, fire, and manage ranks.
+          Lead Officers can review tests, hire, fire, and manage ranks. Admin users are excluded from officer management lists.
         </p>
       </div>
 
@@ -527,6 +685,18 @@ export function LeadOfficerDashboard() {
             </table>
           </div>
         )}
+      </section>
+
+      {/* Application Review Section */}
+      <section className="rounded-2xl border border-blue-800 bg-black/40 p-6">
+        <h2 className="text-xl font-semibold text-blue-200 mb-4 flex items-center gap-2">
+          <FileText className="w-5 h-5" />
+          Applications Pending Review
+        </h2>
+        <PendingApplicationsList
+          onApprove={approveApplication}
+          onReject={rejectApplication}
+        />
       </section>
 
       {/* Active officers */}
@@ -794,6 +964,116 @@ export function LeadOfficerDashboard() {
           </div>
         </div>
       )}
+
+      {/* Weekly Reports Section */}
+      <section className="rounded-2xl border border-green-800 bg-black/40 p-6 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-green-200 flex items-center gap-2">
+            <Calendar className="w-5 h-5" />
+            Weekly Reports
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowReportForm(!showReportForm)}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-semibold"
+          >
+            {showReportForm ? 'Cancel' : 'Submit Report'}
+          </button>
+        </div>
+
+        {showReportForm && (
+          <WeeklyReportForm
+            onSubmit={submitWeeklyReport}
+            onCancel={() => setShowReportForm(false)}
+            loading={submittingReport}
+          />
+        )}
+
+        <WeeklyReportsList reports={weeklyReports} />
+      </section>
+    </div>
+  )
+}
+
+// Component for displaying pending applications
+function PendingApplicationsList({ onApprove, onReject }: {
+  onApprove: (applicationId: string, userId: string) => void
+  onReject: (applicationId: string) => void
+}) {
+  const [applications, setApplications] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    loadApplications()
+  }, [])
+
+  const loadApplications = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          user_profiles!user_id (
+            username,
+            email
+          )
+        `)
+        .is('lead_officer_approved', null)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setApplications(data || [])
+    } catch (error: any) {
+      console.error('Error loading applications:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <p className="text-blue-400">Loading applications...</p>
+  }
+
+  if (applications.length === 0) {
+    return <p className="text-blue-500">No applications pending review.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {applications.map((app) => (
+        <div key={app.id} className="bg-[#1A1A1A] border border-blue-500/30 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-white font-semibold">
+                  {app.user_profiles?.username || "Unknown User"}
+                </span>
+                <span className="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded">
+                  {app.type.toUpperCase().replace("_", " ")}
+                </span>
+              </div>
+              <div className="text-xs text-gray-500">
+                Applied: {new Date(app.created_at).toLocaleDateString()}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onApprove(app.id, app.user_id)}
+                className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700"
+              >
+                ✅ Approve
+              </button>
+              <button
+                onClick={() => onReject(app.id)}
+                className="px-3 py-2 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700"
+              >
+                ❌ Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

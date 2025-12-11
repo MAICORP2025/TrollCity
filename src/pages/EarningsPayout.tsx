@@ -6,7 +6,7 @@ import api from '../lib/api'
 import { toast } from 'sonner'
 import { DollarSign, Banknote, Send, History } from 'lucide-react'
 
-type PayoutMethod = 'PayPal' | 'CashApp' | 'Venmo'
+type PayoutMethod = 'PayPal'
 
 interface CashoutTier {
   id: string
@@ -24,7 +24,7 @@ const CASHOUT_TIERS: CashoutTier[] = [
 
 export default function EarningsPayout() {
   const { profile, user } = useAuthStore()
-  const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('CashApp')
+  const [payoutMethod] = useState<PayoutMethod>('PayPal')
   const [payoutDetails, setPayoutDetails] = useState('')
   const [fullName, setFullName] = useState('')
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null)
@@ -89,11 +89,7 @@ export default function EarningsPayout() {
     }
   }
 
-  const placeholderForMethod = (m: PayoutMethod) => {
-    if (m === 'CashApp') return '$Cashtag (e.g. $TrollKing)'
-    if (m === 'Venmo') return '@VenmoHandle (e.g. @trollqueen)'
-    return 'PayPal email (e.g. troll@example.com)'
-  }
+  const placeholderForMethod = (_m: PayoutMethod) => 'PayPal email (e.g. troll@example.com)'
 
   const handleSubmit = async () => {
     if (!profile) {
@@ -219,15 +215,7 @@ export default function EarningsPayout() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm mb-1">Payout Method</label>
-              <select
-                className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-3 py-2 text-sm"
-                value={payoutMethod}
-                onChange={e => setPayoutMethod(e.target.value as PayoutMethod)}
-              >
-                <option value="CashApp">CashApp</option>
-                <option value="PayPal">PayPal</option>
-                <option value="Venmo">Venmo</option>
-              </select>
+              <div className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-3 py-2 text-sm">PayPal (only)</div>
             </div>
             <div>
               <label className="block text-sm mb-1">Full Name</label>

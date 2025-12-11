@@ -101,11 +101,11 @@ export default function LandingPage() {
           </div>
           <div className="bg-[#1A1A1A] p-8 rounded-xl border border-red-500/30 hover:border-red-400 transition">
             <Crown className="w-12 h-12 text-red-400 mb-4" />
-            <h3 className="text-2xl font-bold mb-4">Real Money</h3>
-            <p className="text-gray-300">
-              Cash out your earnings through multiple payment methods. Turn entertainment into income.
-            </p>
-          </div>
+          <h3 className="text-2xl font-bold mb-4">Real Money</h3>
+          <p className="text-gray-300">
+              Cash out your earnings through PayPal. Turn entertainment into income.
+          </p>
+        </div>
         </div>
       </div>
 
@@ -147,11 +147,11 @@ export default function LandingPage() {
               <div className="w-20 h-20 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-3xl">💸</span>
               </div>
-              <h3 className="text-xl font-bold mb-2">Cash Out</h3>
-              <p className="text-gray-300 text-sm">
-                Convert coins to cash via PayPal, bank transfer, and more
-              </p>
-            </div>
+          <h3 className="text-xl font-bold mb-2">Cash Out</h3>
+          <p className="text-gray-300 text-sm">
+                Convert coins to cash via PayPal
+          </p>
+        </div>
           </div>
           <div className="mt-12 text-center">
             <div className="bg-[#1A1A1A] rounded-xl p-6 border border-green-500/30 max-w-2xl mx-auto">
@@ -245,11 +245,11 @@ export default function LandingPage() {
               <div className="w-16 h-16 bg-gradient-to-r from-yellow-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl">💸</span>
               </div>
-              <h3 className="text-2xl font-bold mb-4">Cash Out</h3>
-              <p className="text-gray-300">
-                Convert earned coins to real money. Multiple payout options with competitive rates.
-              </p>
-            </div>
+          <h3 className="text-2xl font-bold mb-4">Cash Out</h3>
+          <p className="text-gray-300">
+                Convert earned coins to real money via PayPal. Fast payouts with competitive rates.
+          </p>
+        </div>
           </div>
         </div>
       </div>

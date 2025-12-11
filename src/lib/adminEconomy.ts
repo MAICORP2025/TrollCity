@@ -138,9 +138,9 @@ export function hasRouteAccess(userRole: string, isLeadOfficer: boolean, route: 
 
   // Regular users and troll officers have restricted access
   const allowedRoutes = [
-    '/', '/messages', '/following', '/store', '/transactions', 
-    '/shop-partner', '/shop-dashboard', '/creator-contract', 
-    '/creator-dashboard', '/leaderboard', '/wall', '/go-live',
+    '/', '/messages', '/following', '/store', '/transactions',
+    '/shop-partner', '/sell', '/creator-contract',
+    '/leaderboard', '/wall', '/go-live',
     '/tromody', '/battles', '/empire-partner', '/trollifications',
     '/apply', '/earnings', '/support', '/safety'
   ]

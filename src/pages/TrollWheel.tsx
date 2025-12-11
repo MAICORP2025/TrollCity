@@ -56,11 +56,11 @@ export default function TrollWheelPage() {
                 <ul className="space-y-3 text-gray-300">
                   <li className="flex items-start gap-2">
                     <span className="text-purple-400 mt-1">•</span>
-                    <span>Spin the wheel for a chance to win free coins!</span>
+                    <span>Spin the wheel for a chance to win Trollmonds!</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-purple-400 mt-1">•</span>
-                    <span>Cost: <span className="text-yellow-400 font-bold">500 free coins</span> per spin</span>
+                    <span>Cost: <span className="text-yellow-400 font-bold">500 Trollmonds</span> per spin</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-purple-400 mt-1">•</span>
@@ -134,15 +134,9 @@ export default function TrollWheelPage() {
                 </h2>
                 <div className="space-y-4">
                   <div className="bg-black/20 p-4 rounded-lg">
-                    <p className="text-sm text-gray-400 mb-1">Free Coins Available</p>
+                    <p className="text-sm text-gray-400 mb-1">Trollmonds Available</p>
                     <p className="text-2xl font-bold text-yellow-400">
                       {profile?.free_coin_balance?.toLocaleString() || 0}
-                    </p>
-                  </div>
-                  <div className="bg-black/20 p-4 rounded-lg">
-                    <p className="text-sm text-gray-400 mb-1">Trollmond Balance</p>
-                    <p className="text-2xl font-bold text-green-400">
-                      {(profile as any)?.trollmond_balance?.toLocaleString() || 0}
                     </p>
                   </div>
                 </div>
@@ -155,19 +149,22 @@ export default function TrollWheelPage() {
                   {((profile?.free_coin_balance || 0) >= 500) ? (
                     <>
                       <span className="mr-2">🎡</span>
-                      SPIN THE WHEEL - 500 COINS
+                      SPIN THE WHEEL - 500 TROLLMONDS
                     </>
                   ) : (
                     <>
                       <span className="mr-2">⚠️</span>
-                      NEED 500 FREE COINS
+                      NEED 500 TROLLMONDS
                     </>
                   )}
                 </button>
 
                 {((profile?.free_coin_balance || 0) < 500) && (
                   <p className="text-sm text-gray-400 mt-3">
-                    Get more coins from the <button
+                    Get more Trollmonds from <button
+                      onClick={() => navigate('/go-live')}
+                      className="text-purple-400 hover:text-purple-300 font-semibold"
+                    >Streaming</button> or <button
                       onClick={() => navigate('/store')}
                       className="text-purple-400 hover:text-purple-300 font-semibold"
                     >Coin Store</button>
@@ -198,11 +195,11 @@ export default function TrollWheelPage() {
           <ul className="space-y-3 text-gray-300 text-sm">
             <li className="flex items-start gap-2">
               <span className="text-purple-400 mt-1">•</span>
-              <span>Only <span className="text-yellow-400 font-semibold">FREE coins</span> can be used to spin the wheel</span>
+              <span>Only <span className="text-yellow-400 font-semibold">Trollmonds</span> can be used to spin the wheel</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-purple-400 mt-1">•</span>
-              <span>All prizes are awarded as <span className="text-green-400 font-semibold">TROLLMONDS</span></span>
+              <span>All prizes are awarded as <span className="text-green-400 font-semibold">Trollmonds</span></span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-purple-400 mt-1">•</span>

@@ -12,6 +12,9 @@ interface Application {
   created_at: string
   reviewed_by: string | null
   reviewed_at: string | null
+  lead_officer_approved: boolean | null
+  lead_officer_reviewed_by: string | null
+  lead_officer_reviewed_at: string | null
   user_profiles?: {
     username: string
     email?: string
@@ -49,7 +52,7 @@ export default function AdminApplications() {
       const { data: filled } = await supabase.rpc('is_lead_officer_position_filled')
       setPositionFilled(filled || false)
 
-      // Load regular applications
+      // Load regular applications (only Lead Officer approved ones for admin review)
       const { data, error } = await supabase
         .from('applications')
         .select(`
@@ -59,6 +62,7 @@ export default function AdminApplications() {
             email
           )
         `)
+        .eq('lead_officer_approved', true)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -266,10 +270,18 @@ export default function AdminApplications() {
 
   return (
     <div className="space-y-4">
+      <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-4">
+        <h3 className="text-blue-300 font-semibold mb-2">📋 New Application Process</h3>
+        <p className="text-blue-200 text-sm">
+          All applications now require Lead Officer approval first, then admin final approval.
+          Only Lead Officer approved applications are shown below.
+        </p>
+      </div>
+
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
           <Shield className="w-6 h-6 text-purple-400" />
-          All Applications
+          Lead Officer Approved Applications
         </h2>
 
         <button

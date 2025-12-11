@@ -10,6 +10,8 @@ interface OfficerAssignment {
   joined_at: string;
   left_at: string | null;
   status: string;
+  last_activity?: string | null;
+  auto_clocked_out?: boolean | null;
   user_profiles?: {
     username: string | null;
   };

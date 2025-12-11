@@ -37,7 +37,7 @@ async function getAccessToken() {
   return data.access_token as string;
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: cors });
   }

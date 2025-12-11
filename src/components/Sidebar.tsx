@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+ import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home,
@@ -20,6 +20,10 @@ import {
   Store,
   Crown,
   Mic,
+  Trophy,
+  FerrisWheel,
+  MessageCircle,
+  Headphones,
 } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
 import { supabase, isAdminEmail } from '../lib/supabase'
@@ -155,7 +159,7 @@ export default function Sidebar() {
           .from('applications')
           .select('status')
           .eq('user_id', profile.id)
-          .eq('type', 'family')
+          .eq('type', 'troll_family')
           .eq('status', 'approved')
           .maybeSingle()
 
@@ -212,7 +216,7 @@ export default function Sidebar() {
 
           {/* TROLLMONDS */}
           <div
-            onClick={() => navigate("/trollmond-store")}
+            onClick={() => navigate("/trollmonds-store")}
             className="flex items-center justify-between bg-[#1C1C24] px-3 py-2 rounded-lg border border-green-500/40 text-green-300 cursor-pointer hover:bg-[#252530] transition-colors"
           >
             <div className="flex items-center gap-2">
@@ -228,62 +232,55 @@ export default function Sidebar() {
 
       {/* Main Menu */}
       <nav className="flex-1 p-4 space-y-1">
-        <MenuLink to="/" icon={<Home />} label="Home" active={isActive('/')} />
-        <MenuLink to="/messages" icon={<MessageSquare />} label="Messages" active={isActive('/messages')} />
-        <MenuLink to="/following" icon={<UserCheck />} label="Following" active={isActive('/following')} />
-        <MenuLink to="/store" icon={<Coins />} label="Coin Store" active={isActive('/store')} />
-        <MenuLink to="/transactions" icon={<Receipt />} label="Transactions" active={isActive('/transactions')} />
-        <MenuLink to="/shop-partner" icon={<Store />} label="Sell on Troll City" active={isActive('/shop-partner')} />
-        <MenuLink to="/shop-dashboard" icon={<Store />} label="Shop Earnings" active={isActive('/shop-dashboard')} />
-        <MenuLink to="/creator-contract" icon={<Crown />} label="TrollTract" active={isActive('/creator-contract')} />
-        <MenuLink to="/creator-dashboard" icon={<LayoutDashboard />} label="Creator Dashboard" active={isActive('/creator-dashboard')} />
+        <MenuLink to="/" icon={<Home className="w-5 h-5 text-green-400" />} label="Home" active={isActive('/')} />
+        <MenuLink to="/messages" icon={<MessageSquare className="w-5 h-5 text-blue-400" />} label="Messages" active={isActive('/messages')} />
+        <MenuLink to="/following" icon={<UserCheck className="w-5 h-5 text-indigo-400" />} label="Following" active={isActive('/following')} />
+        <MenuLink to="/store" icon={<Coins className="w-5 h-5 text-yellow-500" />} label="Coin Store" active={isActive('/store')} />
+        <MenuLink to="/marketplace" icon={<Store className="w-5 h-5 text-orange-500" />} label="Marketplace" active={isActive('/marketplace')} />
+        <MenuLink to="/sell" icon={<Store className="w-5 h-5 text-emerald-500" />} label="Sell on Troll City" active={isActive('/sell')} />
 
-        <MenuLink to="/leaderboard" icon={<span className="inline-block w-5 h-5">🏆</span>} label="Leaderboard" active={isActive('/leaderboard')} />
-        <MenuLink to="/wall" icon={<span className="inline-block w-5 h-5">🧌</span>} label="Troll City Wall" active={isActive('/wall')} />
+        <MenuLink to="/leaderboard" icon={<Trophy className="w-5 h-5 text-yellow-500" />} label="Leaderboard" active={isActive('/leaderboard')} />
+        <MenuLink to="/wall" icon={<MessageCircle className="w-5 h-5 text-cyan-400" />} label="Troll City Wall" active={isActive('/wall')} />
 
-        <MenuLink to="/go-live" icon={<Radio />} label="Go Live" active={isActive('/go-live')} />
-        <MenuLink to="/tromody" icon={<Mic />} label="Tromody Show" active={isActive('/tromody')} />
-        <MenuLink to="/battles" icon={<Sword />} label="Battle History" active={isActive('/battles')} />
-        <MenuLink to="/empire-partner" icon={<UserPlus />} label="Empire Partner" active={isActive('/empire-partner')} />
-        <MenuLink to="/trollifications" icon={<Gift />} label="Trollifications" active={isActive('/trollifications')} />
-        <MenuLink to="/troll-wheel" icon={<span className="inline-block w-5 h-5">🎡</span>} label="Troll Wheel" active={isActive('/troll-wheel')} />
+        <MenuLink to="/tromody" icon={<Mic className="w-5 h-5 text-purple-400" />} label="Tromody Show" active={isActive('/tromody')} />
+        <MenuLink to="/empire-partner" icon={<UserPlus className="w-5 h-5 text-green-400" />} label="Empire Partner" active={isActive('/empire-partner')} />
+        <MenuLink to="/troll-wheel" icon={<FerrisWheel className="w-5 h-5 text-pink-500" />} label="Troll Wheel" active={isActive('/troll-wheel')} />
         
         {/* Applications - Show for everyone */}
-        <MenuLink to="/apply" icon={<FileText />} label="Applications" active={isActive('/apply')} />
+        <MenuLink to="/apply" icon={<FileText className="w-5 h-5 text-slate-400" />} label="Applications" active={isActive('/apply')} />
 
         {/* Troll Officer Lounge - Only for admin and troll_officer role */}
         {canSeeOfficer && (
           <>
-            <MenuLink to="/officer/lounge" icon={<Shield />} label="Officer Lounge" active={isActive('/officer/lounge')} />
-            <MenuLink to="/officer/moderation" icon={<Shield />} label="Officer Moderation" active={isActive('/officer/moderation')} />
+            <MenuLink to="/officer/lounge" icon={<Shield className="w-5 h-5 text-red-500" />} label="Officer Lounge" active={isActive('/officer/lounge')} />
+            <MenuLink to="/officer/moderation" icon={<Shield className="w-5 h-5 text-orange-500" />} label="Officer Moderation" active={isActive('/officer/moderation')} />
           </>
         )}
 
         {/* Troll Family Lounge - Only for admin, troll_officer, OR approved family app */}
         {canSeeFamilyLounge && (
-          <MenuLink to="/family" icon={<Users />} label="Troll Family Lounge" active={isActive('/family')} />
+          <MenuLink to="/family" icon={<Users className="w-5 h-5 text-cyan-400" />} label="Troll Family Lounge" active={isActive('/family')} />
         )}
 
-        <MenuLink to="/earnings" icon={<Banknote />} label="Earnings" active={isActive('/earnings') || isActive('/my-earnings')} />
-        <MenuLink to="/support" icon={<FileText />} label="Support" active={isActive('/support')} />
-        <MenuLink to="/safety" icon={<Shield />} label="Safety & Policies" active={isActive('/safety')} />
+        <MenuLink to="/support" icon={<FileText className="w-5 h-5 text-gray-400" />} label="Support" active={isActive('/support')} />
+        <MenuLink to="/safety" icon={<Shield className="w-5 h-5 text-red-400" />} label="Safety & Policies" active={isActive('/safety')} />
 
         {/* 🔐 RFC — Only Admin */}
         {profile?.role === 'admin' && (
-          <MenuLink to="/rfc" icon={<Shield />} label="RFC" active={isActive('/rfc')} />
+          <MenuLink to="/rfc" icon={<Shield className="w-5 h-5 text-purple-500" />} label="RFC" active={isActive('/rfc')} />
         )}
 
         {/* Admin Earnings Dashboard — Only Admin */}
         {profile?.role === 'admin' && (
-          <MenuLink to="/admin/earnings" icon={<Banknote />} label="Earnings Dashboard" active={isActive('/admin/earnings')} />
+          <MenuLink to="/admin/earnings" icon={<Banknote className="w-5 h-5 text-green-500" />} label="Earnings Dashboard" active={isActive('/admin/earnings')} />
         )}
       </nav>
 
-      {/* Lead Officer Section — Only Lead Officers */}
+      {/* Lead Officer Section — Lead Officers and Admins */}
       {profile?.is_lead_officer && (
         <div className="p-4 border-t border-[#2C2C2C]">
           <p className="text-gray-500 uppercase text-xs mb-2">Lead Officer</p>
-          <MenuLink to="/lead-officer" icon={<Shield />} label="Lead Officer HQ" active={isActive('/lead-officer')} />
+          <MenuLink to="/lead-officer" icon={<Shield className="w-5 h-5 text-amber-500" />} label="Lead Officer HQ" active={isActive('/lead-officer')} />
         </div>
       )}
 
@@ -291,10 +288,11 @@ export default function Sidebar() {
       {profile?.role === 'admin' && (
         <div className="p-4 border-t border-[#2C2C2C]">
           <p className="text-gray-500 uppercase text-xs mb-2">Admin Controls</p>
-          <MenuLink to="/admin" icon={<LayoutDashboard />} label="Admin Dashboard" active={isActive('/admin')} />
-          <MenuLink to="/admin/officer-reports" icon={<FileText />} label="Officer Reports" active={isActive('/admin/officer-reports')} />
-          <MenuLink to="/store-debug" icon={<Bug />} label="Store Debug" active={isActive('/store-debug')} />
-          <MenuLink to="/changelog" icon={<ListChecks />} label="Updates & Changes" active={isActive('/changelog')} />
+          <MenuLink to="/admin" icon={<LayoutDashboard className="w-5 h-5 text-violet-500" />} label="Admin Dashboard" active={isActive('/admin')} />
+          <MenuLink to="/admin/applications" icon={<UserPlus className="w-5 h-5 text-blue-500" />} label="Applications" active={isActive('/admin/applications')} />
+          <MenuLink to="/admin/officer-reports" icon={<FileText className="w-5 h-5 text-teal-500" />} label="Officer Reports" active={isActive('/admin/officer-reports')} />
+          <MenuLink to="/store-debug" icon={<Bug className="w-5 h-5 text-red-600" />} label="Store Debug" active={isActive('/store-debug')} />
+          <MenuLink to="/changelog" icon={<ListChecks className="w-5 h-5 text-lime-500" />} label="Updates & Changes" active={isActive('/changelog')} />
         </div>
       )}
 
@@ -312,7 +310,7 @@ function MenuLink({ to, icon, label, active }: any) {
           : 'hover:bg-[#1F1F2E] text-gray-300'
       }`}
     >
-      <span className="w-5 h-5">{icon}</span>
+      <span className={`w-5 h-5 ${active ? 'text-white' : ''}`}>{icon}</span>
       <span>{label}</span>
     </Link>
   )

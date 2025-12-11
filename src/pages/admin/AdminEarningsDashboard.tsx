@@ -260,6 +260,36 @@ const AdminEarningsDashboard: React.FC = () => {
     return filtered
   }, [creators, searchTerm, statusFilter, sortBy])
 
+  const processWeeklyPayout = async () => {
+    if (!confirm('Are you sure you want to process weekly TrollTract payouts? This should be done once per week.')) return
+
+    setLoading(true)
+    try {
+      const now = new Date()
+      // Calculate last week's start and end (simple approximation for now, or use ISO weeks)
+      // For now, let's just use the last 7 days window ending now
+      const weekEnd = new Date()
+      const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000)
+      
+      const { data, error } = await supabase.rpc('process_trolltract_weekly_payout', {
+        p_week_start: weekStart.toISOString(),
+        p_week_end: weekEnd.toISOString(),
+        p_threshold: 40000,
+        p_reward: 2000
+      })
+
+      if (error) throw error
+      
+      toast.success(`Weekly payout processed. ${data?.length || 0} users rewarded.`)
+      loadCreators() // Refresh data
+    } catch (err: any) {
+      console.error('Error processing payout:', err)
+      toast.error('Failed to process weekly payout: ' + err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const exportToCSV = async () => {
     try {
       // Fetch additional user data for CSV (address, tax_id_last4, etc.)
@@ -414,6 +444,14 @@ const AdminEarningsDashboard: React.FC = () => {
             <p className="text-gray-400 mt-1">Comprehensive earnings tracking and payout management</p>
           </div>
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={processWeeklyPayout}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold flex items-center gap-2"
+            >
+              <DollarSign className="w-4 h-4" />
+              Process Weekly TrollTract
+            </button>
             <button
               type="button"
               onClick={exportToCSV}
