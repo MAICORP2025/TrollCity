@@ -1,17 +1,27 @@
 /**
- * Officer pay rates by level (coins per hour)
+ * Officer base pay rate (coins per hour)
+ * All officers earn 2500 coins per hour clocked in
  */
-export const OFFICER_HOURLY_COINS: Record<number, number> = {
-  1: 500,   // Junior
-  2: 800,   // Senior
-  3: 1200   // Commander
-};
+export const OFFICER_BASE_HOURLY_COINS = 2500;
 
 /**
- * Calculate coins earned based on hours worked and officer level
+ * Calculate base coins earned based on hours worked
+ * All officers get the same base rate of 2500 coins per hour
  */
-export function calculateOfficerCoins(hoursWorked: number, officerLevel: number): number {
-  const hourlyRate = OFFICER_HOURLY_COINS[officerLevel] || OFFICER_HOURLY_COINS[1];
-  return Math.round(hoursWorked * hourlyRate);
+export function calculateOfficerBaseCoins(hoursWorked: number): number {
+  return Math.round(hoursWorked * OFFICER_BASE_HOURLY_COINS);
+}
+
+/**
+ * Calculate total officer earnings including bonuses
+ */
+export function calculateTotalOfficerEarnings(
+  baseHours: number,
+  liveEarnings: number = 0,
+  courtBonuses: number = 0,
+  otherBonuses: number = 0
+): number {
+  const basePay = calculateOfficerBaseCoins(baseHours);
+  return basePay + liveEarnings + courtBonuses + otherBonuses;
 }
 

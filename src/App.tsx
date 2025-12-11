@@ -52,6 +52,7 @@ const OrientationQuiz = lazy(() => import("./pages/officer/OrientationQuiz"));
 const OfficerOnboarding = lazy(() => import("./pages/officer/OfficerOnboarding"));
 const OfficerTrainingSimulator = lazy(() => import("./pages/officer/OfficerTrainingSimulator"));
 const OfficerTrainingProgress = lazy(() => import("./pages/officer/OfficerTrainingProgress"));
+const OfficerPayrollDashboard = lazy(() => import("./pages/officer/OfficerPayrollDashboard"));
 const OfficerDashboard = lazy(() => import("./pages/officer/OfficerDashboard"));
 const OfficerOWCDashboard = lazy(() => import("./pages/OfficerOWCDashboard"));
 const ReportDetailsPage = lazy(() => import("./pages/ReportDetailsPage"));
@@ -632,6 +633,14 @@ function App() {
                     element={
                       <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
                         <OfficerTrainingProgress />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/officer/payroll"
+                    element={
+                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
+                        <OfficerPayrollDashboard />
                       </RequireRole>
                     }
                   />

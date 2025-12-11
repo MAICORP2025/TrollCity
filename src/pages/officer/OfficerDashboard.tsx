@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp } from 'lucide-react'
+import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
 
 interface WorkSession {
   id: string
@@ -194,7 +194,7 @@ export default function OfficerDashboard() {
       )}
 
       {/* Stats */}
-      <div className="grid md:grid-cols-3 gap-4 mb-6">
+      <div className="grid md:grid-cols-4 gap-4 mb-6">
         <div className="bg-black/60 border border-purple-600 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="w-5 h-5 text-purple-400" />
@@ -217,6 +217,14 @@ export default function OfficerDashboard() {
           <div className="text-2xl font-bold">
             {profile?.is_officer_active ? 'Active' : 'Inactive'}
           </div>
+        </div>
+        <div className="bg-black/60 border border-yellow-600 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <DollarSign className="w-5 h-5 text-yellow-400" />
+            <div className="text-sm opacity-70">Hourly Rate</div>
+          </div>
+          <div className="text-2xl font-bold text-yellow-400">2,500</div>
+          <div className="text-xs opacity-70">coins/hour</div>
         </div>
       </div>
 
@@ -269,7 +277,15 @@ export default function OfficerDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-3 gap-4">
+        <button
+          onClick={() => navigate('/officer/payroll')}
+          className="p-4 bg-black/60 border border-yellow-600 rounded-lg hover:bg-black/80 transition-colors text-left"
+        >
+          <DollarSign className="w-6 h-6 text-yellow-400 mb-2" />
+          <p className="font-semibold">Payroll Dashboard</p>
+          <p className="text-sm opacity-70">View earnings and work hours</p>
+        </button>
         <button
           onClick={() => navigate('/officer/training-progress')}
           className="p-4 bg-black/60 border border-purple-600 rounded-lg hover:bg-black/80 transition-colors text-left"
@@ -280,7 +296,7 @@ export default function OfficerDashboard() {
         </button>
         <button
           onClick={() => navigate('/officer/moderation')}
-          className="p-4 bg-black/60 border border-purple-600 rounded-lg hover:bg-black/80 transition-colors text-left"
+          className="p-4 bg-black/60 border border-red-600 rounded-lg hover:bg-black/80 transition-colors text-left"
         >
           <AlertTriangle className="w-6 h-6 text-red-400 mb-2" />
           <p className="font-semibold">Moderation Tools</p>
