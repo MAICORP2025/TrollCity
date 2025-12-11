@@ -113,14 +113,21 @@ export default function CoinStore() {
   const handleBuy = async (pkg) => {
     console.log('🛒 Starting PayPal checkout for package:', pkg.id);
     setLoadingPackage(pkg.id);
+
     try {
-      // Get the current session token for authentication
+      // Get session token
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
+      if (!token) throw new Error('No authentication token available');
 
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
+      // Build correct payload
+      const payload = {
+        amount: pkg.price,   // REQUIRED BY BACKEND
+        coins: pkg.coins,    // REQUIRED BY BACKEND
+        user_id: user.id     // REQUIRED BY BACKEND
+      };
+
+      console.log("📤 Sending payload →", payload);
 
       const res = await fetch(
         `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/paypal-create-order`,
@@ -128,48 +135,32 @@ export default function CoinStore() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
+            "Authorization": `Bearer ${token}`,   // Supabase auth
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY // REQUIRED
           },
-          body: JSON.stringify({
-            packageId: pkg.id,
-            user_id: user.id
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
-      console.log('📡 PayPal API response status:', res.status);
+      console.log("📡 PayPal API response:", res.status);
 
-      if (!res.ok) {
-        console.error('❌ API response not ok:', res.status, res.statusText);
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
+      if (!res.ok) throw new Error(`API Error: ${res.status}`);
+
+      const data = await res.json();
+      console.log("📦 PayPal API response data:", data);
+
+      if (!data.orderID) {
+        throw new Error("Missing orderID from backend");
       }
 
-      let data;
-      try {
-        data = await res.json();
-      } catch (jsonErr) {
-        console.error('❌ Failed to parse JSON response:', jsonErr);
-        throw new Error('Invalid API response format');
-      }
+      // For mock mode, just confirm
+      toast.success("Mock PayPal order created!");
 
-      console.log('📦 PayPal API response data:', data);
-
-      if (!data.approvalUrl) {
-        throw new Error("Missing PayPal URL");
-      }
-
-      console.log('✅ Redirecting to PayPal:', data.approvalUrl);
-      window.location.href = data.approvalUrl;
     } catch (err) {
       console.error("❌ Failed to start PayPal checkout:", err);
-      if (err.message.includes('API Error') || err.message.includes('Invalid API response')) {
-        toast.error("Payment service is currently unavailable. Please try again later.");
-      } else {
-        toast.error("Unable to start checkout.");
-      }
+      toast.error("Unable to start checkout.");
     } finally {
       setLoadingPackage(null);
-      console.log('🏁 PayPal checkout attempt complete');
     }
   };
 
