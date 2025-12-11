@@ -35,6 +35,7 @@ export default function Profile() {
   const { username: routeUsername, userId } = useParams()
   const [viewed, setViewed] = useState<any | null>(null)
   const [expandedSections, setExpandedSections] = useState<string[]>([
+    'referral_code',
     'profile_info',
     'stats',
     'creator_dashboard',
@@ -66,6 +67,10 @@ export default function Profile() {
   const [newPostImage, setNewPostImage] = useState<File | null>(null)
   const [hasAccess, setHasAccess] = useState<boolean>(true)
   const [checkingAccess, setCheckingAccess] = useState<boolean>(false)
+
+  // Referral code state
+  const [referralCode, setReferralCode] = useState('')
+  const [referralLink, setReferralLink] = useState('')
   
   // Battle history state
   const [battles, setBattles] = useState<any[]>([])
@@ -90,10 +95,16 @@ export default function Profile() {
   const [creatorLoading, setCreatorLoading] = useState(false)
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d')
 
-  // Initialize view price from profile
+  // Initialize view price and referral code from profile
   useEffect(() => {
     if (profile) {
       setViewPrice(Number((profile as any)?.profile_view_price ?? 0))
+
+      // Set referral code and link
+      const code = profile.id
+      const link = `${window.location.origin}/auth?ref=${code}`
+      setReferralCode(code)
+      setReferralLink(link)
     }
   }, [profile?.id])
 
@@ -964,6 +975,56 @@ export default function Profile() {
 
   // Filter sections based on whether viewing own profile or another user's
   const allSections = [
+    {
+      id: 'referral_code',
+      title: 'Referral Code',
+      icon: <UserPlus className="w-5 h-5 text-green-500" />,
+      content: (
+        <div className="space-y-4">
+          <div className="p-4 bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg">
+            <div className="text-white font-semibold mb-2">Your Referral Code</div>
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="text"
+                value={referralCode}
+                readOnly
+                className="flex-1 bg-gray-800 text-white px-3 py-2 rounded-lg border border-gray-600"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(referralCode)
+                  toast.success('Referral code copied!')
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="text-white font-semibold mb-2">Referral Link</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={referralLink}
+                readOnly
+                className="flex-1 bg-gray-800 text-white px-3 py-2 rounded-lg border border-gray-600 text-sm"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(referralLink)
+                  toast.success('Referral link copied!')
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+              >
+                Copy Link
+              </button>
+            </div>
+            <div className="text-xs text-gray-400 mt-2">
+              Share this link with friends! When they sign up and earn 40,000 paid coins within 21 days, you'll get 10,000 coins as a reward.
+            </div>
+          </div>
+        </div>
+      )
+    },
     {
       id: 'profile_info',
       title: 'Profile Info',
