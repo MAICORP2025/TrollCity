@@ -312,12 +312,15 @@ Deno.serve(async (req) => {
             .single();
 
           if (recruiterProfile && recruiterProfile.id !== uid) {
-            // Create referral relationship
+            // Create referral relationship using new table structure
             const { error: referralError } = await supabase
               .from('referrals')
               .insert({
-                recruiter_id: referral_code,
-                referred_user_id: uid
+                referrer_id: referral_code,
+                referred_user_id: uid,
+                referred_at: new Date().toISOString(),
+                reward_status: 'pending',
+                deadline: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString() // 21 days from now
               });
 
             if (referralError) {
