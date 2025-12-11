@@ -1,16 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'livekit-client';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
-import { Video, Users, Gift, Timer, Shield } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { useLiveKitRoom } from '../hooks/useLiveKitRoom';
 
 const OfficerLoungeStream = () => {
   const { user, profile } = useAuthStore();
   const [boxCount, setBoxCount] = useState(2);
   const [error, setError] = useState(null);
-  const [battleTimer, setBattleTimer] = useState(0);
   const [accessDenied, setAccessDenied] = useState(false);
   const roomName = 'officer-stream';
 
@@ -20,80 +18,21 @@ const OfficerLoungeStream = () => {
     user ? { ...user, role: profile?.troll_role, level: profile?.level } : null
   );
 
-  // Gift tracking for each box
-  const [boxGifts, setBoxGifts] = useState({});
-
   // Officer access validation
   useEffect(() => {
     if (!profile || !user) return;
 
-    const isOfficer = 
-      profile.troll_role === 'troll_officer' || 
-      profile.troll_role === 'lead_troll_officer' ||
-      profile.role === 'troll_officer' || 
-      profile.is_troll_officer === true ||
-      profile.is_admin === true;
+    const allowedRoles = ['admin', 'lead_troll_officer', 'troll_officer'];
+    const userRole = profile.role || profile.troll_role;
 
-    if (!isOfficer) {
+    if (!allowedRoles.includes(userRole)) {
       setAccessDenied(true);
       toast.error('Access Denied — Officers Only');
       return;
     }
   }, [profile, user]);
 
-  // Timer effect
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setBattleTimer(prev => prev + 1);
-    }, 1000);
 
-    return () => clearInterval(timer);
-  }, []);
-
-  // Initialize gift tracking for each box
-  useEffect(() => {
-    const initialGifts = {};
-    for (let i = 1; i <= boxCount; i++) {
-      initialGifts[i] = { total: 0, recent: [] };
-    }
-    setBoxGifts(initialGifts);
-
-    // Subscribe to gift events for realtime updates
-    const giftsChannel = supabase
-      .channel('officer-stream-gifts')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'battle_gifts',
-          filter: `room_name=eq.${roomName}`
-        },
-        (payload) => {
-          const gift = payload.new;
-          const boxNum = parseInt(gift.position || '1');
-          setBoxGifts(prev => ({
-            ...prev,
-            [boxNum]: {
-              total: (prev[boxNum]?.total || 0) + gift.coins_spent,
-              recent: [...(prev[boxNum]?.recent || []), gift].slice(-5)
-            }
-          }));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(giftsChannel);
-    };
-  }, [boxCount]);
-
-  // Format time for display
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   // Get grid layout classes based on box count
   const getGridClasses = (count) => {
@@ -157,15 +96,14 @@ const OfficerLoungeStream = () => {
   // Render individual box
   const renderBox = (boxNumber) => {
     const participant = participants[boxNumber];
-    const gifts = boxGifts[boxNumber] || { total: 0, recent: [] };
 
     return (
       <div key={boxNumber} className="relative bg-black rounded-xl overflow-hidden aspect-video">
         {participant ? (
           // Active participant
           <div className="w-full h-full">
-            <VideoRenderer 
-              participant={participant} 
+            <VideoRenderer
+              participant={participant}
               position={boxNumber}
             />
             <div className="absolute bottom-2 left-2 bg-black/60 text-white px-2 py-1 rounded text-sm flex items-center gap-1">
@@ -192,12 +130,6 @@ const OfficerLoungeStream = () => {
             </button>
           </div>
         )}
-
-        {/* Gift counter */}
-        <div className="absolute bottom-2 right-2 bg-black/60 text-yellow-400 px-2 py-1 rounded text-sm flex items-center gap-1">
-          <Gift className="w-4 h-4" />
-          {gifts.total.toLocaleString()}
-        </div>
       </div>
     );
   };
@@ -229,19 +161,13 @@ const OfficerLoungeStream = () => {
           </h1>
           <p className="text-gray-300">Exclusive officer streaming with LiveKit</p>
           {profile && (
-            <p className="text-blue-300 text-sm mt-2">
-              Officer: {profile.username} • Role: {profile.troll_role || profile.role}
-            </p>
+            <div className="text-blue-300 text-sm mt-2">
+              <p>Officer: {profile.username}</p>
+              <p>Role: {profile.role || profile.troll_role}</p>
+            </div>
           )}
         </div>
 
-        {/* Battle Timer */}
-        <div className="bg-blue-900/50 border border-blue-500/50 rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-2 text-2xl font-bold">
-            <Timer className="w-6 h-6" />
-            OFFICER BATTLE TIME: {formatTime(battleTimer)}
-          </div>
-        </div>
 
         {/* Box Count Selector */}
         <div className="bg-[#111320] border border-blue-700/50 rounded-xl p-6">
@@ -319,13 +245,12 @@ const OfficerLoungeStream = () => {
             Officer Stream Guidelines:
           </h3>
           <ul className="space-y-2 text-gray-300">
-            <li>• This area is exclusively for Troll Officers and Lead Troll Officers</li>
+            <li>• This area is exclusively for authorized officers (Admin, Lead Troll Officers, Troll Officers)</li>
             <li>• Select the number of streaming boxes (1-6)</li>
             <li>• Click "Join Officer Box" on any empty box to start broadcasting</li>
-            <li>• Officers can send gifts that appear in real-time</li>
             <li>• Each box represents a different officer broadcaster position</li>
             <li>• Uses unified LiveKit room: "officer-stream"</li>
-            <li>• Officer activity is tracked for shift management</li>
+            <li>• Turn on camera and microphone to appear in your assigned box</li>
           </ul>
         </div>
       </div>
