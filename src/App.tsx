@@ -131,6 +131,7 @@ const OfficerLoungeStream = lazy(() => import("./pages/OfficerLoungeStream"));
 const TrollWheel = lazy(() => import("./pages/TrollWheel"));
 const TrollCourt = lazy(() => import("./pages/TrollCourt"));
 const Marketplace = lazy(() => import("./pages/Marketplace"));
+const ShopView = lazy(() => import("./pages/ShopView"));
 const UserInventory = lazy(() => import("./pages/UserInventory"));
 
 function App() {
@@ -470,6 +471,7 @@ function App() {
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/troll-wheel" element={<TrollWheel />} />
                   <Route path="/marketplace" element={<Marketplace />} />
+                  <Route path="/shop/:id" element={<ShopView />} />
                   <Route path="/inventory" element={<UserInventory />} />
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/support" element={<Support />} />
