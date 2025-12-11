@@ -1,14 +1,10 @@
-// src/supabaseClient.ts (FRONTEND CLIENT)
-import { createClient } from "@supabase/supabase-js";
+// supabase/functions/_shared/supabaseClient.ts (EDGE FUNCTION CLIENT)
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// never use service role here — frontend must use anon key.
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Optional: expose globally for debugging
-if (typeof window !== "undefined") {
-  // @ts-ignore
-  window.supabase = supabase;
-}
+// Edge Functions use service role key for server-side operations
+export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
