@@ -114,11 +114,17 @@ export default function CoinStore() {
     console.log('🛒 Starting PayPal checkout for package:', pkg.id);
     setLoadingPackage(pkg.id);
     try {
-      const res = await fetch('/api/paypal/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packageId: pkg.id })
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/paypal-create-order`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            packageId: pkg.id,
+            user_id: user.id
+          }),
+        }
+      );
 
       console.log('📡 PayPal API response status:', res.status);
 
