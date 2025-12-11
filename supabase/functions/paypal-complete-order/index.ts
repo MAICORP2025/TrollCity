@@ -12,9 +12,9 @@ const PAYPAL_BASE = "https://api-m.paypal.com";
 
 const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-// CORS headers
+// CORS headers - Allow all origins for testing
 const cors = {
-  "Access-Control-Allow-Origin": "https://trollcity.app",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };

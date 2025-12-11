@@ -8,9 +8,9 @@ const PAYPAL_CLIENT_ID = Deno.env.get("PAYPAL_CLIENT_ID")!;
 const PAYPAL_CLIENT_SECRET = Deno.env.get("PAYPAL_CLIENT_SECRET")!;
 const PAYPAL_BASE = "https://api-m.paypal.com";
 
-// CORS headers
+// CORS headers - Allow all origins for testing
 const cors = {
-  "Access-Control-Allow-Origin": "https://trollcity.app",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
