@@ -1,6 +1,14 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// src/supabaseClient.ts (FRONTEND CLIENT)
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 
-export const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+// never use service role here — frontend must use anon key.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Optional: expose globally for debugging
+if (typeof window !== "undefined") {
+  // @ts-ignore
+  window.supabase = supabase;
+}
