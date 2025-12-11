@@ -23,17 +23,32 @@ export default function Marketplace() {
   const loadShops = async () => {
     setLoading(true)
     try {
-      // Load shops with their items
-      const { data: shopsData, error } = await supabase
+      // Load shops first
+      const { data: shopsData, error: shopsError } = await supabase
         .from('trollcity_shops')
-        .select(`
-          *,
-          shop_items (*)
-        `)
+        .select('*')
         .eq('is_active', true)
 
-      if (error) throw error
-      setShops(shopsData || [])
+      if (shopsError) throw shopsError
+
+      // Load items for each shop
+      const shopsWithItems = await Promise.all(
+        (shopsData || []).map(async (shop) => {
+          const { data: itemsData, error: itemsError } = await supabase
+            .from('shop_items')
+            .select('*')
+            .eq('shop_id', shop.id)
+
+          if (itemsError) {
+            console.error(`Error loading items for shop ${shop.id}:`, itemsError)
+            return { ...shop, shop_items: [] }
+          }
+
+          return { ...shop, shop_items: itemsData || [] }
+        })
+      )
+
+      setShops(shopsWithItems)
     } catch (err) {
       console.error('Error loading shops:', err)
       toast.error('Failed to load marketplace')
