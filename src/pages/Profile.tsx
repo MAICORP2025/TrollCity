@@ -195,8 +195,7 @@ export default function Profile() {
         loadDailyEarningsSeries(),
         loadHourlyActivity(),
         loadTopGifters(),
-        loadBattleEventEarnings(),
-        loadTrollTractBonusSummary()
+        loadBattleEventEarnings()
       ])
     } catch (error) {
       console.error('Error loading creator dashboard data:', error)
@@ -1543,17 +1542,11 @@ export default function Profile() {
           ) : (
             <>
               {/* TOP METRICS */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="bg-[#0D0D0D] rounded-lg p-4">
                   <div className="text-gray-400 text-sm">Total Coins Earned</div>
                   <div className="text-white text-2xl font-bold">
                     {(creatorOverview?.total_coins_earned ?? 0).toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-[#0D0D0D] rounded-lg p-4">
-                  <div className="text-gray-400 text-sm">TrollTract Bonus</div>
-                  <div className="text-green-400 text-2xl font-bold">
-                    {(creatorOverview?.total_bonus_coins ?? 0).toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-[#0D0D0D] rounded-lg p-4">
@@ -1612,13 +1605,6 @@ export default function Profile() {
                         dataKey="coins"
                         name="Coins"
                         stroke="#ff2e92"
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="bonus_coins"
-                        name="Bonus"
-                        stroke="#7CFC00"
                         dot={false}
                       />
                       <Line

@@ -1,3 +1,10 @@
 {
-  "imports": {}
+  "imports": {
+    "jsr:@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2",
+    "jsr:@supabase/functions-js/edge-runtime.d.ts": "https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window"],
+    "types": ["https://deno.land/x/deno@v1.28.0/cli/dts/lib.deno.d.ts"]
+  }
 }

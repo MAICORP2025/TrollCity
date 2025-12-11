@@ -124,6 +124,9 @@ export interface UserProfile {
 
   // Broadcaster field
   is_broadcaster?: boolean
+
+  // Profile view price
+  profile_view_price?: number
 }
 
 
