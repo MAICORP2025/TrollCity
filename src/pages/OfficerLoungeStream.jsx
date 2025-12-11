@@ -12,10 +12,17 @@ const OfficerLoungeStream = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const roomName = 'officer-stream';
 
-  // Use unified LiveKit hook
+  // Use unified LiveKit hook with proper role mapping
+  const userForLiveKit = user ? {
+    ...user,
+    role: profile?.role || profile?.troll_role || 'viewer',
+    troll_role: profile?.troll_role,
+    level: profile?.level || 1
+  } : null;
+
   const { room, participants, isConnecting, connect, disconnect } = useLiveKitRoom(
     roomName,
-    user ? { ...user, role: profile?.troll_role, level: profile?.level } : null
+    userForLiveKit
   );
 
   // Officer access validation
@@ -54,15 +61,30 @@ const OfficerLoungeStream = () => {
       return;
     }
 
+    console.log('🎥 Attempting to join officer box:', boxNumber);
+    console.log('👤 User role:', profile?.role || profile?.troll_role);
+    console.log('🏠 Room state:', room?.state);
+
     if (!room) {
-      // Connect to room first
+      console.log('🔌 Connecting to room first...');
       connect();
       // Wait a bit for connection
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     if (room && room.state === 'connected') {
       try {
+        console.log('📡 Room connected, checking permissions...');
+
+        // Check if we can publish
+        const canPublish = room.localParticipant?.permissions?.canPublish;
+        console.log('🔐 Can publish:', canPublish);
+
+        if (!canPublish) {
+          toast.error('You do not have permission to broadcast in this room');
+          return;
+        }
+
         // Update participant metadata with position
         if (room.localParticipant) {
           room.localParticipant.setMetadata(JSON.stringify({
@@ -71,20 +93,37 @@ const OfficerLoungeStream = () => {
           }));
         }
 
+        console.log('🎬 Creating media tracks...');
+
         // Publish local tracks
         const [videoTrack, audioTrack] = await Promise.all([
           createLocalVideoTrack({ facingMode: 'user' }),
           createLocalAudioTrack()
         ]);
 
+        console.log('📤 Publishing video track...');
         await room.localParticipant.publishTrack(videoTrack);
+
+        console.log('📤 Publishing audio track...');
         await room.localParticipant.publishTrack(audioTrack);
 
+        console.log('✅ Successfully joined officer box!');
         toast.success(`Joined Officer Box ${boxNumber}!`);
       } catch (err) {
-        console.error('Error publishing tracks:', err);
-        toast.error('Failed to start camera/microphone');
+        console.error('❌ Error publishing tracks:', err);
+        console.error('Error details:', err.message, err.code, err.name);
+
+        if (err.message?.includes('insufficient permissions')) {
+          toast.error('Permission denied: You cannot broadcast in this room. Contact an admin.');
+        } else if (err.message?.includes('NotAllowedError')) {
+          toast.error('Camera/microphone access denied. Please allow access and try again.');
+        } else {
+          toast.error(`Failed to start camera/microphone: ${err.message}`);
+        }
       }
+    } else {
+      console.log('❌ Room not connected or not available');
+      toast.error('Failed to connect to officer stream room');
     }
   };
 

@@ -25,7 +25,7 @@ export default async function handler(req: any, res: any) {
     metadata: JSON.stringify(metadata),
   })
 
-  // Role-based permissions for court room
+  // Role-based permissions
   let canPublish = true
   let canPublishData = true
 
@@ -33,6 +33,11 @@ export default async function handler(req: any, res: any) {
     // Court room permissions - only specific roles can broadcast
     const courtPublishRoles = ["admin", "lead_troll_officer", "troll_officer", "defendant", "accuser", "witness"]
     canPublish = courtPublishRoles.includes(metadata.role)
+    canPublishData = canPublish // Same permission for data
+  } else if (room === 'officer-stream') {
+    // Officer stream permissions - only officers can broadcast
+    const officerRoles = ["admin", "lead_troll_officer", "troll_officer"]
+    canPublish = officerRoles.includes(metadata.role)
     canPublishData = canPublish // Same permission for data
   }
 
