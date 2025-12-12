@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'livekit-client';
-import api from '../lib/api';
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
@@ -12,7 +10,7 @@ import VideoFeed from '../components/stream/VideoFeed';
 import AuthorityPanel from '../components/AuthorityPanel';
 import RoyalCrownOverlay from '../components/RoyalCrownOverlay';
 import { endStream } from '../lib/endStream';
-import { useLiveKitRoom } from '../hooks/useLiveKitRoom';
+import { useUnifiedLiveKit } from '../hooks/useUnifiedLiveKit';
 
 export default function StreamRoom() {
   const { id, streamId } = useParams<{ id?: string; streamId?: string }>();
@@ -31,16 +29,23 @@ export default function StreamRoom() {
 
   // Use unified LiveKit hook once we have stream data
   const {
-    room,
-    participants,
+    isConnected,
     isConnecting,
+    participants,
+    localParticipant,
     error: liveKitError,
     connect,
     disconnect,
-  } = useLiveKitRoom(
-    stream?.room_name || actualStreamId,
-    user ? { ...user, role: (profile as any)?.troll_role || 'viewer', level: 1 } : null
-  );
+    toggleCamera,
+    toggleMicrophone,
+    getRoom,
+  } = useUnifiedLiveKit({
+    roomName: stream?.room_name || actualStreamId,
+    user: user ? { ...user, role: (profile as any)?.troll_role || 'viewer', level: 1 } : null,
+    autoPublish: isHost // Only auto-publish for hosts
+  });
+
+  const room = getRoom();
 
   // Load stream data
   useEffect(() => {
@@ -129,68 +134,9 @@ export default function StreamRoom() {
     return () => clearTimeout(timer);
   }, [isLoadingStream, stream, room, error, liveKitError]);
 
-  // Handle track publishing for hosts when room connects
+  // Update viewer count when connected
   useEffect(() => {
-    if (!room || !isHost || !stream) return;
-
-    const publishTracks = async () => {
-      try {
-        const shouldPublishTracks = isHost || (isTestingMode && profile && !profile.is_broadcaster);
-
-        if (shouldPublishTracks && room.state === 'connected') {
-          const [videoTrack, audioTrack] = await Promise.all([
-            createLocalVideoTrack({
-              facingMode: 'user',
-            }).catch(err => {
-              console.error('Error creating video track:', err);
-              return null;
-            }),
-            createLocalAudioTrack().catch(err => {
-              console.error('Error creating audio track:', err);
-              return null;
-            }),
-          ]);
-
-          // Only publish if tracks were created and room is still connected
-          if (room.state === 'connected' && room.localParticipant) {
-            if (videoTrack) {
-              try {
-                await room.localParticipant.publishTrack(videoTrack);
-                console.log('✅ Published video track');
-              } catch (err) {
-                console.error('Error publishing video track:', err);
-                videoTrack.stop();
-              }
-            }
-
-            if (audioTrack) {
-              try {
-                await room.localParticipant.publishTrack(audioTrack);
-                console.log('✅ Published audio track');
-              } catch (err) {
-                console.error('Error publishing audio track:', err);
-                audioTrack.stop();
-              }
-            }
-          } else {
-            // Clean up tracks if room disconnected
-            if (videoTrack) videoTrack.stop();
-            if (audioTrack) audioTrack.stop();
-          }
-        }
-      } catch (trackError: any) {
-        console.error('Error publishing tracks:', trackError);
-        // Don't show error toast if it's just a connection issue
-        if (!trackError.message?.includes('closed') && !trackError.message?.includes('disconnected')) {
-          toast.error('Failed to start camera/microphone');
-        }
-      }
-    };
-
-    publishTracks();
-
-    // Update viewer count
-    if (stream.id) {
+    if (isConnected && stream?.id) {
       try {
         supabase.rpc('update_viewer_count', {
           p_stream_id: stream.id,
@@ -206,7 +152,7 @@ export default function StreamRoom() {
     // Cleanup function
     return () => {
       // Decrement viewer count
-      if (stream?.id) {
+      if (stream?.id && isConnected) {
         void (async () => {
           try {
             await supabase.rpc('update_viewer_count', {
@@ -217,7 +163,7 @@ export default function StreamRoom() {
         })();
       }
     };
-  }, [room, isHost, isTestingMode, profile, stream]);
+  }, [isConnected, stream?.id]);
 
   // Handle stream end
   const handleEndStream = async () => {
@@ -231,7 +177,7 @@ export default function StreamRoom() {
   };
 
   // Fix loading condition to prevent infinite loading
-  const stillLoading = isLoadingStream || (stream && !room && !error && !liveKitError);
+  const stillLoading = isLoadingStream || (stream && !isConnected && !error && !liveKitError);
 
   if (stillLoading) {
     return (
@@ -260,7 +206,7 @@ export default function StreamRoom() {
     );
   }
 
-  if (!stream || !room) {
+  if (!stream || !isConnected) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
@@ -293,7 +239,7 @@ export default function StreamRoom() {
             <RoyalCrownOverlay
               streamId={stream.id}
               isAdminStream={true}
-              participants={participants || []}
+              participants={Array.from(participants.values())}
             />
           )}
         </div>
@@ -302,22 +248,14 @@ export default function StreamRoom() {
         <ChatOverlay streamId={stream.id} />
 
         {/* Control Bar */}
-        {isHost && room && (
+        {isHost && isConnected && (
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-30">
             <ControlBar
               room={room}
-              isCameraEnabled={room?.localParticipant?.isCameraEnabled ?? true}
-              isMicrophoneEnabled={room?.localParticipant?.isMicrophoneEnabled ?? true}
-              onToggleCamera={async () => {
-                if (room?.localParticipant) {
-                  await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled);
-                }
-              }}
-              onToggleMicrophone={async () => {
-                if (room?.localParticipant) {
-                  await room.localParticipant.setMicrophoneEnabled(!room.localParticipant.isMicrophoneEnabled);
-                }
-              }}
+              isCameraEnabled={localParticipant?.isCameraEnabled ?? true}
+              isMicrophoneEnabled={localParticipant?.isMicrophoneEnabled ?? true}
+              onToggleCamera={toggleCamera}
+              onToggleMicrophone={toggleMicrophone}
               streamId={stream.id}
               isHost={isHost}
             />
