@@ -77,8 +77,10 @@ export function useUnifiedLiveKit(config: UnifiedLiveKitConfig) {
   useEffect(() => {
     if (serviceRef.current && config.roomName && config.user) {
       console.log('🎥 Connecting LiveKit service');
+      setIsConnecting(true);
       serviceRef.current.connect().catch(err => {
         console.error('Failed to connect:', err);
+        setIsConnecting(false);
       });
     }
 
@@ -116,7 +118,6 @@ export function useUnifiedLiveKit(config: UnifiedLiveKitConfig) {
   const connect = useCallback(async () => {
     if (!serviceRef.current) return false;
 
-    setIsConnecting(true);
     setError(null);
 
     try {
@@ -125,8 +126,6 @@ export function useUnifiedLiveKit(config: UnifiedLiveKitConfig) {
     } catch (err) {
       setError('Failed to connect');
       return false;
-    } finally {
-      setIsConnecting(false);
     }
   }, []);
 
