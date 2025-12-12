@@ -46,7 +46,6 @@ import EmpireApplications from './EmpireApplications'
 import AdminApplications from './components/AdminApplications'
 import UsersPanel from './components/UsersPanel'
 import AdminSupportTickets from './components/AdminSupportTickets'
-import BroadcasterApplications from './components/BroadcasterApplications'
 import EarningsTaxOverview from './components/EarningsTaxOverview'
 import OfficerShiftsPanel from './components/OfficerShiftsPanel'
 import CreateSchedulePanel from './components/CreateSchedulePanel'
@@ -122,7 +121,6 @@ type TabId =
   | 'support'
   | 'declined'
   | 'agreements'
-  | 'broadcaster_applications'
   | 'earnings_tax'
   | 'reset'
   | 'officer_shifts'
@@ -1957,7 +1955,6 @@ export default function AdminDashboard() {
     { id: 'families', label: 'Families' },
     { id: 'support', label: 'Support Tickets' },
     { id: 'agreements', label: 'User Agreements' },
-    { id: 'broadcaster_applications', label: 'Broadcaster Applications' },
     { id: 'earnings_tax', label: 'Earnings & Tax' },
     { id: 'officer_shifts', label: 'Officer Shifts' },
     { id: 'create_schedule', label: 'Create Schedule' },
@@ -2522,8 +2519,6 @@ export default function AdminDashboard() {
           </div>
         )
 
-      case 'broadcaster_applications':
-        return <BroadcasterApplications />
 
       case 'earnings_tax':
         return <EarningsTaxOverview />

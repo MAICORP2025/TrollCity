@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
-import { LiveKitRoom } from "@livekit/components-react";
-import "@livekit/components-styles";
+import { LiveKitRoomWrapper } from '../components/LiveKitVideoGrid';
+import { useLiveKit } from '../contexts/LiveKitContext';
 import { toast } from "sonner";
-import { createLocalVideoTrack, createLocalAudioTrack } from 'livekit-client';
 import { Scale, Gavel, Users, Mic, MicOff, UserX, FileText, MessageSquare, Crown, AlertTriangle, CheckCircle, XCircle, Shield, Eye } from 'lucide-react';
 import AuthorityPanel from '../components/AuthorityPanel';
 import RequireRole from "../components/RequireRole";
@@ -132,122 +131,17 @@ function EvidencePanel({ isOfficial }) {
   );
 }
 
-// Court video slot component
-function CourtVideoSlot({ slot, participant, isJudge, onMute, onRemove, onAssign }) {
-  const videoRef = useRef(null);
-
-  useEffect(() => {
-    if (participant && videoRef.current) {
-      // Attach video track to video element
-      const videoTrack = participant.videoTracks?.values()?.next()?.value?.track;
-      if (videoTrack) {
-        videoTrack.attach(videoRef.current);
-      }
-    }
-  }, [participant]);
-
-  const getSlotConfig = () => {
-    switch (slot.role) {
-      case 'judge':
-        return {
-          title: '⚖️ Judge',
-          bgColor: 'bg-purple-900/50 border-purple-400',
-          icon: Crown
-        };
-      case 'defendant':
-        return {
-          title: '👤 Defendant',
-          bgColor: 'bg-red-900/50 border-red-400',
-          icon: AlertTriangle
-        };
-      case 'witness':
-        return {
-          title: '👁️ Witness',
-          bgColor: 'bg-blue-900/50 border-blue-400',
-          icon: Eye
-        };
-      case 'bailiff':
-        return {
-          title: '🛡️ Bailiff',
-          bgColor: 'bg-green-900/50 border-green-400',
-          icon: Shield
-        };
-      default:
-        return {
-          title: slot.role || 'Available',
-          bgColor: 'bg-gray-900/50 border-gray-400',
-          icon: Users
-        };
-    }
-  };
-
-  const config = getSlotConfig();
-  const IconComponent = config.icon;
-
-  return (
-    <div className={`border rounded-lg p-3 aspect-video flex flex-col ${config.bgColor}`}>
-      <div className="flex justify-between items-center mb-2">
-        <div className="flex items-center gap-2">
-          <IconComponent className="w-4 h-4" />
-          <h3 className="font-semibold text-sm">{config.title}</h3>
-        </div>
-        {isJudge && participant && (
-          <div className="flex gap-1">
-            <button onClick={() => onMute(participant)} className="p-1 bg-yellow-600 hover:bg-yellow-700 rounded text-xs">
-              <MicOff className="w-3 h-3" />
-            </button>
-            <button onClick={() => onRemove(participant)} className="p-1 bg-red-600 hover:bg-red-700 rounded text-xs">
-              <UserX className="w-3 h-3" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="flex-1 bg-black rounded flex items-center justify-center relative overflow-hidden">
-        {participant ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="text-gray-500 text-sm text-center">
-            {slot.assigned ? 'Waiting for participant...' : 'Slot available'}
-          </div>
-        )}
-
-        {participant && (
-          <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-xs">
-            {participant.identity}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function CourtRoom() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
-  const [token, setToken] = useState(null);
-  const [serverUrl, setServerUrl] = useState(null);
+  const { isConnected, toggleMicrophone, localParticipant } = useLiveKit();
+
   const [loading, setLoading] = useState(true);
-  const [room, setRoom] = useState(null);
-  const [participants, setParticipants] = useState(new Map());
-  const [hasJoined, setHasJoined] = useState(false);
   const [courtSession, setCourtSession] = useState(null);
   const [userDocket, setUserDocket] = useState(null);
-  const [courtSlots, setCourtSlots] = useState([
-    { id: 'judge', role: 'judge', assigned: null, participant: null },
-    { id: 'defendant', role: 'defendant', assigned: null, participant: null },
-    { id: 'witness1', role: 'witness', assigned: null, participant: null },
-    { id: 'witness2', role: 'witness', assigned: null, participant: null },
-    { id: 'bailiff', role: 'bailiff', assigned: null, participant: null },
-    { id: 'witness3', role: 'witness', assigned: null, participant: null }
-  ]);
+  const [roomName, setRoomName] = useState(null);
 
   // Determine user role in court
   const getUserRole = () => {
@@ -300,6 +194,7 @@ export default function CourtRoom() {
       }
 
       setCourtSession(session);
+      setRoomName(`courtroom-${actualSessionId}`);
 
       // Check if user has docket entry and mark as in_session
       if (user) {
@@ -319,22 +214,6 @@ export default function CourtRoom() {
         }
       }
 
-      // Get LiveKit token
-      const { data, error } = await supabase.functions.invoke("livekit-token", {
-        body: {
-          room: `courtroom-${actualSessionId}`,
-          identity: user.id,
-          user_id: user.id,
-          role: profile.role,
-          court_role: userRole
-        }
-      });
-
-      if (error) throw error;
-
-      setToken(data?.token);
-      setServerUrl(data?.serverUrl || import.meta.env.VITE_LIVEKIT_URL);
-
     } catch (err) {
       console.error("Courtroom initialization error:", err);
       toast.error("Unable to join court session.");
@@ -346,8 +225,7 @@ export default function CourtRoom() {
 
   // Auto-start court when authority enters
   useEffect(() => {
-    if (!courtSession || courtSession.status !== 'waiting') return;
-    if (!isParticipant) return;
+    if (!courtSession || courtSession.status !== 'waiting' || !isConnected) return;
 
     // Auto-start court
     const autoStartCourt = async () => {
@@ -370,104 +248,8 @@ export default function CourtRoom() {
     };
 
     autoStartCourt();
-  }, [courtSession, isParticipant, user]);
+  }, [courtSession, isConnected, user]);
 
-  // Auto-join with camera/mic when room connects
-  const handleRoomConnected = async (room) => {
-    setRoom(room);
-
-    if (canParticipate) {
-      try {
-        // Create and publish video track
-        const videoTrack = await createLocalVideoTrack({
-          facingMode: 'user',
-          resolution: { width: 1280, height: 720 },
-          frameRate: 30
-        });
-        await room.localParticipant.publishTrack(videoTrack);
-
-        // Create and publish audio track
-        const audioTrack = await createLocalAudioTrack({
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        });
-        await room.localParticipant.publishTrack(audioTrack);
-
-        // Set metadata with court role
-        await room.localParticipant.setMetadata(JSON.stringify({
-          court_role: userRole,
-          user_id: user.id,
-          slot_preference: userRole // Auto-assign to appropriate slot
-        }));
-
-        setHasJoined(true);
-        toast.success(`Joined court session as ${userRole} with audio/video`);
-      } catch (error) {
-        console.error("Failed to publish tracks:", error);
-        toast.warning("Joined as audience only - media access failed");
-        setHasJoined(true);
-      }
-    } else {
-      setHasJoined(true);
-      toast.success("Joined court session as audience");
-    }
-  };
-
-  // Handle participant updates and slot assignment
-  useEffect(() => {
-    if (!room) return;
-
-    const handleParticipantConnected = (participant) => {
-      setParticipants(prev => new Map(prev.set(participant.identity, participant)));
-
-      // Auto-assign participant to appropriate slot based on their role
-      const metadata = participant.metadata ? JSON.parse(participant.metadata) : {};
-      const courtRole = metadata.court_role;
-
-      setCourtSlots(prev => prev.map(slot => {
-        if (slot.role === courtRole && !slot.assigned) {
-          return { ...slot, assigned: participant.identity, participant };
-        }
-        return slot;
-      }));
-    };
-
-    const handleParticipantDisconnected = (participant) => {
-      setParticipants(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(participant.identity);
-        return newMap;
-      });
-
-      // Remove from slot assignment
-      setCourtSlots(prev => prev.map(slot => {
-        if (slot.assigned === participant.identity) {
-          return { ...slot, assigned: null, participant: null };
-        }
-        return slot;
-      }));
-    };
-
-    room.on('participantConnected', handleParticipantConnected);
-    room.on('participantDisconnected', handleParticipantDisconnected);
-
-    return () => {
-      room.off('participantConnected', handleParticipantConnected);
-      room.off('participantDisconnected', handleParticipantDisconnected);
-    };
-  }, [room]);
-
-  // Court controls
-  const handleMute = async (participant) => {
-    if (!isParticipant) return;
-    toast.info(`Muted ${participant.identity}`);
-  };
-
-  const handleRemove = async (participant) => {
-    if (!isParticipant) return;
-    toast.info(`Removed ${participant.identity} from court`);
-  };
 
   const handleRuling = (type) => {
     if (!isOfficial) return;
@@ -569,18 +351,17 @@ export default function CourtRoom() {
         <div className="flex flex-1 min-h-0">
           {/* Main Court Area */}
           <div className="flex-1 p-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 h-full">
-              {courtSlots.map((slot) => (
-                <CourtVideoSlot
-                  key={slot.id}
-                  slot={slot}
-                  participant={slot.participant}
-                  isJudge={isJudge}
-                  onMute={handleMute}
-                  onRemove={handleRemove}
-                />
-              ))}
-            </div>
+            {roomName && (
+              <LiveKitRoomWrapper
+                roomName={roomName}
+                user={{ ...user, role: userRole }}
+                className="w-full h-full bg-black rounded-xl overflow-hidden"
+                showLocalVideo={canParticipate}
+                maxParticipants={6}
+                autoPublish={canParticipate}
+                role={userRole}
+              />
+            )}
 
             {/* Judge Controls - Only for judges */}
             {isJudge && (
@@ -651,23 +432,29 @@ export default function CourtRoom() {
             {/* Evidence Panel - Only for officials */}
             {isOfficial && <EvidencePanel isOfficial={isOfficial} />}
 
-            {/* Court Slots Status */}
+            {/* Court Status */}
             <div className="bg-zinc-900 border border-purple-500/20 rounded-lg p-4">
               <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                 <Users className="w-5 h-5 text-purple-400" />
-                Court Positions
+                Court Status
               </h3>
               <div className="space-y-2 text-sm">
-                {courtSlots.map((slot) => (
-                  <div key={slot.id} className="flex justify-between items-center">
-                    <span className="capitalize">{slot.role}:</span>
-                    <span className={`font-semibold ${
-                      slot.assigned ? 'text-green-400' : 'text-gray-400'
-                    }`}>
-                      {slot.assigned ? '✓' : '○'}
-                    </span>
-                  </div>
-                ))}
+                <div className="flex justify-between items-center">
+                  <span>Your Role:</span>
+                  <span className={`font-semibold capitalize ${
+                    isJudge ? 'text-purple-400' :
+                    isBailiff ? 'text-green-400' :
+                    'text-blue-400'
+                  }`}>
+                    {userRole}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Video/Audio:</span>
+                  <span className={`font-semibold ${canParticipate ? 'text-green-400' : 'text-gray-400'}`}>
+                    {canParticipate ? '✓ Enabled' : '○ Audience'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -702,17 +489,6 @@ export default function CourtRoom() {
           <AuthorityPanel />
         </div>
 
-        {/* LiveKit Room (hidden) */}
-        <div className="hidden">
-          <LiveKitRoom
-            token={token}
-            url={serverUrl}
-            connect={true}
-            audio={canParticipate}
-            video={canParticipate}
-            onConnected={handleRoomConnected}
-          />
-        </div>
 
       </div>
     </RequireRole>

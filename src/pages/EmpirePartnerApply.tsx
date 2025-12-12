@@ -25,7 +25,7 @@ export default function EmpirePartnerApply() {
 
     // If already approved, redirect to dashboard
     if (profile?.empire_partner === true || profile?.partner_status === 'approved' || profile?.role === 'empire_partner') {
-      navigate('/empire/dashboard')
+      navigate('/empire-partner')
       return
     }
   }, [user, profile?.empire_role, navigate])
@@ -176,7 +176,7 @@ export default function EmpirePartnerApply() {
               onClick={async () => {
                 // Refresh profile first to get updated partner status
                 await refreshProfile()
-                navigate('/empire/dashboard')
+                navigate('/empire-partner')
               }}
               className="px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg flex items-center gap-2 mx-auto"
             >

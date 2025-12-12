@@ -1,131 +1,54 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Video } from 'lucide-react';
-import BroadcasterApplicationForm from '../components/BroadcasterApplicationForm';
+import { Video, Mic, MicOff, Settings } from 'lucide-react';
+import { LiveKitRoomWrapper } from '../components/LiveKitVideoGrid';
+import { useLiveKit } from '../contexts/LiveKitContext';
 import { toast } from 'sonner';
 
 const GoLive: React.FC = () => {
   const navigate = useNavigate();
-  const videoRef = useRef<HTMLVideoElement>(null);
-
   const { user, profile } = useAuthStore();
+  const { isConnected, isConnecting, toggleCamera, toggleMicrophone, localParticipant } = useLiveKit();
 
   const [streamTitle, setStreamTitle] = useState('');
+  const [streamId, setStreamId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
 
-  const [showApplicationForm, setShowApplicationForm] = useState(false);
-  const [isTestingMode, setIsTestingMode] = useState(false);
-
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
-
-  const [broadcasterStatus, setBroadcasterStatus] = useState<{
-    isApproved: boolean;
-    hasApplication: boolean;
-    applicationStatus: string | null;
-  } | null>(null);
-
-  // -------------------------------
-  // CHECK BROADCASTER STATUS
-  // -------------------------------
+  // IMMEDIATE CONNECTION: Connect to LiveKit room on page load
   useEffect(() => {
-    const checkStatus = async () => {
-      const { user, profile } = useAuthStore.getState();
-      if (!user || !profile) return;
+    if (!user || !profile || streamId) return;
 
-      // If already marked broadcaster
-      if (profile.is_broadcaster) {
-        setBroadcasterStatus({
-          isApproved: true,
-          hasApplication: true,
-          applicationStatus: 'approved',
-        });
-        return;
-      }
+    const roomName = `stream-${crypto.randomUUID()}`;
+    setStreamId(roomName);
 
-      // Check broadcaster_applications table
-      const { data } = await supabase
-        .from('broadcaster_applications')
-        .select('application_status')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    console.log('🎥 GoLive: Auto-connecting to room:', roomName);
+  }, [user, profile]);
 
-      if (!data) {
-        setBroadcasterStatus({
-          isApproved: false,
-          hasApplication: false,
-          applicationStatus: null,
-        });
-      } else {
-        setBroadcasterStatus({
-          isApproved: data.application_status === 'approved',
-          hasApplication: true,
-          applicationStatus: data.application_status,
-        });
-      }
-    };
-
-    checkStatus();
-  }, []);
-
-  // -------------------------------
-  // START STREAM
-  // -------------------------------
-  const handleStartStream = async () => {
-    const { profile, user } = useAuthStore.getState();
-
-    if (!user || !profile) {
-      toast.error('You must be logged in.');
-      return;
+  // Start stream when connected
+  useEffect(() => {
+    if (isConnected && streamId && !isStreaming && streamTitle.trim()) {
+      handleStartStream();
     }
+  }, [isConnected, streamId, isStreaming, streamTitle]);
 
-    if (!profile.is_broadcaster && !isTestingMode) {
-      toast.error('🚫 You must be an approved broadcaster to go live.');
+  const handleStartStream = async () => {
+    if (!user || !profile || !streamId) {
+      toast.error('Not ready to stream');
       return;
     }
 
     if (!streamTitle.trim()) {
-      toast.error('Enter a stream title.');
+      toast.error('Enter a stream title');
       return;
     }
 
-    setIsConnecting(true);
-
     try {
-      const streamId = crypto.randomUUID();
-      let thumbnailUrl = null;
-
-      // Upload thumbnail
-      if (thumbnailFile) {
-        setUploadingThumbnail(true);
-
-        const fileName = `thumb-${streamId}-${Date.now()}.${thumbnailFile.name.split('.').pop()}`;
-        const filePath = `thumbnails/${fileName}`;
-
-        const upload = await supabase.storage
-          .from('troll-city-assets')
-          .upload(filePath, thumbnailFile, { upsert: false });
-
-        if (!upload.error) {
-          const { data: url } = supabase.storage
-            .from('troll-city-assets')
-            .getPublicUrl(filePath);
-
-          thumbnailUrl = url.publicUrl;
-        }
-
-        setUploadingThumbnail(false);
-      }
+      console.log('🎥 GoLive: Starting stream...');
 
       // Insert into streams table
-      const { error: insertError, data: insertedStream } = await supabase.from('streams').insert({
+      const { error: insertError } = await supabase.from('streams').insert({
         id: streamId,
         broadcaster_id: profile.id,
         title: streamTitle,
@@ -133,145 +56,161 @@ const GoLive: React.FC = () => {
         is_live: true,
         status: 'live',
         start_time: new Date().toISOString(),
-        thumbnail_url: thumbnailUrl,
-        is_testing_mode: isTestingMode,
+        thumbnail_url: null,
+        is_testing_mode: false,
         viewer_count: 0,
         current_viewers: 0,
         total_gifts_coins: 0,
         popularity: 0,
-      }).select().single();
+      });
 
       if (insertError) {
-        console.error(insertError);
-        toast.error('Failed to start stream.');
-        setIsConnecting(false);
+        console.error('❌ GoLive: Failed to create stream record:', insertError);
+        toast.error('Failed to start stream');
         return;
       }
 
-      // Wait a moment to ensure database commit
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // LiveKit token
-      const tokenResponse = await api.post('/livekit-token', {
-        room: streamId,
-        identity: user.email || user.id,
-        isHost: true,
-      });
-
-      const serverUrl = tokenResponse.serverUrl || tokenResponse.livekitUrl;
-      const token =
-        tokenResponse.token ||
-        tokenResponse?.token?.token ||
-        tokenResponse?.accessToken ||
-        null;
-
-      if (!token || !serverUrl) {
-        toast.error('LiveKit token error.');
-        setIsConnecting(false);
-        return;
-      }
-
+      console.log('✅ GoLive: Stream record created');
       setIsStreaming(true);
 
-      // Navigate to stream room
-      navigate(`/stream/${streamId}`, {
-        state: {
-          roomName: streamId,
-          serverUrl,
-          token,
-          streamTitle,
-          isHost: true,
-        },
-        replace: false, // Don't replace so user can go back if needed
-      });
-    } catch (err) {
-      console.error(err);
-      toast.error('Error starting stream.');
-    }
+      // Navigate to stream room after a brief delay
+      setTimeout(() => {
+        navigate(`/stream/${streamId}`, { replace: true });
+      }, 1000);
 
-    setIsConnecting(false);
+    } catch (error) {
+      console.error('❌ GoLive: Error starting stream:', error);
+      toast.error('Error starting stream');
+    }
   };
 
-  // -------------------------------
-  // Camera preview
-  // -------------------------------
-  useEffect(() => {
-    let previewStream: MediaStream | null = null;
-
-    if (videoRef.current && !isStreaming) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-        previewStream = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }).catch((err) => {
-        console.error('Error accessing camera/microphone:', err);
-      });
+  const handleTitleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (streamTitle.trim()) {
+      handleStartStream();
     }
+  };
 
-    // Cleanup: Stop all tracks when component unmounts or when streaming starts
-    return () => {
-      if (previewStream) {
-        previewStream.getTracks().forEach(track => {
-          track.stop();
-        });
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-    };
-  }, [isStreaming]);
-
-  return (
-    <div className="max-w-6xl mx-auto space-y-6 go-live-wrapper">
-      <BroadcasterApplicationForm
-        isOpen={showApplicationForm}
-        onClose={() => setShowApplicationForm(false)}
-        onSubmitted={() => toast.success('Application submitted')}
-      />
-
-      <h1 className="text-3xl font-extrabold flex items-center gap-2">
-        <Video className="text-troll-gold w-8 h-8" />
-        Go Live
-      </h1>
-
-      <div className="host-video-box relative">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-        />
-        {!isStreaming && (
-          <div className="absolute inset-0 bg-black/50 flex justify-center items-center text-white">
-            Camera Preview
-          </div>
-        )}
-      </div>
-
-      {!isStreaming ? (
-        <div className="bg-[#0E0A1A] border border-purple-700/40 p-6 rounded-xl space-y-6">
-          <div>
-            <label className="text-gray-300">Stream Title *</label>
-            <input
-              value={streamTitle}
-              onChange={(e) => setStreamTitle(e.target.value)}
-              className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-4 py-3"
-            />
-          </div>
-
-          <button
-            onClick={handleStartStream}
-            disabled={isConnecting}
-            className="w-full py-3 rounded-lg bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-semibold"
-          >
-            {isConnecting ? 'Starting…' : 'Go Live'}
-          </button>
+  // If not connected yet, show loading
+  if (!streamId || isConnecting) {
+    return (
+      <div className="min-h-screen bg-[#0A0814] text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-lg">Connecting to stream...</p>
+          <p className="text-sm text-gray-400 mt-2">Setting up camera and microphone</p>
         </div>
-      ) : (
-        <div className="p-6 text-gray-300">Redirecting to stream…</div>
-      )}
+      </div>
+    );
+  }
+
+  // If connected but no title yet, show title input
+  if (isConnected && !streamTitle.trim()) {
+    return (
+      <div className="min-h-screen bg-[#0A0814] text-white flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <Video className="w-16 h-16 text-purple-400 mx-auto mb-4" />
+            <h1 className="text-3xl font-bold mb-2">Ready to Go Live</h1>
+            <p className="text-gray-400">Your camera and microphone are connected</p>
+          </div>
+
+          <form onSubmit={handleTitleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Stream Title *
+              </label>
+              <input
+                type="text"
+                value={streamTitle}
+                onChange={(e) => setStreamTitle(e.target.value)}
+                placeholder="What's your stream about?"
+                className="w-full bg-[#1C1C24] border border-purple-500/40 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                autoFocus
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!streamTitle.trim()}
+              className="w-full py-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Start Streaming
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // If streaming, show the live interface
+  if (isStreaming) {
+    return (
+      <div className="min-h-screen bg-[#0A0814] text-white">
+        <div className="max-w-6xl mx-auto p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+              <h1 className="text-2xl font-bold">LIVE: {streamTitle}</h1>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* Camera Toggle */}
+              <button
+                onClick={toggleCamera}
+                className={`p-2 rounded-lg ${localParticipant?.isCameraEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} transition-colors`}
+                title={localParticipant?.isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+              >
+                <Video className="w-5 h-5" />
+              </button>
+
+              {/* Mic Toggle */}
+              <button
+                onClick={toggleMicrophone}
+                className={`p-2 rounded-lg ${localParticipant?.isMicrophoneEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} transition-colors`}
+                title={localParticipant?.isMicrophoneEnabled ? 'Turn off microphone' : 'Turn on microphone'}
+              >
+                {localParticipant?.isMicrophoneEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+              </button>
+
+              {/* Settings */}
+              <button className="p-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors">
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Video Grid */}
+          <LiveKitRoomWrapper
+            roomName={streamId}
+            user={user}
+            className="w-full h-[70vh] bg-black rounded-xl overflow-hidden"
+            showLocalVideo={true}
+            maxParticipants={6}
+            autoPublish={true}
+            role="broadcaster"
+          />
+
+          {/* Stream Info */}
+          <div className="mt-6 bg-[#1C1C24] rounded-lg p-4">
+            <div className="flex items-center justify-between text-sm text-gray-400">
+              <span>Stream ID: {streamId}</span>
+              <span>Status: LIVE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback
+  return (
+    <div className="min-h-screen bg-[#0A0814] text-white flex items-center justify-center">
+      <div className="text-center">
+        <Video className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <p className="text-lg">Preparing your stream...</p>
+      </div>
     </div>
   );
 };

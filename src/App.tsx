@@ -6,6 +6,7 @@ import { supabase, isAdminEmail, UserRole } from "./lib/supabase";
 import api from "./lib/api";
 import { Toaster, toast } from "sonner";
 import { GlobalAppProvider, useGlobalApp } from "./contexts/GlobalAppContext";
+import { LiveKitProvider } from "./contexts/LiveKitContext";
 import GlobalLoadingOverlay from "./components/GlobalLoadingOverlay";
 import GlobalErrorBanner from "./components/GlobalErrorBanner";
 import GlobalEventsBanner from "./components/GlobalEventsBanner";
@@ -957,7 +958,9 @@ function AppContent() {
 function App() {
   return (
     <GlobalAppProvider>
-      <AppContent />
+      <LiveKitProvider>
+        <AppContent />
+      </LiveKitProvider>
     </GlobalAppProvider>
   );
 }
