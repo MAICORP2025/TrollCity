@@ -33,7 +33,7 @@ export function useLiveKitSession(options: SessionOptions) {
   const joinAndPublish = useMemo(
     () => async () => {
       if (joinStartedRef.current) return false
-      if (!options.roomName || !options.user?.id) {
+      if (!options.roomName || !options.user?.identity) {
         setSessionError('Missing room or user for LiveKit')
         return false
       }
