@@ -124,8 +124,10 @@ export function LiveKitRoomWrapper({
       role
     );
 
-  const isAlreadyPublishing =
-    !!localParticipant?.videoTrack || !!localParticipant?.audioTrack;
+const isAlreadyPublishing =
+  !!localParticipant?.videoTrack?.track ||
+  !!localParticipant?.audioTrack?.track;
+
 
   const handleStartPublishing = async () => {
     if (!canPublish || isAlreadyPublishing) return;
