@@ -425,7 +425,7 @@ export default function Home() {
                   <p className="text-xl font-bold text-green-400">{(homeFeature?.total_spent_coins || 0).toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-sm text-gray-300">Spend coins to become the featured King! Winner gets 1,000 paid coins if total spent ≥ 10,000.</p>
+              <p className="text-sm text-gray-300">Spend coins to become the featured King!</p>
             </div>
           </div>
         </div>
