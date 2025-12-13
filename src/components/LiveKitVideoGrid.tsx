@@ -35,22 +35,19 @@ const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participant }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    const videoTrack = participant.videoTrack?.track;
-    const audioTrack = participant.audioTrack?.track;
-
-    if (videoTrack && videoRef.current) {
-      videoTrack.attach(videoRef.current);
+    if (participant.videoTrack && videoRef.current) {
+      participant.videoTrack.attach(videoRef.current);
     }
-    if (audioTrack && audioRef.current) {
-      audioTrack.attach(audioRef.current);
+    if (participant.audioTrack && audioRef.current) {
+      participant.audioTrack.attach(audioRef.current);
     }
 
     return () => {
-      if (videoTrack && videoRef.current) {
-        videoTrack.detach(videoRef.current);
+      if (participant.videoTrack && videoRef.current) {
+        participant.videoTrack.detach(videoRef.current);
       }
-      if (audioTrack && audioRef.current) {
-        audioTrack.detach(audioRef.current);
+      if (participant.audioTrack && audioRef.current) {
+        participant.audioTrack.detach(audioRef.current);
       }
     };
   }, [participant.videoTrack, participant.audioTrack]);

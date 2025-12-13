@@ -170,7 +170,7 @@ const GoLive: React.FC = () => {
             identity={identity!}
             role="creator"
             autoConnect
-            autoPublish={false}
+            autoPublish={true}
             maxParticipants={6}
             className="w-full h-full"
           />
