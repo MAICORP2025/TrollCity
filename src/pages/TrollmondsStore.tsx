@@ -18,6 +18,9 @@ import {
   Star,
   Flame,
   Skull,
+  Coins,
+  ArrowRight,
+  CheckCircle,
 } from 'lucide-react'
 
 interface TrollmondItem {
@@ -166,6 +169,9 @@ export default function TrollmondsStore() {
   const [items, setItems] = useState<TrollmondItem[]>([])
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState<string | null>(null)
+  const [showConvertModal, setShowConvertModal] = useState(false)
+  const [convertAmount, setConvertAmount] = useState(100)
+  const [converting, setConverting] = useState(false)
 
   useEffect(() => {
     loadItems()
@@ -218,6 +224,32 @@ export default function TrollmondsStore() {
       toast.error(err.message || 'Failed to purchase')
     } finally {
       setPurchasing(null)
+    }
+  }
+
+  const convertCoins = async () => {
+    if (!user || !profile) return
+    if ((profile.paid_coin_balance || 0) < convertAmount) return toast.error('Not enough Paid Coins')
+
+    setConverting(true)
+    try {
+      const { data, error } = await supabase.rpc('convert_paid_coins_to_trollmonds', {
+        p_user_id: user.id,
+        p_paid_coins: convertAmount
+      })
+
+      if (error) throw error
+      if (data && !data.success) throw new Error(data.error)
+
+      toast.success(`Converted ${convertAmount} Paid Coins to ${(convertAmount * 100).toLocaleString()} Trollmonds!`)
+      await refreshProfile()
+      setShowConvertModal(false)
+      setConvertAmount(100)
+    } catch (err: any) {
+      console.error('Conversion error:', err)
+      toast.error(err.message || 'Failed to convert')
+    } finally {
+      setConverting(false)
     }
   }
 
@@ -274,6 +306,113 @@ export default function TrollmondsStore() {
             <span className="text-xs text-green-500/70">Trollmonds</span>
           </div>
         </div>
+
+        {/* Conversion Section */}
+        <div className="bg-[#1A1A1A] rounded-xl p-6 border border-purple-500/30 mb-10">
+          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-purple-300">
+            <Coins className="w-6 h-6" />
+            Convert Paid Coins to Trollmonds
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-[#15151A] p-4 rounded-lg border border-[#2C2C2C]">
+              <p className="text-sm text-gray-400 mb-1">Paid Coins Balance</p>
+              <p className="text-2xl font-bold text-yellow-400">
+                {(profile?.paid_coin_balance || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-[#15151A] p-4 rounded-lg border border-[#2C2C2C]">
+              <p className="text-sm text-gray-400 mb-1">Trollmonds Balance</p>
+              <p className="text-2xl font-bold text-green-400">
+                {(profile?.free_coin_balance || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-[#15151A] p-4 rounded-lg border border-[#2C2C2C]">
+              <p className="text-sm text-gray-400 mb-1">Conversion Rate</p>
+              <p className="text-lg font-bold text-purple-400">
+                100 Paid Coins <ArrowRight className="inline w-4 h-4 mx-1" /> 10,000 Trollmonds
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <p className="text-sm text-gray-300 mb-3">Select amount to convert:</p>
+            <div className="flex gap-3 flex-wrap">
+              {[100, 500, 1000].map(amount => (
+                <button
+                  key={amount}
+                  onClick={() => setConvertAmount(amount)}
+                  disabled={(profile?.paid_coin_balance || 0) < amount}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                    convertAmount === amount
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-[#2C2C2C] text-gray-300 hover:bg-[#3C3C3C]'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {amount} Coins
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowConvertModal(true)}
+            disabled={(profile?.paid_coin_balance || 0) < convertAmount}
+            className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-600 text-white rounded-lg font-bold transition-all flex items-center justify-center gap-2"
+          >
+            <ArrowRight className="w-5 h-5" />
+            Convert {convertAmount} Coins to {(convertAmount * 100).toLocaleString()} Trollmonds
+          </button>
+
+          <div className="mt-4 text-xs text-gray-400">
+            <p className="mb-2">💡 Trollmonds are in-app utility points for:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Trollmond Events & Giveaways</li>
+              <li>Stream Boosts & Multipliers</li>
+              <li>Family XP & Influence Perks</li>
+              <li>Exclusive Chat Effects</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Confirmation Modal */}
+        {showConvertModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1A1A1A] rounded-xl p-6 max-w-md w-full border border-purple-500/30">
+              <h3 className="text-xl font-bold mb-4 text-center">Confirm Conversion</h3>
+              <div className="text-center mb-6">
+                <p className="text-gray-300 mb-2">
+                  Convert <span className="text-yellow-400 font-bold">{convertAmount}</span> Paid Coins
+                </p>
+                <ArrowRight className="w-6 h-6 text-purple-400 mx-auto my-2" />
+                <p className="text-gray-300">
+                  to <span className="text-green-400 font-bold">{(convertAmount * 100).toLocaleString()}</span> Trollmonds
+                </p>
+              </div>
+              <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3 mb-6">
+                <p className="text-sm text-red-300">
+                  ⚠️ This conversion is final. Trollmonds are in-app utility points and cannot be withdrawn or transferred.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowConvertModal(false)}
+                  className="flex-1 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={convertCoins}
+                  disabled={converting}
+                  className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+                >
+                  {converting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-10">
           {categories.map(cat => {
