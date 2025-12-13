@@ -26,6 +26,7 @@ export interface LiveKitServiceConfig {
   roomName: string
   identity: string
   user?: any
+  role?: string
   onConnected?: () => void
   onDisconnected?: () => void
   onParticipantJoined?: (participant: LiveKitParticipant) => void
@@ -336,7 +337,7 @@ export class LiveKitService {
         room: this.config.roomName,
         identity: this.config.identity, // ✅ FIXED
         user_id: this.config.user?.id,
-        role: this.config.user?.role || this.config.user?.troll_role || 'viewer',
+        role: this.config.role || this.config.user?.role || this.config.user?.troll_role || 'viewer',
         level: this.config.user?.level || 1,
       })
 

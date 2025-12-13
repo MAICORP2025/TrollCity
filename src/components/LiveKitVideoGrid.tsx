@@ -2,6 +2,15 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useLiveKit } from '../contexts/LiveKitContext'
 import { LiveKitParticipant } from '../lib/LiveKitService'
 
+// Fallback UserRole enum in case the module doesn't exist or type declarations are missing.
+// If you have a shared UserRole enum elsewhere, replace this with the correct import.
+export enum UserRole {
+  ADMIN = 'admin',
+  MODERATOR = 'moderator',
+  TROLL_OFFICER = 'troll_officer',
+  LEAD_TROLL_OFFICER = 'lead_troll_officer',
+}
+
 /* =======================
    VideoGrid
 ======================= */
@@ -69,10 +78,7 @@ const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participant }) => {
         audioTrack.detach(audioRef.current)
       }
     }
-  }, [
-    participant.videoTrack?.track,
-    participant.audioTrack?.track,
-  ])
+  }, [participant.videoTrack?.track, participant.audioTrack?.track])
 
   return (
     <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
@@ -117,8 +123,7 @@ interface LiveKitRoomWrapperProps {
   className?: string
   showLocalVideo?: boolean
   maxParticipants?: number
-  autoPublish?: boolean
-  role?: string
+  role?: UserRole | 'viewer'
   autoConnect?: boolean
   children?: React.ReactNode
 }
@@ -130,8 +135,7 @@ export function LiveKitRoomWrapper({
   className = '',
   showLocalVideo = true,
   maxParticipants = 6,
-  autoPublish = true,
-  role,
+  role = 'viewer',
   autoConnect = true,
 }: LiveKitRoomWrapperProps) {
   const {
@@ -144,23 +148,26 @@ export function LiveKitRoomWrapper({
   } = useLiveKit()
 
   const [isPublishing, setIsPublishing] = useState(false)
-
-  // 🔒 HARD LOCK — connect once
   const didConnectRef = useRef(false)
 
-  // App-level role gate (UI only)
-  const canPublish =
-    !!role &&
-    [
-      'admin',
-      'broadcaster',
-      'officer',
-      'lead_troll_officer',
-      'troll_officer',
-      'moderator',
-    ].includes(role)
+  /* =======================
+     ROLE INTENT (UI ONLY)
+  ======================= */
+  const roleAllowsPublish =
+    role === UserRole.ADMIN ||
+    role === UserRole.MODERATOR ||
+    role === UserRole.TROLL_OFFICER ||
+    role === UserRole.LEAD_TROLL_OFFICER
 
-  // ✅ MUST check actual MediaTrack, not publication
+  /* =======================
+     TOKEN PERMISSION (TRUTH)
+  ======================= */
+  const tokenAllowsPublish =
+    (localParticipant as any)?.permissions?.canPublish !== false &&
+    (localParticipant as any)?.participantInfo?.permissions?.canPublish !== false
+
+  const canPublish = roleAllowsPublish && tokenAllowsPublish
+
   const isAlreadyPublishing =
     !!localParticipant?.videoTrack?.track ||
     !!localParticipant?.audioTrack?.track
@@ -178,20 +185,29 @@ export function LiveKitRoomWrapper({
     }
   }
 
-  // Connect once
+  /* =======================
+     CONNECT (PASS ROLE)
+  ======================= */
   useEffect(() => {
     if (!autoConnect) return
     if (didConnectRef.current) return
 
     didConnectRef.current = true
 
-    connect(roomName, identity, { autoPublish }).catch((err) => {
+    // `role` is not part of the declared LiveKitServiceConfig type; cast options to `any`
+    // so the runtime value is still passed through without a type error.
+    connect(roomName, identity, {
+      autoPublish: true,
+      role,
+    } as any).catch((err) => {
       console.error('LiveKit connect failed:', err)
       didConnectRef.current = false
     })
   }, [])
 
-  // Auto-publish when allowed
+  /* =======================
+     AUTO-PUBLISH
+  ======================= */
   useEffect(() => {
     if (!isConnected) return
     if (!canPublish) return
@@ -200,12 +216,15 @@ export function LiveKitRoomWrapper({
     startPublishing().catch(console.error)
   }, [isConnected, canPublish, isAlreadyPublishing])
 
+  /* =======================
+     STATES
+  ======================= */
   if (isConnecting) {
     return (
       <div className={`flex items-center justify-center bg-black ${className}`}>
         <div className="text-center text-white">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-2" />
-          <div className="text-sm">Connecting to stream...</div>
+          <div className="text-sm">Connecting to stream…</div>
         </div>
       </div>
     )
@@ -222,6 +241,9 @@ export function LiveKitRoomWrapper({
     )
   }
 
+  /* =======================
+     RENDER
+  ======================= */
   return (
     <div className={className}>
       <VideoGrid
