@@ -72,7 +72,7 @@ const FamilyWarsHub = lazy(() => import("./pages/FamilyWarsHub.jsx"));
 const FamilyLeaderboard = lazy(() => import("./pages/FamilyLeaderboard.jsx"));
 const FamilyShop = lazy(() => import("./pages/FamilyShop.jsx"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
-const EarningsPayout = lazy(() => import("./pages/EarningsPayout"));
+const _EarningsPayout = lazy(() => import("./pages/EarningsPayout"));
 const TransactionHistory = lazy(() => import("./pages/TransactionHistory"));
 const TrollCityWall = lazy(() => import("./pages/TrollCityWall"));
 const ReelFeed = lazy(() => import("./pages/ReelFeed"));
@@ -99,13 +99,13 @@ const Withdraw = lazy(() => import("./pages/Withdraw"));
 const Support = lazy(() => import("./pages/Support"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Changelog = lazy(() => import("./pages/Changelog"));
-const AccountWallet = lazy(() => import("./pages/AccountWallet"));
-const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
-const AccountPaymentsSuccess = lazy(() => import("./pages/AccountPaymentsSuccess"));
-const AccountPaymentLinkedSuccess = lazy(() => import("./pages/AccountPaymentLinkedSuccess"));
+const _AccountWallet = lazy(() => import("./pages/AccountWallet"));
+const _PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
+const _AccountPaymentsSuccess = lazy(() => import("./pages/AccountPaymentsSuccess"));
+const _AccountPaymentLinkedSuccess = lazy(() => import("./pages/AccountPaymentLinkedSuccess"));
 const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard"));
 const ReferralBonusPanel = lazy(() => import("./pages/admin/ReferralBonusPanel"));
-const EmpireApplications = lazy(() => import("./pages/admin/EmpireApplications"));
+const _EmpireApplications = lazy(() => import("./pages/admin/EmpireApplications"));
 const EmpirePartnerApply = lazy(() => import("./pages/EmpirePartnerApply"));
 const AddCard = lazy(() => import("./pages/AddCard"));
 const EarningsDashboard = lazy(() => import("./pages/EarningsDashboard"));
@@ -123,10 +123,10 @@ const Wallet = lazy(() => import("./pages/Wallet"));
 const PayoutRequest = lazy(() => import("./pages/PayoutRequest"));
 const AdminPayoutDashboard = lazy(() => import("./pages/admin/components/AdminPayoutDashboard"));
 const AdminLiveOfficersTracker = lazy(() => import("./pages/admin/AdminLiveOfficersTracker"));
-const VerificationPage = lazy(() => import("./pages/VerificationPage"));
-const VerificationComplete = lazy(() => import("./pages/VerificationComplete"));
+const _VerificationPage = lazy(() => import("./pages/VerificationPage"));
+const _VerificationComplete = lazy(() => import("./pages/VerificationComplete"));
 const AdminVerifiedUsers = lazy(() => import("./pages/admin/AdminVerifiedUsers"));
-const AIVerificationPage = lazy(() => import("./pages/AIVerificationPage"));
+const _AIVerificationPage = lazy(() => import("./pages/AIVerificationPage"));
 const AdminVerificationReview = lazy(() => import("./pages/admin/AdminVerificationReview"));
 const AdminPoliciesDocs = lazy(() => import("./pages/admin/AdminPoliciesDocs"));
 const AdminMarketplace = lazy(() => import("./pages/admin/AdminMarketplace"));
@@ -153,7 +153,7 @@ const Marketplace = lazy(() => import("./pages/Marketplace"));
 const ShopView = lazy(() => import("./pages/ShopView"));
 const UserInventory = lazy(() => import("./pages/UserInventory"));
 const DistrictTour = lazy(() => import("./pages/DistrictTour"));
-const DistrictNavigation = lazy(() => import("./components/DistrictNavigation"));
+const _DistrictNavigation = lazy(() => import("./components/DistrictNavigation"));
 
 function AppContent() {
   console.log('🚀 App component rendering...');
@@ -173,7 +173,7 @@ function AppContent() {
   const [profileModalLoading] = useState(false);
 
   // Global app context for loading and error states
-  const { isLoading: globalLoading, loadingMessage, error, errorType, clearError, retryLastAction, isReconnecting, reconnectMessage } = useGlobalApp();
+  const { isLoading: globalLoading, loadingMessage, error, errorType, clearError: _clearError, retryLastAction, isReconnecting, reconnectMessage } = useGlobalApp();
 
   // Track route changes for session persistence
   useEffect(() => {
@@ -217,7 +217,7 @@ function AppContent() {
   useEffect(() => {
     if (profile && (profile.is_kicked || profile.is_banned)) {
       // Import and show kick re-entry modal
-      import('./components/KickReentryModal').then(({ default: KickReentryModal }) => {
+      import('./components/KickReentryModal').then(({ default: _KickReentryModal }) => {
         // This will be handled by a global state or context
         // For now, we'll check on route changes
       })

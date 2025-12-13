@@ -201,7 +201,13 @@ export const subscribeToRealtime = (): (() => void) => {
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         isSubscribed = true
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      } else if (status === 'CHANNEL_ERROR') {
+        isSubscribed = false
+        realtimeChannel = null
+      } else if (status === 'TIMED_OUT') {
+        isSubscribed = false
+        realtimeChannel = null
+      } else if (status === 'CLOSED') {
         isSubscribed = false
         realtimeChannel = null
       }
