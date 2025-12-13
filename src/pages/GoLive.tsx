@@ -1,76 +1,71 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../lib/store';
-import { Video, Mic, MicOff, Settings } from 'lucide-react';
-import { LiveKitRoomWrapper } from '../components/LiveKitVideoGrid';
-import { useLiveKit } from '../contexts/LiveKitContext';
-import { toast } from 'sonner';
+import React, { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../lib/store'
+import { Video, Mic, MicOff, Settings } from 'lucide-react'
+import { LiveKitRoomWrapper } from '../components/LiveKitVideoGrid'
+import { useLiveKit } from '../contexts/LiveKitContext'
+import { toast } from 'sonner'
 
 const GoLive: React.FC = () => {
-  const navigate = useNavigate();
-  const { user, profile } = useAuthStore();
-  const { toggleMicrophone, toggleCamera, isConnected } = useLiveKit();
+  const navigate = useNavigate()
+  const { user, profile } = useAuthStore()
+  const { toggleMicrophone, toggleCamera, isConnected } = useLiveKit()
 
-  // 🔒 HARD-LOCKED identifiers (created once)
-  const streamUuidRef = useRef<string>(crypto.randomUUID());
-  const roomNameRef = useRef<string>(`stream-${streamUuidRef.current}`);
-  const identityRef = useRef<string | null>(null);
+  // 🔒 HARD-LOCKED identifiers
+  const streamUuidRef = useRef<string>(crypto.randomUUID())
+  const roomNameRef = useRef<string>(`stream-${streamUuidRef.current}`)
+  const identityRef = useRef<string | null>(null)
 
-  // Lock identity ONCE when user becomes available
   if (!identityRef.current && user?.id) {
-    identityRef.current = user.id;
+    identityRef.current = user.id
   }
 
-  const streamUuid = streamUuidRef.current;
-  const roomName = roomNameRef.current;
-  const identity = identityRef.current;
+  const streamUuid = streamUuidRef.current
+  const roomName = roomNameRef.current
+  const identity = identityRef.current
 
-  // UI state
-  const [streamTitle, setStreamTitle] = useState('');
-  const [started, setStarted] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [streamTitle, setStreamTitle] = useState('')
+  const [started, setStarted] = useState(false)
+  const [creating, setCreating] = useState(false)
 
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [camEnabled, setCamEnabled] = useState(true);
+  const [micEnabled, setMicEnabled] = useState(true)
+  const [camEnabled, setCamEnabled] = useState(true)
 
-  const createdRef = useRef(false);
-  const navigatedRef = useRef(false);
+  const createdRef = useRef(false)
+  const navigatedRef = useRef(false)
 
   // Default title
   useEffect(() => {
     if (!streamTitle.trim()) {
-      setStreamTitle(`Live with ${profile?.username || 'broadcaster'}`);
+      setStreamTitle(`Live with ${profile?.username || 'broadcaster'}`)
     }
-  }, [profile?.username]);
+  }, [profile?.username])
 
   const startStream = async () => {
     if (!identity || !profile?.id) {
-      toast.error('Not ready to stream');
-      return;
+      toast.error('Not ready to stream')
+      return
     }
 
     if (!streamTitle.trim()) {
-      toast.error('Enter a stream title');
-      return;
+      toast.error('Enter a stream title')
+      return
     }
 
-    // FORCE MEDIA UNLOCK ON USER CLICK
+    // Browser media permission (required)
     try {
-      await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-    } catch (err) {
-      toast.error('Camera/microphone access required to stream');
-      return;
+      await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    } catch {
+      toast.error('Camera/microphone access required')
+      return
     }
 
-    setStarted(true);
+    setStarted(true)
 
-    if (createdRef.current) return;
-    createdRef.current = true;
-    setCreating(true);
+    if (createdRef.current) return
+    createdRef.current = true
+    setCreating(true)
 
     const { error } = await supabase.from('streams').insert({
       id: streamUuid,
@@ -84,27 +79,27 @@ const GoLive: React.FC = () => {
       current_viewers: 0,
       total_gifts_coins: 0,
       popularity: 0,
-    });
+    })
 
-    setCreating(false);
+    setCreating(false)
 
     if (error) {
-      console.error(error);
-      toast.error('Failed to create stream');
-      createdRef.current = false;
-      setStarted(false);
-      return;
+      console.error(error)
+      toast.error('Failed to create stream')
+      createdRef.current = false
+      setStarted(false)
+      return
     }
 
     if (!navigatedRef.current) {
-      navigatedRef.current = true;
+      navigatedRef.current = true
       setTimeout(() => {
-        navigate(`/stream/${streamUuid}`, { replace: true });
-      }, 300);
+        navigate(`/stream/${streamUuid}`, { replace: true })
+      }, 300)
     }
-  };
+  }
 
-  // ---------------- UI ----------------
+  // ================= UI =================
 
   if (!started) {
     return (
@@ -115,7 +110,7 @@ const GoLive: React.FC = () => {
 
           <input
             value={streamTitle}
-            onChange={e => setStreamTitle(e.target.value)}
+            onChange={(e) => setStreamTitle(e.target.value)}
             className="w-full bg-[#1C1C24] border border-purple-500/40 rounded px-4 py-3"
           />
 
@@ -127,7 +122,7 @@ const GoLive: React.FC = () => {
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -142,22 +137,26 @@ const GoLive: React.FC = () => {
           <div className="flex gap-3">
             <button
               onClick={() => {
-                toggleCamera();
-                setCamEnabled(v => !v);
+                toggleCamera()
+                setCamEnabled((v) => !v)
               }}
               disabled={!isConnected}
-              className={`p-2 rounded-lg ${camEnabled ? 'bg-green-600' : 'bg-red-600'} ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`p-2 rounded-lg ${
+                camEnabled ? 'bg-green-600' : 'bg-red-600'
+              } ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <Video />
             </button>
 
             <button
               onClick={() => {
-                toggleMicrophone();
-                setMicEnabled(v => !v);
+                toggleMicrophone()
+                setMicEnabled((v) => !v)
               }}
               disabled={!isConnected}
-              className={`p-2 rounded-lg ${micEnabled ? 'bg-green-600' : 'bg-red-600'} ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`p-2 rounded-lg ${
+                micEnabled ? 'bg-green-600' : 'bg-red-600'
+              } ${!isConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {micEnabled ? <Mic /> : <MicOff />}
             </button>
@@ -172,7 +171,7 @@ const GoLive: React.FC = () => {
             identity={identity!}
             role="broadcaster"
             autoConnect
-            autoPublish={true}
+            autoPublish
             maxParticipants={6}
             className="w-full h-full"
           />
@@ -184,7 +183,7 @@ const GoLive: React.FC = () => {
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default GoLive;
+export default GoLive

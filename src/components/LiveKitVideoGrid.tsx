@@ -1,63 +1,86 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useLiveKit } from '../contexts/LiveKitContext';
-import { LiveKitParticipant } from '../lib/LiveKitService';
+import React, { useEffect, useRef, useState } from 'react'
+import { useLiveKit } from '../contexts/LiveKitContext'
+import { LiveKitParticipant } from '../lib/LiveKitService'
+
+/* =======================
+   VideoGrid
+======================= */
 
 interface VideoGridProps {
-  showLocalVideo?: boolean;
-  maxParticipants?: number;
+  showLocalVideo?: boolean
+  maxParticipants?: number
 }
 
-const VideoGrid: React.FC<VideoGridProps> = ({ showLocalVideo = true, maxParticipants = 6 }) => {
-  const { participants, localParticipant } = useLiveKit();
+const VideoGrid: React.FC<VideoGridProps> = ({
+  showLocalVideo = true,
+  maxParticipants = 6,
+}) => {
+  const { participants, localParticipant } = useLiveKit()
 
-  const allParticipants = Array.from(participants.values());
+  const allParticipants = Array.from(participants.values())
+
   if (showLocalVideo && localParticipant) {
-    allParticipants.unshift(localParticipant); // Local first
+    allParticipants.unshift(localParticipant)
   }
 
-  const visibleParticipants = allParticipants.slice(0, maxParticipants);
+  const visibleParticipants = allParticipants.slice(0, maxParticipants)
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 h-full">
       {visibleParticipants.map((participant) => (
-        <ParticipantVideo key={participant.identity} participant={participant} />
+        <ParticipantVideo
+          key={participant.identity}
+          participant={participant}
+        />
       ))}
     </div>
-  );
-};
+  )
+}
+
+/* =======================
+   ParticipantVideo
+======================= */
 
 interface ParticipantVideoProps {
-  participant: LiveKitParticipant;
+  participant: LiveKitParticipant
 }
 
 const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participant }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
-    if (participant.videoTrack && videoRef.current) {
-      participant.videoTrack.attach(videoRef.current);
+    const videoTrack = participant.videoTrack?.track
+    const audioTrack = participant.audioTrack?.track
+
+    if (videoTrack && videoRef.current) {
+      videoTrack.attach(videoRef.current)
     }
-    if (participant.audioTrack && audioRef.current) {
-      participant.audioTrack.attach(audioRef.current);
+
+    if (audioTrack && audioRef.current) {
+      audioTrack.attach(audioRef.current)
     }
 
     return () => {
-      if (participant.videoTrack && videoRef.current) {
-        participant.videoTrack.detach(videoRef.current);
+      if (videoTrack && videoRef.current) {
+        videoTrack.detach(videoRef.current)
       }
-      if (participant.audioTrack && audioRef.current) {
-        participant.audioTrack.detach(audioRef.current);
+      if (audioTrack && audioRef.current) {
+        audioTrack.detach(audioRef.current)
       }
-    };
-  }, [participant.videoTrack, participant.audioTrack]);
+    }
+  }, [
+    participant.videoTrack?.track,
+    participant.audioTrack?.track,
+  ])
 
   return (
     <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
-      {participant.videoTrack ? (
+      {participant.videoTrack?.track ? (
         <video
           ref={videoRef}
           autoPlay
+          playsInline
           muted={participant.isLocal}
           className="w-full h-full object-cover"
         />
@@ -67,29 +90,37 @@ const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participant }) => {
             <div className="w-16 h-16 bg-gray-600 rounded-full mx-auto mb-2 flex items-center justify-center">
               <span className="text-2xl">👤</span>
             </div>
-            <div className="text-sm">{participant.name || participant.identity}</div>
+            <div className="text-sm">
+              {participant.name || participant.identity}
+            </div>
           </div>
         </div>
       )}
+
       <audio ref={audioRef} autoPlay />
-      <div className="absolute bottom-2 left-2 text-white text-sm bg-black bg-opacity-50 px-2 py-1 rounded">
+
+      <div className="absolute bottom-2 left-2 text-white text-sm bg-black/50 px-2 py-1 rounded">
         {participant.name || participant.identity}
         {participant.isMicrophoneEnabled ? ' 🎤' : ' 🔇'}
       </div>
     </div>
-  );
-};
+  )
+}
+
+/* =======================
+   LiveKitRoomWrapper
+======================= */
 
 interface LiveKitRoomWrapperProps {
-  roomName: string;
-  identity: string;
-  className?: string;
-  showLocalVideo?: boolean;
-  maxParticipants?: number;
-  autoPublish?: boolean;
-  role?: string;
-  autoConnect?: boolean;
-  children?: React.ReactNode;
+  roomName: string
+  identity: string
+  className?: string
+  showLocalVideo?: boolean
+  maxParticipants?: number
+  autoPublish?: boolean
+  role?: string
+  autoConnect?: boolean
+  children?: React.ReactNode
 }
 
 export function LiveKitRoomWrapper({
@@ -110,59 +141,63 @@ export function LiveKitRoomWrapper({
     error,
     startPublishing,
     localParticipant,
-  } = useLiveKit();
+  } = useLiveKit()
 
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false)
 
-  // 🔒 HARD LOCK — connect exactly once
-  const didConnectRef = useRef(false);
+  // 🔒 HARD LOCK — connect once
+  const didConnectRef = useRef(false)
 
-  // ✅ ROLE IS APP-LEVEL ONLY
+  // App-level role gate (UI only)
   const canPublish =
     !!role &&
-    ['admin', 'broadcaster', 'officer', 'lead_troll_officer', 'troll_officer'].includes(
-      role
-    );
+    [
+      'admin',
+      'broadcaster',
+      'officer',
+      'lead_troll_officer',
+      'troll_officer',
+    ].includes(role)
 
-const isAlreadyPublishing =
-  !!localParticipant?.videoTrack?.track ||
-  !!localParticipant?.audioTrack?.track;
-
+  // ✅ MUST check actual MediaTrack, not publication
+  const isAlreadyPublishing =
+    !!localParticipant?.videoTrack?.track ||
+    !!localParticipant?.audioTrack?.track
 
   const handleStartPublishing = async () => {
-    if (!canPublish || isAlreadyPublishing) return;
+    if (!canPublish || isAlreadyPublishing) return
 
-    setIsPublishing(true);
+    setIsPublishing(true)
     try {
-      await startPublishing();
+      await startPublishing()
     } catch (err) {
-      console.error('Failed to start publishing:', err);
+      console.error('Failed to start publishing:', err)
     } finally {
-      setIsPublishing(false);
+      setIsPublishing(false)
     }
-  };
+  }
 
-  // ✅ CONNECT ONCE — NO ROLE PASSED
+  // Connect once
   useEffect(() => {
-    if (!autoConnect) return;
-    if (didConnectRef.current) return;
+    if (!autoConnect) return
+    if (didConnectRef.current) return
 
-    didConnectRef.current = true;
+    didConnectRef.current = true
 
     connect(roomName, identity, { autoPublish }).catch((err) => {
-      console.error('LiveKit connect failed:', err);
-      didConnectRef.current = false;
-    });
-  }, []); // ⛔ DO NOT ADD DEPS
+      console.error('LiveKit connect failed:', err)
+      didConnectRef.current = false
+    })
+  }, [])
 
-  // AUTO-START PUBLISHING AFTER CONNECT
+  // Auto-publish when allowed
   useEffect(() => {
-    if (!isConnected) return;
-    if (!canPublish) return;
-    if (isAlreadyPublishing) return;
+    if (!isConnected) return
+    if (!canPublish) return
+    if (isAlreadyPublishing) return
 
-    startPublishing().catch(console.error);
-  }, [isConnected, canPublish, isAlreadyPublishing]);
+    startPublishing().catch(console.error)
+  }, [isConnected, canPublish, isAlreadyPublishing])
 
   if (isConnecting) {
     return (
@@ -172,7 +207,7 @@ const isAlreadyPublishing =
           <div className="text-sm">Connecting to stream...</div>
         </div>
       </div>
-    );
+    )
   }
 
   if (error) {
@@ -183,12 +218,11 @@ const isAlreadyPublishing =
           <div className="text-sm">{error}</div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
     <div className={className}>
-      {/* VideoGrid must already exist in this file or be imported correctly */}
       <VideoGrid
         showLocalVideo={showLocalVideo}
         maxParticipants={maxParticipants}
@@ -221,5 +255,5 @@ const isAlreadyPublishing =
 
       {children}
     </div>
-  );
+  )
 }
