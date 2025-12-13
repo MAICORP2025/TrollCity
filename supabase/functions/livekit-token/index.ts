@@ -1,35 +1,33 @@
 import { serve } from "https://deno.land/std@0.214.0/http/server.ts"
 import { AccessToken } from "npm:livekit-server-sdk"
 
-serve(async (request: Request) => {
-  try {
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ success: false, error: "Method not allowed" }),
-        { status: 405 }
-      )
-    }
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "https://www.maitrollcity.com",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+}
 
-    const body = await request.json()
-    const { room, identity, role = "viewer" } = body
+serve(async (request: Request) => {
+  // Handle CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders })
+  }
+
+  try {
+    const { room, identity, role } = await request.json()
 
     if (!room || !identity) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing room or identity" }),
-        { status: 400 }
+        JSON.stringify({ success: false, error: "Identity is required" }),
+        { status: 400, headers: corsHeaders }
       )
     }
 
-    const apiKey = Deno.env.get("LIVEKIT_API_KEY")
-    const apiSecret = Deno.env.get("LIVEKIT_API_SECRET")
-
-    if (!apiKey || !apiSecret) {
-      throw new Error("Missing LiveKit env vars")
-    }
-
-    const token = new AccessToken(apiKey, apiSecret, {
-      identity,
-    })
+    const token = new AccessToken(
+      Deno.env.get("LIVEKIT_API_KEY")!,
+      Deno.env.get("LIVEKIT_API_SECRET")!,
+      { identity }
+    )
 
     token.addGrant({
       room,
@@ -39,20 +37,22 @@ serve(async (request: Request) => {
     })
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        token: token.toJwt(),
-      }),
-      { headers: { "Content-Type": "application/json" } }
+      JSON.stringify({ success: true, token: token.toJwt() }),
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      }
     )
   } catch (err) {
     return new Response(
       JSON.stringify({
         success: false,
         error: "Failed to generate token",
-        details: err.message,
+        details: String(err),
       }),
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     )
   }
 })

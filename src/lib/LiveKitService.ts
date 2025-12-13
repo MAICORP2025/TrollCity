@@ -83,6 +83,7 @@ export class LiveKitService {
       return true
     }
 
+    // Connection lock to prevent death-loops
     this.isConnecting = true
     this.log('Starting connection process...')
 
