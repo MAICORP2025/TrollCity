@@ -1,4 +1,4 @@
-import { AccessToken, TrackSource } from 'livekit-server-sdk'
+import { AccessToken, TrackSource } from 'npm:livekit-server-sdk'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
