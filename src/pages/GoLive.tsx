@@ -55,6 +55,17 @@ const GoLive: React.FC = () => {
       return;
     }
 
+    // FORCE MEDIA UNLOCK ON USER CLICK
+    try {
+      await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+    } catch (err) {
+      toast.error('Camera/microphone access required to stream');
+      return;
+    }
+
     setStarted(true);
 
     if (createdRef.current) return;
@@ -159,7 +170,7 @@ const GoLive: React.FC = () => {
             identity={identity!}
             role="broadcaster"
             autoConnect
-            autoPublish
+            autoPublish={false}
             maxParticipants={6}
             className="w-full h-full"
           />

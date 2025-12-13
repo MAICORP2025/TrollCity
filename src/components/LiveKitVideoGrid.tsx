@@ -1,21 +1,80 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLiveKit } from '../contexts/LiveKitContext';
+import { LiveKitParticipant } from '../lib/LiveKitService';
 
 interface VideoGridProps {
   showLocalVideo?: boolean;
   maxParticipants?: number;
 }
 
-/**
- * Minimal inline VideoGrid placeholder to satisfy the JSX reference.
- * Replace with the real implementation or import when available.
- */
 const VideoGrid: React.FC<VideoGridProps> = ({ showLocalVideo = true, maxParticipants = 6 }) => {
+  const { participants, localParticipant } = useLiveKit();
+
+  const allParticipants = Array.from(participants.values());
+  if (showLocalVideo && localParticipant) {
+    allParticipants.unshift(localParticipant); // Local first
+  }
+
+  const visibleParticipants = allParticipants.slice(0, maxParticipants);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-      {/* Placeholder cells; real implementation should render participant video elements */}
-      <div className="col-span-full text-sm text-gray-400 bg-black p-4 rounded">
-        Video grid placeholder — showLocalVideo: {String(showLocalVideo)}, maxParticipants: {maxParticipants}
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 h-full">
+      {visibleParticipants.map((participant) => (
+        <ParticipantVideo key={participant.identity} participant={participant} />
+      ))}
+    </div>
+  );
+};
+
+interface ParticipantVideoProps {
+  participant: LiveKitParticipant;
+}
+
+const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participant }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (participant.videoTrack && videoRef.current) {
+      participant.videoTrack.attach(videoRef.current);
+    }
+    if (participant.audioTrack && audioRef.current) {
+      participant.audioTrack.attach(audioRef.current);
+    }
+
+    return () => {
+      if (participant.videoTrack && videoRef.current) {
+        participant.videoTrack.detach(videoRef.current);
+      }
+      if (participant.audioTrack && audioRef.current) {
+        participant.audioTrack.detach(audioRef.current);
+      }
+    };
+  }, [participant.videoTrack, participant.audioTrack]);
+
+  return (
+    <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
+      {participant.videoTrack ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          muted={participant.isLocal}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-white">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gray-600 rounded-full mx-auto mb-2 flex items-center justify-center">
+              <span className="text-2xl">👤</span>
+            </div>
+            <div className="text-sm">{participant.name || participant.identity}</div>
+          </div>
+        </div>
+      )}
+      <audio ref={audioRef} autoPlay />
+      <div className="absolute bottom-2 left-2 text-white text-sm bg-black bg-opacity-50 px-2 py-1 rounded">
+        {participant.name || participant.identity}
+        {participant.isMicrophoneEnabled ? ' 🎤' : ' 🔇'}
       </div>
     </div>
   );
@@ -93,6 +152,15 @@ export function LiveKitRoomWrapper({
       didConnectRef.current = false;
     });
   }, []); // ⛔ DO NOT ADD DEPS
+
+  // AUTO-START PUBLISHING AFTER CONNECT
+  useEffect(() => {
+    if (!isConnected) return;
+    if (!canPublish) return;
+    if (isAlreadyPublishing) return;
+
+    startPublishing().catch(console.error);
+  }, [isConnected, canPublish, isAlreadyPublishing]);
 
   if (isConnecting) {
     return (
