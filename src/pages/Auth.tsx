@@ -30,21 +30,9 @@ const Auth = () => {
     setLoading(true)
     
     try {
-      // Block all new signups temporarily
-      if (!isLogin) {
-        toast.error('New signups are temporarily closed.')
-        setLoading(false)
-        return
-      }
-
       if (isLogin) {
         // Sign in with email/password
         console.log('Attempting email login...')
-        if (!isAdminEmail(email)) {
-          toast.error('Access restricted. Only admin accounts can sign in right now.')
-          setLoading(false)
-          return
-        }
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -294,28 +282,32 @@ const Auth = () => {
   return (
     <div className="auth-container flex items-center justify-center min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
       <div className="bg-[#18181b] p-8 rounded-xl shadow-lg w-full max-w-md">
-        <div className="bg-gradient-to-r from-purple-800/80 via-fuchsia-700/80 to-purple-900/80 border border-purple-400/40 text-center px-3 py-2 rounded-lg mb-4">
-          <p className="text-xs md:text-sm font-semibold">
-            CURRENTLY IN DEVELOPMENT — THANKS TO HATERS ON LIVEME, TROLL CITY WILL BE BETTER THAN LIVEME. NEW SIGNUPS TEMPORARILY CLOSED.
-          </p>
-        </div>
         <div className="flex flex-col items-center mb-8">
           <span className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-[#FFC93C] via-[#FFD700] to-[#FFB300] bg-clip-text text-transparent drop-shadow-lg select-none tracking-wide">
             Troll City
           </span>
           <span className="block text-troll-gold text-lg font-semibold mt-1 tracking-widest">Welcome</span>
         </div>
-        
-        <div className="mb-6 flex justify-center">
-          <button
-            onClick={() => {
-              toast.error('Signups are closed. Admin only.')
-              setIsLogin(true)
-            }}
-            className="text-troll-purple-300 hover:text-white transition-colors"
-          >
-            Admin Sign In Only
-          </button>
+
+        <div className="flex justify-center mb-6">
+          <div className="flex bg-[#23232b] rounded-lg p-1">
+            <button
+              onClick={() => setIsLogin(true)}
+              className={`px-4 py-2 rounded-md transition-colors ${
+                isLogin ? 'bg-[#FFC93C] text-black' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => setIsLogin(false)}
+              className={`px-4 py-2 rounded-md transition-colors ${
+                !isLogin ? 'bg-[#FFC93C] text-black' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
