@@ -328,6 +328,14 @@ export default function Home() {
 
     loadHomeFeature();
 
+    // Real-time subscription for home feature updates
+    const channel = supabase
+      .channel('home-feature-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'home_feature_cycles' }, () => {
+        loadHomeFeature();
+      })
+      .subscribe();
+
     // Update countdown every second
     const interval = setInterval(() => {
       if (homeFeature?.end_time) {
@@ -338,7 +346,10 @@ export default function Home() {
       }
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [homeFeature?.end_time]);
 
   const formatTime = (seconds: number) => {

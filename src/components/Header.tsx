@@ -274,16 +274,16 @@ const Header = () => {
       </div>
 
       <div className="relative z-10 flex items-center space-x-6">
-        <Link 
+        <Link
           to="/trollifications"
           className="relative p-3 text-purple-400 hover:text-purple-300 transition-all duration-300 group"
         >
           <Bell className="w-6 h-6" />
-          <span className={`absolute -top-1 -right-1 text-xs px-2 py-1 rounded-full min-w-[20px] text-center ${
-            unreadNotifications > 0 ? 'bg-red-500 text-white' : 'bg-gray-600 text-white'
-          }`}>
-            {unreadNotifications > 99 ? '99+' : unreadNotifications}
-          </span>
+          {unreadNotifications > 0 && (
+            <span className="absolute -top-1 -right-1 text-xs px-2 py-1 rounded-full min-w-[20px] text-center bg-red-500 text-white">
+              {unreadNotifications > 99 ? '99+' : unreadNotifications}
+            </span>
+          )}
         </Link>
         
         <Link 
