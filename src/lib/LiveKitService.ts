@@ -373,6 +373,10 @@ export class LiveKitService {
         await this.publishAudioTrack(audioTrack);
       }
 
+      // Enable tracks after publishing
+      await this.room.localParticipant.setCameraEnabled(true);
+      await this.room.localParticipant.setMicrophoneEnabled(true);
+
       // Update local participant state
       this.updateLocalParticipantState();
 
