@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { User, Session } from '@supabase/supabase-js'
-import { UserProfile, UserRole } from './supabase'
+import { UserProfile, UserRole, validateProfile } from './supabase'
 import { supabase } from './supabase'
 
 interface AuthState {
@@ -71,7 +71,6 @@ export const useAuthStore = create<AuthState>()(
 
         // Production logging with validation
         try {
-          const { validateProfile } = require('./supabase')
           const validation = validateProfile(profile)
           if (!validation.isValid) {
             console.warn("Profile validation warnings:", validation.warnings)

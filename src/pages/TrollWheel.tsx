@@ -181,7 +181,7 @@ export default function TrollWheelPage() {
                     </>
                   ) : (
                     <>
-                      <span className="mr-2">Гs Л,?</span>
+                      <span className="mr-2">LOCKED</span>
                       NEED 500 TROLLMONDS
                     </>
                   )}
