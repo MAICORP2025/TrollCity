@@ -7,6 +7,9 @@ import { toast } from 'sonner'
 import { createPayPalOrder, capturePayPalOrder, getPayPalConfig, testPayPalConnection, logPayPalAction } from '../lib/paypalUtils'
 import TrollerInsurance from './TrollerInsurance'
 
+// App version for cache busting
+const APP_VERSION = '1.0.0-' + Date.now().toString();
+
 export default function CoinStore() {
   const { user, profile, refreshProfile } = useAuthStore()
   const navigate = useNavigate()
@@ -233,7 +236,7 @@ export default function CoinStore() {
   )
 
   return (
-    <PayPalScriptProvider options={paypalOptions}>
+    <PayPalScriptProvider key={APP_VERSION} options={paypalOptions}>
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-4">

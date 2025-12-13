@@ -1,6 +1,11 @@
 import paypal from "@paypal/paypal-server-sdk";
 
 export default async function handler(req, res) {
+  // Disable caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
