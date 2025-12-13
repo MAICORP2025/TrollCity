@@ -59,10 +59,13 @@ export default function Sidebar() {
 
   // Role logic for Go Live access
   const canGoLive =
-    user?.role === "admin" ||
-    user?.role === "broadcaster" ||
-    user?.role === "lead_officer" ||
-    user?.role === "troll_officer";
+    profile?.role === "admin" ||
+    profile?.role === "broadcaster" ||
+    profile?.role === "lead_troll_officer" ||
+    profile?.role === "lead_officer" ||
+    profile?.role === "troll_officer" ||
+    profile?.is_broadcaster ||
+    profile?.is_lead_officer;
 
   // Real-time wallet updates
   useEffect(() => {
@@ -217,17 +220,11 @@ export default function Sidebar() {
         {/* Go Live Button - Under username */}
         {canGoLive && (
           <button
-            onClick={() => {
-              const confirmed = confirm("You are about to start a live stream. Continue?");
-              if (confirmed) {
-                navigate("/go-live");
-              }
-            }}
-            className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg
-                       bg-red-700 hover:bg-red-800 text-white font-bold
-                       shadow-lg border border-red-500"
+            onClick={() => navigate("/go-live")}
+            className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold shadow-lg border border-red-500"
           >
-            🔴 Go Live
+            <Radio className="w-4 h-4" />
+            Go Live
           </button>
         )}
 

@@ -173,6 +173,7 @@ interface LiveKitRoomWrapperProps {
   maxParticipants?: number;
   autoPublish?: boolean;
   role?: string;
+  autoConnect?: boolean;
 }
 
 export function LiveKitRoomWrapper({
@@ -183,7 +184,8 @@ export function LiveKitRoomWrapper({
   showLocalVideo = true,
   maxParticipants = 6,
   autoPublish = false, // Changed default to false
-  role
+  role,
+  autoConnect = true,
 }: LiveKitRoomWrapperProps) {
   const { connect, isConnected, isConnecting, error, startPublishing, localParticipant } = useLiveKit();
   const [isPublishing, setIsPublishing] = useState(false);
@@ -206,11 +208,12 @@ export function LiveKitRoomWrapper({
   };
 
   useEffect(() => {
-    // Auto-connect on mount
+    if (!autoConnect) return;
+    // Auto-connect on mount if allowed
     connect(roomName, user, { autoPublish, role }).catch(err => {
       console.error('Failed to auto-connect:', err);
     });
-  }, [roomName, user?.id, connect, autoPublish, role]);
+  }, [roomName, user?.id, connect, autoPublish, role, autoConnect]);
 
   if (isConnecting) {
     return (

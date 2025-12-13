@@ -5,8 +5,7 @@ import { useAuthStore } from "./lib/store";
 import { supabase, isAdminEmail, UserRole } from "./lib/supabase";
 import api from "./lib/api";
 import { Toaster, toast } from "sonner";
-import { GlobalAppProvider, useGlobalApp } from "./contexts/GlobalAppContext";
-import { LiveKitProvider } from "./contexts/LiveKitContext";
+import { useGlobalApp } from "./contexts/GlobalAppContext";
 import GlobalLoadingOverlay from "./components/GlobalLoadingOverlay";
 import GlobalErrorBanner from "./components/GlobalErrorBanner";
 import GlobalEventsBanner from "./components/GlobalEventsBanner";
@@ -41,7 +40,7 @@ const MyEarnings = lazy(() => import("./pages/MyEarnings"));
 const EarningsPage = lazy(() => import("./pages/EarningsPage"));
 
 // Lazy-loaded pages
-const GoLiveSetup = lazy(() => import("./pages/GoLiveSetup"));
+const GoLive = lazy(() => import("./pages/GoLive"));
 const LiveBroadcast = lazy(() => import("./pages/LiveBroadcast"));
 const StreamRoom = lazy(() => import("./pages/StreamRoom"));
 const Stream = lazy(() => import("./pages/Stream"));
@@ -371,6 +370,13 @@ function AppContent() {
     initSession();
   }, []);
 
+  // Failsafe so refreshes never get stuck on the loading screen
+  useEffect(() => {
+    const timeout = setTimeout(() => setLoading(false), 8000);
+    return () => clearTimeout(timeout);
+  }, [setLoading]);
+
+
   // 🔹 Auth State Change Listener (handles token refresh failures)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -542,7 +548,7 @@ function AppContent() {
                   <Route path="/profile/setup" element={<ProfileSetupPage />} />
 
                   {/* 🎥 Streaming */}
-                  <Route path="/go-live" element={<GoLiveSetup />} />
+                  <Route path="/go-live" element={<GoLive />} />
                   <Route path="/live/:streamId" element={<LiveBroadcast />} />
                   <Route path="/stream/:id" element={<Stream />} />
                   <Route path="/stream/:streamId" element={<StreamRoom />} />
@@ -955,14 +961,6 @@ function AppContent() {
 );
 }
 
-function App() {
-  return (
-    <GlobalAppProvider>
-      <LiveKitProvider>
-        <AppContent />
-      </LiveKitProvider>
-    </GlobalAppProvider>
-  );
+export default function App() {
+  return <AppContent />;
 }
-
-export default App;

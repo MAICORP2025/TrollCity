@@ -7,14 +7,6 @@ export default async function handler(req: any, res: any) {
   // Support both GET (query params) and POST (body) for flexibility
   const { room, identity, user_id, role, level } = req.method === 'POST' ? req.body : req.query
 
-  // Backend guard for Go Live access - only allow specific roles to create broadcaster tokens
-  const allowedGoLiveRoles = ["admin", "broadcaster", "lead_officer", "troll_officer"];
-  
-  // If this is a broadcaster request and the role is not allowed, deny access
-  if (role === 'broadcaster' && !allowedGoLiveRoles.includes(role)) {
-    return res.status(403).json({ error: "Not allowed to go live" });
-  }
-
   // Build metadata from request
   const metadata = {
     user_id: user_id || req.body?.user_id || req.query?.user_id,
@@ -33,9 +25,12 @@ export default async function handler(req: any, res: any) {
     metadata: JSON.stringify(metadata),
   })
 
-  // Role-based permissions
-  let canPublish = true
-  let canPublishData = true
+  // Role-based permissions (publisher vs viewer)
+  const publisherRoles = ['admin', 'lead_troll_officer', 'troll_officer', 'broadcaster']
+  const isBroadcaster = publisherRoles.includes(metadata.role)
+
+  let canPublish = isBroadcaster
+  let canPublishData = isBroadcaster
 
   if (room === 'troll-court') {
     // Court room permissions - only specific roles can broadcast
@@ -55,6 +50,7 @@ export default async function handler(req: any, res: any) {
     canPublish: canPublish,
     canSubscribe: true,
     canPublishData: canPublishData,
+    canUpdateOwnMetadata: true,
   })
 
   res.status(200).json({

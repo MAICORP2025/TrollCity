@@ -39,7 +39,6 @@ const NeonParticle: React.FC<{ delay: number; color: string }> = ({ delay, color
 };
 
 export default function Home() {
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [liveStreams, setLiveStreams] = useState<any[]>([]);
   const [loadingLive, setLoadingLive] = useState(false);
   const [newUsers, setNewUsers] = useState<any[]>([]);
@@ -53,13 +52,6 @@ export default function Home() {
   const [showBanPage, setShowBanPage] = useState(false);
   const [showKickPage, setShowKickPage] = useState(false);
   const isDev = import.meta.env.DEV;
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Check for seller application submission success
   useEffect(() => {

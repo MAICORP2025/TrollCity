@@ -16,6 +16,7 @@ const LIVEKIT_URL = Deno.env.get("LIVEKIT_URL")!;
 async function generateLiveKitToken(
   identity: string,
   room: string,
+  role: string | undefined,
   isHost: boolean = false,
   allowPublish: boolean = false
 ) {
@@ -26,8 +27,9 @@ async function generateLiveKitToken(
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Allow publishing for hosts or Tromody battle participants
-  const canPublish = isHost || allowPublish || room === 'tromody-show';
+  // Role-based publishing: broadcasters only
+  const publisherRoles = ['admin', 'lead_troll_officer', 'troll_officer', 'broadcaster'];
+  const canPublish = isHost || allowPublish || publisherRoles.includes(role || '');
 
   const payload = {
     iss: LIVEKIT_API_KEY,
@@ -40,7 +42,7 @@ async function generateLiveKitToken(
       roomJoin: true,
       canPublish, // Hosts and Tromody participants can publish
       canSubscribe: true, // Everyone can subscribe
-      canPublishData: true, // Allow data messages
+      canPublishData: canPublish, // Allow data messages for publishers
       canUpdateOwnMetadata: true, // Allow updating own metadata
     },
   };
@@ -105,6 +107,7 @@ serve(async (req: Request) => {
     const identity = (payload?.identity || '').trim();
     const isHost = payload?.isHost === true || payload?.isHost === 'true';
     const allowPublish = payload?.allowPublish === true || payload?.allowPublish === 'true';
+    const userRole = payload?.role || payload?.metadata?.role;
 
     // Validate credentials
     if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
@@ -128,12 +131,24 @@ serve(async (req: Request) => {
       );
     }
 
+    // Role-based access control for broadcaster tokens
+    const publisherRoles = ["admin", "lead_troll_officer", "troll_officer", "broadcaster"];
+    const isBroadcasterRequest = isHost || allowPublish || publisherRoles.includes(userRole || '');
+
+    // If this is a broadcaster request and the role is not allowed, deny access
+    if (isBroadcasterRequest && userRole && !publisherRoles.includes(userRole)) {
+      return new Response(
+        JSON.stringify({ error: "Not allowed to go live" }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Generate token
     console.log(`Generating token for identity: ${identity}, room: ${room}, isHost: ${isHost}, allowPublish: ${allowPublish}`);
 
     let token: string;
     try {
-      token = await generateLiveKitToken(identity, room, isHost, allowPublish);
+      token = await generateLiveKitToken(identity, room, userRole, isHost, allowPublish);
       
       // Validate token is a string
       if (!token || typeof token !== 'string') {
