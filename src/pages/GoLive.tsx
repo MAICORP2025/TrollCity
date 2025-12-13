@@ -168,7 +168,7 @@ const GoLive: React.FC = () => {
           <LiveKitRoomWrapper
             roomName={roomName}
             identity={identity!}
-            role="creator"
+            role="broadcaster"
             autoConnect
             autoPublish={true}
             maxParticipants={6}
