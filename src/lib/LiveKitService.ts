@@ -94,6 +94,19 @@ export class LiveKitService {
         throw new Error('Failed to get LiveKit token')
       }
 
+      const token = tokenResponse.token
+
+      // Runtime invariant: ensure token is valid string
+      if (typeof token !== "string") {
+        console.error("🚨 LiveKit token is NOT a string", token)
+        throw new Error("Invalid LiveKit token type")
+      }
+
+      if (!token.startsWith("eyJ")) {
+        console.error("🚨 LiveKit token is not JWT", token)
+        throw new Error("Invalid LiveKit token format")
+      }
+
       // Step 2: Create room with configuration
       // NOTE: Do NOT spread this.config into Room() because it contains non-Room keys (callbacks/user/etc).
       this.room = new Room({
@@ -105,7 +118,7 @@ export class LiveKitService {
 
       // Step 4: Connect to room
       this.log('Connecting to LiveKit room...')
-      await this.room.connect(LIVEKIT_URL, tokenResponse.token)
+      await this.room.connect(LIVEKIT_URL, token)
 
       // Ensure local participant exists in map as soon as we connect
       this.updateLocalParticipantState()
