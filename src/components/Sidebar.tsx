@@ -60,9 +60,7 @@ export default function Sidebar() {
   // Role logic for Go Live access
   const canGoLive =
     profile?.role === "admin" ||
-    profile?.role === "broadcaster" ||
     profile?.role === "lead_troll_officer" ||
-    profile?.role === "lead_officer" ||
     profile?.role === "troll_officer" ||
     profile?.is_broadcaster ||
     profile?.is_lead_officer;

@@ -2191,7 +2191,7 @@ export default function AdminDashboard() {
                   }}
                   className="text-xs px-3 py-1 border border-red-600 text-red-400 rounded hover:bg-red-900 hover:text-red-200"
                 >
-                  Delete All Live Streams
+                  Delete All Broadcasts
                 </button>
                 <button
                   onClick={cleanupStreams}
