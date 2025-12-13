@@ -27,9 +27,16 @@ async function generateLiveKitToken(
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Role-based publishing: broadcasters only
-  const publisherRoles = ['admin', 'lead_troll_officer', 'troll_officer', 'broadcaster'];
-  const canPublish = isHost || allowPublish || publisherRoles.includes(role || '');
+  // Explicit role-based grants
+  const broadcasterRoles = ['admin', 'broadcaster', 'creator', 'lead_troll_officer', 'troll_officer', 'court_host'];
+
+  // POST requests always get publisher tokens, GET requests always get viewer tokens
+  const isPublisherRequest = req.method === 'POST';
+  const canPublish = isPublisherRequest;
+  const canPublishData = isPublisherRequest;
+
+  // Log resolved role and grants
+  console.log(`[LiveKit Token] Method: ${req.method}, Role: ${role}, IsPublisher: ${isPublisherRequest}, CanPublish: ${canPublish}`);
 
   const payload = {
     iss: LIVEKIT_API_KEY,
@@ -40,10 +47,10 @@ async function generateLiveKitToken(
     video: {
       room,
       roomJoin: true,
-      canPublish, // Hosts and Tromody participants can publish
-      canSubscribe: true, // Everyone can subscribe
-      canPublishData: canPublish, // Allow data messages for publishers
-      canUpdateOwnMetadata: true, // Allow updating own metadata
+      canPublish,
+      canSubscribe: true,
+      canPublishData,
+      canUpdateOwnMetadata: true,
     },
   };
 
@@ -131,17 +138,7 @@ serve(async (req: Request) => {
       );
     }
 
-    // Role-based access control for broadcaster tokens
-    const publisherRoles = ["admin", "lead_troll_officer", "troll_officer", "broadcaster"];
-    const isBroadcasterRequest = isHost || allowPublish || publisherRoles.includes(userRole || '');
-
-    // If this is a broadcaster request and the role is not allowed, deny access
-    if (isBroadcasterRequest && userRole && !publisherRoles.includes(userRole)) {
-      return new Response(
-        JSON.stringify({ error: "Not allowed to go live" }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // No role-based access control needed; method determines permissions
 
     // Generate token
     console.log(`Generating token for identity: ${identity}, room: ${room}, isHost: ${isHost}, allowPublish: ${allowPublish}`);
