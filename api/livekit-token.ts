@@ -25,24 +25,39 @@ export default async function handler(req: any, res: any) {
     metadata: JSON.stringify(metadata),
   })
 
-  // Role-based permissions (publisher vs viewer)
-  const publisherRoles = ['admin', 'lead_troll_officer', 'troll_officer', 'broadcaster']
-  const isBroadcaster = publisherRoles.includes(metadata.role)
+  // Role-based permissions - ALL specified roles get broadcaster tokens
+  const broadcasterRoles = [
+    'admin',
+    'lead_troll_officer',
+    'troll_officer',
+    'broadcaster', // Go Live
+    'tromody_show', // Tromody Show
+    'officer_stream', // Officer Stream
+    'troll_court', // Troll Court
+    // Also include court-specific roles
+    'defendant',
+    'accuser',
+    'witness'
+  ]
+
+  const isBroadcaster = broadcasterRoles.includes(metadata.role)
 
   let canPublish = isBroadcaster
   let canPublishData = isBroadcaster
 
+  // For troll-court room, allow court roles to publish
   if (room === 'troll-court') {
-    // Court room permissions - only specific roles can broadcast
-    const courtPublishRoles = ["admin", "lead_troll_officer", "troll_officer", "defendant", "accuser", "witness"]
-    canPublish = courtPublishRoles.includes(metadata.role)
-    canPublishData = canPublish // Same permission for data
-  } else if (room === 'officer-stream') {
-    // Officer stream permissions - only officers can broadcast
+    const courtRoles = ["admin", "lead_troll_officer", "troll_officer", "defendant", "accuser", "witness"]
+    canPublish = courtRoles.includes(metadata.role)
+    canPublishData = canPublish
+  }
+  // For officer-stream room, allow officer roles to publish
+  else if (room === 'officer-stream') {
     const officerRoles = ["admin", "lead_troll_officer", "troll_officer"]
     canPublish = officerRoles.includes(metadata.role)
-    canPublishData = canPublish // Same permission for data
+    canPublishData = canPublish
   }
+  // For other rooms, use the broadcaster roles
 
   token.addGrant({
     room: room as string,
