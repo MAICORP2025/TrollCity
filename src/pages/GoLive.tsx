@@ -50,15 +50,17 @@ const GoLive: React.FC = () => {
   // ---- Surface REAL LiveKit errors only
   useEffect(() => {
     if (livekitError) {
-      // Ignore transient disconnect errors
+      const msg = livekitError;
+      // Filter transient LiveKit events BEFORE setting state
       if (
-        livekitError.includes('Client initiated disconnect') ||
-        livekitError.includes('websocket closed')
+        msg.includes('Client initiated disconnect') ||
+        msg.includes('websocket closed') ||
+        msg.includes('Abort connection')
       ) {
-        // transient — ignore
+        // transient LiveKit event — NOT an error
         return;
       }
-      setConnectionError(livekitError);
+      setConnectionError(msg);
     }
   }, [livekitError]);
 
@@ -91,15 +93,17 @@ const GoLive: React.FC = () => {
       await joinAndPublish(); // event-driven, do NOT interpret return value
     } catch (err: any) {
       console.error('GoLive: joinAndPublish error:', err);
-      // Ignore transient disconnect errors
+      const msg = err?.message || '';
+      // Filter transient LiveKit events BEFORE setting state
       if (
-        err?.message?.includes('Client initiated disconnect') ||
-        err?.message?.includes('websocket closed')
+        msg.includes('Client initiated disconnect') ||
+        msg.includes('websocket closed') ||
+        msg.includes('Abort connection')
       ) {
-        // transient — ignore
+        // transient LiveKit event — NOT an error
         return;
       }
-      setConnectionError(err?.message || '🔄 Reconnecting to stream…');
+      setConnectionError(msg || '🔄 Reconnecting to stream…');
       resetJoinGuard();
     } finally {
       setIsPublishing(false);
