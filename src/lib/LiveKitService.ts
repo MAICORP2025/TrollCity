@@ -125,13 +125,14 @@ export class LiveKitService {
       // ✅ Hydrate participants already in the room (important when you join late)
       this.hydrateExistingRemoteParticipants()
 
-      // If autoPublish requested, publish immediately
+      // If autoPublish requested, enable and publish camera/mic immediately
       if (this.config.autoPublish) {
         try {
-          await this.startPublishing()
+          await this.room!.localParticipant.enableCameraAndMicrophone()
+          this.log('✅ Camera and microphone enabled and published')
         } catch (e: any) {
-          // startPublishing already logs + onError
-          this.log('AutoPublish failed (continuing connected state):', e?.message)
+          this.log('❌ Failed to enable/publish camera and microphone:', e?.message)
+          this.config.onError?.(e?.message || 'Failed to enable media')
         }
       }
 
@@ -305,12 +306,19 @@ private hydrateExistingRemoteParticipants(): void {
 
     const p = this.room.localParticipant
 
+    // Get tracks from publications if available, otherwise from stored references
+    const videoPub = Array.from(p.videoTrackPublications.values())[0]
+    const audioPub = Array.from(p.audioTrackPublications.values())[0]
+
+    const videoTrack = videoPub?.track || this.localVideoTrack
+    const audioTrack = audioPub?.track || this.localAudioTrack
+
     const localParticipant: LiveKitParticipant = {
       identity: p.identity,
       name: this.config.user?.username || this.config.user?.email || 'You',
       isLocal: true,
-      videoTrack: this.localVideoTrack ? { track: this.localVideoTrack } : undefined,
-      audioTrack: this.localAudioTrack ? { track: this.localAudioTrack } : undefined,
+      videoTrack: videoTrack ? { track: videoTrack } : undefined,
+      audioTrack: audioTrack ? { track: audioTrack } : undefined,
       isCameraEnabled: p.isCameraEnabled,
       isMicrophoneEnabled: p.isMicrophoneEnabled,
       isMuted: !p.isMicrophoneEnabled,
