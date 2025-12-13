@@ -69,57 +69,22 @@ export default async function handler(req: any, res: any) {
   })
 
   /* ============================
-     ROLE PERMISSIONS
+     POST-BASED AUTHORITY
   ============================ */
-  const broadcasterRoles = [
-    'admin',
-    'lead_troll_officer',
-    'troll_officer',
-    'creator',
-    'tromody_show',
-    'officer_stream',
-    'troll_court',
-    'defendant',
-    'accuser',
-    'witness',
-  ]
+  const isBroadcaster = req.method === 'POST'
 
-  let canPublish = broadcasterRoles.includes(resolvedRole)
-  let canPublishData = canPublish
-
-  /* ============================
-     ROOM OVERRIDES
-  ============================ */
-  if (room === 'troll-court') {
-    const courtRoles = [
-      'admin',
-      'lead_troll_officer',
-      'troll_officer',
-      'defendant',
-      'accuser',
-      'witness',
-    ]
-    canPublish = courtRoles.includes(resolvedRole)
-    canPublishData = canPublish
-  }
-
-  if (room === 'officer-stream') {
-    const officerRoles = [
-      'admin',
-      'lead_troll_officer',
-      'troll_officer',
-    ]
-    canPublish = officerRoles.includes(resolvedRole)
-    canPublishData = canPublish
-  }
+  const canPublish = isBroadcaster
+  const canPublishData = isBroadcaster
 
   /* ============================
      DEBUG LOG
   ============================ */
   console.log('[LiveKit Token Issued]', {
+    method: req.method,
     room,
     identity,
     role: resolvedRole,
+    isBroadcaster,
     canPublish,
     sources: canPublish
       ? [TrackSource.CAMERA, TrackSource.MICROPHONE]
