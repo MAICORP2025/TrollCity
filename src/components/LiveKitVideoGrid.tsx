@@ -99,7 +99,7 @@ export function LiveKitRoomWrapper({
   className = '',
   showLocalVideo = true,
   maxParticipants = 6,
-  autoPublish = false,
+  autoPublish = true,
   role,
   autoConnect = true,
 }: LiveKitRoomWrapperProps) {
