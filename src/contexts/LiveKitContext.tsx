@@ -36,6 +36,8 @@ const LiveKitContext = createContext<LiveKitContextValue | null>(null)
 
 export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => {
   const serviceRef = useRef<LiveKitService | null>(null)
+  const lastInitRef = useRef<string | null>(null)
+  const disconnectingRef = useRef(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [participants, setParticipants] = useState<Map<string, LiveKitParticipant>>(
@@ -67,6 +69,20 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       }
 
       console.log('[LiveKit identity check]', user.id)
+
+      // Hard guard against re-init for same room/identity
+      const initKey = `${roomName}:${user.id}`
+      if (lastInitRef.current === initKey) {
+        console.log('[CONNECT SKIPPED - already initialized]', initKey)
+        return true
+      }
+
+      // CONNECT INTENT logging
+      console.log('[CONNECT INTENT]', {
+        roomName,
+        identity: user.id,
+        mode: options.autoPublish ? 'publisher' : 'viewer'
+      })
 
       // Disconnect existing service before creating new one
       if (serviceRef.current) {
@@ -160,6 +176,9 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       setError(null)
       setIsConnecting(true)
 
+      // Mark as initialized
+      lastInitRef.current = initKey
+
       try {
         const ok = await serviceRef.current.connect()
         syncLocalParticipant()
@@ -167,6 +186,8 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       } catch (err: any) {
         setIsConnecting(false)
         setError(err?.message || 'Failed to connect to LiveKit')
+        // Reset init key on failure
+        lastInitRef.current = null
         return false
       }
     },
@@ -174,6 +195,9 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
   )
 
   const disconnect = useCallback(() => {
+    if (disconnectingRef.current) return
+    disconnectingRef.current = true
+
     if (serviceRef.current) {
       serviceRef.current.disconnect()
     }
@@ -181,6 +205,8 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
     setIsConnecting(false)
     setParticipants(new Map())
     setLocalParticipant(null)
+    lastInitRef.current = null
+    disconnectingRef.current = false
   }, [])
 
   const toggleCamera = useCallback(async () => {

@@ -24,6 +24,9 @@ export default function StreamRoom() {
     return () => console.log('[StreamRoom unmount]')
   }, [])
 
+  // Single source of truth for room name
+  const getRoomName = (roomId: string) => `stream-${roomId}`
+
   const [stream, setStream] = useState<any>(null);
   const [isLoadingStream, setIsLoadingStream] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +35,9 @@ export default function StreamRoom() {
 
   // Get stream ID from params or location state
   const actualStreamId = id || streamId || location.state?.streamId;
+
+  // Consistent room name from the start
+  const roomName = actualStreamId ? getRoomName(actualStreamId) : null;
 
   // Use unified LiveKit hook once we have stream data
   const {
@@ -46,7 +52,7 @@ export default function StreamRoom() {
     toggleMicrophone,
     getRoom,
   } = useUnifiedLiveKit({
-    roomName: stream?.room_name || actualStreamId,
+    roomName: roomName || '',
     user: user ? { ...user, role: (profile as any)?.troll_role || 'viewer', level: 1 } : null,
     autoPublish: isHost // Only auto-publish for hosts
   });
