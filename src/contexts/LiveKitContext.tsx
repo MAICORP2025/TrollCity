@@ -64,7 +64,6 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
 
       // Hard guard: block ONLY if user id is missing
       if (!user?.id) {
-        console.log('⏳ LiveKit waiting for user id')
         return false // do NOT set error
       }
 

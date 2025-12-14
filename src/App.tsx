@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, Suspense, lazy, useState } from "react";
+import React, { useEffect, Suspense, lazy, useState, useRef } from "react";
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
 import { supabase, isAdminEmail, UserRole } from "./lib/supabase";
@@ -167,10 +167,18 @@ function AppContent() {
   } = useAuthStore();
   console.log('📊 App state:', { hasUser: !!user, hasProfile: !!profile, isLoading });
 
+  // APP INIT ONCE debug log
+  useEffect(() => {
+    console.log('[APP INIT ONCE]')
+  }, [])
+
   const location = useLocation();
   const navigate = useNavigate();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalLoading] = useState(false);
+
+  // Guard startup navigation
+  const didNavigateRef = useRef(false);
 
   // Global app context for loading and error states
   const { isLoading: globalLoading, loadingMessage, error, errorType, clearError: _clearError, retryLastAction, isReconnecting, reconnectMessage } = useGlobalApp();
@@ -192,6 +200,11 @@ function AppContent() {
       return;
     }
 
+    // Guard against multiple navigates
+    if (didNavigateRef.current) {
+      return;
+    }
+
     // Only redirect officers who need orientation (lead officers and admins skip quiz)
     if (profile?.role === 'troll_officer' || profile?.is_troll_officer) {
       // Admins don't need orientation/quiz - they're automatically active
@@ -206,9 +219,11 @@ function AppContent() {
       }
       // Regular officers need to complete orientation/quiz
       if (!profile?.is_officer_active) {
+        didNavigateRef.current = true;
         navigate('/officer/orientation', { replace: true });
       }
     } else if (profile?.role === 'troll_family') {
+      didNavigateRef.current = true;
       navigate('/family', { replace: true });
     }
   }, [profile?.role, profile?.is_troll_officer, profile?.is_officer_active, location.pathname, navigate, user]);
