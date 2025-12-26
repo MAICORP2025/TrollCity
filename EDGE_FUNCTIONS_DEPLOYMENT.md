@@ -108,7 +108,7 @@ await fetch('https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1/wheel/spin', 
    - Line ~320-340: Change `/api/wheel/deduct` 
    - Line ~390-410: Change `/api/wheel/award`
 
-## 💸 Automatic Payouts (Mondays @ 1:00 PM MST)
+## Automatic Payouts (Mondays @ 1:00 PM MST)
 
 - The `payouts` edge function now runs automatically every Monday at 1:00 PM Mountain Standard Time (`schedule: 0 20 * * 1`) and processes any creator `payout_requests` that have already been approved.
 - It calculates the PayPal amount (USD/net/fees) from the stored request data, posts to PayPal using the shared credentials, and moves the record into `completed` with a `payout_audit_log` entry. Failures mark the request as `failed` so you can triage before the following Monday run.
