@@ -4,15 +4,15 @@
 
 I've migrated your Express API routes to Supabase Edge Functions:
 
+> **Note:** This system now relies only on PayPal for payments/payouts; Square and Agora integrations are no longer used.
+
 ### Edge Functions Created:
 1. **✅ wheel** - Complete (handles /spin, /deduct, /award)
 2. **✅ auth** - Complete (handles /admin-create-user, /admin-exists, /whoami, /logout, /fix-admin-role, /signup)
-3. **⏳ payments** - Needs manual completion (Square SDK integration)
+3. **⏳ payments** - Needs manual completion (PayPal-based payment flow)
 4. **⏳ payouts** - Needs manual completion
 5. **⏳ admin** - Needs manual completion
-6. **⏳ square** - Needs manual completion
-7. **⏳ platform-fees** - Needs manual completion
-8. **⏳ agora** - Needs manual completion
+6. **⏳ platform-fees** - Needs manual completion
 
 ## 🚀 Deployment Steps
 
@@ -57,10 +57,9 @@ After deploying, set the required secrets for each function:
 npx supabase secrets set SUPABASE_URL=https://yjxpwfalenorzrqxwmtr.supabase.co
 npx supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 npx supabase secrets set VITE_ADMIN_EMAIL=trollcity2025@gmail.com
-npx supabase secrets set SQUARE_ACCESS_TOKEN=<your-square-token>
-npx supabase secrets set SQUARE_LOCATION_ID=<your-square-location>
-npx supabase secrets set AGORA_APP_ID=<your-agora-app-id>
-npx supabase secrets set AGORA_APP_CERTIFICATE=<your-agora-cert>
+npx supabase secrets set PAYPAL_CLIENT_ID=<your-paypal-client-id>
+npx supabase secrets set PAYPAL_CLIENT_SECRET=<your-paypal-client-secret>
+npx supabase secrets set PAYPAL_MODE=live
 ```
 
 ### 5. Test the Functions
@@ -109,6 +108,13 @@ await fetch('https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1/wheel/spin', 
    - Line ~320-340: Change `/api/wheel/deduct` 
    - Line ~390-410: Change `/api/wheel/award`
 
+## 💸 Automatic Payouts (Mondays @ 1:00 PM MST)
+
+- The `payouts` edge function now runs automatically every Monday at 1:00 PM Mountain Standard Time (`schedule: 0 20 * * 1`) and processes any creator `payout_requests` that have already been approved.
+- It calculates the PayPal amount (USD/net/fees) from the stored request data, posts to PayPal using the shared credentials, and moves the record into `completed` with a `payout_audit_log` entry. Failures mark the request as `failed` so you can triage before the following Monday run.
+- Keep the same PayPal secrets in both Supabase and Vercel (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE=live`) so this scheduled job can authenticate and run against your production account.
+- Monitor the job via `supabase functions logs payouts` and update `payout_requests` manually if a request stays `failed` for more than one cycle.
+
 2. **src/pages/Auth.tsx**
    - Change `/api/auth/signup` to edge function URL
 
@@ -144,6 +150,7 @@ await fetch('https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1/wheel/spin', 
 3. **Update Vercel Environment Variables**:
    - Remove `VITE_API_URL` 
    - Keep `VITE_EDGE_FUNCTIONS_URL=https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1`
+   - Verify PayPal secrets (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE=live`) are configured to match what the Supabase edge functions expect
 
 4. **Remove `api` folder from build**:
    - Delete `api/` directory
@@ -153,12 +160,10 @@ await fetch('https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1/wheel/spin', 
 
 To complete the migration, you need to create edge functions for:
 
-- **payments** - Square payment processing (complex, needs Square SDK for Deno)
+- **payments** - PayPal payment processing and order handling
 - **payouts** - Cashout requests
 - **admin** - Admin dashboard operations
-- **square** - Square webhooks
 - **platform-fees** - Fee calculations
-- **agora** - Agora token generation
 
 ## ⚠️ Important Notes
 
