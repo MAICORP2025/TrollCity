@@ -28,8 +28,8 @@ export default defineConfig({
         type: 'module'
       },
       manifest: {
-        name: 'Tromody Studio',
-        short_name: 'Tromody',
+        name: 'Troll City',
+        short_name: 'Troll City',
         description: 'Desktop-only interactive broadcast platform.',
         start_url: '/',
         scope: '/',
