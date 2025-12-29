@@ -9,10 +9,12 @@ export default function OfflinePage() {
           Troll City is a desktop-first experience. The shell will load, but live data and broadcasts need an internet connection.
         </p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            window.location.assign('/')
+          }}
           className="px-6 py-3 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-semibold shadow-lg shadow-yellow-400/30"
         >
-          Try again
+          Refresh and go home
         </button>
       </div>
     </div>
