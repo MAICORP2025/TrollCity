@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 
 interface GlobalAppContextType {
   isLoading: boolean;
@@ -30,31 +30,58 @@ export const GlobalAppProvider: React.FC<GlobalAppProviderProps> = ({ children }
   const [retryAction, setRetryActionState] = useState<(() => void) | null>(null);
   const [isStreamEnded, setIsStreamEndedState] = useState(false);
 
-  const setError = (message: string | null, type: 'error' | 'offline' = 'error') => {
+  const setError = useCallback((message: string | null, type: 'error' | 'offline' = 'error') => {
     setErrorState(message);
     setErrorType(message ? type : null);
-  };
+  }, []);
 
-  const setRetryAction = (action: (() => void) | null) => {
+  const setRetryAction = useCallback((action: (() => void) | null) => {
     setRetryActionState(() => action);
-  };
+  }, []);
 
-  const setStreamEnded = (ended: boolean) => {
+  const setStreamEnded = useCallback((ended: boolean) => {
     setIsStreamEndedState(ended);
-  };
+  }, []);
 
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setErrorState(null);
     setErrorType(null);
     setRetryActionState(null);
     setIsStreamEndedState(false);
-  };
+  }, []);
 
-  const retryLastAction = () => {
+  const retryLastAction = useCallback(() => {
     if (retryAction) {
       retryAction();
     }
-  };
+  }, [retryAction]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const goOnline = () => {
+      clearError();
+    };
+
+    const goOffline = () => {
+      setError(
+        'You are offline. The Troll City shell remains available but live data may be delayed until you reconnect.',
+        'offline'
+      );
+    };
+
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+
+    if (!navigator.onLine) {
+      goOffline();
+    }
+
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, [clearError, setError]);
 
   const value: GlobalAppContextType = {
     isLoading,
