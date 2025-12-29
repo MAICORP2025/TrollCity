@@ -81,6 +81,7 @@ export default defineConfig({
         clientsClaim: true,
         navigateFallback: '/offline.html',
         ignoreURLParametersMatching: [/^utm_/, /^fbclid$/],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === 'document',

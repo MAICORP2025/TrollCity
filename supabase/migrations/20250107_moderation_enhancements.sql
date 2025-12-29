@@ -57,12 +57,12 @@ CREATE INDEX IF NOT EXISTS idx_escalation_reports_status ON escalation_reports(s
 ALTER TABLE escalation_reports ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own escalations
-CREATE POLICY "Users can view own escalations"
+CREATE POLICY IF NOT EXISTS "Users can view own escalations"
   ON escalation_reports FOR SELECT
   USING (escalated_by = auth.uid() OR escalated_to = auth.uid());
 
 -- Officers can view escalations to them
-CREATE POLICY "Officers can view escalations to them"
+CREATE POLICY IF NOT EXISTS "Officers can view escalations to them"
   ON escalation_reports FOR SELECT
   USING (
     escalated_to = auth.uid() AND
@@ -73,7 +73,7 @@ CREATE POLICY "Officers can view escalations to them"
   );
 
 -- Admins can view all escalations
-CREATE POLICY "Admins can view all escalations"
+CREATE POLICY IF NOT EXISTS "Admins can view all escalations"
   ON escalation_reports FOR ALL
   USING (
     EXISTS (
