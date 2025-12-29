@@ -5,13 +5,22 @@ interface Props {
 }
 
 export default function DesktopOnlyGuard({ children }: Props) {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window === 'undefined' ? true : window.innerWidth >= 1024
-  )
+  const getIsDesktop = () => {
+    if (typeof window === 'undefined') return true
+
+    const ua = navigator.userAgent || ''
+    const isMobileUA = /(Mobi|Android|iPhone|iPad|iPod|Phone|BlackBerry|IEMobile|Opera Mini)/i.test(ua)
+    const isDesktopOS = /(Windows|Macintosh|Mac OS|Linux)/i.test(ua)
+    const wideEnough = window.innerWidth >= 1024
+
+    return !isMobileUA && (isDesktopOS || wideEnough)
+  }
+
+  const [isDesktop, setIsDesktop] = useState(getIsDesktop)
 
   useEffect(() => {
     const handleResize = () => {
-      setIsDesktop(window.innerWidth >= 1024)
+      setIsDesktop(getIsDesktop())
     }
 
     window.addEventListener('resize', handleResize)
