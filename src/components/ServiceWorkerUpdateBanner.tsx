@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 export default function ServiceWorkerUpdateBanner() {
@@ -9,6 +9,12 @@ export default function ServiceWorkerUpdateBanner() {
     }
   })
 
+  useEffect(() => {
+    if (!needRefresh) {
+      setShowBanner(false)
+    }
+  }, [needRefresh])
+
   if (!needRefresh && !showBanner) {
     return null
   }
@@ -16,6 +22,7 @@ export default function ServiceWorkerUpdateBanner() {
   const handleRefresh = async () => {
     if (updateServiceWorker) {
       await updateServiceWorker()
+      setShowBanner(false)
       window.location.assign('/')
     }
   }
