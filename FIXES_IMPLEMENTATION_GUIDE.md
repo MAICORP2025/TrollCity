@@ -29,7 +29,7 @@ Metadata is now included in checkout creation. The webhook will receive:
 **Implementation:**
 In `src/pages/admin/AdminResetPanel.tsx`, replace all `api.post('/admin-reset', ...)` calls with:
 ```typescript
-import { resetTestData, resetLiveStreams, resetCoinBalances } from '../fixes/admin-reset-api-fix';
+import { resetTestData, resetLiveStreams, resetTrollcoinss } from '../fixes/admin-reset-api-fix';
 
 // Replace:
 // api.post('/admin-reset', { action: 'reset_test_data' })

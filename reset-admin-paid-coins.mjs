@@ -7,8 +7,8 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
 })
 
-async function resetAdminPaidCoins() {
-  console.log('\n=== RESETTING ADMIN PAID COINS ===\n')
+async function resetAdmintroll_coins() {
+  console.log('\n=== RESETTING ADMIN troll_coins ===\n')
 
   // Get admin account
   const { data: admin, error: fetchError } = await supabase
@@ -24,17 +24,17 @@ async function resetAdminPaidCoins() {
 
   console.log('Current Admin Balance:')
   console.log(`  Username: ${admin.username}`)
-  console.log(`  Paid Coins: ${admin.paid_coin_balance}`)
-  console.log(`  Free Coins: ${admin.free_coin_balance}`)
+  console.log(`  troll_coins: ${admin.troll_coins}`)
+  console.log(`  Free Coins: ${admin.troll_coins}`)
   console.log(`  Total Earned: ${admin.total_earned_coins}`)
   console.log(`  Total Spent: ${admin.total_spent_coins}`)
 
-  // Reset paid coins to 0
+  // Reset troll_coins to 0
   const { data: updated, error: updateError } = await supabase
     .from('user_profiles')
     .update({ 
-      paid_coin_balance: 0,
-      total_earned_coins: admin.free_coin_balance // Reset to only free coins
+      troll_coins: 0,
+      total_earned_coins: admin.troll_coins // Reset to only free coins
     })
     .eq('role', 'admin')
     .select()
@@ -45,13 +45,13 @@ async function resetAdminPaidCoins() {
     return
   }
 
-  console.log('\n✅ Admin paid coins reset successfully!')
+  console.log('\n✅ Admin troll_coins reset successfully!')
   console.log('\nNew Admin Balance:')
   console.log(`  Username: ${updated.username}`)
-  console.log(`  Paid Coins: ${updated.paid_coin_balance}`)
-  console.log(`  Free Coins: ${updated.free_coin_balance}`)
+  console.log(`  troll_coins: ${updated.troll_coins}`)
+  console.log(`  Free Coins: ${updated.troll_coins}`)
   console.log(`  Total Earned: ${updated.total_earned_coins}`)
   console.log(`  Total Spent: ${updated.total_spent_coins}`)
 }
 
-resetAdminPaidCoins().catch(console.error)
+resetAdmintroll_coins().catch(console.error)

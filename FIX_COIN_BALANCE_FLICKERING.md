@@ -16,7 +16,7 @@ If the background refresh fetches BEFORE the database update completes, it gets 
 ### Timeline that caused the issue:
 ```
 T0:  User clicks purchase
-T1:  DB update sent (troll_coins_balance = 5000 - 1000)
+T1:  DB update sent (Troll_coins = 5000 - 1000)
 T2:  Optimistic update: UI shows 4000 coins ✓
 T3:  Background refresh starts (no delay)
 T4:  Background refresh fetches profile (DB update may not be replicated yet!)
@@ -43,8 +43,8 @@ await new Promise(resolve => setTimeout(resolve, delayMs))
 
 // Only update if values actually changed to prevent flickering
 if (currentProfile && 
-    currentProfile.troll_coins_balance === data.troll_coins_balance &&
-    currentProfile.free_coin_balance === data.free_coin_balance) {
+    currentProfile.Troll_coins === data.Troll_coins &&
+    currentProfile.troll_coins === data.troll_coins) {
   return  // Skip update if nothing changed
 }
 ```
@@ -77,8 +77,8 @@ const refreshProfileBackground = async () => {
       
       // Only update if coins actually changed (prevent flickering)
       if (currentProfile &&
-          currentProfile.troll_coins_balance === data.troll_coins_balance &&
-          currentProfile.free_coin_balance === data.free_coin_balance &&
+          currentProfile.Troll_coins === data.Troll_coins &&
+          currentProfile.troll_coins === data.troll_coins &&
           currentProfile.total_earned_coins === data.total_earned_coins &&
           currentProfile.total_spent_coins === data.total_spent_coins) {
         return
@@ -147,8 +147,8 @@ T6:  UI stays at 4000 coins (no flicker!) ✓
 
 ### Change Detection
 Compares these fields before updating:
-- `troll_coins_balance` - Paid coins
-- `free_coin_balance` - Free coins
+- `Troll_coins` - troll_coins
+- `troll_coins` - Free coins
 - `total_earned_coins` - Lifetime earnings
 - `total_spent_coins` - Lifetime spending
 

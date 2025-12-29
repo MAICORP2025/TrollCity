@@ -49,7 +49,7 @@ serve(async (req) => {
 
     const { data: profile, error: profErr } = await supabase
       .from("user_profiles")
-      .select("paid_coin_balance, payout_paypal_email")
+      .select("troll_coins, payout_paypal_email")
       .eq("id", userId)
       .single();
 
@@ -63,8 +63,8 @@ serve(async (req) => {
       return new Response("Missing PayPal payout email", { status: 400, headers: cors });
     }
 
-    if (profile.paid_coin_balance < coinsRequested) {
-      return new Response("Insufficient paid coins", { status: 400, headers: cors });
+    if (profile.troll_coins < coinsRequested) {
+      return new Response("Insufficient troll_coins", { status: 400, headers: cors });
     }
 
     const usdEstimate = coinsRequested / COINS_PER_DOLLAR;
@@ -73,7 +73,7 @@ serve(async (req) => {
     const { error: balErr } = await supabase
       .from("user_profiles")
       .update({
-        paid_coin_balance: profile.paid_coin_balance - coinsRequested
+        troll_coins: profile.troll_coins - coinsRequested
       })
       .eq("id", userId);
 

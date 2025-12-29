@@ -162,7 +162,7 @@ export default function TrollCatch({ streamId, userId, onCatch }: TrollCatchProp
         // Fallback: Direct update
         const { data: profileData } = await supabase
           .from('user_profiles')
-          .select('free_coin_balance')
+          .select('troll_coins')
           .eq('id', userId)
           .single()
 
@@ -170,7 +170,7 @@ export default function TrollCatch({ streamId, userId, onCatch }: TrollCatchProp
           await supabase
             .from('user_profiles')
             .update({
-              free_coin_balance: (profileData.free_coin_balance || 0) + coins,
+              troll_coins: (profileData.troll_coins || 0) + coins,
             })
             .eq('id', userId)
         }
@@ -188,10 +188,10 @@ export default function TrollCatch({ streamId, userId, onCatch }: TrollCatchProp
       } else {
         // Fallback: Instantly update local profile balance if refresh fails
         if (profile) {
-          const newBalance = (profile.free_coin_balance || 0) + coins
+          const newBalance = (profile.troll_coins || 0) + coins
           setProfile({
             ...profile,
-            free_coin_balance: newBalance,
+            troll_coins: newBalance,
           })
         }
       }

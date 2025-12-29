@@ -102,10 +102,10 @@ const TrollEvent: React.FC<TrollEventProps> = ({ streamId }) => {
         toast.success(`🎉 Claimed ${result.reward_amount} FREE coins!`);
 
         // Update local profile balance
-        const newBalance = (profile.free_coin_balance || 0) + result.reward_amount;
+        const newBalance = (profile.troll_coins || 0) + result.reward_amount;
         useAuthStore.getState().setProfile({
           ...profile,
-          free_coin_balance: newBalance
+          troll_coins: newBalance
         });
       } else {
         toast.error(result.error || 'Failed to claim reward');

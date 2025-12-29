@@ -26,7 +26,7 @@
   - Enforces LIVE mode only
   - Captures PayPal orders
   - Updates `coin_transactions` with PayPal data
-  - Updates `paid_coin_balance`
+  - Updates `troll_coins`
   - Prevents duplicate processing
 
 - ✅ `supabase/functions/paypal-test-live/index.ts`

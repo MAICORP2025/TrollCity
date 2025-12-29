@@ -25,7 +25,7 @@ async function grantCoinsToAllUsers() {
     // Get all user profiles
     const { data: users, error: fetchError } = await supabase
       .from('user_profiles')
-      .select('id, username, free_coin_balance')
+      .select('id, username, troll_coins')
 
     if (fetchError) {
       console.error('Error fetching users:', fetchError)
@@ -39,18 +39,18 @@ async function grantCoinsToAllUsers() {
 
     // Update each user's free coin balance
     for (const user of users) {
-      const newBalance = (user.free_coin_balance || 0) + 200
+      const newBalance = (user.troll_coins || 0) + 200
 
       const { error: updateError } = await supabase
         .from('user_profiles')
-        .update({ free_coin_balance: newBalance })
+        .update({ troll_coins: newBalance })
         .eq('id', user.id)
 
       if (updateError) {
         console.error(`Failed to update user ${user.username || user.id}:`, updateError)
         failed++
       } else {
-        console.log(`✅ ${user.username || user.id}: ${user.free_coin_balance || 0} → ${newBalance} coins`)
+        console.log(`✅ ${user.username || user.id}: ${user.troll_coins || 0} → ${newBalance} coins`)
         updated++
       }
     }

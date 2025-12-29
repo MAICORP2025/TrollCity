@@ -1,10 +1,10 @@
 # Column Name Consistency Fix - Complete Summary
 
 ## Issue
-Earnings pages and coin operations were failing with: `"column user_profiles.troll_coins_balance does not exist"`
+Earnings pages and coin operations were failing with: `"column user_profiles.Troll_coins does not exist"`
 
 This was caused by a critical mismatch between:
-- **Database Schema**: Uses `troll_coins_balance` and `free_coin_balance` 
+- **Database Schema**: Uses `Troll_coins` and `troll_coins` 
 - **Multiple Migrations**: Were referencing non-existent columns `troll_coins` and `trollmonds`
 - **Frontend Code**: Some files were selecting the wrong columns
 
@@ -13,7 +13,7 @@ This was caused by a critical mismatch between:
 During the migration period (Dec 23 - Feb 11), several database migration files were created with incorrect column references:
 
 ```
-Intended:        troll_coins_balance  |  free_coin_balance
+Intended:        Troll_coins  |  troll_coins
 Bug introduced:  troll_coins          |  trollmonds
 ```
 
@@ -27,7 +27,7 @@ This created a cascade of failures:
 
 ### 1. Database Migrations (4 files)
 
-#### a. `20260211_migrate_coin_balance_column_names.sql` ✅
+#### a. `20260211_migrate_troll_coins_column_names.sql` ✅
 **Functions Updated:**
 - `add_troll_coins()` - Line 19
 - `deduct_coins()` - Lines 65, 69, 84, 90
@@ -41,15 +41,15 @@ SELECT troll_coins INTO v_current_balance
 UPDATE user_profiles SET troll_coins = ...
 
 -- After
-SELECT troll_coins_balance INTO v_current_balance
-UPDATE user_profiles SET troll_coins_balance = ...
+SELECT Troll_coins INTO v_current_balance
+UPDATE user_profiles SET Troll_coins = ...
 ```
 
 #### b. `20251231_spend_coins_rpc.sql` ✅
 **Changes:**
-- Line 21: SELECT changed to use `troll_coins_balance`
-- Line 45: UPDATE changed to use `troll_coins_balance`  
-- Line 53: UPDATE changed to use `troll_coins_balance`
+- Line 21: SELECT changed to use `Troll_coins`
+- Line 45: UPDATE changed to use `Troll_coins`  
+- Line 53: UPDATE changed to use `Troll_coins`
 - Line 140: Comment updated to reference correct column
 
 #### c. `20251221_fix_deduct_coins_coin_type.sql` ✅
@@ -66,7 +66,7 @@ UPDATE user_profiles SET troll_coins_balance = ...
 
 #### `FIX_COLUMN_NAME_CONSISTENCY.sql` (NEW) ✅
 **Purpose:** Ensure database consistency by:
-1. Verifying `troll_coins_balance` and `free_coin_balance` columns exist
+1. Verifying `Troll_coins` and `troll_coins` columns exist
 2. Dropping any incorrect columns (`troll_coins`, `trollmonds`)
 3. Recreating `earnings_view` with correct column references
 
@@ -80,13 +80,13 @@ UPDATE user_profiles SET troll_coins_balance = ...
 
 #### `src/lib/coinTransactions.ts` ✅
 **Lines Changed:**
-- Line 106: `.select('troll_coins_balance, free_coin_balance')`
-- Lines 112-113: `profile.troll_coins_balance`, `profile.free_coin_balance`
-- Line 201: `.select('troll_coins_balance, free_coin_balance, role')`
-- Lines 212-213: `profile.troll_coins_balance`, `profile.free_coin_balance`
-- Line 292: `.select('troll_coins_balance, free_coin_balance')`
-- Lines 302-303: `profile.troll_coins_balance`, `profile.free_coin_balance`
-- Line 308: Update field corrected to `'troll_coins_balance' : 'free_coin_balance'`
+- Line 106: `.select('Troll_coins, troll_coins')`
+- Lines 112-113: `profile.Troll_coins`, `profile.troll_coins`
+- Line 201: `.select('Troll_coins, troll_coins, role')`
+- Lines 212-213: `profile.Troll_coins`, `profile.troll_coins`
+- Line 292: `.select('Troll_coins, troll_coins')`
+- Lines 302-303: `profile.Troll_coins`, `profile.troll_coins`
+- Line 308: Update field corrected to `'Troll_coins' : 'troll_coins'`
 
 **Note:** `src/lib/hooks/useCoins.ts` already has defensive fallback logic and didn't need changes.
 
@@ -105,18 +105,18 @@ UPDATE user_profiles SET troll_coins_balance = ...
 
 | Column Name | Type | Purpose | 
 |---|---|---|
-| `troll_coins_balance` | bigint | Paid coins from purchases |
-| `free_coin_balance` | bigint | Free coins from gameplay |
+| `Troll_coins` | bigint | troll_coins from purchases |
+| `troll_coins` | bigint | Free coins from gameplay |
 | `total_earned_coins` | bigint | Lifetime earnings |
 | `total_spent_coins` | bigint | Lifetime spending |
 
 ### Column Aliases (for RPC compatibility)
 
 The system supports these aliases for backward compatibility:
-- `'troll_coins'` parameter → uses `troll_coins_balance` column
-- `'paid'` parameter → uses `troll_coins_balance` column  
-- `'trollmonds'` parameter → uses `free_coin_balance` column
-- `'free'` parameter → uses `free_coin_balance` column
+- `'troll_coins'` parameter → uses `Troll_coins` column
+- `'paid'` parameter → uses `Troll_coins` column  
+- `'trollmonds'` parameter → uses `troll_coins` column
+- `'free'` parameter → uses `troll_coins` column
 
 ## Impact on Features
 
@@ -129,7 +129,7 @@ The system supports these aliases for backward compatibility:
 ✅ Coin transaction logging
 
 ### No Frontend Changes Required
-- Frontend code already uses `troll_coins_balance` and `free_coin_balance`
+- Frontend code already uses `Troll_coins` and `troll_coins`
 - useCoins hook has defensive fallback logic
 - All coin balance displays work correctly once DB is fixed
 
@@ -151,7 +151,7 @@ The system supports these aliases for backward compatibility:
 3. **For Staging/Testing:**
    ```bash
    # Test that earnings view works
-   SELECT id, username, troll_coins_balance FROM earnings_view LIMIT 5;
+   SELECT id, username, Troll_coins FROM earnings_view LIMIT 5;
    
    # Test that deduct_coins function works
    SELECT deduct_coins('user-uuid', 100, 'paid');

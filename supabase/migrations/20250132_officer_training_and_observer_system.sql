@@ -139,7 +139,7 @@ DECLARE
   v_deducted INTEGER;
 BEGIN
   -- Get current balance
-  SELECT free_coin_balance INTO v_current_balance
+  SELECT troll_coins INTO v_current_balance
   FROM user_profiles
   WHERE id = p_user_id;
 
@@ -148,7 +148,7 @@ BEGIN
 
   -- Deduct from free coin balance
   UPDATE user_profiles
-  SET free_coin_balance = GREATEST(free_coin_balance - p_amount, 0)
+  SET troll_coins = GREATEST(troll_coins - p_amount, 0)
   WHERE id = p_user_id;
 
   -- Log punishment record

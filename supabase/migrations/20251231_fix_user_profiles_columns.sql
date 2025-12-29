@@ -8,14 +8,14 @@ BEGIN
     ALTER TABLE user_profiles ADD COLUMN tier TEXT DEFAULT 'Bronze' CHECK (tier IN ('Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'));
   END IF;
 
-  -- Add free_coin_balance column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'free_coin_balance') THEN
-    ALTER TABLE user_profiles ADD COLUMN free_coin_balance INTEGER DEFAULT 0 CHECK (free_coin_balance >= 0);
+  -- Add troll_coins column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'troll_coins') THEN
+    ALTER TABLE user_profiles ADD COLUMN troll_coins INTEGER DEFAULT 0 CHECK (troll_coins >= 0);
   END IF;
 
-  -- Add paid_coin_balance column if it doesn't exist
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'paid_coin_balance') THEN
-    ALTER TABLE user_profiles ADD COLUMN paid_coin_balance INTEGER DEFAULT 0 CHECK (paid_coin_balance >= 0);
+  -- Add troll_coins column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'troll_coins') THEN
+    ALTER TABLE user_profiles ADD COLUMN troll_coins INTEGER DEFAULT 0 CHECK (troll_coins >= 0);
   END IF;
 
   -- Add role column if it doesn't exist

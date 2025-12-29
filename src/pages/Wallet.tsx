@@ -153,7 +153,7 @@ export default function Wallet() {
         <div className="rounded-xl bg-black/60 border border-purple-600 p-4">
           <div className="flex items-center gap-2 mb-2">
             <Coins className="w-5 h-5 text-purple-400" />
-            <div className="text-sm opacity-70">Paid Coins</div>
+            <div className="text-sm opacity-70">troll_coins</div>
           </div>
           <div className="text-2xl font-bold text-purple-300">
             {profile?.troll_coins?.toLocaleString() ?? 0}
@@ -169,7 +169,7 @@ export default function Wallet() {
             <div className="text-sm opacity-70">Free Coins</div>
           </div>
           <div className="text-2xl font-bold text-green-300">
-            {profile?.free_coin_balance?.toLocaleString() ?? 0}
+            {profile?.troll_coins?.toLocaleString() ?? 0}
           </div>
           <div className="text-xs text-gray-400 mt-1">
             Entertainment & bonuses

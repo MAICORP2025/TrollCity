@@ -96,8 +96,8 @@ async function main() {
     
     testUser = users
     log.success(`Using test user: ${testUser.username} (${testUser.id})`)
-    log.info(`Current paid balance: ${testUser.paid_coin_balance || 0}`)
-    log.info(`Current free balance: ${testUser.free_coin_balance || 0}`)
+    log.info(`Current paid balance: ${testUser.troll_coins || 0}`)
+    log.info(`Current free balance: ${testUser.troll_coins || 0}`)
   } catch (err) {
     log.error(`Failed to get test user: ${err.message}`)
     process.exit(1)
@@ -174,7 +174,7 @@ async function main() {
   log.info(`Amount: ${testPackage.coin_amount} coins`)
   log.info(`Price: $${testPackage.price}`)
   
-  const balanceBefore = testUser.paid_coin_balance || 0
+  const balanceBefore = testUser.troll_coins || 0
   
   try {
     const resp = await fetch(`${API_URL}/api/payments/create-payment`, {
@@ -219,13 +219,13 @@ async function main() {
   try {
     const { data: updatedUser, error } = await supabase
       .from('user_profiles')
-      .select('paid_coin_balance, free_coin_balance')
+      .select('troll_coins, troll_coins')
       .eq('id', testUser.id)
       .single()
     
     if (error) throw error
     
-    const balanceAfter = updatedUser.paid_coin_balance || 0
+    const balanceAfter = updatedUser.troll_coins || 0
     const difference = balanceAfter - balanceBefore
     
     log.info(`Balance before: ${balanceBefore}`)

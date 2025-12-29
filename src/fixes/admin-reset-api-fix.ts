@@ -47,7 +47,7 @@ export const resetLiveStreams = async () => {
   return data;
 };
 
-export const resetCoinBalances = async () => {
+export const resetTrollcoinss = async () => {
   const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
     'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1';
   
@@ -61,7 +61,7 @@ export const resetCoinBalances = async () => {
       'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({
-      action: 'reset_coin_balances'
+      action: 'reset_troll_coinss'
     })
   });
 

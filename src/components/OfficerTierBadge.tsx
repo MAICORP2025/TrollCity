@@ -29,7 +29,7 @@ export default function OfficerTierBadge({ level, className = '', size = 'sm' }:
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${sizeClasses[size]} ${className}`}
       style={{ backgroundColor: `${color}20`, border: `1px solid ${color}`, color: color }}
-      title={`${config.title} - ${config.finalPaidCoinsPerHour.toLocaleString()} paid coins/hr`}
+      title={`${config.title} - ${config.finaltroll_coinsPerHour.toLocaleString()} troll_coins/hr`}
     >
       <span>{config.badgeEmoji}</span>
       <span className="font-semibold">{config.title}</span>

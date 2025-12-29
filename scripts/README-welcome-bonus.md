@@ -13,7 +13,7 @@ This script applies a 1000 Tromonds welcome bonus to all existing users in Troll
 -- First, update all existing user profiles to add 1000 free coins
 UPDATE user_profiles
 SET
-  free_coin_balance = COALESCE(free_coin_balance, 0) + 1000,
+  troll_coins = COALESCE(troll_coins, 0) + 1000,
   total_earned_coins = COALESCE(total_earned_coins, 0) + 1000,
   updated_at = NOW()
 WHERE id IS NOT NULL;
@@ -42,7 +42,7 @@ node scripts/apply-welcome-bonus.js
 
 ## What This Does
 
-- **Adds 1000 Tromonds** to each existing user's `free_coin_balance`
+- **Adds 1000 Tromonds** to each existing user's `troll_coins`
 - **Updates `total_earned_coins`** to reflect the bonus in earnings tracking
 - **Creates transaction records** in `coin_transactions` table for transparency
 - **Only affects existing users** - new users get the bonus automatically via ProfileSetupPage.tsx

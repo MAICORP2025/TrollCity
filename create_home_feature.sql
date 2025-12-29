@@ -99,7 +99,7 @@ BEGIN
   ORDER BY SUM(coins_spent) DESC
   LIMIT 1;
 
-  -- Credit 1,000 paid coins via existing logic (assuming deduct_coins can be negative for credit)
+  -- Credit 1,000 troll_coins via existing logic (assuming deduct_coins can be negative for credit)
   -- Actually, use a separate function or direct insert
   -- For now, insert transaction
   INSERT INTO coin_transactions (user_id, coins, usd_amount, source, external_id, payer_email, payment_status, payment_method, metadata)
@@ -107,7 +107,7 @@ BEGIN
 
   -- Update user balance
   UPDATE user_profiles
-  SET paid_coin_balance = paid_coin_balance + 1000
+  SET troll_coins = troll_coins + 1000
   WHERE id = winner_id;
 
   -- Mark cycle as paid

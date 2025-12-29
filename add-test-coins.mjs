@@ -34,13 +34,13 @@ async function addTestCoins() {
     
     console.log('✅ Found admin user:', admin.id)
     
-    // Add 50,000 paid coins for testing (enough for multiple cashout tiers)
+    // Add 50,000 troll_coins for testing (enough for multiple cashout tiers)
     const testCoins = 50000
     
     const { data: updated, error: updateError } = await supabase
       .from('user_profiles')
       .update({ 
-        paid_coin_balance: testCoins,
+        troll_coins: testCoins,
         updated_at: new Date().toISOString()
       })
       .eq('id', admin.id)
@@ -52,7 +52,7 @@ async function addTestCoins() {
     console.log('✅ Added test coins to admin account')
     console.log('   User ID:', admin.id)
     console.log('   Email:', adminEmail)
-    console.log('   Paid Coins:', testCoins.toLocaleString())
+    console.log('   troll_coins:', testCoins.toLocaleString())
     console.log('')
     console.log('💰 You can now test cashout requests!')
     console.log('   Available tiers:')

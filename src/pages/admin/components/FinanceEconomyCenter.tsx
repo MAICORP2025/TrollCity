@@ -242,15 +242,15 @@ export default function FinanceEconomyCenter({
                 </h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-400">Paid Coins Purchased:</span>
+                    <span className="text-gray-400">troll_coins Purchased:</span>
                     <span className="text-white font-medium">
-                      {economySummary.paidCoins?.totalPurchased?.toLocaleString() || 0}
+                      {economySummary.troll_coins?.totalPurchased?.toLocaleString() || 0}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Outstanding Liability:</span>
                     <span className="text-white font-medium">
-                      ${economySummary.paidCoins?.outstandingLiability?.toLocaleString() || 0}
+                      ${economySummary.troll_coins?.outstandingLiability?.toLocaleString() || 0}
                     </span>
                   </div>
                   <div className="flex justify-between">

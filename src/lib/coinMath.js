@@ -24,7 +24,7 @@ export const cashoutTiers = [
 
 /**
  * Get the highest eligible cashout tier based on total coins
- * @param {number} totalCoins - Combined paid_coins + free_coins
+ * @param {number} totalCoins - Combined troll_coins + free_coins
  * @returns {object|null} - The eligible tier object or null if no tier is eligible
  */
 export function getEligibleTier(totalCoins) {
@@ -67,10 +67,10 @@ export function formatUSD(amount) {
 
 /**
  * Calculate total coins by summing paid and free coins
- * @param {number} paidCoins - Paid coin balance
+ * @param {number} troll_coins - Paid coin balance
  * @param {number} freeCoins - Free coin balance
  * @returns {number} - Total coins
  */
-export function calculateTotalCoins(paidCoins, freeCoins) {
-  return (paidCoins || 0) + (freeCoins || 0);
+export function calculateTotalCoins(troll_coins, freeCoins) {
+  return (troll_coins || 0) + (freeCoins || 0);
 }

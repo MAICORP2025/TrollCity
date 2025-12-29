@@ -1,21 +1,21 @@
 # Fix: Earnings Pages Column Name Consistency
 
 ## Problem
-The earnings pages were reporting error: `"column user_profiles.troll_coins_balance does not exist"` 
+The earnings pages were reporting error: `"column user_profiles.Troll_coins does not exist"` 
 
 This was caused by multiple migrations referencing non-existent column names:
-- Using `troll_coins` instead of `troll_coins_balance`
-- Using `trollmonds` instead of `free_coin_balance`
+- Using `troll_coins` instead of `Troll_coins`
+- Using `trollmonds` instead of `troll_coins`
 
 ## Root Cause
 Several migration files (created between Dec 23-Feb 11) introduced functions that referenced incorrect column names that don't exist in the database schema. The actual columns in `user_profiles` table are:
-- `troll_coins_balance` (bigint) - for paid coins
-- `free_coin_balance` (bigint) - for free coins
+- `Troll_coins` (bigint) - for troll_coins
+- `troll_coins` (bigint) - for free coins
 
 ## Files Fixed
 The following migration files have been corrected to use proper column names:
 
-1. **20260211_migrate_coin_balance_column_names.sql**
+1. **20260211_migrate_troll_coins_column_names.sql**
    - Fixed `deduct_coins()` function
    - Fixed `add_troll_coins()` function
    - Fixed `spend_coins()` function
@@ -44,10 +44,10 @@ The following migration files have been corrected to use proper column names:
 1. Ensure columns exist:
    ```sql
    ALTER TABLE user_profiles 
-   ADD COLUMN IF NOT EXISTS troll_coins_balance bigint DEFAULT 0 NOT NULL;
+   ADD COLUMN IF NOT EXISTS Troll_coins bigint DEFAULT 0 NOT NULL;
    
    ALTER TABLE user_profiles 
-   ADD COLUMN IF NOT EXISTS free_coin_balance bigint DEFAULT 0 NOT NULL;
+   ADD COLUMN IF NOT EXISTS troll_coins bigint DEFAULT 0 NOT NULL;
    ```
 
 2. Remove any incorrect columns if they exist:
@@ -65,20 +65,20 @@ After applying the fix, verify:
 -- Check columns exist
 SELECT column_name FROM information_schema.columns 
 WHERE table_name = 'user_profiles' 
-AND column_name IN ('troll_coins_balance', 'free_coin_balance');
+AND column_name IN ('Troll_coins', 'troll_coins');
 
 -- Should return 2 rows:
--- troll_coins_balance
--- free_coin_balance
+-- Troll_coins
+-- troll_coins
 
 -- Check earnings view works
-SELECT id, username, troll_coins_balance FROM earnings_view LIMIT 5;
+SELECT id, username, Troll_coins FROM earnings_view LIMIT 5;
 ```
 
 ## Frontend Impact
 The frontend correctly uses:
-- `profile.troll_coins_balance` - displays user's paid coin balance
-- `profile.free_coin_balance` - displays user's free coin balance
+- `profile.Troll_coins` - displays user's paid coin balance
+- `profile.troll_coins` - displays user's free coin balance
 
 No frontend changes are needed. The data will sync correctly once the database is fixed.
 

@@ -311,7 +311,7 @@ export default function OfficerPayrollDashboard() {
             <p>• <strong>Live Earnings:</strong> Additional coins from live streaming activities</p>
             <p>• <strong>Court Bonuses:</strong> Rewards for court moderation and rulings</p>
             <p>• <strong>Other Bonuses:</strong> Special rewards for outstanding service</p>
-            <p>• <strong>Cashout Rate:</strong> 6,000 paid coins = $60 USD</p>
+            <p>• <strong>Cashout Rate:</strong> 6,000 troll_coins = $60 USD</p>
           </div>
         </div>
       </div>

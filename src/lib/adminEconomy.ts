@@ -40,7 +40,7 @@ export async function resetAdminEconomy(): Promise<{ success: boolean; error?: s
       .from('user_profiles')
       .update({
         troll_coins: 0,
-        free_coin_balance: 0,
+        troll_coins: 0,
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id)

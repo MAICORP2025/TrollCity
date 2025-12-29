@@ -143,7 +143,7 @@ export default function StartBattleModal({
         </div>
 
         <p className="text-gray-400 mb-6">
-          Challenge another broadcaster to a 2-minute battle! Only paid coins count toward victory.
+          Challenge another broadcaster to a 2-minute battle! Only troll_coins count toward victory.
         </p>
 
         {/* Random Match */}

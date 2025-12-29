@@ -110,7 +110,7 @@ BEGIN
   -- Credit coins to officer (only for non-admins)
   UPDATE user_profiles
   SET 
-    free_coin_balance = COALESCE(free_coin_balance, 0) + v_coins_earned,
+    troll_coins = COALESCE(troll_coins, 0) + v_coins_earned,
     updated_at = NOW()
   WHERE id = v_slot.officer_id;
 

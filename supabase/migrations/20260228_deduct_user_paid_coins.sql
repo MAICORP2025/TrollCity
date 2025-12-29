@@ -1,7 +1,7 @@
 -- Migration: Provide a stable RPC surface for deducting coins without overload ambiguity
 -- Date: 2026-02-28
 
-CREATE OR REPLACE FUNCTION deduct_user_paid_coins(
+CREATE OR REPLACE FUNCTION deduct_user_troll_coins(
   p_user_id uuid,
   p_amount bigint,
   p_coin_type text DEFAULT 'troll_coins'
@@ -16,5 +16,5 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION deduct_user_paid_coins(uuid, bigint, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION deduct_user_paid_coins(uuid, bigint, text) TO service_role;
+GRANT EXECUTE ON FUNCTION deduct_user_troll_coins(uuid, bigint, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION deduct_user_troll_coins(uuid, bigint, text) TO service_role;

@@ -34,13 +34,13 @@ async function setupCoinsAndBadges() {
       const { error: adminError } = await supabase
         .from('user_profiles')
         .update({ 
-          paid_coin_balance: 50000,
+          troll_coins: 50000,
           updated_at: new Date().toISOString()
         })
         .eq('id', admin.id)
       
       if (adminError) throw adminError
-      console.log('✅ Restored 50,000 paid coins to admin account\n')
+      console.log('✅ Restored 50,000 troll_coins to admin account\n')
     } else {
       console.log('⚠️  Admin user not found\n')
     }
@@ -77,10 +77,10 @@ async function setupCoinsAndBadges() {
     const { data: updated, error: coinsError } = await supabase
       .from('user_profiles')
       .update({ 
-        free_coin_balance: 200,
+        troll_coins: 200,
         updated_at: new Date().toISOString()
       })
-      .eq('free_coin_balance', 0)
+      .eq('troll_coins', 0)
       .select('id, username')
     
     if (coinsError) {
@@ -95,7 +95,7 @@ async function setupCoinsAndBadges() {
     console.log('  ✅ OG badge for users before 2026-01-01')
     console.log('  ✅ 200 free coins for new users')
     console.log('\n📝 Note: Add this to user_profiles table default:')
-    console.log('   free_coin_balance: DEFAULT 200')
+    console.log('   troll_coins: DEFAULT 200')
     console.log('   og_badge: DEFAULT false')
     
   } catch (error) {

@@ -1,16 +1,12 @@
-import React from 'react';
+import React from 'react'
+import AdminControlPanel from './components/AdminControlPanel'
 
-const ControlPanel: React.FC = () => {
+export default function ControlPanel() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-4">Control Panel</h1>
-        <div className="bg-black/60 border border-purple-600/30 rounded-xl p-8 text-center">
-          <p>Control panel will be implemented here.</p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
+      <div className="max-w-6xl mx-auto px-6 py-10">
+        <AdminControlPanel />
       </div>
     </div>
-  );
-};
-
-export default ControlPanel;
+  )
+}

@@ -27,10 +27,10 @@ export default function AdminResetPanel() {
 
     setLoading(action)
     
-    // Handle reset_coin_balances with direct RPC call
-    if (action === 'reset_coin_balances') {
+    // Handle reset_troll_coinss with direct RPC call
+    if (action === 'reset_troll_coinss') {
       try {
-        const { error } = await supabase.rpc("reset_coin_balances", {})
+        const { error } = await supabase.rpc("reset_troll_coinss", {})
 
         if (error) {
           console.error('Reset error:', error)
@@ -242,12 +242,12 @@ export default function AdminResetPanel() {
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()
-            handleReset('reset_coin_balances', 'Reset Coin Balances')
+            handleReset('reset_troll_coinss', 'Reset Coin Balances')
           }}
           disabled={loading !== null || confirmText !== 'RESET'}
           className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
         >
-          {loading === 'reset_coin_balances' ? (
+          {loading === 'reset_troll_coinss' ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
               Resetting balances...

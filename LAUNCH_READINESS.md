@@ -18,7 +18,7 @@
 - ✅ Role-based access (user, admin, troll_officer)
 
 ### 🪙 Coin Economy System
-- ✅ Paid coins (purchased with real money)
+- ✅ troll_coins (purchased with real money)
 - ✅ Free coins (earned/gifted)
 - ✅ **All users start with 200 FREE coins** (new default)
 - ✅ **All existing users granted 200 free coins** (script executed successfully)
@@ -97,7 +97,7 @@
 ### 📊 Admin Dashboard
 - ✅ User statistics
 - ✅ Revenue tracking
-- ✅ Economy overview (paid coins, cashouts, officer earnings, wheel activity)
+- ✅ Economy overview (troll_coins, cashouts, officer earnings, wheel activity)
 - ✅ Risk & Compliance section (frozen accounts, high-risk users)
 - ✅ Live stream monitoring
 - ✅ Application management
@@ -259,11 +259,11 @@ Run these SQL files in Supabase SQL Editor (in order):
 2. **Coin Economy** - Monitor 200 free coin usage
 3. **Risk Events** - Watch for abuse patterns
 4. **Frozen Accounts** - Monitor auto-freeze triggers
-5. **Revenue** - Track paid coins vs broadcaster cashouts
+5. **Revenue** - Track troll_coins vs broadcaster cashouts
 6. **Engagement** - Stream creation, gift sending, wheel spins
 
 ### Admin Dashboard Sections
-- Economy Overview (paid coins, cashouts, officer earnings, wheel)
+- Economy Overview (troll_coins, cashouts, officer earnings, wheel)
 - Risk & Compliance (frozen accounts, high-risk users)
 - Live Streams Monitor
 - User Management

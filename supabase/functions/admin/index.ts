@@ -354,26 +354,26 @@ Deno.serve(async (req: Request) => {
 
     // /economy/summary
     if (pathname === 'economy/summary' && req.method === 'GET') {
-      // Get paid coins data
-      const { data: paidCoinsTx } = await supabase
+      // Get troll_coins data
+      const { data: troll_coinsTx } = await supabase
         .from('coin_transactions')
         .select('user_id, amount, type')
         .in('type', ['purchase', 'cashout']);
 
-      const paidCoinsMap = new Map<string, { purchased: number; spent: number }>();
-      paidCoinsTx?.forEach((tx: { user_id: string; amount?: number; type: string }) => {
-        const existing = paidCoinsMap.get(tx.user_id) || { purchased: 0, spent: 0 };
+      const troll_coinsMap = new Map<string, { purchased: number; spent: number }>();
+      troll_coinsTx?.forEach((tx: { user_id: string; amount?: number; type: string }) => {
+        const existing = troll_coinsMap.get(tx.user_id) || { purchased: 0, spent: 0 };
         if (tx.type === 'purchase') {
           existing.purchased += Math.abs(Number(tx.amount || 0));
         } else if (tx.type === 'cashout') {
           existing.spent += Math.abs(Number(tx.amount || 0));
         }
-        paidCoinsMap.set(tx.user_id, existing);
+        troll_coinsMap.set(tx.user_id, existing);
       });
 
       let totalPurchased = 0;
       let totalSpent = 0;
-      for (const data of paidCoinsMap.values()) {
+      for (const data of troll_coinsMap.values()) {
         totalPurchased += data.purchased;
         totalSpent += data.spent;
       }
@@ -424,7 +424,7 @@ Deno.serve(async (req: Request) => {
       });
 
       return new Response(JSON.stringify({
-        paidCoins: {
+        troll_coins: {
           totalPurchased,
           totalSpent,
           outstandingLiability

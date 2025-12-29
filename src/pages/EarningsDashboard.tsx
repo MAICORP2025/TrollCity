@@ -22,7 +22,7 @@ interface MonthlyEarnings {
   coins_earned_from_gifts: number
   gift_count: number
   unique_gifters: number
-  paid_coins_earned: number
+  troll_coins_earned: number
   free_coins_earned: number
 }
 
@@ -348,7 +348,7 @@ export default function EarningsDashboard() {
                         <th className="text-right py-2">Coins Earned</th>
                         <th className="text-right py-2">Gifts Received</th>
                         <th className="text-right py-2">Unique Gifters</th>
-                        <th className="text-right py-2">Paid Coins</th>
+                        <th className="text-right py-2">troll_coins</th>
                         <th className="text-right py-2">Free Coins</th>
                       </tr>
                     </thead>
@@ -371,7 +371,7 @@ export default function EarningsDashboard() {
                             {month.unique_gifters || 0}
                           </td>
                           <td className="text-right py-2 text-yellow-400">
-                            {month.paid_coins_earned?.toLocaleString() || 0}
+                            {month.troll_coins_earned?.toLocaleString() || 0}
                           </td>
                           <td className="text-right py-2 text-blue-400">
                             {month.free_coins_earned?.toLocaleString() || 0}

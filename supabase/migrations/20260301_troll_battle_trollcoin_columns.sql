@@ -15,14 +15,14 @@ BEGIN
   SET
     host_troll_coins = GREATEST(
       COALESCE(host_troll_coins, 0),
-      COALESCE(host_paid_coins, 0),
+      COALESCE(host_troll_coins, 0),
       COALESCE(host_free_coins, 0),
       COALESCE(host_trollmonds, 0),
       COALESCE(host_trollmods, 0)
     ),
     challenger_troll_coins = GREATEST(
       COALESCE(challenger_troll_coins, 0),
-      COALESCE(challenger_paid_coins, 0),
+      COALESCE(challenger_troll_coins, 0),
       COALESCE(challenger_free_coins, 0),
       COALESCE(challenger_trollmonds, 0),
       COALESCE(guest_trollmonds, 0)
@@ -36,8 +36,8 @@ END;
 $$;
 
 ALTER TABLE troll_battles
-DROP COLUMN IF EXISTS host_paid_coins,
-DROP COLUMN IF EXISTS challenger_paid_coins,
+DROP COLUMN IF EXISTS host_troll_coins,
+DROP COLUMN IF EXISTS challenger_troll_coins,
 DROP COLUMN IF EXISTS host_free_coins,
 DROP COLUMN IF EXISTS challenger_free_coins,
 DROP COLUMN IF EXISTS host_trollmonds,

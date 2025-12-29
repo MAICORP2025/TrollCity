@@ -229,7 +229,8 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
     if (!serviceRef.current) return
     await serviceRef.current.startPublishing()
     syncLocalParticipant()
-  }, [syncLocalParticipant])
+    setParticipants(new Map(serviceRef.current.getParticipants()))
+  }, [syncLocalParticipant, setParticipants])
 
   const getRoom = useCallback(() => {
     return serviceRef.current?.getRoom() || null

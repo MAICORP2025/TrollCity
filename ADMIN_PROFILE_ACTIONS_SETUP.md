@@ -3,8 +3,8 @@
 ## Overview
 
 When an admin views a user's profile by clicking on their username, they now see an **Admin Actions Panel** that allows them to:
-- **Grant/Deduct Trollmonds** (free_coin_balance)
-- **Grant/Deduct Troll Coins** (troll_coins_balance)
+- **Grant/Deduct Trollmonds** (troll_coins)
+- **Grant/Deduct Troll Coins** (Troll_coins)
 - **Grant/Deduct Levels**
 
 All actions are logged with transaction records and audit metadata.
@@ -161,7 +161,7 @@ You can modify the panel's appearance by editing:
 
 ### Coins not updating
 1. Verify user profile exists in database
-2. Check that `free_coin_balance` or `troll_coins_balance` columns exist
+2. Check that `troll_coins` or `Troll_coins` columns exist
 3. Review coin_transactions table for entries
 4. Check Supabase RLS policies allow updates
 

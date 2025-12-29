@@ -163,7 +163,7 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
               .single()
 
             if (!kickerProfile || kickerProfile.troll_coins < 500) {
-              toast.error('You need 500 paid coins to kick a user')
+              toast.error('You need 500 troll_coins to kick a user')
               return
             }
 

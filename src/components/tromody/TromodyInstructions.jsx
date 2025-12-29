@@ -16,7 +16,7 @@ export default function TromodyInstructions({ onClose }) {
         <ul className="text-gray-400 text-sm space-y-2 mb-6">
           <li>• The broadcaster with the MOST gift value wins.</li>
           <li>• Winner receives ALL gifts sent by both sides.</li>
-          <li>• Free coins and paid coins BOTH count.</li>
+          <li>• Free coins and troll_coins BOTH count.</li>
           <li>• Usernames are clickable to open profiles.</li>
           <li>• Troll emoji button is the LIKE button.</li>
           <li>• Enjoy the chaos — this is Troll City!</li>

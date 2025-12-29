@@ -141,14 +141,14 @@ DECLARE
   v_current_balance INTEGER;
   v_deducted INTEGER;
 BEGIN
-  SELECT free_coin_balance INTO v_current_balance
+  SELECT troll_coins INTO v_current_balance
   FROM user_profiles
   WHERE id = p_user_id;
 
   v_deducted := LEAST(v_current_balance, p_amount);
 
   UPDATE user_profiles
-  SET free_coin_balance = GREATEST(free_coin_balance - p_amount, 0)
+  SET troll_coins = GREATEST(troll_coins - p_amount, 0)
   WHERE id = p_user_id;
 
   INSERT INTO punishment_transactions (user_id, coins_deducted, reason, appeal_id, verdict)

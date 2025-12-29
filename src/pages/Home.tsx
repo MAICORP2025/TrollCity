@@ -38,7 +38,7 @@ type HomeUser = {
   avatar_url?: string | null;
   tier?: string | null;
   level?: number | null;
-  free_coin_balance?: number | null;
+  troll_coins?: number | null;
   troll_coins?: number | null;
   created_at?: string | null;
   role?: string | null;
@@ -520,8 +520,8 @@ const HomePageContent = () => {
   const [bufferedStreams, setBufferedStreams] = useState<HomeStream[]>([]); // dY Step 5: Buffered state for smooth transitions
   const [newUsers, setNewUsers] = useState<HomeUser[]>([]);
   const [bufferedUsers, setBufferedUsers] = useState<HomeUser[]>([]); // dY Step 5: Buffered state for users
-  const [loadingLive, setLoadingLive] = useState(false);
-  const [loadingNewUsers, setLoadingNewUsers] = useState(false);
+  const [_loadingLive, setLoadingLive] = useState(false);
+  const [_loadingNewUsers, setLoadingNewUsers] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const loadLiveRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
   const loadNewUsersRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
@@ -762,7 +762,7 @@ const HomePageContent = () => {
         } else {
           const { data: directData, error: directError } = await supabase
             .from('user_profiles')
-            .select('id, username, avatar_url, tier, level, free_coin_balance, troll_coins, created_at, role, is_banned, banned_until')
+            .select('id, username, avatar_url, tier, level, troll_coins, troll_coins, created_at, role, is_banned, banned_until')
             .order('created_at', { ascending: false })
             .limit(100);
           if (directError) throw directError;

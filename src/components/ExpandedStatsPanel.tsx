@@ -15,7 +15,7 @@ interface UserStats {
   xp: number
   totalXp: number
   nextLevelXp: number
-  paidCoins: number
+  troll_coins: number
   trollmonds: number
   familyName?: string
   familyLevel?: number
@@ -89,8 +89,8 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
           xp: levelData.xp,
           totalXp: levelData.total_xp,
           nextLevelXp: levelData.next_level_xp,
-          paidCoins: profile?.troll_coins || 0,
-          trollmonds: profile?.free_coin_balance || 0,
+          troll_coins: profile?.troll_coins || 0,
+          trollmonds: profile?.troll_coins || 0,
           ...familyData,
           ...warStats,
           badges
@@ -218,7 +218,7 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
                       Troll Coins
                     </span>
                     <span className="font-bold text-green-400">
-                      {stats.paidCoins.toLocaleString()}
+                      {stats.troll_coins.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -233,7 +233,7 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
                   <div className="flex justify-between items-center pt-2 border-t border-[#2C2C2C]">
                     <span className="text-gray-300">Cashout Value</span>
                     <span className="font-bold text-yellow-400">
-                      ${(stats.paidCoins * 0.0001 * 0.8).toFixed(2)}
+                      ${(stats.troll_coins * 0.0001 * 0.8).toFixed(2)}
                     </span>
                   </div>
                 </div>

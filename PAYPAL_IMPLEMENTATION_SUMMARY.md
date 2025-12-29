@@ -21,7 +21,7 @@
 - ✅ Validates payment status
 - ✅ Extracts metadata from custom_id
 - ✅ Inserts coin transactions
-- ✅ Updates user paid_coin_balance atomically
+- ✅ Updates user troll_coins atomically
 - ✅ Returns success with coins added
 
 #### `supabase/functions/paypal-payout-request/index.ts`

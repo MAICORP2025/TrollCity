@@ -325,8 +325,8 @@ SELECT
   p.id,
   p.username,
   p.total_earned_coins,
-  p.paid_coin_balance,
-  p.free_coin_balance,
+  p.troll_coins,
+  p.troll_coins,
   COALESCE(ce.total_coins, 0) AS current_month_earnings,
   COALESCE(ce.transaction_count, 0) AS current_month_transactions,
   COALESCE(ps.paid_out_usd, 0) AS current_month_paid_out,
@@ -368,7 +368,7 @@ SELECT
   SUM(g.coins_spent) AS coins_earned_from_gifts,
   COUNT(DISTINCT g.id) AS gift_count,
   COUNT(DISTINCT g.sender_id) AS unique_gifters,
-  SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END) AS paid_coins_earned,
+  SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END) AS troll_coins_earned,
   SUM(CASE WHEN g.gift_type = 'free' THEN g.coins_spent ELSE 0 END) AS free_coins_earned
 FROM user_profiles p
 JOIN gifts g ON g.receiver_id = p.id
@@ -439,7 +439,7 @@ RETURNS TABLE (
   coins_earned_from_gifts bigint,
   gift_count bigint,
   unique_gifters bigint,
-  paid_coins_earned bigint,
+  troll_coins_earned bigint,
   free_coins_earned bigint,
   usd_equivalent numeric
 )
@@ -454,7 +454,7 @@ BEGIN
     SUM(g.coins_spent)::bigint AS coins_earned_from_gifts,
     COUNT(DISTINCT g.id)::bigint AS gift_count,
     COUNT(DISTINCT g.sender_id)::bigint AS unique_gifters,
-    SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END)::bigint AS paid_coins_earned,
+    SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END)::bigint AS troll_coins_earned,
     SUM(CASE WHEN g.gift_type = 'free' THEN g.coins_spent ELSE 0 END)::bigint AS free_coins_earned,
     (SUM(g.coins_spent)::numeric / 100.0) AS usd_equivalent
   FROM gifts g
@@ -487,7 +487,7 @@ DECLARE
   v_minimum_coins bigint := 5000;
   v_conversion_rate numeric := 0.01;
 BEGIN
-  SELECT paid_coin_balance INTO v_current_balance
+  SELECT troll_coins INTO v_current_balance
   FROM user_profiles
   WHERE id = p_user_id;
 

@@ -1,16 +1,16 @@
 EARNINGS COLUMN FIX - QUICK REFERENCE
 =====================================
 
-PROBLEM: "column user_profiles.troll_coins_balance does not exist"
+PROBLEM: "column user_profiles.Troll_coins does not exist"
 
 ROOT CAUSE: Multiple migrations referencing wrong column names
-- Using: troll_coins (should be troll_coins_balance)
-- Using: trollmonds (should be free_coin_balance)
+- Using: troll_coins (should be Troll_coins)
+- Using: trollmonds (should be troll_coins)
 
 FILES MODIFIED (4 database migrations + 1 frontend library):
 ============================================================
 
-1. supabase/migrations/20260211_migrate_coin_balance_column_names.sql
+1. supabase/migrations/20260211_migrate_troll_coins_column_names.sql
    - Fixed: add_troll_coins() function
    - Fixed: deduct_coins() function  
    - Fixed: spend_coins() function
@@ -35,8 +35,8 @@ FILES CREATED (Database consistency fix):
 ==========================================
 
 1. FIX_COLUMN_NAME_CONSISTENCY.sql
-   - Ensures troll_coins_balance column exists
-   - Ensures free_coin_balance column exists
+   - Ensures Troll_coins column exists
+   - Ensures troll_coins column exists
    - Removes any incorrect columns
    - Recreates earnings_view with correct columns
    - Safe to run multiple times
@@ -73,18 +73,18 @@ COLUMN MAPPING (for reference):
 ==============================
 
 USER PROFILE COINS:
-  troll_coins_balance   = Paid coins from purchases
-  free_coin_balance     = Free coins from gameplay
+  Troll_coins   = troll_coins from purchases
+  troll_coins     = Free coins from gameplay
 
 NOT THESE:
   troll_coins      ❌ (old/wrong)
   trollmonds       ❌ (old/wrong)
 
 RPC PARAMETER ALIASES:
-  'troll_coins' → troll_coins_balance
-  'paid'        → troll_coins_balance
-  'trollmonds'  → free_coin_balance
-  'free'        → free_coin_balance
+  'troll_coins' → Troll_coins
+  'paid'        → Troll_coins
+  'trollmonds'  → troll_coins
+  'free'        → troll_coins
 
 AFFECTED FEATURES (now fixed):
 =============================

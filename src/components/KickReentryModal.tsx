@@ -27,7 +27,7 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
     if (!user || !profile) return
 
     if (profile.troll_coins < 250) {
-      toast.error('You need 250 paid coins to re-enter')
+      toast.error('You need 250 troll_coins to re-enter')
       return
     }
 
@@ -58,7 +58,7 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
     if (!user || !profile) return
 
     if (profile.troll_coins < 2000) {
-      toast.error('You need 2000 paid coins ($20) to restore your account')
+      toast.error('You need 2000 troll_coins ($20) to restore your account')
       return
     }
 
@@ -110,7 +110,7 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
                 You have been kicked 3 times. Your account is now banned.
               </p>
               <p className="text-sm text-gray-300 mt-2">
-                Pay <strong className="text-yellow-400">$20 (2000 paid coins)</strong> to restore your account.
+                Pay <strong className="text-yellow-400">$20 (2000 troll_coins)</strong> to restore your account.
                 Your account will be reset to level 0 with 0 coins.
               </p>
               <div className="mt-3 p-3 bg-blue-900/20 border border-blue-500/50 rounded-lg">
@@ -136,7 +136,7 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
                 Kick count: <strong>{kickCount}/3</strong>
               </p>
               <p className="text-sm text-gray-300 mt-2">
-                Pay <strong className="text-yellow-400">250 paid coins</strong> to re-enter the app.
+                Pay <strong className="text-yellow-400">250 troll_coins</strong> to re-enter the app.
                 After 3 kicks, you'll be permanently banned.
               </p>
               <div className="mt-3 p-3 bg-blue-900/20 border border-blue-500/50 rounded-lg">

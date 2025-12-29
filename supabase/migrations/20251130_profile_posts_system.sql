@@ -130,7 +130,7 @@ BEGIN
   -- This is a simplified version - you may want to track access in a separate table
 
   -- Get viewer's paid coin balance
-  SELECT paid_coin_balance INTO v_viewer_balance
+  SELECT troll_coins INTO v_viewer_balance
   FROM user_profiles
   WHERE id = p_viewer_id;
 
@@ -139,7 +139,7 @@ BEGIN
     RETURN jsonb_build_object(
       'success', false,
       'has_access', false,
-      'error', 'Insufficient paid coins',
+      'error', 'Insufficient troll_coins',
       'required', v_view_price,
       'current_balance', v_viewer_balance
     );
@@ -147,12 +147,12 @@ BEGIN
 
   -- Deduct coins from viewer
   UPDATE user_profiles
-  SET paid_coin_balance = paid_coin_balance - v_view_price
+  SET troll_coins = troll_coins - v_view_price
   WHERE id = p_viewer_id;
 
   -- Add coins to profile owner
   UPDATE user_profiles
-  SET paid_coin_balance = paid_coin_balance + v_view_price
+  SET troll_coins = troll_coins + v_view_price
   WHERE id = p_profile_owner_id;
 
   -- Record transaction

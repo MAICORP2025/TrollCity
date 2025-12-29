@@ -40,7 +40,7 @@ export default function PayoutRequest() {
       }
       
       if (num > balance) {
-        toast.error("You don't have that many paid coins.");
+        toast.error("You don't have that many troll_coins.");
         return;
       }
       
@@ -98,7 +98,7 @@ export default function PayoutRequest() {
 
       <div className="bg-[#1A1A1A] border-2 border-purple-500/30 rounded-xl p-6 space-y-4">
         <div>
-          <p className="text-sm opacity-70 mb-1">Paid Coins Available</p>
+          <p className="text-sm opacity-70 mb-1">troll_coins Available</p>
           <p className="text-2xl font-bold text-purple-300">
             {balance.toLocaleString()}
           </p>

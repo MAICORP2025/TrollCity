@@ -94,7 +94,7 @@ Comprehensive earnings tracking and payout management system for TrollCity, incl
 **File:** `src/pages/Withdraw.tsx`
 
 **Features:**
-- Display current withdrawable balance (paid_coin_balance)
+- Display current withdrawable balance (troll_coins)
 - Minimum withdrawal: 10,000 coins ($100)
 - Submit payout request to `payout_requests` table
 - Uses `coins_redeemed` and `cash_amount` columns

@@ -3,8 +3,8 @@
 -- Purpose: Document the frontend TypeScript/TSX migration from old to new coin balance column names
 --
 -- This migration serves as documentation for the corresponding frontend changes made to support:
--- - troll_coins_balance → troll_coins
--- - free_coin_balance → trollmonds
+-- - Troll_coins → troll_coins
+-- - troll_coins → trollmonds
 --
 -- =====================================================
 -- FRONTEND FILES UPDATED

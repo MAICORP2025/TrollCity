@@ -56,7 +56,7 @@ BEGIN
     -- Award coins
     UPDATE public.user_profiles
     SET 
-      paid_coin_balance = COALESCE(paid_coin_balance, 0) + v_coins_awarded,
+      troll_coins = COALESCE(troll_coins, 0) + v_coins_awarded,
       last_birthday_coins_awarded = v_today,
       updated_at = NOW()
     WHERE id = p_user_id;

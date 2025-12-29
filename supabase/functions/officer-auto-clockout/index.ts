@@ -120,15 +120,15 @@ Deno.serve(async (req) => {
         // Add coins to balance
         const { data: currentProfile } = await supabase
           .from("user_profiles")
-          .select("free_coin_balance")
+          .select("troll_coins")
           .eq("id", assignment.officer_id)
           .single();
 
-        const currentBalance = currentProfile?.free_coin_balance || 0;
+        const currentBalance = currentProfile?.troll_coins || 0;
         await supabase
           .from("user_profiles")
           .update({
-            free_coin_balance: currentBalance + coinsEarned
+            troll_coins: currentBalance + coinsEarned
           })
           .eq("id", assignment.officer_id);
       }

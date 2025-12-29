@@ -97,16 +97,16 @@ export default function VerificationPage() {
   const payWithCoins = async () => {
     if (processing) return
 
-    const paidCoins = profile?.troll_coins || 0
-    if (paidCoins < 500) {
-      toast.error('You need 500 paid coins to verify. You have ' + paidCoins)
+    const troll_coins = profile?.troll_coins || 0
+    if (troll_coins < 500) {
+      toast.error('You need 500 troll_coins to verify. You have ' + troll_coins)
       return
     }
 
     setProcessing('coins')
     try {
-      // Check if deduct_paid_coins RPC exists, otherwise use direct update
-      const { error: deductError } = await supabase.rpc('deduct_paid_coins', {
+      // Check if deduct_troll_coins RPC exists, otherwise use direct update
+      const { error: deductError } = await supabase.rpc('deduct_troll_coins', {
         p_user_id: user.id,
         p_amount: 500
       })
@@ -120,7 +120,7 @@ export default function VerificationPage() {
           .single()
 
         if ((currentProfile?.troll_coins || 0) < 500) {
-          throw new Error('Insufficient paid coins')
+          throw new Error('Insufficient troll_coins')
         }
 
         await supabase
@@ -162,8 +162,11 @@ export default function VerificationPage() {
     }
   }
 
-  const paidCoins = profile?.troll_coins || 0
-  const canPayWithCoins = paidCoins >= 500
+  const troll_coins = profile?.troll_coins || 0
+  const canPayWithCoins = troll_coins >= 500
+  const handleSkip = () => {
+    navigate('/messages')
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
@@ -208,15 +211,27 @@ export default function VerificationPage() {
               <Coins className="w-5 h-5" />
               {processing === 'coins' 
                 ? 'Processing...' 
-                : `Pay 500 Paid Coins ${canPayWithCoins ? `(You have ${paidCoins})` : `(Need ${500 - paidCoins} more)`}`
+                : `Pay 500 troll_coins ${canPayWithCoins ? `(You have ${troll_coins})` : `(Need ${500 - troll_coins} more)`}`
               }
             </button>
             {!canPayWithCoins && (
               <p className="text-xs text-red-400 mt-2 text-center">
-                Insufficient paid coins. You need 500, but only have {paidCoins}.
+                Insufficient troll_coins. You need 500, but only have {troll_coins}.
               </p>
             )}
           </div>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-2 items-center">
+          <p className="text-xs text-gray-400 text-center">
+            Not ready to verify yet? You can still access Messages and grab it later from the store.
+          </p>
+          <button
+            onClick={handleSkip}
+            className="px-6 py-3 bg-white text-black rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+          >
+            Not right now — Take me to Messages
+          </button>
         </div>
 
         <p className="text-xs opacity-60 mt-6 text-center">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { getLevelConfig, formatOWC, convertOWCToPaidCoins } from '../lib/officerOWC'
+import { getLevelConfig, formatOWC, convertOWCTotroll_coins } from '../lib/officerOWC'
 import { Coins, TrendingUp, Clock, ArrowRight, RefreshCw } from 'lucide-react'
 
 interface OWCTransaction {
@@ -11,7 +11,7 @@ interface OWCTransaction {
   transaction_type: string
   source: string
   conversion_rate: number | null
-  paid_coins_received: number | null
+  troll_coins_received: number | null
   created_at: string
 }
 
@@ -100,8 +100,8 @@ export default function OfficerOWCDashboard() {
       }
 
       toast.success(
-        `Converted ${formatOWC(amount)} to ${result.total_paid_coins.toLocaleString()} paid coins! ` +
-        `(${result.base_paid_coins.toLocaleString()} base + ${result.bonus_coins.toLocaleString()} bonus)`
+        `Converted ${formatOWC(amount)} to ${result.total_troll_coins.toLocaleString()} troll_coins! ` +
+        `(${result.base_troll_coins.toLocaleString()} base + ${result.bonus_coins.toLocaleString()} bonus)`
       )
 
       setConvertAmount('')
@@ -115,7 +115,7 @@ export default function OfficerOWCDashboard() {
     }
   }
 
-  const estimatedPaidCoins = convertOWCToPaidCoins(parseInt(convertAmount.replace(/[^\d]/g, '')) || 0, officerLevel)
+  const estimatedtroll_coins = convertOWCTotroll_coins(parseInt(convertAmount.replace(/[^\d]/g, '')) || 0, officerLevel)
   
   if (!user || (!isOfficer && !isAdmin)) {
     return (
@@ -140,7 +140,7 @@ export default function OfficerOWCDashboard() {
             <div className="space-y-1 text-sm text-gray-300">
               <p>OWC per Hour: <span className="font-semibold text-purple-400">{formatOWC(levelConfig.owcPerHour)}</span></p>
               <p>Conversion Rate: <span className="font-semibold text-purple-400">{(levelConfig.conversionRate * 100).toFixed(1)}%</span></p>
-              <p>Final Paid Coins/hr: <span className="font-semibold text-green-400">{levelConfig.finalPaidCoinsPerHour.toLocaleString()}</span> (with 10% bonus)</p>
+              <p>Final troll_coins/hr: <span className="font-semibold text-green-400">{levelConfig.finaltroll_coinsPerHour.toLocaleString()}</span> (with 10% bonus)</p>
             </div>
           </div>
           <div className="text-6xl">{levelConfig.badgeEmoji}</div>
@@ -171,14 +171,14 @@ export default function OfficerOWCDashboard() {
             <span className="text-sm text-gray-400">Estimated Value</span>
           </div>
           <div className="text-2xl font-bold text-green-400">
-            {convertOWCToPaidCoins(owcBalance, officerLevel).toLocaleString()} paid coins
+            {convertOWCTotroll_coins(owcBalance, officerLevel).toLocaleString()} troll_coins
           </div>
         </div>
       </div>
 
       {/* Conversion Section */}
       <div className="bg-black/60 border border-purple-600/30 rounded-xl p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">Convert OWC to Paid Coins</h2>
+        <h2 className="text-xl font-bold mb-4">Convert OWC to troll_coins</h2>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold mb-2">OWC Amount to Convert</label>
@@ -192,7 +192,7 @@ export default function OfficerOWCDashboard() {
             {convertAmount && (
               <p className="text-sm text-gray-400 mt-2">
                 Will convert to approximately <span className="font-semibold text-green-400">
-                  {estimatedPaidCoins.toLocaleString()} paid coins
+                  {estimatedtroll_coins.toLocaleString()} troll_coins
                 </span> (with 10% bonus)
               </p>
             )}
@@ -210,7 +210,7 @@ export default function OfficerOWCDashboard() {
             ) : (
               <>
                 <ArrowRight className="w-5 h-5" />
-                Convert to Paid Coins
+                Convert to troll_coins
               </>
             )}
           </button>
@@ -248,9 +248,9 @@ export default function OfficerOWCDashboard() {
                   }`}>
                     {tx.amount > 0 ? '+' : ''}{formatOWC(Math.abs(tx.amount))}
                   </div>
-                  {tx.paid_coins_received && (
+                  {tx.troll_coins_received && (
                     <div className="text-sm text-purple-400">
-                      → {tx.paid_coins_received.toLocaleString()} paid coins
+                      → {tx.troll_coins_received.toLocaleString()} troll_coins
                     </div>
                   )}
                 </div>

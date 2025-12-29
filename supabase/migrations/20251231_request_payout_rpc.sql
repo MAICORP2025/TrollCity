@@ -18,7 +18,7 @@ DECLARE
   v_conversion_rate numeric := 0.003; -- Approximate rate: $21 for 7000 coins
 BEGIN
   -- Get current paid coin balance
-  SELECT paid_coin_balance INTO v_current_balance
+  SELECT troll_coins INTO v_current_balance
   FROM user_profiles
   WHERE id = p_user_id;
 

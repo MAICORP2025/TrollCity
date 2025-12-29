@@ -1356,7 +1356,7 @@ export default function Profile() {
   const displayTier = getTierFromXP(displayXP)
   const displayTotalEarned = displayProfile?.total_earned_coins || 0
   const displaytroll_coins = displayProfile?.troll_coins || 0
-  const displaytrollmonds = displayProfile?.free_coin_balance || 0
+  const displaytrollmonds = displayProfile?.troll_coins || 0
   const canModerateProfile = Boolean(isViewingOtherUser && (isAdminViewer || isLeadOfficerViewer))
   const targetIsBanned = Boolean(displayProfile?.is_banned)
   const targetIsDisabled = Boolean(displayProfile?.account_deleted_at)

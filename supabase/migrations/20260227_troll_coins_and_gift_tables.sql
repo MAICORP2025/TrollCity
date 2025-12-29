@@ -1,6 +1,6 @@
 BEGIN;
 
--- Ensure troll_coins column exists and mirrors troll_coin_balance
+-- Ensure troll_coins column exists and mirrors troll_troll_coins
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -14,7 +14,7 @@ END;
 $$;
 
 UPDATE user_profiles
-SET troll_coins = COALESCE(troll_coins, paid_coin_balance, 0);
+SET troll_coins = COALESCE(troll_coins, troll_coins, 0);
 
 CREATE OR REPLACE FUNCTION sync_troll_coins_paid_balance()
 RETURNS TRIGGER
@@ -25,14 +25,14 @@ DECLARE
 BEGIN
   base_balance := COALESCE(
     NEW.troll_coins,
-    NEW.paid_coin_balance,
+    NEW.troll_coins,
     OLD.troll_coins,
-    OLD.paid_coin_balance,
+    OLD.troll_coins,
     0
   );
 
   NEW.troll_coins := base_balance;
-  NEW.paid_coin_balance := base_balance;
+  NEW.troll_coins := base_balance;
 
   RETURN NEW;
 END;

@@ -32,7 +32,7 @@ interface WalletData {
     usd: string
   }
   adminBalance: {
-    paidCoins: number
+    troll_coins: number
     freeCoins: number
     totalCoins: number
     valueUSD: string
@@ -146,8 +146,8 @@ const PlatformWallet = () => {
         <h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-1">Admin Account</h3>
         
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <p className="text-gray-300">👑 Paid Coins:</p>
-          <p className="text-right font-semibold">{wallet.adminBalance.paidCoins.toLocaleString()} coins</p>
+          <p className="text-gray-300">👑 troll_coins:</p>
+          <p className="text-right font-semibold">{wallet.adminBalance.troll_coins.toLocaleString()} coins</p>
           
           <p className="text-gray-300">🎫 Free Coins:</p>
           <p className="text-right font-semibold">{wallet.adminBalance.freeCoins.toLocaleString()} coins</p>

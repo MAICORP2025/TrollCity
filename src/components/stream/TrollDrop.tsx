@@ -66,7 +66,7 @@ export default function TrollDrop({ drop, onExpire, onClaimSuccess }: TrollDropP
           toast.error(result.error || 'Failed to claim reward');
         }
       } else {
-        const balanceCheck = (profile.free_coin_balance || 0);
+        const balanceCheck = (profile.troll_coins || 0);
         if (balanceCheck < Math.floor(amountPerUser)) {
           toast.error('Not enough Trollmonds to click the red troll!');
           setIsProcessing(false);

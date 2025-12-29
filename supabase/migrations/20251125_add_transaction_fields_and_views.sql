@@ -36,10 +36,10 @@ CREATE OR REPLACE VIEW public.v_broadcaster_balances AS
 SELECT
   u.id as broadcaster_id,
   u.username,
-  COALESCE(SUM(ct.amount),0) FILTER (WHERE ct.type = 'gift_receive' AND ct.coin_type = 'paid') AS paid_coins_received
+  COALESCE(SUM(ct.amount),0) FILTER (WHERE ct.type = 'gift_receive' AND ct.coin_type = 'paid') AS troll_coins_received
 FROM public.user_profiles u
 LEFT JOIN public.coin_transactions ct ON ct.user_id = u.id
 GROUP BY u.id, u.username
-ORDER BY paid_coins_received DESC;
+ORDER BY troll_coins_received DESC;
 
 COMMIT;

@@ -67,7 +67,7 @@ export default function ShopDashboard() {
           .update({
             name: formData.name,
             description: formData.description,
-            price_paid_coins: price,
+            price_troll_coins: price,
             updated_at: new Date().toISOString()
           })
           .eq('id', editProduct.id)
@@ -82,7 +82,7 @@ export default function ShopDashboard() {
             shop_id: shop.id,
             name: formData.name,
             description: formData.description,
-            price_paid_coins: price
+            price_troll_coins: price
           }])
         
         if (error) throw error
@@ -103,7 +103,7 @@ export default function ShopDashboard() {
     setFormData({
       name: prod.name,
       description: prod.description || '',
-      price: prod.price_paid_coins.toString()
+      price: prod.price_troll_coins.toString()
     })
     setIsEditing(true)
   }
@@ -215,7 +215,7 @@ export default function ShopDashboard() {
                   <div>
                     <h3 className="font-bold text-lg">{prod.name}</h3>
                     <p className="text-gray-400 text-sm mb-1">{prod.description}</p>
-                    <p className="text-yellow-400 font-semibold">{prod.price_paid_coins.toLocaleString()} Troll Coins</p>
+                    <p className="text-yellow-400 font-semibold">{prod.price_troll_coins.toLocaleString()} Troll Coins</p>
                   </div>
                   <div className="flex gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
                     <button

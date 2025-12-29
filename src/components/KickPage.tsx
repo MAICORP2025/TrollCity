@@ -83,7 +83,7 @@ export default function KickPage({ onClose, kickCount = 1 }: KickPageProps) {
               Re-enter Troll City
             </h3>
             <p className="text-sm text-gray-300 mb-3">
-              Pay <strong className="text-yellow-400">250 paid coins</strong> to re-enter the app.
+              Pay <strong className="text-yellow-400">250 troll_coins</strong> to re-enter the app.
             </p>
             <button className={`w-full py-3 rounded-lg font-semibold transition-colors ${
               isLastWarning 

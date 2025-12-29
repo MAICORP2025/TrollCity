@@ -77,10 +77,10 @@ CREATE OR REPLACE FUNCTION process_referral_rewards()
 RETURNS TRIGGER AS $$
 DECLARE
     referral_record RECORD;
-    current_paid_coins BIGINT;
+    current_troll_coins BIGINT;
 BEGIN
-    -- Only process if paid_coins increased
-    IF NEW.paid_coins > OLD.paid_coins THEN
+    -- Only process if troll_coins increased
+    IF NEW.troll_coins > OLD.troll_coins THEN
         -- Check if this user was referred
         SELECT * INTO referral_record
         FROM referrals
@@ -89,13 +89,13 @@ BEGIN
         AND deadline > NOW();
 
         IF FOUND THEN
-            -- Get current total paid coins
-            SELECT COALESCE(SUM(paid_coins), 0) INTO current_paid_coins
+            -- Get current total troll_coins
+            SELECT COALESCE(SUM(troll_coins), 0) INTO current_troll_coins
             FROM wallets
             WHERE user_id = NEW.user_id;
 
-            -- Check if they reached 40,000 paid coins
-            IF current_paid_coins >= 40000 THEN
+            -- Check if they reached 40,000 troll_coins
+            IF current_troll_coins >= 40000 THEN
                 -- Mark referral as completed
                 UPDATE referrals
                 SET reward_status = 'completed', updated_at = NOW()
@@ -106,11 +106,11 @@ BEGIN
                 VALUES (referral_record.referrer_id, NEW.user_id, 10000);
 
                 -- Add coins to referrer's wallet
-                INSERT INTO wallets (user_id, paid_coins, updated_at)
+                INSERT INTO wallets (user_id, troll_coins, updated_at)
                 VALUES (referral_record.referrer_id, 10000, NOW())
                 ON CONFLICT (user_id)
                 DO UPDATE SET
-                    paid_coins = wallets.paid_coins + 10000,
+                    troll_coins = wallets.troll_coins + 10000,
                     updated_at = NOW();
 
                 -- Log the transaction

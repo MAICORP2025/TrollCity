@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
           // Get current recruiter balance
           const { data: recruiterProfile, error: balanceError } = await supabase
             .from('user_profiles')
-            .select('paid_coin_balance')
+            .select('troll_coins')
             .eq('id', recruiter_id)
             .single()
           
@@ -128,13 +128,13 @@ Deno.serve(async (req) => {
             continue
           }
           
-          const currentBalance = recruiterProfile?.paid_coin_balance || 0
+          const currentBalance = recruiterProfile?.troll_coins || 0
           const newBalance = currentBalance + bonusAmount
           
-          // Update recruiter's troll_coin_balance
+          // Update recruiter's troll_troll_coins
           const { error: updateError } = await supabase
             .from('user_profiles')
-            .update({ paid_coin_balance: newBalance })
+            .update({ troll_coins: newBalance })
             .eq('id', recruiter_id)
           
           if (updateError) {
@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
               referred_user_id,
               month: currentMonth,
               coins_earned: monthlyCoins,
-              bonus_paid_coins: bonusAmount
+              bonus_troll_coins: bonusAmount
             })
           
           if (bonusError) {
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
             // Rollback balance update if possible
             await supabase
               .from('user_profiles')
-              .update({ paid_coin_balance: currentBalance })
+              .update({ troll_coins: currentBalance })
               .eq('id', recruiter_id)
             continue
           }

@@ -26,7 +26,7 @@ export default function PartnerProgram() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Eligibility</h2>
             <p className="text-gray-300 leading-relaxed">
-              Partners must apply and pay a one-time fee ($15 or 1500 paid coins) to join. Only approved
+              Partners must apply and pay a one-time fee ($15 or 1500 troll_coins) to join. Only approved
               partners can earn referral bonuses.
             </p>
           </section>
@@ -35,7 +35,7 @@ export default function PartnerProgram() {
             <h2 className="text-2xl font-semibold mb-4">Referral Bonus</h2>
             <p className="text-gray-300 leading-relaxed">
               Partners earn 5% of a referred user's earned coins once that user reaches 40,000 coins in a
-              calendar month. Bonuses are paid in paid coins (not cash withdrawable).
+              calendar month. Bonuses are paid in troll_coins (not cash withdrawable).
             </p>
           </section>
 

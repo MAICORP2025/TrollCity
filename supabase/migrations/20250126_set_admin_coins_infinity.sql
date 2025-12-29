@@ -1,6 +1,6 @@
 -- Set admin coin amounts to infinity (high number)
 UPDATE user_profiles
-SET free_coin_balance = 999999999,
+SET troll_coins = 999999999,
     total_earned_coins = 999999999
 WHERE role = 'admin';
 

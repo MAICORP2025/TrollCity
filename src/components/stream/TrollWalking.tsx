@@ -54,10 +54,10 @@ export default function TrollWalking({ streamId, userId, onCaught }: TrollWalkin
 
       // Instantly update local profile balance
       if (profile) {
-        const newBalance = (profile.free_coin_balance || 0) + coins
+        const newBalance = (profile.troll_coins || 0) + coins
         setProfile({
           ...profile,
-          free_coin_balance: newBalance,
+          troll_coins: newBalance,
         })
       }
 

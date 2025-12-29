@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS admin_gift_totals (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   admin_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
-  total_paid_coins BIGINT DEFAULT 0,
+  total_troll_coins BIGINT DEFAULT 0,
   last_gift_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS royal_family_history (
 
 -- 7. Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_admin_gift_totals_user_admin ON admin_gift_totals(user_id, admin_id);
-CREATE INDEX IF NOT EXISTS idx_admin_gift_totals_total_coins ON admin_gift_totals(total_paid_coins DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_gift_totals_total_coins ON admin_gift_totals(total_troll_coins DESC);
 CREATE INDEX IF NOT EXISTS idx_royal_family_titles_user_admin ON royal_family_titles(user_id, admin_id);
 CREATE INDEX IF NOT EXISTS idx_royal_family_titles_active ON royal_family_titles(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_royal_family_perks_title ON royal_family_perks(title_id);
@@ -152,7 +152,7 @@ CREATE POLICY "Admins can view all history"
 CREATE OR REPLACE FUNCTION process_admin_gift(
   p_gifter_id UUID,
   p_admin_id UUID,
-  p_paid_coins BIGINT
+  p_troll_coins BIGINT
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -177,14 +177,14 @@ BEGIN
   END IF;
 
   -- Update or insert gift total
-  INSERT INTO admin_gift_totals (user_id, admin_id, total_paid_coins, last_gift_at, updated_at)
-  VALUES (p_gifter_id, p_admin_id, p_paid_coins, NOW(), NOW())
+  INSERT INTO admin_gift_totals (user_id, admin_id, total_troll_coins, last_gift_at, updated_at)
+  VALUES (p_gifter_id, p_admin_id, p_troll_coins, NOW(), NOW())
   ON CONFLICT (user_id, admin_id)
   DO UPDATE SET
-    total_paid_coins = admin_gift_totals.total_paid_coins + p_paid_coins,
+    total_troll_coins = admin_gift_totals.total_troll_coins + p_troll_coins,
     last_gift_at = NOW(),
     updated_at = NOW()
-  RETURNING total_paid_coins INTO v_current_total;
+  RETURNING total_troll_coins INTO v_current_total;
 
   -- Check if gifter qualifies for royal title (50k threshold)
   IF v_current_total >= v_threshold THEN
@@ -200,8 +200,8 @@ BEGIN
     -- Find the user with the highest total now
     SELECT agt.user_id INTO v_new_title_holder
     FROM admin_gift_totals agt
-    WHERE agt.admin_id = p_admin_id AND agt.total_paid_coins >= v_threshold
-    ORDER BY agt.total_paid_coins DESC
+    WHERE agt.admin_id = p_admin_id AND agt.total_troll_coins >= v_threshold
+    ORDER BY agt.total_troll_coins DESC
     LIMIT 1;
 
     -- If the top gifter changed, transfer the title
@@ -369,7 +369,7 @@ BEGIN
         jsonb_build_object(
           'user_id', wf.user_id,
           'username', wf_up.username,
-          'total_coins', agt_wife.total_paid_coins,
+          'total_coins', agt_wife.total_troll_coins,
           'duration_days', wf.duration_days,
           'assigned_at', wf.assigned_at
         )
@@ -379,7 +379,7 @@ BEGIN
         jsonb_build_object(
           'user_id', hm.user_id,
           'username', hm_up.username,
-          'total_coins', agt_husband.total_paid_coins,
+          'total_coins', agt_husband.total_troll_coins,
           'duration_days', hm.duration_days,
           'assigned_at', hm.assigned_at
         )
@@ -389,14 +389,14 @@ BEGIN
         jsonb_build_object(
           'user_id', agt.user_id,
           'username', up_gift.username,
-          'total_coins', agt.total_paid_coins,
+          'total_coins', agt.total_troll_coins,
           'gender', up_gift.gender,
           'last_gift_at', agt.last_gift_at
         )
       ) FROM (
         SELECT * FROM admin_gift_totals
-        WHERE admin_id = up.id AND total_paid_coins >= 50000
-        ORDER BY total_paid_coins DESC
+        WHERE admin_id = up.id AND total_troll_coins >= 50000
+        ORDER BY total_troll_coins DESC
         LIMIT 10
       ) agt
       LEFT JOIN user_profiles up_gift ON agt.user_id = up_gift.id
@@ -431,7 +431,7 @@ BEGIN
         jsonb_build_object(
           'user_id', wf.user_id,
           'username', wf_up.username,
-          'total_coins', agt_wife.total_paid_coins,
+          'total_coins', agt_wife.total_troll_coins,
           'duration_days', wf.duration_days,
           'assigned_at', wf.assigned_at
         )
@@ -441,7 +441,7 @@ BEGIN
         jsonb_build_object(
           'user_id', hm.user_id,
           'username', hm_up.username,
-          'total_coins', agt_husband.total_paid_coins,
+          'total_coins', agt_husband.total_troll_coins,
           'duration_days', hm.duration_days,
           'assigned_at', hm.assigned_at
         )
@@ -451,14 +451,14 @@ BEGIN
         jsonb_build_object(
           'user_id', agt.user_id,
           'username', up_gift.username,
-          'total_coins', agt.total_paid_coins,
+          'total_coins', agt.total_troll_coins,
           'gender', up_gift.gender,
           'last_gift_at', agt.last_gift_at
         )
       ) FROM (
         SELECT * FROM admin_gift_totals
-        WHERE admin_id = p_admin_id AND total_paid_coins >= 50000
-        ORDER BY total_paid_coins DESC
+        WHERE admin_id = p_admin_id AND total_troll_coins >= 50000
+        ORDER BY total_troll_coins DESC
         LIMIT 10
       ) agt
       LEFT JOIN user_profiles up_gift ON agt.user_id = up_gift.id
@@ -578,7 +578,7 @@ SELECT
   rft.*,
   up.username,
   up.avatar_url,
-  agt.total_paid_coins,
+  agt.total_troll_coins,
   agt.last_gift_at
 FROM royal_family_titles rft
 LEFT JOIN user_profiles up ON rft.user_id = up.id
@@ -592,11 +592,11 @@ SELECT
   up.username,
   up.avatar_url,
   up.gender,
-  ROW_NUMBER() OVER (PARTITION BY agt.admin_id ORDER BY agt.total_paid_coins DESC) as rank
+  ROW_NUMBER() OVER (PARTITION BY agt.admin_id ORDER BY agt.total_troll_coins DESC) as rank
 FROM admin_gift_totals agt
 LEFT JOIN user_profiles up ON agt.user_id = up.id
-WHERE agt.total_paid_coins >= 50000
-ORDER BY agt.admin_id, agt.total_paid_coins DESC;
+WHERE agt.total_troll_coins >= 50000
+ORDER BY agt.admin_id, agt.total_troll_coins DESC;
 
 GRANT SELECT ON current_royal_family TO authenticated;
 GRANT SELECT ON royal_family_leaderboard TO authenticated;

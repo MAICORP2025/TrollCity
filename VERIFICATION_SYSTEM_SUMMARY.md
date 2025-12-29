@@ -15,7 +15,7 @@
 - **`verify-user-complete`** - Completes PayPal payment and verifies user
 
 ### 3. Frontend Pages
-- **`/verify`** - Verification purchase page (PayPal $5 or 500 paid coins)
+- **`/verify`** - Verification purchase page (PayPal $5 or 500 troll_coins)
 - **`/verify/complete`** - PayPal callback handler
 - **`/admin/verified-users`** - Admin panel to manage verified users
 
@@ -37,7 +37,7 @@
    - Completes on callback
    - Calls `verify_user()` RPC
 
-2. **Coins**: 500 paid coins
+2. **Coins**: 500 troll_coins
    - Checks balance
    - Deducts coins
    - Calls `verify_user()` RPC

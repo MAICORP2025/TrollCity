@@ -20,7 +20,7 @@ export default function PayoutPolicy() {
           To be eligible for payouts, you must meet all of the following requirements:
         </p>
         <ul>
-          <li>Hold at least <strong>7,000 Paid Coins</strong> in your account</li>
+          <li>Hold at least <strong>7,000 troll_coins</strong> in your account</li>
           <li>Complete identity verification (KYC/ID check)</li>
           <li>Submit required tax forms (W-9 for US users, or equivalent for international)</li>
           <li>Have a verified PayPal email address on file</li>
@@ -34,7 +34,7 @@ export default function PayoutPolicy() {
         </p>
         <ol>
           <li><strong>Request Submission:</strong> Submit a payout request through
-            your account dashboard with the amount of Paid Coins you wish to cash out</li>
+            your account dashboard with the amount of troll_coins you wish to cash out</li>
           <li><strong>Review Period:</strong> All requests are reviewed by our admin
             team, typically within 3-5 business days</li>
           <li><strong>Approval:</strong> Approved payouts are processed manually via
@@ -45,7 +45,7 @@ export default function PayoutPolicy() {
 
         <h2>3. Conversion Rate</h2>
         <p>
-          Current conversion rate: <strong>100 Paid Coins = $1.00 USD</strong>
+          Current conversion rate: <strong>100 troll_coins = $1.00 USD</strong>
         </p>
         <p>
           This rate may be adjusted at any time. You will be notified of rate changes
@@ -55,7 +55,7 @@ export default function PayoutPolicy() {
 
         <h2>4. Minimum and Maximum Payouts</h2>
         <ul>
-          <li><strong>Minimum:</strong> 7,000 Paid Coins ($70 USD)</li>
+          <li><strong>Minimum:</strong> 7,000 troll_coins ($70 USD)</li>
           <li><strong>Maximum per request:</strong> No maximum, but large payouts
             may require additional verification</li>
           <li><strong>Frequency:</strong> You may submit one payout request at a time.

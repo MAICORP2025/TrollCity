@@ -59,21 +59,21 @@ DECLARE
   v_target_kick_count integer;
   v_result jsonb;
 BEGIN
-  -- Check if kicker has enough paid coins
-  SELECT paid_coin_balance INTO v_kicker_balance
+  -- Check if kicker has enough troll_coins
+  SELECT troll_coins INTO v_kicker_balance
   FROM user_profiles
   WHERE id = p_kicker_user_id;
 
   IF v_kicker_balance < v_kick_cost THEN
     RETURN jsonb_build_object(
       'success', false,
-      'error', 'Insufficient paid coins. Need 500 paid coins to kick a user.'
+      'error', 'Insufficient troll_coins. Need 500 troll_coins to kick a user.'
     );
   END IF;
 
   -- Deduct coins from kicker
   UPDATE user_profiles
-  SET paid_coin_balance = paid_coin_balance - v_kick_cost
+  SET troll_coins = troll_coins - v_kick_cost
   WHERE id = p_kicker_user_id;
 
   -- Get current kick count
@@ -116,7 +116,7 @@ BEGIN
     'success', true,
     'kicked', true,
     'kick_count', v_target_kick_count + 1,
-    'message', 'User kicked. They can pay 250 paid coins to re-enter.'
+    'message', 'User kicked. They can pay 250 troll_coins to re-enter.'
   );
 END;
 $$;
@@ -135,7 +135,7 @@ DECLARE
   v_kick_count integer;
 BEGIN
   -- Check if user is kicked
-  SELECT is_kicked, kick_count, paid_coin_balance INTO v_is_kicked, v_kick_count, v_user_balance
+  SELECT is_kicked, kick_count, troll_coins INTO v_is_kicked, v_kick_count, v_user_balance
   FROM user_profiles
   WHERE id = p_user_id;
 
@@ -146,11 +146,11 @@ BEGIN
     );
   END IF;
 
-  -- Check if user has enough paid coins
+  -- Check if user has enough troll_coins
   IF v_user_balance < v_reentry_fee THEN
     RETURN jsonb_build_object(
       'success', false,
-      'error', 'Insufficient paid coins. Need 250 paid coins to re-enter.'
+      'error', 'Insufficient troll_coins. Need 250 troll_coins to re-enter.'
     );
   END IF;
 
@@ -165,7 +165,7 @@ BEGIN
   -- Deduct re-entry fee
   UPDATE user_profiles
   SET 
-    paid_coin_balance = paid_coin_balance - v_reentry_fee,
+    troll_coins = troll_coins - v_reentry_fee,
     is_kicked = false,
     kicked_until = NULL
   WHERE id = p_user_id;
@@ -197,7 +197,7 @@ DECLARE
   v_restoration_fee integer := 2000; -- $20 = 2000 coins
 BEGIN
   -- Check if user is banned and needs account reset
-  SELECT paid_coin_balance INTO v_user_balance
+  SELECT troll_coins INTO v_user_balance
   FROM user_profiles
   WHERE id = p_user_id
   AND is_banned = true
@@ -210,19 +210,19 @@ BEGIN
     );
   END IF;
 
-  -- Check if user has enough paid coins
+  -- Check if user has enough troll_coins
   IF v_user_balance < v_restoration_fee THEN
     RETURN jsonb_build_object(
       'success', false,
-      'error', 'Insufficient paid coins. Need 2000 paid coins ($20) to restore account.'
+      'error', 'Insufficient troll_coins. Need 2000 troll_coins ($20) to restore account.'
     );
   END IF;
 
   -- Reset account and unban
   UPDATE user_profiles
   SET 
-    paid_coin_balance = paid_coin_balance - v_restoration_fee,
-    free_coin_balance = 0,
+    troll_coins = troll_coins - v_restoration_fee,
+    troll_coins = 0,
     xp = 0,
     level = 0,
     is_banned = false,
@@ -256,21 +256,21 @@ DECLARE
 BEGIN
   -- Check if user wants to pay early fee
   IF p_pay_early_fee THEN
-    SELECT paid_coin_balance INTO v_user_balance
+    SELECT troll_coins INTO v_user_balance
     FROM user_profiles
     WHERE id = p_user_id;
 
     IF v_user_balance < v_early_fee THEN
       RETURN jsonb_build_object(
         'success', false,
-        'error', 'Insufficient paid coins. Need 500 paid coins ($5) to skip cooldown.'
+        'error', 'Insufficient troll_coins. Need 500 troll_coins ($5) to skip cooldown.'
       );
     END IF;
 
     -- Deduct fee and allow immediate deletion
     UPDATE user_profiles
     SET 
-      paid_coin_balance = paid_coin_balance - v_early_fee,
+      troll_coins = troll_coins - v_early_fee,
       account_deleted_at = now()
     WHERE id = p_user_id;
 
@@ -302,8 +302,8 @@ $$;
 
 -- Add comment
 COMMENT ON TABLE kick_logs IS 'Logs of all kick actions with costs and re-entry fees';
-COMMENT ON FUNCTION kick_user IS 'Kicks a user from the app. Costs 500 paid coins. After 3 kicks, user is auto-banned.';
-COMMENT ON FUNCTION pay_kick_reentry_fee IS 'Allows kicked user to pay 250 paid coins to re-enter (max 3 times)';
+COMMENT ON FUNCTION kick_user IS 'Kicks a user from the app. Costs 500 troll_coins. After 3 kicks, user is auto-banned.';
+COMMENT ON FUNCTION pay_kick_reentry_fee IS 'Allows kicked user to pay 250 troll_coins to re-enter (max 3 times)';
 COMMENT ON FUNCTION pay_ban_restoration_fee IS 'Allows banned user to pay $20 (2000 coins) to restore account with reset';
 COMMENT ON FUNCTION delete_user_account IS 'Deletes user account with 7-day cooldown or $5 early fee';
 

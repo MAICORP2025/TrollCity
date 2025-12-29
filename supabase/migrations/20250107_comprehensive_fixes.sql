@@ -1,25 +1,30 @@
 -- Comprehensive fixes for Troll City application
 -- This migration ensures all required tables exist and are properly configured
 
--- 1. Ensure applications table has all required columns
-DO $$ 
-BEGIN
-  -- Add type column if it doesn't exist
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'applications' AND column_name = 'type'
-  ) THEN
-    ALTER TABLE applications ADD COLUMN type TEXT;
-  END IF;
+ -- 1. Ensure applications table has all required columns (skip if table not created yet)
+ DO $$ 
+ BEGIN
+   IF EXISTS (
+     SELECT 1 FROM information_schema.tables 
+     WHERE table_schema = 'public' AND table_name = 'applications'
+   ) THEN
+     -- Add type column if it doesn't exist
+     IF NOT EXISTS (
+       SELECT 1 FROM information_schema.columns 
+       WHERE table_name = 'applications' AND column_name = 'type'
+     ) THEN
+       ALTER TABLE applications ADD COLUMN type TEXT;
+     END IF;
 
-  -- Add data JSONB column if it doesn't exist
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'applications' AND column_name = 'data'
-  ) THEN
-    ALTER TABLE applications ADD COLUMN data JSONB;
-  END IF;
-END $$;
+     -- Add data JSONB column if it doesn't exist
+     IF NOT EXISTS (
+       SELECT 1 FROM information_schema.columns 
+       WHERE table_name = 'applications' AND column_name = 'data'
+     ) THEN
+       ALTER TABLE applications ADD COLUMN data JSONB;
+     END IF;
+   END IF;
+ END $$;
 
 -- 1.5. Ensure streams table has testing mode and thumbnail columns
 DO $$ 
@@ -38,6 +43,18 @@ BEGIN
     WHERE table_name = 'streams' AND column_name = 'thumbnail_url'
   ) THEN
     ALTER TABLE streams ADD COLUMN thumbnail_url TEXT;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'streams' AND column_name = 'is_live'
+  ) THEN
+    ALTER TABLE streams ADD COLUMN is_live BOOLEAN DEFAULT TRUE;
+    UPDATE streams SET is_live = (status = 'live') WHERE is_live IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_streams_is_live ON streams(is_live);
   END IF;
 END $$;
 
@@ -118,62 +135,81 @@ BEGIN
   END IF;
 END $$;
 
+
 -- 5. Create RPC function to approve lead officer application
-CREATE OR REPLACE FUNCTION approve_lead_officer_application(
-  p_application_id UUID,
-  p_reviewer_id UUID
-) RETURNS JSONB AS $$
-DECLARE
-  v_user_id UUID;
-  v_app_type TEXT;
+DO $$
 BEGIN
-  -- Get application details
-  SELECT user_id, type INTO v_user_id, v_app_type
-  FROM applications
-  WHERE id = p_application_id AND status = 'pending';
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'applications'
+  ) THEN
+    EXECUTE $sql$
+    CREATE OR REPLACE FUNCTION approve_lead_officer_application(
+      p_application_id UUID,
+      p_reviewer_id UUID
+    ) RETURNS JSONB AS $fn$
+    DECLARE
+      v_user_id UUID;
+      v_app_type TEXT;
+    BEGIN
+      -- Get application details
+      SELECT user_id, type INTO v_user_id, v_app_type
+      FROM applications
+      WHERE id = p_application_id AND status = 'pending';
 
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Application not found or already processed');
+      IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Application not found or already processed');
+      END IF;
+
+      IF v_app_type != 'lead_officer' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Not a lead officer application');
+      END IF;
+
+      -- Update user profile
+      UPDATE user_profiles
+      SET 
+        is_lead_officer = TRUE,
+        officer_role = 'lead_officer',
+        role = CASE WHEN role = 'user' THEN 'lead_officer' ELSE role END,
+        updated_at = NOW()
+      WHERE id = v_user_id;
+
+      -- Update application status
+      UPDATE applications
+      SET 
+        status = 'approved',
+        reviewed_by = p_reviewer_id,
+        reviewed_at = NOW()
+      WHERE id = p_application_id;
+
+      RETURN jsonb_build_object('success', true, 'user_id', v_user_id);
+    END;
+    $fn$
+    LANGUAGE plpgsql SECURITY DEFINER;
+    $sql$;
   END IF;
-
-  IF v_app_type != 'lead_officer' THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Not a lead officer application');
-  END IF;
-
-  -- Update user profile
-  UPDATE user_profiles
-  SET 
-    is_lead_officer = TRUE,
-    officer_role = 'lead_officer',
-    role = CASE WHEN role = 'user' THEN 'lead_officer' ELSE role END,
-    updated_at = NOW()
-  WHERE id = v_user_id;
-
-  -- Update application status
-  UPDATE applications
-  SET 
-    status = 'approved',
-    reviewed_by = p_reviewer_id,
-    reviewed_at = NOW()
-  WHERE id = p_application_id;
-
-  RETURN jsonb_build_object('success', true, 'user_id', v_user_id);
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+END $$;
 
 -- 6. Ensure applications are visible to both admin and lead officers
 -- Update RLS policies for applications table
-DROP POLICY IF EXISTS "Admins can view all applications" ON applications;
-CREATE POLICY "Admins can view all applications" ON applications
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles 
-      WHERE id = auth.uid() 
-      AND (role = 'admin' OR is_lead_officer = TRUE OR officer_role IN ('lead_officer', 'owner'))
-    )
-  );
-
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'applications'
+  ) THEN
+    DROP POLICY IF EXISTS "Admins can view all applications" ON applications;
+    CREATE POLICY "Admins can view all applications" ON applications
+      FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1 FROM user_profiles 
+          WHERE id = auth.uid() 
+          AND (role = 'admin' OR is_lead_officer = TRUE OR officer_role IN ('lead_officer', 'owner'))
+        )
+      );
+  END IF;
+END $$;
 -- 7. Create function to check if lead officer position is filled
 CREATE OR REPLACE FUNCTION is_lead_officer_position_filled()
 RETURNS BOOLEAN AS $$
@@ -196,14 +232,38 @@ GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 
--- 10. Create index for faster username lookups
-CREATE INDEX IF NOT EXISTS idx_user_profiles_username_lower ON user_profiles(LOWER(username));
-CREATE INDEX IF NOT EXISTS idx_applications_type_status ON applications(type, status);
-CREATE INDEX IF NOT EXISTS idx_messages_sender_receiver ON messages(sender_id, receiver_id);
-CREATE INDEX IF NOT EXISTS idx_messages_seen ON messages(seen) WHERE seen = FALSE;
-
-COMMENT ON TABLE applications IS 'All user applications including lead officer, troll officer, troller, and family';
-COMMENT ON COLUMN user_profiles.is_lead_officer IS 'True if user is a lead officer';
-COMMENT ON COLUMN user_profiles.officer_role IS 'Officer role: lead_officer, owner, or null';
-COMMENT ON COLUMN user_profiles.empire_role IS 'Empire partner role: partner or null';
+ -- 10. Create index for faster username lookups
+ CREATE INDEX IF NOT EXISTS idx_user_profiles_username_lower ON user_profiles(LOWER(username));
+ DO $$
+ BEGIN
+   IF EXISTS (
+     SELECT 1 FROM information_schema.tables 
+     WHERE table_schema = 'public' AND table_name = 'applications'
+   ) THEN
+     CREATE INDEX IF NOT EXISTS idx_applications_type_status ON applications(type, status);
+     COMMENT ON TABLE applications IS 'All user applications including lead officer, troll officer, troller, and family';
+   END IF;
+ END $$;
+ DO $$
+ BEGIN
+   IF EXISTS (
+     SELECT 1 FROM information_schema.columns 
+     WHERE table_name = 'messages' AND column_name = 'sender_id'
+   )
+   AND EXISTS (
+     SELECT 1 FROM information_schema.columns 
+     WHERE table_name = 'messages' AND column_name = 'receiver_id'
+   ) THEN
+     CREATE INDEX IF NOT EXISTS idx_messages_sender_receiver ON messages(sender_id, receiver_id);
+   END IF;
+   IF EXISTS (
+     SELECT 1 FROM information_schema.columns 
+     WHERE table_name = 'messages' AND column_name = 'seen'
+   ) THEN
+     CREATE INDEX IF NOT EXISTS idx_messages_seen ON messages(seen) WHERE seen = FALSE;
+   END IF;
+ END $$;
+ COMMENT ON COLUMN user_profiles.is_lead_officer IS 'True if user is a lead officer';
+ COMMENT ON COLUMN user_profiles.officer_role IS 'Officer role: lead_officer, owner, or null';
+ COMMENT ON COLUMN user_profiles.empire_role IS 'Empire partner role: partner or null';
 

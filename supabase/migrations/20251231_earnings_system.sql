@@ -177,8 +177,8 @@ SELECT
   p.id,
   p.username,
   p.total_earned_coins,
-  p.paid_coin_balance,
-  p.free_coin_balance,
+  p.troll_coins,
+  p.troll_coins,
   
   -- Current month earnings
   COALESCE(ce.total_coins, 0) AS current_month_earnings,
@@ -238,7 +238,7 @@ SELECT
   SUM(g.coins_spent) AS coins_earned_from_gifts,
   COUNT(DISTINCT g.id) AS gift_count,
   COUNT(DISTINCT g.sender_id) AS unique_gifters,
-  SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END) AS paid_coins_earned,
+  SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END) AS troll_coins_earned,
   SUM(CASE WHEN g.gift_type = 'free' THEN g.coins_spent ELSE 0 END) AS free_coins_earned
 FROM user_profiles p
 JOIN gifts g ON g.receiver_id = p.id

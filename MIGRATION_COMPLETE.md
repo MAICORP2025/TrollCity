@@ -7,7 +7,7 @@ This document summarizes all changes made to migrate from legacy database column
 **Status**: ✅ COMPLETE
 
 ### Changes Made
-- **Old Column Names**: `troll_coins_balance`, `free_coin_balance`
+- **Old Column Names**: `Troll_coins`, `troll_coins`
 - **New Column Names**: `troll_coins`, `trollmonds`
 
 ### Files Modified
@@ -41,7 +41,7 @@ This document summarizes all changes made to migrate from legacy database column
 1. **supabase/migrations/20251231_add_deduct_coins_function.sql**
    - Fixed `deduct_coins()` function
 
-2. **supabase/migrations/20251206_add_paid_coins_function.sql**
+2. **supabase/migrations/20251206_add_troll_coins_function.sql**
    - Fixed `add_troll_coins()` function
 
 3. **supabase/migrations/20251221_fix_deduct_coins_coin_type.sql**
@@ -54,13 +54,13 @@ This document summarizes all changes made to migrate from legacy database column
    - Fixed `spend_trollmonds()` function
 
 #### New Comprehensive Migrations
-1. **supabase/migrations/20260211_migrate_coin_balance_column_names.sql**
+1. **supabase/migrations/20260211_migrate_troll_coins_column_names.sql**
    - Central location for all function updates
 
 2. **supabase/migrations/20260211_frontend_column_migration.sql**
    - Documentation of frontend changes
 
-3. **supabase/migrations/20260211_coin_balance_migration_summary.sql**
+3. **supabase/migrations/20260211_troll_coins_migration_summary.sql**
    - Complete change summary
 
 ## Phase 2: RLS Policy Fix for Purchase Tables
@@ -156,11 +156,11 @@ SELECT DISTINCT coin_type FROM coin_transactions LIMIT 10;
 1. **Apply Database Migrations**
    - Deploy migrations in order:
      - 20251231_add_deduct_coins_function.sql
-     - 20251206_add_paid_coins_function.sql
+     - 20251206_add_troll_coins_function.sql
      - 20251221_fix_deduct_coins_coin_type.sql
      - 20251231_spend_coins_rpc.sql
      - 20260119_spend_free_coins_function.sql
-     - 20260211_migrate_coin_balance_column_names.sql
+     - 20260211_migrate_troll_coins_column_names.sql
      - 20260211_fix_purchase_rls.sql
 
 2. **Deploy Frontend Changes**

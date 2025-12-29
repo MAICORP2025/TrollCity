@@ -45,7 +45,7 @@ export default function BattleWinnerModal({
           <div className="text-center">
             <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-3xl font-bold text-white mb-2">It's a Tie!</h2>
-            <p className="text-gray-400 mb-6">Both broadcasters received the same amount of paid coins.</p>
+            <p className="text-gray-400 mb-6">Both broadcasters received the same amount of troll_coins.</p>
             <div className="bg-black/50 rounded-lg p-4 mb-4">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-gray-400">@{broadcaster1Name || 'Broadcaster 1'}</span>

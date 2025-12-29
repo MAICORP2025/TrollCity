@@ -90,7 +90,7 @@ export default function StreamRoom() {
   // Stream stats
 
   // UI state
-  const [showChat, setShowChat] = useState(true);
+  const [showChat, setShowChat] = useState(false);
   const [showGiftBox, setShowGiftBox] = useState(false);
   const [messages, setMessages] = useState<StreamMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -125,7 +125,7 @@ export default function StreamRoom() {
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [trollbagInventory, setTrollbagInventory] = useState<TrollbagItem[]>([]);
   const [isLoadingTrollbag, setIsLoadingTrollbag] = useState(false);
-  const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   
   // Troll drops
   const [activeTrollDrop, setActiveTrollDrop] = useState<TrollDropType | null>(null);
@@ -604,7 +604,7 @@ export default function StreamRoom() {
               const currentProfile = useAuthStore.getState().profile;
               if (currentProfile) {
                 const isTrollmond = giftId.startsWith('trollmond:');
-                const balanceKey = isTrollmond ? 'free_coin_balance' : 'troll_coins';
+                const balanceKey = isTrollmond ? 'troll_coins' : 'troll_coins';
                 const newBalance = (currentProfile[balanceKey] || 0) + delta;
                 useAuthStore.getState().setProfile({
                   ...currentProfile,
@@ -970,7 +970,7 @@ export default function StreamRoom() {
     if (!user || !profile || !stream?.id) return;
 
     const useTrollmonds = giftCurrency === 'trollmonds';
-    const availableBalance = useTrollmonds ? profile.free_coin_balance : profile.troll_coins;
+    const availableBalance = useTrollmonds ? profile.troll_coins : profile.troll_coins;
 
     if ((availableBalance || 0) < gift.cost) {
       toast.error(useTrollmonds ? 'Not enough Trollmonds!' : 'Not enough Troll Coins!');
@@ -2085,5 +2085,3 @@ const VideoGrid = React.memo<{
     </div>
   );
 });
-
-

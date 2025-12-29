@@ -110,7 +110,7 @@ const [uid, coins] = custom_id.split("|");
 const coinAmount = Number(coins);
 
 // Add coins directly via RPC
-await supabase.rpc("add_paid_coins", {
+await supabase.rpc("add_troll_coins", {
   p_user_id: uid,
   p_amount: coinAmount
 });
@@ -166,7 +166,7 @@ BEGIN
   UPDATE user_profiles
   SET 
     troll_coins = COALESCE(troll_coins, 0) + coins_to_add,
-    troll_coins_balance = COALESCE(troll_coins_balance, 0) + coins_to_add,
+    Troll_coins = COALESCE(Troll_coins, 0) + coins_to_add,
     total_earned_coins = COALESCE(total_earned_coins, 0) + coins_to_add,
     updated_at = NOW()
   WHERE id = user_id_input;

@@ -23,20 +23,20 @@ DECLARE
 BEGIN
   IF p_gift_type = 'paid' THEN
     UPDATE user_profiles
-      SET paid_coin_balance = paid_coin_balance - p_coins_spent,
+      SET troll_coins = troll_coins - p_coins_spent,
           total_spent_coins = total_spent_coins + p_coins_spent,
           updated_at = now()
       WHERE id = p_sender_id;
   ELSE
     UPDATE user_profiles
-      SET free_coin_balance = free_coin_balance - p_coins_spent,
+      SET troll_coins = troll_coins - p_coins_spent,
           total_spent_coins = total_spent_coins + p_coins_spent,
           updated_at = now()
       WHERE id = p_sender_id;
   END IF;
 
   UPDATE user_profiles
-    SET paid_coin_balance = paid_coin_balance + p_coins_spent,
+    SET troll_coins = troll_coins + p_coins_spent,
         total_earned_coins = total_earned_coins + p_coins_spent,
         updated_at = now()
     WHERE id = p_streamer_id;
@@ -83,7 +83,7 @@ BEGIN
   SELECT user_id, coins INTO v_user, v_coins FROM coin_transactions WHERE id = p_tx_id;
   IF v_user IS NULL THEN RETURN; END IF;
   UPDATE coin_transactions SET status = 'completed' WHERE id = p_tx_id;
-  UPDATE user_profiles SET paid_coin_balance = paid_coin_balance + COALESCE(v_coins,0), updated_at = now() WHERE id = v_user;
+  UPDATE user_profiles SET troll_coins = troll_coins + COALESCE(v_coins,0), updated_at = now() WHERE id = v_user;
 END;
 $$;
 
@@ -91,7 +91,7 @@ CREATE OR REPLACE FUNCTION add_free_coins(p_user_id uuid, p_amount bigint)
 RETURNS void
 LANGUAGE sql SECURITY DEFINER
 AS $$
-  UPDATE user_profiles SET free_coin_balance = free_coin_balance + p_amount, updated_at = now() WHERE id = p_user_id;
+  UPDATE user_profiles SET troll_coins = troll_coins + p_amount, updated_at = now() WHERE id = p_user_id;
 $$;
 
 CREATE OR REPLACE FUNCTION grant_family_crown(p_family_id uuid)
@@ -152,7 +152,7 @@ CREATE OR REPLACE FUNCTION reset_user_coins(p_user_id uuid)
 RETURNS void
 LANGUAGE sql SECURITY DEFINER
 AS $$
-  UPDATE user_profiles SET paid_coin_balance = 0, free_coin_balance = 0, updated_at = now() WHERE id = p_user_id;
+  UPDATE user_profiles SET troll_coins = 0, troll_coins = 0, updated_at = now() WHERE id = p_user_id;
 $$;
 
 CREATE OR REPLACE FUNCTION end_stream(p_stream_id uuid)

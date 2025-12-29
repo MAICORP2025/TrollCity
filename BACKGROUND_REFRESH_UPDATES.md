@@ -51,7 +51,7 @@ export default function MyPage() {
     await supabase.from('user_profiles').update({ ... })
     
     // Update local state immediately (optimistic)
-    useAuthStore.getState().setProfile({ ...profile, troll_coins_balance: newBalance })
+    useAuthStore.getState().setProfile({ ...profile, Troll_coins: newBalance })
     
     // Refresh from DB silently in background
     refreshProfileInBackground()

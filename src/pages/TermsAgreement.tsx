@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { CheckCircle, XCircle, FileText } from 'lucide-react'
 
 export default function TermsAgreement() {
-  const { profile } = useAuthStore()
+  const { profile, session, refreshProfile } = useAuthStore()
   const navigate = useNavigate()
   const [agreed, setAgreed] = useState(false)
   const [privacyAgreed, setPrivacyAgreed] = useState(false)
@@ -67,46 +67,38 @@ export default function TermsAgreement() {
 
     setSubmitting(true)
     try {
-      // Update profile to mark terms as accepted with timestamp
-      if (profile) {
-        console.log('[Terms] Updating profile to mark terms as accepted for user:', profile.username)
-        
-        // Update database first
-        const { error: dbError } = await supabase
-          .from('user_profiles')
-          .update({
-            terms_accepted: true,
-            court_recording_consent: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', profile.id)
-        
-        if (dbError) {
-          console.error('[Terms] Database update error:', dbError)
-          toast.error('Failed to save agreement. Please try again.')
-          setSubmitting(false)
-          return
-        }
-        
-        console.log('[Terms] Database updated successfully')
-        
-        // Then update local store
-        const updatedProfile = {
-          ...profile,
-          terms_accepted: true,
-          court_recording_consent: true,
-          terms_accepted_at: new Date().toISOString()
-        } as any
-        
-        useAuthStore.getState().setProfile(updatedProfile)
-        console.log('[Terms] Store updated, navigating to home')
+      const functionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
+      const token =
+        session?.access_token ||
+        (await supabase.auth.getSession()).data.session?.access_token
+
+      if (!token) {
+        throw new Error('Missing authentication token')
+      }
+
+      const response = await fetch(`${functionsUrl}/user-agreements?action=accept_agreement`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ agreement_version: '1.0' })
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(errorBody?.error || 'Failed to record agreement acceptance')
+      }
+
+      if (refreshProfile) {
+        await refreshProfile()
       }
 
       toast.success('Welcome to Troll City!')
       navigate('/home')
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Terms] Agreement error:', err)
-      toast.error('Failed to save agreement')
+      toast.error(err?.message || 'Failed to save agreement')
     } finally {
       setSubmitting(false)
     }
@@ -190,7 +182,7 @@ export default function TermsAgreement() {
             When you are banned, your account is <strong>completely reset</strong>. You will lose:
           </p>
           <ul className="list-disc list-inside mt-2 text-gray-200 space-y-1">
-            <li>All paid coins (non-refundable)</li>
+            <li>All troll_coins (non-refundable)</li>
             <li>All free coins</li>
             <li>All XP and levels (back to Level 1)</li>
             <li>All badges and achievements</li>

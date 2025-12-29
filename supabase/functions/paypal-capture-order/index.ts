@@ -158,7 +158,7 @@ serve(async (req: Request) => {
     // Get current balance first
     const { data: profileData, error: profileErr } = await supabase
       .from("user_profiles")
-      .select("paid_coin_balance")
+      .select("troll_coins")
       .eq("id", meta.userId)
       .single();
 
@@ -167,7 +167,7 @@ serve(async (req: Request) => {
       return new Response("Failed to fetch profile", { status: 500, headers: cors });
     }
 
-    const currentBalance = profileData?.paid_coin_balance ?? 0;
+    const currentBalance = profileData?.troll_coins ?? 0;
 
     // Update DB: transaction + balance
     const { error: txErr } = await supabase.from("coin_transactions").insert({
@@ -190,7 +190,7 @@ serve(async (req: Request) => {
     const { error: balErr } = await supabase
       .from("user_profiles")
       .update({
-        paid_coin_balance: currentBalance + meta.coins
+        troll_coins: currentBalance + meta.coins
       })
       .eq("id", meta.userId);
 

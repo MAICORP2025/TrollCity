@@ -4,7 +4,7 @@
 
 -- 1. Add currency columns to user_profiles
 ALTER TABLE user_profiles
-ADD COLUMN IF NOT EXISTS paid_coins bigint NOT NULL DEFAULT 0,
+ADD COLUMN IF NOT EXISTS troll_coins bigint NOT NULL DEFAULT 0,
 ADD COLUMN IF NOT EXISTS trollmonds bigint NOT NULL DEFAULT 0;
 
 -- 2. Create lucky_trollmond_events audit table
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS lucky_trollmond_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   gift_id uuid, -- Can be null for future expansion
-  spent_paid_coins bigint NOT NULL CHECK (spent_paid_coins > 0),
+  spent_troll_coins bigint NOT NULL CHECK (spent_troll_coins > 0),
   multiplier integer CHECK (multiplier IN (100, 200, 500, 1000, 10000)),
   trollmonds_awarded bigint NOT NULL DEFAULT 0,
   created_at timestamptz DEFAULT now()
@@ -88,7 +88,7 @@ $$;
 CREATE OR REPLACE FUNCTION process_gift_with_lucky(
   p_sender_id uuid,
   p_receiver_id uuid,
-  p_paid_coins bigint,
+  p_troll_coins bigint,
   p_gift_type varchar DEFAULT 'standard'
 )
 RETURNS jsonb
@@ -104,7 +104,7 @@ DECLARE
   v_admin_check boolean := false;
 BEGIN
   -- Input validation
-  IF p_paid_coins <= 0 THEN
+  IF p_troll_coins <= 0 THEN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid coin amount');
   END IF;
 
@@ -119,7 +119,7 @@ BEGIN
   ) INTO v_admin_check;
 
   -- Check sender balance
-  SELECT paid_coins INTO v_sender_balance
+  SELECT troll_coins INTO v_sender_balance
   FROM user_profiles
   WHERE id = p_sender_id;
 
@@ -127,30 +127,30 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Sender not found');
   END IF;
 
-  IF v_sender_balance < p_paid_coins THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Insufficient paid coins');
+  IF v_sender_balance < p_troll_coins THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Insufficient troll_coins');
   END IF;
 
   -- Start atomic transaction
   BEGIN
-    -- Deduct paid coins from sender
+    -- Deduct troll_coins from sender
     UPDATE user_profiles
-    SET paid_coins = paid_coins - p_paid_coins,
+    SET troll_coins = troll_coins - p_troll_coins,
         updated_at = now()
     WHERE id = p_sender_id;
 
     -- Process gift and update recipient's earned coins for payout system
     UPDATE user_profiles
-    SET total_earned_coins = total_earned_coins + p_paid_coins,
+    SET total_earned_coins = total_earned_coins + p_troll_coins,
         updated_at = now()
     WHERE id = p_receiver_id;
 
     -- Roll for lucky multiplier
-    SELECT calculate_lucky_multiplier(p_paid_coins) INTO v_lucky_multiplier;
+    SELECT calculate_lucky_multiplier(p_troll_coins) INTO v_lucky_multiplier;
 
     -- Calculate trollmonds if lucky
     IF v_lucky_multiplier IS NOT NULL THEN
-      v_trollmonds_awarded := p_paid_coins * v_lucky_multiplier;
+      v_trollmonds_awarded := p_troll_coins * v_lucky_multiplier;
 
       -- Credit trollmonds to sender
       UPDATE user_profiles
@@ -163,29 +163,29 @@ BEGIN
     INSERT INTO lucky_trollmond_events (
       user_id,
       gift_id,
-      spent_paid_coins,
+      spent_troll_coins,
       multiplier,
       trollmonds_awarded
     ) VALUES (
       p_sender_id,
       gen_random_uuid(), -- Generate gift ID
-      p_paid_coins,
+      p_troll_coins,
       v_lucky_multiplier,
       v_trollmonds_awarded
     ) RETURNING id INTO v_event_id;
 
     -- Process admin gift for royal family if receiver is admin
     IF v_admin_check THEN
-      PERFORM process_admin_gift(p_sender_id, p_receiver_id, p_paid_coins);
+      PERFORM process_admin_gift(p_sender_id, p_receiver_id, p_troll_coins);
     END IF;
 
     -- Commit transaction
     RETURN jsonb_build_object(
       'success', true,
-      'spent_coins', p_paid_coins,
+      'spent_coins', p_troll_coins,
       'lucky_multiplier', v_lucky_multiplier,
       'trollmonds_awarded', v_trollmonds_awarded,
-      'new_paid_balance', v_sender_balance - p_paid_coins,
+      'new_paid_balance', v_sender_balance - p_troll_coins,
       'event_id', v_event_id
     );
 
@@ -229,7 +229,7 @@ BEGIN
 
   RETURN QUERY
   SELECT
-    COALESCE(SUM(spent_paid_coins), 0)::bigint as total_spent,
+    COALESCE(SUM(spent_troll_coins), 0)::bigint as total_spent,
     COALESCE(SUM(trollmonds_awarded), 0)::bigint as total_trollmonds_won,
     COUNT(*) FILTER (WHERE multiplier IS NOT NULL)::bigint as total_wins,
     CASE
@@ -258,7 +258,7 @@ GRANT EXECUTE ON FUNCTION get_lucky_stats(uuid) TO authenticated;
 GRANT SELECT ON lucky_trollmond_events TO authenticated;
 
 -- 10. Add comments
-COMMENT ON TABLE user_profiles IS 'User profiles with paid_coins and trollmonds balances';
+COMMENT ON TABLE user_profiles IS 'User profiles with troll_coins and trollmonds balances';
 COMMENT ON TABLE lucky_trollmond_events IS 'Audit trail for lucky trollmond events';
 COMMENT ON FUNCTION calculate_lucky_multiplier IS 'Calculates lucky multiplier based on spent coins with scaling';
 COMMENT ON FUNCTION process_gift_with_lucky IS 'Atomic gift processing with lucky mechanics';

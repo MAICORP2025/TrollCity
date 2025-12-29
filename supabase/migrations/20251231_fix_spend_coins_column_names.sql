@@ -1,5 +1,5 @@
 -- Fix spend_coins RPC function to use correct column names
--- Update from troll_coins_balance to troll_coins
+-- Update from Troll_coins to troll_coins
 
 CREATE OR REPLACE FUNCTION spend_coins(
   p_sender_id UUID,

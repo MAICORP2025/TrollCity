@@ -1,122 +1,109 @@
-// File: /api/livekit-token.ts
-// Universal LiveKit token endpoint for ALL Troll City live features
-
 import { AccessToken, TrackSource } from 'livekit-server-sdk'
+import { authorizeUser, OFFICER_ROLES, AuthorizedProfile } from './_shared/auth'
+
+const API_KEY = process.env.LIVEKIT_API_KEY
+const API_SECRET = process.env.LIVEKIT_API_SECRET
+const LIVEKIT_URL = process.env.LIVEKIT_URL
+
+if (!API_KEY || !API_SECRET || !LIVEKIT_URL) {
+  throw new Error('LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and LIVEKIT_URL must be set')
+}
+
+type TokenRequest = {
+  room?: string
+  roomName?: string
+  participantName?: string
+  allowPublish?: boolean | 'true' | 'false' | '1' | '0'
+  level?: number | string
+}
+
+function normalizeRoom(data: TokenRequest) {
+  return String(data.room || data.roomName || '').trim()
+}
+
+function normalizeParticipantName(profile: AuthorizedProfile, data: TokenRequest) {
+  return String(data.participantName || profile.username || profile.id || '').trim()
+}
+
+function canPublish(profile: AuthorizedProfile, requested: TokenRequest): boolean {
+  const allowPublish =
+    requested.allowPublish === true ||
+    requested.allowPublish === 'true' ||
+    requested.allowPublish === '1'
+  if (!allowPublish) return false
+
+  const role = (profile.role || '').toLowerCase()
+  const isOfficerRole =
+    OFFICER_ROLES.has(role) ||
+    Boolean(profile.is_admin) ||
+    Boolean(profile.is_lead_officer) ||
+    Boolean(profile.is_troll_officer)
+  return isOfficerRole
+}
 
 export default async function handler(req: any, res: any) {
-  /* ============================
-     METHOD GUARD
-  ============================ */
-  if (req.method !== 'GET' && req.method !== 'POST') {
+  if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
   }
 
-  /* ============================
-     PARAMS
-  ============================ */
-  const params = req.method === 'POST' ? req.body : req.query
-
-  const room = params.room
-  const identity = params.identity
-  const user_id = params.user_id
-  const role = params.role
-  const level = params.level
-
-  /* ============================
-     HARD GUARDS
-  ============================ */
-  if (!room || !identity) {
-    return res.status(400).json({
-      error: 'Missing required parameters: room or identity',
-    })
+  let profile: AuthorizedProfile
+  try {
+    profile = await authorizeUser(req)
+  } catch (error: any) {
+    const message = error?.message || 'Unauthorized'
+    return res.status(403).json({ error: message })
   }
 
-  /* ============================
-     ROLE RESOLUTION
-     POST with allowPublish → broadcaster
-     GET  → viewer (default)
-     POST without allowPublish → viewer
-  ============================ */
-  const allowPublish = params.allowPublish === true || params.allowPublish === 'true'
-  const isBroadcaster = req.method === 'POST' && allowPublish
-  const resolvedRole = isBroadcaster ? (role || 'broadcaster') : 'viewer'
+  const payload: TokenRequest = req.body || {}
+  const roomName = normalizeRoom(payload)
+  const participantName = normalizeParticipantName(profile, payload)
 
-  /* ============================
-     METADATA
-  ============================ */
+  if (!roomName) {
+    return res.status(400).json({ error: 'Missing room name' })
+  }
+  if (!participantName) {
+    return res.status(400).json({ error: 'Missing participant name' })
+  }
+
+  const publishAllowed = canPublish(profile, payload)
   const metadata = {
-    user_id: user_id ?? null,
-    role: resolvedRole,
-    level: Number(level ?? 1),
+    user_id: profile.id,
+    username: profile.username,
+    avatar_url: profile.avatar_url ?? null,
+    role: profile.role,
+    level: Number(payload.level ?? 1),
+    participantName,
   }
 
-  /* ============================
-     ENV VALIDATION
-  ============================ */
-  const apiKey = process.env.LIVEKIT_API_KEY
-  const apiSecret = process.env.LIVEKIT_API_SECRET
-  const livekitUrl = process.env.LIVEKIT_CLOUD_URL
+  try {
+    const token = new AccessToken(API_KEY, API_SECRET, {
+      identity: profile.id,
+      name: participantName,
+      ttl: 60 * 60, // 1 hour
+      metadata: JSON.stringify(metadata),
+    })
 
-  if (!apiKey || !apiSecret || !livekitUrl) {
-    return res.status(500).json({ error: 'LiveKit not configured' })
+    const grant = {
+      room: roomName,
+      roomJoin: true,
+      canSubscribe: true,
+      canPublish: publishAllowed,
+      canPublishData: publishAllowed,
+      canUpdateOwnMetadata: true,
+      canPublishSources: publishAllowed ? [TrackSource.CAMERA, TrackSource.MICROPHONE] : [],
+    }
+
+    token.addGrant(grant)
+
+    return res.status(200).json({
+      token: await token.toJwt(),
+      livekitUrl: LIVEKIT_URL,
+      room: roomName,
+      identity: profile.id,
+      allowPublish: publishAllowed,
+    })
+  } catch (error: any) {
+    console.error('[livekit-token] issuance failed', error)
+    return res.status(500).json({ error: 'Failed to issue LiveKit token' })
   }
-
-  /* ============================
-     TOKEN
-  ============================ */
-  const token = new AccessToken(apiKey, apiSecret, {
-    identity: String(identity),
-    ttl: 60 * 60 * 6,
-    metadata: JSON.stringify(metadata),
-  })
-
-  /* ============================
-     PUBLISH AUTHORITY
-     Only broadcasters can publish
-  ============================ */
-  const canPublish = isBroadcaster
-  const canPublishData = isBroadcaster
-
-  /* ============================
-     DEBUG LOG
-  ============================ */
-  console.log('[LiveKit Token Issued]', {
-    method: req.method,
-    room,
-    identity,
-    role: resolvedRole,
-    isBroadcaster,
-    canPublish,
-    allowPublish: params.allowPublish,
-    sources: canPublish
-      ? [TrackSource.CAMERA, TrackSource.MICROPHONE]
-      : [],
-  })
-
-  /* ============================
-     GRANTS - FIXED BROADCASTER/VIEWER DISTINCTION
-     - Broadcasters: can publish video + audio, subscribe to others
-     - Viewers: can only subscribe, cannot publish
-  ============================ */
-  token.addGrant({
-    room: String(room),
-    roomJoin: true,
-    canSubscribe: true,  // Everyone can subscribe/watch
-    canPublish,           // Only broadcasters
-    canPublishData,       // Only broadcasters
-    canUpdateOwnMetadata: true,
-    canPublishSources: canPublish
-      ? [TrackSource.CAMERA, TrackSource.MICROPHONE]
-      : [],
-  })
-
-  /* ============================
-     RESPONSE
-  ============================ */
-  return res.status(200).json({
-    token: await token.toJwt(),
-    livekitUrl,
-    serverUrl: livekitUrl,
-    url: livekitUrl,
-  })
 }

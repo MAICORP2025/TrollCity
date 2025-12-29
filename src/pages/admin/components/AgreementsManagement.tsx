@@ -137,7 +137,7 @@ Watch streams
 
 Chat (unless muted)
 
-Send free or paid coins
+Send free or troll_coins
 
 Join events
 

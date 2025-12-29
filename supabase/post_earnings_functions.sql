@@ -19,7 +19,7 @@ create or replace function credit_free_coins(target_user uuid, amount int)
 returns void
 language sql as $$
 update user_profiles
-set free_coin_balance = free_coin_balance + amount
+set troll_coins = troll_coins + amount
 where id = target_user;
 $$;
 

@@ -15,10 +15,10 @@ export default function TrollWheelPage() {
   useEffect(() => {
     if (!profile) return
     setLoadingBalance(true)
-    const trollmonds = profile?.free_coin_balance ?? 0
+    const trollmonds = profile?.troll_coins ?? 0
     setTrollmonds(trollmonds)
     setLoadingBalance(false)
-  }, [profile?.id, profile?.free_coin_balance])
+  }, [profile?.id, profile?.troll_coins])
 
   if (!user || !profile) {
     return (

@@ -1,6 +1,6 @@
 -- Officer Cashout System
 -- Officers can cash out after clocking out from a shift
--- Rate: 6,000 paid coins = $60
+-- Rate: 6,000 troll_coins = $60
 
 -- Create officer_payouts table if it doesn't exist
 CREATE TABLE IF NOT EXISTS officer_payouts (
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS officer_payouts (
   officer_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   shift_log_id UUID REFERENCES officer_shift_logs(id) ON DELETE SET NULL,
   free_coins_redeemed BIGINT NOT NULL,
-  paid_coins_received INTEGER NOT NULL,
+  troll_coins_received INTEGER NOT NULL,
   usd_amount NUMERIC(10,2) NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'paid', 'rejected')),
   requested_at TIMESTAMPTZ DEFAULT NOW(),
@@ -61,9 +61,9 @@ DECLARE
   v_shift_log RECORD;
   v_officer RECORD;
   v_free_coins BIGINT;
-  v_paid_coins INTEGER;
+  v_troll_coins INTEGER;
   v_usd_amount NUMERIC(10,2);
-  v_exchange_rate NUMERIC := 100.0; -- 6,000 paid coins = $60, so 100 paid coins = $1
+  v_exchange_rate NUMERIC := 100.0; -- 6,000 troll_coins = $60, so 100 troll_coins = $1
   v_payout_id UUID;
 BEGIN
   -- Get shift log details
@@ -107,22 +107,22 @@ BEGIN
   END IF;
 
   -- Check if officer has enough free coins
-  IF (v_officer.free_coin_balance < v_free_coins) THEN
+  IF (v_officer.troll_coins < v_free_coins) THEN
     RETURN jsonb_build_object('success', false, 'error', 'Insufficient free coins. You may have already cashed out or spent them.');
   END IF;
 
-  -- Calculate conversion: 6,000 paid coins = $60
-  -- So 100 paid coins = $1
-  -- Free coins to paid coins: 1 free coin = 1 paid coin (1:1 ratio)
-  -- But we need to convert to USD: 6,000 paid coins = $60, so 100 paid coins = $1
-  v_paid_coins := v_free_coins; -- 1:1 conversion
-  v_usd_amount := (v_paid_coins::NUMERIC / 100.0); -- 100 paid coins = $1
+  -- Calculate conversion: 6,000 troll_coins = $60
+  -- So 100 troll_coins = $1
+  -- Free coins to troll_coins: 1 free coin = 1 paid coin (1:1 ratio)
+  -- But we need to convert to USD: 6,000 troll_coins = $60, so 100 troll_coins = $1
+  v_troll_coins := v_free_coins; -- 1:1 conversion
+  v_usd_amount := (v_troll_coins::NUMERIC / 100.0); -- 100 troll_coins = $1
 
-  -- Deduct free coins and add paid coins
+  -- Deduct free coins and add troll_coins
   UPDATE user_profiles
   SET 
-    free_coin_balance = free_coin_balance - v_free_coins,
-    paid_coin_balance = paid_coin_balance + v_paid_coins,
+    troll_coins = troll_coins - v_free_coins,
+    troll_coins = troll_coins + v_troll_coins,
     updated_at = NOW()
   WHERE id = v_officer.id;
 
@@ -131,7 +131,7 @@ BEGIN
     officer_id,
     shift_log_id,
     free_coins_redeemed,
-    paid_coins_received,
+    troll_coins_received,
     usd_amount,
     status,
     requested_at
@@ -139,7 +139,7 @@ BEGIN
     v_officer.id,
     p_shift_log_id,
     v_free_coins,
-    v_paid_coins,
+    v_troll_coins,
     v_usd_amount,
     'pending',
     NOW()
@@ -155,25 +155,25 @@ BEGIN
   ) VALUES (
     v_officer.id,
     'officer_cashout',
-    v_paid_coins,
-    format('Officer cashout: %s free coins converted to %s paid coins ($%s)', 
-           v_free_coins, v_paid_coins, v_usd_amount),
+    v_troll_coins,
+    format('Officer cashout: %s free coins converted to %s troll_coins ($%s)', 
+           v_free_coins, v_troll_coins, v_usd_amount),
     jsonb_build_object(
       'shift_log_id', p_shift_log_id,
       'payout_id', v_payout_id,
       'free_coins_redeemed', v_free_coins,
-      'paid_coins_received', v_paid_coins,
+      'troll_coins_received', v_troll_coins,
       'usd_amount', v_usd_amount
     )
   );
 
   RETURN jsonb_build_object(
     'success', true,
-    'message', format('Successfully cashed out %s free coins for %s paid coins ($%s)', 
-                     v_free_coins, v_paid_coins, v_usd_amount),
+    'message', format('Successfully cashed out %s free coins for %s troll_coins ($%s)', 
+                     v_free_coins, v_troll_coins, v_usd_amount),
     'payout_id', v_payout_id,
     'free_coins_redeemed', v_free_coins,
-    'paid_coins_received', v_paid_coins,
+    'troll_coins_received', v_troll_coins,
     'usd_amount', v_usd_amount
   );
 END;
@@ -190,7 +190,7 @@ RETURNS TABLE (
   id UUID,
   shift_log_id UUID,
   free_coins_redeemed BIGINT,
-  paid_coins_received INTEGER,
+  troll_coins_received INTEGER,
   usd_amount NUMERIC(10,2),
   status TEXT,
   requested_at TIMESTAMPTZ,
@@ -206,7 +206,7 @@ BEGIN
     op.id,
     op.shift_log_id,
     op.free_coins_redeemed,
-    op.paid_coins_received,
+    op.troll_coins_received,
     op.usd_amount,
     op.status,
     op.requested_at,
@@ -221,6 +221,6 @@ $$;
 GRANT EXECUTE ON FUNCTION get_officer_cashout_history(UUID, INTEGER) TO authenticated;
 
 COMMENT ON TABLE officer_payouts IS 'Tracks officer cashouts after completed shifts';
-COMMENT ON FUNCTION officer_cashout_after_shift IS 'Allows officers to cash out free coins earned from a shift into paid coins';
+COMMENT ON FUNCTION officer_cashout_after_shift IS 'Allows officers to cash out free coins earned from a shift into troll_coins';
 COMMENT ON FUNCTION get_officer_cashout_history IS 'Returns cashout history for an officer';
 

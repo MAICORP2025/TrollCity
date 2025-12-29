@@ -7,7 +7,7 @@
 --
 -- OBJECTIVE:
 -- Migrate the entire TrollCity application from using legacy column names
--- (troll_coins_balance, free_coin_balance) to the new standardized names
+-- (Troll_coins, troll_coins) to the new standardized names
 -- (troll_coins, trollmonds) across both frontend and backend.
 --
 -- =====================================================
@@ -21,30 +21,30 @@
 
 -- Function: add_troll_coins(uuid, int)
 -- Purpose: Add coins to user balance after payment processing
--- Updated: troll_coins_balance → troll_coins
+-- Updated: Troll_coins → troll_coins
 
 -- Function: deduct_coins(uuid, bigint, text)
 -- Purpose: Deduct coins from user balance with coin type validation
 -- Updated: 
---   - troll_coins_balance → troll_coins
---   - free_coin_balance → trollmonds
+--   - Troll_coins → troll_coins
+--   - troll_coins → trollmonds
 -- Supports legacy coin type values (paid, free) and new values (troll_coins, trollmonds)
 
 -- Function: deduct_troll_coins(uuid, bigint)
--- Purpose: Wrapper function for deducting paid coins
+-- Purpose: Wrapper function for deducting troll_coins
 -- Updated: References corrected deduct_coins function
 
 -- Function: spend_coins(uuid, uuid, bigint, text, text)
 -- Purpose: Transfer coins from sender to receiver
 -- Updated:
---   - troll_coins_balance → troll_coins (sender deduction)
---   - troll_coins_balance → troll_coins (receiver addition)
+--   - Troll_coins → troll_coins (sender deduction)
+--   - Troll_coins → troll_coins (receiver addition)
 --   - coin_type parameter: 'paid' → 'troll_coins'
 
 -- Function: spend_trollmonds(uuid, bigint, text)
 -- Purpose: Deduct free coins from wallet and user_profiles
 -- Updated:
---   - free_coin_balance → trollmonds
+--   - troll_coins → trollmonds
 --   - coin_type parameter: 'free' → 'trollmonds'
 
 -- =====================================================

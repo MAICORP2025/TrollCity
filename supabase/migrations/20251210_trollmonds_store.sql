@@ -55,10 +55,10 @@ BEGIN
   FROM information_schema.columns
   WHERE table_schema = 'public'
     AND table_name = 'user_profiles'
-    AND column_name IN ('trollmonds', 'free_coin_balance', 'troll_coins')
+    AND column_name IN ('trollmonds', 'troll_coins', 'troll_coins')
   ORDER BY CASE column_name
     WHEN 'trollmonds' THEN 1
-    WHEN 'free_coin_balance' THEN 2
+    WHEN 'troll_coins' THEN 2
     ELSE 3
   END
   LIMIT 1;
@@ -69,7 +69,7 @@ BEGIN
 
   v_coin_type := CASE v_balance_column
     WHEN 'trollmonds' THEN 'trollmonds'
-    WHEN 'free_coin_balance' THEN 'free'
+    WHEN 'troll_coins' THEN 'free'
     ELSE 'troll_coins'
   END;
 

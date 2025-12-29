@@ -16,9 +16,9 @@ BEGIN
     SELECT 1
     FROM information_schema.columns
     WHERE table_name = 'user_profiles'
-      AND column_name = 'free_coin_balance'
+      AND column_name = 'troll_coins'
   ) THEN
-    ALTER TABLE user_profiles ADD COLUMN free_coin_balance BIGINT DEFAULT 0 NOT NULL;
+    ALTER TABLE user_profiles ADD COLUMN troll_coins BIGINT DEFAULT 0 NOT NULL;
   END IF;
 END;
 $$;
@@ -26,8 +26,8 @@ $$;
 -- Keep both columns synchronized
 UPDATE user_profiles
 SET
-  trollmonds = COALESCE(trollmonds, free_coin_balance, 0),
-  free_coin_balance = COALESCE(trollmonds, free_coin_balance, 0);
+  trollmonds = COALESCE(trollmonds, troll_coins, 0),
+  troll_coins = COALESCE(trollmonds, troll_coins, 0);
 
 CREATE OR REPLACE FUNCTION sync_user_profiles_trollmonds_free()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -36,13 +36,13 @@ DECLARE
 BEGIN
   synced_balance := COALESCE(
     NEW.trollmonds,
-    NEW.free_coin_balance,
+    NEW.troll_coins,
     OLD.trollmonds,
-    OLD.free_coin_balance,
+    OLD.troll_coins,
     0
   );
   NEW.trollmonds := synced_balance;
-  NEW.free_coin_balance := synced_balance;
+  NEW.troll_coins := synced_balance;
   RETURN NEW;
 END;
 $$;

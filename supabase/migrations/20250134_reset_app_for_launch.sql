@@ -11,11 +11,11 @@ TRUNCATE TABLE payout_requests CASCADE;
 -- 3. Reset all user coin balances to 0
 UPDATE user_profiles
 SET 
-  paid_coin_balance = 0,
-  free_coin_balance = 0,
+  troll_coins = 0,
+  troll_coins = 0,
   total_coins_earned = 0,
   total_coins_spent = 0
-WHERE paid_coin_balance > 0 OR free_coin_balance > 0 OR total_coins_earned > 0 OR total_coins_spent > 0;
+WHERE troll_coins > 0 OR troll_coins > 0 OR total_coins_earned > 0 OR total_coins_spent > 0;
 
 -- 4. Delete all test messages (optional - you may want to keep real user messages)
 -- Uncomment if you want to clear all messages:
@@ -65,8 +65,8 @@ TRUNCATE TABLE officer_actions CASCADE;
 -- 15. Reset admin user balances (keep admin account but reset coins)
 UPDATE user_profiles
 SET 
-  paid_coin_balance = 0,
-  free_coin_balance = 0,
+  troll_coins = 0,
+  troll_coins = 0,
   total_coins_earned = 0,
   total_coins_spent = 0
 WHERE role = 'admin' OR email = 'trollcity2025@gmail.com';

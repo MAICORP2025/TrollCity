@@ -56,7 +56,7 @@ export function useStreamStats(room: Room | null, streamerId: string | null) {
       try {
         const { data } = await supabase
           .from('user_profiles')
-          .select('username, level, total_earned_coins, troll_coins, free_coin_balance')
+          .select('username, level, total_earned_coins, troll_coins, troll_coins')
           .eq('id', streamerId)
           .single()
 

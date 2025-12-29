@@ -378,7 +378,7 @@ export default function BattleArena({
         <div className="p-4 text-white">
           <p className="text-sm text-gray-400">Battle Chat - Send gifts to support your favorite broadcaster!</p>
           <p className="text-xs text-gray-500 mt-1">
-            Only paid coins count toward winning. Free coins create effects and animations.
+            Only troll_coins count toward winning. Free coins create effects and animations.
           </p>
         </div>
       </div>

@@ -292,7 +292,7 @@ CREATE TABLE IF NOT EXISTS broadcaster_earnings (
 ```
 
 ### Already Applied (via bootstrap_schema.sql)
-- ✅ user_profiles (with free_coin_balance default 200)
+- ✅ user_profiles (with troll_coins default 200)
 - ✅ coin_transactions
 - ✅ streams
 - ✅ messages
@@ -314,7 +314,7 @@ CREATE TABLE IF NOT EXISTS broadcaster_earnings (
 - ✅ Grant script executed successfully: `grant-200-coins.mjs`
 
 ### Coin Types
-- ✅ Paid coins (purchased with real money)
+- ✅ troll_coins (purchased with real money)
 - ✅ Free coins (earned/gifted/promotional)
 - ✅ Proper tracking in coin_transactions table
 

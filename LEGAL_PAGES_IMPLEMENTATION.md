@@ -26,9 +26,9 @@
 ### 4. Creator & Payout Policy
 **File**: `src/pages/legal/PayoutPolicy.tsx`
 **Route**: `/legal/payouts`
-- Eligibility requirements (7,000 Paid Coins minimum)
+- Eligibility requirements (7,000 troll_coins minimum)
 - Payout process (request → review → approval → payment)
-- Conversion rate (100 Paid Coins = $1 USD)
+- Conversion rate (100 troll_coins = $1 USD)
 - Tax obligations (W-9, 1099 forms)
 - Payout denials and appeals
 

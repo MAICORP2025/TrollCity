@@ -118,10 +118,8 @@ Deno.serve(async (req: Request) => {
           bio: null,
           role: r === 'troller' ? 'user' : r,
           tier: 'Bronze',
-          paid_coin_balance: 0,
-          free_coin_balance: 100,
           troll_coins: 0,
-          total_earned_coins: 100,
+          total_earned_coins: 0,
           total_spent_coins: 0,
           avatar_url: avatar,
           email,
@@ -147,7 +145,7 @@ Deno.serve(async (req: Request) => {
         .from('user_profiles')
         .select('id')
         .eq('role', 'admin')
-        .limit(1);
+        .limit(2);
       const exists = (data || []).length > 0;
       
       return new Response(JSON.stringify({ exists }), {
@@ -273,7 +271,7 @@ Deno.serve(async (req: Request) => {
 
       // Get test user benefits
       const benefitsSetting = await fetchAppSettingValue('test_user_benefits');
-      const benefits = benefitsSetting || { free_coins: 5000, bypass_family_fee: true, bypass_admin_message_fee: true };
+      const benefits = benefitsSetting || { initial_coins: 5000, bypass_family_fee: true, bypass_admin_message_fee: true };
 
       const trimmedUsername = username.trim();
       const { data: created, error: createErr } = await supabase.auth.admin.createUser({
@@ -293,7 +291,7 @@ Deno.serve(async (req: Request) => {
 
       const uid = created.user.id;
       const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${trimmedUsername}`;
-      const initialCoins = isTestingMode ? benefits.free_coins : 100;
+      const initialCoins = isTestingMode ? (benefits.initial_coins ?? benefits.free_coins ?? 0) : 0;
 
       const profilePayload = {
         id: uid,
@@ -302,9 +300,8 @@ Deno.serve(async (req: Request) => {
         email,
         role: 'user',
         tier: 'Bronze',
-        paid_coin_balance: 0,
-        troll_coins: 0,
-        free_coin_balance: initialCoins,
+        troll_coins: initialCoins,
+        free_troll_coins: 0,
         total_earned_coins: initialCoins,
         total_spent_coins: 0,
         is_test_user: isTestingMode,
@@ -367,7 +364,7 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      return new Response(JSON.stringify({ success: true, user: created.user }), {
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

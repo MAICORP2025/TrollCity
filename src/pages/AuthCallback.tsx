@@ -92,7 +92,7 @@ const AuthCallback = () => {
                   bio: null,
                   role: u.email === ADMIN_EMAIL ? 'admin' : 'user', 
                   troll_coins: 0, 
-                  free_coin_balance: 0, 
+                  troll_coins: 0, 
                   avatar_url: u.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${suggestedUsername}`,
                   created_at: new Date().toISOString(), 
                   updated_at: new Date().toISOString() 

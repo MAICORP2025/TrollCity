@@ -32,7 +32,7 @@ export default function KickUserButton({
     }
 
     if (profile.troll_coins < 500) {
-      toast.error('You need 500 paid coins to kick a user')
+      toast.error('You need 500 troll_coins to kick a user')
       return
     }
 
@@ -52,7 +52,7 @@ export default function KickUserButton({
         if (data.auto_banned) {
           toast.success(`${targetUsername} kicked and auto-banned. They must pay $20 to restore their account.`)
         } else {
-          toast.success(`${targetUsername} kicked! They can pay 250 paid coins to re-enter.`)
+          toast.success(`${targetUsername} kicked! They can pay 250 troll_coins to re-enter.`)
         }
         onKickComplete?.()
       } else {
@@ -73,7 +73,7 @@ export default function KickUserButton({
       onClick={handleKick}
       disabled={kicking || profile.troll_coins < 500}
       className="px-3 py-1 bg-red-600/80 hover:bg-red-600 rounded-lg text-sm flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      title={profile.troll_coins < 500 ? 'Need 500 paid coins to kick' : `Kick ${targetUsername} (costs 500 paid coins)`}
+      title={profile.troll_coins < 500 ? 'Need 500 troll_coins to kick' : `Kick ${targetUsername} (costs 500 troll_coins)`}
     >
       <UserX size={14} />
       {kicking ? 'Kicking...' : 'Kick User'}

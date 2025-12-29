@@ -31,12 +31,12 @@ export default function EarningsPayout() {
   const [loading, setLoading] = useState(false)
   const [recentRequests, setRecentRequests] = useState<any[]>([])
 
-  const paidCoins = profile?.troll_coins || 0
-  const freeCoins = profile?.free_coin_balance || 0
+  const troll_coins = profile?.troll_coins || 0
+  const freeCoins = profile?.troll_coins || 0
 
   const eligibleTiers = useMemo(
-    () => CASHOUT_TIERS.filter(t => t.coins <= paidCoins),
-    [paidCoins]
+    () => CASHOUT_TIERS.filter(t => t.coins <= troll_coins),
+    [troll_coins]
   )
 
   useEffect(() => {
@@ -108,7 +108,7 @@ export default function EarningsPayout() {
       return
     }
 
-    if (tier.coins > paidCoins) {
+    if (tier.coins > troll_coins) {
       toast.error('You no longer have enough Troll Coins for that tier.')
       return
     }
@@ -167,14 +167,14 @@ export default function EarningsPayout() {
             Troll City Cashout
           </h1>
           <p className="text-sm text-gray-300 mb-4">
-            Only <span className="text-troll-gold">Troll Coins (paid coins)</span> count toward payouts.
+            Only <span className="text-troll-gold">Troll Coins (troll_coins)</span> count toward payouts.
             Free coins are for fun, wheel, and bonuses only.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div className="bg-[#151027] rounded-lg p-4 border border-purple-500/30">
               <p className="text-gray-400">Paid Troll Coins</p>
-              <p className="text-2xl font-bold text-troll-gold">{paidCoins.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-troll-gold">{troll_coins.toLocaleString()}</p>
             </div>
             <div className="bg-[#101522] rounded-lg p-4 border border-green-500/20">
               <p className="text-gray-400">Free Coins (not cashout)</p>
@@ -204,8 +204,8 @@ export default function EarningsPayout() {
   onChange={e => setSelectedTierId(e.target.value)}
 >
   {CASHOUT_TIERS.map(tier => (
-    <option key={tier.id} value={tier.id} disabled={tier.coins > paidCoins}>
-      {tier.label} {tier.coins > paidCoins ? '(not eligible)' : ''}
+    <option key={tier.id} value={tier.id} disabled={tier.coins > troll_coins}>
+      {tier.label} {tier.coins > troll_coins ? '(not eligible)' : ''}
     </option>
   ))}
 </select>

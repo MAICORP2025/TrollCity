@@ -141,7 +141,7 @@ export default function MyEarnings() {
               coins_earned_from_gifts: m.coins_earned_from_gifts || 0,
               gift_count: m.gift_count || 0,
               unique_gifters: m.unique_gifters || 0,
-              troll_coins_earned: (m.paid_coins_earned || 0) + (m.free_coins_earned || 0)
+              troll_coins_earned: (m.troll_coins_earned || 0) + (m.free_coins_earned || 0)
             })))
           } else {
             setMonthlyEarnings([])
@@ -165,8 +165,11 @@ export default function MyEarnings() {
     }
   }
 
-  // Check if W9/onboarding is required
-  if (profile && profile.w9_status !== 'submitted' && profile.w9_status !== 'verified') {
+  const totalEarned = earningsData?.total_earned_coins || profile?.total_earned_coins || 0
+
+  // Check if W9/onboarding is required (only if user has earnings or pending payouts)
+  const hasEarningsOrPayouts = totalEarned > 0 || (earningsData?.current_month_pending || 0) > 0 || (earningsData?.pending_requests_count || 0) > 0
+  if (profile && hasEarningsOrPayouts && profile.w9_status !== 'submitted' && profile.w9_status !== 'verified') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-zinc-900 border border-yellow-500/30 rounded-xl p-8 text-center">
@@ -196,14 +199,13 @@ export default function MyEarnings() {
     )
   }
 
-  const totalEarned = earningsData?.total_earned_coins || profile.total_earned_coins || 0
-  const availableCoins = earningsData?.troll_coins || profile.troll_coins || 0
+  const availableCoins = earningsData?.troll_coins || profile?.troll_coins || 0
   const pendingPayouts = earningsData?.current_month_pending || 0
   const totalCashedOut = earningsData?.lifetime_paid_usd || 0
   const yearlyPaid = earningsData?.yearly_paid_usd || 0
   const isOverThreshold = yearlyPaid >= 600
   const isNearingThreshold = yearlyPaid >= 500 && yearlyPaid < 600
-  const canRequestPayout = availableCoins >= 7000 // Minimum 7,000 coins ($21)
+  const canRequestPayout = availableCoins >= 7000 && profile?.w9_status === 'submitted' || profile?.w9_status === 'verified' // Minimum 7,000 coins ($21) and onboarding completed
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">

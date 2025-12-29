@@ -106,7 +106,7 @@ export default function ReferralBonusPanel() {
           referred_username: referredUser?.username || 'Unknown',
           month,
           coins_earned: monthlyCoins,
-          bonus_paid: existingBonus?.bonus_paid_coins || 0,
+          bonus_paid: existingBonus?.bonus_troll_coins || 0,
           status: existingBonus ? 'paid' : (isEligible ? 'pending' : 'not_eligible') as 'paid' | 'pending' | 'not_eligible'
         }
       })

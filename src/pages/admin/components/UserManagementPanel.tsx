@@ -18,7 +18,15 @@ interface UserProfile {
   created_at: string
 }
 
-export default function UserManagementPanel() {
+interface UserManagementPanelProps {
+  title?: string
+  description?: string
+}
+
+export default function UserManagementPanel({
+  title = 'User Management',
+  description
+}: UserManagementPanelProps) {
   const { profile: adminProfile } = useAuthStore()
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(false)
@@ -120,7 +128,7 @@ export default function UserManagementPanel() {
       if (error) throw error
 
       // Log the admin action
-      await supabase.from('coin_transactions').insert({
+      const { error: logError } = await supabase.from('coin_transactions').insert({
         user_id: selectedUser.id,
         type: 'admin_adjustment',
         amount: editingCoins.paid - (selectedUser.troll_coins || 0),
@@ -134,7 +142,10 @@ export default function UserManagementPanel() {
           previous_role: selectedUser.role,
           new_role: editingRole
         }
-      }).catch(err => console.error('Error logging admin action:', err))
+      })
+      if (logError) {
+        console.error('Error logging admin action:', logError)
+      }
 
       toast.success('User updated successfully')
       setSelectedUser(null)
@@ -161,11 +172,14 @@ export default function UserManagementPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+  <div className="flex flex-col gap-1">
         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
           <User className="w-6 h-6 text-purple-400" />
-          User Management
+          {title}
         </h2>
+        {description && (
+          <p className="text-sm text-gray-400">{description}</p>
+        )}
       </div>
 
       {/* Search */}

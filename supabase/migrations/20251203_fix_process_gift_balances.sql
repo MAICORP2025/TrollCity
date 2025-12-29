@@ -1,5 +1,5 @@
--- Fix process_gift function to ensure broadcaster always receives paid coins
--- and properly distinguishes between free coins and paid coins (troll coins)
+-- Fix process_gift function to ensure broadcaster always receives troll_coins
+-- and properly distinguishes between free coins and troll_coins (troll coins)
 
 CREATE OR REPLACE FUNCTION process_gift(
   p_sender_id uuid,
@@ -20,29 +20,29 @@ BEGIN
   -- Deduct from sender based on gift type (paid = troll coins, free = free coins)
   IF p_gift_type = 'paid' THEN
     UPDATE user_profiles
-      SET paid_coin_balance = paid_coin_balance - p_coins_spent,
+      SET troll_coins = troll_coins - p_coins_spent,
           total_spent_coins = total_spent_coins + p_coins_spent,
           updated_at = now()
       WHERE id = p_sender_id;
   ELSE
     UPDATE user_profiles
-      SET free_coin_balance = free_coin_balance - p_coins_spent,
+      SET troll_coins = troll_coins - p_coins_spent,
           total_spent_coins = total_spent_coins + p_coins_spent,
           updated_at = now()
       WHERE id = p_sender_id;
   END IF;
 
-  -- Broadcaster ALWAYS receives the full gift amount as PAID COINS (troll coins)
+  -- Broadcaster ALWAYS receives the full gift amount as troll_coins (troll coins)
   -- regardless of whether sender used paid or free coins
   UPDATE user_profiles
-    SET paid_coin_balance = paid_coin_balance + p_coins_spent,
+    SET troll_coins = troll_coins + p_coins_spent,
         total_earned_coins = total_earned_coins + p_coins_spent,
         updated_at = now()
     WHERE id = p_streamer_id;
 
   -- Check if recipient is an admin and process royal family gift tracking
   IF EXISTS (SELECT 1 FROM user_profiles WHERE id = p_streamer_id AND role = 'admin') THEN
-    -- Process admin gift for royal family system (only count paid coins)
+    -- Process admin gift for royal family system (only count troll_coins)
     IF p_gift_type = 'paid' THEN
       BEGIN
         PERFORM process_admin_gift(p_sender_id, p_streamer_id, p_coins_spent);

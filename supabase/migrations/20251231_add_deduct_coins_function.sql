@@ -16,11 +16,11 @@ DECLARE
 BEGIN
   -- Get current balance based on coin type
   IF p_coin_type = 'paid' THEN
-    SELECT paid_coin_balance INTO v_current_balance
+    SELECT troll_coins INTO v_current_balance
     FROM user_profiles
     WHERE id = p_user_id;
   ELSE
-    SELECT free_coin_balance INTO v_current_balance
+    SELECT troll_coins INTO v_current_balance
     FROM user_profiles
     WHERE id = p_user_id;
   END IF;
@@ -38,13 +38,13 @@ BEGIN
   -- Deduct coins
   IF p_coin_type = 'paid' THEN
     UPDATE user_profiles
-    SET paid_coin_balance = paid_coin_balance - p_amount,
+    SET troll_coins = troll_coins - p_amount,
         total_spent_coins = COALESCE(total_spent_coins, 0) + p_amount,
         updated_at = now()
     WHERE id = p_user_id;
   ELSE
     UPDATE user_profiles
-    SET free_coin_balance = free_coin_balance - p_amount,
+    SET troll_coins = troll_coins - p_amount,
         total_spent_coins = COALESCE(total_spent_coins, 0) + p_amount,
         updated_at = now()
     WHERE id = p_user_id;

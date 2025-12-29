@@ -66,7 +66,7 @@ async function fixProfiles() {
       console.log(`  ✅ Profile exists`)
       console.log(`     Username: ${profile.username || 'NULL'}`)
       console.log(`     Role: ${profile.role}`)
-      console.log(`     Coins: ${profile.paid_coin_balance} paid, ${profile.free_coin_balance} free`)
+      console.log(`     Coins: ${profile.troll_coins} paid, ${profile.troll_coins} free`)
       
       // Update username if missing
       if (!profile.username || profile.username.trim() === '') {

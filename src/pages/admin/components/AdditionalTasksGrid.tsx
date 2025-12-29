@@ -5,46 +5,28 @@ import {
   Shield,
   BarChart3,
   Users,
-  FileText,
   MessageSquare,
-  Gift,
   Coins,
   ShoppingCart,
   Calendar,
   Bell,
   Download,
-  Upload,
-  Trash2,
   RefreshCw,
-  Lock,
-  Unlock,
-  Eye,
-  EyeOff,
-  Zap,
-  Target,
-  Award,
-  Star,
-  Crown,
-  Gamepad2,
-  Music,
-  Camera,
+  Ban,
+  Flag,
+  UserCheck,
   Monitor,
-  Server,
-  Wifi,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Clock,
+  Camera,
+  TrendingUp,
   DollarSign,
   CreditCard,
-  PiggyBank,
-  TrendingUp,
+  Clock,
   Activity,
-  UserCheck,
-  UserX,
-  Ban,
-  Flag
+  Award,
+  Zap
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { systemManagementRoutes } from '../adminRoutes'
 
 interface AdditionalTasksGridProps {
   onNavigateToEconomy?: () => void
@@ -80,47 +62,26 @@ export default function AdditionalTasksGrid({
     onSelectTab(tabId)
   }
 
+  const navigate = useNavigate()
+
+  const systemManagementGroup = {
+    title: 'System Management',
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/20',
+    borderColor: 'border-cyan-500/30',
+    tasks: systemManagementRoutes.map((route) => ({
+      icon: route.icon || <Database className="w-5 h-5" />,
+      label: route.title,
+      description: route.description || 'Open system tool',
+      action: () => navigate(route.path),
+      color: route.tileColor || 'text-white',
+      bgColor: route.tileBgColor || 'bg-white/5',
+      borderColor: route.tileBorderColor
+    }))
+  }
+
   const taskGroups = [
-    {
-      title: 'System Management',
-      color: 'text-cyan-400',
-      bgColor: 'bg-cyan-500/20',
-      borderColor: 'border-cyan-500/30',
-      tasks: [
-        {
-          icon: <Database className="w-5 h-5" />,
-          label: 'Database Backup',
-          description: 'Create system backup',
-          action: () => console.log('Database backup'),
-          color: 'text-blue-400',
-          bgColor: 'bg-blue-500/20'
-        },
-        {
-          icon: <Server className="w-5 h-5" />,
-          label: 'System Health',
-          description: 'Check server status',
-          action: () => console.log('System health'),
-          color: 'text-green-400',
-          bgColor: 'bg-green-500/20'
-        },
-        {
-          icon: <RefreshCw className="w-5 h-5" />,
-          label: 'Cache Clear',
-          description: 'Clear all caches',
-          action: () => console.log('Cache clear'),
-          color: 'text-orange-400',
-          bgColor: 'bg-orange-500/20'
-        },
-        {
-          icon: <Settings className="w-5 h-5" />,
-          label: 'System Config',
-          description: 'Edit configuration',
-          action: () => console.log('System config'),
-          color: 'text-purple-400',
-          bgColor: 'bg-purple-500/20'
-        }
-      ]
-    },
+    systemManagementGroup,
     {
       title: 'User Management',
       color: 'text-purple-400',
@@ -131,7 +92,7 @@ export default function AdditionalTasksGrid({
           icon: <Users className="w-5 h-5" />,
           label: 'User Search',
           description: 'Find and manage users',
-          action: () => console.log('User search'),
+          action: pickTab('user_search'),
           color: 'text-blue-400',
           bgColor: 'bg-blue-500/20'
         },
@@ -139,7 +100,7 @@ export default function AdditionalTasksGrid({
           icon: <Ban className="w-5 h-5" />,
           label: 'Ban Management',
           description: 'Manage banned users',
-          action: () => console.log('Ban management'),
+          action: pickTab('ban_management'),
           color: 'text-red-400',
           bgColor: 'bg-red-500/20'
         },
@@ -147,7 +108,7 @@ export default function AdditionalTasksGrid({
           icon: <Flag className="w-5 h-5" />,
           label: 'Reports Queue',
           description: 'Handle user reports',
-          action: () => console.log('Reports queue'),
+          action: pickTab('reports_queue'),
           color: 'text-yellow-400',
           bgColor: 'bg-yellow-500/20'
         },
@@ -155,7 +116,7 @@ export default function AdditionalTasksGrid({
           icon: <UserCheck className="w-5 h-5" />,
           label: 'Role Management',
           description: 'Assign user roles',
-          action: () => console.log('Role management'),
+          action: pickTab('role_management'),
           color: 'text-green-400',
           bgColor: 'bg-green-500/20'
         }
@@ -171,7 +132,7 @@ export default function AdditionalTasksGrid({
           icon: <Monitor className="w-5 h-5" />,
           label: 'Stream Monitor',
           description: 'Monitor live streams',
-          action: () => console.log('Stream monitor'),
+          action: pickTab('stream_monitor'),
           color: 'text-pink-400',
           bgColor: 'bg-pink-500/20'
         },
@@ -179,7 +140,7 @@ export default function AdditionalTasksGrid({
           icon: <Camera className="w-5 h-5" />,
           label: 'Media Library',
           description: 'Manage uploaded content',
-          action: () => console.log('Media library'),
+          action: pickTab('media_library'),
           color: 'text-cyan-400',
           bgColor: 'bg-cyan-500/20'
         },
@@ -187,7 +148,7 @@ export default function AdditionalTasksGrid({
           icon: <MessageSquare className="w-5 h-5" />,
           label: 'Chat Moderation',
           description: 'Moderate chat messages',
-          action: () => console.log('Chat moderation'),
+          action: pickTab('chat_moderation'),
           color: 'text-orange-400',
           bgColor: 'bg-orange-500/20'
         },
@@ -195,7 +156,7 @@ export default function AdditionalTasksGrid({
           icon: <Bell className="w-5 h-5" />,
           label: 'Announcements',
           description: 'Send system announcements',
-          action: () => console.log('Announcements'),
+          action: pickTab('announcements'),
           color: 'text-yellow-400',
           bgColor: 'bg-yellow-500/20'
         }
@@ -251,7 +212,7 @@ export default function AdditionalTasksGrid({
           icon: <CreditCard className="w-5 h-5" />,
           label: 'Payment Logs',
           description: 'View payment history',
-          action: () => console.log('Payment logs'),
+          action: pickTab('payment_logs'),
           color: 'text-blue-400',
           bgColor: 'bg-blue-500/20'
         }
@@ -331,7 +292,7 @@ export default function AdditionalTasksGrid({
           icon: <Download className="w-5 h-5" />,
           label: 'Export Data',
           description: 'Export system data',
-          action: () => console.log('Export data'),
+          action: pickTab('export_data'),
           color: 'text-green-400',
           bgColor: 'bg-green-500/20'
         }

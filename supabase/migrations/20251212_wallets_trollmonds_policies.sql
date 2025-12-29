@@ -13,7 +13,7 @@ CREATE POLICY "wallets_insert_own" ON wallets
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- Allow a user to update their own wallet row (trollmonds, paid_coins, etc.)
+-- Allow a user to update their own wallet row (trollmonds, troll_coins, etc.)
 CREATE POLICY "wallets_update_own" ON wallets
   FOR UPDATE
   USING (auth.uid() = user_id)

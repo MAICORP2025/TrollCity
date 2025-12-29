@@ -97,11 +97,11 @@ Run `force_apply_new_migration.sql` in Supabase Dashboard SQL Editor.
 ## 🎯 System Features
 
 ### Levels
-- **Level 1**: Junior Officer - 1M OWC/hr → 5,500 paid coins/hr
-- **Level 2**: Senior Officer - 1.5M OWC/hr → 11,550 paid coins/hr
-- **Level 3**: Commander - 1.8M OWC/hr → 15,840 paid coins/hr
-- **Level 4**: Elite Commander - 2.2M OWC/hr → 21,780 paid coins/hr
-- **Level 5**: HQ Master Officer - 2.6M OWC/hr → 31,460 paid coins/hr
+- **Level 1**: Junior Officer - 1M OWC/hr → 5,500 troll_coins/hr
+- **Level 2**: Senior Officer - 1.5M OWC/hr → 11,550 troll_coins/hr
+- **Level 3**: Commander - 1.8M OWC/hr → 15,840 troll_coins/hr
+- **Level 4**: Elite Commander - 2.2M OWC/hr → 21,780 troll_coins/hr
+- **Level 5**: HQ Master Officer - 2.6M OWC/hr → 31,460 troll_coins/hr
 
 ### Conversion
 - Base conversion: OWC × conversion rate

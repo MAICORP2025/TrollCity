@@ -30,12 +30,12 @@ BEGIN
   -- 3. Reset all user coin balances
   UPDATE user_profiles
   SET 
-    paid_coin_balance = 0,
-    free_coin_balance = 0,
+    troll_coins = 0,
+    troll_coins = 0,
     total_coins_earned = 0,
     total_coins_spent = 0
-  WHERE paid_coin_balance > 0 OR free_coin_balance > 0 OR total_coins_earned > 0 OR total_coins_spent > 0;
-  v_deleted_counts := v_deleted_counts || jsonb_build_object('balances_reset', (SELECT COUNT(*) FROM user_profiles WHERE paid_coin_balance = 0 AND free_coin_balance = 0));
+  WHERE troll_coins > 0 OR troll_coins > 0 OR total_coins_earned > 0 OR total_coins_spent > 0;
+  v_deleted_counts := v_deleted_counts || jsonb_build_object('balances_reset', (SELECT COUNT(*) FROM user_profiles WHERE troll_coins = 0 AND troll_coins = 0));
 
   -- 4. Delete all notifications
   DELETE FROM notifications;

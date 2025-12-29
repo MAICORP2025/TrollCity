@@ -6,7 +6,7 @@ The new OWC system replaces the old free coins/hour system with a more sophistic
 
 ### Levels & Rates
 
-| Level | Title | OWC/hr | Conversion % | Final Paid Coins/hr (with 10% bonus) |
+| Level | Title | OWC/hr | Conversion % | Final troll_coins/hr (with 10% bonus) |
 |-------|-------|--------|--------------|--------------------------------------|
 | 1 | Junior Officer | 1,000,000 | 0.5% | 5,500 |
 | 2 | Senior Officer | 1,500,000 | 0.7% | 11,550 |
@@ -24,9 +24,9 @@ The new OWC system replaces the old free coins/hour system with a more sophistic
 - Creates functions:
   - `get_owc_per_hour(level)` - Returns OWC per hour for level
   - `get_owc_conversion_rate(level)` - Returns conversion rate
-  - `convert_owc_to_paid_coins(owc, level)` - Calculates paid coins with bonus
+  - `convert_owc_to_troll_coins(owc, level)` - Calculates troll_coins with bonus
   - `award_owc_for_session()` - Awards OWC for completed shifts
-  - `convert_owc_to_paid()` - Converts OWC to paid coins
+  - `convert_owc_to_paid()` - Converts OWC to troll_coins
 
 ### 2. Frontend Configuration
 **File**: `src/lib/officerOWC.ts`
@@ -38,12 +38,12 @@ The new OWC system replaces the old free coins/hour system with a more sophistic
 **File**: `src/components/OfficerTierBadge.tsx`
 - Updated to support levels 1-5
 - Shows correct badge colors (blue, orange, red, purple, gold)
-- Displays final paid coins/hr in tooltip
+- Displays final troll_coins/hr in tooltip
 
 **File**: `src/pages/OfficerOWCDashboard.tsx`
 - Complete OWC dashboard for officers
 - Shows current balance, total earned, estimated value
-- Convert OWC to paid coins interface
+- Convert OWC to troll_coins interface
 - Transaction history
 
 ### 4. Routes
@@ -61,11 +61,11 @@ The new OWC system replaces the old free coins/hour system with a more sophistic
    - Updates `owc_balance` and `total_owc_earned`
    - Logs transaction in `owc_transactions`
 
-### Converting OWC to Paid Coins
+### Converting OWC to troll_coins
 1. Officer goes to `/officer/owc` dashboard
 2. Enters amount of OWC to convert
 3. System calculates:
-   - Base paid coins = OWC × conversion rate
+   - Base troll_coins = OWC × conversion rate
    - Bonus = Base × 10%
    - Total = Base + Bonus
 4. Updates balances and logs transactions
@@ -76,7 +76,7 @@ The new OWC system replaces the old free coins/hour system with a more sophistic
 - `user_profiles.owc_balance` - Current OWC balance
 - `user_profiles.total_owc_earned` - Lifetime OWC earned
 - `officer_work_sessions.owc_earned` - OWC earned in session
-- `officer_work_sessions.paid_coins_converted` - Paid coins from conversion
+- `officer_work_sessions.troll_coins_converted` - troll_coins from conversion
 
 ### New Table: `owc_transactions`
 - Tracks all OWC transactions (earned, converted, bonus, deducted)

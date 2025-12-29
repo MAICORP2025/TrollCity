@@ -150,8 +150,8 @@ Inside UserProfilePopup, below main profile buttons
 
 ## Database Fields Updated
 
-- `user_profiles.troll_coins_balance` - Troll coins
-- `user_profiles.free_coin_balance` - Trollmonds
+- `user_profiles.Troll_coins` - Troll coins
+- `user_profiles.troll_coins` - Trollmonds
 - `user_profiles.level` - User level
 - `user_profiles.updated_at` - Timestamp
 

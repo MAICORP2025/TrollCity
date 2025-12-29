@@ -19,7 +19,7 @@ SELECT
   DATE_TRUNC('month', osl.shift_start) AS month,
   COALESCE(SUM(osl.hours_worked), 0) AS total_hours,
   COALESCE(SUM(osl.coins_earned), 0) AS total_coins,
-  COALESCE(SUM(CASE WHEN COALESCE(osl.paid, false) = false THEN osl.coins_earned ELSE 0 END), 0) AS unpaid_coins,
+  COALESCE(SUM(CASE WHEN COALESCE(osl.paid, false) = false THEN osl.coins_earned ELSE 0 END), 0) AS untroll_coins,
   COALESCE(SUM(CASE WHEN osl.auto_clocked_out = true THEN 1 ELSE 0 END), 0) AS auto_clockouts,
   COUNT(*) AS total_shifts
 FROM officer_shift_logs osl

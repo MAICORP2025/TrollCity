@@ -7,20 +7,20 @@ CREATE TABLE IF NOT EXISTS trollmond_transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES user_profiles(id),
   type TEXT CHECK (type IN ('convert','burn','reward','expire')),
-  paid_coins_spent INTEGER,
+  troll_coins_spent INTEGER,
   trollmonds_added BIGINT,
   created_at TIMESTAMP DEFAULT now()
 );
 
 -- Create the RPC function for conversion
-CREATE OR REPLACE FUNCTION convert_paid_coins_to_trollmonds(p_user_id UUID, p_paid_coins INTEGER)
+CREATE OR REPLACE FUNCTION convert_troll_coins_to_trollmonds(p_user_id UUID, p_troll_coins INTEGER)
 RETURNS JSON AS $$
 DECLARE
   user_record RECORD;
   trollmonds_to_add BIGINT;
 BEGIN
   -- Validate input
-  IF p_paid_coins <= 0 OR p_paid_coins % 100 != 0 THEN
+  IF p_troll_coins <= 0 OR p_troll_coins % 100 != 0 THEN
     RETURN json_build_object('success', false, 'error', 'Invalid conversion amount. Must be multiples of 100.');
   END IF;
 
@@ -31,23 +31,23 @@ BEGIN
   END IF;
 
   -- Check balance
-  IF (user_record.paid_coin_balance < p_paid_coins) THEN
-    RETURN json_build_object('success', false, 'error', 'Insufficient paid coins.');
+  IF (user_record.troll_coins < p_troll_coins) THEN
+    RETURN json_build_object('success', false, 'error', 'Insufficient troll_coins.');
   END IF;
 
   -- Calculate trollmonds
-  trollmonds_to_add := p_paid_coins * 100;
+  trollmonds_to_add := p_troll_coins * 100;
 
-  -- Atomic update (using free_coin_balance as trollmonds)
+  -- Atomic update (using troll_coins as trollmonds)
   UPDATE user_profiles
   SET
-    paid_coin_balance = paid_coin_balance - p_paid_coins,
-    free_coin_balance = free_coin_balance + trollmonds_to_add
+    troll_coins = troll_coins - p_troll_coins,
+    troll_coins = troll_coins + trollmonds_to_add
   WHERE id = p_user_id;
 
   -- Log transaction
-  INSERT INTO trollmond_transactions (user_id, type, paid_coins_spent, trollmonds_added)
-  VALUES (p_user_id, 'convert', p_paid_coins, trollmonds_to_add);
+  INSERT INTO trollmond_transactions (user_id, type, troll_coins_spent, trollmonds_added)
+  VALUES (p_user_id, 'convert', p_troll_coins, trollmonds_to_add);
 
   RETURN json_build_object('success', true);
 END;

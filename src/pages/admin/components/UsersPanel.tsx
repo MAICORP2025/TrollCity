@@ -3,7 +3,12 @@ import { supabase } from "../../../lib/supabase";
 import { toast } from "sonner";
 import UserActions from "./UserActions";
 
-const UsersPanel: React.FC = () => {
+interface UsersPanelProps {
+  title?: string;
+  description?: string;
+}
+
+const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", description }) => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +67,8 @@ const UsersPanel: React.FC = () => {
   if (loading) {
     return (
       <div>
-        <h2 className="text-2xl font-semibold mb-3">User Management</h2>
+        <h2 className="text-2xl font-semibold mb-3">{title}</h2>
+        {description && <p className="text-sm text-gray-400 mb-3">{description}</p>}
         <div className="bg-black/40 rounded-lg p-4">
           <div className="text-center py-8 text-gray-400">Loading users...</div>
         </div>
@@ -73,7 +79,8 @@ const UsersPanel: React.FC = () => {
   if (error) {
     return (
       <div>
-        <h2 className="text-2xl font-semibold mb-3">User Management</h2>
+        <h2 className="text-2xl font-semibold mb-3">{title}</h2>
+        {description && <p className="text-sm text-gray-400 mb-3">{description}</p>}
         <div className="bg-black/40 rounded-lg p-4">
           <div className="text-center py-8">
             <div className="text-red-400 mb-2">{error}</div>
@@ -91,8 +98,11 @@ const UsersPanel: React.FC = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-3">
-        <h2 className="text-2xl font-semibold">User Management</h2>
+      <div className="flex flex-col gap-1 mb-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold">{title}</h2>
+          {description && <p className="text-sm text-gray-400">{description}</p>}
+        </div>
         <button 
           onClick={loadUsers}
           className="px-3 py-1 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"

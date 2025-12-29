@@ -209,7 +209,7 @@ BEGIN
   v_platform_fee := v_purchase_price - v_seller_earnings;
 
   -- Check buyer balance
-  SELECT paid_coin_balance + free_coin_balance INTO v_buyer_balance
+  SELECT troll_coins + troll_coins INTO v_buyer_balance
   FROM user_profiles
   WHERE id = p_buyer_id;
 
@@ -219,13 +219,13 @@ BEGIN
 
   -- Deduct from buyer
   UPDATE user_profiles
-  SET paid_coin_balance = CASE
-        WHEN paid_coin_balance >= v_purchase_price THEN paid_coin_balance - v_purchase_price
+  SET troll_coins = CASE
+        WHEN troll_coins >= v_purchase_price THEN troll_coins - v_purchase_price
         ELSE 0
       END,
-      free_coin_balance = CASE
-        WHEN paid_coin_balance >= v_purchase_price THEN free_coin_balance
-        ELSE free_coin_balance - (v_purchase_price - paid_coin_balance)
+      troll_coins = CASE
+        WHEN troll_coins >= v_purchase_price THEN troll_coins
+        ELSE troll_coins - (v_purchase_price - troll_coins)
       END,
       total_spent_coins = total_spent_coins + v_purchase_price,
       updated_at = now()

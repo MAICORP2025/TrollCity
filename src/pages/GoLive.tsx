@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Video } from 'lucide-react';
+import { Room, createLocalTracks } from 'livekit-client';
 import BroadcasterApplicationForm from '../components/BroadcasterApplicationForm';
 import { toast } from 'sonner';
 
@@ -227,6 +228,43 @@ const GoLive: React.FC = () => {
       setStarting(false);
     }
   };
+
+  const goLiveTest = useCallback(async () => {
+    try {
+      console.log('🎥 Go Live clicked — requesting token...');
+
+      const res = await fetch('/api/livekit/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: 'test-room',
+          participantName: `host-${Date.now()}`,
+          role: 'admin',
+          allowPublish: true,
+          level: 1,
+        }),
+      });
+
+      const data = await res.json();
+      console.log('✅ Token response:', data);
+
+      const room = new Room();
+      console.log('🔌 Connecting to room...');
+
+      await room.connect(import.meta.env.VITE_LIVEKIT_URL, data.token);
+      console.log('✅ Connected to LiveKit!');
+
+      const tracks = await createLocalTracks({ audio: true, video: true });
+      console.log('🎙️📷 Tracks created:', tracks);
+
+      await room.localParticipant.publishTrack(tracks[0]);
+      await room.localParticipant.publishTrack(tracks[1]);
+
+      console.log('🚀 Published local tracks successfully!');
+    } catch (err) {
+      console.error('❌ Go Live failed:', err);
+    }
+  }, []);
 
   /* ----------------------------------------------------
      ACCESS DENIED

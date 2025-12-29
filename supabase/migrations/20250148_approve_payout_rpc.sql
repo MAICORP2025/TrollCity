@@ -46,7 +46,7 @@ BEGIN
   END IF;
 
   -- Get user info
-  SELECT username, paid_coin_balance INTO v_user
+  SELECT username, troll_coins INTO v_user
   FROM user_profiles
   WHERE id = v_payout.user_id;
 
@@ -71,10 +71,10 @@ BEGIN
   -- But we'll ensure the balance is correct
   UPDATE user_profiles
   SET 
-    paid_coin_balance = GREATEST(0, paid_coin_balance - COALESCE(v_payout.coins_redeemed, 0)),
+    troll_coins = GREATEST(0, troll_coins - COALESCE(v_payout.coins_redeemed, 0)),
     updated_at = NOW()
   WHERE id = v_payout.user_id
-  RETURNING paid_coin_balance INTO v_new_balance;
+  RETURNING troll_coins INTO v_new_balance;
 
   -- Create notification
   INSERT INTO notifications (

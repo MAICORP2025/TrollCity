@@ -28,7 +28,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [luckyResult, setLuckyResult] = useState<LuckyResult | null>(null);
   const [showLuckyOverlay, setShowLuckyOverlay] = useState(false);
-  const [balance, setBalance] = useState({ paidCoins: 0, trollmonds: 0 });
+  const [balance, setBalance] = useState({ troll_coins: 0, trollmonds: 0 });
 
   const presetAmounts = [50, 100, 200, 500, 1000, 2500, 5000];
 
@@ -42,13 +42,13 @@ const GiftModal: React.FC<GiftModalProps> = ({
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('paid_coins, trollmonds')
+        .select('troll_coins, trollmonds')
         .eq('id', user!.id)
         .single();
 
       if (error) throw error;
       setBalance({
-        paidCoins: data.paid_coins || 0,
+        troll_coins: data.troll_coins || 0,
         trollmonds: data.trollmonds || 0
       });
     } catch (error) {
@@ -57,7 +57,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
   };
 
   const sendGift = async () => {
-    if (!user || amount <= 0 || amount > balance.paidCoins) {
+    if (!user || amount <= 0 || amount > balance.troll_coins) {
       toast.error('Invalid gift amount or insufficient balance');
       return;
     }
@@ -67,7 +67,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
       const { data, error } = await supabase.rpc('process_gift_with_lucky', {
         p_sender_id: user.id,
         p_receiver_id: recipientId,
-        p_paid_coins: amount
+        p_troll_coins: amount
       });
 
       if (error) throw error;
@@ -76,7 +76,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
         // Update local balance
         setBalance(prev => ({
           ...prev,
-          paidCoins: prev.paidCoins - amount
+          troll_coins: prev.troll_coins - amount
         }));
 
         // Check for lucky win
@@ -165,7 +165,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
                 <span className="text-sm text-gray-400">Troll Coins</span>
               </div>
               <span className="text-lg font-bold text-yellow-400">
-                {balance.paidCoins.toLocaleString()}
+                {balance.troll_coins.toLocaleString()}
               </span>
             </div>
             <div className="flex items-center justify-between mt-2">
@@ -252,7 +252,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
           {/* Send Button */}
           <button
             onClick={sendGift}
-            disabled={loading || amount <= 0 || amount > balance.paidCoins}
+            disabled={loading || amount <= 0 || amount > balance.troll_coins}
             className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -268,7 +268,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
             )}
           </button>
 
-          {amount > balance.paidCoins && (
+          {amount > balance.troll_coins && (
             <p className="text-red-400 text-sm mt-2 text-center">
               Insufficient Troll Coins balance
             </p>

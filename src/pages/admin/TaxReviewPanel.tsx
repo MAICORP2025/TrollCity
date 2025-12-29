@@ -31,7 +31,7 @@ export default function TaxReviewPanel() {
       const { data, error } = await supabase
         .from('admin_tax_reviews')
         .select('*')
-        .order('tax_last_updated', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (error) throw error
       setReviews(data || [])
@@ -202,8 +202,8 @@ export default function TaxReviewPanel() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-400">
-                      {review.tax_last_updated
-                        ? new Date(review.tax_last_updated).toLocaleDateString()
+                      {review.created_at
+                        ? new Date(review.created_at).toLocaleDateString()
                         : 'N/A'}
                     </td>
                     <td className="px-4 py-3">

@@ -216,7 +216,7 @@ export default function EarningsPage() {
               <p className="text-xs text-gray-500 mt-1">all trolling spending balance</p>
             </div>
 
-            {/* Paid Coins */}
+            {/* troll_coins */}
             <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl p-6 border border-yellow-500/30 shadow-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Coins className="w-5 h-5 text-yellow-400" />

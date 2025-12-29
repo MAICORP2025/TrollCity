@@ -96,7 +96,7 @@ export async function chargeProfileView(
     }
 
     // Add to profile owner's earned coins
-    const { error: ownerError } = await supabase.rpc('add_paid_coins', {
+    const { error: ownerError } = await supabase.rpc('add_troll_coins', {
       p_user_id: profileOwnerId,
       p_amount: profileViewPrice
     })

@@ -55,7 +55,7 @@ export default function AdminPoliciesDocsPage() {
             Cannot be cashed out directly.
           </p>
           <p>
-            • <strong>Paid Coins:</strong> Purchased or converted. Only balance that is
+            • <strong>troll_coins:</strong> Purchased or converted. Only balance that is
             eligible for payouts.
           </p>
           <p>
@@ -70,7 +70,7 @@ export default function AdminPoliciesDocsPage() {
 
         <DocSection title="Payout Rules">
           <p>
-            • Minimum payout threshold: <strong>7,000 Paid Coins</strong>.
+            • Minimum payout threshold: <strong>7,000 troll_coins</strong>.
           </p>
           <p>
             • Payouts are processed manually via the Admin "Payout Requests"
@@ -127,7 +127,7 @@ export default function AdminPoliciesDocsPage() {
           <p>• <strong>OG Badge:</strong> joined before Jan 1, 2026.</p>
           <p>• <strong>Officer Badge:</strong> approved Troll Officer role.</p>
           <p>• <strong>Influencer Badge:</strong> verified + influencer tier active (200+ followers, 5000+ coins received).</p>
-          <p>• <strong>Verified Badge:</strong> AI verification passed + payment ($5 PayPal or 500 paid coins).</p>
+          <p>• <strong>Verified Badge:</strong> AI verification passed + payment ($5 PayPal or 500 troll_coins).</p>
           <p>• <strong>VIP / high-spender:</strong> based on coin purchases; thresholds stored in settings.</p>
         </DocSection>
 
@@ -154,7 +154,7 @@ export default function AdminPoliciesDocsPage() {
             • <strong>AI Verification:</strong> ID upload + selfie matching via OpenAI Vision API
           </p>
           <p>
-            • <strong>Payment:</strong> $5 PayPal or 500 paid coins
+            • <strong>Payment:</strong> $5 PayPal or 500 troll_coins
           </p>
           <p>
             • <strong>Auto-approval:</strong> AI match score ≥75 AND behavior score ≥75

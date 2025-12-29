@@ -28,6 +28,10 @@ export const API_ENDPOINTS = {
   livekit: {
     token: '/livekit-token',   // 👈 Correct path for STREAM token
   },
+  broadcastSeats: {
+    list: '/broadcast-seats',
+    action: '/broadcast-seats',
+  },
   stream: {
     create: '/stream/create',      // 👈 You’ll use this soon
   },
@@ -110,7 +114,6 @@ async function request<T = any>(
 
     // Don't require auth for signup endpoint (user doesn't exist yet)
     const isSignupEndpoint = endpoint.includes('/auth/signup');
-    const isLiveKitToken = endpoint.includes('/livekit-token');
 
     const requestHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -126,7 +129,7 @@ async function request<T = any>(
     // For other endpoints, add user auth token if available
     if (isSignupEndpoint) {
       requestHeaders['Authorization'] = `Bearer ${supabaseAnonKey}`;
-    } else if (!isLiveKitToken && token) {
+    } else if (token) {
       requestHeaders['Authorization'] = `Bearer ${token}`;
     }
     

@@ -6,7 +6,7 @@ WITH
   -- Total coins in circulation (all user balances)
   coins_in_circulation AS (
     SELECT 
-      COALESCE(SUM(paid_coin_balance), 0) + COALESCE(SUM(free_coin_balance), 0) AS total
+      COALESCE(SUM(troll_coins), 0) + COALESCE(SUM(troll_coins), 0) AS total
     FROM user_profiles
   ),
   

@@ -38,7 +38,7 @@ The following files still contain direct database updates that should be migrate
 ### 1. `src/pages/Profile.tsx` (Line 667)
 ```typescript
 // ❌ OLD: Direct update
-.update({ paid_coin_balance: profile.paid_coin_balance - cost })
+.update({ troll_coins: profile.troll_coins - cost })
 
 // ✅ NEW: Should use
 const { spendCoins } = useCoins()
@@ -53,16 +53,16 @@ await spendCoins({
 ### 2. `src/pages/CoinStore.tsx` (Line 590)
 ```typescript
 // ❌ OLD: Direct update for free coins
-.update({ free_coin_balance: newBalance })
+.update({ troll_coins: newBalance })
 
 // ✅ NEW: Free coins should be awarded via RPC or edge function
-// (Note: spend_coins RPC only handles paid coins currently)
+// (Note: spend_coins RPC only handles troll_coins currently)
 ```
 
 ### 3. `src/pages/EmpirePartnerApply.tsx` (Lines 66, 87)
 ```typescript
 // ❌ OLD: Direct paid coin deduction
-paid_coin_balance: profile.paid_coin_balance - requiredCoins
+troll_coins: profile.troll_coins - requiredCoins
 
 // ✅ NEW: Should use spendCoins RPC
 await spendCoins({
@@ -76,7 +76,7 @@ await spendCoins({
 ### 4. `src/pages/admin/AdminDashboard.tsx` (Line 1071)
 ```typescript
 // ❌ OLD: Admin reset directly updates balance
-.update({ paid_coin_balance: newBal })
+.update({ troll_coins: newBal })
 
 // ✅ NOTE: Admin operations might be acceptable to keep direct,
 // but consider using RPC for audit trail
@@ -90,12 +90,12 @@ await spendCoins({
    - Returns: `{ success: boolean, gift_id?: uuid, error?: string }`
    - Location: `supabase/migrations/20251231_spend_coins_rpc.sql`
 
-2. **`add_paid_coins`** - Adds coins (used by Square webhook)
+2. **`add_troll_coins`** - Adds coins (used by Square webhook)
    - Parameters: `user_id_input`, `coins_to_add`
-   - Location: `supabase/migrations/20251206_add_paid_coins_function.sql`
+   - Location: `supabase/migrations/20251206_add_troll_coins_function.sql`
 
 ### Edge Functions Updated
-1. **`square-webhook`** - Already calls `add_paid_coins` RPC ✅
+1. **`square-webhook`** - Already calls `add_troll_coins` RPC ✅
 2. **`wheel`** - Now uses `spend_coins` RPC ✅
 
 ## 🎯 Usage Examples
@@ -125,7 +125,7 @@ function GiftButton() {
   return (
     <button 
       onClick={handleSendGift}
-      disabled={loading || balances.paid_coin_balance < 100}
+      disabled={loading || balances.troll_coins < 100}
     >
       Send Gift (100 coins)
     </button>

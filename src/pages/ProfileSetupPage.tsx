@@ -68,7 +68,7 @@ const ProfileSetupPage: React.FC = () => {
             gender: gender,
             email: user.email,
             role: 'user',
-            free_coin_balance: 1000, // Welcome bonus: 1000 Tromonds
+            troll_coins: 1000, // Welcome bonus: 1000 Tromonds
             total_earned_coins: 1000, // Track in total earnings
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()

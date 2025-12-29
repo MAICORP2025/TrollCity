@@ -29,8 +29,8 @@ BEGIN
     bio,
     role,
     tier,
-    paid_coin_balance,
-    free_coin_balance,
+    troll_coins,
+    troll_coins,
     total_earned_coins,
     total_spent_coins
   ) VALUES (

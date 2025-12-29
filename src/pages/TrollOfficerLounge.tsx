@@ -368,7 +368,7 @@ export default function TrollOfficerLounge() {
         }
       }
 
-      toast.success(`${username} kicked successfully - 500 paid coins deducted from your balance`)
+      toast.success(`${username} kicked successfully - 500 troll_coins deducted from your balance`)
 
     } catch (error) {
       console.error('Error in kickUser:', error)
@@ -667,7 +667,7 @@ export default function TrollOfficerLounge() {
                 </p>
                 <div className="text-3xl font-bold text-yellow-300 mb-1">
                   {officerStats.coinsEarned.toLocaleString()}{' '}
-                  <span className="text-base">paid coins</span>
+                  <span className="text-base">troll_coins</span>
                 </div>
                 <div className="text-xs text-gray-400">
                   Approx value: $

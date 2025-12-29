@@ -21,7 +21,6 @@ interface CitySummaryBarProps {
     giftCoins: number
     appSponsoredGifts: number
     savPromoCount: number
-    vivedPromoCount: number
     total_liability_coins: number
     total_platform_profit_usd: number
     kick_ban_revenue: number

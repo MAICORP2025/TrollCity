@@ -57,17 +57,17 @@ serve(async (req) => {
     // Award coins and reputation
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("free_coin_balance, officer_reputation_score")
+      .select("troll_coins, officer_reputation_score")
       .eq("id", officerId)
       .single();
 
-    const currentBalance = profile?.free_coin_balance || 0;
+    const currentBalance = profile?.troll_coins || 0;
     const currentRep = profile?.officer_reputation_score || 100;
 
     await supabase
       .from("user_profiles")
       .update({
-        free_coin_balance: currentBalance + rewards.coins,
+        troll_coins: currentBalance + rewards.coins,
         officer_reputation_score: Math.min(200, currentRep + rewards.reputation)
       })
       .eq("id", officerId);

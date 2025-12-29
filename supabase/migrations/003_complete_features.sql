@@ -62,7 +62,7 @@ CREATE TABLE admin_adjustments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   target_user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
-  adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('paid_coins', 'free_coins')),
+  adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('troll_coins', 'free_coins')),
   amount INTEGER NOT NULL,
   reason TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -125,8 +125,8 @@ INSERT INTO entrance_effects (name, icon, coin_cost, animation_type, message_tem
 
 -- Insert default config values
 INSERT INTO config (key, value, description, category, is_public) VALUES
-('troll_wheel_spin_cost', '50', 'Cost in paid coins to spin the Troll Wheel', 'wheel', true),
-('bankrupt_percentage', '50', 'Percentage of paid coins lost on Bankrupt', 'wheel', true),
+('troll_wheel_spin_cost', '50', 'Cost in troll_coins to spin the Troll Wheel', 'wheel', true),
+('bankrupt_percentage', '50', 'Percentage of troll_coins lost on Bankrupt', 'wheel', true),
 ('welcome_bonus_coins', '100', 'Free coins given to new users', 'general', true),
 ('daily_login_bonus', '10', 'Free coins for daily login', 'general', true),
 ('stream_title_min_length', '5', 'Minimum length for stream titles', 'streaming', true),

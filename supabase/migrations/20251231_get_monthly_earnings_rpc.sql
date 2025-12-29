@@ -7,7 +7,7 @@ RETURNS TABLE (
   coins_earned_from_gifts bigint,
   gift_count bigint,
   unique_gifters bigint,
-  paid_coins_earned bigint,
+  troll_coins_earned bigint,
   free_coins_earned bigint,
   usd_equivalent numeric
 )
@@ -22,7 +22,7 @@ BEGIN
     SUM(g.coins_spent)::bigint AS coins_earned_from_gifts,
     COUNT(DISTINCT g.id)::bigint AS gift_count,
     COUNT(DISTINCT g.sender_id)::bigint AS unique_gifters,
-    SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END)::bigint AS paid_coins_earned,
+    SUM(CASE WHEN g.gift_type = 'paid' THEN g.coins_spent ELSE 0 END)::bigint AS troll_coins_earned,
     SUM(CASE WHEN g.gift_type = 'free' THEN g.coins_spent ELSE 0 END)::bigint AS free_coins_earned,
     (SUM(g.coins_spent)::numeric / 100.0) AS usd_equivalent
   FROM gifts g

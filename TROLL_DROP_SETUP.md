@@ -17,8 +17,8 @@ The troll drop feature spawns animated trolls during live broadcasts that walk a
 ### User Interaction
 - Each troll drop lasts **15 seconds** before expiring
 - Amount split **equally** among all users who click
-- **Green trolls** add coins to `free_coin_balance` (trollmonds)
-- **Red trolls** deduct coins from `free_coin_balance` (trollmonds)
+- **Green trolls** add coins to `troll_coins` (trollmonds)
+- **Red trolls** deduct coins from `troll_coins` (trollmonds)
 - Users can only claim each drop once
 
 ## Database Setup
@@ -165,7 +165,7 @@ Open browser DevTools console and check for:
 
 ### Coins not updating
 1. Verify user has sufficient balance for red trolls
-2. Check that user profile `free_coin_balance` exists
+2. Check that user profile `troll_coins` exists
 3. Verify coin transaction logs in database
 4. Check Supabase auth/RLS policies
 

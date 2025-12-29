@@ -43,8 +43,8 @@ async function runTest() {
         id: userId,
         username: `tester_${Date.now()}`,
         role: 'troll',
-        paid_coin_balance: 0,
-        free_coin_balance: 0,
+        troll_coins: 0,
+        troll_coins: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -86,10 +86,10 @@ async function runTest() {
     console.log('\n5️⃣  Checking initial balance...')
     const { data: profileBefore } = await supabase
       .from('user_profiles')
-      .select('paid_coin_balance')
+      .select('troll_coins')
       .eq('id', userId)
       .single()
-    console.log(`   ✓ Coins before: ${profileBefore.paid_coin_balance}`)
+    console.log(`   ✓ Coins before: ${profileBefore.troll_coins}`)
 
     // 6. Create payment transaction
     console.log('\n6️⃣  Processing payment...')
@@ -118,15 +118,15 @@ async function runTest() {
     console.log('\n7️⃣  Verifying balance update...')
     const { data: profileAfter } = await supabase
       .from('user_profiles')
-      .select('paid_coin_balance')
+      .select('troll_coins')
       .eq('id', userId)
       .single()
 
-    const coinsAdded = profileAfter.paid_coin_balance - profileBefore.troll_coin_balance
+    const coinsAdded = profileAfter.troll_coins - profileBefore.troll_troll_coins
     if (coinsAdded !== pkg.coin_amount) {
       throw new Error(`Balance mismatch: expected +${pkg.coin_amount}, got +${coinsAdded}`)
     }
-    console.log(`   ✓ Balance updated correctly: ${profileBefore.paid_coin_balance} → ${profileAfter.paid_coin_balance}`)
+    console.log(`   ✓ Balance updated correctly: ${profileBefore.troll_coins} → ${profileAfter.troll_coins}`)
 
     // 8. Check coin_transactions table
     console.log('\n8️⃣  Verifying transaction record...')

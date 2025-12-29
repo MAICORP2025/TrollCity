@@ -72,7 +72,7 @@ export default function TrollSurprise({ streamId }: TrollSurpriseProps) {
         // Fallback: Direct coin update if RPC doesn't work
         const { data: currentProfile } = await supabase
           .from('user_profiles')
-          .select('free_coin_balance')
+          .select('troll_coins')
           .eq('id', user.id)
           .single()
 
@@ -80,7 +80,7 @@ export default function TrollSurprise({ streamId }: TrollSurpriseProps) {
           await supabase
             .from('user_profiles')
             .update({
-              free_coin_balance: (currentProfile.free_coin_balance || 0) + 10,
+              troll_coins: (currentProfile.troll_coins || 0) + 10,
             })
             .eq('id', user.id)
         }
@@ -98,10 +98,10 @@ export default function TrollSurprise({ streamId }: TrollSurpriseProps) {
       } else {
         // Fallback: Instantly update local profile balance if refresh fails
         if (profile) {
-          const newBalance = (profile.free_coin_balance || 0) + 10
+          const newBalance = (profile.troll_coins || 0) + 10
           setProfile({
             ...profile,
-            free_coin_balance: newBalance,
+            troll_coins: newBalance,
           })
         }
       }

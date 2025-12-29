@@ -4,32 +4,32 @@
 -- and that all views and functions reference them properly
 -- 
 -- The issue: Multiple migrations were referencing non-existent columns:
--- - troll_coins (should be troll_coins_balance)
--- - trollmonds (should be free_coin_balance)
+-- - troll_coins (should be Troll_coins)
+-- - trollmonds (should be troll_coins)
 
 -- =====================================================
 -- 1. ENSURE CORRECT COLUMNS EXIST
 -- =====================================================
 
--- Ensure troll_coins_balance exists
+-- Ensure Troll_coins exists
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'user_profiles' AND column_name = 'troll_coins_balance'
+    WHERE table_name = 'user_profiles' AND column_name = 'Troll_coins'
   ) THEN
-    ALTER TABLE user_profiles ADD COLUMN troll_coins_balance bigint DEFAULT 0 NOT NULL;
+    ALTER TABLE user_profiles ADD COLUMN Troll_coins bigint DEFAULT 0 NOT NULL;
   END IF;
 END $$;
 
--- Ensure free_coin_balance exists
+-- Ensure troll_coins exists
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'user_profiles' AND column_name = 'free_coin_balance'
+    WHERE table_name = 'user_profiles' AND column_name = 'troll_coins'
   ) THEN
-    ALTER TABLE user_profiles ADD COLUMN free_coin_balance bigint DEFAULT 0 NOT NULL;
+    ALTER TABLE user_profiles ADD COLUMN troll_coins bigint DEFAULT 0 NOT NULL;
   END IF;
 END $$;
 
@@ -50,7 +50,7 @@ BEGIN
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'user_profiles' AND column_name = 'trollmonds'
   ) THEN
-    -- trollmonds might not exist, but if it does and it's not the same as free_coin_balance, drop it
+    -- trollmonds might not exist, but if it does and it's not the same as troll_coins, drop it
     ALTER TABLE user_profiles DROP COLUMN IF EXISTS trollmonds;
   END IF;
 END $$;
@@ -128,8 +128,8 @@ SELECT
   p.id,
   p.username,
   p.total_earned_coins,
-  p.troll_coins_balance,
-  p.free_coin_balance,
+  p.Troll_coins,
+  p.troll_coins,
   
   COALESCE(ce.total_coins, 0) AS current_month_earnings,
   COALESCE(ce.transaction_count, 0) AS current_month_transactions,
@@ -166,7 +166,7 @@ LEFT JOIN payout_summary ps
 LEFT JOIN yearly_payouts yp 
   ON yp.user_id = p.id 
   AND yp.year = DATE_PART('year', NOW())::int
-WHERE COALESCE(p.total_earned_coins, 0) > 0 OR COALESCE(p.troll_coins_balance, 0) > 0;
+WHERE COALESCE(p.total_earned_coins, 0) > 0 OR COALESCE(p.Troll_coins, 0) > 0;
 
 GRANT SELECT ON earnings_view TO authenticated;
 
@@ -177,10 +177,10 @@ GRANT SELECT ON earnings_view TO authenticated;
 DO $$
 BEGIN
   RAISE NOTICE 'Column Name Consistency Fix Applied';
-  RAISE NOTICE '- Verified troll_coins_balance column exists';
-  RAISE NOTICE '- Verified free_coin_balance column exists';
+  RAISE NOTICE '- Verified Troll_coins column exists';
+  RAISE NOTICE '- Verified troll_coins column exists';
   RAISE NOTICE '- Recreated earnings_view with correct column references';
   RAISE NOTICE 'All views and functions now correctly reference:';
-  RAISE NOTICE '  - troll_coins_balance (paid coins)';
-  RAISE NOTICE '  - free_coin_balance (free coins)';
+  RAISE NOTICE '  - Troll_coins (troll_coins)';
+  RAISE NOTICE '  - troll_coins (free coins)';
 END $$;

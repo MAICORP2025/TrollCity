@@ -19,6 +19,7 @@ import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
 import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
 import { RequireLeadOrOwner } from "./components/auth/RequireLeadOrOwner";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 // Static pages (fast load)
 import Home from "./pages/Home";
@@ -61,6 +62,7 @@ import StoreDebug from "./pages/admin/StoreDebug";
 import Changelog from "./pages/Changelog";
 import AccessDenied from "./pages/AccessDenied";
 import ReferralBonusPanel from "./pages/admin/ReferralBonusPanel";
+import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 
 // Lazy-loaded pages
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
@@ -149,9 +151,6 @@ const CourtRoom = lazy(() => import("./pages/CourtRoom"));
 const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
 
 // Admin pages
-const DatabaseBackup = lazy(() => import("./pages/admin/DatabaseBackup"));
-const CacheClear = lazy(() => import("./pages/admin/CacheClear"));
-const SystemConfig = lazy(() => import("./pages/admin/SystemConfig"));
 const BanManagement = lazy(() => import("./pages/admin/BanManagement"));
 const RoleManagement = lazy(() => import("./pages/admin/RoleManagement"));
 const MediaLibrary = lazy(() => import("./pages/admin/MediaLibrary"));
@@ -163,6 +162,7 @@ const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
 const StreamMonitorPage = lazy(() => import("./pages/admin/StreamMonitorPage"));
 const GrantCoins = lazy(() => import("./pages/admin/GrantCoins"));
 const PaymentLogs = lazy(() => import("./pages/admin/PaymentLogs"));
+const StorePriceEditor = lazy(() => import("./pages/admin/components/StorePriceEditor"));
 const AdminFinanceDashboard = lazy(() => import("./pages/admin/AdminFinanceDashboard"));
 const CreateSchedule = lazy(() => import("./pages/admin/CreateSchedule"));
 const OfficerShifts = lazy(() => import("./pages/admin/OfficerShifts"));
@@ -370,27 +370,6 @@ function AppContent() {
     ) {
       return <Navigate to="/application" replace />;
     }
-    const verificationAllowedPaths = new Set([
-      "/verification",
-      "/verification/complete",
-      "/ai-verification",
-      "/terms",
-      "/support"
-    ]);
-    const verificationBypassRoles = new Set([
-      "admin",
-      "hr_admin",
-      "lead_troll_officer",
-      "troll_officer"
-    ]);
-    if (
-      profile &&
-      !profile.is_verified &&
-      !verificationBypassRoles.has(profile.role || "") &&
-      !verificationAllowedPaths.has(location.pathname)
-    ) {
-      return <Navigate to="/verification" replace />;
-    }
     return <Outlet />;
   };
 
@@ -433,8 +412,9 @@ function AppContent() {
             {user && <AdminOfficerQuickMenu />}
 
             <main ref={mainRef} className="flex-1 overflow-y-auto bg-transparent safe-area-bottom">
-              <Suspense fallback={<LoadingScreen />}>
-                <Routes>
+              <ErrorBoundary>
+                <Suspense fallback={<LoadingScreen />}>
+                  <Routes>
                 {/* 🚪 Public Routes */}
                 <Route path="/" element={user ? <Home /> : <LandingPage />} />
                 <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
@@ -808,30 +788,20 @@ function AppContent() {
                         </RequireRole>
                       }
                     />
-                    <Route
-                      path="/admin/database-backup"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <DatabaseBackup />
-                        </RequireRole>
-                      }
-                    />
-                    <Route
-                      path="/admin/cache-clear"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <CacheClear />
-                        </RequireRole>
-                      }
-                    />
-                    <Route
-                      path="/admin/system-config"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <SystemConfig />
-                        </RequireRole>
-                      }
-                    />
+                    {systemManagementRoutes.map((route) => {
+                      const Component = route.component
+                      return (
+                        <Route
+                          key={route.id}
+                          path={route.path}
+                          element={
+                            <RequireRole roles={route.roles ?? [UserRole.ADMIN]}>
+                              <Component />
+                            </RequireRole>
+                          }
+                        />
+                      )
+                    })}
                     <Route
                       path="/admin/ban-management"
                       element={
@@ -921,6 +891,14 @@ function AppContent() {
                       }
                     />
                     <Route
+                      path="/admin/store-pricing"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <StorePriceEditor />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
                       path="/admin/finance"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
@@ -1006,9 +984,10 @@ function AppContent() {
 
                 {/* 🔙 Catch-all */}
                 <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </Suspense>
-          </main>
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
+            </main>
         </div>
       </div>
 

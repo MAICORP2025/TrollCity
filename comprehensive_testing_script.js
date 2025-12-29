@@ -77,15 +77,15 @@ async function testUserProfiles() {
   try {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('id, username, paid_coin_balance, free_coin_balance, og_badge')
+      .select('id, username, troll_coins, troll_coins, og_badge')
       .limit(5)
     
     if (error) throw error
     
     const hasOgBadge = data.some(user => user.og_badge === true)
     const hasValidBalances = data.every(user => 
-      typeof user.paid_coin_balance === 'number' && 
-      typeof user.free_coin_balance === 'number'
+      typeof user.troll_coins === 'number' && 
+      typeof user.troll_coins === 'number'
     )
     
     logTest('User Profiles', true, `Found ${data.length} users`)

@@ -502,29 +502,14 @@ export function LeadOfficerDashboard() {
           break
         }
 
-        case 'promote_to_lead': {
-          // Promote to lead officer
-          const { error: promoteError } = await supabase
-            .from('user_profiles')
-            .update({
-              is_lead_officer: true,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', userId)
-          error = promoteError
-          break
-        }
-
+        case 'promote_to_lead':
         case 'revoke_lead': {
-          // Revoke lead officer status
-          const { error: revokeError } = await supabase
-            .from('user_profiles')
-            .update({
-              is_lead_officer: false,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', userId)
-          error = revokeError
+          const { error: setStatusError } = await supabase.rpc('set_lead_officer_status', {
+            p_user_id: userId,
+            p_make_lead: actionType === 'promote_to_lead'
+          })
+
+          error = setStatusError
           break
         }
       }

@@ -289,7 +289,7 @@ BEGIN
 
     -- Return coins to buyer
     UPDATE user_profiles
-    SET paid_coin_balance = paid_coin_balance + v_refund_coins,
+    SET troll_coins = troll_coins + v_refund_coins,
         total_spent_coins = total_spent_coins - v_refund_coins,
         updated_at = NOW()
     WHERE id = v_purchase.buyer_id;

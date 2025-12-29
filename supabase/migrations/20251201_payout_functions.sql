@@ -3,7 +3,7 @@
 -- Function for users to request a payout
 CREATE OR REPLACE FUNCTION request_payout(
   p_user_id UUID,
-  p_amount_paid_coins INTEGER
+  p_amount_troll_coins INTEGER
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -39,16 +39,16 @@ BEGIN
   END IF;
 
   -- Validate amount
-  IF p_amount_paid_coins < v_minimum THEN
-    RETURN jsonb_build_object('success', false, 'error', format('Minimum withdrawal is %s paid coins', v_minimum));
+  IF p_amount_troll_coins < v_minimum THEN
+    RETURN jsonb_build_object('success', false, 'error', format('Minimum withdrawal is %s troll_coins', v_minimum));
   END IF;
 
-  IF p_amount_paid_coins > v_user_profile.paid_coin_balance THEN
+  IF p_amount_troll_coins > v_user_profile.troll_coins THEN
     RETURN jsonb_build_object('success', false, 'error', 'Insufficient paid coin balance');
   END IF;
 
   -- Calculate amounts
-  v_cash_amount := p_amount_paid_coins * v_conversion_rate;
+  v_cash_amount := p_amount_troll_coins * v_conversion_rate;
   v_processing_fee := v_cash_amount * 0.05; -- 5% processing fee
   v_net_amount := v_cash_amount - v_processing_fee;
 
@@ -64,7 +64,7 @@ BEGIN
   )
   VALUES (
     p_user_id,
-    p_amount_paid_coins,
+    p_amount_troll_coins,
     v_cash_amount,
     v_processing_fee,
     v_net_amount,
@@ -76,7 +76,7 @@ BEGIN
   -- Deduct coins from user balance (hold them until payout is processed)
   UPDATE user_profiles
   SET 
-    paid_coin_balance = paid_coin_balance - p_amount_paid_coins,
+    troll_coins = troll_coins - p_amount_troll_coins,
     updated_at = NOW()
   WHERE id = p_user_id;
 
@@ -91,8 +91,8 @@ BEGIN
   VALUES (
     p_user_id,
     'payout_request',
-    -p_amount_paid_coins,
-    format('Payout request: %s coins ($%s)', p_amount_paid_coins, v_net_amount),
+    -p_amount_troll_coins,
+    format('Payout request: %s coins ($%s)', p_amount_troll_coins, v_net_amount),
     jsonb_build_object('payout_request_id', v_payout_id)
   );
 
@@ -169,7 +169,7 @@ BEGIN
     -- If rejected, refund coins to user
     UPDATE user_profiles
     SET 
-      paid_coin_balance = paid_coin_balance + v_payout.coins_used,
+      troll_coins = troll_coins + v_payout.coins_used,
       updated_at = NOW()
     WHERE id = v_payout.user_id;
 

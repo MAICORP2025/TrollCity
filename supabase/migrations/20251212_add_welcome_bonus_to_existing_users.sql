@@ -4,7 +4,7 @@
 -- First, update all existing user profiles to add 1000 free coins
 UPDATE user_profiles
 SET
-  free_coin_balance = COALESCE(free_coin_balance, 0) + 1000,
+  troll_coins = COALESCE(troll_coins, 0) + 1000,
   total_earned_coins = COALESCE(total_earned_coins, 0) + 1000,
   updated_at = NOW()
 WHERE id IS NOT NULL;

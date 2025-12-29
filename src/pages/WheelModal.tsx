@@ -82,10 +82,10 @@ export default function WheelModal({ onClose, trollmonds = 0, setTrollmonds }: W
 
   useEffect(() => {
     if (!profile) return
-    const walletBalance = profile?.free_coin_balance ?? 0
+    const walletBalance = profile?.troll_coins ?? 0
     setBalance(walletBalance)
     if (setTrollmonds) setTrollmonds(walletBalance)
-  }, [profile?.id, profile?.free_coin_balance, setTrollmonds])
+  }, [profile?.id, profile?.troll_coins, setTrollmonds])
 
   const spinWheel = async () => {
     if (!profile || !user || !wheelConfig?.is_active) return
@@ -111,7 +111,7 @@ export default function WheelModal({ onClose, trollmonds = 0, setTrollmonds }: W
       const { error: deductError } = await supabase
         .from('user_profiles')
         .update({
-          free_coin_balance: newBalance,
+          troll_coins: newBalance,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
@@ -143,7 +143,7 @@ export default function WheelModal({ onClose, trollmonds = 0, setTrollmonds }: W
       const { error: awardError } = await supabase
         .from('user_profiles')
         .update({
-          free_coin_balance: payoutBalance,
+          troll_coins: payoutBalance,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)

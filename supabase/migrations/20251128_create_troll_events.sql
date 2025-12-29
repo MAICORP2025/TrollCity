@@ -98,7 +98,7 @@ BEGIN
   END IF;
 
   -- Get user profile
-  SELECT free_coin_balance INTO new_balance
+  SELECT troll_coins INTO new_balance
   FROM user_profiles
   WHERE id = p_user_id;
 
@@ -112,7 +112,7 @@ BEGIN
 
   -- Add reward to user balance
   UPDATE user_profiles
-  SET free_coin_balance = free_coin_balance + event_record.reward_amount
+  SET troll_coins = troll_coins + event_record.reward_amount
   WHERE id = p_user_id;
 
   -- Record transaction

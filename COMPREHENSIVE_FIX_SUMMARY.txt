@@ -10,11 +10,11 @@ THREE CRITICAL ISSUES FIXED:
 ISSUE #1: COLUMN NAME CONSISTENCY
 ================================================================================
 
-Problem: "column user_profiles.troll_coins_balance does not exist"
+Problem: "column user_profiles.Troll_coins does not exist"
 
 Root Cause:
   - Multiple migrations (created Dec 23 - Feb 11) referenced wrong column names
-  - Database schema uses: troll_coins_balance and free_coin_balance
+  - Database schema uses: Troll_coins and troll_coins
   - Migrations were trying to use: troll_coins and trollmonds (non-existent)
 
 Impact:
@@ -24,7 +24,7 @@ Impact:
 
 Fix Applied:
   Files Modified:
-    1. supabase/migrations/20260211_migrate_coin_balance_column_names.sql
+    1. supabase/migrations/20260211_migrate_troll_coins_column_names.sql
        - Fixed: add_troll_coins() function
        - Fixed: deduct_coins() function
        - Fixed: spend_coins() function
@@ -180,7 +180,7 @@ Quick Reference:
 
 Detailed Analysis:
   - COLUMN_FIX_SUMMARY.md
-  - FIX_COIN_BALANCE_FLICKERING.md
+  - FIX_troll_coins_FLICKERING.md
   - FIX_EARNINGS_COLUMNS_INSTRUCTIONS.md
 
 SQL Files:

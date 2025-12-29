@@ -11,7 +11,7 @@ interface PayrollReport {
   month: string
   total_hours: number
   total_coins: number
-  unpaid_coins: number
+  untroll_coins: number
   auto_clockouts: number
   total_shifts: number
 }
@@ -55,7 +55,7 @@ export async function downloadPayrollPDF(report: PayrollReport) {
       body: [
         ['Total Hours', Number(report.total_hours || 0).toFixed(2)],
         ['Coins Earned', Number(report.total_coins || 0).toLocaleString()],
-        ['Unpaid Coins', Number(report.unpaid_coins || 0).toLocaleString()],
+        ['Untroll_coins', Number(report.untroll_coins || 0).toLocaleString()],
         ['Auto Clock-Outs', report.auto_clockouts?.toString() || '0'],
         ['Total Shifts', report.total_shifts?.toString() || '0'],
       ],
@@ -73,8 +73,8 @@ export async function downloadPayrollPDF(report: PayrollReport) {
     doc.setFontSize(12)
     doc.text(`Estimated Payout: $${estimatedPayout}`, 14, finalY + 25)
     
-    if (Number(report.unpaid_coins || 0) > 0) {
-      const unpaidPayout = (Number(report.unpaid_coins || 0) * 0.01).toFixed(2)
+    if (Number(report.untroll_coins || 0) > 0) {
+      const unpaidPayout = (Number(report.untroll_coins || 0) * 0.01).toFixed(2)
       doc.setFontSize(10)
       doc.setTextColor(200, 0, 0)
       doc.text(`Unpaid Amount: $${unpaidPayout}`, 14, finalY + 35)

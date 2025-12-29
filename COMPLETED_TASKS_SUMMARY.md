@@ -19,7 +19,7 @@
 #### **kickUser() Implementation:**
 ```typescript
 - Calls `kick_user` RPC function with proper parameters
-- Deducts 500 paid coins from officer's balance
+- Deducts 500 troll_coins from officer's balance
 - Logs moderation action in `moderation_actions` table
 - Updates officer statistics and activity
 - Provides proper error handling and user feedback

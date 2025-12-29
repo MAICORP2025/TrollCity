@@ -18,7 +18,7 @@ DECLARE
   v_gift_id UUID := gen_random_uuid();
 BEGIN
   -- Check sender's paid coin balance
-  SELECT troll_coins_balance INTO v_sender_balance
+  SELECT Troll_coins INTO v_sender_balance
   FROM user_profiles
   WHERE id = p_sender_id;
 
@@ -42,15 +42,15 @@ BEGIN
   -- Deduct coins from sender
   UPDATE user_profiles
   SET 
-    troll_coins_balance = troll_coins_balance - p_coin_amount,
+    Troll_coins = Troll_coins - p_coin_amount,
     total_spent_coins = COALESCE(total_spent_coins, 0) + p_coin_amount,
     updated_at = now()
   WHERE id = p_sender_id;
 
-  -- Add coins to receiver (as troll_coins_balance)
+  -- Add coins to receiver (as Troll_coins)
   UPDATE user_profiles
   SET 
-    troll_coins_balance = COALESCE(troll_coins_balance, 0) + p_coin_amount,
+    Troll_coins = COALESCE(Troll_coins, 0) + p_coin_amount,
     total_earned_coins = COALESCE(total_earned_coins, 0) + p_coin_amount,
     updated_at = now()
   WHERE id = p_receiver_id;
@@ -137,5 +137,5 @@ GRANT EXECUTE ON FUNCTION spend_coins(UUID, UUID, BIGINT, TEXT, TEXT) TO authent
 GRANT EXECUTE ON FUNCTION spend_coins(UUID, UUID, BIGINT, TEXT, TEXT) TO service_role;
 
 -- Add comment
-COMMENT ON FUNCTION spend_coins IS 'Simple function to send coins from one user to another. Deducts from sender and adds to receiver as troll_coins_balance.';
+COMMENT ON FUNCTION spend_coins IS 'Simple function to send coins from one user to another. Deducts from sender and adds to receiver as Troll_coins.';
 

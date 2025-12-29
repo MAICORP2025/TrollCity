@@ -38,7 +38,7 @@ BEGIN
   -- Apply bonus if any
   IF bonus > 0 THEN
     UPDATE user_profiles
-    SET free_coin_balance = free_coin_balance + bonus
+    SET troll_coins = troll_coins + bonus
     WHERE id = p_sender_id;
 
     -- Record bonus transaction

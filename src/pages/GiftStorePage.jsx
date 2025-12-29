@@ -82,7 +82,7 @@ export default function GiftStorePage() {
   }
 
   const totalMatches = filteredGifts.length
-  const trollCoinBalance = profile?.troll_coins ?? profile?.troll_coins ?? 0
+  const trollTrollcoins = profile?.troll_coins ?? profile?.troll_coins ?? 0
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#03030a] via-[#05050f] to-[#0c0a14] text-white px-6 py-8">

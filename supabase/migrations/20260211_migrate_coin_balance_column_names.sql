@@ -1,6 +1,6 @@
 -- Migration: Update coin balance column references from old to new names
 -- Date: 2025-02-11
--- Purpose: Migrate all RPC functions from troll_coins_balance/free_coin_balance to troll_coins/trollmonds
+-- Purpose: Migrate all RPC functions from Troll_coins/troll_coins to troll_coins/trollmonds
 
 -- =====================================================
 -- 1. Update add_troll_coins function
@@ -16,7 +16,7 @@ AS $$
 BEGIN
   UPDATE user_profiles
   SET 
-    troll_coins_balance = COALESCE(troll_coins_balance, 0) + coins_to_add,
+    Troll_coins = COALESCE(Troll_coins, 0) + coins_to_add,
     total_earned_coins = COALESCE(total_earned_coins, 0) + coins_to_add,
     updated_at = NOW()
   WHERE id = user_id_input;
@@ -62,11 +62,11 @@ BEGIN
   END IF;
 
   IF v_coin_type = 'paid' THEN
-    SELECT troll_coins_balance INTO v_current_balance
+    SELECT Troll_coins INTO v_current_balance
     FROM user_profiles
     WHERE id = p_user_id;
   ELSE
-    SELECT free_coin_balance INTO v_current_balance
+    SELECT troll_coins INTO v_current_balance
     FROM user_profiles
     WHERE id = p_user_id;
   END IF;
@@ -81,13 +81,13 @@ BEGIN
 
   IF v_coin_type = 'paid' THEN
     UPDATE user_profiles
-    SET troll_coins_balance = troll_coins_balance - p_amount,
+    SET Troll_coins = Troll_coins - p_amount,
         total_spent_coins = COALESCE(total_spent_coins, 0) + p_amount,
         updated_at = now()
     WHERE id = p_user_id;
   ELSE
     UPDATE user_profiles
-    SET free_coin_balance = free_coin_balance - p_amount,
+    SET troll_coins = troll_coins - p_amount,
         total_spent_coins = COALESCE(total_spent_coins, 0) + p_amount,
         updated_at = now()
     WHERE id = p_user_id;
@@ -138,7 +138,7 @@ DECLARE
   v_gift_id UUID := gen_random_uuid();
 BEGIN
   -- Check sender's paid coin balance
-  SELECT troll_coins_balance INTO v_sender_balance
+  SELECT Troll_coins INTO v_sender_balance
   FROM user_profiles
   WHERE id = p_sender_id;
 
@@ -162,15 +162,15 @@ BEGIN
   -- Deduct coins from sender
   UPDATE user_profiles
   SET 
-    troll_coins_balance = troll_coins_balance - p_coin_amount,
+    Troll_coins = Troll_coins - p_coin_amount,
     total_spent_coins = COALESCE(total_spent_coins, 0) + p_coin_amount,
     updated_at = now()
   WHERE id = p_sender_id;
 
-  -- Add coins to receiver (as troll_coins_balance)
+  -- Add coins to receiver (as Troll_coins)
   UPDATE user_profiles
   SET 
-    troll_coins_balance = COALESCE(troll_coins_balance, 0) + p_coin_amount,
+    Troll_coins = COALESCE(Troll_coins, 0) + p_coin_amount,
     total_earned_coins = COALESCE(total_earned_coins, 0) + p_coin_amount,
     updated_at = now()
   WHERE id = p_receiver_id;
@@ -294,12 +294,12 @@ BEGIN
   END IF;
 
   UPDATE wallets
-  SET free_coin_balance = v_remaining - p_amount,
+  SET troll_coins = v_remaining - p_amount,
       updated_at = NOW()
   WHERE user_id = p_user_id;
 
   UPDATE user_profiles
-  SET free_coin_balance = GREATEST(COALESCE(free_coin_balance, 0) - p_amount, 0),
+  SET troll_coins = GREATEST(COALESCE(troll_coins, 0) - p_amount, 0),
       total_spent_coins = COALESCE(total_spent_coins, 0) + p_amount,
       updated_at = NOW()
   WHERE id = p_user_id;

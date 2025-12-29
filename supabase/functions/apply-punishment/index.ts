@@ -54,11 +54,11 @@ serve(async (req) => {
       // Get user's current balance
       const { data: user } = await supabase
         .from("user_profiles")
-        .select("free_coin_balance")
+        .select("troll_coins")
         .eq("id", userId)
         .single();
 
-      coinsToDeduct = user?.free_coin_balance || 0; // Wipe all
+      coinsToDeduct = user?.troll_coins || 0; // Wipe all
     } else {
       coinsToDeduct = penaltyMap[severity] || 0;
     }

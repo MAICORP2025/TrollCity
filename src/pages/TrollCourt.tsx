@@ -21,16 +21,29 @@ export default function TrollCourt() {
 
   const loadCourtState = async () => {
     try {
-      const { data: session } = await supabase
-        .from('court_sessions')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const { data: currentSession, error: sessionError } = await supabase.rpc('get_current_court_session')
+      if (sessionError) {
+        console.warn('Court session RPC error; falling back to direct query', sessionError)
+        throw new Error('RPC not available')
+      }
 
+      const session = Array.isArray(currentSession) ? currentSession[0] : currentSession
       setCourtSession(session || null)
+    } catch {
+      try {
+        const { data: session } = await supabase
+          .from('court_sessions')
+          .select('*')
+          .eq('status', 'live')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
+        setCourtSession(session || null)
+      } catch {
+        setCourtSession(null)
+      }
+    } finally {
       if (user?.id) {
         const { data: summons } = await supabase
           .from('court_summons')
@@ -43,8 +56,6 @@ export default function TrollCourt() {
       } else {
         setPendingSummons([])
       }
-    } catch (err) {
-      // non-fatal
     }
   }
 

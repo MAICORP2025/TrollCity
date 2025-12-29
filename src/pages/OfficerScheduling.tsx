@@ -327,9 +327,9 @@ export default function OfficerScheduling() {
       if (error) throw error
 
       if (data?.success) {
-        const paidCoins = data.paid_coins_received?.toLocaleString() || '0'
+        const troll_coins = data.troll_coins_received?.toLocaleString() || '0'
         const usdAmount = data.usd_amount?.toFixed(2) || '0.00'
-        toast.success(`Cashout successful! Converted ${data.free_coins_redeemed?.toLocaleString()} free coins to ${paidCoins} paid coins ($${usdAmount})`)
+        toast.success(`Cashout successful! Converted ${data.free_coins_redeemed?.toLocaleString()} free coins to ${troll_coins} troll_coins ($${usdAmount})`)
         await loadSlots()
         // Refresh profile to update balances
         const { data: updatedProfile } = await supabase
@@ -582,7 +582,7 @@ export default function OfficerScheduling() {
                                     onClick={() => handleCashout(slot.shift_log_id!)}
                                     disabled={loading}
                                     className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                                    title="Cash out: 6,000 paid coins = $60"
+                                    title="Cash out: 6,000 troll_coins = $60"
                                   >
                                     <DollarSign className="w-4 h-4" />
                                     Cash Out

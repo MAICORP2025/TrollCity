@@ -67,7 +67,7 @@ export default function AdminRFC() {
             ]}
           />
           <p className="text-gray-400 text-sm mt-2">
-            ⚠ Paid coins cannot be cashed out. Only free coins earned via streaming or gifting.
+            ⚠ troll_coins cannot be cashed out. Only free coins earned via streaming or gifting.
           </p>
         </Section>
 
@@ -82,8 +82,8 @@ export default function AdminRFC() {
               ['Bong', '25', '20', 'Green vapor'],
               ['Troll Hat', '40', '32', 'Rotating hat'],
               ['Tool Box (Admin)', '75', '35', '+1% Store Profit'],
-              ['Basketball - VIVED', '100', '5 paid coins', 'Tracks 5000 coin goal'],
-              ['SAV Cat Scratch', '200', '5 paid coins', 'Screen-wide scratch'],
+              ['Basketball - VIVED', '100', '5 troll_coins', 'Tracks 5000 coin goal'],
+              ['SAV Cat Scratch', '200', '5 troll_coins', 'Screen-wide scratch'],
             ]}
           />
         </Section>
@@ -101,7 +101,7 @@ export default function AdminRFC() {
         {/* OFFICER PAY STRUCTURE */}
         <Section title="Troll Officer Earnings" icon={<Shield className="text-blue-400 w-6 h-6" />}>
           <Table
-            headers={['Action', 'Reputation Gain', 'Paid Coins?', 'Bonus']}
+            headers={['Action', 'Reputation Gain', 'troll_coins?', 'Bonus']}
             rows={[
               ['Kick', '+3', 'No', 'Light violation'],
               ['Mute', '+1', 'No', 'Temporary discipline'],
@@ -128,7 +128,7 @@ export default function AdminRFC() {
         </Section>
 
         {/* ENTRANCE EFFECTS */}
-        <Section title="Entrance Effects (Paid Coins)" icon={<Crown className="text-yellow-500 w-6 h-6" />}>
+        <Section title="Entrance Effects (troll_coins)" icon={<Crown className="text-yellow-500 w-6 h-6" />}>
           <Table
             headers={['Effect Name', 'Coin Cost', 'Duration', 'Eligibility']}
             rows={[
@@ -180,7 +180,7 @@ export default function AdminRFC() {
             <li>Recruits are manually assigned by admins only</li>
             <li>No self-assignment or referral link abuse allowed</li>
             <li>5% commission only applies to earnings over 40,000 coins/month</li>
-            <li>Commission paid in paid coins (not cash withdrawable)</li>
+            <li>Commission paid in troll_coins (not cash withdrawable)</li>
             <li>Abuse of system results in permanent ban from program</li>
             <li>Recruit relationships are permanent and cannot be changed</li>
           </ul>
@@ -232,7 +232,7 @@ export default function AdminRFC() {
               content: (
                 <>
                   • Earn 5% of streamer's earned coins once they reach 40,000/month<br />
-                  • Bonus paid in paid coins (not cash withdrawable)<br />
+                  • Bonus paid in troll_coins (not cash withdrawable)<br />
                   • Referrals must be REAL and unique active users<br />
                   • Abuse = Permanent Recruiter program ban<br />
                 </>

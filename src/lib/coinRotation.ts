@@ -34,7 +34,7 @@ export class CoinRotationOptimizer {
 
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('troll_coins, free_coin_balance, total_earned_coins, total_spent_coins')
+        .select('troll_coins, troll_coins, total_earned_coins, total_spent_coins')
         .eq('id', profile.id)
         .single()
 
@@ -47,7 +47,7 @@ export class CoinRotationOptimizer {
       useAuthStore.getState().setProfile({
         ...profile,
         troll_coins: data.troll_coins,
-        free_coin_balance: data.free_coin_balance,
+        troll_coins: data.troll_coins,
         total_earned_coins: data.total_earned_coins,
         total_spent_coins: data.total_spent_coins
       })
@@ -77,7 +77,7 @@ export class CoinRotationOptimizer {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('troll_coins, free_coin_balance')
+        .select('troll_coins, troll_coins')
         .eq('id', userId)
         .single()
 

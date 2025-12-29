@@ -114,7 +114,7 @@ export default function EmpirePartnerDashboard() {
           referred_user:user_profiles!referrals_referred_user_id_fkey (
             username,
             avatar_url,
-            troll_coin_balance
+            troll_troll_coins
           )
         `)
         .eq('referrer_id', user.id)
@@ -269,7 +269,7 @@ export default function EmpirePartnerDashboard() {
             // Add coins to referrer's wallet
             const { data: currentWallet } = await supabase
               .from('wallets')
-              .select('paid_coins')
+              .select('troll_coins')
               .eq('user_id', user.id)
               .single()
 
@@ -277,7 +277,7 @@ export default function EmpirePartnerDashboard() {
               const { error: updateError } = await supabase
                 .from('wallets')
                 .update({
-                  paid_coins: currentWallet.paid_coins + 10000,
+                  troll_coins: currentWallet.troll_coins + 10000,
                   updated_at: new Date().toISOString()
                 })
                 .eq('user_id', user.id)
@@ -291,7 +291,7 @@ export default function EmpirePartnerDashboard() {
                 .from('wallets')
                 .insert({
                   user_id: user.id,
-                  paid_coins: 10000,
+                  troll_coins: 10000,
                   updated_at: new Date().toISOString()
                 })
 
@@ -332,7 +332,7 @@ export default function EmpirePartnerDashboard() {
           <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
             Troll Empire Partner Program
           </h1>
-          <p className="text-gray-400">Earn 10,000 coins when your referrals reach 40,000 paid coins within 21 days</p>
+          <p className="text-gray-400">Earn 10,000 coins when your referrals reach 40,000 troll_coins within 21 days</p>
         </div>
 
         {/* Stats Cards */}
@@ -393,7 +393,7 @@ export default function EmpirePartnerDashboard() {
             </button>
           </div>
           <p className="text-sm text-gray-400 mt-2">
-            Share this link to recruit new users. You'll earn 10,000 coins when they reach 40,000 paid coins within 21 days.
+            Share this link to recruit new users. You'll earn 10,000 coins when they reach 40,000 troll_coins within 21 days.
           </p>
         </div>
 
@@ -449,7 +449,7 @@ export default function EmpirePartnerDashboard() {
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Paid Coins Progress</span>
+                        <span className="text-gray-400">troll_coins Progress</span>
                         <span className="text-white font-medium">
                           {(referral.referred_user?.troll_coins || 0).toLocaleString()} / 40,000
                         </span>

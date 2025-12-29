@@ -3,7 +3,7 @@ import { supabase, ensureSupabaseSession, UserProfile } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
 
-interface CoinBalance {
+interface Trollcoins {
   troll_coins: number
   total_earned_coins: number
   total_spent_coins: number
@@ -30,7 +30,7 @@ export function useCoins() {
   const { user, profile } = useAuthStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [balances, setBalances] = useState<CoinBalance>({
+  const [balances, setBalances] = useState<Trollcoins>({
     troll_coins: profile?.troll_coins ?? 0,
     total_earned_coins: profile?.total_earned_coins || 0,
     total_spent_coins: profile?.total_spent_coins || 0,

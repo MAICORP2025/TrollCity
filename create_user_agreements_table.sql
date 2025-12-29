@@ -94,9 +94,10 @@ BEGIN
         encode(digest(p_user_id::text || p_agreement_version || NOW()::text, 'sha256'), 'hex')
     ) RETURNING id INTO v_agreement_id;
 
-    -- Update user profile to mark terms as accepted
+    -- Update user profile to mark terms and recording consent as accepted
     UPDATE user_profiles
     SET terms_accepted = true,
+        court_recording_consent = true,
         updated_at = NOW()
     WHERE id = p_user_id;
 

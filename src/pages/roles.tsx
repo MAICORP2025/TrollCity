@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import ClickableUsername from '../components/ClickableUsername'
 
 export default function RolesManager() {
-  const { profile } = useAuthStore()
+  const { profile, refreshProfile } = useAuthStore()
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState<string | null>(null)
@@ -41,6 +41,13 @@ export default function RolesManager() {
 
       if (error) throw error
       toast.success('Role updated successfully')
+      if (profile?.id === id) {
+        try {
+          await refreshProfile()
+        } catch (refreshError) {
+          console.warn('Unable to refresh current profile after role update', refreshError)
+        }
+      }
       await loadUsers()
     } catch {
       toast.error('Failed to update role')

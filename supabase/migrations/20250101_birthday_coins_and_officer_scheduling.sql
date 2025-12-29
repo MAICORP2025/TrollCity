@@ -73,10 +73,10 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'reason', 'already_awarded');
   END IF;
 
-  -- Award 1000 paid coins
+  -- Award 1000 troll_coins
   UPDATE user_profiles
   SET 
-    paid_coin_balance = COALESCE(paid_coin_balance, 0) + v_birthday_coins,
+    troll_coins = COALESCE(troll_coins, 0) + v_birthday_coins,
     total_earned_coins = COALESCE(total_earned_coins, 0) + v_birthday_coins,
     birthday_coins_awarded_date = v_today,
     updated_at = NOW()
@@ -94,7 +94,7 @@ BEGIN
     p_user_id,
     'birthday_bonus',
     v_birthday_coins,
-    'Birthday bonus - 1000 paid coins',
+    'Birthday bonus - 1000 troll_coins',
     jsonb_build_object('birthday_date', v_date_of_birth, 'awarded_date', v_today),
     NOW()
   );
@@ -102,7 +102,7 @@ BEGIN
   RETURN jsonb_build_object(
     'success', true,
     'coins_awarded', v_birthday_coins,
-    'message', 'Happy Birthday! You received 1000 paid coins!'
+    'message', 'Happy Birthday! You received 1000 troll_coins!'
   );
 END;
 $$;
@@ -314,5 +314,5 @@ $$;
 GRANT EXECUTE ON FUNCTION clock_out_and_complete_slot(UUID) TO authenticated;
 
 COMMENT ON TABLE officer_shift_slots IS 'Officers schedule their work shifts in advance. Each slot must be filled by the assigned officer.';
-COMMENT ON FUNCTION award_birthday_coins_if_eligible(UUID) IS 'Awards 1000 paid coins to user when they go live on their birthday (once per day)';
+COMMENT ON FUNCTION award_birthday_coins_if_eligible(UUID) IS 'Awards 1000 troll_coins to user when they go live on their birthday (once per day)';
 

@@ -1,27 +1,29 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { toast } from 'sonner'
+import { LiveKitRoomWrapper } from '../components/LiveKitVideoGrid'
+import { useLiveKit } from '../contexts/LiveKitContext'
+import { useGiftSystem, GiftItem } from '../lib/hooks/useGiftSystem'
+import { UserRole } from '../lib/supabase'
+import type { LucideIcon } from 'lucide-react'
 import {
   Heart,
   Users,
   Coins,
-  Crown,
-  Shield,
-  Ban,
-  Eye,
-  MicOff,
-  MessageSquare,
   Gift,
+  Menu,
+  MessageCircle,
+  Sparkles,
+  Mic,
+  Video,
+  RotateCcw,
+  Power,
+  Settings,
 } from 'lucide-react'
-import { toast } from 'sonner'
-import { LiveKitRoomWrapper } from '../components/LiveKitVideoGrid'
-import { UserRole } from '../lib/supabase'
 
-/* =========================
-   TYPES
-========================= */
-interface StreamData {
+type StreamData = {
   id: string
   title: string
   broadcaster_id: string
@@ -39,24 +41,78 @@ interface StreamData {
   max_guest_slots: number
   viewer_count: number
   total_gifts_coins: number
+  status: string
+  room_name?: string
 }
 
-interface UserProfile {
+type UserProfile = {
   id: string
   username: string
   level: number
   role: UserRole
   troll_family_id?: string
   troll_coins?: number
-  free_coin_balance?: number
+  troll_coins?: number
   xp?: number
   is_admin?: boolean
   is_lead_officer?: boolean
 }
 
-/* =========================
-   COMPONENT
-========================= */
+type StreamMessage = {
+  id: string
+  user_id: string
+  username: string
+  content: string
+  message_type?: string
+  created_at: string
+  role?: string
+  level?: number
+}
+
+type ProfileCacheEntry = {
+  username: string
+  role?: string
+  level: number
+}
+
+type ActionButtonProps = {
+  icon: LucideIcon
+  label: string
+  onClick?: () => void
+}
+
+const formatTimer = (seconds: number) => {
+  const minutes = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${minutes.toString().padStart(2, '0')}:${secs
+    .toString()
+    .padStart(2, '0')}`
+}
+
+const ActionButton: React.FC<ActionButtonProps> = ({ icon: Icon, label, onClick }) => {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-purple-500/40 bg-gradient-to-br bg-clip-border px-4 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-white transition hover:border-purple-400 hover:shadow-[0_0_20px_rgba(180,100,255,0.35)]"
+      style={{
+        backgroundImage:
+          'linear-gradient(130deg, rgba(255,255,255,0.02), rgba(255,255,255,0))',
+      }}
+    >
+      <div className="rounded-full border border-white/10 bg-white/10 p-2 shadow-[0_0_25px_rgba(147,103,255,0.35)]">
+        <Icon className="h-4 w-4" />
+      </div>
+      <span className="text-[10px] tracking-[0.25em]">{label}</span>
+    </button>
+  )
+}
+
+const GIFT_OFFERS: GiftItem[] = [
+  { id: 'heart', name: 'Heart Burst', coinCost: 100, type: 'paid' },
+  { id: 'dragon', name: 'Dragon Fury', coinCost: 500, type: 'paid' },
+  { id: 'crown', name: 'Royal Crown', coinCost: 1200, type: 'paid' },
+]
+
 const LiveBroadcast: React.FC = () => {
   const { streamId } = useParams<{ streamId: string }>()
   const { user, profile } = useAuthStore()
@@ -66,12 +122,117 @@ const LiveBroadcast: React.FC = () => {
   const [likeCount, setLikeCount] = useState(0)
   const [hasPaidEntry, setHasPaidEntry] = useState(false)
   const [showGiftDrawer, setShowGiftDrawer] = useState(false)
+  const [messages, setMessages] = useState<StreamMessage[]>([])
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const [chatTable, setChatTable] = useState<'stream_messages' | 'messages'>('stream_messages')
+  const [showGuestPanel, setShowGuestPanel] = useState(false)
+  const [showMenuPanel, setShowMenuPanel] = useState(false)
+  const [mediaRequestState, setMediaRequestState] = useState<'idle' | 'requesting' | 'granted' | 'denied'>(
+    'idle'
+  )
+  const [activeGiftId, setActiveGiftId] = useState<string | null>(null)
+  const [showPermissionModal, setShowPermissionModal] = useState(false)
+  const [liveSeconds, setLiveSeconds] = useState(0)
+  const [chatDraft, setChatDraft] = useState('')
+  const profileCacheRef = useRef<Map<string, ProfileCacheEntry>>(new Map())
+  const messageSelectFields = `
+    id,
+    user_id,
+    content,
+    created_at,
+    user_profiles (
+      username,
+      role,
+      level
+    )
+  `
+
+  const ensureProfileInfo = useCallback(async (userId: string) => {
+    if (!userId) {
+      return { username: 'Anonymous', role: 'viewer', level: 1 }
+    }
+    const cached = profileCacheRef.current.get(userId)
+    if (cached) {
+      return cached
+    }
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('username, role, level')
+      .eq('id', userId)
+      .maybeSingle()
+
+    const profileInfo: ProfileCacheEntry = {
+      username: data?.username || 'Anonymous',
+      role: data?.role || 'viewer',
+      level: data?.level ?? 1,
+    }
+    profileCacheRef.current.set(userId, profileInfo)
+    return profileInfo
+  }, [])
+
+  const buildStreamMessage = useCallback(
+    (
+      row: StreamMessage & { user_profiles?: ProfileCacheEntry },
+      profileOverride?: ProfileCacheEntry
+    ): StreamMessage => {
+      const profileData =
+        profileOverride ??
+        row.user_profiles ??
+        (row.user_id ? profileCacheRef.current.get(row.user_id) : undefined)
+      const username = row.username || profileData?.username || 'Anonymous'
+      const role = row.role || profileData?.role
+      const level = row.level ?? profileData?.level ?? 1
+
+      if (row.user_id) {
+        profileCacheRef.current.set(row.user_id, { username, role, level })
+      }
+
+      if (!row.id || !row.user_id || !row.created_at) {
+        throw new Error('Stream message missing required identifiers')
+      }
+
+      return {
+        id: row.id,
+        user_id: row.user_id,
+        username,
+        content: row.content || '',
+        created_at: row.created_at,
+        role,
+        level,
+      }
+    },
+    []
+  )
+
+  const processIncomingMessage = useCallback(
+    async (message: StreamMessage) => {
+      const needsProfileInfo =
+        !message.username || typeof message.level !== 'number' || message.role === undefined
+      if (!needsProfileInfo) {
+        return buildStreamMessage(message)
+      }
+      const profileInfo = await ensureProfileInfo(message.user_id)
+      return buildStreamMessage(message, profileInfo)
+    },
+    [buildStreamMessage, ensureProfileInfo]
+  )
+
+  const {
+    localParticipant,
+    startPublishing,
+    toggleCamera,
+    toggleMicrophone,
+    isConnected,
+    isConnecting,
+  } = useLiveKit()
+
+  const { sendGift: sendGiftToStreamer, isSending: isGiftSending } = useGiftSystem(
+    stream?.broadcaster_id || '',
+    stream?.id || null
+  )
 
   const roomName = `stream-${streamId}`
 
-  /* =========================
-     LOAD STREAM + BROADCASTER
-  ========================= */
   useEffect(() => {
     if (!streamId) return
 
@@ -97,9 +258,6 @@ const LiveBroadcast: React.FC = () => {
     loadStream()
   }, [streamId])
 
-  /* =========================
-     PAID ENTRY CHECK
-  ========================= */
   useEffect(() => {
     if (!user || !profile || !stream) return
 
@@ -123,22 +281,20 @@ const LiveBroadcast: React.FC = () => {
 
       const cost = stream.pricing_value
       const paid = profile.troll_coins || 0
-      const free = profile.free_coin_balance || 0
+     
 
-      if (paid + free < cost) {
+      if (paid < cost) {
         toast.error('Insufficient coins to enter stream')
         return
       }
 
       const newPaid = Math.max(0, paid - cost)
       const remaining = cost - paid
-      const newFree = remaining > 0 ? Math.max(0, free - remaining) : free
 
       await supabase
         .from('user_profiles')
         .update({
           troll_coins: newPaid,
-          free_coin_balance: newFree,
         })
         .eq('id', profile.id)
 
@@ -156,135 +312,677 @@ const LiveBroadcast: React.FC = () => {
     checkEntry()
   }, [stream, user, profile])
 
+  useEffect(() => {
+    if (!isConnected) {
+      setLiveSeconds(0)
+      return
+    }
+
+    const interval = setInterval(() => {
+      setLiveSeconds((prev) => prev + 1)
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isConnected])
+
+  const guestSlots = useMemo(
+    () => [
+      {
+        id: 'guest-1',
+        name: 'Mallory',
+        level: 17,
+        status: 'Live',
+        coins: '1.2K',
+        badge: 'Royal',
+      },
+      {
+        id: 'guest-2',
+        name: 'MasonLegend',
+        level: 21,
+        status: 'Queued',
+        coins: '925',
+        badge: 'Battle',
+      },
+      {
+        id: 'guest-3',
+        name: null,
+        level: null,
+        status: 'Empty',
+        coins: null,
+        badge: 'Tap to Join',
+      },
+    ],
+    []
+  )
+
+  const quickReactions = ['❤️', '🔥', '✨', '🎉']
+
+  const menuOptions = useMemo(
+    () => [
+      {
+        label: 'Copy stream link',
+        action: async () => {
+          setShowMenuPanel(false)
+          try {
+            const url =
+              stream?.id && typeof window !== 'undefined'
+                ? `${window.location.origin}/live/${stream.id}`
+                : window?.location?.href || ''
+            if (!url) throw new Error('Unable to determine share link')
+            await navigator.clipboard.writeText(url)
+            toast.success('Stream link copied to clipboard')
+          } catch (error) {
+            console.error('Copy failed:', error)
+            toast.error('Unable to copy stream link')
+          }
+        },
+      },
+      {
+        label: 'Report an issue',
+        action: () => {
+          setShowMenuPanel(false)
+          toast('Report submitted — team will review soon')
+        },
+      },
+      {
+        label: 'Support & FAQ',
+        action: () => {
+          setShowMenuPanel(false)
+          toast('Support portal will be available shortly')
+        },
+      },
+    ],
+    [stream?.id, setShowMenuPanel]
+  )
+
+  const verticalActions = useMemo(
+    () => [
+      {
+        id: 'gifts',
+        icon: Gift,
+        label: 'Gifts',
+        onClick: () => setShowGiftDrawer(true),
+      },
+      {
+        id: 'guests',
+        icon: Users,
+        label: 'Guests',
+        onClick: () => toast('Guest queue is live — manage participants from the host controls.'),
+      },
+      {
+        id: 'menu',
+        icon: Menu,
+        label: 'Menu',
+        onClick: () => setShowMenuPanel(true),
+      },
+    ],
+    [setShowGiftDrawer, setShowGuestPanel, setShowMenuPanel]
+  )
+
+  const isBroadcaster =
+    profile?.role === UserRole.ADMIN ||
+    profile?.role === UserRole.MODERATOR ||
+    profile?.role === UserRole.TROLL_OFFICER
+
+  const liveKitRole: string = isBroadcaster ? profile?.role || 'admin' : 'viewer'
+  const hasLocalTracks =
+    Boolean(localParticipant?.videoTrack?.track) && Boolean(localParticipant?.audioTrack?.track)
+  const showGoLiveOverlay = isBroadcaster && isConnected && !hasLocalTracks
+
+  const handleGoLive = useCallback(async () => {
+    if (!startPublishing) return
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      toast.error('Your browser does not expose camera/microphone APIs.')
+      return
+    }
+
+    setMediaRequestState('requesting')
+    try {
+      await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      })
+
+      await startPublishing()
+      setMediaRequestState('granted')
+    } catch (error: any) {
+      console.error('Media permission failed:', error)
+      setMediaRequestState('denied')
+      setShowPermissionModal(true)
+      toast.error('Camera and microphone access are required to go live.')
+    }
+  }, [startPublishing])
+
+    const loadMessages = useCallback(async () => {
+      if (!stream?.id) return
+      setIsChatLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from(chatTable)
+          .select(messageSelectFields)
+          .eq('stream_id', stream.id)
+          .order('created_at', { ascending: true })
+          .limit(40)
+
+        if (error) {
+          if (chatTable === 'stream_messages') {
+            setChatTable('messages')
+            return
+          }
+          throw error
+        }
+
+        const normalized = (data || []).map((row: any) => buildStreamMessage(row))
+        setMessages(normalized)
+      } catch (error) {
+        console.error('Unable to load chat messages', error)
+      } finally {
+        setIsChatLoading(false)
+      }
+    }, [stream?.id, chatTable, buildStreamMessage])
+
+  useEffect(() => {
+    loadMessages()
+  }, [loadMessages])
+
+  useEffect(() => {
+    if (!stream?.id) return
+    let isSubscribed = true
+    const channelName = `livechat-${stream.id}-${chatTable}`
+    const channel = supabase
+      .channel(channelName, {
+        config: {
+          broadcast: { self: true },
+        },
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: chatTable,
+          filter: `stream_id=eq.${stream.id}`,
+        },
+        (payload) => {
+          const newMessage = payload.new as StreamMessage
+          if (!newMessage?.id) return
+          processIncomingMessage(newMessage)
+            .then((message) => {
+              if (!isSubscribed || !message) return
+              setMessages((prev) => {
+                if (prev.some((msg) => msg.id === message.id)) return prev
+                return [...prev.slice(-49), message]
+              })
+            })
+            .catch((error) => {
+              console.error('Failed to hydrate chat message', error)
+            })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      isSubscribed = false
+      channel.unsubscribe()
+      supabase.removeChannel(channel)
+    }
+  }, [stream?.id, chatTable, processIncomingMessage])
+
+  const sendMessage = useCallback(
+    async (rawMessage: string, tableOverride?: 'stream_messages' | 'messages') => {
+      if (!rawMessage.trim() || !user || !stream?.id) return
+      const trimmed = rawMessage.trim()
+      const table = tableOverride || chatTable
+
+      try {
+        const { data, error } = await supabase
+          .from(table)
+          .insert({
+            stream_id: stream.id,
+            user_id: user.id,
+            content: trimmed,
+            message_type: 'chat',
+          })
+          .select(messageSelectFields)
+          .single()
+
+        if (error) {
+          if (table === 'stream_messages') {
+            setChatTable('messages')
+            return sendMessage(trimmed, 'messages')
+          }
+          throw error
+        }
+
+        if (data) {
+          const inserted = buildStreamMessage(data)
+          setMessages((prev) => [...prev.slice(-49), inserted])
+        }
+
+        setChatDraft('')
+      } catch (err) {
+        console.error('Failed to send chat message', err)
+        toast.error('Failed to send chat message')
+      }
+    },
+    [chatTable, stream?.id, user, buildStreamMessage]
+  )
+
+  const handleQuickReaction = useCallback(
+    (emoji: string) => {
+      sendMessage(emoji)
+    },
+    [sendMessage]
+  )
+
+  const handleSendGift = useCallback(
+    async (gift: GiftItem) => {
+      if (!sendGiftToStreamer || !stream?.broadcaster_id) return
+      setActiveGiftId(gift.id)
+      try {
+        await sendGiftToStreamer(gift)
+      } finally {
+        setActiveGiftId(null)
+      }
+    },
+    [sendGiftToStreamer, stream?.broadcaster_id]
+  )
+
+  const handleRetryPermission = () => {
+    setShowPermissionModal(false)
+    handleGoLive()
+  }
+
   if (!stream || !hasPaidEntry || !profile) {
     return (
-      <div className="min-h-screen bg-[#0A0814] text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400 mx-auto mb-4" />
-          <p>Loading stream…</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#04000c] via-[#08031b] to-[#120321] text-white flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 rounded-full border-2 border-purple-500/60 animate-pulse" />
+          <p className="text-sm text-gray-300">Loading the Troll City experience…</p>
         </div>
       </div>
     )
   }
 
-  /* =========================
-     ROLE RESOLUTION (TYPE SAFE)
-  ========================= */
-  const isBroadcaster =
-    profile.role === UserRole.ADMIN ||
-    profile.role === UserRole.MODERATOR ||
-    profile.role === UserRole.TROLL_OFFICER
+  const micEnabled = localParticipant?.isMicrophoneEnabled ?? true
+  const cameraEnabled = localParticipant?.isCameraEnabled ?? true
 
-  const liveKitRole: string = isBroadcaster ? profile.role : 'viewer'
-
-  const isAdmin =
-    profile.role === UserRole.ADMIN ||
-    profile.role === UserRole.TROLL_OFFICER ||
-    profile.is_admin ||
-    profile.is_lead_officer
-
-  /* =========================
-     RENDER
-  ========================= */
   return (
-    <div className="min-h-screen bg-[#0A0814] text-white">
-      {/* HUD */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-black/80 border-b border-purple-500/20 p-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div>
-            <div className="font-semibold">{broadcaster?.username}</div>
-            <div className="text-xs text-gray-400">
-              Level {broadcaster?.level}
+    <div className="min-h-screen bg-gradient-to-br from-[#05010c] via-[#080216] to-[#12011e] text-white">
+      <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col gap-6 px-4 py-6">
+        <header className="rounded-3xl border border-purple-500/40 bg-white/5 bg-clip-padding p-5 shadow-[0_30px_90px_rgba(120,69,255,0.35)] backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-purple-400/60 bg-gradient-to-br from-purple-500/50 to-pink-500/20 text-lg font-bold shadow-[0_0_25px_rgba(201,91,255,0.45)]">
+                {broadcaster?.username?.charAt(0) || 'T'}
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="text-lg font-semibold">{broadcaster?.username}</div>
+                <div className="text-xs uppercase tracking-[0.3em] text-gray-300">
+                  Level {broadcaster?.level}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-6 text-sm text-gray-200">
+              <div className="flex items-center gap-2 rounded-full bg-black/40 px-3 py-1 text-xs uppercase tracking-wider text-green-300 shadow-[0_0_20px_rgba(34,197,94,0.45)]">
+                <span className="h-2 w-2 rounded-full bg-green-400" />
+                LIVE
+              </div>
+              <div className="flex flex-col text-right">
+                <span className="text-xs text-gray-400">Timer</span>
+                <span className="text-base font-semibold text-white">{formatTimer(liveSeconds)}</span>
+              </div>
+              <div className="flex flex-col text-right">
+                <span className="text-xs text-gray-400">Viewers</span>
+                <span className="text-base font-semibold text-white">{stream.viewer_count}</span>
+              </div>
+              <button
+                onClick={() => setLikeCount((prev) => prev + 1)}
+                className="flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-pink-300 shadow-[0_0_20px_rgba(239,68,68,0.35)]"
+              >
+                <Heart className="h-4 w-4 text-pink-400" />
+                {likeCount}
+              </button>
+              <div className="flex items-center gap-2 rounded-full border border-yellow-400/40 bg-black/40 px-3 py-1 text-xs uppercase tracking-[0.2em] text-yellow-300">
+                <Coins className="h-4 w-4" />
+                {stream.total_gifts_coins?.toLocaleString() || '0'}
+              </div>
             </div>
           </div>
+          <div className="mt-4 text-sm text-gray-400">
+            {stream.title || 'Troll City broadcast'} — Modern neon vibes with glassified overlays.
+          </div>
+        </header>
 
-          <div className="flex items-center gap-6">
-            <div className="flex gap-2 items-center">
-              <Coins className="w-5 h-5 text-yellow-400" />
-              {stream.total_gifts_coins}
-            </div>
-            <div className="flex gap-2 items-center">
-              <Users className="w-5 h-5 text-green-400" />
-              {stream.viewer_count}
-            </div>
+        <main className="flex-1 space-y-5">
+          <div className="grid gap-5 lg:grid-cols-[1.2fr,360px]">
+            <section className="space-y-4">
+              <div className="relative overflow-hidden rounded-[32px] border border-purple-500/30 bg-gradient-to-br from-[#090111]/80 to-[#150025]/80 p-5 shadow-[0_30px_90px_rgba(93,30,158,0.45)]">
+                <div className="relative overflow-hidden rounded-3xl border border-purple-500/20 bg-black/80">
+                  <LiveKitRoomWrapper
+                    roomName={roomName}
+                    identity={user?.id || `viewer-${crypto.randomUUID()}`}
+                    role={liveKitRole}
+                    autoPublish={isBroadcaster ? false : true}
+                    maxParticipants={6}
+                    className="h-[420px] w-full"
+                  />
+                </div>
+
+                <div className="absolute right-6 top-1/2 hidden -translate-y-1/2 flex-col items-center gap-4 lg:flex">
+                  {verticalActions.map((action) => (
+                    <ActionButton
+                      key={action.id}
+                      icon={action.icon}
+                      label={action.label}
+                      onClick={action.onClick}
+                    />
+                  ))}
+                </div>
+
+                {showGoLiveOverlay && (
+                  <div className="absolute inset-0 rounded-3xl bg-black/75 p-6 text-center text-sm text-white backdrop-blur">
+                    <p className="mb-2 text-xs uppercase tracking-[0.4em] text-purple-300">
+                      Host Control
+                    </p>
+                    <p className="text-lg font-semibold text-white">Live camera + mic pending</p>
+                    <p className="my-3 text-xs text-purple-200">
+                      Allow camera and microphone, then publish tracks to open the Troll City stage.
+                    </p>
+                    {isConnecting && (
+                      <div className="flex items-center justify-center gap-2 text-xs text-gray-300">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
+                        Connecting to the broadcast…
+                      </div>
+                    )}
+                    <button
+                      onClick={handleGoLive}
+                      disabled={!isConnected || mediaRequestState === 'requesting'}
+                      className="mt-4 inline-flex items-center justify-center gap-2 rounded-full border border-purple-400/70 bg-gradient-to-br from-purple-600 to-pink-500 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {mediaRequestState === 'requesting' ? 'Requesting permissions…' : 'Go Live'}
+                    </button>
+                    <div className="mt-3 text-[11px] text-gray-400">
+                      Permissions are required before the broadcast room renders for your audience.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {guestSlots.map((slot) => (
+                  <div
+                    key={slot.id}
+                    className="flex flex-col gap-2 rounded-2xl border border-purple-500/30 bg-black/60 p-4 text-sm text-gray-200 shadow-[0_20px_45px_rgba(72,49,150,0.3)]"
+                  >
+                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-purple-300">
+                      <span>{slot.id.split('-').join(' ').toUpperCase()}</span>
+                      <span>{slot.badge}</span>
+                    </div>
+                    {slot.name ? (
+                      <>
+                        <div className="text-base font-semibold text-white">{slot.name}</div>
+                        <div className="text-xs text-gray-400">Level {slot.level}</div>
+                        <div className="flex items-center justify-between text-xs text-gray-300">
+                          <span>{slot.status}</span>
+                          <span className="text-amber-300">{slot.coins} coins</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-1 flex-col items-center justify-center text-center text-xs text-gray-400">
+                        <span className="text-lg font-semibold text-white">Tap to Join</span>
+                        <span className="mt-1 text-[10px] uppercase tracking-[0.3em] text-purple-400">
+                          Seat available
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <aside className="space-y-4">
+              <div className="lg:hidden flex items-center justify-center gap-3">
+                {verticalActions.map((action) => (
+                  <ActionButton
+                    key={`mobile-${action.id}`}
+                    icon={action.icon}
+                    label={action.label}
+                    onClick={action.onClick}
+                  />
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-3 overflow-hidden rounded-3xl border border-purple-500/30 bg-[#0b0416]/80 p-4 shadow-[0_30px_90px_rgba(86,33,178,0.3)]">
+                <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-gray-400">
+                  <span>Chat</span>
+                  <span className="flex items-center gap-2 text-[11px] text-green-300">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
+                    {stream.viewer_count} viewers
+                  </span>
+                </div>
+                  <div className="flex flex-1 flex-col gap-3 overflow-hidden rounded-2xl border border-purple-500/20 bg-black/40 p-3">
+                    <div className="flex flex-1 flex-col gap-3 overflow-y-auto pr-2">
+                      {isChatLoading ? (
+                        <div className="text-center text-sm text-gray-400">Loading chat…</div>
+                      ) : messages.length === 0 ? (
+                        <div className="text-center text-sm text-gray-400">No chat yet</div>
+                      ) : (
+                        messages.map((message) => (
+                          <div key={message.id} className="flex gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-purple-500/60 bg-gradient-to-br from-purple-600 to-pink-500 text-xs font-bold uppercase tracking-wider text-white shadow-[0_10px_30px_rgba(111,66,193,0.45)]">
+                              {message.username?.charAt(0) || 'T'}
+                            </div>
+                            <div className="flex-1 rounded-2xl border border-purple-500/20 bg-white/5 p-3 text-xs text-gray-200">
+                              <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.3em] text-purple-300">
+                                <span>{message.username}</span>
+                                <span>
+                                  {message.role || 'Viewer'}
+                                  {message.level ? ` · Lvl ${message.level}` : ''}
+                                </span>
+                              </div>
+                              <p className="mt-1 leading-relaxed text-sm text-white">{message.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <textarea
+                          value={chatDraft}
+                          onChange={(event) => setChatDraft(event.target.value)}
+                          placeholder="Type a message…"
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault()
+                              sendMessage(chatDraft)
+                            }
+                          }}
+                          className="flex-1 rounded-2xl border border-purple-500/40 bg-black/70 px-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <button
+                          onClick={() => sendMessage(chatDraft)}
+                          className="rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:brightness-110"
+                        >
+                          Send
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2 text-xl">
+                        {quickReactions.map((emoji) => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleQuickReaction(emoji)}
+                            className="rounded-2xl border border-white/10 bg-white/5 px-3 py-1 transition hover:bg-white/10"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <MessageCircle className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </div>
+              </div>
+            </aside>
+          </div>
+
+          <section className="flex flex-wrap items-center justify-center gap-3 rounded-3xl border border-purple-500/40 bg-gradient-to-br from-[#0b0416] to-[#150024] p-4 text-xs uppercase tracking-[0.3em] text-white shadow-[0_25px_80px_rgba(82,36,160,0.35)]">
             <button
-              onClick={() => setLikeCount((v) => v + 1)}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500/20 rounded-lg"
+              onClick={() => toggleMicrophone && toggleMicrophone()}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.3em] text-white shadow-[0_0_25px_rgba(239,68,68,0.35)] transition hover:border-pink-400"
             >
-              <Heart className="w-5 h-5 text-red-400" />
-              {likeCount}
+              <Mic className={`h-4 w-4 ${micEnabled ? 'text-emerald-300' : 'text-red-400'}`} />
+              {micEnabled ? 'Mute Mic' : 'Unmute Mic'}
             </button>
-          </div>
-        </div>
+            <button
+              onClick={() => toggleCamera && toggleCamera()}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.3em] text-white transition hover:border-cyan-400"
+            >
+              <Video className={`h-4 w-4 ${cameraEnabled ? 'text-cyan-300' : 'text-red-400'}`} />
+              {cameraEnabled ? 'Camera On' : 'Camera Off'}
+            </button>
+            <button
+              onClick={() => toast('Flip camera is working behind the scenes')}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.3em] text-white transition hover:border-purple-300"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Flip Camera
+            </button>
+            <button
+              onClick={() => toast('Live ended (simulation)')}
+              className="flex items-center gap-2 rounded-full border border-red-500/80 bg-red-500/30 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.3em] text-red-200 transition hover:bg-red-500/50"
+            >
+              <Power className="h-4 w-4" />
+              End Live
+            </button>
+            <button
+              onClick={() => toast('Settings panel coming soon')}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.3em] text-white transition hover:border-yellow-400"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </button>
+            <button
+              onClick={() => toast('Effects rack will be refreshed soon')}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.3em] text-white transition hover:border-fuchsia-400"
+            >
+              <Sparkles className="h-4 w-4" />
+              Effects
+            </button>
+          </section>
+        </main>
       </div>
 
-      <div className="pt-20 flex h-screen">
-        {/* VIDEO */}
-        <div className="flex-1 p-4">
-          <div className="h-full rounded-xl overflow-hidden border border-purple-500/20">
-            <LiveKitRoomWrapper
-              roomName={roomName}
-              identity={user?.id || `viewer-${crypto.randomUUID()}`}
-              role={liveKitRole}
-              autoConnect
-              autoPublish={isBroadcaster}
-              maxParticipants={6}
-              className="w-full h-full"
-            />
+      {showGiftDrawer && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 backdrop-blur">
+          <div className="mx-auto max-w-lg rounded-3xl border border-purple-500/40 bg-[#090112]/90 p-4 shadow-[0_30px_90px_rgba(112,66,255,0.45)]">
+            <div className="flex items-center justify-between text-sm text-gray-200">
+              <div className="flex items-center gap-2">
+                <Gift className="h-4 w-4 text-purple-300" />
+                Send Gifts
+              </div>
+              <button onClick={() => setShowGiftDrawer(false)} className="text-xs text-gray-400">
+                Close
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {GIFT_OFFERS.map((gift) => (
+                <button
+                  key={gift.id}
+                  onClick={() => handleSendGift(gift)}
+                  disabled={isGiftSending || !stream?.broadcaster_id}
+                  className="flex flex-col gap-1 rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-600/10 to-black/40 px-4 py-4 text-center text-xs uppercase tracking-[0.2em] text-gray-200 transition hover:border-white/60 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="text-sm font-bold text-white">{gift.name}</div>
+                  <div className="text-[10px] text-gray-400">{gift.coinCost.toLocaleString()} coins</div>
+                  <span className="text-[10px] text-purple-300">
+                    {isGiftSending && activeGiftId === gift.id ? 'Sending…' : 'Send Gift'}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* CHAT */}
-        <div className="w-80 bg-zinc-900/50 border-l border-purple-500/20 p-4 flex flex-col">
-          <div className="flex items-center gap-2 mb-4">
-            <MessageSquare className="w-5 h-5 text-purple-400" />
-            Chat
-          </div>
-          <div className="flex-1 text-gray-400 text-sm">Chat messages…</div>
-          <input
-            placeholder="Type a message…"
-            className="mt-4 bg-zinc-800 border border-purple-500/30 rounded px-3 py-2"
-          />
-        </div>
-      </div>
-
-      {/* ADMIN TOOLS */}
-      {isAdmin && (
-        <div className="fixed bottom-4 right-4 bg-zinc-900/90 p-4 rounded-lg space-y-2">
-          <button className="flex gap-2 text-sm">
-            <Ban className="w-4 h-4" /> Ban
-          </button>
-          <button className="flex gap-2 text-sm">
-            <Eye className="w-4 h-4" /> Shadow Ban
-          </button>
-          <button className="flex gap-2 text-sm">
-            <MicOff className="w-4 h-4" /> Mute
-          </button>
-          <button className="flex gap-2 text-sm">
-            <Shield className="w-4 h-4" /> Disable Stream
-          </button>
-          <button className="flex gap-2 text-sm">
-            <Crown className="w-4 h-4" /> Court Summon
-          </button>
         </div>
       )}
 
-      {/* GIFT BUTTON */}
-      <button
-        onClick={() => setShowGiftDrawer(true)}
-        className="fixed bottom-4 left-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full w-14 h-14 flex items-center justify-center"
-      >
-        <Gift className="w-6 h-6" />
-      </button>
-
-      {showGiftDrawer && (
-        <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 p-4 border-t border-purple-500/20">
-          <div className="flex justify-between mb-4">
-            <div className="flex gap-2 items-center">
-              <Gift className="w-5 h-5 text-purple-400" />
-              Send Gifts
+      {showGuestPanel && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-6">
+          <div className="w-full max-w-4xl rounded-3xl border border-purple-500/60 bg-[#070114]/95 p-6 shadow-[0_30px_90px_rgba(94,63,255,0.35)]">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em] text-purple-300">Guest queue</p>
+                <h3 className="text-2xl font-bold text-white">Guests & invitations</h3>
+              </div>
+              <button onClick={() => setShowGuestPanel(false)} className="text-sm text-gray-200">
+                Close
+              </button>
             </div>
-            <button onClick={() => setShowGiftDrawer(false)}>✕</button>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              {guestSlots.map((slot) => (
+                <div key={slot.id} className="rounded-2xl border border-purple-500/30 bg-white/5 p-4 text-sm text-gray-200">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-purple-300">
+                    <span>{slot.id.replace('-', ' ')}</span>
+                    <span>{slot.badge}</span>
+                  </div>
+                  {slot.name ? (
+                    <>
+                      <p className="mt-2 text-lg font-semibold text-white">{slot.name}</p>
+                      <p className="text-xs text-gray-400">Level {slot.level}</p>
+                      <p className="mt-1 text-[11px] text-yellow-300">{slot.status}</p>
+                      <p className="text-[11px] text-amber-200">{slot.coins} coins</p>
+                    </>
+                  ) : (
+                    <p className="mt-4 text-xs text-gray-500">Seat available — click to invite</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMenuPanel && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-6">
+          <div className="w-full max-w-md rounded-3xl border border-purple-500/60 bg-[#070114]/95 p-6 text-center shadow-[0_30px_90px_rgba(94,63,255,0.35)]">
+            <p className="text-xs uppercase tracking-[0.4em] text-purple-300">Live menu</p>
+            <h3 className="text-2xl font-semibold text-white">Stream options</h3>
+            <div className="mt-6 space-y-3">
+              {menuOptions.map((option) => (
+                <button
+                  key={option.label}
+                  onClick={option.action}
+                  className="w-full rounded-full border border-white/20 bg-white/5 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-purple-300"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPermissionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-md rounded-3xl border border-purple-500/60 bg-[#070114]/95 p-6 text-center">
+            <p className="text-sm uppercase tracking-[0.3em] text-purple-300">Permissions required</p>
+            <h2 className="mt-4 text-xl font-semibold">Camera & mic access blocked</h2>
+            <p className="mt-2 text-sm text-gray-300">
+              Troll City needs both camera and microphone access to publish the live broadcast.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 text-xs uppercase tracking-[0.3em]">
+              <button
+                onClick={handleRetryPermission}
+                className="rounded-full border border-purple-400/70 bg-gradient-to-br from-purple-600 to-pink-500 px-4 py-3 font-semibold text-white shadow-[0_0_30px_rgba(214,127,255,0.45)]"
+              >
+                Retry
+              </button>
+              <button
+                onClick={() => setShowPermissionModal(false)}
+                className="rounded-full border border-white/20 px-4 py-3 text-white"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

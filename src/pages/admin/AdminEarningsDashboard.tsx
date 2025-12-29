@@ -22,7 +22,7 @@ interface MonthlyBreakdown {
   coins_earned_from_gifts: number
   gift_count: number
   unique_gifters: number
-  paid_coins_earned: number
+  troll_coins_earned: number
   free_coins_earned: number
 }
 
@@ -119,7 +119,7 @@ const AdminEarningsDashboard: React.FC = () => {
       console.log('Using fallback: loading from user_profiles')
       const { data, error: fallbackError } = await supabase
         .from('user_profiles')
-        .select('id, username, total_earned_coins, troll_coins, free_coin_balance')
+        .select('id, username, total_earned_coins, troll_coins, troll_coins')
         .gt('total_earned_coins', 0)
         .order('total_earned_coins', { ascending: false })
         .limit(100)
@@ -135,7 +135,7 @@ const AdminEarningsDashboard: React.FC = () => {
           username: p.username || '',
           total_earned_coins: p.total_earned_coins || 0,
           troll_coins: p.troll_coins || 0,
-          free_coin_balance: p.free_coin_balance || 0,
+          troll_coins: p.troll_coins || 0,
           current_month_earnings: 0,
           current_month_transactions: 0,
           current_month_paid_out: 0,

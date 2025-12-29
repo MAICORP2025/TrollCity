@@ -51,7 +51,7 @@ SELECT
   tax_form_url,
   tax_last_updated,
   created_at,
-  paid_coin_balance,
+  troll_coins,
   total_earned_coins
 FROM user_profiles
 WHERE tax_status IN ('submitted', 'rejected')

@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 interface ResetAction {
-  action: 'reset_test_data' | 'reset_live_streams' | 'reset_coin_balances';
+  action: 'reset_test_data' | 'reset_live_streams' | 'reset_troll_coinss';
   [key: string]: any;
 }
 
@@ -136,7 +136,7 @@ export const handler = async (req: Request): Promise<Response> => {
         return withCors({ streams_ended: streamIds.length }, 200);
       }
 
-      case 'reset_coin_balances': {
+      case 'reset_troll_coinss': {
         // Reset all non-admin user coin balances
         const { data: nonAdminUsers } = await supabase
           .from("user_profiles")
@@ -151,8 +151,8 @@ export const handler = async (req: Request): Promise<Response> => {
         const { error: updateError } = await supabase
           .from("user_profiles")
           .update({
-            paid_coin_balance: 0,
-            free_coin_balance: 0,
+            troll_coins: 0,
+            troll_coins: 0,
             total_earned_coins: 0,
           })
           .in("id", nonAdminUsers.map(u => u.id));

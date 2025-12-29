@@ -31,5 +31,5 @@ INSERT INTO cashout_tiers (coin_amount, cash_amount, currency, processing_fee_pe
 
 -- Create admin user (you'll need to create the auth user first, then run this)
 -- This is a placeholder - you'll need to manually create the admin user in Supabase auth first
--- INSERT INTO user_profiles (id, username, avatar_url, bio, role, tier, paid_coin_balance, free_coin_balance, total_earned_coins, total_spent_coins) VALUES
+-- INSERT INTO user_profiles (id, username, avatar_url, bio, role, tier, troll_coins, troll_coins, total_earned_coins, total_spent_coins) VALUES
 -- ('admin-user-id-from-auth', 'Admin', 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin', 'The supreme ruler of Troll City!', 'admin', 'Platinum', 100000, 50000, 150000, 0);

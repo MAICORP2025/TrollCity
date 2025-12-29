@@ -4,20 +4,9 @@ import './admin.css'
 import { useAuthStore } from '../../lib/store'
 import { supabase, isAdminEmail } from '../../lib/supabase'
 import { sendNotification } from '../../lib/sendNotification'
-import {
-  Users,
-  FileText,
-  DollarSign,
-  Award,
-  Shield,
-  CreditCard,
-  Camera,
-  Monitor,
-  Play,
-} from 'lucide-react'
+import { Users, DollarSign, Award, Shield, FileText } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { downloadText } from '../../lib/downloads'
 import _api from '../../lib/api'
 import _ClickableUsername from '../../components/ClickableUsername'
 import _ProfitSummary from '../../components/ProfitSummary'
@@ -52,9 +41,7 @@ import _TestDiagnostics from './components/TestDiagnostics'
 import _AdminResetPanel from './AdminResetPanel'
 import _PayoutQueue from './components/PayoutQueue'
 import _PayPalPayoutManager from './components/PayPalPayoutManager'
-import AdminCostDashboard from './components/AdminCostDashboard'
 import MAIAuthorityPanel from '../../components/mai/MAIAuthorityPanel'
-import StorePriceEditor from './components/StorePriceEditor'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isValidUuid = (value?: string) => Boolean(value && UUID_REGEX.test(value))
@@ -79,7 +66,6 @@ type StatState = {
   giftCoins: number
   appSponsoredGifts: number
   savPromoCount: number
-  vivedPromoCount: number
   total_liability_coins: number
   total_platform_profit_usd: number
   kick_ban_revenue: number
@@ -243,7 +229,6 @@ export default function AdminDashboard() {
     giftCoins: 0,
     appSponsoredGifts: 0,
     savPromoCount: 0,
-    vivedPromoCount: 0,
     total_liability_coins: 0,
     total_platform_profit_usd: 0,
     kick_ban_revenue: 0,
@@ -251,11 +236,11 @@ export default function AdminDashboard() {
 
   const [activeTab, setActiveTab] = useState<TabId>('connections')
   const [_loading, _setLoading] = useState(false)
-  const [tabLoading, setTabLoading] = useState(false)
 
   const [_cashouts, _setCashouts] = useState<any[]>([])
   const [_cashoutsSearch, _setCashoutsSearch] = useState('')
   const [_cashoutsProvider, _setCashoutsProvider] = useState('')
+  const [, setTabLoading] = useState(false)
   const [_purchases, _setPurchases] = useState<any[]>([])
   const [_declinedTransactions, _setDeclinedTransactions] = useState<any[]>([])
   const [_selectedDeclined, _setSelectedDeclined] = useState<any | null>(null)
@@ -525,7 +510,7 @@ export default function AdminDashboard() {
         supabase.from('stream_reports').select('id').eq('status', 'pending'),
         supabase
           .from('user_profiles')
-          .select('troll_coins, free_coin_balance, sav_bonus_coins, vived_bonus_coins'),
+        .select('troll_coins, sav_bonus_coins'),
         supabase.from('coin_transactions').select('metadata').eq('type', 'purchase'),
         supabase.from('coin_transactions').select('amount, type').eq('type', 'gift'),
         supabase.from('payout_requests').select('cash_amount, processing_fee'),
@@ -542,14 +527,12 @@ export default function AdminDashboard() {
       let purchasedCoins = 0
       let trollmonds = 0
       let savBonusTotal = 0
-      let vivedBonusTotal = 0
       for (const row of balances as any[]) {
         purchasedCoins += Number(row.troll_coins || 0)
-        trollmonds += Number(row.free_coin_balance || 0)
+        trollmonds += Number(row.troll_coins || 0)
         savBonusTotal += Number(row.sav_bonus_coins || 0)
-        vivedBonusTotal += Number(row.vived_bonus_coins || 0)
       }
-      const freeCoins = trollmonds + savBonusTotal + vivedBonusTotal
+      const freeCoins = trollmonds + savBonusTotal
       const totalCoins = purchasedCoins + trollmonds
       const totalValue = totalCoins / 100
 
@@ -567,9 +550,8 @@ export default function AdminDashboard() {
         const amt = Number(g.amount || 0)
         if (amt < 0) giftCoins += Math.abs(amt)
       }
-      const appSponsoredGifts = savBonusTotal + vivedBonusTotal
+      const appSponsoredGifts = savBonusTotal
       const savPromoCount = balances.filter((b: any) => Number(b.sav_bonus_coins || 0) > 0).length
-      const vivedPromoCount = balances.filter((b: any) => Number(b.vived_bonus_coins || 0) > 0).length
 
       const payoutRows = payoutAggRes.data || []
       let totalPayouts = 0
@@ -604,7 +586,6 @@ export default function AdminDashboard() {
         giftCoins,
         appSponsoredGifts,
         savPromoCount,
-        vivedPromoCount,
         total_liability_coins: 0,
         total_platform_profit_usd: platformProfit,
         kick_ban_revenue: 0,
@@ -1903,7 +1884,7 @@ export default function AdminDashboard() {
             role: isAdmin ? 'admin' : 'user',
             tier: 'Bronze',
             troll_coins: 0,
-            free_coin_balance: 100,
+            troll_coins: 100,
             total_earned_coins: 100,
             total_spent_coins: 0,
             email: user?.email || null,
@@ -1927,7 +1908,7 @@ export default function AdminDashboard() {
         username: (user?.email || '').split('@')[0] || '',
         role: isAdmin2 ? 'admin' : 'user',
         troll_coins: 0,
-        free_coin_balance: 0,
+        troll_coins: 0,
       } as any
       setProfile(minimalProfile)
     }
@@ -1967,82 +1948,8 @@ export default function AdminDashboard() {
     },
   ]
 
-  const _sections = [
-    {
-      title: 'HR Management',
-      tabs: [
-        { id: 'hr' as TabId, label: 'HR System', description: 'Staff applications and hiring' },
-        { id: 'all_hr' as TabId, label: 'All HR Tools', description: 'Complete HR management suite' },
-      ]
-    },
-    {
-      title: 'System Management',
-      tabs: [
-        { id: 'database_backup' as TabId, label: 'Database Backup', description: 'Create system backup' },
-        { id: 'system_health' as TabId, label: 'System Health', description: 'Check server status' },
-        { id: 'cache_clear' as TabId, label: 'Cache Clear', description: 'Clear all caches' },
-        { id: 'system_config' as TabId, label: 'System Config', description: 'Edit configuration' },
-      ]
-    },
-    {
-      title: 'User Management',
-      tabs: [
-        { id: 'user_search' as TabId, label: 'User Search', description: 'Find and manage users' },
-        { id: 'ban_management' as TabId, label: 'Ban Management', description: 'Manage banned users' },
-        { id: 'reports_queue' as TabId, label: 'Reports Queue', description: 'Handle user reports' },
-        { id: 'role_management' as TabId, label: 'Role Management', description: 'Assign user roles' },
-      ]
-    },
-    {
-      title: 'Content & Media',
-      tabs: [
-        { id: 'stream_monitor' as TabId, label: 'Stream Monitor', description: 'Monitor live streams' },
-        { id: 'media_library' as TabId, label: 'Media Library', description: 'Manage uploaded content' },
-        { id: 'chat_moderation' as TabId, label: 'Chat Moderation', description: 'Moderate chat messages' },
-        { id: 'announcements' as TabId, label: 'Announcements', description: 'Send system announcements' },
-      ]
-    },
-    {
-      title: 'Economy & Finance',
-      tabs: [
-        { id: 'economy_dashboard' as TabId, label: 'Economy Dashboard', description: 'View economy metrics' },
-        { id: 'grant_coins' as TabId, label: 'Grant Coins', description: 'Manually grant coins' },
-        { id: 'tax_reviews' as TabId, label: 'Tax Reviews', description: 'Review tax calculations' },
-        { id: 'payment_logs' as TabId, label: 'Payment Logs', description: 'View payment history' },
-      ]
-    },
-    {
-      title: 'Cost Monitoring',
-      tabs: [
-        { id: 'cost_dashboard' as TabId, label: 'Cost Dashboard', description: 'Track infrastructure spend' },
-      ]
-    },
-    {
-      title: 'Operations & Scheduling',
-      tabs: [
-        { id: 'create_schedule' as TabId, label: 'Create Schedule', description: 'Schedule officer shifts' },
-        { id: 'officer_shifts' as TabId, label: 'Officer Shifts', description: 'Manage shift schedules' },
-        { id: 'shift_requests_approval' as TabId, label: 'Shift Requests', description: 'Approve time off and extra shifts' },
-        { id: 'empire_applications' as TabId, label: 'Empire Applications', description: 'Review empire partnerships' },
-        { id: 'referral_bonuses' as TabId, label: 'Referral Bonuses', description: 'Manage referral system' },
-      ]
-    },
-    {
-      title: 'Maintenance & Testing',
-      tabs: [
-        { id: 'control_panel' as TabId, label: 'Control Panel', description: 'Advanced system controls' },
-        { id: 'test_diagnostics' as TabId, label: 'Test Diagnostics', description: 'Run system diagnostics' },
-        { id: 'reset_maintenance' as TabId, label: 'Reset & Maintenance', description: 'System reset tools' },
-        { id: 'export_data' as TabId, label: 'Export Data', description: 'Export system data' },
-      ]
-    },
-  ]
-
   const handleSelectTab = (tabId: TabId) => {
-    setTabLoading(true)
     setActiveTab(tabId)
-    // small delay to show loading state for UX consistency
-    setTimeout(() => setTabLoading(false), 150)
     if (tabId === 'finance_dashboard') {
       navigate('/admin/finance')
     }
@@ -2053,9 +1960,9 @@ export default function AdminDashboard() {
       ({
         hr: '/admin/hr',
         all_hr: '/admin/hr',
-        database_backup: '/admin/database-backup',
-        cache_clear: '/admin/cache-clear',
-        system_config: '/admin/system-config',
+        database_backup: '/admin/system/backup',
+        cache_clear: '/admin/system/cache',
+        system_config: '/admin/system/config',
         user_search: '/admin/user-search',
         ban_management: '/admin/ban-management',
         reports_queue: '/admin/reports-queue',
@@ -2068,6 +1975,7 @@ export default function AdminDashboard() {
         grant_coins: '/admin/grant-coins',
         tax_reviews: '/admin/tax-reviews',
         payment_logs: '/admin/payment-logs',
+        store_pricing: '/admin/store-pricing',
         create_schedule: '/admin/create-schedule',
         officer_shifts: '/admin/officer-shifts',
         shift_requests_approval: '/admin/shift-requests-approval',
@@ -2112,429 +2020,6 @@ export default function AdminDashboard() {
     )
   }
 
-  const renderTabContent = () => {
-    if (tabLoading) {
-      return <div className="text-sm text-gray-400">Loading {activeTab}…</div>
-    }
-
-    switch (activeTab) {
-      case 'database_backup':
-        return <div className="text-sm text-gray-400">Redirecting to Database Backup...</div>
-
-      case 'system_health':
-        return (
-          <div className="space-y-6">
-            {/* connection tests */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <CreditCard className="w-4 h-4 text-blue-400" />
-                  <span className="font-semibold">PayPal</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={testPayPal}
-                  disabled={paypalTesting}
-                  className="px-3 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {paypalTesting ? 'Testing...' : 'Test PayPal'}
-                </button>
-                <div className="mt-2 text-xs text-gray-400">
-                  Status:{' '}
-                  {paypalTesting ? (
-                    <span className="text-yellow-400">Testing...</span>
-                  ) : paypalStatus ? (
-                    paypalStatus.ok ? (
-                      <span className="text-green-400">OK</span>
-                    ) : (
-                      <span className="text-red-400">{paypalStatus.error || 'Failed'}</span>
-                    )
-                  ) : (
-                    'Not tested'
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Monitor className="w-4 h-4 text-purple-400" />
-                  <span className="font-semibold">Supabase</span>
-                </div>
-                <button
-                  onClick={testSupabase}
-                  className="px-3 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500"
-                >
-                  Test Supabase
-                </button>
-                <div className="mt-2 text-xs text-gray-400">
-                  Status:{' '}
-                  {supabaseStatus
-                    ? supabaseStatus.ok
-                      ? 'OK'
-                      : supabaseStatus.error || 'Failed'
-                    : 'Not tested'}
-                </div>
-              </div>
-
-              <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Camera className="w-4 h-4 text-cyan-400" />
-                  <span className="font-semibold">LiveKit</span>
-                </div>
-                <button
-                  onClick={testLiveKitStreaming}
-                  className="px-3 py-1 text-xs rounded bg-cyan-600 hover:bg-cyan-500"
-                >
-                  Test LiveKit
-                </button>
-                <div className="mt-2 text-xs text-gray-400">
-                  Status:{' '}
-                  {liveKitStatus
-                    ? liveKitStatus.ok
-                      ? 'OK'
-                      : liveKitStatus.error || 'Failed'
-                    : 'Not tested'}
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-
-      case 'cache_clear':
-        return <div className="text-sm text-gray-400">Redirecting to Cache Management...</div>
-
-      case 'system_config':
-        return <div className="text-sm text-gray-400">Redirecting to System Configuration...</div>
-
-      case 'user_search':
-        return <div className="text-sm text-gray-400">Redirecting to User Search...</div>
-
-      case 'ban_management':
-        return <div className="text-sm text-gray-400">Redirecting to Ban Management...</div>
-
-      case 'reports_queue':
-        return <div className="text-sm text-gray-400">Redirecting to Reports Queue...</div>
-
-      case 'role_management':
-        return <div className="text-sm text-gray-400">Redirecting to Role Management...</div>
-
-      case 'stream_monitor':
-        return <div className="text-sm text-gray-400">Redirecting to Stream Monitor...</div>
-
-      case 'media_library':
-        return <div className="text-sm text-gray-400">Redirecting to Media Library...</div>
-
-      case 'chat_moderation':
-        return <div className="text-sm text-gray-400">Redirecting to Chat Moderation...</div>
-
-      case 'announcements':
-        return <div className="text-sm text-gray-400">Redirecting to Announcements...</div>
-
-      case 'economy_dashboard':
-        return <div className="text-sm text-gray-400">Redirecting to Economy Dashboard...</div>
-
-      case 'cost_dashboard':
-        return <AdminCostDashboard />
-
-      case 'finance_dashboard':
-        return <div className="text-sm text-gray-400">Redirecting to Finance Dashboard...</div>
-
-      case 'grant_coins':
-        return <div className="text-sm text-gray-400">Redirecting to Grant Coins...</div>
-
-      case 'tax_reviews':
-        return <div className="text-sm text-gray-400">Redirecting to Tax Reviews...</div>
-
-      case 'payment_logs':
-        return <div className="text-sm text-gray-400">Redirecting to Payment Logs...</div>
-
-      case 'store_pricing':
-        return <StorePriceEditor />
-
-      case 'create_schedule':
-        return <div className="text-sm text-gray-400">Redirecting to Create Schedule...</div>
-
-      case 'officer_shifts':
-        return <div className="text-sm text-gray-400">Redirecting to Officer Shifts...</div>
-
-      case 'empire_applications':
-        return <div className="text-sm text-gray-400">Redirecting to Empire Applications...</div>
-
-      case 'referral_bonuses':
-        return <div className="text-sm text-gray-400">Redirecting to Referral Bonuses...</div>
-
-      case 'control_panel':
-        return <div className="text-sm text-gray-400">Redirecting to Control Panel...</div>
-
-      case 'test_diagnostics':
-        return <div className="text-sm text-gray-400">Redirecting to Test Diagnostics...</div>
-
-      case 'reset_maintenance':
-        return <div className="text-sm text-gray-400">Redirecting to Reset & Maintenance...</div>
-
-      case 'export_data':
-        return <div className="text-sm text-gray-400">Redirecting to Data Export...</div>
-
-      case 'reports':
-        return (
-          <div className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {/* User Analytics */}
-              <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-xl p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Users className="w-6 h-6 text-blue-400" />
-                  <h3 className="text-lg font-semibold">User Analytics</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Total Users</span>
-                    <span className="text-white font-semibold">{stats.totalUsers.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Active Officers</span>
-                    <span className="text-white font-semibold">{stats.trollOfficers}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Pending Applications</span>
-                    <span className="text-white font-semibold">{stats.pendingApps}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">User Growth Rate</span>
-                    <span className="text-green-400 font-semibold">+12.5%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Financial Analytics */}
-              <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-xl p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <DollarSign className="w-6 h-6 text-green-400" />
-                  <h3 className="text-lg font-semibold">Financial Analytics</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Total Revenue</span>
-                    <span className="text-white font-semibold">${stats.coinSalesRevenue.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Total Payouts</span>
-                    <span className="text-white font-semibold">${stats.totalPayouts.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Platform Profit</span>
-                    <span className="text-green-400 font-semibold">${stats.platformProfit.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Coins in Circulation</span>
-                    <span className="text-white font-semibold">{stats.totalCoinsInCirculation.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Content Analytics */}
-              <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-xl p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Play className="w-6 h-6 text-purple-400" />
-                  <h3 className="text-lg font-semibold">Content Analytics</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Active Streams</span>
-                    <span className="text-white font-semibold">{liveStreams.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Total Viewers</span>
-                    <span className="text-white font-semibold">
-                      {liveStreams.reduce((sum, stream) => sum + (stream.current_viewers || 0), 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Avg Stream Duration</span>
-                    <span className="text-white font-semibold">2.3h</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Top Category</span>
-                    <span className="text-white font-semibold">Gaming</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Detailed Analytics Charts */}
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Revenue Trends */}
-              <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-xl p-6">
-                <h3 className="text-lg font-semibold mb-4">Revenue Trends (Last 30 Days)</h3>
-                <div className="h-64 flex items-center justify-center text-gray-400">
-                  <div className="text-center">
-                    <DollarSign className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>Revenue chart would go here</p>
-                    <p className="text-sm">Integration with charting library needed</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* User Activity */}
-              <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-xl p-6">
-                <h3 className="text-lg font-semibold mb-4">User Activity (Last 7 Days)</h3>
-                <div className="h-64 flex items-center justify-center text-gray-400">
-                  <div className="text-center">
-                    <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>User activity chart would go here</p>
-                    <p className="text-sm">Integration with charting library needed</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Key Metrics Table */}
-            <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-xl p-6">
-              <h3 className="text-lg font-semibold mb-4">Key Performance Indicators</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[#2C2C2C]">
-                      <th className="text-left py-2 text-gray-400">Metric</th>
-                      <th className="text-left py-2 text-gray-400">Current</th>
-                      <th className="text-left py-2 text-gray-400">Target</th>
-                      <th className="text-left py-2 text-gray-400">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2C2C2C]">
-                    <tr>
-                      <td className="py-3 text-white">Monthly Active Users</td>
-                      <td className="py-3 text-white">{stats.totalUsers.toLocaleString()}</td>
-                      <td className="py-3 text-gray-400">10,000</td>
-                      <td className="py-3">
-                        <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">
-                          On Track
-                        </span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3 text-white">Revenue per User</td>
-                      <td className="py-3 text-white">
-                        ${(stats.coinSalesRevenue / Math.max(stats.totalUsers, 1)).toFixed(2)}
-                      </td>
-                      <td className="py-3 text-gray-400">$25.00</td>
-                      <td className="py-3">
-                        <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs">
-                          Below Target
-                        </span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3 text-white">Stream Uptime</td>
-                      <td className="py-3 text-white">99.7%</td>
-                      <td className="py-3 text-gray-400">99.9%</td>
-                      <td className="py-3">
-                        <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">
-                          Excellent
-                        </span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3 text-white">Support Response Time</td>
-                      <td className="py-3 text-white">&lt; 2 hours</td>
-                      <td className="py-3 text-gray-400">&lt; 1 hour</td>
-                      <td className="py-3">
-                        <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs">
-                          Needs Improvement
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Export Options */}
-            <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-xl p-6">
-              <h3 className="text-lg font-semibold mb-4">Export Analytics Data</h3>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => {
-                    const csv = [
-                      'metric,value',
-                      'total_users,0',
-                      'active_streams,0',
-                      'daily_revenue,0',
-                    ].join('\n')
-                    downloadText(
-                      `analytics_export_${new Date().toISOString().split('T')[0]}.csv`,
-                      csv,
-                      'text/csv;charset=utf-8;',
-                    )
-                    toast.success('Analytics CSV downloaded')
-                  }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Export as CSV
-                </button>
-                <button
-                  onClick={() => {
-                    const report = [
-                      'Troll City Analytics Report',
-                      `Generated: ${new Date().toLocaleString()}`,
-                      'Summary: This is a placeholder report.',
-                    ].join('\n')
-                    downloadText(
-                      `analytics_report_${new Date().toISOString().split('T')[0]}.pdf`,
-                      report,
-                      'text/plain;charset=utf-8;',
-                    )
-                    toast.success('Analytics report downloaded')
-                  }}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Generate PDF Report
-                </button>
-                <button
-                  onClick={() => toast.info('Email report would be implemented here')}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Email Weekly Report
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-
-      default:
-        return null
-    }
-  }
-
-  const renderAdminModuleTabs = () => (
-    <div className="space-y-4 mb-4 border-t border-white/5 pt-4">
-      {_sections.map((section) => (
-        <div key={section.title} className="space-y-2">
-          <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-gray-400">
-            <span>{section.title}</span>
-            <span className="text-[10px] text-gray-500">{section.tabs.length} tools</span>
-          </div>
-          <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
-            {section.tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleSelectTab(tab.id)}
-                title={tab.description || tab.label}
-                className={`min-w-[140px] whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                  activeTab === tab.id
-                    ? 'bg-white text-black border-transparent shadow-[0_0_18px_rgba(255,255,255,0.25)]'
-                    : 'bg-white/5 text-white border-white/10 hover:border-white/40'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
       {/* Quick Actions Bar */}
@@ -2546,7 +2031,6 @@ export default function AdminDashboard() {
         onExportData={handleExportData}
         onToggleMaintenanceMode={handleToggleMaintenanceMode}
         maintenanceMode={maintenanceMode}
-        refreshing={refreshing}
       />
 
       <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-5">
@@ -2642,36 +2126,15 @@ export default function AdminDashboard() {
           stats={stats}
         />
 
-        {/* Admin Modules */}
-        {/* <AdminApplications /> */}
+          {/* Admin Modules */}
+          {/* <AdminApplications /> */}
 
-        {/* Agreements Management */}
-        {/* <AgreementsManagement
-          onLoadAgreements={() => console.log('Load agreements')}
-          agreementsLoading={false}
-          agreements={[]}
-        /> */}
-
-        {/* Admin Modules Output */}
-        <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-purple-500/20 border border-purple-500/30 rounded-lg flex items-center justify-center">
-              <Monitor className="w-5 h-5 text-purple-300" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Admin Modules</h3>
-              <p className="text-sm text-gray-400">Launch tools and jump to dedicated admin pages.</p>
-            </div>
-          </div>
-          {renderAdminModuleTabs()}
-          <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-lg p-4">
-            {activeTab === 'connections' ? (
-              <div className="text-sm text-gray-400">Select a module below to open it.</div>
-            ) : (
-              renderTabContent()
-            )}
-          </div>
-        </div>
+          {/* Agreements Management */}
+          {/* <AgreementsManagement
+            onLoadAgreements={() => console.log('Load agreements')}
+            agreementsLoading={false}
+            agreements={[]}
+          /> */}
 
         {/* Additional Tasks Grid */}
         <AdditionalTasksGrid

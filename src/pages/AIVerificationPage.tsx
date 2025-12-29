@@ -217,14 +217,14 @@ export default function AIVerificationPage() {
     setPaymentMethod(method)
     
     if (method === 'coins') {
-      const paidCoins = profile?.troll_coins || 0
-      if (paidCoins < 500) {
-        toast.error(`You need 500 paid coins. You have ${paidCoins}`)
+      const troll_coins = profile?.troll_coins || 0
+      if (troll_coins < 500) {
+        toast.error(`You need 500 troll_coins. You have ${troll_coins}`)
         return
       }
 
       // Deduct coins and verify
-      const { error } = await supabase.rpc('deduct_paid_coins', {
+      const { error } = await supabase.rpc('deduct_troll_coins', {
         p_user_id: user.id,
         p_amount: 500
       })
@@ -409,7 +409,7 @@ export default function AIVerificationPage() {
                   <p className="text-sm">Behavior Score: <strong>{result.behaviorScore.toFixed(1)}%</strong></p>
                 </div>
                 <p className="text-center opacity-80 mb-6">
-                  Complete your verification by paying $5 via PayPal or 500 paid coins
+                  Complete your verification by paying $5 via PayPal or 500 troll_coins
                 </p>
                 <div className="space-y-3">
                   <button
@@ -425,7 +425,7 @@ export default function AIVerificationPage() {
                     className="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Coins className="w-5 h-5" />
-                    Pay 500 Paid Coins (You have {profile?.troll_coins || 0})
+                    Pay 500 troll_coins (You have {profile?.troll_coins || 0})
                   </button>
                 </div>
               </>

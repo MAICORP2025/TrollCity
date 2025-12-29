@@ -41,7 +41,7 @@ export default function TermsOfService() {
 
         <h2>3. Virtual Currency and Digital Items</h2>
         <p>
-          Troll City may offer Free Coins, Paid Coins, and promotional Coins. Coins and
+          Troll City may offer Free Coins, troll_coins, and promotional Coins. Coins and
           digital gifts are licenses to use features inside Troll City and have no
           inherent real-world value, except where we explicitly allow payouts of Paid
           Coins through our official payout process. We may update exchange structures,
@@ -59,7 +59,7 @@ export default function TermsOfService() {
         <h2>5. Payouts and Taxes</h2>
         <p>
           Only eligible users may request a payout. At minimum, you must hold at least{' '}
-          <strong>7,000 Paid Coins</strong>, complete our identity verification, and
+          <strong>7,000 troll_coins</strong>, complete our identity verification, and
           comply with all rules. Payouts are not guaranteed, may be processed manually,
           and are subject to review. You are solely responsible for any taxes related
           to income or benefits you receive from Troll City.

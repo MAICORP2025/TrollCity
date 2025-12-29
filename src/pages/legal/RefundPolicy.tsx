@@ -24,7 +24,7 @@ export default function RefundPolicy() {
 
         <h2>2. Coin Purchases</h2>
         <p>
-          When you purchase Paid Coins through PayPal or other payment methods:
+          When you purchase troll_coins through PayPal or other payment methods:
         </p>
         <ul>
           <li>Coins are credited to your account immediately upon successful payment</li>

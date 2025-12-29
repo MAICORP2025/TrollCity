@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
 import { applyGiftToBattle } from '../../lib/battleHelpers'
 
-interface GiftItem {
+export interface GiftItem {
   id: string
   name: string
   icon?: string
@@ -34,7 +34,7 @@ export function useGiftSystem(
     // Validate balance based on gift type (paid or free)
     const balance = gift.type === 'paid' 
       ? (profile.troll_coins || 0)
-      : (profile.free_coin_balance || 0)
+      : (profile.troll_coins || 0)
 
     if (balance < gift.coinCost) {
       toast.error(`Not enough ${gift.type} coins for this gift.`)

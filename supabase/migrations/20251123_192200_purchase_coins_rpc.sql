@@ -4,7 +4,7 @@ language plpgsql security definer set search_path = public
 as $$
 begin
   update user_profiles
-    set paid_coin_balance = paid_coin_balance + p_coins,
+    set troll_coins = troll_coins + p_coins,
         updated_at = now()
     where id = p_user_id;
 

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS owc_transactions (
   source TEXT, -- 'shift', 'conversion', 'bonus', etc.
   session_id UUID REFERENCES officer_work_sessions(id) ON DELETE SET NULL,
   conversion_rate NUMERIC(5, 4), -- e.g., 0.005 for 0.5%
-  paid_coins_received BIGINT, -- If converted, how many paid coins
+  troll_coins_received BIGINT, -- If converted, how many troll_coins
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -47,8 +47,8 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'officer_work_sessions' AND column_name = 'owc_earned') THEN
     ALTER TABLE officer_work_sessions ADD COLUMN owc_earned BIGINT DEFAULT 0;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'officer_work_sessions' AND column_name = 'paid_coins_converted') THEN
-    ALTER TABLE officer_work_sessions ADD COLUMN paid_coins_converted BIGINT DEFAULT 0;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'officer_work_sessions' AND column_name = 'troll_coins_converted') THEN
+    ALTER TABLE officer_work_sessions ADD COLUMN troll_coins_converted BIGINT DEFAULT 0;
   END IF;
 END $$;
 
@@ -82,18 +82,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Function to calculate paid coins from OWC (with 10% bonus)
-CREATE OR REPLACE FUNCTION convert_owc_to_paid_coins(p_owc BIGINT, p_level INTEGER)
+-- Function to calculate troll_coins from OWC (with 10% bonus)
+CREATE OR REPLACE FUNCTION convert_owc_to_troll_coins(p_owc BIGINT, p_level INTEGER)
 RETURNS BIGINT AS $$
 DECLARE
   v_conversion_rate NUMERIC;
-  v_base_paid_coins BIGINT;
+  v_base_troll_coins BIGINT;
   v_bonus_coins BIGINT;
 BEGIN
   v_conversion_rate := get_owc_conversion_rate(p_level);
-  v_base_paid_coins := FLOOR(p_owc * v_conversion_rate);
-  v_bonus_coins := FLOOR(v_base_paid_coins * 0.10); -- 10% bonus
-  RETURN v_base_paid_coins + v_bonus_coins;
+  v_base_troll_coins := FLOOR(p_owc * v_conversion_rate);
+  v_bonus_coins := FLOOR(v_base_troll_coins * 0.10); -- 10% bonus
+  RETURN v_base_troll_coins + v_bonus_coins;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
@@ -132,7 +132,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to convert OWC to paid coins
+-- Function to convert OWC to troll_coins
 CREATE OR REPLACE FUNCTION convert_owc_to_paid(
   p_user_id UUID,
   p_owc_amount BIGINT
@@ -142,9 +142,9 @@ DECLARE
   v_current_owc BIGINT;
   v_officer_level INTEGER;
   v_conversion_rate NUMERIC;
-  v_base_paid_coins BIGINT;
+  v_base_troll_coins BIGINT;
   v_bonus_coins BIGINT;
-  v_total_paid_coins BIGINT;
+  v_total_troll_coins BIGINT;
 BEGIN
   -- Get current OWC balance and officer level
   SELECT owc_balance, officer_level
@@ -162,15 +162,15 @@ BEGIN
 
   -- Calculate conversion
   v_conversion_rate := get_owc_conversion_rate(v_officer_level);
-  v_base_paid_coins := FLOOR(p_owc_amount * v_conversion_rate);
-  v_bonus_coins := FLOOR(v_base_paid_coins * 0.10); -- 10% bonus
-  v_total_paid_coins := v_base_paid_coins + v_bonus_coins;
+  v_base_troll_coins := FLOOR(p_owc_amount * v_conversion_rate);
+  v_bonus_coins := FLOOR(v_base_troll_coins * 0.10); -- 10% bonus
+  v_total_troll_coins := v_base_troll_coins + v_bonus_coins;
 
-  -- Deduct OWC and add paid coins
+  -- Deduct OWC and add troll_coins
   UPDATE user_profiles
   SET 
     owc_balance = owc_balance - p_owc_amount,
-    paid_coin_balance = COALESCE(paid_coin_balance, 0) + v_total_paid_coins
+    troll_coins = COALESCE(troll_coins, 0) + v_total_troll_coins
   WHERE id = p_user_id;
 
   -- Log conversion transaction
@@ -180,7 +180,7 @@ BEGIN
     transaction_type, 
     source, 
     conversion_rate, 
-    paid_coins_received
+    troll_coins_received
   )
   VALUES (
     p_user_id, 
@@ -188,7 +188,7 @@ BEGIN
     'converted', 
     'manual_conversion', 
     v_conversion_rate, 
-    v_total_paid_coins
+    v_total_troll_coins
   );
 
   -- Log bonus transaction
@@ -197,7 +197,7 @@ BEGIN
     amount, 
     transaction_type, 
     source, 
-    paid_coins_received
+    troll_coins_received
   )
   VALUES (
     p_user_id, 
@@ -210,9 +210,9 @@ BEGIN
   RETURN json_build_object(
     'success', true,
     'owc_converted', p_owc_amount,
-    'base_paid_coins', v_base_paid_coins,
+    'base_troll_coins', v_base_troll_coins,
     'bonus_coins', v_bonus_coins,
-    'total_paid_coins', v_total_paid_coins,
+    'total_troll_coins', v_total_troll_coins,
     'conversion_rate', v_conversion_rate
   );
 END;

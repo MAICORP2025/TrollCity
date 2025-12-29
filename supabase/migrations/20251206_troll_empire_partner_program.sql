@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS referral_monthly_bonus (
   referred_user_id uuid NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   month text NOT NULL, -- Format: 'YYYY-MM' e.g. '2025-02'
   coins_earned bigint NOT NULL, -- Total coins earned by referred user that month
-  bonus_paid_coins bigint NOT NULL, -- 5% bonus paid to recruiter (in paid coins)
+  bonus_troll_coins bigint NOT NULL, -- 5% bonus paid to recruiter (in troll_coins)
   created_at timestamptz DEFAULT now(),
   UNIQUE (referred_user_id, month) -- Prevent double payout for same user/month
 );
@@ -73,15 +73,15 @@ BEGIN
 END;
 $$;
 
--- Ensure paid_coin_balance exists in user_profiles
+-- Ensure troll_coins exists in user_profiles
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'user_profiles' 
-    AND column_name = 'paid_coin_balance'
+    AND column_name = 'troll_coins'
   ) THEN
-    ALTER TABLE user_profiles ADD COLUMN paid_coin_balance integer NOT NULL DEFAULT 0;
+    ALTER TABLE user_profiles ADD COLUMN troll_coins integer NOT NULL DEFAULT 0;
   END IF;
 END $$;
 

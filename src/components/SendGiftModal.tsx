@@ -226,8 +226,8 @@ export default function SendGiftModal({
       )}
 
       <div className="text-sm mb-3 flex justify-between bg-gray-800 p-2 rounded-lg">
-        <span>Paid Coins: {profile?.troll_coins || 0}</span>
-        <span>Free Coins: {profile?.free_coin_balance || 0}</span>
+        <span>troll_coins: {profile?.troll_coins || 0}</span>
+        <span>Free Coins: {profile?.troll_coins || 0}</span>
       </div>
 
       {loadingGifts ? (
@@ -236,7 +236,7 @@ export default function SendGiftModal({
         <div className={`grid grid-cols-2 gap-3 ${inline ? 'max-h-[calc(100vh-300px)]' : 'max-h-96'} overflow-y-auto`}>
           {displayGifts.map((gift) => {
           const paidBalance = profile?.troll_coins || 0
-          const freeBalance = profile?.free_coin_balance || 0
+          const freeBalance = profile?.troll_coins || 0
           const totalBalance = paidBalance + freeBalance
           const canAfford = totalBalance >= gift.coinCost
           

@@ -89,7 +89,7 @@ export default async function handler(req, res) {
     }
 
     // Award coins to user
-    const { error: coinError } = await supabase.rpc("add_paid_coins", {
+    const { error: coinError } = await supabase.rpc("add_troll_coins", {
       p_user_id: uid,
       p_amount: coinsAwarded
     });

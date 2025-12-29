@@ -20,7 +20,7 @@ ON CONFLICT DO NOTHING;
 -- 2. Update user balances to add 1000 Trollmonds
 UPDATE user_profiles
 SET
-  free_coin_balance = free_coin_balance + 1000,
+  troll_coins = troll_coins + 1000,
   total_earned_coins = total_earned_coins + 1000,
   updated_at = NOW()
 WHERE id NOT IN (
@@ -36,7 +36,7 @@ BEGIN
   -- Only grant bonus until 2026-01-01
   IF CURRENT_DATE < '2026-01-01' THEN
     -- Add 1000 Trollmonds to new user
-    NEW.free_coin_balance = COALESCE(NEW.free_coin_balance, 0) + 1000;
+    NEW.troll_coins = COALESCE(NEW.troll_coins, 0) + 1000;
     NEW.total_earned_coins = COALESCE(NEW.total_earned_coins, 0) + 1000;
 
     -- Record the transaction (will be done after insert due to trigger timing)
@@ -79,6 +79,6 @@ SELECT
   'OG Welcome Bonus Applied' as status,
   COUNT(*) as total_users,
   COUNT(*) FILTER (WHERE og_badge = true) as og_badge_users,
-  AVG(free_coin_balance) as avg_trollmonds,
-  SUM(CASE WHEN free_coin_balance >= 1000 THEN 1 ELSE 0 END) as users_with_bonus
+  AVG(troll_coins) as avg_trollmonds,
+  SUM(CASE WHEN troll_coins >= 1000 THEN 1 ELSE 0 END) as users_with_bonus
 FROM user_profiles;

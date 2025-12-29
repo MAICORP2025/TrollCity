@@ -273,8 +273,8 @@ export const handler = async (req: Request): Promise<Response> => {
           user_id: updated.host_id,
           opponent_id: updated.challenger_id,
           won: winner_id === updated.host_id,
-          paid_coins_received: updated.host_troll_coins,
-          paid_coins_sent: hostPaidSent.data?.reduce((sum, g) => sum + (g.amount || 0), 0) || 0,
+          troll_coins_received: updated.host_troll_coins,
+          troll_coins_sent: hostPaidSent.data?.reduce((sum, g) => sum + (g.amount || 0), 0) || 0,
           battle_duration_seconds: duration,
         });
 
@@ -291,8 +291,8 @@ export const handler = async (req: Request): Promise<Response> => {
           user_id: updated.challenger_id,
           opponent_id: updated.host_id,
           won: winner_id === updated.challenger_id,
-          paid_coins_received: updated.challenger_troll_coins,
-          paid_coins_sent: challengerPaidSent.data?.reduce((sum, g) => sum + (g.amount || 0), 0) || 0,
+          troll_coins_received: updated.challenger_troll_coins,
+          troll_coins_sent: challengerPaidSent.data?.reduce((sum, g) => sum + (g.amount || 0), 0) || 0,
           battle_duration_seconds: duration,
         });
 

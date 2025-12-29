@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS empire_applications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   status text NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
-  payment_type text NOT NULL CHECK (payment_type IN ('paid_coins', 'card_payment')),
+  payment_type text NOT NULL CHECK (payment_type IN ('troll_coins', 'card_payment')),
   amount_paid numeric(10,2) NOT NULL, -- $15 for card, 1500 for coins
   payment_id text, -- Square payment ID or transaction ID
   reviewed_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL,

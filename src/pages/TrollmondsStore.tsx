@@ -204,7 +204,7 @@ export default function TrollmondsStore() {
 
   const buyItem = async (item: TrollmondItem) => {
     if (!user || !profile) return toast.error('Please log in')
-    if ((profile.free_coin_balance || 0) < item.value) return toast.error('Not enough Trollmonds')
+    if ((profile.troll_coins || 0) < item.value) return toast.error('Not enough Trollmonds')
 
     setPurchasing(item.id)
     try {
@@ -229,19 +229,19 @@ export default function TrollmondsStore() {
 
   const convertCoins = async () => {
     if (!user || !profile) return
-    if ((profile.troll_coins || 0) < convertAmount) return toast.error('Not enough Paid Coins')
+    if ((profile.troll_coins || 0) < convertAmount) return toast.error('Not enough troll_coins')
 
     setConverting(true)
     try {
-      const { data, error } = await supabase.rpc('convert_paid_coins_to_trollmonds', {
+      const { data, error } = await supabase.rpc('convert_troll_coins_to_trollmonds', {
         p_user_id: user.id,
-        p_paid_coins: convertAmount
+        p_troll_coins: convertAmount
       })
 
       if (error) throw error
       if (data && !data.success) throw new Error(data.error)
 
-      toast.success(`Converted ${convertAmount} Paid Coins to ${(convertAmount * 100).toLocaleString()} Trollmonds!`)
+      toast.success(`Converted ${convertAmount} troll_coins to ${(convertAmount * 100).toLocaleString()} Trollmonds!`)
       await refreshProfile()
       setShowConvertModal(false)
       setConvertAmount(100)
@@ -301,7 +301,7 @@ export default function TrollmondsStore() {
           <div className="bg-[#1A1A1A] px-6 py-3 rounded-xl border border-green-500/30 flex items-center gap-3">
             <span className="text-gray-400 text-sm">Your Balance</span>
             <span className="text-2xl font-bold text-green-400">
-              {(profile?.free_coin_balance || 0).toLocaleString()}
+              {(profile?.troll_coins || 0).toLocaleString()}
             </span>
             <span className="text-xs text-green-500/70">Trollmonds</span>
           </div>
@@ -311,12 +311,12 @@ export default function TrollmondsStore() {
         <div className="bg-[#1A1A1A] rounded-xl p-6 border border-purple-500/30 mb-10">
           <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-purple-300">
             <Coins className="w-6 h-6" />
-            Convert Paid Coins to Trollmonds
+            Convert troll_coins to Trollmonds
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-[#15151A] p-4 rounded-lg border border-[#2C2C2C]">
-              <p className="text-sm text-gray-400 mb-1">Paid Coins Balance</p>
+              <p className="text-sm text-gray-400 mb-1">troll_coins Balance</p>
               <p className="text-2xl font-bold text-yellow-400">
                 {(profile?.troll_coins || 0).toLocaleString()}
               </p>
@@ -324,13 +324,13 @@ export default function TrollmondsStore() {
             <div className="bg-[#15151A] p-4 rounded-lg border border-[#2C2C2C]">
               <p className="text-sm text-gray-400 mb-1">Trollmonds Balance</p>
               <p className="text-2xl font-bold text-green-400">
-                {(profile?.free_coin_balance || 0).toLocaleString()}
+                {(profile?.troll_coins || 0).toLocaleString()}
               </p>
             </div>
             <div className="bg-[#15151A] p-4 rounded-lg border border-[#2C2C2C]">
               <p className="text-sm text-gray-400 mb-1">Conversion Rate</p>
               <p className="text-lg font-bold text-purple-400">
-                100 Paid Coins <ArrowRight className="inline w-4 h-4 mx-1" /> 10,000 Trollmonds
+                100 troll_coins <ArrowRight className="inline w-4 h-4 mx-1" /> 10,000 Trollmonds
               </p>
             </div>
           </div>
@@ -382,7 +382,7 @@ export default function TrollmondsStore() {
               <h3 className="text-xl font-bold mb-4 text-center">Confirm Conversion</h3>
               <div className="text-center mb-6">
                 <p className="text-gray-300 mb-2">
-                  Convert <span className="text-yellow-400 font-bold">{convertAmount}</span> Paid Coins
+                  Convert <span className="text-yellow-400 font-bold">{convertAmount}</span> troll_coins
                 </p>
                 <ArrowRight className="w-6 h-6 text-purple-400 mx-auto my-2" />
                 <p className="text-gray-300">

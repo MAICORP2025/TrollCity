@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 
 interface ProfitData {
-  totalPaidCoins: number
-  totalPaidCoinsUSD: string
+  totaltroll_coins: number
+  totaltroll_coinsUSD: string
   totalShopRevenue: number
   totalShopRevenueUSD: string
   totalGiftRevenue: number
@@ -13,7 +13,7 @@ interface ProfitData {
   totalLiabilityCoins: number
   totalLiabilityUSD: string
   pendingCashoutUSD: string
-  adminPaidCoins: number
+  admintroll_coins: number
   adminFreeCoins: number
   adminTotalCoins: number
   platformSpendableCoins: number
@@ -76,7 +76,7 @@ const ProfitSummary = () => {
         
         <div className="grid grid-cols-2 gap-2 text-sm">
           <p className="text-gray-300">💵 Coin Purchases (Square):</p>
-          <p className="text-right font-semibold">{summary.totalPaidCoins.toLocaleString()} coins (${summary.totalPaidCoinsUSD})</p>
+          <p className="text-right font-semibold">{summary.totaltroll_coins.toLocaleString()} coins (${summary.totaltroll_coinsUSD})</p>
           
           <p className="text-gray-300">🛒 Shop Revenue (Insurance/Effects/Perks):</p>
           <p className="text-right font-semibold">{summary.totalShopRevenue.toLocaleString()} coins (${summary.totalShopRevenueUSD})</p>
@@ -111,8 +111,8 @@ const ProfitSummary = () => {
         <h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-1">Admin Account</h3>
         
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <p className="text-gray-300">👑 Admin Paid Coins:</p>
-          <p className="text-right font-semibold">{summary.adminPaidCoins.toLocaleString()} coins</p>
+          <p className="text-gray-300">👑 Admin troll_coins:</p>
+          <p className="text-right font-semibold">{summary.admintroll_coins.toLocaleString()} coins</p>
           
           <p className="text-gray-300">🎫 Admin Free Coins:</p>
           <p className="text-right font-semibold">{summary.adminFreeCoins.toLocaleString()} coins</p>

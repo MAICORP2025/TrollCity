@@ -1,6 +1,6 @@
 -- Migration: Update Perk Prices
 -- Created: 2025-12-12
--- Purpose: Update perk prices to range from 200 to 5000 paid coins
+-- Purpose: Update perk prices to range from 200 to 5000 troll_coins
 
 -- Update existing perk prices
 UPDATE perks SET cost = 200 WHERE id = 'perk_disappear_chat'; -- Disappearing Chats (30m)

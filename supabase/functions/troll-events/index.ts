@@ -180,15 +180,15 @@ export const handler = async (req: Request): Promise<Response> => {
         // Add coins to user
         const { data: profile } = await supabase
           .from("user_profiles")
-          .select("paid_coin_balance")
+          .select("troll_coins")
           .eq("id", user.id)
           .single();
 
-        const newBalance = (profile?.paid_coin_balance || 0) + event.coin_reward;
+        const newBalance = (profile?.troll_coins || 0) + event.coin_reward;
 
         const { error: updateError } = await supabase
           .from("user_profiles")
-          .update({ paid_coin_balance: newBalance })
+          .update({ troll_coins: newBalance })
           .eq("id", user.id);
 
         if (updateError) {

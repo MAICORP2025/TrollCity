@@ -21,7 +21,7 @@ async function applyWelcomeBonus() {
     // Get all users
     const { data: users, error: usersError } = await supabase
       .from('user_profiles')
-      .select('id, username, free_coin_balance, total_earned_coins');
+      .select('id, username, troll_coins, total_earned_coins');
 
     if (usersError) {
       console.error('Error fetching users:', usersError);
@@ -38,7 +38,7 @@ async function applyWelcomeBonus() {
         const { error: updateError } = await supabase
           .from('user_profiles')
           .update({
-            free_coin_balance: (user.free_coin_balance || 0) + 1000,
+            troll_coins: (user.troll_coins || 0) + 1000,
             total_earned_coins: (user.total_earned_coins || 0) + 1000,
             updated_at: new Date().toISOString()
           })

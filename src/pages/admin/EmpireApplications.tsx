@@ -9,7 +9,7 @@ interface EmpireApplication {
   id: string
   user_id: string
   status: 'pending' | 'approved' | 'rejected'
-  payment_type: 'paid_coins' | 'card_payment' | 'free'
+  payment_type: 'troll_coins' | 'card_payment' | 'free'
   amount_paid: number
   payment_id: string | null
   reviewed_by: string | null
@@ -45,7 +45,7 @@ export default function EmpireApplications() {
           user:user_profiles!empire_applications_user_id_fkey (
             username,
             avatar_url,
-            troll_coin_balance
+            troll_troll_coins
           ),
           reviewer:user_profiles!empire_applications_reviewed_by_fkey (
             username
@@ -241,7 +241,7 @@ export default function EmpireApplications() {
                                 <CheckCircle2 className="w-4 h-4 text-green-400" />
                                 Free Application
                               </>
-                            ) : app.payment_type === 'paid_coins' ? (
+                            ) : app.payment_type === 'troll_coins' ? (
                               <>
                                 <Coins className="w-4 h-4 text-yellow-400" />
                                 {app.amount_paid} Coins

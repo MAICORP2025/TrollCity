@@ -100,5 +100,6 @@ export function useLiveKitSession(options: SessionOptions) {
     error: sessionError || error,
     toggleCamera,
     toggleMicrophone,
+    startPublishing,
   }
 }

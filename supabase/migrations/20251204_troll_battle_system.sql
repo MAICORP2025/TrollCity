@@ -1,5 +1,5 @@
 -- Troll Battle System
--- 2-minute live duels between streamers where paid coins determine victory
+-- 2-minute live duels between streamers where troll_coins determine victory
 
 -- Battle sessions table
 CREATE TABLE IF NOT EXISTS troll_battles (
@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS troll_battles (
   challenger_stream_id uuid REFERENCES streams(id) ON DELETE SET NULL,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'countdown', 'active', 'completed', 'cancelled')),
   winner_id uuid REFERENCES user_profiles(id) ON DELETE SET NULL,
-  host_paid_coins bigint DEFAULT 0 NOT NULL,
-  challenger_paid_coins bigint DEFAULT 0 NOT NULL,
+  host_troll_coins bigint DEFAULT 0 NOT NULL,
+  challenger_troll_coins bigint DEFAULT 0 NOT NULL,
   host_free_coins bigint DEFAULT 0 NOT NULL,
   challenger_free_coins bigint DEFAULT 0 NOT NULL,
   start_time timestamptz,
@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS battle_history (
   user_id uuid NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   opponent_id uuid NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   won boolean NOT NULL,
-  paid_coins_received bigint DEFAULT 0 NOT NULL,
-  paid_coins_sent bigint DEFAULT 0 NOT NULL,
+  troll_coins_received bigint DEFAULT 0 NOT NULL,
+  troll_coins_sent bigint DEFAULT 0 NOT NULL,
   battle_duration_seconds integer,
   created_at timestamptz NOT NULL DEFAULT now()
 );

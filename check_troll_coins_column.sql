@@ -1,14 +1,14 @@
--- Check if troll_coins_balance column exists in user_profiles table
+-- Check if Troll_coins column exists in user_profiles table
 SELECT column_name, data_type, is_nullable, column_default
 FROM information_schema.columns 
 WHERE table_name = 'user_profiles' 
-  AND column_name = 'troll_coins_balance';
+  AND column_name = 'Troll_coins';
 
--- Also check for free_coin_balance column
+-- Also check for troll_coins column
 SELECT column_name, data_type, is_nullable, column_default
 FROM information_schema.columns 
 WHERE table_name = 'user_profiles' 
-  AND column_name = 'free_coin_balance';
+  AND column_name = 'troll_coins';
 
 -- Show all columns in user_profiles table
 SELECT column_name, data_type, is_nullable, column_default
