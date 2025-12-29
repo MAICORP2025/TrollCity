@@ -2510,6 +2510,36 @@ export default function AdminDashboard() {
     }
   }
 
+  const renderAdminModuleTabs = () => (
+    <div className="space-y-4 mb-4 border-t border-white/5 pt-4">
+      {_sections.map((section) => (
+        <div key={section.title} className="space-y-2">
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-gray-400">
+            <span>{section.title}</span>
+            <span className="text-[10px] text-gray-500">{section.tabs.length} tools</span>
+          </div>
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
+            {section.tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleSelectTab(tab.id)}
+                title={tab.description || tab.label}
+                className={`min-w-[140px] whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  activeTab === tab.id
+                    ? 'bg-white text-black border-transparent shadow-[0_0_18px_rgba(255,255,255,0.25)]'
+                    : 'bg-white/5 text-white border-white/10 hover:border-white/40'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
       {/* Quick Actions Bar */}
@@ -2639,6 +2669,7 @@ export default function AdminDashboard() {
               <p className="text-sm text-gray-400">Launch tools and jump to dedicated admin pages.</p>
             </div>
           </div>
+          {renderAdminModuleTabs()}
           <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-lg p-4">
             {activeTab === 'connections' ? (
               <div className="text-sm text-gray-400">Select a module below to open it.</div>

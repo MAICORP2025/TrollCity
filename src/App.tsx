@@ -16,8 +16,6 @@ import { APP_DATA_REFETCH_EVENT_NAME } from "./lib/appEvents";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
-import ServiceWorkerUpdateBanner from "./components/ServiceWorkerUpdateBanner";
-import PwaInstallPrompt from "./components/PwaInstallPrompt";
 import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
 import { RequireLeadOrOwner } from "./components/auth/RequireLeadOrOwner";
@@ -426,9 +424,6 @@ function AppContent() {
         onRetry={retryLastAction}
       />
 
-
-      <ServiceWorkerUpdateBanner />
-      <PwaInstallPrompt />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
         <div className="flex min-h-screen">
