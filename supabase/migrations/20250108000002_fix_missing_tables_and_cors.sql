@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS public.streams_participants (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(stream_id, user_id, is_active) WHERE is_active = true
 );
 
 -- 2. Create award_birthday_coins_if_eligible function if it doesn't exist
@@ -115,4 +114,5 @@ CREATE POLICY "Users can update their participant status"
 CREATE INDEX IF NOT EXISTS idx_streams_participants_stream_id ON public.streams_participants(stream_id);
 CREATE INDEX IF NOT EXISTS idx_streams_participants_user_id ON public.streams_participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_streams_participants_active ON public.streams_participants(stream_id, is_active) WHERE is_active = true;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_streams_participants_unique_active ON public.streams_participants(stream_id, user_id) WHERE is_active = true;
 

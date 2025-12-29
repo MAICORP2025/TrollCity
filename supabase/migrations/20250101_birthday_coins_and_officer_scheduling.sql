@@ -4,6 +4,21 @@
 ALTER TABLE user_profiles 
   ADD COLUMN IF NOT EXISTS birthday_coins_awarded_date DATE;
 
+ -- Ensure officer flag exists before schedules reference it
+ DO $$
+ BEGIN
+   IF NOT EXISTS (
+     SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'user_profiles'
+       AND column_name = 'is_troll_officer'
+   ) THEN
+     ALTER TABLE public.user_profiles
+       ADD COLUMN is_troll_officer BOOLEAN DEFAULT false;
+   END IF;
+ END $$;
+
 -- Create index for birthday checks
 CREATE INDEX IF NOT EXISTS idx_user_profiles_birthday_coins 
   ON user_profiles(birthday_coins_awarded_date) 

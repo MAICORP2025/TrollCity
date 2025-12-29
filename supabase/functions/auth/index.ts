@@ -1,12 +1,47 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+const decodeSettingValue = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+};
+
+const buildAppSettingFetcher = (client: ReturnType<typeof createClient>) => async (key: string) => {
+  try {
+    const { data, error } = await client
+      .from("app_settings")
+      .select("setting_value")
+      .eq("key", key)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return decodeSettingValue(data?.setting_value ?? null);
+  } catch (error: any) {
+    console.warn(
+      `Unable to load app_settings.${key} (row or table may be missing); falling back to defaults.`,
+      error?.message || error
+    );
+    return null;
+  }
+};
+
 Deno.serve(async (req: Request) => {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false, autoRefreshToken: false } }
   );
+  const fetchAppSettingValue = buildAppSettingFetcher(supabase);
 
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -85,6 +120,7 @@ Deno.serve(async (req: Request) => {
           tier: 'Bronze',
           paid_coin_balance: 0,
           free_coin_balance: 100,
+          troll_coins: 0,
           total_earned_coins: 100,
           total_spent_coins: 0,
           avatar_url: avatar,
@@ -224,15 +260,10 @@ Deno.serve(async (req: Request) => {
       }
 
       // Check testing mode
-      const { data: testingModeSettings } = await supabase
-        .from('app_settings')
-        .select('setting_value')
-        .eq('key', 'testing_mode')
-        .single();
-      
-      const testingMode = testingModeSettings?.setting_value || { enabled: false, signup_limit: 15, current_signups: 0 };
+      const testingModeSetting = await fetchAppSettingValue('testing_mode');
+      const testingMode = testingModeSetting || { enabled: false, signup_limit: 15, current_signups: 0 };
       const isTestingMode = testingMode.enabled;
-      
+
       if (isTestingMode && testingMode.current_signups >= testingMode.signup_limit) {
         return new Response(JSON.stringify({ error: 'Signups are currently limited. Testing mode is active and the signup limit has been reached. Please contact an administrator.' }), {
           status: 403,
@@ -241,13 +272,8 @@ Deno.serve(async (req: Request) => {
       }
 
       // Get test user benefits
-      const { data: benefitsSettings } = await supabase
-        .from('app_settings')
-        .select('setting_value')
-        .eq('key', 'test_user_benefits')
-        .single();
-      
-      const benefits = benefitsSettings?.setting_value || { free_coins: 5000, bypass_family_fee: true, bypass_admin_message_fee: true };
+      const benefitsSetting = await fetchAppSettingValue('test_user_benefits');
+      const benefits = benefitsSetting || { free_coins: 5000, bypass_family_fee: true, bypass_admin_message_fee: true };
 
       const trimmedUsername = username.trim();
       const { data: created, error: createErr } = await supabase.auth.admin.createUser({
@@ -269,25 +295,32 @@ Deno.serve(async (req: Request) => {
       const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${trimmedUsername}`;
       const initialCoins = isTestingMode ? benefits.free_coins : 100;
 
+      const profilePayload = {
+        id: uid,
+        username: trimmedUsername,
+        avatar_url: avatar,
+        email,
+        role: 'user',
+        tier: 'Bronze',
+        paid_coin_balance: 0,
+        troll_coins: 0,
+        free_coin_balance: initialCoins,
+        total_earned_coins: initialCoins,
+        total_spent_coins: 0,
+        is_test_user: isTestingMode,
+        updated_at: new Date().toISOString()
+      };
+
       const { error: profileErr } = await supabase
         .from('user_profiles')
-        .insert({
-          id: uid,
-          username: trimmedUsername,
-          avatar_url: avatar,
-          role: 'user',
-          tier: 'Bronze',
-          free_coin_balance: initialCoins,
-          paid_coin_balance: 0,
-          total_earned_coins: initialCoins,
-          total_spent_coins: 0,
-          is_test_user: isTestingMode,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+        .upsert(profilePayload, { onConflict: 'id' });
 
       if (profileErr) {
-        return new Response(JSON.stringify({ error: profileErr.message }), {
+        console.error('Profile creation error:', profileErr);
+        return new Response(JSON.stringify({
+          error: `Database error creating user profile: ${profileErr.message}`,
+          details: profileErr
+        }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
