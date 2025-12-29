@@ -15,19 +15,18 @@ import {
    FileText,
    UserCheck,
    ListChecks,
-   Receipt,
    Sword,
    UserPlus,
    Bug,
    Store,
    Crown,
-   Mic,
    Trophy,
    FerrisWheel,
    MessageCircle,
-  Headphones,
-  Package,
-  Scale,
+   Package,
+   Scale,
+   ChevronDown,
+   ChevronUp,
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -51,7 +50,9 @@ export default function Sidebar() {
   const [canSeeFamilyLounge, setCanSeeFamilyLounge] = useState(false)
   const [showCourtModal, setShowCourtModal] = useState(false)
   const [showStatsPanel, setShowStatsPanel] = useState(false)
-  const isAdmin = profile?.role === 'admin'
+  const [trollFamiliesCollapsed, setTrollFamiliesCollapsed] = useState(false)
+  const [leadOfficerCollapsed, setLeadOfficerCollapsed] = useState(false)
+  const [adminControlsCollapsed, setAdminControlsCollapsed] = useState(false)
 
   // Role logic for Go Live access
   const canGoLive =
@@ -221,11 +222,21 @@ export default function Sidebar() {
 
             {/* Troll Families Section */}
             <div className="mt-4">
-              <p className="text-gray-500 uppercase text-xs mb-2 px-4">Troll Families</p>
-              <MenuLink to="/family/lounge" icon={<Crown className="w-5 h-5 text-purple-400" />} label="Family Lounge" active={isActive('/family/lounge')} />
-              <MenuLink to="/family/wars-hub" icon={<Sword className="w-5 h-5 text-red-400" />} label="Family War Hub" active={isActive('/family/wars-hub')} />
-              <MenuLink to="/family/leaderboard" icon={<Trophy className="w-5 h-5 text-yellow-400" />} label="Family Leaderboard" active={isActive('/family/leaderboard')} />
-              <MenuLink to="/family/shop" icon={<Coins className="w-5 h-5 text-green-400" />} label="Family Shop" active={isActive('/family/shop')} />
+              <button
+                onClick={() => setTrollFamiliesCollapsed(!trollFamiliesCollapsed)}
+                className="flex items-center justify-between w-full text-gray-500 uppercase text-xs mb-2 px-4 hover:text-gray-400 transition-colors"
+              >
+                <span>Troll Families</span>
+                {trollFamiliesCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+              {!trollFamiliesCollapsed && (
+                <>
+                  <MenuLink to="/family/lounge" icon={<Crown className="w-5 h-5 text-purple-400" />} label="Family Lounge" active={isActive('/family/lounge')} />
+                  <MenuLink to="/family/wars-hub" icon={<Sword className="w-5 h-5 text-red-400" />} label="Family War Hub" active={isActive('/family/wars-hub')} />
+                  <MenuLink to="/family/leaderboard" icon={<Trophy className="w-5 h-5 text-yellow-400" />} label="Family Leaderboard" active={isActive('/family/leaderboard')} />
+                  <MenuLink to="/family/shop" icon={<Coins className="w-5 h-5 text-green-400" />} label="Family Shop" active={isActive('/family/shop')} />
+                </>
+              )}
             </div>
           </>
         )}
@@ -247,22 +258,40 @@ export default function Sidebar() {
       {/* Lead Officer Section — Lead Officers and Admins */}
       {profile?.is_lead_officer && (
         <div className="p-4 border-t border-[#2C2C2C]">
-          <p className="text-gray-500 uppercase text-xs mb-2">Lead Officer</p>
-          <MenuLink to="/lead-officer" icon={<Shield className="w-5 h-5 text-amber-500" />} label="Lead Officer HQ" active={isActive('/lead-officer')} />
+          <button
+            onClick={() => setLeadOfficerCollapsed(!leadOfficerCollapsed)}
+            className="flex items-center justify-between w-full text-gray-500 uppercase text-xs mb-2 hover:text-gray-400 transition-colors"
+          >
+            <span>Lead Officer</span>
+            {leadOfficerCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+          {!leadOfficerCollapsed && (
+            <MenuLink to="/lead-officer" icon={<Shield className="w-5 h-5 text-amber-500" />} label="Lead Officer HQ" active={isActive('/lead-officer')} />
+          )}
         </div>
       )}
 
       {/* Admin Dashboard — Only Admin */}
       {profile?.role === 'admin' && (
         <div className="p-4 border-t border-[#2C2C2C]">
-          <p className="text-gray-500 uppercase text-xs mb-2">Admin Controls</p>
-          <MenuLink to="/admin" icon={<LayoutDashboard className="w-5 h-5 text-violet-500" />} label="Admin Dashboard" active={isActive('/admin')} />
-          <MenuLink to="/admin/applications" icon={<UserPlus className="w-5 h-5 text-blue-500" />} label="Applications" active={isActive('/admin/applications')} />
-          <MenuLink to="/admin/marketplace" icon={<Store className="w-5 h-5 text-orange-500" />} label="Marketplace Admin" active={isActive('/admin/marketplace')} />
-          <MenuLink to="/admin/officer-reports" icon={<FileText className="w-5 h-5 text-teal-500" />} label="Officer Reports" active={isActive('/admin/officer-reports')} />
-          <MenuLink to="/store-debug" icon={<Bug className="w-5 h-5 text-red-600" />} label="Store Debug" active={isActive('/store-debug')} />
-          <MenuLink to="/changelog" icon={<ListChecks className="w-5 h-5 text-lime-500" />} label="Updates & Changes" active={isActive('/changelog')} />
-          <MenuLink to="/admin/royal-family" icon={<Crown className="w-5 h-5 text-yellow-500" />} label="Royal Family" active={isActive('/admin/royal-family')} />
+          <button
+            onClick={() => setAdminControlsCollapsed(!adminControlsCollapsed)}
+            className="flex items-center justify-between w-full text-gray-500 uppercase text-xs mb-2 hover:text-gray-400 transition-colors"
+          >
+            <span>Admin Controls</span>
+            {adminControlsCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+          {!adminControlsCollapsed && (
+            <>
+              <MenuLink to="/admin" icon={<LayoutDashboard className="w-5 h-5 text-violet-500" />} label="Admin Dashboard" active={isActive('/admin')} />
+              <MenuLink to="/admin/applications" icon={<UserPlus className="w-5 h-5 text-blue-500" />} label="Applications" active={isActive('/admin/applications')} />
+              <MenuLink to="/admin/marketplace" icon={<Store className="w-5 h-5 text-orange-500" />} label="Marketplace Admin" active={isActive('/admin/marketplace')} />
+              <MenuLink to="/admin/officer-reports" icon={<FileText className="w-5 h-5 text-teal-500" />} label="Officer Reports" active={isActive('/admin/officer-reports')} />
+              <MenuLink to="/store-debug" icon={<Bug className="w-5 h-5 text-red-600" />} label="Store Debug" active={isActive('/store-debug')} />
+              <MenuLink to="/changelog" icon={<ListChecks className="w-5 h-5 text-lime-500" />} label="Updates & Changes" active={isActive('/changelog')} />
+              <MenuLink to="/admin/royal-family" icon={<Crown className="w-5 h-5 text-yellow-500" />} label="Royal Family" active={isActive('/admin/royal-family')} />
+            </>
+          )}
         </div>
       )}
 
