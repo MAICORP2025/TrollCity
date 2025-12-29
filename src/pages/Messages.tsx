@@ -5,7 +5,6 @@ import { MessageSquarePlus } from 'lucide-react'
 import InboxSidebar from './messages/components/InboxSidebar'
 import ChatWindow from './messages/components/ChatWindow'
 import NewMessageModal from './messages/components/NewMessageModal'
-import MessageInput from './messages/components/MessageInput'
 import IncomingCallPopup from '../components/IncomingCallPopup'
 import { supabase } from '../lib/supabase'
 

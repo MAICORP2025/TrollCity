@@ -61,7 +61,7 @@ export default function TrollOfficerLounge() {
   const [officerChat, setOfficerChat] = useState<OfficerChatMessage[]>([])
   const [newOfficerMessage, setNewOfficerMessage] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'moderation' | 'families' | 'officer-stream'>('moderation')
+  const [activeTab, setActiveTab] = useState<'moderation' | 'families'>('moderation')
   const [familiesList, setFamiliesList] = useState<any[]>([])
   const [payrollReports, setPayrollReports] = useState<any[]>([])
   const [payrollLoading, setPayrollLoading] = useState(false)
@@ -603,17 +603,6 @@ export default function TrollOfficerLounge() {
             Troll Families
           </button>
           <button
-            onClick={() => setActiveTab('officer-stream')}
-            className={`px-4 py-2 rounded-t-lg transition ${
-              activeTab === 'officer-stream'
-                ? 'bg-purple-600 text-white'
-                : 'bg-[#1A1A1A] text-gray-400 hover:bg-[#252525]'
-            }`}
-          >
-            <Shield className="w-4 h-4 inline mr-2" />
-            Officer Stream
-          </button>
-          <button
             onClick={() => navigate('/officer/scheduling')}
             className="px-4 py-2 rounded-t-lg transition bg-[#1A1A1A] text-gray-400 hover:bg-[#252525]"
           >
@@ -1052,57 +1041,6 @@ export default function TrollOfficerLounge() {
           </section>
         )}
 
-        {/* OFFICER STREAM TAB */}
-        {activeTab === 'officer-stream' && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold flex items-center gap-2">
-                <Shield className="w-6 h-6 text-blue-400" />
-                Officer Multi-Box Streaming
-              </h2>
-              <div className="text-sm text-gray-400">
-                Exclusive LiveKit streaming for officers
-              </div>
-            </div>
-
-            <div className="bg-[#111320] border border-blue-700/50 rounded-xl p-8 text-center">
-              <Shield className="w-16 h-16 mx-auto mb-4 text-blue-400" />
-              <h3 className="text-xl font-bold mb-2">Officer Stream — Multi-Box View</h3>
-              <p className="text-gray-400 mb-6">
-                Launch the exclusive officer streaming interface with LiveKit integration.
-                Supports up to 6 simultaneous broadcast boxes for officer battles and coordination.
-              </p>
-              <button
-                onClick={() => navigate('/officer-stream')}
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors flex items-center gap-2 mx-auto"
-              >
-                <Shield className="w-5 h-5" />
-                Launch Officer Stream
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-[#111320] border border-gray-700 rounded-xl p-4">
-                <h4 className="font-semibold text-blue-300 mb-2">Multi-Box Support</h4>
-                <p className="text-gray-400 text-sm">
-                  Configure 1-6 streaming boxes simultaneously with LiveKit routing
-                </p>
-              </div>
-              <div className="bg-[#111320] border border-gray-700 rounded-xl p-4">
-                <h4 className="font-semibold text-blue-300 mb-2">Officer Only</h4>
-                <p className="text-gray-400 text-sm">
-                  Restricted access for Troll Officers and Lead Troll Officers
-                </p>
-              </div>
-              <div className="bg-[#111320] border border-gray-700 rounded-xl p-4">
-                <h4 className="font-semibold text-blue-300 mb-2">LiveKit Integration</h4>
-                <p className="text-gray-400 text-sm">
-                  Professional streaming with metadata-based participant routing
-                </p>
-              </div>
-            </div>
-          </section>
-        )}
       </div>
     </div>
   )

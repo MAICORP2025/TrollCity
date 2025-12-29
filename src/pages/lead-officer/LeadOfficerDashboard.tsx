@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { X, CheckCircle, XCircle, Award, User, Clock, FileText, AlertTriangle, Calendar } from 'lucide-react'
+import { X, CheckCircle, XCircle, Award, User, Clock, FileText, AlertTriangle, Calendar, Crown } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
 import WeeklyReportForm from '../../components/WeeklyReportForm'
 import WeeklyReportsList from '../../components/WeeklyReportsList'
@@ -65,6 +65,7 @@ export function LeadOfficerDashboard() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [liveStreams, setLiveStreams] = useState<LiveStream[]>([])
   const [streamsLoading, setStreamsLoading] = useState(false)
+  const [empireApplications, setEmpireApplications] = useState<any[]>([])
 
   const [viewingUser, setViewingUser] = useState<Applicant | Officer | null>(null)
   const [viewResult, setViewResult] = useState<OrientationResult | null>(null)
@@ -88,7 +89,7 @@ export function LeadOfficerDashboard() {
     const init = async () => {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setCurrentUserId(authUser?.id ?? null)
-      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadLiveStreams(), loadWeeklyReports()])
+      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadLiveStreams(), loadWeeklyReports(), loadEmpireApplications()])
     }
     init()
 
@@ -285,6 +286,78 @@ export function LeadOfficerDashboard() {
     } catch (error: any) {
       console.error('Error loading logs:', error)
       setLogs([])
+    }
+  }
+
+  const loadEmpireApplications = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('empire_applications')
+        .select(`
+          *,
+          user:user_profiles!user_id (
+            username,
+            avatar_url
+          )
+        `)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const transformed = (data || []).map((app: any) => ({
+        ...app,
+        user: Array.isArray(app.user) ? app.user[0] : app.user
+      }))
+
+      setEmpireApplications(transformed)
+    } catch (error: any) {
+      console.error('Error loading empire applications:', error)
+      toast.error('Failed to load empire applications')
+    }
+  }
+
+  const approveEmpireApplication = async (appId: string) => {
+    if (!profile?.id) return
+
+    setLoading(true)
+    try {
+      const { error } = await supabase.rpc('approve_empire_partner', {
+        p_application_id: appId,
+        p_reviewer_id: profile.id
+      })
+
+      if (error) throw error
+
+      toast.success('Empire Partner application approved!')
+      await loadEmpireApplications()
+    } catch (error: any) {
+      console.error('Error approving application:', error)
+      toast.error(error.message || 'Failed to approve application')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const rejectEmpireApplication = async (appId: string) => {
+    if (!confirm('Are you sure you want to reject this application?')) return
+
+    setLoading(true)
+    try {
+      const { error } = await supabase.rpc('reject_empire_partner', {
+        p_application_id: appId,
+        p_reviewer_id: profile?.id
+      })
+
+      if (error) throw error
+
+      toast.success('Empire Partner application rejected.')
+      await loadEmpireApplications()
+    } catch (error: any) {
+      console.error('Error rejecting application:', error)
+      toast.error(error.message || 'Failed to reject application')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -800,6 +873,71 @@ export function LeadOfficerDashboard() {
         )}
       </section>
 
+      {/* Empire Partner Applications */}
+      <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-purple-200 flex items-center gap-2">
+            <Crown className="w-5 h-5" />
+            Empire Partner Applications
+          </h2>
+          <button
+            type="button"
+            onClick={loadEmpireApplications}
+            className="text-sm text-purple-300 hover:text-purple-100"
+          >
+            Refresh
+          </button>
+        </div>
+        {empireApplications.length === 0 ? (
+          <p className="text-sm text-purple-500">
+            No pending Empire Partner applications.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {empireApplications.map((app) => (
+              <div
+                key={app.id}
+                className="border border-purple-700/50 rounded-xl p-4 bg-black/40 hover:bg-purple-900/20 transition"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    <img
+                      src={app.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${app.user?.username}`}
+                      alt={app.user?.username}
+                      className="w-10 h-10 rounded-full"
+                    />
+                    <div className="flex-1">
+                      <ClickableUsername userId={app.user_id} username={app.user?.username || 'Unknown'} />
+                      <p className="text-xs text-gray-400 mt-1">Applied: {new Date(app.created_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      type="button"
+                      onClick={() => approveEmpireApplication(app.id)}
+                      disabled={loading}
+                      className="px-3 py-1 bg-green-600 hover:bg-green-500 rounded-lg text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => rejectEmpireApplication(app.id)}
+                      disabled={loading}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded-lg text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <XCircle className="w-3 h-3" />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Reason boxes */}
       <div className="grid md:grid-cols-2 gap-4">
         <section className="rounded-2xl border border-purple-800 bg-black/40 p-4">
@@ -827,46 +965,6 @@ export function LeadOfficerDashboard() {
           />
         </section>
       </div>
-
-      {/* Live Streams */}
-      <section className="rounded-2xl border border-purple-800 bg-black/40 p-4">
-        <h2 className="text-xl font-semibold text-purple-200 mb-4 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5" />
-          Live Streams
-        </h2>
-        {streamsLoading ? (
-          <p className="text-sm text-purple-500">Loading streams...</p>
-        ) : liveStreams.length === 0 ? (
-          <p className="text-sm text-purple-500">No live streams at the moment.</p>
-        ) : (
-          <div className="space-y-2">
-            {liveStreams.map((stream) => (
-              <div
-                key={stream.id}
-                className="flex items-center justify-between border border-purple-700/50 rounded-xl p-3 bg-black/40 hover:bg-purple-900/20 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                  <div>
-                    <div className="font-medium text-purple-100">{stream.title}</div>
-                    <div className="text-xs text-purple-400">
-                      {stream.user_profiles?.username || 'Unknown'} • {stream.current_viewers || 0} viewers
-                    </div>
-                  </div>
-                </div>
-                <a
-                  href={`/stream/${stream.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded-lg transition"
-                >
-                  Watch
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
 
       {/* Action history */}
       <section className="rounded-2xl border border-purple-800 bg-black/40 p-4">
@@ -1081,4 +1179,3 @@ function PendingApplicationsList({ onApprove, onReject }: {
     </div>
   )
 }
-

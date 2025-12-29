@@ -970,6 +970,11 @@ const HomePageContent = () => {
       </div>
 
       <div className="relative z-20 max-w-7xl mx-auto px-5 py-3">
+        <div className="mb-6 flex justify-center">
+          <div className="w-full max-w-3xl rounded-3xl border border-yellow-400/50 bg-yellow-500/10 px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-yellow-100 backdrop-blur-sm shadow-inner shadow-yellow-500/20 sm:text-sm">
+            We're in test mode; please use support tickets for any issues. Thanks for understanding!
+          </div>
+        </div>
         {/* Live Now */}
         <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <div className="flex items-center justify-between mb-8">

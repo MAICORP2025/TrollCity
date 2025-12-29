@@ -23,13 +23,40 @@ export function useLiveKitRoom(roomName, user, options = {}) {
 
     try {
       // Fetch token from universal endpoint
-      const tokenResponse = await api.post('/livekit-token', {
-        room: roomName,
-        identity: user.email || user.id,
-        user_id: user.id,
-        role: user.role || user.troll_role || 'viewer',
-        level: user.level || 1,
-      });
+      // Use GET for viewers (POST is for broadcasters only)
+      const isPublishing = options.allowPublish === true;
+      
+      const tokenUrl = `/api/livekit-token?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(user.email || user.id)}&user_id=${encodeURIComponent(user.id)}&role=${encodeURIComponent(user.role || user.troll_role || 'viewer')}&level=${user.level || 1}`;
+      
+      let tokenResponse;
+      if (isPublishing) {
+        // Broadcasters use POST with publish permission
+        tokenResponse = await api.post('/livekit-token', {
+          room: roomName,
+          identity: user.email || user.id,
+          user_id: user.id,
+          role: user.role || 'broadcaster',
+          level: user.level || 1,
+          allowPublish: true,
+        });
+      } else {
+        // Viewers use GET (viewers can't publish)
+        try {
+          const response = await fetch(tokenUrl);
+          if (!response.ok) throw new Error('Failed to get token');
+          tokenResponse = await response.json();
+        } catch (fetchErr) {
+          console.warn('GET token failed, falling back to POST:', fetchErr);
+          tokenResponse = await api.post('/livekit-token', {
+            room: roomName,
+            identity: user.email || user.id,
+            user_id: user.id,
+            role: 'viewer',
+            level: user.level || 1,
+            allowPublish: false,
+          });
+        }
+      }
 
       if (!tokenResponse.token) {
         throw new Error('Failed to get LiveKit token');

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../supabase'
-import { useAuthStore } from '../store'
-import { UserProfile } from '../supabase'
+import { supabase, ensureSupabaseSession, UserProfile } from '@/lib/supabase'
+import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
 
 interface CoinBalance {
@@ -48,6 +47,8 @@ export function useCoins() {
     setError(null)
 
     try {
+      await ensureSupabaseSession(supabase)
+
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('troll_coins, total_earned_coins, total_spent_coins')

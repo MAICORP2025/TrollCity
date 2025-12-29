@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -11,6 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
   },
   realtime: {
     params: {
@@ -239,6 +241,7 @@ export enum UserRole {
   MODERATOR = 'moderator',
   ADMIN = 'admin',
   HR_ADMIN = 'hr_admin',
+  LEAD_TROLL_OFFICER = 'lead_troll_officer',
   TROLL_OFFICER = 'troll_officer',
   TROLL_FAMILY = 'troll_family',
   TROLLER = 'troller',
@@ -364,7 +367,11 @@ export const hasRole = (
   // Direct role match
   if (roles.includes(profile.role as UserRole)) {
     // Additional checks for specific roles
-    if (profile.role === UserRole.TROLL_OFFICER && requireActive) {
+    if (
+      (profile.role === UserRole.TROLL_OFFICER ||
+        profile.role === UserRole.LEAD_TROLL_OFFICER) &&
+      requireActive
+    ) {
       return Boolean(profile.is_officer_active)
     }
     return true
@@ -372,6 +379,13 @@ export const hasRole = (
   
   // Legacy role field compatibility
   if (roles.includes(UserRole.TROLL_OFFICER) && profile.is_troll_officer) {
+    if (requireActive) {
+      return Boolean(profile.is_officer_active)
+    }
+    return true
+  }
+
+  if (roles.includes(UserRole.LEAD_TROLL_OFFICER) && profile.is_lead_officer) {
     if (requireActive) {
       return Boolean(profile.is_officer_active)
     }
@@ -421,4 +435,17 @@ export const validateProfile = (profile: UserProfile | null): {
     errors,
     warnings
   }
+}
+
+export async function ensureSupabaseSession(client: SupabaseClient) {
+  const { data: sessionData, error } = await client.auth.getSession()
+  if (error) {
+    throw error
+  }
+  const session = sessionData?.session ?? null
+  if (!session) {
+    throw new Error('Not logged in yet')
+  }
+
+  return session
 }

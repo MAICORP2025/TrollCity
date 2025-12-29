@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import ClickableUsername from '../../../components/ClickableUsername'
 import { toast } from 'sonner'
+import MessageInput from './MessageInput'
 
 interface Message {
   id: string
@@ -306,6 +307,16 @@ export default function ChatWindow({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const handleMessageSent = async () => {
+    try {
+      await loadMessages()
+    } catch (error) {
+      console.error('Error refreshing messages after send:', error)
+    } finally {
+      scrollToBottom()
+    }
+  }
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
     const now = new Date()
@@ -430,6 +441,7 @@ export default function ChatWindow({
         )}
         <div ref={messagesEndRef} />
       </div>
+      <MessageInput otherUserId={otherUserId} onMessageSent={handleMessageSent} />
     </div>
   )
 }

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../lib/store';
-import { useCoins } from '../lib/hooks/useCoins';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/lib/store';
+import { useCoins } from '@/lib/hooks/useCoins';
 import { toast } from 'sonner';
 import { Coins, DollarSign, ShoppingCart, CreditCard, CheckCircle, Loader2 } from 'lucide-react';
 import { coinPackages, formatCoins, formatUSD } from '../lib/coinMath';
-import { addCoins, deductCoins } from '../lib/coinTransactions';
+import { addCoins, deductCoins } from '@/lib/coinTransactions';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { useLiveContextStore } from '../lib/liveContextStore';
 import { useStreamMomentum } from '../lib/hooks/useStreamMomentum';

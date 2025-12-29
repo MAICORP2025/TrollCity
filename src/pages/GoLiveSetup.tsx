@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Video, Users, Globe, Crown } from 'lucide-react';
+import { Video, Users, Globe, Crown, Shield, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface StreamConfig {
@@ -13,7 +13,11 @@ interface StreamConfig {
   description: string;
 }
 
-const CATEGORIES = ['Just Chatting', 'Tromody Show', 'Troll Court', 'Family Stream', 'Music', 'Other'];
+const CATEGORIES = ['Just Chatting', 'Family Stream', 'Music', 'Other'];
+const OFFICER_CATEGORY = 'Officer Stream';
+const TROMODY_CATEGORY = 'Tromody Show';
+
+const OFFICER_ROLES = ['admin', 'lead_troll_officer', 'troll_officer'];
 
 const GoLiveSetup: React.FC = () => {
   const navigate = useNavigate();
@@ -103,6 +107,53 @@ const GoLiveSetup: React.FC = () => {
     setConfig(prev => ({ ...prev, [field]: value }));
   };
 
+  const effectiveRole = profile?.role || profile?.troll_role || '';
+  const hasOfficerAccess =
+    Boolean(profile) &&
+    (OFFICER_ROLES.includes(effectiveRole) ||
+      profile?.is_troll_officer ||
+      profile?.is_lead_officer);
+  const isBroadcaster =
+    Boolean(
+      profile?.is_broadcaster ||
+        profile?.is_admin ||
+        profile?.role === 'admin'
+    );
+
+  const categoryOptions = useMemo(() => {
+    const options = [...CATEGORIES];
+    if (hasOfficerAccess && !options.includes(OFFICER_CATEGORY)) {
+      options.push(OFFICER_CATEGORY);
+    }
+    if (isBroadcaster && !options.includes(TROMODY_CATEGORY)) {
+      options.push(TROMODY_CATEGORY);
+    }
+    return options;
+  }, [hasOfficerAccess, isBroadcaster]);
+
+  useEffect(() => {
+    if (!categoryOptions.length) return;
+    if (!categoryOptions.includes(config.category)) {
+      setConfig((prev) => ({ ...prev, category: categoryOptions[0] }));
+    }
+  }, [categoryOptions, config.category]);
+
+  const isOfficerCategory = config.category === OFFICER_CATEGORY;
+  const isTromodyCategory = config.category === TROMODY_CATEGORY;
+  const isSpecialCategory = isOfficerCategory || isTromodyCategory;
+
+  const handleOfficerStreamEntry = () => {
+    navigate('/officer/stream');
+  };
+
+  const handleTromodyStart = () => {
+    if (!isBroadcaster) {
+      toast.error('Only live broadcasters can trigger the Tromody Show.');
+      return;
+    }
+    navigate('/tromody');
+  };
+
   if (!broadcasterStatus) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center">
@@ -154,10 +205,53 @@ const GoLiveSetup: React.FC = () => {
               onChange={(e) => updateConfig('category', e.target.value)}
               className="w-full bg-zinc-800 border border-purple-500/30 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
-              {CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+              {categoryOptions.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
               ))}
             </select>
+            {isOfficerCategory && (
+              <div className="mt-4 rounded-2xl border border-blue-500/40 bg-[#0b0716]/80 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm text-blue-200">
+                  <Shield className="w-4 h-4 text-blue-300" />
+                  Officer Stream mode activates the secure LiveKit room for trolls & admins.
+                </div>
+                <p className="text-xs text-gray-400 leading-snug">
+                  Only admins, lead troll officers, and troll officers may launch this broadcast. Guests join via the host
+                  controls, guests are limited to three per side, and your feed is kept separate from the public channel.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOfficerStreamEntry}
+                  className="w-full px-4 py-2 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-xs font-semibold text-black shadow-lg shadow-blue-500/30"
+                >
+                  Enter Officer Stream
+                </button>
+              </div>
+            )}
+            {isTromodyCategory && (
+              <div className="mt-4 rounded-2xl border border-pink-500/40 bg-[#120721]/80 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm text-pink-200">
+                  <Sparkles className="w-4 h-4 text-pink-300" />
+                  Tromody Show is a timed head-to-head battle between live broadcasters.
+                </div>
+                <ul className="text-[11px] text-gray-300 space-y-1 list-disc pl-5">
+                  <li>Only live broadcasters can trigger it; opponents must accept the popup within 10 seconds.</li>
+                  <li>Each team can have 1 host + 3 guests (4 total), and guests count toward the score.</li>
+                  <li>Points are derived solely from gifts/coins; the timer runs for 180 seconds with VS energy effects.</li>
+                  <li>Support feeds highlight gift events, viewers send coins via preset tiers, and the winner screen shows top supporters.</li>
+                </ul>
+                <button
+                  type="button"
+                  onClick={handleTromodyStart}
+                  disabled={!isBroadcaster}
+                  className="w-full px-4 py-2 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-semibold shadow-lg shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Start Tromody Show
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Audience */}
@@ -254,7 +348,7 @@ const GoLiveSetup: React.FC = () => {
           {/* Submit Button */}
           <button
             onClick={handleSubmit}
-            disabled={loading || !config.title.trim()}
+            disabled={loading || !config.title.trim() || isSpecialCategory}
             className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-600 rounded-lg font-bold text-white transition-all duration-200 flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -265,11 +359,12 @@ const GoLiveSetup: React.FC = () => {
             ) : (
               <>
                 <Video className="w-5 h-5" />
-                🔴 Go Live
+                {isSpecialCategory ? 'Select another category to go live' : `dY"'" Go Live`}
               </>
             )}
           </button>
         </div>
+
       </div>
     </div>
   );

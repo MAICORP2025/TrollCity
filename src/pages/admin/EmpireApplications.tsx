@@ -9,7 +9,7 @@ interface EmpireApplication {
   id: string
   user_id: string
   status: 'pending' | 'approved' | 'rejected'
-  payment_type: 'paid_coins' | 'card_payment'
+  payment_type: 'paid_coins' | 'card_payment' | 'free'
   amount_paid: number
   payment_id: string | null
   reviewed_by: string | null
@@ -236,7 +236,12 @@ export default function EmpireApplications() {
                         <div>
                           <p className="text-gray-400">Payment Method</p>
                           <p className="font-semibold flex items-center gap-1">
-                            {app.payment_type === 'paid_coins' ? (
+                            {app.payment_type === 'free' ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                                Free Application
+                              </>
+                            ) : app.payment_type === 'paid_coins' ? (
                               <>
                                 <Coins className="w-4 h-4 text-yellow-400" />
                                 {app.amount_paid} Coins

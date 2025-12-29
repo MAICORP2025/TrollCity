@@ -755,70 +755,112 @@ export default function StreamRoom() {
     };
   }, [stream?.id, user?.id, isHost]);
 
-  // Handle LiveKit connection
+  // Handle LiveKit connection - publish broadcaster's tracks
   useEffect(() => {
-    console.log('🔍 publishTracks check:', { room: !!room, isHost, stream: !!stream, alreadyPublished: publishedTracksRef.current });
     if (!room || !isHost || !stream) return;
     if (publishedTracksRef.current) return;
 
+    let mounted = true;
+
     const publishTracks = async () => {
       try {
+        // Wait for room to be connected
         if (room.state !== 'connected') {
-          console.log('Room not yet connected, waiting...');
+          console.log('⏳ Room not connected yet, state:', room.state);
+          
+          // Set up one-time listener for connection
+          const handleConnected = async () => {
+            if (!mounted) return;
+            await publishLocalTracks();
+            room.off(RoomEvent.Connected, handleConnected);
+          };
+          
+          room.once(RoomEvent.Connected, handleConnected);
           return;
         }
 
-        const hasVideo = room.localParticipant?.videoTrackPublications?.size > 0;
-        const hasAudio = room.localParticipant?.audioTrackPublications?.size > 0;
+        await publishLocalTracks();
+      } catch (err) {
+        console.error('❌ Error in publishTracks:', err);
+        if (mounted) {
+          publishedTracksRef.current = false;
+        }
+      }
+    };
+
+    const publishLocalTracks = async () => {
+      if (!mounted || !room?.localParticipant) return;
+
+      try {
+        const hasVideo = room.localParticipant.videoTrackPublications?.size > 0;
+        const hasAudio = room.localParticipant.audioTrackPublications?.size > 0;
         
         if (hasVideo && hasAudio) {
-          console.log('Tracks already published');
+          console.log('✅ Tracks already published');
           publishedTracksRef.current = true;
           return;
         }
 
-        // Publish video track
+        // Publish video track with error handling
         if (!hasVideo) {
           try {
-            const videoTrack = await createLocalVideoTrack({ facingMode: 'user' });
-            if (room.localParticipant) {
-              await room.localParticipant.publishTrack(videoTrack);
-              console.log('✅ Video track published successfully');
-            }
+            console.log('📹 Creating video track...');
+            const videoTrack = await createLocalVideoTrack({ 
+              facingMode: 'user',
+              resolution: { width: 1280, height: 720 }
+            });
+            
+            await room.localParticipant.publishTrack(videoTrack, {
+              simulcast: false,
+            });
+            console.log('✅ Video track published');
           } catch (videoErr) {
-            console.error('❌ Error publishing video track:', videoErr);
-            throw videoErr;
+            console.error('❌ Video track error:', videoErr);
+            // Try to recover - maybe no camera available
+            if ((videoErr as any).message?.includes('NotFoundError')) {
+              toast.error('Camera not found or permission denied');
+            } else {
+              toast.error('Failed to publish video');
+            }
           }
         }
 
-        // Publish audio track
+        // Publish audio track with error handling
         if (!hasAudio) {
           try {
+            console.log('🎤 Creating audio track...');
             const audioTrack = await createLocalAudioTrack();
-            if (room.localParticipant) {
-              await room.localParticipant.publishTrack(audioTrack);
-              console.log('✅ Audio track published successfully');
-            }
+            
+            await room.localParticipant.publishTrack(audioTrack);
+            console.log('✅ Audio track published');
           } catch (audioErr) {
-            console.error('❌ Error publishing audio track:', audioErr);
-            throw audioErr;
+            console.error('❌ Audio track error:', audioErr);
+            if ((audioErr as any).message?.includes('NotFoundError')) {
+              toast.error('Microphone not found or permission denied');
+            } else {
+              toast.error('Failed to publish audio');
+            }
           }
         }
 
         publishedTracksRef.current = true;
-        console.log('✅ All tracks published');
       } catch (err) {
-        console.error('❌ Error in publishTracks:', err);
+        console.error('❌ Error publishing tracks:', err);
         publishedTracksRef.current = false;
       }
     };
 
     publishTracks();
+
+    return () => {
+      mounted = false;
+    };
   }, [room, isHost, stream]);
 
+  // Reset tracks when room changes
   useEffect(() => {
     publishedTracksRef.current = false;
-  }, [room]);
+  }, [room?.name]);
 
 
   // Send message

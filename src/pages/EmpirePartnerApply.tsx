@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
-import { Crown, Coins, CreditCard, CheckCircle2, XCircle, ArrowRight } from 'lucide-react'
+import { Crown, CheckCircle2, XCircle, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
-import { deductCoins } from '../lib/coinTransactions'
 
 export default function EmpirePartnerApply() {
   const { profile, user, refreshProfile } = useAuthStore()
@@ -51,109 +50,36 @@ export default function EmpirePartnerApply() {
     }
   }
 
-  const handleCoinPayment = async () => {
-    if (!user?.id || !profile) return
-
-    const requiredCoins = 1500
-    if (profile.troll_coins < requiredCoins) {
-      toast.error(`You need ${requiredCoins} troll_coins. You have ${profile.troll_coins}.`)
-      return
-    }
-
-    setLoading(true)
-    try {
-    const result = await deductCoins({
-      userId: user.id,
-      amount: requiredCoins,
-      type: 'purchase',
-      description: 'Empire Partner application fee',
-        metadata: { feature: 'empire_partner_fee' },
-      })
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to deduct coins')
-      }
-
-      // Create application
-      const { error: appError } = await supabase
-        .from('empire_applications')
-        .insert({
-          user_id: user.id,
-          status: 'pending',
-          payment_type: 'troll_coins',
-          amount_paid: 1500,
-          payment_id: `coins_${Date.now()}`
-        })
-
-      if (appError) {
-        throw appError
-      }
-
-      toast.success('Application submitted! Admin will review it shortly.')
-      setHasApplication(true)
-      setApplicationStatus('pending')
-      navigate('/empire-partner')
-    } catch (error: any) {
-      console.error('Error submitting application:', error)
-      toast.error(error.message || 'Failed to submit application')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCardPayment = async () => {
+  const handleSubmitApplication = async () => {
     if (!user?.id) return
 
     setLoading(true)
     try {
-      // Create pending application first
       const { error: appError } = await supabase
         .from('empire_applications')
         .insert({
           user_id: user.id,
           status: 'pending',
-          payment_type: 'card_payment',
-          amount_paid: 15,
-          payment_id: `pending_${Date.now()}`
+          payment_type: 'free',
+          amount_paid: 0,
+          payment_id: `free_${Date.now()}`
         })
 
-      if (appError && !appError.message.includes('duplicate')) {
-        console.error('Error creating application:', appError)
-        throw new Error('Failed to create application')
+      if (appError) {
+        if (appError.message.includes('duplicate')) {
+          toast.error('You already have a pending application')
+          return
+        }
+        throw appError
       }
 
-      // Create PayPal order for Empire Partner fee
-      const session = await supabase.auth.getSession()
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/paypal-create-order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.data.session?.access_token || ''}`
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          coins: 0, // Not purchasing coins, just paying fee
-          price: 15,
-          type: 'empire_partner_fee'
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to create order' }))
-        throw new Error(errorData.error || 'Failed to create PayPal order')
-      }
-
-      const data = await response.json()
-
-      if (data.orderId && data.approvalUrl) {
-        // Redirect to PayPal checkout
-        window.location.href = data.approvalUrl
-      } else {
-        throw new Error('No order ID or approval URL returned from server')
-      }
+      toast.success('Application submitted! Admin and Lead Troll Officer will review it.')
+      setHasApplication(true)
+      setApplicationStatus('pending')
     } catch (error: any) {
-      console.error('Error initiating card payment:', error)
-      toast.error(error.message || 'Failed to initiate payment')
+      console.error('Error submitting application:', error)
+      toast.error(error.message || 'Failed to submit application')
+    } finally {
       setLoading(false)
     }
   }
@@ -227,8 +153,6 @@ export default function EmpirePartnerApply() {
     )
   }
 
-  const hasEnoughCoins = (profile?.troll_coins || 0) >= 1500
-
   return (
     <div className="min-h-screen bg-[#0A0814] text-white p-6">
       <div className="max-w-4xl mx-auto">
@@ -241,7 +165,7 @@ export default function EmpirePartnerApply() {
             Join the Troll Empire Partner Program
           </h1>
           <p className="text-xl text-gray-400">
-            Recruit users and earn 5% bonus when they reach 40,000+ coins per month
+            Recruit users and earn 5% bonus when they reach 40,000+ coins per month - Free to apply!
           </p>
         </div>
 
@@ -280,63 +204,54 @@ export default function EmpirePartnerApply() {
           </div>
         </div>
 
-        {/* Payment Options */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* Coin Payment */}
-          <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Coins className="w-8 h-8 text-yellow-400" />
-              <h3 className="text-xl font-bold">Pay with Coins</h3>
+        {/* Application Requirements */}
+        <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-8 mb-8">
+          <h2 className="text-2xl font-bold mb-6">Application Requirements</h2>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-semibold mb-1">Free Application</h3>
+                <p className="text-sm text-gray-400">No payment required - just fill out the form and submit</p>
+              </div>
             </div>
-            <div className="mb-6">
-              <p className="text-3xl font-bold text-yellow-400 mb-2">1,500</p>
-              <p className="text-sm text-gray-400">troll_coins required</p>
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-semibold mb-1">Admin Review</h3>
+                <p className="text-sm text-gray-400">Your application will be reviewed by our admin team</p>
+              </div>
             </div>
-            <div className="mb-6">
-              <p className="text-sm text-gray-400 mb-2">Your balance:</p>
-              <p className="text-lg font-semibold">
-                {profile?.troll_coins || 0} troll_coins
-              </p>
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-semibold mb-1">Lead Troll Officer Approval</h3>
+                <p className="text-sm text-gray-400">Must be approved by a Lead Troll Officer before activation</p>
+              </div>
             </div>
-            <button
-              onClick={handleCoinPayment}
-              disabled={loading || !hasEnoughCoins}
-              className={`w-full px-6 py-3 rounded-lg font-semibold transition-colors ${
-                hasEnoughCoins
-                  ? 'bg-yellow-600 hover:bg-yellow-500'
-                  : 'bg-gray-600 cursor-not-allowed'
-              }`}
-            >
-              {loading ? 'Processing...' : hasEnoughCoins ? 'Pay with Coins' : 'Insufficient Coins'}
-            </button>
-            {!hasEnoughCoins && (
-              <p className="text-sm text-gray-400 mt-2 text-center">
-                Need {1500 - (profile?.troll_coins || 0)} more coins
-              </p>
-            )}
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-semibold mb-1">Dual Approval System</h3>
+                <p className="text-sm text-gray-400">Both admin and lead officer must approve your application</p>
+              </div>
+            </div>
           </div>
+        </div>
 
-          {/* Card Payment */}
-          <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <CreditCard className="w-8 h-8 text-blue-400" />
-              <h3 className="text-xl font-bold">Pay with Card</h3>
-            </div>
-            <div className="mb-6">
-              <p className="text-3xl font-bold text-blue-400 mb-2">$15.00</p>
-              <p className="text-sm text-gray-400">One-time application fee</p>
-            </div>
-            <div className="mb-6">
-              <p className="text-sm text-gray-400">Secure payment via PayPal</p>
-            </div>
-            <button
-              onClick={handleCardPayment}
-              disabled={loading}
-              className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Processing...' : 'Pay with Card'}
-            </button>
-          </div>
+        {/* Application Button */}
+        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/50 rounded-xl p-8 mb-8 text-center">
+          <h2 className="text-2xl font-bold mb-4">Ready to Apply?</h2>
+          <p className="text-gray-300 mb-6">
+            Submit your application for approval. Our admin team and Lead Troll Officers will review it carefully.
+          </p>
+          <button
+            onClick={handleSubmitApplication}
+            disabled={loading}
+            className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-bold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Submitting...' : 'Submit Application'}
+          </button>
         </div>
 
         {/* Terms */}

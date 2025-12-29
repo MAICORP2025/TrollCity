@@ -2,14 +2,9 @@
 // Centralized coin transaction logging utility
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import { supabase, ensureSupabaseSession } from '@/lib/supabase'
 import { trackCoinEarning } from './familyTasks'
 import { trackWarActivity } from './familyWars'
-
-const getSupabaseUserId = async (client: SupabaseClient) => {
-  const { data } = await client.auth.getSession()
-  return data?.session?.user?.id ?? null
-}
 
 const safeNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -30,6 +25,24 @@ const formatBalanceForRecord = (value: unknown): number | string | null => {
   if (value === undefined || value === null) return null
   if (typeof value === 'bigint') return value.toString()
   return value as number | string
+}
+
+const getSessionUserId = async (client: SupabaseClient) => {
+  const { data } = await client.auth.getSession()
+  return data?.session?.user?.id ?? null
+}
+
+const sanitizeMetadata = (metadata?: CoinTransactionMetadata) => {
+  if (!metadata) return null
+  try {
+    return JSON.parse(
+      JSON.stringify(metadata, (_key, value) =>
+        typeof value === 'bigint' ? value.toString() : value
+      )
+    )
+  } catch {
+    return metadata
+  }
 }
 
 export type CoinTransactionType = 
@@ -76,6 +89,7 @@ export interface RecordCoinTransactionParams {
   metadata?: CoinTransactionMetadata
   balanceAfter?: number | string | null // If not provided, will be calculated
   supabaseClient?: SupabaseClient // Optional supabase client (for backend usage)
+  allowServiceRole?: boolean
 }
 
 /**
@@ -97,7 +111,8 @@ export async function recordCoinTransaction(params: RecordCoinTransactionParams)
       description,
       metadata,
       balanceAfter,
-      supabaseClient
+      supabaseClient,
+      allowServiceRole = false
     } = params
 
     const sb = supabaseClient || supabase
@@ -106,8 +121,8 @@ export async function recordCoinTransaction(params: RecordCoinTransactionParams)
       return null
     }
 
-    const sessionUserId = await getSupabaseUserId(sb)
-    if (!sessionUserId && !supabaseClient) {
+    const sessionUserId = await getSessionUserId(sb)
+    if (!sessionUserId && !allowServiceRole) {
       throw new Error('User not authenticated')
     }
 
@@ -124,12 +139,6 @@ export async function recordCoinTransaction(params: RecordCoinTransactionParams)
       })
     }
 
-    // Validate required fields
-    if (!userId) {
-      console.error('recordCoinTransaction: userId is required')
-      return null
-    }
-
     if (amount === undefined || amount === null) {
       console.error('recordCoinTransaction: amount is required')
       return null
@@ -137,8 +146,8 @@ export async function recordCoinTransaction(params: RecordCoinTransactionParams)
 
     const finalBalanceAfter = formatBalanceForRecord(balanceAfter ?? null)
     const coinTypeValue = coinType || 'troll_coins'
+    const metadataPayload = sanitizeMetadata(metadata)
 
-    // Insert transaction record
     const insertPayload = {
       user_id: targetUserId,
       amount,
@@ -149,7 +158,7 @@ export async function recordCoinTransaction(params: RecordCoinTransactionParams)
       source_id: sourceId || null,
       description: description || null,
       balance_after: finalBalanceAfter,
-      metadata: metadata || null,
+      metadata: metadataPayload,
       created_at: new Date().toISOString()
     }
 
@@ -217,9 +226,9 @@ export async function deductCoins(params: {
   }
 
   try {
-    const sessionUserId = await getSupabaseUserId(sb)
+    const sessionUserId = await getSessionUserId(sb) || userId
 
-    if (!sessionUserId && !supabaseClient) {
+    if (!sessionUserId) {
       throw new Error('User not authenticated')
     }
 
@@ -237,47 +246,25 @@ export async function deductCoins(params: {
       }
     }
 
-    let newBalance: number | null = null
-    let rpcError: any = null
-    let rpcBalanceResult: unknown = null
     const amountParam = normalizedAmount.toString()
+    const { data: rpcBalance, error: deductError } = await sb.rpc('deduct_user_troll_coins', {
+      p_user_id: userId,
+      p_amount: amountParam
+    })
 
-    if (coinType === 'trollmonds') {
-      const { data: rpcData, error } = await sb.rpc('spend_trollmonds', {
-        p_user_id: userId,
-        p_amount: amountParam,
-        p_reason: description || type
-      })
-
-      rpcError = error
-      if (!error) {
-        if (rpcData && typeof rpcData === 'object' && 'remaining' in rpcData) {
-          rpcBalanceResult = (rpcData as any).remaining
-        } else {
-          rpcBalanceResult = rpcData
-        }
-      }
-    } else {
-      const { data: rpcBalance, error: deductError } = await sb.rpc('deduct_user_troll_coins', {
-        p_user_id: userId,
-        p_amount: amountParam
-      })
-
-      rpcError = deductError
-      rpcBalanceResult = rpcBalance
+    if (deductError) {
+      console.error('deductCoins: RPC error', deductError)
+      return { success: false, newBalance: null, transaction: null, error: deductError.message || 'Failed to deduct coins' }
     }
 
-    if (!rpcError) {
-      newBalance = safeNumber(rpcBalanceResult)
-    }
-
-    if (rpcError) {
-      console.error('deductCoins: RPC error', rpcError)
-      return { success: false, newBalance: null, transaction: null, error: rpcError.message || 'Failed to deduct coins' }
+    const parsedBalance = safeNumber(rpcBalance)
+    let newBalance: number | string | null = parsedBalance
+    if (newBalance === null && rpcBalance !== null && rpcBalance !== undefined) {
+      newBalance = typeof rpcBalance === 'string' ? rpcBalance : String(rpcBalance)
     }
 
     const balanceAfterForRecord = formatBalanceForRecord(
-      balanceAfter ?? rpcBalanceResult ?? null,
+      balanceAfter ?? newBalance ?? null
     )
 
     const transaction = await recordCoinTransaction({
@@ -331,6 +318,8 @@ export async function addCoins(params: {
   }
 
   try {
+    await ensureSupabaseSession(sb)
+
     const { data: profile, error: profileError } = await sb
       .from('user_profiles')
       .select('troll_coins')

@@ -30,8 +30,8 @@ import {
   Scale,
 } from 'lucide-react'
 
-import { useAuthStore } from '../lib/store'
-import { supabase, isAdminEmail } from '../lib/supabase'
+import { useAuthStore } from '@/lib/store'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
 export default function Sidebar() {
@@ -42,9 +42,9 @@ export default function Sidebar() {
 
   const badge =
     profile?.role === 'admin'
-      ? '🛡️'
+      ? 'Admin'
       : profile?.tier && ['gold', 'platinum', 'diamond'].includes(profile.tier)
-      ? '⭐'
+      ? profile.tier.charAt(0).toUpperCase() + profile.tier.slice(1)
       : null
 
   const [canSeeOfficer, setCanSeeOfficer] = useState(false)
@@ -186,10 +186,17 @@ export default function Sidebar() {
           </span>
           <span>Troll Court</span>
         </button>
-        <MenuLink to="/empire-partner" icon={<UserPlus className="w-5 h-5 text-green-400" />} label="Empire Partner" active={isActive('/empire-partner')} />
         <button
           type="button"
-          onClick={() => toast('Troll Wheel is under construction', { icon: '🛠️' })}
+          onClick={() => toast('Empire Partner program is under construction', { icon: '🚧' })}
+          className="flex items-center gap-3 px-4 py-2 rounded-lg transition w-full text-left hover:bg-[#1F1F2E] text-gray-300"
+        >
+          <UserPlus className="w-5 h-5 text-green-400" />
+          Empire Partner
+        </button>
+        <button
+          type="button"
+          onClick={() => toast('Troll Wheel is under construction', { icon: '🚧' })}
           className="flex items-center gap-3 px-4 py-2 rounded-lg transition w-full text-left hover:bg-[#1F1F2E] text-gray-300"
         >
           <FerrisWheel className="w-5 h-5 text-pink-500" />

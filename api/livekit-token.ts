@@ -33,11 +33,13 @@ export default async function handler(req: any, res: any) {
 
   /* ============================
      ROLE RESOLUTION
-     POST → broadcaster
-     GET  → viewer
+     POST with allowPublish → broadcaster
+     GET  → viewer (default)
+     POST without allowPublish → viewer
   ============================ */
-  const resolvedRole =
-    req.method === 'POST' ? role || 'creator' : 'viewer'
+  const allowPublish = params.allowPublish === true || params.allowPublish === 'true'
+  const isBroadcaster = req.method === 'POST' && allowPublish
+  const resolvedRole = isBroadcaster ? (role || 'broadcaster') : 'viewer'
 
   /* ============================
      METADATA
@@ -69,10 +71,9 @@ export default async function handler(req: any, res: any) {
   })
 
   /* ============================
-     POST-BASED AUTHORITY
+     PUBLISH AUTHORITY
+     Only broadcasters can publish
   ============================ */
-  const isBroadcaster = req.method === 'POST'
-
   const canPublish = isBroadcaster
   const canPublishData = isBroadcaster
 
@@ -86,20 +87,23 @@ export default async function handler(req: any, res: any) {
     role: resolvedRole,
     isBroadcaster,
     canPublish,
+    allowPublish: params.allowPublish,
     sources: canPublish
       ? [TrackSource.CAMERA, TrackSource.MICROPHONE]
       : [],
   })
 
   /* ============================
-     GRANTS (THIS WAS THE BUG)
+     GRANTS - FIXED BROADCASTER/VIEWER DISTINCTION
+     - Broadcasters: can publish video + audio, subscribe to others
+     - Viewers: can only subscribe, cannot publish
   ============================ */
   token.addGrant({
     room: String(room),
     roomJoin: true,
-    canSubscribe: true,
-    canPublish,
-    canPublishData,
+    canSubscribe: true,  // Everyone can subscribe/watch
+    canPublish,           // Only broadcasters
+    canPublishData,       // Only broadcasters
     canUpdateOwnMetadata: true,
     canPublishSources: canPublish
       ? [TrackSource.CAMERA, TrackSource.MICROPHONE]

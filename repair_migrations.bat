@@ -1,0 +1,24 @@
+@echo off
+supabase migration repair --status applied 20250107
+supabase migration repair --status applied 20250108
+supabase migration repair --status applied 20251120
+supabase migration repair --status applied 20251122
+supabase migration repair --status applied 20251123
+supabase migration repair --status applied 20251125
+supabase migration repair --status applied 20251126
+supabase migration repair --status applied 20251129
+supabase migration repair --status applied 20251130
+supabase migration repair --status applied 20251201
+supabase migration repair --status applied 20251202
+supabase migration repair --status applied 20251203
+supabase migration repair --status applied 20251206
+supabase migration repair --status applied 20251209
+supabase migration repair --status applied 20251211
+supabase migration repair --status applied 20251212
+supabase migration repair --status applied 20251230
+supabase migration repair --status applied 20251231
+supabase migration repair --status applied 20260211
+supabase migration repair --status applied 20260228
+supabase migration repair --status applied 20260307
+supabase migration repair --status applied 20260308
+supabase migration repair --status applied 20260309

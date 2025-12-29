@@ -79,6 +79,8 @@ const AIVerificationPage = lazy(() => import("./pages/AIVerificationPage"));
 
 // Lazy-loaded pages
 const GoLiveSetup = lazy(() => import("./pages/GoLiveSetup"));
+const TromodyShow = lazy(() => import("./pages/TromodyShow"));
+const OfficerLoungeStream = lazy(() => import("./pages/OfficerLoungeStream"));
 const LiveStreamPage = lazy(() => import("./pages/LiveStreamPage"));
 const Stream = lazy(() => import("./pages/Stream"));
 const StreamSummary = lazy(() => import("./pages/StreamSummary"));
@@ -486,6 +488,7 @@ function AppContent() {
 
                   {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLiveSetup />} />
+                  <Route path="/tromody" element={<TromodyShow />} />
                   <Route path="/live/:streamId" element={<LiveStreamPage />} />
                   <Route path="/interview/:sessionId" element={<InterviewRoom />} />
                   <Route path="/stream/:id" element={<Stream />} />
@@ -610,6 +613,17 @@ function AppContent() {
                     element={
                       <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]} requireActive={true}>
                         <OfficerScheduling />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/officer/stream"
+                    element={
+                      <RequireRole
+                        roles={[UserRole.ADMIN, UserRole.TROLL_OFFICER, UserRole.LEAD_TROLL_OFFICER]}
+                        requireActive={true}
+                      >
+                        <OfficerLoungeStream />
                       </RequireRole>
                     }
                   />

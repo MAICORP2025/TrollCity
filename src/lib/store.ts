@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { User, Session } from '@supabase/supabase-js'
-import { UserProfile, UserRole, validateProfile } from './supabase'
-import { supabase } from './supabase'
+import { supabase, UserProfile, UserRole, validateProfile, ensureSupabaseSession } from '@/lib/supabase'
 
 interface AuthState {
   user: User | null
@@ -96,11 +95,13 @@ export const useAuthStore = create<AuthState>()(
         const u = get().user
         if (!u) return
 
+        await ensureSupabaseSession(supabase)
+
         const { data, error } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('id', u.id)
-          .single()
+          .maybeSingle()
 
         if (error) {
           console.error('refreshProfile error:', error)

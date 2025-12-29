@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-// import tsconfigPaths from "vite-tsconfig-paths";
+import tsconfigPaths from 'vite-tsconfig-paths'
+import path from 'path'
 // import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
 // 🚫 Removed dotenv — not needed on Vercel
@@ -11,6 +12,7 @@ const disableHmr = process.env.DISABLE_HMR === '1'
 export default defineConfig({
   plugins: [
     react(),
+    tsconfigPaths(),
     // traeBadgePlugin({
     //   variant: 'dark',
     //   position: 'bottom-right',
@@ -54,5 +56,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets'
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
   },
 })
