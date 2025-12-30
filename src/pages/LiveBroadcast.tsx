@@ -23,7 +23,7 @@ import {
   Power,
   Settings,
 } from 'lucide-react'
-import { useLiveKit } from '../contexts/LiveKitContext'
+import { useLiveKit } from '../hooks/useLiveKit'
 
 type StreamData = {
   id: string
@@ -55,6 +55,8 @@ type UserProfile = {
   role: UserRole
   troll_family_id?: string
   troll_coins?: number
+  paid_coin_balance?: number
+  free_coin_balance?: number
   xp?: number
   is_admin?: boolean
   is_lead_officer?: boolean
@@ -209,9 +211,6 @@ const LiveBroadcast: React.FC = () => {
       const embedded = row.user_profiles
       const cached = row.user_id ? profileCacheRef.current.get(row.user_id) : undefined
 
-      const hasEmbedded =
-        Boolean(embedded?.username) && typeof embedded?.level === 'number' && embedded?.role !== undefined
-
       let username = row.username || embedded?.username || cached?.username
       let role = row.role || embedded?.role || cached?.role
       let level = row.level ?? embedded?.level ?? cached?.level
@@ -262,8 +261,9 @@ const LiveBroadcast: React.FC = () => {
     toggleCamera,
     toggleMicrophone,
     isConnected,
-    isConnecting,
+    isConnecting: _isConnecting,
     disconnect,
+    connect,
   } = useLiveKit()
 
   const { sendGift: sendGiftToStreamer, isSending: isGiftSending } = useGiftSystem(
@@ -437,7 +437,7 @@ const LiveBroadcast: React.FC = () => {
   const effectiveMaxGuests = useMemo(() => Math.min(Math.max(maxGuestSlots, 0), 5), [maxGuestSlots])
 
   const guestParticipants = useMemo(
-    () => Array.from(participants.values()).filter((p) => !p.isLocal),
+    () => (Array.from(participants.values()) as any[]).filter((p) => !p.isLocal),
     [participants]
   )
 
@@ -566,15 +566,26 @@ const LiveBroadcast: React.FC = () => {
   const handleOpenMenuPanel = useCallback(() => setShowMenuPanel(true), [])
 
   const handleGoLive = useCallback(async () => {
-    if (!startPublishing || !stream?.id) return
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      toast.error('Your browser does not expose camera/microphone APIs.')
+    console.log('[DEBUG] handleGoLive called')
+    if (!startPublishing || !stream?.id) {
+      console.log('[DEBUG] startPublishing or stream.id missing:', { startPublishing: !!startPublishing, streamId: stream?.id })
       return
     }
 
     try {
-      await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      console.log('[DEBUG] Checking connection')
+      if (!isConnected) {
+        console.log('[DEBUG] Connecting to room...')
+        const connected = await connect(roomName, user, { allowPublish: true, role: 'broadcaster' })
+        if (!connected) {
+          toast.error('Failed to connect to the live room')
+          return
+        }
+        console.log('[DEBUG] Connected to room')
+      }
+      console.log('[DEBUG] Starting publishing')
       await startPublishing()
+      console.log('[DEBUG] startPublishing completed, updating DB')
 
       // Update stream status to live
       const { error } = await supabase
@@ -588,11 +599,12 @@ const LiveBroadcast: React.FC = () => {
 
       setStream((prev) => (prev ? { ...prev, is_live: true, status: 'live' } : prev))
       toast.success('You are now live!')
+      console.log('[DEBUG] handleGoLive completed successfully')
     } catch (error: any) {
-      console.error('Media permission failed:', error)
-      toast.error('Camera and microphone access are required to go live.')
+      console.error('Go live failed:', error)
+      toast.error('Failed to start broadcasting. Please check your camera and microphone permissions.')
     }
-  }, [startPublishing, stream?.id])
+  }, [startPublishing, stream?.id, isConnected, connect, roomName, user])
 
   const verticalActions = useMemo(
     () => [
@@ -623,7 +635,7 @@ const LiveBroadcast: React.FC = () => {
         throw error
       }
 
-      const rows = (data || []) as StreamMessage[]
+      const rows = (data || []) as any as StreamMessage[]
       const normalized = await Promise.all(rows.map((row) => normalizeMessage(row)))
       setMessages(normalized)
     } catch (error) {
@@ -690,7 +702,7 @@ const LiveBroadcast: React.FC = () => {
       const table = tableOverride || chatTable
 
       try {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from(table)
           .insert({
             stream_id: stream.id,
@@ -809,8 +821,9 @@ const LiveBroadcast: React.FC = () => {
                   <LiveKitRoomWrapper
                     roomName={roomName}
                     identity={viewerIdentity}
-                    role={liveKitRole}
-                    autoPublish={isBroadcaster ? false : true}
+                    role={liveKitRole as any}
+                    autoConnect={true}
+                    allowPublish={isBroadcaster ? false : true}
                     maxParticipants={liveKitMaxParticipants}
                     className="h-[420px] w-full"
                   />

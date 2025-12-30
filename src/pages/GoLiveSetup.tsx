@@ -1,118 +1,136 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../lib/store';
-import { Video, Users, Globe, Crown, Shield, Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
-
-interface StreamConfig {
-  title: string;
-  category: string;
-  audience: 'public' | 'followers' | 'family';
-  allowGifts: boolean;
-  description: string;
-}
+import React, { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../lib/store'
+import { Video, Users, Globe, Crown, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
+import { useGoLiveFlow, type StreamConfig } from '../hooks/useGoLiveFlow'
 
 const CATEGORIES = ['Just Chatting', 'Family Stream', 'Music', 'Other'];
-const OFFICER_CATEGORY = 'Officer Stream';
 const TROMODY_CATEGORY = 'Tromody Show';
 
-const OFFICER_ROLES = ['admin', 'lead_troll_officer', 'troll_officer'];
-
 const GoLiveSetup: React.FC = () => {
-  const navigate = useNavigate();
-  const { user, profile } = useAuthStore();
+  const navigate = useNavigate()
+  const { user, profile } = useAuthStore()
+  const {
+    permissionState,
+    requestPermissions,
+    createStreamRecord,
+    getToken,
+    connectToRoom,
+    publishTracks,
+  } = useGoLiveFlow()
 
   const [config, setConfig] = useState<StreamConfig>({
     title: '',
-    category: 'Just Chatting',
+    category: 'Just Chatting' as const,
     audience: 'public',
     allowGifts: true,
-    description: ''
-  });
+    description: '',
+  })
 
-  const [loading, setLoading] = useState(false);
   const [broadcasterStatus, setBroadcasterStatus] = useState<{
-    isApproved: boolean;
-    hasApplication: boolean;
-  } | null>(null);
+    isApproved: boolean
+    hasApplication: boolean
+  } | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
 
-  // Check broadcaster status
   useEffect(() => {
-    // Everyone is allowed to go live instantly
-    if (!user || !profile) return;
+    if (!user || !profile) return
     setBroadcasterStatus({
       isApproved: true,
       hasApplication: true,
-    });
-  }, [user?.id, profile?.id]);
+    })
+  }, [user?.id, profile?.id])
 
-  const handleSubmit = async () => {
+  const handleStartGoLive = async () => {
+    if (isStarting) return
+
     if (!user || !profile) {
-      toast.error('You must be logged in');
-      return;
+      toast.error('You must be logged in')
+      return
     }
 
     if (!config.title.trim()) {
-      toast.error('Stream title is required');
-      return;
+      toast.error('Stream title is required')
+      return
     }
 
-    const submissionConfig = config;
+    const configSnapshot = { ...config } as StreamConfig
+    console.log(`[GoLiveSetup] Go Live clicked for "${configSnapshot.title}"`)
 
-    setLoading(true);
-
+    setIsStarting(true)
     try {
-      const streamId = crypto.randomUUID();
-
-      // Create stream record
-      const { error: insertError } = await supabase
-        .from('streams')
-        .insert({
-          id: streamId,
-          broadcaster_id: profile.id,
-          title: submissionConfig.title,
-          category: submissionConfig.category,
-          audience_type: submissionConfig.audience,
-          allow_gifts: submissionConfig.allowGifts,
-          description: submissionConfig.description,
-          status: 'scheduled',
-          room_name: streamId,
-          is_live: false,
-          viewer_count: 0,
-          current_viewers: 0,
-          total_gifts_coins: 0,
-          popularity: 0,
-          created_at: new Date().toISOString()
-        });
-
-      if (insertError) {
-        console.error('Error creating stream:', insertError);
-        toast.error('Failed to create stream');
-        return;
+      console.log('[GoLiveSetup] Requesting camera and microphone permissions...')
+      const grantedStream = await requestPermissions()
+      if (!grantedStream) {
+        console.log('[GoLiveSetup] Permission request failed or was denied')
+        return
       }
 
-      // Navigate to live broadcast screen
-      navigate(`/live/${streamId}`);
+      console.log('[GoLiveSetup] Permissions granted')
+      console.log('[GoLiveSetup] Creating stream record...')
+      const newStream = await createStreamRecord(configSnapshot)
+      if (!newStream) {
+        toast.error('Failed to create your stream')
+        return
+      }
 
-    } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      toast.error('Failed to set up stream');
+      console.log(`[GoLiveSetup] Stream record created: ${newStream.id}`)
+      console.log('[GoLiveSetup] Requesting publish token...')
+      const tokenData = await getToken(newStream.id, true)
+      if (!tokenData) {
+        toast.error('Failed to retrieve LiveKit permissions')
+        return
+      }
+
+      console.log(`[GoLiveSetup] Token obtained for stream ${newStream.id} (allowPublish=${tokenData.allowPublish})`)
+      console.log('[GoLiveSetup] Connecting to LiveKit with publish permissions...')
+      const connectedRoom = await connectToRoom(newStream.id, true)
+      if (!connectedRoom) {
+        toast.error('Failed to connect to LiveKit')
+        return
+      }
+
+      console.log('[GoLiveSetup] Connected to LiveKit')
+      const published = await publishTracks()
+      if (!published) {
+        toast.error('Failed to publish your camera and microphone')
+        return
+      }
+
+      console.log('[GoLiveSetup] Published local tracks')
+      console.log('[GoLiveSetup] Marking stream as live in Supabase...')
+      const { error: updateError } = await supabase
+        .from('streams')
+        .update({
+          is_live: true,
+          status: 'live',
+          start_time: new Date().toISOString(),
+        })
+        .eq('id', newStream.id)
+
+      if (updateError) {
+        console.error('[GoLiveSetup] Stream update failed:', updateError)
+        toast.error('Failed to update stream status')
+        return
+      }
+
+      console.log(`[GoLiveSetup] Stream ${newStream.id} is now live`)
+      toast.success('You are live!')
+      navigate(`/live/${newStream.id}`)
+    } catch (err: any) {
+      console.error('[GoLiveSetup] Go live flow failed:', err)
+      toast.error('Something went wrong while starting your stream')
     } finally {
-      setLoading(false);
+      setIsStarting(false)
     }
-  };
+  }
 
   const updateConfig = (field: keyof StreamConfig, value: any) => {
     setConfig(prev => ({ ...prev, [field]: value }));
   };
 
-  const effectiveRole = profile?.role || profile?.troll_role || '';
-  const hasOfficerAccess =
-    Boolean(profile) &&
-    (OFFICER_ROLES.includes(effectiveRole) ||
-      profile?.is_troll_officer ||
-      profile?.is_lead_officer);
   const isBroadcaster =
     Boolean(
       profile?.is_broadcaster ||
@@ -122,14 +140,11 @@ const GoLiveSetup: React.FC = () => {
 
   const categoryOptions = useMemo(() => {
     const options = [...CATEGORIES];
-    if (hasOfficerAccess && !options.includes(OFFICER_CATEGORY)) {
-      options.push(OFFICER_CATEGORY);
-    }
     if (isBroadcaster && !options.includes(TROMODY_CATEGORY)) {
       options.push(TROMODY_CATEGORY);
     }
     return options;
-  }, [hasOfficerAccess, isBroadcaster]);
+  }, [isBroadcaster]);
 
   useEffect(() => {
     if (!categoryOptions.length) return;
@@ -138,13 +153,8 @@ const GoLiveSetup: React.FC = () => {
     }
   }, [categoryOptions, config.category]);
 
-  const isOfficerCategory = config.category === OFFICER_CATEGORY;
   const isTromodyCategory = config.category === TROMODY_CATEGORY;
-  const isSpecialCategory = isOfficerCategory || isTromodyCategory;
-
-  const handleOfficerStreamEntry = () => {
-    navigate('/officer/stream');
-  };
+  const isSpecialCategory = isTromodyCategory;
 
   const handleTromodyStart = () => {
     if (!isBroadcaster) {
@@ -211,25 +221,6 @@ const GoLiveSetup: React.FC = () => {
                 </option>
               ))}
             </select>
-            {isOfficerCategory && (
-              <div className="mt-4 rounded-2xl border border-blue-500/40 bg-[#0b0716]/80 p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm text-blue-200">
-                  <Shield className="w-4 h-4 text-blue-300" />
-                  Officer Stream mode activates the secure LiveKit room for trolls & admins.
-                </div>
-                <p className="text-xs text-gray-400 leading-snug">
-                  Only admins, lead troll officers, and troll officers may launch this broadcast. Guests join via the host
-                  controls, guests are limited to three per side, and your feed is kept separate from the public channel.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleOfficerStreamEntry}
-                  className="w-full px-4 py-2 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-xs font-semibold text-black shadow-lg shadow-blue-500/30"
-                >
-                  Enter Officer Stream
-                </button>
-              </div>
-            )}
             {isTromodyCategory && (
               <div className="mt-4 rounded-2xl border border-pink-500/40 bg-[#120721]/80 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm text-pink-200">
@@ -345,24 +336,34 @@ const GoLiveSetup: React.FC = () => {
             />
           </div>
 
-          {/* Submit Button */}
+          {permissionState === 'denied' && (
+            <div className="mb-4 flex flex-col gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Camera/Microphone blocked. Please enable permissions and try again.
+              </span>
+              <button
+                onClick={handleStartGoLive}
+                disabled={isStarting}
+                className="rounded-lg bg-red-500/80 px-3 py-1 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           <button
-            onClick={handleSubmit}
-            disabled={loading || !config.title.trim() || isSpecialCategory}
+            onClick={handleStartGoLive}
+            disabled={!config.title.trim() || isSpecialCategory || isStarting}
             className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-600 rounded-lg font-bold text-white transition-all duration-200 flex items-center justify-center gap-2"
           >
-            {loading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin" />
-                Setting Up Stream...
-              </>
-            ) : (
-              <>
-                <Video className="w-5 h-5" />
-                {isSpecialCategory ? 'Select another category to go live' : 'Go Live'}
-              </>
-            )}
+            <Video className="w-5 h-5" />
+            {isSpecialCategory
+              ? 'Select another category to go live'
+              : isStarting
+                ? 'Going Live...'
+                : 'Go Live'}
           </button>
+
         </div>
 
       </div>

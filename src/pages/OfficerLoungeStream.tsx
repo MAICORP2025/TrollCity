@@ -1,17 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { RoomEvent } from 'livekit-client'
-import { useLiveKit } from '../contexts/LiveKitContext'
+import { useLiveKit } from '../hooks/useLiveKit'
 import { useLiveKitSession } from '../hooks/useLiveKitSession'
 import { useSeatRoster } from '../hooks/useSeatRoster'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { Shield, Video, Mic, Settings, Users } from 'lucide-react'
+import {
+  Video,
+  Mic,
+  Settings,
+  Users,
+} from 'lucide-react'
 
 const TEXT_ENCODER = new TextEncoder()
 const ROOM_NAME = 'officer-stream'
 const SEAT_COUNT = 6
-
-type ConnectionStatus = 'connecting' | 'live' | 'reconnecting' | 'offline'
 
 type ControlMessage = {
   type: 'admin-action'
@@ -20,393 +22,255 @@ type ControlMessage = {
   initiatorId?: string
 }
 
-const connectionLabels: Record<ConnectionStatus, string> = {
-  connecting: 'Connecting',
-  live: 'Live',
-  reconnecting: 'Reconnecting',
-  offline: 'Offline',
-}
-
-const connectionStatusColors: Record<ConnectionStatus, string> = {
-  connecting: 'bg-amber-400',
-  live: 'bg-emerald-400',
-  reconnecting: 'bg-sky-400',
-  offline: 'bg-red-500',
-}
-
 const OfficerLoungeStream: React.FC = () => {
   const { user, profile } = useAuthStore()
   const liveKit = useLiveKit()
 
+  const localVideoRef = useRef<HTMLVideoElement | null>(null)
+  const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null)
+
   const {
     joinAndPublish,
-    startPublishing,
     toggleCamera,
     toggleMicrophone,
-    isConnected,
-    isConnecting,
-    error: sessionError,
   } = useLiveKitSession({
     roomName: ROOM_NAME,
     user: user ? { ...user, role: profile?.role || 'officer' } : null,
     role: 'officer',
-    autoPublish: false,
+    allowPublish: true,
     maxParticipants: SEAT_COUNT,
   })
 
   const { participants, localParticipant, service } = liveKit
-  const { seats, claimSeat, releaseSeat, isClaimingSeat } = useSeatRoster()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { seats, claimSeat, releaseSeat, isClaimingSeat } = useSeatRoster(ROOM_NAME)
 
   const [currentSeatIndex, setCurrentSeatIndex] = useState<number | null>(null)
   const [claimingSeat, setClaimingSeat] = useState<number | null>(null)
-  const [permissionModal, setPermissionModal] = useState<{ visible: boolean; seatIndex: number | null }>({
-    visible: false,
-    seatIndex: null,
-  })
-  const [entranceEffectSeat, setEntranceEffectSeat] = useState<number | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
+  const [permissionErrorSeat, setPermissionErrorSeat] = useState<number | null>(null)
   const [targetSeatIndex, setTargetSeatIndex] = useState<number | null>(null)
+  const [entranceEffectSeat, setEntranceEffectSeat] = useState<number | null>(null)
+  const entranceEffectTimer = useRef<number | null>(null)
 
   const isAdmin = useMemo(
     () => Boolean(profile?.role === 'admin' || profile?.is_admin || profile?.is_lead_officer),
     [profile]
   )
 
-  /* ==========================
-     Connection status listeners
-  ========================== */
-  useEffect(() => {
-    const room = service?.getRoom?.()
-    if (!room) return
-
-    const handleConnected = () => setConnectionStatus('live')
-    const handleDisconnected = () => setConnectionStatus('offline')
-    const handleReconnecting = () => setConnectionStatus('reconnecting')
-
-    room.on(RoomEvent.Connected, handleConnected)
-    room.on(RoomEvent.Disconnected, handleDisconnected)
-    room.on(RoomEvent.Reconnecting, handleReconnecting)
-
-    return () => {
-      room.off(RoomEvent.Connected, handleConnected)
-      room.off(RoomEvent.Disconnected, handleDisconnected)
-      room.off(RoomEvent.Reconnecting, handleReconnecting)
+  const requestMediaAccess = useCallback(async () => {
+    if (localMediaStream && localMediaStream.active) {
+      return localMediaStream
     }
-  }, [service])
 
-  useEffect(() => {
-    if (isConnecting) {
-      setConnectionStatus('connecting')
-    } else if (!isConnected && connectionStatus !== 'reconnecting') {
-      setConnectionStatus('offline')
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Media devices API not available')
     }
-  }, [isConnecting, isConnected, connectionStatus])
 
-  /* ==========================
-     Find local seat index
-  ========================== */
-  useEffect(() => {
-    if (!profile) return
-    const seatIndex = seats.findIndex((seat) => seat?.user_id === profile.id)
-    setCurrentSeatIndex(seatIndex !== -1 ? seatIndex : null)
-  }, [seats, profile])
+    if (!window.isSecureContext) {
+      throw new Error('Camera/microphone access requires a secure context')
+    }
 
-  /* ==========================
-     Entrance effect timer
-  ========================== */
-  useEffect(() => {
-    if (entranceEffectSeat === null) return
-    const timer = setTimeout(() => setEntranceEffectSeat(null), 2200)
-    return () => clearTimeout(timer)
-  }, [entranceEffectSeat])
-
-  /* ==========================
-     Data channel messaging
-  ========================== */
-  const sendSeatMessage = useCallback(
-    async (message: ControlMessage) => {
-      try {
-        const room = service?.getRoom?.()
-        if (!room?.localParticipant) return
-        await room.localParticipant.publishData(TEXT_ENCODER.encode(JSON.stringify(message)), {
-          reliable: true,
-        })
-      } catch (error) {
-        console.error('Failed to broadcast control message', error)
+    try {
+      console.log('[OfficerLoungeStream] Requesting camera & mic')
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = true
+      })
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream
       }
-    },
-    [service]
-  )
+      setLocalMediaStream(stream)
+      return stream
+    } catch (err: any) {
+      console.error('[OfficerLoungeStream] getUserMedia failed:', err.name, err.message)
+      throw err
+    }
+  }, [localMediaStream])
 
-  /* ============================================
-     Join session once profile/user are available
-  ============================================ */
-  const didJoinRef = useRef(false)
-  useEffect(() => {
-    if (!user || !profile) return
-    if (didJoinRef.current) return
-    didJoinRef.current = true
+  const cleanupLocalStream = useCallback(() => {
+    if (localMediaStream) {
+      localMediaStream.getTracks().forEach((track) => track.stop())
+      setLocalMediaStream(null)
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null
+    }
+  }, [localMediaStream])
 
-    joinAndPublish().catch((err) => {
-      console.error(err)
-      toast.error(err?.message || 'Unable to enter Officer Stream')
-      didJoinRef.current = false
-    })
-  }, [joinAndPublish, profile, user])
+  useEffect(() => cleanupLocalStream, [cleanupLocalStream])
 
-  /* ==========================
-     Seat claim handler
-     ✅ AUTO-PUBLISH after permission granted
-  ========================== */
+  const renderSeats = useMemo(() => {
+    return seats.map((seat, index) => ({
+      seat,
+      participant: seat?.user_id ? participants.get(seat.user_id) : undefined,
+      index,
+    }))
+  }, [seats, participants])
+
+  const targetSeatLabel = useMemo(() => {
+    if (targetSeatIndex === null) return 'None'
+    return `Seat ${targetSeatIndex + 1}`
+  }, [targetSeatIndex])
+
   const handleSeatClaim = useCallback(
-    async (seatIndex: number) => {
-      if (!user || !profile) return
-
-      if (seats[seatIndex] || claimingSeat !== null) {
-        toast('This seat is already occupied')
-        return
-      }
-
-      const identity = localParticipant?.identity || user.id
-      setClaimingSeat(seatIndex)
+    async (index: number) => {
+      if (claimingSeat !== null || currentSeatIndex !== null) return
+      console.log(`[OfficerLoungeStream] Seat ${index + 1} clicked to join`)
+      setClaimingSeat(index)
+      setPermissionErrorSeat(null)
 
       try {
-        // Claim seat
-        await claimSeat(seatIndex, {
-          username: profile.username,
-          avatarUrl: profile.avatar_url ?? null,
-          role: profile.role,
-          metadata: { identity },
+        console.log('[OfficerLoungeStream] Prompting for camera & microphone permissions')
+        const stream = await requestMediaAccess()
+        console.log('[OfficerLoungeStream] Permissions granted')
+
+        const success = await claimSeat(index, {
+          username: profile?.username || 'Anonymous',
+          avatarUrl: profile?.avatar_url,
+          role: profile?.role || 'officer',
+          metadata: {},
         })
 
-        // Ensure connected
-        if (!isConnected) {
-          await joinAndPublish()
+        if (!success) {
+          throw new Error('Seat claim failed')
         }
 
-        // Request permissions (must succeed)
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        stream.getTracks().forEach((track) => track.stop())
+        setCurrentSeatIndex(index)
+        setEntranceEffectSeat(index)
+        if (entranceEffectTimer.current) {
+          window.clearTimeout(entranceEffectTimer.current)
+        }
+        entranceEffectTimer.current = window.setTimeout(() => {
+          setEntranceEffectSeat(null)
+          entranceEffectTimer.current = null
+        }, 2800)
 
-        // ✅ Publish immediately
-        await startPublishing()
-
-        // ✅ Update UI state immediately
-        setCurrentSeatIndex(seatIndex)
-        setEntranceEffectSeat(seatIndex)
-      } catch (error: any) {
-        const isPermissionIssue =
-          error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError'
-
-        if (isPermissionIssue) {
-          setPermissionModal({ visible: true, seatIndex })
+        console.log('[OfficerLoungeStream] Calling joinAndPublish with captured stream')
+        const joined = await joinAndPublish(stream)
+        if (!joined) {
+          throw new Error('LiveKit join/publish failed')
+        }
+        console.log('[OfficerLoungeStream] LiveKit join/publish succeeded')
+      } catch (err: any) {
+        console.error('Failed to claim seat:', err)
+        const permissionDenied = ['NotAllowedError', 'NotFoundError', 'SecurityError', 'PermissionDeniedError']
+        if (permissionDenied.includes(err?.name)) {
+          console.log('[OfficerLoungeStream] Permission denied, prompting banner')
+          setPermissionErrorSeat(index)
+          toast.error('Camera/Microphone blocked. Please enable permissions and try again.')
         } else {
-          toast.error(error?.message || 'Failed to join this seat')
+          toast.error('Failed to join seat')
         }
-
-        // Cleanup seat claim
-        await releaseSeat(seatIndex, profile.id, { force: true })
       } finally {
         setClaimingSeat(null)
       }
     },
-    [
-      user,
-      profile,
-      seats,
-      claimingSeat,
-      localParticipant,
-      isConnected,
-      joinAndPublish,
-      startPublishing,
-      claimSeat,
-      releaseSeat,
-    ]
+    [claimingSeat, currentSeatIndex, claimSeat, joinAndPublish, profile, requestMediaAccess]
   )
 
-  /* ==========================
-     Leave seat handler
-  ========================== */
   const handleLeaveSeat = useCallback(async () => {
-    if (currentSeatIndex === null || !profile) return
-
+    if (currentSeatIndex === null) return
     try {
-      if (localParticipant?.isCameraEnabled) {
-        await toggleCamera?.()
-      }
-      if (localParticipant?.isMicrophoneEnabled) {
-        await toggleMicrophone?.()
-      }
-    } catch (e) {
-      console.warn('Failed to stop tracks before leaving seat:', e)
+      await releaseSeat(currentSeatIndex)
+      setCurrentSeatIndex(null)
+    } catch (error) {
+      console.error('Failed to leave seat:', error)
+      toast.error('Failed to leave seat')
     }
+  }, [currentSeatIndex, releaseSeat])
 
-    await releaseSeat(currentSeatIndex, profile.id, { force: true })
-    setCurrentSeatIndex(null)
-  }, [currentSeatIndex, profile, localParticipant, toggleCamera, toggleMicrophone, releaseSeat])
-
-  /* ==========================
-     Handle admin control messages
-  ========================== */
-  const handleControlMessage = useCallback(
-    async (message: ControlMessage) => {
-      if (message.type !== 'admin-action') return
-
-      if (message.action === 'mute-all') {
-        if (!localParticipant) return
-        if (message.initiatorId === localParticipant.identity) return
-        if (currentSeatIndex === null) return
-
-        if (localParticipant.isMicrophoneEnabled) {
-          await toggleMicrophone?.()
-        }
-        toast('You have been muted by the admin')
-        return
+  const handleMuteAll = useCallback(async () => {
+    if (!isAdmin || !service) return
+    try {
+      const room = service.getRoom()
+      if (!room) return
+      const data: ControlMessage = {
+        type: 'admin-action',
+        action: 'mute-all',
+        initiatorId: user?.id,
       }
-
-      if (message.action === 'remove' && typeof message.seatIndex === 'number') {
-        const seatIndex = message.seatIndex
-        const matches =
-          currentSeatIndex === seatIndex || seats[seatIndex]?.user_id === localParticipant?.identity
-        if (!matches) return
-        toast('You have been removed from the seat')
-        await handleLeaveSeat()
-      }
-    },
-    [currentSeatIndex, handleLeaveSeat, localParticipant, seats, toggleMicrophone]
-  )
-
-  useEffect(() => {
-    const room = service?.getRoom?.()
-    if (!room) return
-    const decoder = new TextDecoder()
-
-    const handleData = (payload: Uint8Array) => {
-      try {
-        const message = JSON.parse(decoder.decode(payload)) as ControlMessage
-        handleControlMessage(message)
-      } catch (error) {
-        console.error('Invalid control message', error)
-      }
+      await room.localParticipant.publishData(TEXT_ENCODER.encode(JSON.stringify(data)), { reliable: true })
+      toast.success('Muted all participants')
+    } catch (error) {
+      console.error('Failed to mute all:', error)
+      toast.error('Failed to mute all')
     }
-
-    room.on(RoomEvent.DataReceived, handleData)
-    return () => {
-      room.off(RoomEvent.DataReceived, handleData)
-    }
-  }, [service, handleControlMessage])
-
-  const handlePermissionRetry = () => {
-    const seatIndex = permissionModal.seatIndex
-    setPermissionModal({ visible: false, seatIndex: null })
-    if (seatIndex !== null) {
-      handleSeatClaim(seatIndex)
-    }
-  }
-
-  /* ======================================================
-     Render seat + map participant from participants map
-  ====================================================== */
-  const renderSeats = useMemo(
-    () =>
-      seats.map((seat, index) => ({
-        seat,
-        participant: seat ? (participants as any).get(seat.user_id) : undefined,
-        index,
-      })),
-    [seats, participants]
-  )
-
-  /* Admin actions */
-  const handleMuteAll = useCallback(() => {
-    sendSeatMessage({
-      type: 'admin-action',
-      action: 'mute-all',
-      initiatorId: localParticipant?.identity,
-    })
-    toast('Mute command sent')
-  }, [localParticipant?.identity, sendSeatMessage])
+  }, [isAdmin, service, user?.id])
 
   const handleRemove = useCallback(async () => {
-    if (targetSeatIndex === null) {
-      toast.error('Select a seat to remove')
-      return
+    if (!isAdmin || targetSeatIndex === null || !service) return
+    try {
+      const room = service.getRoom()
+      if (!room) return
+      const data: ControlMessage = {
+        type: 'admin-action',
+        action: 'remove',
+        seatIndex: targetSeatIndex,
+        initiatorId: user?.id,
+      }
+      await room.localParticipant.publishData(TEXT_ENCODER.encode(JSON.stringify(data)), { reliable: true })
+      toast.success(`Removed participant from seat ${targetSeatIndex + 1}`)
+    } catch (error) {
+      console.error('Failed to remove participant:', error)
+      toast.error('Failed to remove participant')
     }
-    const seat = seats[targetSeatIndex]
-    if (!seat) {
-      toast.error('Seat is already empty')
-      return
-    }
+  }, [isAdmin, targetSeatIndex, service, user?.id])
 
-    sendSeatMessage({
-      type: 'admin-action',
-      action: 'remove',
-      seatIndex: targetSeatIndex,
-      initiatorId: localParticipant?.identity,
-    })
-
-    await releaseSeat(targetSeatIndex, seat.user_id, { force: true })
-    setTargetSeatIndex(null)
-    toast('User has been removed')
-  }, [localParticipant?.identity, releaseSeat, sendSeatMessage, seats, targetSeatIndex])
-
-  const targetedSeat = targetSeatIndex !== null ? seats[targetSeatIndex] : null
-  const targetSeatNumber = targetSeatIndex !== null ? targetSeatIndex + 1 : null
-  const targetSeatLabel = targetedSeat
-    ? targetedSeat.username
-      ? `${targetedSeat.username} (Seat ${targetSeatNumber})`
-      : `Seat ${targetSeatNumber}`
-    : 'None'
+  const handlePermissionRetry = useCallback(async () => {
+    if (permissionErrorSeat === null) return
+    const seatToRetry = permissionErrorSeat
+    console.log(`[OfficerLoungeStream] Retrying permission prompt for seat ${seatToRetry + 1}`)
+    setPermissionErrorSeat(null)
+    await handleSeatClaim(seatToRetry)
+  }, [permissionErrorSeat, handleSeatClaim])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#03010c] via-[#05031a] to-[#110117] text-white">
+      {permissionErrorSeat !== null && (
+        <div className="fixed top-4 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 px-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-full border border-red-500/60 bg-red-500/90 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg shadow-red-500/50">
+            <span className="flex-1 min-w-0 text-left">
+              Camera/Microphone blocked. Please enable permissions and try again.
+            </span>
+            <button
+              onClick={handlePermissionRetry}
+              className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.3em] text-white transition hover:bg-white/20"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex h-screen flex-col">
-        <header className="flex items-start justify-between border-b border-purple-600/40 bg-white/5 px-6 py-5 shadow-[0_10px_40px_rgba(50,10,100,0.5)] backdrop-blur">
-          <div>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.5em] text-purple-300">
-              <Shield className="h-4 w-4 text-purple-300" />
-              Officer Stream
+        <main className="flex-1 px-6 py-5">
+          <section className="h-full rounded-[32px] border border-white/10 bg-gradient-to-b from-[#050113] to-[#0b091f] p-6 shadow-[0_30px_70px_rgba(0,0,0,0.55)]">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em] text-white/50">Seat roster</p>
+                <p className="text-sm text-white/70">Six seats · {participants.size} active</p>
+              </div>
+              <span className="rounded-full border border-white/30 px-3 py-1 text-[10px] uppercase tracking-[0.4em] text-white/70">
+                Officers only
+              </span>
             </div>
-            <h1 className="text-2xl font-bold text-white">Command Deck · LiveKit</h1>
-            <p className="text-sm text-gray-400">6-seat broadcast · Officers only</p>
-          </div>
-
-          <div className="flex flex-col items-end gap-1 text-right uppercase tracking-[0.3em] text-gray-300">
-            <div className="flex items-center gap-2 text-[10px]">
-              <span className={`h-2 w-2 rounded-full ${connectionStatusColors[connectionStatus]}`} />
-              <span className="text-[11px] font-semibold text-white">{connectionLabels[connectionStatus]}</span>
-            </div>
-            <span className="text-[9px] tracking-[0.6em] text-purple-400">Connection status</span>
-            <span className="text-[11px] text-gray-300">{participants.size} active participants</span>
-            {sessionError && (
-              <span className="text-[9px] uppercase tracking-[0.4em] text-pink-300">{sessionError}</span>
-            )}
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-hidden px-6 py-5">
-          <div className="h-full overflow-hidden rounded-[32px] border border-purple-500/30 bg-gradient-to-br from-[#070117] to-[#140027] p-4 shadow-[0_20px_90px_rgba(88,38,182,0.4)]">
-            <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-gray-400">
-              <span>Seat roster</span>
-              <span className="text-[11px]">Target: {targetSeatLabel}</span>
-            </div>
-
-            <div className="relative h-full">
+            <div className="h-full">
               <SeatGrid
                 seats={renderSeats}
                 onSeatClaim={handleSeatClaim}
-                claimingSeat={claimingSeat ?? (isClaimingSeat as any)}
+                claimingSeat={claimingSeat}
                 currentSeatIndex={currentSeatIndex}
                 isAdmin={isAdmin}
                 onTargetSeat={(idx) => setTargetSeatIndex(idx)}
                 targetedSeatIndex={targetSeatIndex}
               />
-
               {entranceEffectSeat !== null && (
-                <EntranceEffectScreenOverlay seat={seats[entranceEffectSeat]} seatIndex={entranceEffectSeat} />
+                <EntranceEffectScreenOverlay
+                  seat={seats[entranceEffectSeat]}
+                  seatIndex={entranceEffectSeat}
+                />
               )}
             </div>
-          </div>
+          </section>
         </main>
 
         <BottomControls
@@ -423,31 +287,13 @@ const OfficerLoungeStream: React.FC = () => {
         />
       </div>
 
-      {permissionModal.visible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-md rounded-[30px] border border-purple-500/60 bg-[#070114]/95 p-6 text-center shadow-[0_20px_60px_rgba(94,99,255,0.4)]">
-            <p className="text-xs uppercase tracking-[0.4em] text-purple-300">Permissions required</p>
-            <h2 className="mt-4 text-xl font-semibold">Camera & mic blocked</h2>
-            <p className="mt-2 text-sm text-gray-300">
-              Troll City requires both camera and microphone permissions to publish your feed. Please enable them and retry.
-            </p>
-            <div className="mt-6 flex flex-col gap-3 text-xs uppercase tracking-[0.3em]">
-              <button
-                onClick={handlePermissionRetry}
-                className="rounded-full border border-purple-400/70 bg-gradient-to-br from-purple-600 to-pink-500 px-4 py-3 font-semibold text-white shadow-[0_0_30px_rgba(214,127,255,0.45)]"
-              >
-                Retry permissions
-              </button>
-              <button
-                onClick={() => setPermissionModal({ visible: false, seatIndex: null })}
-                className="rounded-full border border-white/20 px-4 py-3 text-white"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <video
+        ref={localVideoRef}
+        autoPlay
+        muted
+        playsInline
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+      />
     </div>
   )
 }
@@ -556,7 +402,8 @@ const SeatTile: React.FC<SeatTileProps> = ({
   const showVideo = Boolean(assignment && participant?.videoTrack?.track)
 
   return (
-    <div className={`relative flex h-56 flex-col overflow-hidden rounded-[28px] border ${borderState} bg-gradient-to-br from-white/5 to-black/40 text-white transition`}>
+    <div
+      className={`relative flex h-56 flex-col overflow-hidden rounded-[28px] border ${borderState} bg-gradient-to-br from-white/5 to-black/40 text-white transition`}>
       <div className="flex items-center justify-between px-4 pt-3 text-[10px] uppercase tracking-[0.4em] text-purple-300">
         <span>Seat {index + 1}</span>
       </div>
@@ -574,7 +421,7 @@ const SeatTile: React.FC<SeatTileProps> = ({
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-white/70 text-xs uppercase tracking-[0.3em]">
-                Waiting for video…
+                Waiting for video...
               </div>
             )}
             <audio ref={audioRef} autoPlay />
@@ -738,4 +585,4 @@ const EntranceEffectScreenOverlay: React.FC<{
   )
 }
 
-export default OfficerLoungeStream 
+export default OfficerLoungeStream
