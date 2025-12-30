@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Room, RoomEvent } from 'livekit-client';
 import { LIVEKIT_URL, defaultLiveKitOptions } from '../lib/LiveKitConfig';
-import api from '../lib/api';
+import api, { API_ENDPOINTS } from '../lib/api';
 
 export function useLiveKitRoom(roomName, user, options = {}) {
   const [room, setRoom] = useState(null);
@@ -26,8 +26,14 @@ export function useLiveKitRoom(roomName, user, options = {}) {
       // Use GET for viewers (POST is for broadcasters only)
       const isPublishing = options.allowPublish === true;
       
-      const tokenUrl = `/api/livekit-token?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(user.email || user.id)}&user_id=${encodeURIComponent(user.id)}&role=${encodeURIComponent(user.role || user.troll_role || 'viewer')}&level=${user.level || 1}`;
-      
+      const tokenParams = {
+        room: roomName,
+        identity: user.email || user.id,
+        user_id: user.id,
+        role: user.role || user.troll_role || 'viewer',
+        level: user.level || 1,
+      };
+
       let tokenResponse;
       if (isPublishing) {
         // Broadcasters use POST with publish permission
@@ -42,17 +48,16 @@ export function useLiveKitRoom(roomName, user, options = {}) {
       } else {
         // Viewers use GET (viewers can't publish)
         try {
-          const response = await fetch(tokenUrl);
-          if (!response.ok) throw new Error('Failed to get token');
-          tokenResponse = await response.json();
+          const response = await api.get(API_ENDPOINTS.livekit.token, tokenParams);
+          if (!response.success || !response.token) {
+            throw new Error(response.error || 'Failed to get token');
+          }
+          tokenResponse = response;
         } catch (fetchErr) {
           console.warn('GET token failed, falling back to POST:', fetchErr);
-          tokenResponse = await api.post('/livekit-token', {
-            room: roomName,
-            identity: user.email || user.id,
-            user_id: user.id,
+          tokenResponse = await api.post(API_ENDPOINTS.livekit.token, {
+            ...tokenParams,
             role: 'viewer',
-            level: user.level || 1,
             allowPublish: false,
           });
         }
