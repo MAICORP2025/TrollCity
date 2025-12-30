@@ -63,3 +63,6 @@ CREATE POLICY "Admins can manage all momentum"
       AND (role = 'admin' OR is_admin = true)
     )
   );
+
+GRANT SELECT ON stream_momentum TO authenticated;
+GRANT SELECT ON stream_momentum TO anonymous;

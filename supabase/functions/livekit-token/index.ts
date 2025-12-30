@@ -7,8 +7,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
 };
 
-const OFFICER_ROLES = new Set(["admin", "lead_troll_officer", "troll_officer"]);
-
 interface AuthorizedProfile {
   id: string;
   username: string;
@@ -113,15 +111,7 @@ serve(async (req: Request) => {
       });
     }
 
-    const normalizedRole = (profile.role || "").toLowerCase();
-    const hasOfficerRole =
-      OFFICER_ROLES.has(normalizedRole) ||
-      Boolean(profile.is_admin) ||
-      Boolean(profile.is_lead_officer) ||
-      Boolean(profile.is_troll_officer);
-
-    const isBroadcaster = Boolean(profile.is_broadcaster);
-    const canPublish = allowPublish && (hasOfficerRole || isBroadcaster);
+    const canPublish = allowPublish;
 
     const metadata = {
       user_id: profile.id,

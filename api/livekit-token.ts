@@ -1,5 +1,5 @@
 import { AccessToken, TrackSource } from 'livekit-server-sdk'
-import { authorizeUser, OFFICER_ROLES, AuthorizedProfile } from './_shared/auth'
+import { authorizeUser, AuthorizedProfile } from './_shared/auth'
 import { LIVEKIT_URL } from './livekitconfig'
 
 const API_KEY = process.env.LIVEKIT_API_KEY
@@ -23,25 +23,6 @@ function normalizeRoom(data: TokenRequest) {
 
 function normalizeParticipantName(profile: AuthorizedProfile, data: TokenRequest) {
   return String(data.participantName || profile.username || profile.id || '').trim()
-}
-
-function canPublish(profile: AuthorizedProfile, requested: TokenRequest): boolean {
-  const allowPublish =
-    requested.allowPublish === true ||
-    requested.allowPublish === 'true' ||
-    requested.allowPublish === '1'
-  if (!allowPublish) return false
-
-  const role = (profile.role || '').toLowerCase()
-  const isOfficerRole =
-    OFFICER_ROLES.has(role) ||
-    Boolean(profile.is_admin) ||
-    Boolean(profile.is_lead_officer) ||
-    Boolean(profile.is_troll_officer)
-  
-  const isBroadcaster = Boolean(profile.is_broadcaster)
-  
-  return isOfficerRole || isBroadcaster
 }
 
 export default async function handler(req: any, res: any) {
@@ -68,7 +49,10 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Missing participant name' })
   }
 
-  const publishAllowed = canPublish(profile, payload)
+  const publishAllowed =
+    payload.allowPublish === true ||
+    payload.allowPublish === 'true' ||
+    payload.allowPublish === '1'
   const metadata = {
     user_id: profile.id,
     username: profile.username,
@@ -78,7 +62,7 @@ export default async function handler(req: any, res: any) {
     participantName,
   }
   
-  console.log(`[livekit-token] room=${roomName} user=${profile.id} allowPublish=${publishAllowed} isBroadcaster=${profile.is_broadcaster} isOfficer=${OFFICER_ROLES.has((profile.role || '').toLowerCase())}`)
+  console.log(`[livekit-token] room=${roomName} user=${profile.id} allowPublish=${publishAllowed}`)
 
   try {
     const token = new AccessToken(API_KEY!, API_SECRET!, {

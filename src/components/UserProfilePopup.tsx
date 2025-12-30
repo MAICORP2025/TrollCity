@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, AlertTriangle, Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -22,12 +22,9 @@ export default function UserProfilePopup({ userId, username, onClose }: UserProf
   const [loading, setLoading] = useState(true)
   const [isAdminUser, setIsAdminUser] = useState(false)
 
-  useEffect(() => {
-    loadProfile()
-    setIsAdminUser(isAdmin(user, userProfile))
-  }, [userId, user, userProfile])
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
+    setLoading(true)
+    setProfile(null)
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -42,7 +39,12 @@ export default function UserProfilePopup({ userId, username, onClose }: UserProf
     } finally {
       setLoading(false)
     }
-  }
+  }, [userId])
+
+  useEffect(() => {
+    loadProfile()
+    setIsAdminUser(isAdmin(user, userProfile))
+  }, [loadProfile, user, userProfile])
 
   if (loading) {
     return (

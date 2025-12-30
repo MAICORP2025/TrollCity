@@ -14,7 +14,7 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KE
   },
 })
 
-export const OFFICER_ROLES = new Set(['admin', 'lead_troll_officer', 'troll_officer'])
+export const OFFICER_ROLES = new Set(['admin', 'lead_troll_officer', 'troll_officer', 'officer'])
 
 export interface AuthorizedProfile {
   id: string
