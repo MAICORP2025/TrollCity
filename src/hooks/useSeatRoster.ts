@@ -67,7 +67,10 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
         },
       })
 
-      console.log('[useSeatRoster] raw invoke:', { data, error: invokeError })
+      // Only log errors, not successful responses
+      if (invokeError) {
+        console.error('[useSeatRoster] invoke error:', invokeError)
+      }
 
       if (invokeError) {
         throw invokeError
@@ -178,7 +181,10 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
           },
         })
 
-        console.log('[useSeatRoster] claim invoke:', { data, error: invokeError })
+        // Only log errors
+        if (invokeError) {
+          console.error('[useSeatRoster] claim invoke error:', invokeError)
+        }
 
         if (invokeError) {
           throw invokeError
@@ -230,7 +236,10 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
           },
         })
 
-        console.log('[useSeatRoster] release invoke:', { data, error: invokeError })
+        // Only log errors
+        if (invokeError) {
+          console.error('[useSeatRoster] release invoke error:', invokeError)
+        }
 
         if (invokeError) {
           throw invokeError

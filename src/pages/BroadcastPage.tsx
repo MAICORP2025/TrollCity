@@ -334,7 +334,27 @@ export default function BroadcastPage() {
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
             continue;
           }
-          console.error("❌ Stream load failed: No data returned");
+          // Last attempt failed - use fallback if we have user/profile
+          console.warn("⚠️ Stream load failed: No data returned after all retries");
+          if (profile && user && streamId) {
+            console.warn('⚠️ Using fallback stream data - some features may be limited');
+            const fallbackStream: StreamRow = {
+              id: streamId,
+              broadcaster_id: profile.id,
+              title: 'Stream',
+              status: 'live',
+              is_live: true,
+              start_time: new Date().toISOString(),
+              total_gifts_coins: 0,
+              current_viewers: 0,
+            } as StreamRow;
+            
+            setStream(fallbackStream);
+            setCoinCount(0);
+            setIsLoadingStream(false);
+            return;
+          }
+          console.error("❌ Stream load failed: No data returned and no fallback available");
           toast.error("Stream not found.");
           setIsLoadingStream(false);
           return;
@@ -363,13 +383,14 @@ export default function BroadcastPage() {
           
           // Fallback: Create minimal stream object from streamId and profile
           // This allows the page to continue functioning even if we can't load full stream data
-          if (profile && user) {
+          if (profile && user && streamId) {
             console.warn('⚠️ Using fallback stream data - some features may be limited');
             const fallbackStream: StreamRow = {
               id: streamId,
               broadcaster_id: profile.id,
-              title: 'Loading...',
+              title: 'Stream',
               status: 'live',
+              is_live: true,
               start_time: new Date().toISOString(),
               total_gifts_coins: 0,
               current_viewers: 0,
