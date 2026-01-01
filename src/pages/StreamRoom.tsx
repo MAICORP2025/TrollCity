@@ -70,17 +70,18 @@ interface TrollbagItem {
 }
 
 export default function StreamRoom() {
-  const { id } = useParams<{ id: string }>();
+  const { id, streamId } = useParams<{ id?: string; streamId?: string }>();
+  const streamIdValue = id || streamId;
   const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuthStore();
   const { setError, setRetryAction, setStreamEnded, clearError } = useGlobalApp();
   const setActiveStreamId = useLiveContextStore((s) => s.setActiveStreamId);
 
   useEffect(() => {
-    if (!id) return;
-    setActiveStreamId(id);
+    if (!streamIdValue) return;
+    setActiveStreamId(streamIdValue);
     return () => setActiveStreamId(null);
-  }, [id, setActiveStreamId]);
+  }, [streamIdValue, setActiveStreamId]);
 
   const [stream, setStream] = useState<any>(null);
   const [isLoadingStream, setIsLoadingStream] = useState(true);
@@ -164,7 +165,7 @@ export default function StreamRoom() {
     connectionStatus,
     disconnect,
   } = useLiveKitRoom({
-    roomName: stream?.id || id,
+    roomName: stream?.id || streamIdValue,
     user: liveKitUser,
     ...liveKitOptions
   });
@@ -257,7 +258,7 @@ export default function StreamRoom() {
 
   // Load stream data
   useEffect(() => {
-    if (!id) {
+    if (!streamIdValue) {
       setError('Stream ID not found');
       setIsLoadingStream(false);
       return;
@@ -276,7 +277,7 @@ export default function StreamRoom() {
               level
             )
           `)
-          .eq('id', id)
+          .eq('id', streamIdValue)
           .single();
 
         if (streamError || !data) {
@@ -372,7 +373,7 @@ export default function StreamRoom() {
     };
 
     loadStream();
-  }, [id, user, profile]);
+  }, [streamIdValue, user, profile]);
 
   // Update guest slots when stream loads
   useEffect(() => {
@@ -397,7 +398,7 @@ export default function StreamRoom() {
         if (!canDrop) return;
 
         const color = Math.random() > 0.5 ? 'green' : 'red';
-        const drop = await createTrollDrop(stream.id, color);
+        const drop = await createTrollDrop(stream.id, color, user?.id);
         
         if (drop) {
           setActiveTrollDrop(drop);
@@ -1881,13 +1882,13 @@ export default function StreamRoom() {
       />
 
       <JoinRequestsPanel
-        streamId={stream?.id || id || ''}
+        streamId={stream?.id || streamIdValue || ''}
         isHost={isHost}
         onRequestApproved={handleJoinRequestApproved}
       />
 
       <OfficerInviteModal
-        streamId={stream?.id || id || ''}
+        streamId={stream?.id || streamIdValue || ''}
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         onUserInvited={handleJoinRequestApproved}

@@ -1,22 +1,12 @@
 import { X, Send } from "lucide-react";
 import { useState } from "react";
 
-interface ProfileModalProps {
-  profile: { name: string };
-  onClose: () => void;
-  onSendCoins?: (amount: number) => void;
-}
-
-export default function ProfileModal({
-  profile,
-  onClose,
-  onSendCoins,
-}: ProfileModalProps) {
+export default function ProfileModal({ profile, onClose, onSendCoins }) {
   const [coinAmount, setCoinAmount] = useState(100);
   const [sent, setSent] = useState(false);
 
   const handleSendCoins = () => {
-    onSendCoins?.(coinAmount);
+    onSendCoins(coinAmount);
     setSent(true);
     setTimeout(() => {
       onClose();

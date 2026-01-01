@@ -46,7 +46,7 @@ export default function UserInventory() {
       if (itemIds.length) {
         const { data: itemsData, error: itemsError } = await supabase
           .from('marketplace_items')
-          .select('id, title, description, thumbnail_url, type')
+          .select('id, title, description, type')
           .in('id', itemIds)
 
         if (itemsError) throw itemsError
@@ -188,20 +188,6 @@ export default function UserInventory() {
 
               return (
                 <div key={item.id} className="bg-zinc-900 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-all">
-                  {/* Item Image */}
-                  {item.marketplace_item?.thumbnail_url && (
-                    <div className="mb-4">
-                      <img
-                        src={item.marketplace_item.thumbnail_url}
-                        alt={item.marketplace_item.title}
-                        className="w-full h-32 object-cover rounded-lg"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none'
-                        }}
-                      />
-                    </div>
-                  )}
-
                   {/* Item Info */}
                   <div className="mb-4">
                     <div className="flex items-center gap-2 mb-2">

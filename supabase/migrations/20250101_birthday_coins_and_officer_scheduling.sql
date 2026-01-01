@@ -286,7 +286,9 @@ BEGIN
 
   -- Calculate hours worked
   v_hours_worked := EXTRACT(EPOCH FROM (NOW() - v_shift_log.shift_start)) / 3600.0;
-  v_coins_earned := FLOOR(v_hours_worked * 10000000); -- 10 million coins per hour
+  -- NOTE: Previously this was 10,000,000 coins/hour which was a test value and breaks the economy.
+  -- Default to a sane baseline rate; if you later add tiered pay, update this to use that field.
+  v_coins_earned := FLOOR(v_hours_worked * 800); -- 800 free coins per hour
 
   -- Update shift log
   UPDATE officer_shift_logs

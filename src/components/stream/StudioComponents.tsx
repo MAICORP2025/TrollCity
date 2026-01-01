@@ -54,6 +54,7 @@ export function StreamStage({
   className = '',
   isConnected,
   isConnecting,
+  autoConnect = true,
   children,
 }: {
   roomName: string
@@ -64,11 +65,9 @@ export function StreamStage({
   className?: string
   isConnected: boolean
   isConnecting: boolean
+  autoConnect?: boolean
   children?: React.ReactNode
 }) {
-  const _status = isConnected ? 'Connected' : isConnecting ? 'Connecting' : 'Disconnected'
-  const showOverlay = !isConnected && !isConnecting
-
   return (
     <div className={`rounded-[32px] border border-purple-500/30 bg-gradient-to-br from-[#06010b] to-[#150027] p-4 shadow-[0_30px_90px_rgba(52,16,153,0.55)] ${className}`}>
       <div className="relative overflow-hidden rounded-[28px] border border-white/5 bg-black/80">
@@ -77,15 +76,10 @@ export function StreamStage({
           identity={identity}
           role={role || 'viewer'}
           allowPublish={allowPublish}
-          autoConnect={true}
+          autoConnect={autoConnect}
           maxParticipants={maxParticipants}
           className="h-[420px] w-full"
         />
-        {showOverlay && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-[28px] bg-black/60 text-center text-white">
-            <p className="text-lg font-semibold">Waiting for connection…</p>
-          </div>
-        )}
         {children && (
           <div className="absolute right-6 top-1/2 hidden -translate-y-1/2 flex-col items-center gap-3 lg:flex">
             {children}

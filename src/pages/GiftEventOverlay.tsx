@@ -10,7 +10,7 @@ export default function GiftEventOverlay({ gift }: any) {
   useEffect(() => {
     if (!gift) return
     setVisible(true)
-    const timer = setTimeout(() => setVisible(false), 5000)
+    const timer = setTimeout(() => setVisible(false), 3000)
     return () => clearTimeout(timer)
   }, [gift])
 
@@ -71,7 +71,10 @@ export default function GiftEventOverlay({ gift }: any) {
         )}
       </div>
 
-      <GiftSoundPlayer giftId={gift.id} />
+      {/* Play sound only for single-item sends */}
+      {(gift.quantity === undefined || Number(gift.quantity) === 1) && (
+        <GiftSoundPlayer giftId={String(gift.id)} />
+      )}
       {gift.id === 'trollwheel' && <WheelModal />}
     </>
   )

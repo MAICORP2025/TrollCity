@@ -60,7 +60,7 @@ export const useGoLiveFlow = () => {
             description: config.description || '',
             audience_type: config.audience || 'public',
             allow_gifts: config.allowGifts !== false,
-            room_name: streamId,
+            room_name: `stream-${streamId}`,
             is_live: false,
             status: 'preparing',
             viewer_count: 0,

@@ -40,35 +40,6 @@ export default function EntranceEffect({ username, role }: EntranceEffectProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 animate-pulse">
-      <style jsx>{`
-        @keyframes slideInUp {
-          from {
-            opacity: 0;
-            transform: translateY(50px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes glowPulse {
-          0%, 100% {
-            filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.5));
-          }
-          50% {
-            filter: drop-shadow(0 0 40px rgba(255, 255, 255, 0.8));
-          }
-        }
-
-        .entrance-text {
-          animation: slideInUp 0.8s ease-out;
-        }
-
-        .glow {
-          animation: glowPulse 1s ease-in-out infinite;
-        }
-      `}</style>
 
       <div className="entrance-text text-center">
         <div className={`text-8xl mb-4 glow`}>{config.emoji}</div>

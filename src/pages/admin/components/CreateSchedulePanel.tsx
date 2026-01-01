@@ -3,11 +3,12 @@ import { supabase } from '../../../lib/supabase'
 import { toast } from 'sonner'
 import { Calendar, Clock, User, Plus, Trash2, CheckCircle } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
+import { useAuthStore } from '../../../lib/store'
 
 interface Officer {
   id: string
   username: string
-  email: string
+  email?: string
   is_troll_officer: boolean
 }
 
@@ -22,6 +23,7 @@ interface ScheduleSlot {
 }
 
 export default function CreateSchedulePanel() {
+  const { profile } = useAuthStore()
   const [officers, setOfficers] = useState<Officer[]>([])
   const [selectedOfficer, setSelectedOfficer] = useState<string>('')
   const [selectedDate, setSelectedDate] = useState('')
@@ -31,13 +33,26 @@ export default function CreateSchedulePanel() {
   const [loading, setLoading] = useState(false)
   const [loadingSchedules, setLoadingSchedules] = useState(true)
 
+  const canViewEmails = profile?.role === 'admin' || (profile as any)?.is_admin === true
+
+  // Auto-generate state
+  const [autoStartDate, setAutoStartDate] = useState('')
+  const [autoDays, setAutoDays] = useState(7)
+  const [autoStartTime, setAutoStartTime] = useState('09:00')
+  const [autoEndTime, setAutoEndTime] = useState('17:00')
+
   // Load all troll officers (exclude admins - they don't need shifts)
   const loadOfficers = async () => {
     try {
+      const selectFields = canViewEmails
+        ? 'id, username, email, is_troll_officer, is_lead_officer, role, is_admin'
+        : 'id, username, is_troll_officer, is_lead_officer, role, is_admin'
+
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, email, is_troll_officer, role, is_admin')
-        .or('is_troll_officer.eq.true,role.eq.troll_officer')
+        .select(selectFields as any)
+        // Include both troll officers and lead officers
+        .or('is_troll_officer.eq.true,is_lead_officer.eq.true,role.eq.troll_officer,role.eq.lead_troll_officer')
         .neq('role', 'admin')  // Exclude admins from shift scheduling
         .eq('is_admin', false)  // Also exclude by is_admin flag
         .order('username', { ascending: true })
@@ -109,6 +124,71 @@ export default function CreateSchedulePanel() {
       supabase.removeChannel(channel)
     }
   }, [])
+
+  // Default autoStartDate to today once
+  useEffect(() => {
+    if (!autoStartDate) {
+      const today = new Date().toISOString().split('T')[0]
+      setAutoStartDate(today)
+    }
+  }, [autoStartDate])
+
+  const handleAutoGenerate = async () => {
+    if (!autoStartDate || !autoStartTime || !autoEndTime) {
+      toast.error('Please fill in auto-generate fields')
+      return
+    }
+    if (autoStartTime >= autoEndTime) {
+      toast.error('End time must be after start time')
+      return
+    }
+
+    const days = Math.max(1, Math.min(31, Number(autoDays) || 7))
+
+    setLoading(true)
+    try {
+      const start = new Date(autoStartDate + 'T00:00:00')
+      const dateStrings: string[] = []
+      for (let i = 0; i < days; i++) {
+        const d = new Date(start)
+        d.setDate(start.getDate() + i)
+        dateStrings.push(d.toISOString().split('T')[0])
+      }
+
+      const officerIds = officers.map((o) => o.id).filter(Boolean)
+      if (!officerIds.length) {
+        toast.error('No officers found to schedule')
+        return
+      }
+
+      const rows = officerIds.flatMap((officerId) =>
+        dateStrings.map((shift_date) => ({
+          officer_id: officerId,
+          shift_date,
+          shift_start_time: autoStartTime,
+          shift_end_time: autoEndTime,
+          status: 'scheduled',
+        })),
+      )
+
+      const { error } = await supabase
+        .from('officer_shift_slots')
+        .upsert(rows as any, {
+          onConflict: 'officer_id,shift_date,shift_start_time',
+          ignoreDuplicates: true,
+        })
+
+      if (error) throw error
+
+      toast.success(`Auto-generated schedules for ${officerIds.length} officers (${days} days)`) 
+      await loadSchedules()
+    } catch (err: any) {
+      console.error('Error auto-generating schedules:', err)
+      toast.error(err?.message || 'Failed to auto-generate schedules')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleCreateSchedule = async () => {
     if (!selectedOfficer || !selectedDate || !startTime || !endTime) {
@@ -205,6 +285,64 @@ export default function CreateSchedulePanel() {
         </h2>
       </div>
 
+      {/* Auto Generate */}
+      <div className="bg-[#1A1A1A] border border-purple-500/30 rounded-xl p-6">
+        <h3 className="text-xl font-bold mb-4 text-white">Auto-generate Schedules (All Officers)</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Start Date</label>
+            <input
+              type="date"
+              value={autoStartDate}
+              onChange={(e) => setAutoStartDate(e.target.value)}
+              min={today}
+              className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Days</label>
+            <input
+              type="number"
+              min={1}
+              max={31}
+              value={autoDays}
+              onChange={(e) => setAutoDays(parseInt(e.target.value) || 7)}
+              className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Start Time</label>
+            <input
+              type="time"
+              value={autoStartTime}
+              onChange={(e) => setAutoStartTime(e.target.value)}
+              className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">End Time</label>
+            <input
+              type="time"
+              value={autoEndTime}
+              onChange={(e) => setAutoEndTime(e.target.value)}
+              className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={handleAutoGenerate}
+          disabled={loading || officers.length === 0}
+          className="mt-4 px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+        >
+          <CheckCircle className="w-4 h-4" />
+          {loading ? 'Generating...' : 'Generate for All Officers'}
+        </button>
+        <p className="text-xs text-gray-500 mt-2">
+          Excludes admins. Includes troll officers and lead officers. Duplicates are ignored.
+        </p>
+      </div>
+
       {/* Create Schedule Form */}
       <div className="bg-[#1A1A1A] border border-purple-500/30 rounded-xl p-6">
         <h3 className="text-xl font-bold mb-4 text-white">Create New Schedule</h3>
@@ -219,7 +357,7 @@ export default function CreateSchedulePanel() {
               <option value="">Select Officer</option>
               {officers.map((officer) => (
                 <option key={officer.id} value={officer.id}>
-                  {officer.username} ({officer.email})
+                  {canViewEmails && officer.email ? `${officer.username} (${officer.email})` : officer.username}
                 </option>
               ))}
             </select>

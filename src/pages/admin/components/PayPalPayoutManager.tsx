@@ -30,8 +30,11 @@ export default function PayPalPayoutManager() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved'>('pending')
 
   // Check if user is admin or lead officer
-  const isAdmin = profile?.role === 'admin'
-  const isLeadOfficer = profile?.officer_role === 'lead_officer'
+  const isAdmin = profile?.role === 'admin' || (profile as any)?.is_admin === true
+  const isLeadOfficer =
+    profile?.role === 'lead_troll_officer' ||
+    (profile as any)?.is_lead_officer === true ||
+    (profile as any)?.officer_role === 'lead_officer'
   const canViewPaymentInfo = isAdmin // Only admins can see full payment info
   const canProcessPayouts = isAdmin || isLeadOfficer
 
@@ -44,16 +47,11 @@ export default function PayPalPayoutManager() {
   const loadPayouts = async () => {
     setLoading(true)
     try {
+      // NOTE: Avoid FK-name joins (e.g. user_profiles!payout_requests_user_id_fkey) because
+      // schema-cache/constraint-name drift can cause PGRST200. Hydrate in a second query.
       let query = supabase
         .from('payout_requests')
-        .select(`
-          *,
-          user_profiles!payout_requests_user_id_fkey (
-            username,
-            email,
-            payout_paypal_email
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       // Apply status filter
@@ -67,20 +65,51 @@ export default function PayPalPayoutManager() {
 
       if (error) throw error
 
+      const raw = data || []
+
+      const userIds = Array.from(
+        new Set(
+          raw
+            .map((p: any) => p.user_id)
+            .filter((id: any) => typeof id === 'string' && id.length > 0 && id !== 'null'),
+        ),
+      )
+
+      const userProfileMap = new Map<string, any>()
+      if (userIds.length) {
+        const userSelect = canViewPaymentInfo
+          ? 'id, username, email, payout_paypal_email'
+          : 'id, username'
+
+        const { data: usersData, error: usersError } = await supabase
+          .from('user_profiles')
+          .select(userSelect)
+          .in('id', userIds)
+
+        if (usersError) {
+          console.warn('Failed to hydrate payout user profiles (non-fatal):', usersError)
+        } else {
+          ;(usersData || []).forEach((u: any) => userProfileMap.set(u.id, u))
+        }
+      }
+
       // Transform data
-      const transformedPayouts: PayoutRequest[] = (data || []).map((p: any) => ({
-        id: p.id,
-        user_id: p.user_id,
-        username: p.user_profiles?.username || 'Unknown',
-        email: p.user_profiles?.email || '',
-        payout_paypal_email: p.user_profiles?.payout_paypal_email || '',
-        coins_used: p.coins_used || p.coin_amount || 0,
-        cash_amount: Number(p.cash_amount || p.amount_usd || 0),
-        status: p.status,
-        created_at: p.created_at,
-        processed_at: p.processed_at,
-        processed_by: p.processed_by
-      }))
+      const transformedPayouts: PayoutRequest[] = raw.map((p: any) => {
+        const u = userProfileMap.get(p.user_id)
+        return {
+          id: p.id,
+          user_id: p.user_id,
+          username: u?.username || 'Unknown',
+          email: canViewPaymentInfo ? (u?.email || '') : '',
+          payout_paypal_email: canViewPaymentInfo ? (u?.payout_paypal_email || '') : '',
+          coins_used: p.coins_used || p.coin_amount || 0,
+          cash_amount: Number(p.cash_amount || p.amount_usd || 0),
+          status: p.status,
+          created_at: p.created_at,
+          processed_at: p.processed_at,
+          processed_by: p.processed_by,
+        }
+      })
 
       setPayouts(transformedPayouts)
     } catch (error: any) {

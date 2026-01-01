@@ -7,7 +7,7 @@ import {
   createLocalAudioTrack,
 } from 'livekit-client'
 import { LIVEKIT_URL, defaultLiveKitOptions } from './LiveKitConfig'
-import api from './api'
+import { toast } from 'sonner'
 
 export interface LiveKitParticipant {
   identity: string
@@ -37,6 +37,7 @@ export interface LiveKitServiceConfig {
   allowPublish?: boolean // Whether to allow publishing camera/mic
   preflightStream?: MediaStream
   autoPublish?: boolean
+  tokenOverride?: string // For testing or special cases
 }
 
 export class LiveKitService {
@@ -56,10 +57,10 @@ export class LiveKitService {
       roomName: config.roomName,
       identity: config.identity,
       userId: config.user?.id,
+      allowPublish: config.allowPublish,
+      role: config.role || config.user?.role,
     })
   }
-
-  // Constructor replaced with singleton pattern
 
   /* =========================
      PUBLISH GUARDS
@@ -77,43 +78,71 @@ export class LiveKitService {
     return !!this.localVideoTrack || !!this.localAudioTrack
   }
 
+  private canPublish(): boolean {
+    return this.config.allowPublish === true
+  }
+
   /* =========================
      Main connection method
   ========================= */
 
-  async connect(): Promise<boolean> {
+  async connect(tokenOverride?: string): Promise<boolean> {
     // Hard guard: prevent multiple connections
     if (this.room || this.isConnecting) {
       this.log('Already connected or connecting')
       return true
     }
 
-    // Connection lock to prevent death-loops
     this.isConnecting = true
-    this.log('Starting connection process...')
+    this.log('Starting connection process...', {
+      allowPublish: this.config.allowPublish,
+      role: this.config.role || this.config.user?.role,
+    })
 
     try {
-      // Step 1: Get LiveKit token
-      const tokenResponse = await this.getToken()
-      if (!tokenResponse?.token) {
-        throw new Error('Failed to get LiveKit token')
+      // Step 1: Get LiveKit token (unless overridden)
+      let token: string | undefined = undefined
+      if (tokenOverride) {
+        token = tokenOverride
+      } else {
+        const tokenResponse = await this.getToken()
+        if (!tokenResponse?.token) {
+          throw new Error('Failed to get LiveKit token')
+        }
+        token = tokenResponse.token
       }
-
-      const token = tokenResponse.token
 
       // Runtime invariant: ensure token is valid string
-      if (typeof token !== "string") {
-        console.error("🚨 LiveKit token is NOT a string", token)
-        throw new Error("Invalid LiveKit token type")
+      if (typeof token !== 'string') {
+        console.error('🚨 LiveKit token is NOT a string', token)
+        throw new Error('Invalid LiveKit token type')
       }
 
-      if (!token.startsWith("eyJ")) {
-        console.error("🚨 LiveKit token is not JWT", token)
-        throw new Error("Invalid LiveKit token format")
+      if (!token.startsWith('eyJ')) {
+        console.error('🚨 LiveKit token is not JWT', token)
+        throw new Error('Invalid LiveKit token format')
+      }
+
+      // Debug: log token length and decoded payload for troubleshooting publish permissions
+      try {
+        this.log('🔐 LiveKit token length', { length: token.length })
+        const parts = token.split('.')
+        if (parts.length >= 2) {
+          const payload = JSON.parse(decodeURIComponent(escape(atob(parts[1]))))
+          this.log('🔐 LiveKit token payload', payload)
+          // Helpful quick fields
+          this.log('🔐 Token room/canPublish', {
+            tokenRoom: payload?.room ?? payload?.r ?? null,
+            canPublish: payload?.allowPublish ?? payload?.canPublish ?? null,
+          })
+        } else {
+          this.log('🔐 LiveKit token (raw preview)', token.substring(0, 60) + '...')
+        }
+      } catch (e) {
+        this.log('🔐 Failed to decode LiveKit token payload', e?.message || e)
       }
 
       // Step 2: Create room with configuration
-      // NOTE: Do NOT spread this.config into Room() because it contains non-Room keys (callbacks/user/etc).
       this.room = new Room({
         ...defaultLiveKitOptions,
       })
@@ -122,26 +151,39 @@ export class LiveKitService {
       this.setupEventListeners()
 
       // Step 4: Connect to room
-      this.log('Connecting to LiveKit room...')
-      await this.room.connect(LIVEKIT_URL, token)
+      this.log('Connecting to LiveKit room...', { LIVEKIT_URL, roomName: this.config.roomName, identity: this.config.identity })
+
+      // Fallback check: LIVEKIT_URL should be a secure websocket endpoint
+      if (typeof LIVEKIT_URL === 'string' && !LIVEKIT_URL.startsWith('wss://')) {
+        console.error('LIVEKIT_URL does not start with wss:// — blocking connect', LIVEKIT_URL)
+        toast.error('LiveKit connection failed: check LIVEKIT_URL, token, or server availability')
+        this.isConnecting = false
+        return false
+      }
+
+      try {
+        await this.room.connect(LIVEKIT_URL, token)
+      } catch (err) {
+        // Log the full error object for debugging
+        console.error('LiveKit room.connect error:', err)
+        this.log('❌ room.connect threw an error', err)
+        toast.error('LiveKit connection failed: check LIVEKIT_URL, token, or server availability')
+        this.isConnecting = false
+        this.config.onError?.((err as any)?.message || 'LiveKit connect failed')
+        return false
+      }
 
       // Ensure local participant exists in map as soon as we connect
       this.updateLocalParticipantState()
 
-      // ✅ Hydrate participants already in the room (important when you join late)
+      // ✅ Hydrate participants already in the room
       this.hydrateExistingRemoteParticipants()
 
-      const shouldAutoPublish = this.config.allowPublish && this.config.autoPublish !== false
-      if (shouldAutoPublish) {
-        try {
-          await this.room!.localParticipant.enableCameraAndMicrophone()
-          this.log('✅ Camera and microphone enabled and published')
-        } catch (e: any) {
-          this.log('❌ Failed to enable/publish camera and microphone:', e?.message)
-          this.config.onError?.(e?.message || 'Failed to enable media')
-        }
-      } else if (this.config.allowPublish) {
-        this.log('Auto publish disabled - waiting for manual startPublishing')
+      // Publishing is handled by the caller/session hook to avoid duplicate preflight publishes.
+      if (!this.canPublish()) {
+        this.log('Viewer mode detected - publishing blocked')
+      } else {
+        this.log('✅ Connected. Publishing handled by caller/session hook.')
       }
 
       this.log('✅ Connection successful')
@@ -149,17 +191,19 @@ export class LiveKitService {
       this.isConnecting = false
       return true
     } catch (error: any) {
-      this.log('❌ Connection failed:', error.message)
-      this.config.onError?.(error.message || 'Failed to connect to stream')
+      console.error('❌ LiveKitService.connect failed FULL error:', error)
+
+      this.log('❌ Connection failed:', error?.message || String(error))
+
+      this.config.onError?.(error?.message || 'Failed to connect')
       this.isConnecting = false
       return false
     }
   }
 
-private hydrateExistingRemoteParticipants(): void {
-  if (!this.room) return
+  private hydrateExistingRemoteParticipants(): void {
+    if (!this.room) return
 
-  // remoteParticipants is a Map<string, RemoteParticipant> in the livekit-client types
     this.room.remoteParticipants.forEach((participant: any) => {
       if (this.participants.has(participant.identity)) return
 
@@ -174,70 +218,13 @@ private hydrateExistingRemoteParticipants(): void {
       }
 
       this.participants.set(participant.identity, liveKitParticipant)
-    this.config.onParticipantJoined?.(liveKitParticipant)
-  })
-}
-
-  /* =========================
-     IMMEDIATE media capture and publishing
-     (kept as your original design)
-  ========================= */
-
-  private async immediateMediaCaptureAndPublish(): Promise<void> {
-    if (!this.room || this.room.state !== 'connected') {
-      throw new Error('Room not connected')
-    }
-
-    // ✅ Hard guard: never publish twice
-    if (this.isPublishing()) {
-      this.log('⛔ Already publishing - immediate capture skipped')
-      return
-    }
-
-    this.log('🎥 Starting immediate media capture and publishing...')
-
-    try {
-      const [videoTrack, audioTrack] = await Promise.all([
-        this.captureVideoTrack(),
-        this.captureAudioTrack(),
-      ])
-
-      // Store references to prevent GC
-      this.localVideoTrack = videoTrack
-      this.localAudioTrack = audioTrack
-
-      if (videoTrack) {
-        await this.publishVideoTrack(videoTrack)
-      }
-
-      if (audioTrack) {
-        await this.publishAudioTrack(audioTrack)
-      }
-
-      this.updateLocalParticipantState()
-
-      this.log('✅ Media capture and publishing complete')
-    } catch (error: any) {
-      this.log('❌ Media capture/publishing failed:', error.message)
-      this.config.onError?.(`Media access failed: ${error.message}`)
-
-      if (this.localVideoTrack) {
-        this.localVideoTrack.stop()
-        this.localVideoTrack = null
-      }
-      if (this.localAudioTrack) {
-        this.localAudioTrack.stop()
-        this.localAudioTrack = null
-      }
-
-      throw error
-    }
+      this.config.onParticipantJoined?.(liveKitParticipant)
+    })
   }
 
   private async publishMediaStream(stream: MediaStream): Promise<void> {
-    if (!this.room?.localParticipant) {
-      throw new Error('Room not connected')
-    }
+    if (!this.room?.localParticipant) throw new Error('Room not connected')
+    if (!this.canPublish()) throw new Error('Publishing not allowed for this user')
 
     const videoTrack = stream.getVideoTracks()[0]
     const audioTrack = stream.getAudioTracks()[0]
@@ -246,117 +233,49 @@ private hydrateExistingRemoteParticipants(): void {
       throw new Error('No video or audio track available from preflight stream')
     }
 
-    try {
-      if (videoTrack) {
-        this.log('dY"1 Wrapping preflight video track...')
-        this.localVideoTrack = new LocalVideoTrack(videoTrack)
-        await this.publishVideoTrack(this.localVideoTrack)
-      }
-      if (audioTrack) {
-        this.log('dY"1 Wrapping preflight audio track...')
-        this.localAudioTrack = new LocalAudioTrack(audioTrack)
-        await this.publishAudioTrack(this.localAudioTrack)
-      }
-
-      await this.room.localParticipant.setCameraEnabled(!!videoTrack)
-      await this.room.localParticipant.setMicrophoneEnabled(!!audioTrack)
-      this.updateLocalParticipantState()
-      this.log('ƒo. Preflight stream published')
-    } catch (error: any) {
-      this.log('ƒ?O Preflight stream publish failed:', error.message)
-      if (this.localVideoTrack) {
-        this.localVideoTrack.stop()
-        this.localVideoTrack = null
-      }
-      if (this.localAudioTrack) {
-        this.localAudioTrack.stop()
-        this.localAudioTrack = null
-      }
-      throw error
+    if (videoTrack) {
+      this.localVideoTrack = new LocalVideoTrack(videoTrack)
+      await this.room.localParticipant.publishTrack(this.localVideoTrack as any)
     }
-  }
 
-  /* =========================
-     Capture tracks
-  ========================= */
+    if (audioTrack) {
+      this.localAudioTrack = new LocalAudioTrack(audioTrack)
+      await this.room.localParticipant.publishTrack(this.localAudioTrack as any)
+    }
+
+    this.updateLocalParticipantState()
+    this.log('✅ Preflight stream published successfully')
+  }
 
   private async captureVideoTrack(): Promise<LocalVideoTrack | null> {
     try {
-      this.log('📹 Capturing video track...')
       const track = await createLocalVideoTrack({
         resolution: { width: 1280, height: 720 },
         frameRate: { ideal: 30, max: 60 },
       } as any)
-      this.log('✅ Video track captured')
       return track
     } catch (error: any) {
-      this.log('❌ Video capture failed:', error.message)
       throw new Error(`Camera access failed: ${error.message}`)
     }
   }
 
   private async captureAudioTrack(): Promise<LocalAudioTrack | null> {
     try {
-      this.log('🎤 Capturing audio track...')
       const track = await createLocalAudioTrack({
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       } as any)
-      this.log('✅ Audio track captured')
       return track
     } catch (error: any) {
-      this.log('❌ Audio capture failed:', error.message)
       throw new Error(`Microphone access failed: ${error.message}`)
     }
   }
-
-  /* =========================
-     Publish helpers
-  ========================= */
-
-  private async publishVideoTrack(track: LocalVideoTrack): Promise<void> {
-    if (!this.room?.localParticipant) {
-      throw new Error('No local participant available')
-    }
-
-    try {
-      this.log('📤 Publishing video track...')
-      await this.room.localParticipant.publishTrack(track as any)
-      this.log('✅ Video track published')
-    } catch (error: any) {
-      this.log('❌ Video publishing failed:', error.message)
-      track.stop()
-      throw error
-    }
-  }
-
-  private async publishAudioTrack(track: LocalAudioTrack): Promise<void> {
-    if (!this.room?.localParticipant) {
-      throw new Error('No local participant available')
-    }
-
-    try {
-      this.log('📤 Publishing audio track...')
-      await this.room.localParticipant.publishTrack(track as any)
-      this.log('✅ Audio track published')
-    } catch (error: any) {
-      this.log('❌ Audio publishing failed:', error.message)
-      track.stop()
-      throw error
-    }
-  }
-
-  /* =========================
-     Local participant state sync
-  ========================= */
 
   private updateLocalParticipantState(): void {
     if (!this.room?.localParticipant) return
 
     const p = this.room.localParticipant
-
-    // Get tracks from publications if available, otherwise from stored references
     const videoPub = Array.from(p.videoTrackPublications.values())[0]
     const audioPub = Array.from(p.audioTrackPublications.values())[0]
 
@@ -377,10 +296,6 @@ private hydrateExistingRemoteParticipants(): void {
 
     this.participants.set(localParticipant.identity, localParticipant)
   }
-
-  /* =========================
-     Event listeners
-  ========================= */
 
   private setupEventListeners(): void {
     if (!this.room) return
@@ -424,16 +339,12 @@ private hydrateExistingRemoteParticipants(): void {
       }
     })
 
-    // ✅ store remote tracks as { track } to match UI expectations
     this.room.on(RoomEvent.TrackSubscribed, (track: any, publication: any, participant: any) => {
       this.log('📥 Track subscribed:', track.kind, participant.identity)
       const liveKitParticipant = this.participants.get(participant.identity)
       if (liveKitParticipant) {
-        if (track.kind === 'video') {
-          liveKitParticipant.videoTrack = { track }
-        } else if (track.kind === 'audio') {
-          liveKitParticipant.audioTrack = { track }
-        }
+        if (track.kind === 'video') liveKitParticipant.videoTrack = { track }
+        if (track.kind === 'audio') liveKitParticipant.audioTrack = { track }
         liveKitParticipant.metadata = participant.metadata
         this.config.onTrackSubscribed?.(track, liveKitParticipant)
       }
@@ -443,195 +354,218 @@ private hydrateExistingRemoteParticipants(): void {
       this.log('📤 Track unsubscribed:', track.kind, participant.identity)
       const liveKitParticipant = this.participants.get(participant.identity)
       if (liveKitParticipant) {
-        if (track.kind === 'video' && liveKitParticipant.videoTrack?.track === track) {
-          liveKitParticipant.videoTrack = undefined
-        }
-        if (track.kind === 'audio' && liveKitParticipant.audioTrack?.track === track) {
-          liveKitParticipant.audioTrack = undefined
-        }
+        if (track.kind === 'video') liveKitParticipant.videoTrack = undefined
+        if (track.kind === 'audio') liveKitParticipant.audioTrack = undefined
         this.config.onTrackUnsubscribed?.(track, liveKitParticipant)
       }
     })
-
-    // ✅ keep mute state accurate for UI
-    this.room.on(RoomEvent.TrackMuted, (_pub: any, participant: any) => {
-      const p = this.participants.get(participant.identity)
-      if (p) p.isMuted = true
-    })
-
-    this.room.on(RoomEvent.TrackUnmuted, (_pub: any, participant: any) => {
-      const p = this.participants.get(participant.identity)
-      if (p) p.isMuted = false
-    })
-
-    this.room.on(RoomEvent.ConnectionQualityChanged, (quality: any, participant: any) => {
-      this.log('📊 Connection quality changed:', quality, participant?.identity)
-    })
   }
 
-  /* =========================
-     Token (identity fixed)
-  ========================= */
-
   private async getToken(): Promise<any> {
-    if (!this.config.identity) {
-      throw new Error('Identity is required for LiveKit token')
+    if ((this.config as any).token) {
+      return { token: (this.config as any).token }
     }
 
+    if (!this.config.identity) throw new Error('Identity is required for LiveKit token')
+
     try {
-      const response = await api.post('/livekit-token', {
+      // ✅ Only publish tokens when allowPublish === true (hard safety)
+      const allowPublish = this.config.allowPublish === true
+
+      // Normalize role: treat internal "admin" as "broadcaster" for LiveKit token requests
+      let roleToSend = this.config.role || this.config.user?.role || 'viewer'
+      if (roleToSend === 'admin') roleToSend = 'broadcaster'
+
+      const requestBody = {
         room: this.config.roomName,
         identity: this.config.identity,
         user_id: this.config.user?.id,
-        role:
-          this.config.role ||
-          this.config.user?.role ||
-          this.config.user?.troll_role ||
-          'viewer',
+        role: roleToSend,
         level: this.config.user?.level || 1,
-        allowPublish: this.config.allowPublish !== false,
+        allowPublish,
+      }
+
+      this.log('🔑 Requesting LiveKit token...', {
+        endpoint: '/livekit-token',
+        body: requestBody,
+        allowPublish,
+        userId: this.config.user?.id,
+        hasUser: !!this.config.user
       })
 
-      console.log('LiveKit token raw response:', response)
+      // Developer debug: show exact function payload
+      console.log('🟣 getToken() request payload:', {
+        room: this.config.roomName,
+        identity: this.config.identity,
+        allowPublish: this.config.allowPublish,
+      })
 
-      const data = response?.data ?? response
+      // Import supabase client to check session
+      const { supabase } = await import('./supabase')
+      const session = await supabase.auth.getSession()
+
+      if (!session.data.session?.access_token) {
+        throw new Error('No valid user session found. Please sign in again.')
+      }
+
+      this.log('🔑 Session validated, making API request...', {
+        hasToken: !!session.data.session.access_token,
+        tokenLength: session.data.session.access_token.length,
+        expiresAt: session.data.session.expires_at,
+        now: Math.floor(Date.now() / 1000)
+      })
+
+      // Call external token endpoint (Vercel). Set `VITE_LIVEKIT_TOKEN_URL` during frontend build
+      const tokenUrl = (import.meta as any).env?.VITE_LIVEKIT_TOKEN_URL || '/api/livekit-token'
+
+      const resp = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.data.session.access_token}`,
+        },
+        body: JSON.stringify({
+          room: this.config.roomName,
+          identity: this.config.identity,
+          user_id: this.config.user?.id,
+          role: this.config.role || this.config.user?.role || 'viewer',
+          level: this.config.user?.level || 1,
+          allowPublish: this.config.allowPublish !== false,
+        }),
+      })
+
+      let data: any = null
+      try {
+        data = await resp.json()
+      } catch (e) {
+        this.log('🔑 Failed to parse token endpoint response', e?.message || e)
+        throw new Error('Invalid token response from server')
+      }
+
+      console.log('🟢 getToken() response:', data)
+
+      if (!resp.ok) {
+        this.log('🔑 Token endpoint returned error', { status: resp.status, body: data })
+        const msg = data?.error || data?.message || `Token endpoint error ${resp.status}`
+        throw new Error(msg)
+      }
 
       if (!data?.token) {
-        console.error('LiveKit token API response data:', data)
-        throw new Error('No token received from server')
+        this.log('❌ No token in endpoint response', data)
+        throw new Error('No token returned from token endpoint')
       }
+
+      this.log('✅ Token received successfully:', {
+        tokenLength: data.token.length,
+        tokenPreview: data.token.substring(0, 20) + '...',
+        livekitUrl: data.livekitUrl,
+        allowPublish: data.allowPublish,
+      })
 
       return data
     } catch (error: any) {
-      this.log('❌ Token fetch failed:', error.message)
+      this.log('❌ Token fetch failed:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      })
+
+      // Provide user-friendly error messages
+      if (error.message.includes('No valid user session') || error.message.includes('no active session')) {
+        throw new Error('Please sign in to join the stream.')
+      } else if (error.message.includes('Authentication failed') || error.message.includes('session expired')) {
+        throw new Error('Your session has expired. Please sign in again.')
+      } else if (error.message.includes('No token received from server')) {
+        throw new Error('Server configuration error. Please try again later.')
+      } else if (error.message.includes('Unable to verify user session')) {
+        throw new Error('Session validation failed. Please sign in again.')
+      } else if (error.message.includes('User profile not found')) {
+        throw new Error('User profile not found. Please contact support.')
+      }
+
       throw new Error(`Authentication failed: ${error.message}`)
     }
   }
 
-  /* =========================
-     Public control methods
-  ========================= */
-
   async toggleCamera(): Promise<boolean> {
     if (!this.room?.localParticipant) return false
+    if (!this.canPublish()) return false
 
     try {
       const enabled = !this.room.localParticipant.isCameraEnabled
 
-      // ✅ If not publishing yet and user turns on camera, publish once
       if (enabled && !this.isPublishing()) {
-        // publish both camera+mic if you're going live; camera alone if that's your UI behavior
         const video = await this.captureVideoTrack()
         if (video) {
           this.localVideoTrack = video
-          await this.publishVideoTrack(video)
+          await this.room.localParticipant.publishTrack(video as any)
         }
       }
 
       await this.room.localParticipant.setCameraEnabled(enabled)
 
-      // If disabling, stop our stored track reference (LiveKit also manages internally)
       if (!enabled && this.localVideoTrack) {
-        try {
-          this.localVideoTrack.stop()
-        } catch {}
+        this.localVideoTrack.stop()
         this.localVideoTrack = null
       }
 
       this.updateLocalParticipantState()
-      this.log(`📹 Camera ${enabled ? 'enabled' : 'disabled'}`)
       return enabled
-    } catch (error: any) {
-      this.log('❌ Camera toggle failed:', error.message)
+    } catch {
       return false
     }
   }
 
   async toggleMicrophone(): Promise<boolean> {
     if (!this.room?.localParticipant) return false
+    if (!this.canPublish()) return false
 
     try {
       const enabled = !this.room.localParticipant.isMicrophoneEnabled
 
-      // ✅ If not publishing yet and user turns on mic, publish once
       if (enabled && !this.isPublishing()) {
         const audio = await this.captureAudioTrack()
         if (audio) {
           this.localAudioTrack = audio
-          await this.publishAudioTrack(audio)
+          await this.room.localParticipant.publishTrack(audio as any)
         }
       }
 
       await this.room.localParticipant.setMicrophoneEnabled(enabled)
 
       if (!enabled && this.localAudioTrack) {
-        try {
-          this.localAudioTrack.stop()
-        } catch {}
-        this.localAudioTrack = null
-      }
-
-      this.updateLocalParticipantState()
-      this.log(`🎤 Microphone ${enabled ? 'enabled' : 'disabled'}`)
-      return enabled
-    } catch (error: any) {
-      this.log('❌ Microphone toggle failed:', error.message)
-      return false
-    }
-  }
-
-  // Start publishing camera and microphone - user-triggered
-  async startPublishing(): Promise<void> {
-    if (!this.room || this.room.state !== 'connected') {
-      throw new Error('Room not connected')
-    }
-
-    // ✅ HARD GUARD: never publish twice
-    if (this.isPublishing()) {
-      this.log('⛔ Already publishing - startPublishing skipped')
-      return
-    }
-
-    this.log('🎥 Starting user-triggered media publishing...')
-
-    try {
-      const [videoTrack, audioTrack] = await Promise.all([
-        this.captureVideoTrack(),
-        this.captureAudioTrack(),
-      ])
-
-      this.localVideoTrack = videoTrack
-      this.localAudioTrack = audioTrack
-
-      if (videoTrack) await this.publishVideoTrack(videoTrack)
-      if (audioTrack) await this.publishAudioTrack(audioTrack)
-
-      await this.room.localParticipant.setCameraEnabled(true)
-      await this.room.localParticipant.setMicrophoneEnabled(true)
-
-      this.updateLocalParticipantState()
-      this.log('✅ User-triggered publishing complete')
-    } catch (error: any) {
-      this.log('❌ Publishing failed:', error.message)
-      this.config.onError?.(`Media publishing failed: ${error.message}`)
-
-      if (this.localVideoTrack) {
-        this.localVideoTrack.stop()
-        this.localVideoTrack = null
-      }
-      if (this.localAudioTrack) {
         this.localAudioTrack.stop()
         this.localAudioTrack = null
       }
 
       this.updateLocalParticipantState()
-      throw error
+      return enabled
+    } catch {
+      return false
     }
   }
 
-  /* =========================
-     Get current state
-  ========================= */
+  async startPublishing(): Promise<void> {
+    if (!this.room || this.room.state !== 'connected') throw new Error('Room not connected')
+    if (!this.canPublish()) throw new Error('Publishing not allowed for this user')
+    if (this.isPublishing()) return
+
+    const [videoTrack, audioTrack] = await Promise.all([
+      this.captureVideoTrack(),
+      this.captureAudioTrack(),
+    ])
+
+    this.localVideoTrack = videoTrack
+    this.localAudioTrack = audioTrack
+
+    if (videoTrack) await this.room.localParticipant.publishTrack(videoTrack as any)
+    if (audioTrack) await this.room.localParticipant.publishTrack(audioTrack as any)
+
+    await this.room.localParticipant.setCameraEnabled(!!videoTrack)
+    await this.room.localParticipant.setMicrophoneEnabled(!!audioTrack)
+
+    this.updateLocalParticipantState()
+  }
 
   getRoom(): Room | null {
     return this.room
@@ -650,21 +584,13 @@ private hydrateExistingRemoteParticipants(): void {
     return this.participants.get(this.room.localParticipant.identity) || null
   }
 
-  /* =========================
-     Cleanup and disconnect
-  ========================= */
-
   disconnect(): void {
     this.log('🔌 Disconnecting from LiveKit room...')
-
     if (this.room) {
       try {
         this.room.disconnect()
-      } catch (error: any) {
-        this.log('❌ Disconnect error:', error.message)
-      }
+      } catch { }
     }
-
     this.cleanup()
   }
 
@@ -672,14 +598,14 @@ private hydrateExistingRemoteParticipants(): void {
     if (this.localVideoTrack) {
       try {
         this.localVideoTrack.stop()
-      } catch {}
+      } catch { }
       this.localVideoTrack = null
     }
 
     if (this.localAudioTrack) {
       try {
         this.localAudioTrack.stop()
-      } catch {}
+      } catch { }
       this.localAudioTrack = null
     }
 

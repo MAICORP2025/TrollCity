@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { Crown, Video, PartyPopper, X } from 'lucide-react';
+import { Crown, Video, PartyPopper, X, Radio } from 'lucide-react';
 import { APP_DATA_REFETCH_EVENT_NAME as REFRESH_EVENT } from '../lib/appEvents';
 import { isBirthdayToday } from '../lib/birthdayUtils';
 import { useAuthStore } from '../lib/store';
+import { areUsersLive, getUserLiveStreamId } from '../lib/liveUtils';
 import BanPage from '../components/BanPage';
 import KickPage from '../components/KickPage';
 
@@ -38,7 +39,6 @@ type HomeUser = {
   avatar_url?: string | null;
   tier?: string | null;
   level?: number | null;
-  troll_coins?: number | null;
   troll_coins?: number | null;
   created_at?: string | null;
   role?: string | null;
@@ -483,6 +483,106 @@ const ChristmasOutline: React.FC<{ rowCount?: number; colCount?: number }> = ({
   );
 };
 
+const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) => void; isLive?: boolean; navigate: (path: string) => void }> = memo(({ user, onClick, isLive, navigate }) => {
+  const displayName = user.username || 'User';
+  const isAdmin = user.role === 'admin';
+  const profileRoute = `/profile/id/${user.id}`;
+
+  const handleProfileClick = () => {
+    onClick(profileRoute);
+  };
+
+  const handleLiveClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isLive) {
+      try {
+        const streamId = await getUserLiveStreamId(user.id);
+        if (streamId) {
+          navigate(`/broadcast/${streamId}`);
+        } else {
+          // Fallback to profile if stream ID not found
+          onClick(profileRoute);
+        }
+      } catch (error) {
+        console.error('Error getting live stream ID:', error);
+        onClick(profileRoute);
+      }
+    } else {
+      onClick(profileRoute);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleProfileClick}
+      className="relative group bg-gradient-to-br from-[#1f1535]/80 via-[#16102a]/60 to-[#0f0820]/40 rounded-xl p-4 border border-purple-500/30 hover:border-purple-400/60 shadow-lg hover:shadow-xl hover:shadow-purple-500/20 transition-all duration-300 flex flex-col items-center gap-3 overflow-hidden"
+    >
+      <div className="absolute inset-0 bg-gradient-to-t from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      <div className="relative z-10">
+        <div className="relative">
+          <img
+            src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
+            alt={displayName}
+            className={`w-20 h-20 rounded-full border-3 object-cover transition-all duration-300 ${
+              isAdmin
+                ? 'border-yellow-400/60 shadow-lg shadow-yellow-400/40 group-hover:shadow-yellow-400/60'
+                : 'border-cyan-400/60 shadow-lg shadow-cyan-400/30 group-hover:shadow-cyan-400/50'
+            } ${
+              isLive
+                ? 'live-user-neon shadow-[0_0_20px_rgba(255,0,100,0.8)] border-red-400/80 animate-pulse'
+                : ''
+            }`}
+          />
+          
+          {/* Live indicator overlay */}
+          {isLive && (
+            <div 
+              className="absolute -top-1 -right-1 bg-gradient-to-r from-red-500 to-pink-600 rounded-full p-1.5 border-2 border-white shadow-lg cursor-pointer hover:scale-110 transition-transform"
+              onClick={handleLiveClick}
+              title="Click to watch live stream"
+            >
+              <Radio className="w-3 h-3 text-white animate-pulse" />
+            </div>
+          )}
+          
+          {isAdmin && (
+            <div className="absolute -top-1 -left-1 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full p-1.5 border-2 border-black">
+              <Crown className="w-3 h-3 text-black" />
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="relative z-10 text-center flex-1 w-full">
+        <p className="text-lg font-semibold text-white truncate">{displayName}</p>
+        <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
+          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
+            isAdmin
+              ? 'bg-yellow-500/20 border border-yellow-400/50 text-yellow-300'
+              : 'bg-purple-500/20 border border-purple-400/50 text-purple-300'
+          }`}>
+            Lv {user.level ?? 1}
+          </span>
+          {isAdmin && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-500/20 border border-yellow-400/50 text-yellow-300">
+              Admin
+            </span>
+          )}
+          {isLive && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 border border-red-400/50 text-red-300 animate-pulse">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              LIVE
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+});
+
+NewUserCard.displayName = 'NewUserCard';
+
 // 🔑 Step 5: Background refresh pattern with dual-state buffering
 const HomePageContent = () => {
   const { profile } = useAuthStore();
@@ -567,6 +667,9 @@ const HomePageContent = () => {
   const [bufferedStreams, setBufferedStreams] = useState<HomeStream[]>([]); // dY Step 5: Buffered state for smooth transitions
   const [newUsers, setNewUsers] = useState<HomeUser[]>([]);
   const [bufferedUsers, setBufferedUsers] = useState<HomeUser[]>([]); // dY Step 5: Buffered state for users
+  const [liveUsers, setLiveUsers] = useState<Map<string, boolean>>(new Map()); // Track which users are live
+  const prevBufferedUsersRef = useRef<HomeUser[] | null>(null);
+  const prevBufferedStreamsRef = useRef<HomeStream[] | null>(null);
   const [_loadingLive, setLoadingLive] = useState(false);
   const [_loadingNewUsers, setLoadingNewUsers] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -616,9 +719,10 @@ const HomePageContent = () => {
   }, [feeMode, isDev]);
 
   useEffect(() => {
+    // Only update the page-level time once per minute to avoid constant re-renders.
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000);
+    }, 60_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -681,7 +785,13 @@ const HomePageContent = () => {
             }
             
             // dY"` Step 5: Dual-state buffering - update buffered state first
-            setBufferedStreams(normalizedRanked);
+            // Only update when the ranking changed to avoid re-render storms
+            const prevRank = prevBufferedStreamsRef.current;
+            const rankUnchanged = prevRank && prevRank.length === normalizedRanked.length && prevRank.every((p, i) => p.id === normalizedRanked[i].id);
+            if (!rankUnchanged) {
+              setBufferedStreams(normalizedRanked);
+              prevBufferedStreamsRef.current = normalizedRanked;
+            }
             return;
           }
         }
@@ -743,8 +853,13 @@ const HomePageContent = () => {
           return 0 // Keep original order for remaining ties
         })
         
-        // 🔑 Step 5: Dual-state buffering
-        setBufferedStreams(sortedStreams);
+        // 🔑 Step 5: Dual-state buffering - only update when changed
+        const prevRank2 = prevBufferedStreamsRef.current;
+        const rankUnchanged2 = prevRank2 && prevRank2.length === sortedStreams.length && prevRank2.every((p, i) => p.id === sortedStreams[i].id);
+        if (!rankUnchanged2) {
+          setBufferedStreams(sortedStreams);
+          prevBufferedStreamsRef.current = sortedStreams;
+        }
       } catch (e) {
         console.error(e);
         if (showLoading) toast.error('Failed to load live streams');
@@ -803,7 +918,7 @@ const HomePageContent = () => {
         // Prefer server-side RPC (bypasses RLS safely and avoids cross-user selects from the client).
         // Fallback to direct query if the RPC isn't deployed yet.
         let data: HomeUser[] | null = null;
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_recent_users', { limit_count: 100 });
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_recent_users', { limit_count: 25 });
         if (!rpcError && Array.isArray(rpcData)) {
           data = rpcData as HomeUser[];
         } else {
@@ -811,7 +926,7 @@ const HomePageContent = () => {
             .from('user_profiles')
             .select('id, username, avatar_url, tier, level, troll_coins, troll_coins, created_at, role, is_banned, banned_until')
             .order('created_at', { ascending: false })
-            .limit(100);
+            .limit(25);
           if (directError) throw directError;
           data = directData as HomeUser[];
         }
@@ -844,13 +959,19 @@ const HomePageContent = () => {
         
         console.log(`Loaded ${displayUsers.length} users (all profiles shown)`);
         
-        // 🔑 Step 5: Dual-state buffering
-        setBufferedUsers(displayUsers);
+        // 🔑 Step 5: Dual-state buffering - only update when users actually change
+        const prevUsers = prevBufferedUsersRef.current;
+        const usersUnchanged = prevUsers && prevUsers.length === displayUsers.length && prevUsers.every((p, i) => p.id === displayUsers[i].id);
+        if (!usersUnchanged) {
+          setBufferedUsers(displayUsers);
+          prevBufferedUsersRef.current = displayUsers;
+        }
       } catch (e: any) {
         console.error('Failed to load new users:', e);
         // Don't show error toast on initial load, just log it
         // toast.error('Failed to load new users');
         setBufferedUsers([]); // Set empty array instead of leaving it undefined
+        prevBufferedUsersRef.current = [];
       } finally {
         if (showLoading) setLoadingNewUsers(false);
       }
@@ -858,10 +979,10 @@ const HomePageContent = () => {
     loadNewUsersRef.current = loadNewUsers;
     loadNewUsers(true);
 
-    // Auto-refresh every 15 seconds (background, no loading state)
+    // Auto-refresh every 30 seconds (background, no loading state)
     const interval = setInterval(() => {
       loadNewUsers(false);
-    }, 15000);
+    }, 30000);
 
     // Real-time subscription for new user inserts
     const channel = supabase
@@ -886,6 +1007,31 @@ const HomePageContent = () => {
       setNewUsers(bufferedUsers);
     }
   }, [bufferedUsers]);
+
+  // Check which users are live
+  useEffect(() => {
+    const checkLiveUsers = async () => {
+      if (newUsers.length === 0) {
+        setLiveUsers(new Map());
+        return;
+      }
+
+      try {
+        const userIds = newUsers.map(user => user.id);
+        const liveStatusMap = await areUsersLive(userIds);
+        setLiveUsers(liveStatusMap);
+      } catch (error) {
+        console.error('Failed to check live users:', error);
+        setLiveUsers(new Map());
+      }
+    };
+
+    checkLiveUsers();
+
+    // Refresh live status every 15 seconds
+    const interval = setInterval(checkLiveUsers, 15000);
+    return () => clearInterval(interval);
+  }, [newUsers]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -1024,6 +1170,19 @@ const HomePageContent = () => {
         </div>
         {/* Live Now */}
         <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <div className="mb-4 flex justify-center">
+            <Link
+              to="/coins"
+              className="w-full max-w-3xl bg-gradient-to-r from-purple-700/80 via-pink-600/70 to-indigo-600/70 text-white rounded-2xl px-4 py-3 shadow-lg backdrop-blur-sm transform hover:scale-[1.02] transition-all duration-200 flex items-center justify-between gap-4"
+              aria-label="Get TrollPass - open coin store"
+            >
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-bold">TrollPass — Unlock exclusive perks</div>
+                <div className="text-xs opacity-80">Available now in the Coin Store</div>
+              </div>
+              <div className="text-sm font-semibold bg-white/10 px-3 py-1 rounded-full">Get TrollPass</div>
+            </Link>
+          </div>
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
@@ -1090,7 +1249,7 @@ const HomePageContent = () => {
                 {displayStreams.map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => navigate(`/live/${s.id}`)}
+                    onClick={() => navigate(`/broadcast/${s.id}`)}
                     className={`relative rounded-2xl overflow-hidden shadow-xl bg-gradient-to-br from-[#1f1535] via-[#16102a] to-[#0f0820] border transition-all duration-300 group ${
                       s.user_profiles?.date_of_birth && isBirthdayToday(s.user_profiles.date_of_birth)
                         ? 'border-yellow-400/60 shadow-[0_0_30px_rgba(255,215,0,0.7)] birthday-stream'
@@ -1129,16 +1288,19 @@ const HomePageContent = () => {
                     </div>
                     {canEndLive && (
                       <div className="absolute top-3 right-3 z-10">
-                        <button
+                        <div
+                          role="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             endLiveStream(s.id);
                           }}
                           className="bg-red-600/90 hover:bg-red-700 text-white p-2 rounded-full shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-red-600/50 cursor-pointer"
                           title="End Live Stream"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); endLiveStream(s.id); } }}
                         >
                           <X className="w-4 h-4" />
-                        </button>
+                        </div>
                       </div>
                     )}
 
@@ -1205,59 +1367,15 @@ const HomePageContent = () => {
                 <div className="col-span-full p-6 text-center text-gray-400">No new users yet</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {newUsers.map((user) => {
-                    const displayName = user.username || 'User';
-                    const isAdmin = user.role === 'admin';
-                    const profileRoute = `/profile/id/${user.id}`;
-
-                    return (
-                      <button
-                        key={user.id}
-                        onClick={() => navigate(profileRoute)}
-                        className="relative group bg-gradient-to-br from-[#1f1535]/80 via-[#16102a]/60 to-[#0f0820]/40 rounded-xl p-4 border border-purple-500/30 hover:border-purple-400/60 shadow-lg hover:shadow-xl hover:shadow-purple-500/20 transition-all duration-300 flex flex-col items-center gap-3 overflow-hidden"
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-t from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        
-                        <div className="relative z-10">
-                          <div className="relative">
-                            <img
-                              src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
-                              alt={displayName}
-                              className={`w-20 h-20 rounded-full border-3 object-cover transition-all duration-300 ${
-                                isAdmin
-                                  ? 'border-yellow-400/60 shadow-lg shadow-yellow-400/40 group-hover:shadow-yellow-400/60'
-                                  : 'border-cyan-400/60 shadow-lg shadow-cyan-400/30 group-hover:shadow-cyan-400/50'
-                              }`}
-                            />
-                            {isAdmin && (
-                              <div className="absolute -top-1 -right-1 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full p-1.5 border-2 border-black">
-                                <Crown className="w-3 h-3 text-black" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="relative z-10 text-center flex-1 w-full">
-                          <p className="text-lg font-semibold text-white truncate">{displayName}</p>
-                          <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
-                              isAdmin
-                                ? 'bg-yellow-500/20 border border-yellow-400/50 text-yellow-300'
-                                : 'bg-purple-500/20 border border-purple-400/50 text-purple-300'
-                            }`}>
-                              Lv {user.level ?? 1}
-                            </span>
-                            {isAdmin && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-500/20 border border-yellow-400/50 text-yellow-300">
-                                Admin
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        
-                      </button>
-                    );
-                  })}
+                  {newUsers.map((user) => (
+                    <NewUserCard 
+                      key={user.id} 
+                      user={user} 
+                      onClick={navigate} 
+                      isLive={liveUsers.get(user.id) || false}
+                      navigate={navigate}
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -1269,6 +1387,21 @@ const HomePageContent = () => {
             © {new Date().getFullYear()} Troll City. All rights reserved.
           </div>
         </div>
+        
+        {/* Neon glow styles for live users */}
+        <style>{`
+          .live-user-neon {
+            animation: liveNeonGlow 2s ease-in-out infinite alternate;
+          }
+          @keyframes liveNeonGlow {
+            0% {
+              box-shadow: 0 0 20px rgba(255, 0, 100, 0.8), 0 0 40px rgba(255, 0, 100, 0.6), 0 0 60px rgba(255, 0, 100, 0.4);
+            }
+            100% {
+              box-shadow: 0 0 30px rgba(255, 0, 150, 1), 0 0 50px rgba(255, 0, 150, 0.8), 0 0 70px rgba(255, 0, 150, 0.6);
+            }
+          }
+        `}</style>
       </div>
     </div>
   );

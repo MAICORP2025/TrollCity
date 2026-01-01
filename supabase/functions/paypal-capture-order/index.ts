@@ -73,7 +73,7 @@ serve(async (req: Request) => {
     const accessToken = await getAccessToken();
 
     // Get current order status
-    let orderRes = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${orderId}`, {
+    const orderRes = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${orderId}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`
       }
@@ -130,7 +130,7 @@ serve(async (req: Request) => {
       null;
     try {
       meta = JSON.parse(purchaseUnit.custom_id);
-    } catch (_e) {
+    } catch {
       console.error("Failed to parse custom_id", purchaseUnit.custom_id);
     }
 

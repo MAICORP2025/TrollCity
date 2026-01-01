@@ -17,7 +17,7 @@ interface ShiftLog {
   created_at: string
   officer?: {
     username: string
-    email: string
+    email?: string
   }
 }
 
@@ -32,13 +32,8 @@ export default function OfficerShiftsPanel() {
     try {
       let query = supabase
         .from('officer_shift_logs')
-        .select(`
-          *,
-          officer:user_profiles!officer_shift_logs_officer_id_fkey(
-            username,
-            email
-          )
-        `)
+        // Avoid FK-name joins to prevent schema-cache/constraint-name drift (PGRST200)
+        .select('*')
         .order('clock_in', { ascending: false })
         .limit(100)
 
@@ -52,7 +47,30 @@ export default function OfficerShiftsPanel() {
 
       if (error) throw error
 
-      setShifts((data as any) || [])
+      const raw = (data as any) || []
+      const officerIds = Array.from(
+        new Set(raw.map((s: any) => s.officer_id).filter((id: any) => typeof id === 'string' && id.length > 0)),
+      )
+
+      const officerMap = new Map<string, any>()
+      if (officerIds.length) {
+        const { data: officersData, error: officersError } = await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .in('id', officerIds)
+        if (officersError) {
+          console.warn('Failed to hydrate officer usernames (non-fatal):', officersError)
+        } else {
+          ;(officersData || []).forEach((o: any) => officerMap.set(o.id, o))
+        }
+      }
+
+      setShifts(
+        raw.map((s: any) => ({
+          ...s,
+          officer: officerMap.get(s.officer_id) ? { username: officerMap.get(s.officer_id).username } : undefined,
+        })),
+      )
     } catch (err: any) {
       console.error('Error loading shifts:', err)
       toast.error(err?.message || 'Failed to load shifts')

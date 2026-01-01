@@ -30,6 +30,7 @@ interface SellerAppeal {
   user_id: string
   type: string
   status: 'denied'
+  updated_at?: string
   appeal_requested: boolean
   appeal_reason: string
   appeal_requested_at: string
@@ -37,6 +38,7 @@ interface SellerAppeal {
   appeal_notes?: string
   store_name?: string
   store_description?: string
+  contact_email?: string
   user_profiles?: {
     username: string
     email?: string
@@ -57,6 +59,7 @@ interface BroadcasterApplication {
 
 export default function AdminApplications() {
   const { profile, user, refreshProfile } = useAuthStore()
+  const isAdmin = profile?.role === 'admin' || (profile as any)?.is_admin === true
   const [applications, setApplications] = useState<Application[]>([])
   const [broadcasterApplications, setBroadcasterApplications] = useState<BroadcasterApplication[]>([])
   const [sellerAppeals, setSellerAppeals] = useState<SellerAppeal[]>([])
@@ -64,6 +67,8 @@ export default function AdminApplications() {
   const [positionFilled, setPositionFilled] = useState(false)
   const loadingRef = useRef(false)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending')
 
   const loadApplications = async (skipLoadingState = false) => {
     if (loadingRef.current) return
@@ -85,7 +90,7 @@ export default function AdminApplications() {
             email
           )
         `)
-        .eq('lead_officer_approved', true)
+        // Show ALL applications; UI splits into Pending/Approved/Rejected
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -411,25 +416,52 @@ export default function AdminApplications() {
   }
 
 
-  const totalPending =
-    applications.filter(a => a.status === 'pending').length +
-    broadcasterApplications.filter(a => a.application_status === 'pending').length +
-    sellerAppeals.length
+  const counts = {
+    pending:
+      applications.filter(a => a.status === 'pending').length +
+      broadcasterApplications.filter(a => a.application_status === 'pending').length +
+      sellerAppeals.length,
+    approved:
+      applications.filter(a => a.status === 'approved').length +
+      broadcasterApplications.filter(a => a.application_status === 'approved').length,
+    rejected:
+      applications.filter(a => a.status === 'rejected').length +
+      broadcasterApplications.filter(a => a.application_status === 'rejected').length,
+  }
+
+  const visibleApplications = applications.filter((a) => a.status === activeTab)
+  const visibleBroadcasterApplications = broadcasterApplications.filter((a) => a.application_status === activeTab)
 
   return (
     <div className="space-y-4">
       <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-4">
-        <h3 className="text-blue-300 font-semibold mb-2">📋 New Application Process</h3>
+        <h3 className="text-blue-300 font-semibold mb-2">📋 Applications</h3>
         <p className="text-blue-200 text-sm">
-          All applications now require Lead Officer approval first, then admin final approval.
-          Only Lead Officer approved applications are shown below.
+          View all applications and triage them by status. Pending items are those not approved yet.
         </p>
+      </div>
+
+      {/* Status Tabs */}
+      <div className="flex gap-2 border-b border-gray-700">
+        {(['pending', 'approved', 'rejected'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === tab
+                ? 'text-purple-400 border-b-2 border-purple-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)} ({counts[tab]})
+          </button>
+        ))}
       </div>
 
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
           <Shield className="w-6 h-6 text-purple-400" />
-          Lead Officer Approved Applications
+          Applications Admin
         </h2>
 
         <button
@@ -449,7 +481,7 @@ export default function AdminApplications() {
 
           {/* USER APPLICATIONS */}
           <div className="space-y-3">
-            {applications.map(app => {
+            {visibleApplications.map(app => {
               const isLead = app.type === "lead_officer"
               const isSeller = app.type === "seller"
               const disable = isLead && positionFilled
@@ -502,7 +534,7 @@ export default function AdminApplications() {
                     </div>
 
                     <div className="ml-4">
-                      {app.status === "pending" && !disable ? (
+                      {app.status === "pending" && activeTab === 'pending' && !disable ? (
                         <div className="flex gap-2">
                           <button onClick={() => handleApprove(app)} className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg">APPROVE</button>
                           <button onClick={() => handleReject(app)} className="px-3 py-2 bg-red-600 text-white text-xs rounded-lg">DENY</button>
@@ -527,7 +559,7 @@ export default function AdminApplications() {
               Broadcaster Applications
             </h3>
 
-            {broadcasterApplications.map(app => (
+            {visibleBroadcasterApplications.map(app => (
               <div key={app.id} className="bg-[#1A1A1A] border border-purple-500/30 rounded-lg p-4">
 
                 <div className="flex items-center justify-between">
@@ -538,7 +570,7 @@ export default function AdminApplications() {
                     </div>
                   </div>
 
-                  {app.application_status === "pending" ? (
+                  {app.application_status === "pending" && activeTab === 'pending' ? (
                     <div className="flex gap-2">
                       <button onClick={() => handleApproveBroadcaster(app)} className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg flex items-center gap-1">
                         <Check className="w-4" /> Approve
@@ -559,6 +591,7 @@ export default function AdminApplications() {
           </div>
 
           {/* SELLER APPEALS */}
+          {activeTab === 'pending' && (
           <div className="space-y-3 mt-6">
             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-orange-400" />
@@ -645,6 +678,7 @@ export default function AdminApplications() {
               </div>
             )}
           </div>
+          )}
         </>
       )}
     </div>

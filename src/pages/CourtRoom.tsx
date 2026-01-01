@@ -106,6 +106,11 @@ export default function CourtRoom() {
    const [joinBoxLoading, setJoinBoxLoading] = useState(false);
    const [activeBoxCount, setActiveBoxCount] = useState(0);
 
+  const isValidUuid = (value?: string | null) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value || ''
+    );
+
   // Stabilize room ID once at mount
   const roomIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -169,14 +174,47 @@ export default function CourtRoom() {
   });
 
   useEffect(() => {
-    // Check if courtId is provided
-    if (!courtId) {
+    if (!user) return;
+
+    // Handle missing/invalid IDs early so we don't get "invalid input syntax for type uuid: \"null\""
+    if (!courtId || courtId === 'null' || courtId === 'undefined') {
       toast.error('Invalid court session');
+      setLoading(false);
       navigate('/troll-court');
       return;
     }
 
-    if (!user) return;
+    // Support /court/active as a shortcut (resolves to the current live session)
+    if (courtId === 'active') {
+      void (async () => {
+        try {
+          const { data: currentSession, error } = await supabase.rpc('get_current_court_session');
+          if (error) throw error;
+          const session = Array.isArray(currentSession) ? currentSession[0] : currentSession;
+          const resolvedId = session?.id;
+          if (!resolvedId || !isValidUuid(resolvedId)) {
+            toast.error('No active court session found');
+            setLoading(false);
+            navigate('/troll-court');
+            return;
+          }
+          navigate(`/court/${resolvedId}`);
+        } catch (err) {
+          console.error('[CourtRoom] Failed to resolve active court session:', err);
+          toast.error('No active court session found');
+          setLoading(false);
+          navigate('/troll-court');
+        }
+      })();
+      return;
+    }
+
+    if (!isValidUuid(courtId)) {
+      toast.error('Invalid court session');
+      setLoading(false);
+      navigate('/troll-court');
+      return;
+    }
 
     initCourtroom();
   }, [user, courtId]);
@@ -184,6 +222,7 @@ export default function CourtRoom() {
   // Keep box count in sync for all viewers
   useEffect(() => {
     if (!courtId) return;
+    if (courtId === 'active' || !isValidUuid(courtId)) return;
     let lastBoxCount = boxCount;
     
     const id = window.setInterval(async () => {
@@ -214,7 +253,7 @@ export default function CourtRoom() {
     }, 5000);
 
     return () => window.clearInterval(id);
-  }, [courtId, navigate]);
+  }, [courtId, navigate, boxCount]);
 
   useEffect(() => {
     console.log('[CourtRoom] Component mounted with courtId:', courtId);
@@ -237,7 +276,8 @@ export default function CourtRoom() {
 
         if (sessionData) {
           setCourtSession(sessionData);
-          setBoxCount(Math.min(6, Math.max(2, sessionData.maxBoxes || 2)));
+          const maxBoxes = (sessionData as any)?.max_boxes ?? (sessionData as any)?.maxBoxes ?? 2;
+          setBoxCount(Math.min(6, Math.max(2, maxBoxes)));
         }
       } catch {
         // non-fatal, still allow joining if token works
@@ -245,15 +285,25 @@ export default function CourtRoom() {
 
       const canRequestPublish =
         profile?.role === "admin" ||
+        profile?.role === "lead_troll_officer" ||
         profile?.is_admin === true ||
         profile?.is_lead_officer === true;
+
+      const requestedRole =
+        profile?.role === 'admin' || profile?.is_admin
+          ? 'admin'
+          : profile?.role === 'lead_troll_officer' || profile?.is_lead_officer
+          ? 'lead_troll_officer'
+          : profile?.role === 'troll_officer' || (profile as any)?.is_troll_officer
+          ? 'troll_officer'
+          : (profile as any)?.role || 'user';
 
       const { data, error } = await supabase.functions.invoke("livekit-token", {
         body: {
           room: courtId,
           identity: user.id,
           user_id: user.id,
-          role: profile.role,
+          role: requestedRole,
           allowPublish: canRequestPublish,
           isHost: canRequestPublish,
         },
@@ -277,8 +327,11 @@ export default function CourtRoom() {
   };
 
   // Check if user is a judge (admin or lead officer)
-  const isJudge = ['admin'].includes(profile?.role) ||
-                   profile?.is_admin || profile?.is_lead_officer;
+  const isJudge =
+    profile?.role === 'admin' ||
+    profile?.role === 'lead_troll_officer' ||
+    profile?.is_admin ||
+    profile?.is_lead_officer;
 
   // Get the effective role for display (prioritize is_admin flag)
   const getEffectiveRole = () => {
@@ -409,12 +462,16 @@ export default function CourtRoom() {
     if (!isJudge || !courtId) return;
 
     try {
-      const { error } = await supabase.rpc('end_court_session', {
+      console.log('Calling end_court_session RPC for courtId=', courtId)
+      const res = await supabase.rpc('end_court_session', {
         p_session_id: courtId
       });
+      console.log('end_court_session RPC response:', res)
+      if ((res as any)?.error) {
+        console.error('end_court_session RPC returned error object:', (res as any).error)
+        throw (res as any).error
+      }
 
-      if (error) throw error;
-      
       toast.success('Court session ended');
       navigate('/troll-court');
     } catch (err) {
@@ -873,7 +930,7 @@ export default function CourtRoom() {
   }
 
   return (
-    <RequireRole roles={[UserRole.USER, UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
+    <RequireRole roles={[UserRole.USER, UserRole.TROLL_OFFICER, UserRole.LEAD_TROLL_OFFICER, UserRole.ADMIN]}>
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-4">
 
         {/* Header */}

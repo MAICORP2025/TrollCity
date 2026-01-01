@@ -49,6 +49,9 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_user_id;
 
+  -- Add officer to scheduled shifts
+  PERFORM add_approved_officer_to_shifts(p_user_id);
+
   -- Create notification
   INSERT INTO notifications (
     user_id,
@@ -60,11 +63,11 @@ BEGIN
     p_user_id,
     'officer_update',
     'Officer Application Approved',
-    'Congratulations! Your Troll Officer application has been approved. Complete orientation to become active.',
-    jsonb_build_object('link', '/officer/orientation')
+    'Congratulations! Your Troll Officer application has been approved. You have been added to scheduled shifts.',
+    jsonb_build_object('link', '/officer/dashboard')
   );
 
-  RETURN jsonb_build_object('success', TRUE, 'message', 'Officer application approved successfully');
+  RETURN jsonb_build_object('success', TRUE, 'message', 'Officer application approved and added to scheduled shifts successfully');
 END;
 $$;
 

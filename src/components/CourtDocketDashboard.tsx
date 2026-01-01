@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Calendar, Clock, CheckCircle, XCircle, AlertTriangle, Gavel, User, FileText, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertTriangle, Gavel, FileText, Trash2 } from 'lucide-react';
 
 interface DocketEntry {
   id: string;
@@ -17,7 +17,7 @@ interface DocketEntry {
 }
 
 const CourtDocketDashboard: React.FC = (): JSX.Element => {
-  const { user, profile } = useAuthStore();
+  const { profile } = useAuthStore();
   const [docketEntries, setDocketEntries] = useState<DocketEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'scheduled' | 'in_session' | 'completed' | 'missed'>('all');
@@ -56,20 +56,6 @@ const CourtDocketDashboard: React.FC = (): JSX.Element => {
       await loadAllDocketEntries();
     } catch (error) {
       console.error('Error updating docket:', error);
-    }
-  };
-
-  const assignOfficer = async (docketId: string, officerId: string) => {
-    try {
-      const { error } = await supabase
-        .from('court_docket')
-        .update({ assigned_officer: officerId })
-        .eq('id', docketId);
-
-      if (error) throw error;
-      await loadAllDocketEntries();
-    } catch (error) {
-      console.error('Error assigning officer:', error);
     }
   };
 

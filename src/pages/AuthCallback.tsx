@@ -86,16 +86,15 @@ const AuthCallback = () => {
               
               const { data: inserted } = await supabase
                 .from('user_profiles')
-                .insert({ 
-                  id: u.id, 
+                .insert({
+                  id: u.id,
                   username: '', // Keep empty to force profile setup
                   bio: null,
-                  role: u.email === ADMIN_EMAIL ? 'admin' : 'user', 
-                  troll_coins: 0, 
-                  troll_coins: 0, 
+                  role: u.email === ADMIN_EMAIL ? 'admin' : 'user',
+                  troll_coins: 0,
                   avatar_url: u.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${suggestedUsername}`,
-                  created_at: new Date().toISOString(), 
-                  updated_at: new Date().toISOString() 
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
                 })
                 .select()
                 .single()

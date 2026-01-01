@@ -412,14 +412,40 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
   const loadApplications = async () => {
     setLoading(true)
     try {
+      // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
       const { data, error } = await supabase
         .from('broadcaster_applications')
-        .select('*, user_profiles!broadcaster_applications_user_id_fkey(username, email)')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (error) throw error
-      setApplications(data || [])
+
+      const raw = data || []
+      const userIds = Array.from(
+        new Set(raw.map((a: any) => a.user_id).filter((id: any) => typeof id === 'string' && id.length > 0)),
+      )
+
+      const profileMap = new Map<string, any>()
+      if (userIds.length) {
+        const { data: profiles, error: profErr } = await supabase
+          .from('user_profiles')
+          .select('id, username, email')
+          .in('id', userIds)
+
+        if (profErr) {
+          console.warn('Failed to hydrate user profiles (non-fatal):', profErr)
+        } else {
+          ;(profiles || []).forEach((p: any) => profileMap.set(p.id, p))
+        }
+      }
+
+      setApplications(
+        raw.map((a: any) => ({
+          ...a,
+          user_profiles: profileMap.get(a.user_id) || null,
+        })),
+      )
     } catch (error: any) {
       console.error('Error loading applications:', error)
       toast.error('Failed to load applications')
@@ -447,7 +473,7 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
                   <p className="font-semibold text-white">
                     {app.user_profiles?.username || 'Unknown'}
                   </p>
-                  <p className="text-xs text-gray-400">{app.email}</p>
+                  <p className="text-xs text-gray-400">{app.user_profiles?.email || ''}</p>
                 </div>
                 <span className={`px-2 py-1 rounded text-xs ${
                   app.application_status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -479,15 +505,41 @@ function MobilePayoutQueue({ onStatsUpdate }: { onStatsUpdate: () => void }) {
   const loadPayouts = async () => {
     setLoading(true)
     try {
+      // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
       const { data, error } = await supabase
         .from('payout_requests')
-        .select('*, user_profiles!payout_requests_user_id_fkey(username, email)')
+        .select('*')
         .in('status', ['pending', 'approved'])
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (error) throw error
-      setPayouts(data || [])
+
+      const raw = data || []
+      const userIds = Array.from(
+        new Set(raw.map((p: any) => p.user_id).filter((id: any) => typeof id === 'string' && id.length > 0)),
+      )
+
+      const profileMap = new Map<string, any>()
+      if (userIds.length) {
+        const { data: profiles, error: profErr } = await supabase
+          .from('user_profiles')
+          .select('id, username, email')
+          .in('id', userIds)
+
+        if (profErr) {
+          console.warn('Failed to hydrate user profiles (non-fatal):', profErr)
+        } else {
+          ;(profiles || []).forEach((p: any) => profileMap.set(p.id, p))
+        }
+      }
+
+      setPayouts(
+        raw.map((p: any) => ({
+          ...p,
+          user_profiles: profileMap.get(p.user_id) || null,
+        })),
+      )
     } catch (error: any) {
       console.error('Error loading payouts:', error)
       toast.error('Failed to load payouts')

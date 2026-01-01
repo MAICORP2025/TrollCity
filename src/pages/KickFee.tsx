@@ -23,12 +23,6 @@ export default function KickFee() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950 text-white flex items-center justify-center p-4">
-      <style jsx global>{`
-        .purple-neon {
-          border: 2px solid #A78BFA;
-          box-shadow: 0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2);
-        }
-      `}</style>
 
       <div className="max-w-md w-full">
         <div className="bg-gray-900/80 rounded-xl p-8 purple-neon">

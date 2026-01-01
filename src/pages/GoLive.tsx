@@ -1,233 +1,360 @@
-import { useState } from "react";
-import { Heart, Gift, Settings, Plus, Minus } from "lucide-react";
-import ChatBox from "@/components/broadcast/ChatBox";
-import StatsPanel from "@/components/broadcast/StatsPanel";
-import GiftModal from "@/components/broadcast/GiftModal";
-import ProfileModal from "@/components/broadcast/ProfileModal";
-import ParticipantBoxes from "@/components/broadcast/ParticipantBoxes";
-import GiftBox from "@/components/broadcast/GiftBox";
-import CoinStoreModal from "@/components/broadcast/CoinStoreModal";
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../lib/api';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
+import { Video } from 'lucide-react';
+import { toast } from 'sonner';
 
-interface Participant {
-  id: number;
-  name: string;
-  color: string;
-  isSpeaking: boolean;
-}
+const GoLive: React.FC = () => {
+  const navigate = useNavigate();
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-export default function GoLive() {
-  const [viewerCount, setViewerCount] = useState(1284);
-  const [trollLikeCount, setTrollLikeCount] = useState(3421);
-  const [coinCount, setCoinCount] = useState(5280);
-  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
-  const [selectedProfile, setSelectedProfile] = useState<{
-    name: string;
+  const { user, profile } = useAuthStore();
+
+  const [streamTitle, setStreamTitle] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  
+  const [isTestingMode, setIsTestingMode] = useState(false);
+
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [broadcasterName, setBroadcasterName] = useState<string>('');
+  const [category, setCategory] = useState<string>('Chat');
+  const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
+  const [enablePaidGuestBoxes, setEnablePaidGuestBoxes] = useState<boolean>(false);
+
+  const [broadcasterStatus, setBroadcasterStatus] = useState<{
+    isApproved: boolean;
+    hasApplication: boolean;
+    applicationStatus: string | null;
   } | null>(null);
-  const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false);
-  const [participants, setParticipants] = useState<Participant[]>([
-    { id: 1, name: "Participant 1", color: "#A78BFA", isSpeaking: false },
-  ]);
-  const [broadcasterSpeaking, setBroadcasterSpeaking] = useState(false);
 
-  const handleAddParticipant = () => {
-    const newId = Math.max(...participants.map((p) => p.id), 0) + 1;
-    const colors = ["#A78BFA", "#F472B6", "#FB923C", "#34D399", "#60A5FA"];
-    setParticipants([
-      ...participants,
-      {
-        id: newId,
-        name: `Participant ${newId}`,
-        color: colors[newId % colors.length],
-        isSpeaking: false,
-      },
-    ]);
+  // -------------------------------
+  // CHECK BROADCASTER STATUS
+  // -------------------------------
+  useEffect(() => {
+    const checkStatus = async () => {
+      const { user, profile } = useAuthStore.getState();
+      if (!user || !profile) return;
+
+      // If already marked broadcaster
+      if (profile.is_broadcaster) {
+        setBroadcasterStatus({
+          isApproved: true,
+          hasApplication: true,
+          applicationStatus: 'approved',
+        });
+        return;
+      }
+
+      // Check broadcaster_applications table
+      const { data } = await supabase
+        .from('broadcaster_applications')
+        .select('application_status')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data) {
+        setBroadcasterStatus({
+          isApproved: false,
+          hasApplication: false,
+          applicationStatus: null,
+        });
+      } else {
+        setBroadcasterStatus({
+          isApproved: data.application_status === 'approved',
+          hasApplication: true,
+          applicationStatus: data.application_status,
+        });
+      }
+    };
+
+    checkStatus();
+    // Prefill broadcaster name if available
+    const p = useAuthStore.getState().profile;
+    if (p?.username) setBroadcasterName(p.username);
+  }, []);
+
+  // -------------------------------
+  // START STREAM
+  // -------------------------------
+  const handleStartStream = async () => {
+    const { profile, user } = useAuthStore.getState();
+
+    if (!user || !profile) {
+      toast.error('You must be logged in.');
+      return;
+    }
+
+    if (!profile.is_broadcaster && !isTestingMode) {
+      toast.error('🚫 You must be an approved broadcaster to go live.');
+      return;
+    }
+
+    if (!streamTitle.trim()) {
+      toast.error('Enter a stream title.');
+      return;
+    }
+
+    setIsConnecting(true);
+
+    // small helper to add timeouts to long-running promises
+    const withTimeout = async <T,>(p: Promise<T>, ms = 30000): Promise<T> => {
+      let timer: any = null;
+      return await Promise.race([
+        p.then((v) => {
+          if (timer) clearTimeout(timer);
+          return v;
+        }),
+        new Promise((_, rej) => {
+          timer = setTimeout(() => rej(new Error('timeout')), ms);
+        }) as any,
+      ]);
+    };
+
+    try {
+      const streamId = crypto.randomUUID();
+      let thumbnailUrl: string | null = null;
+
+      // Upload thumbnail
+      if (thumbnailFile) {
+        setUploadingThumbnail(true);
+
+        const fileName = `thumb-${streamId}-${Date.now()}.${thumbnailFile.name.split('.').pop()}`;
+        const filePath = `thumbnails/${fileName}`;
+
+        const upload = await supabase.storage
+          .from('troll-city-assets')
+          .upload(filePath, thumbnailFile, { upsert: false });
+
+        if (!upload.error) {
+          const { data: url } = supabase.storage.from('troll-city-assets').getPublicUrl(filePath);
+          thumbnailUrl = url.publicUrl;
+        }
+
+        setUploadingThumbnail(false);
+      }
+
+      // Optional quick DB health check to surface connectivity issues fast
+      try {
+        console.log('[GoLive] Running quick DB health check...');
+        const health = await withTimeout(
+          supabase.from('streams').select('id').limit(1).maybeSingle(),
+          5000
+        );
+        console.log('[GoLive] DB health check result:', health);
+      } catch (hErr) {
+        console.error('[GoLive] DB health check failed:', hErr);
+        toast.error('Database health check failed — check network/Supabase.');
+        // continue to attempt insert; health check is advisory
+      }
+
+      // Insert into streams table (use timeout to avoid hanging UI)
+      console.log('[GoLive] Inserting stream row into DB...');
+
+      const insertPromise = supabase
+        .from('streams')
+        .insert({
+          id: streamId,
+          broadcaster_id: profile.id,
+          title: streamTitle,
+          room_name: `stream-${streamId}`,
+          is_live: true,
+          status: 'live',
+          start_time: new Date().toISOString(),
+          thumbnail_url: thumbnailUrl,
+          is_testing_mode: isTestingMode,
+          viewer_count: 0,
+          current_viewers: 0,
+          total_gifts_coins: 0,
+          popularity: 0,
+        })
+        .select()
+        .single()
+        .then((r) => r)
+        .catch((e) => {
+          console.error('[GoLive] Supabase insert immediate error:', e);
+          throw e;
+        });
+
+      const res: any = await withTimeout(insertPromise, 30000);
+
+      if (res.error) {
+        console.error('[GoLive] Insert returned error', res.error);
+        toast.error('Failed to start stream.');
+        return;
+      }
+
+      const insertedStream = res.data ?? res;
+      const createdId = insertedStream?.id;
+      if (!createdId) {
+        console.error('[GoLive] Stream insert did not return an id', insertedStream);
+        toast.error('Failed to start stream (no id returned).');
+        return;
+      }
+
+      setIsStreaming(true);
+      console.log('[GoLive] Stream created successfully, navigating to broadcast', { createdId });
+      navigate(`/broadcast/${createdId}?start=1`);
+    } catch (err: any) {
+      console.error('[GoLive] Error starting stream:', err);
+      if (err?.message === 'timeout') {
+        toast.error('Starting stream timed out — check network or Supabase and try again.');
+      } else {
+        toast.error('Error starting stream.');
+      }
+    } finally {
+      try {
+        setIsConnecting(false);
+      } catch {}
+    }
   };
 
-  const handleRemoveParticipant = (id: number) => {
-    setParticipants(participants.filter((p) => p.id !== id));
-  };
+  // -------------------------------
+  // Camera preview
+  // -------------------------------
+  useEffect(() => {
+    let previewStream: MediaStream | null = null;
 
-  const handleTrollLike = () => {
-    setTrollLikeCount(trollLikeCount + 1);
-  };
-
-  const handleGiftSent = (amount: number) => {
-    setCoinCount(coinCount + amount);
-    setIsGiftModalOpen(false);
-  };
-
-  const handleCoinsPurchased = (amount: number) => {
-    setCoinCount(coinCount + amount);
-    setIsCoinStoreOpen(false);
-  };
+    if (videoRef.current && !isStreaming) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
+        previewStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }).catch((err) => {
+        console.error('Error accessing camera/microphone:', err);
+      });
+    }
+    // Cleanup: Stop all tracks when component unmounts or when streaming starts
+    return () => {
+      if (previewStream) {
+        previewStream.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [isStreaming]);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white overflow-hidden">
-      <style jsx global>{`
-        @keyframes rgbRotate {
-          0% {
-            border-color: rgb(255, 0, 0);
-            box-shadow: 0 0 20px rgb(255, 0, 0), inset 0 0 20px rgba(255, 0, 0, 0.3);
-          }
-          33% {
-            border-color: rgb(0, 255, 0);
-            box-shadow: 0 0 20px rgb(0, 255, 0), inset 0 0 20px rgba(0, 255, 0, 0.3);
-          }
-          66% {
-            border-color: rgb(0, 0, 255);
-            box-shadow: 0 0 20px rgb(0, 0, 255), inset 0 0 20px rgba(0, 0, 255, 0.3);
-          }
-          100% {
-            border-color: rgb(255, 0, 0);
-            box-shadow: 0 0 20px rgb(255, 0, 0), inset 0 0 20px rgba(255, 0, 0, 0.3);
-          }
-        }
+    <div className="max-w-6xl mx-auto space-y-6 go-live-wrapper">
 
-        .rgb-neon {
-          animation: rgbRotate 2s infinite;
-          border: 2px solid;
-        }
+      <h1 className="text-3xl font-extrabold flex items-center gap-2">
+        <Video className="text-troll-gold w-8 h-8" />
+        Go Live
+      </h1>
 
-        .purple-neon {
-          border: 2px solid #A78BFA;
-          box-shadow: 0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2);
-        }
+      <div className="host-video-box relative rounded-xl overflow-hidden border border-purple-700/30">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-32 md:h-40 lg:h-48 object-cover bg-black"
+        />
+      </div>
 
-        .red-neon {
-          border: 2px solid #F472B6;
-          box-shadow: 0 0 15px rgba(244, 114, 182, 0.6), inset 0 0 15px rgba(244, 114, 182, 0.2);
-        }
-
-        .purple-neon:hover {
-          box-shadow: 0 0 25px rgba(167, 139, 250, 0.8), inset 0 0 15px rgba(167, 139, 250, 0.3);
-        }
-
-        .red-neon:hover {
-          box-shadow: 0 0 25px rgba(244, 114, 182, 0.8), inset 0 0 15px rgba(244, 114, 182, 0.3);
-        }
-      `}</style>
-
-      <div className="flex h-screen gap-4 p-4">
-        <div className="flex-1 flex flex-col gap-4">
-          <div
-            className="flex-[2] bg-gradient-to-br from-gray-900 to-black rounded-lg overflow-hidden relative"
-            style={{
-              border: broadcasterSpeaking ? "2px solid" : "2px solid #A78BFA",
-              boxShadow: broadcasterSpeaking
-                ? "0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2)"
-                : "0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2)",
-              animation: broadcasterSpeaking ? "rgbRotate 2s infinite" : "none",
-            }}
-          >
-            <video
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              loop
-              src="https://www.w3schools.com/html/mov_bbb.mp4"
+      {!isStreaming ? (
+        <div className="bg-[#0E0A1A] border border-purple-700/40 p-6 rounded-xl space-y-6">
+          <div>
+            <label className="text-gray-300">Stream Title *</label>
+            <input
+              value={streamTitle}
+              onChange={(e) => setStreamTitle(e.target.value)}
+              className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-4 py-3"
+              placeholder="Enter your stream title..."
             />
+          </div>
 
-            <div className="absolute top-4 left-4 bg-black/70 rounded-lg px-4 py-2 purple-neon text-sm">
-              <span className="font-bold">StreamMaster</span>
-            </div>
+          <div>
+            <label className="text-gray-300">Broadcaster Name *</label>
+            <input
+              value={broadcasterName}
+              onChange={(e) => setBroadcasterName(e.target.value)}
+              className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-4 py-3"
+              placeholder="Your display name..."
+            />
+          </div>
 
-            <div className="absolute top-16 left-4 bg-black/70 rounded-lg px-4 py-2 purple-neon text-xs">
-              <span className="font-bold">{viewerCount.toLocaleString()}</span>{" "}
-              watching
-            </div>
-
-            <div className="absolute bottom-4 left-4 flex gap-2 bg-black/70 rounded-lg p-3 purple-neon">
-              <button
-                onClick={handleAddParticipant}
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded transition-colors"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-gray-300">Category *</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-4 py-3"
               >
-                <Plus size={18} />
-              </button>
-              <button
-                onClick={() => {
-                  if (participants.length > 1) {
-                    handleRemoveParticipant(
-                      participants[participants.length - 1].id
-                    );
-                  }
-                }}
-                disabled={participants.length === 1}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 px-3 py-2 rounded transition-colors"
-              >
-                <Minus size={18} />
-              </button>
+                <option>Chat</option>
+                <option>Gaming</option>
+                <option>Music</option>
+                <option>IRL</option>
+              </select>
             </div>
 
-            <button
-              onClick={handleTrollLike}
-              className="absolute bottom-4 right-4 flex items-center gap-2 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 px-4 py-2 rounded-lg font-bold text-white transition-all hover:scale-110 active:scale-95 red-neon"
-            >
-              <Heart size={20} fill="currentColor" />
-              {trollLikeCount}
-            </button>
-
-            <div className="absolute top-4 right-4 flex gap-2">
-              <button className="p-2 bg-black/70 rounded-lg purple-neon hover:bg-black/80 transition-colors">
-                <Settings size={20} />
-              </button>
+            <div className="flex flex-col gap-3">
+              <label className="text-gray-300">Options</label>
+              <div className="flex items-center gap-3">
+                <input id="private" type="checkbox" checked={isPrivateStream} onChange={() => setIsPrivateStream((v) => !v)} />
+                <label htmlFor="private" className="text-sm text-gray-300">Private Stream <span className="text-xs text-purple-300">(1000 troll coins)</span></label>
+              </div>
+              <div className="flex items-center gap-3">
+                <input id="paidGuests" type="checkbox" checked={enablePaidGuestBoxes} onChange={() => setEnablePaidGuestBoxes((v) => !v)} />
+                <label htmlFor="paidGuests" className="text-sm text-gray-300">Enable Paid Guest Boxes</label>
+              </div>
             </div>
           </div>
 
-          {participants.length > 0 && (
-            <ParticipantBoxes
-              participants={participants}
-              onRemove={handleRemoveParticipant}
-            />
-          )}
+          <div>
+            <label className="text-gray-300">Stream Thumbnail (Optional)</label>
+            <div className="mt-2">
+              <label className="block w-full border-2 border-dashed border-purple-700/30 rounded-lg p-6 text-center cursor-pointer">
+                {thumbnailPreview ? (
+                  <img src={thumbnailPreview} className="mx-auto max-h-40 object-contain" />
+                ) : (
+                  <div className="text-gray-400">Click to upload thumbnail<br/><span className="text-xs text-gray-500">PNG, JPG up to 5MB</span></div>
+                )}
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    if (f) {
+                      setThumbnailFile(f);
+                      setThumbnailPreview(URL.createObjectURL(f));
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleStartStream}
+              disabled={isConnecting}
+              className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-semibold"
+            >
+              {isConnecting ? 'Starting…' : 'Go Live Now!'}
+            </button>
+
+            {/* Broadcaster options removed per design */}
+          </div>
         </div>
-
-        <div className="w-1/3 flex flex-col gap-4 min-w-0">
-          <ChatBox
-            onProfileClick={setSelectedProfile}
-            onCoinSend={(userId, amount) => {
-              setCoinCount(coinCount + amount);
-            }}
-          />
-
-          <StatsPanel
-            viewers={viewerCount}
-            trollCount={trollLikeCount}
-            coins={coinCount}
-            onStoreClick={() => setIsCoinStoreOpen(true)}
-          />
-
-          <GiftBox
-            onSendGift={(gift, recipient) => {
-              setCoinCount(coinCount + gift.coins);
-            }}
-          />
-        </div>
-      </div>
-
-      {isGiftModalOpen && (
-        <GiftModal
-          onClose={() => setIsGiftModalOpen(false)}
-          onSendGift={handleGiftSent}
-        />
-      )}
-
-      {selectedProfile && (
-        <ProfileModal
-          profile={selectedProfile}
-          onClose={() => setSelectedProfile(null)}
-          onSendCoins={(amount) => {
-            setCoinCount(coinCount + amount);
-            setSelectedProfile(null);
-          }}
-        />
-      )}
-
-      {isCoinStoreOpen && (
-        <CoinStoreModal
-          onClose={() => setIsCoinStoreOpen(false)}
-          onPurchase={handleCoinsPurchased}
-        />
+      ) : (
+        <div className="p-6 text-gray-300">Redirecting to stream…</div>
       )}
     </div>
   );
-}
+};
+
+export default GoLive;

@@ -83,38 +83,41 @@ export const updateSetting = async (key: string, value: any): Promise<void> => {
       .select('setting_key')
       .maybeSingle()
 
-    // If update didn't find a row, insert instead
-    if (updateError || !updated) {
-      const { error: insertError } = await supabase
-        .from('app_settings')
-        .insert({
-          setting_key: key,
-          setting_value: value,
-          updated_at: new Date().toISOString(),
-        })
+    if (!updateError && updated) {
+      // Update succeeded
+      useAppSettingsStore.getState().setSetting(key, value)
+      return
+    }
 
-      // If insert fails due to unique constraint (race condition), update succeeded elsewhere
-      if (insertError) {
-        if (insertError.message?.includes('unique constraint')) {
-          // Another process inserted it, try update one more time
-          const { error: finalUpdateError } = await supabase
-            .from('app_settings')
-            .update({
-              setting_value: value,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('setting_key', key)
+    // Update didn't succeed, try insert
+    const { error: insertError } = await supabase
+      .from('app_settings')
+      .insert({
+        setting_key: key,
+        setting_value: value,
+        updated_at: new Date().toISOString(),
+      })
 
-          if (finalUpdateError) {
-            const err = new Error(`Failed to update setting "${key}": ${finalUpdateError.message}`)
-            useAppSettingsStore.getState().setError(err)
-            throw err
-          }
-        } else {
-          const err = new Error(`Failed to update setting "${key}": ${insertError.message}`)
+    if (insertError) {
+      if (insertError.message?.includes('unique constraint')) {
+        // Another process inserted it, try update one more time
+        const { error: finalUpdateError } = await supabase
+          .from('app_settings')
+          .update({
+            setting_value: value,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('setting_key', key)
+
+        if (finalUpdateError) {
+          const err = new Error(`Failed to update setting "${key}": ${finalUpdateError.message}`)
           useAppSettingsStore.getState().setError(err)
           throw err
         }
+      } else {
+        const err = new Error(`Failed to update setting "${key}": ${insertError.message}`)
+        useAppSettingsStore.getState().setError(err)
+        throw err
       }
     }
 

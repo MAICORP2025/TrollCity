@@ -6,6 +6,7 @@ import { LiveKitParticipant } from '../lib/LiveKitService'
 import { useAuthStore } from '../lib/store'
 
 interface OfficerStreamGridProps {
+  roomName?: string
   onSeatClick?: (seatIndex: number, seat: SeatAssignment) => void
 }
 
@@ -23,9 +24,10 @@ const parseLiveKitMetadataUserId = (metadata?: string): string | undefined => {
 }
 
 const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
+  roomName = 'officer-stream',
   onSeatClick,
 }) => {
-  const { seats, claimSeat, releaseSeat } = useSeatRoster()
+  const { seats, claimSeat, releaseSeat } = useSeatRoster(roomName)
   const { user, profile } = useAuthStore()
 
   const liveKitUser = useMemo(() => {
@@ -45,14 +47,42 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
   useEffect(() => {
     if (!liveKitUser) return
 
-    connect('officer-stream', liveKitUser, { allowPublish: true, autoPublish: false })
-  }, [liveKitUser, connect])
+    // auto-connect to the provided roomName so boxes can be claimed immediately
+    connect(roomName, liveKitUser, { allowPublish: true, autoPublish: false })
+  }, [liveKitUser, connect, roomName])
 
   const handleSeatAction = useCallback(async (action: 'claim' | 'release' | 'leave', seatIndex: number, seat?: SeatAssignment) => {
     if (action === 'claim' && profile) {
-      if (!isConnected) {
-        alert('Please wait for the stream to connect before claiming a seat.')
+      // Validate authentication before attempting to connect
+      if (!user?.id) {
+        alert('Please sign in to join the stream.')
         return
+      }
+
+      // If not connected, attempt to connect first (wait for connect to resolve)
+      if (!isConnected) {
+        try {
+          const ok = await connect(roomName, {
+            id: user?.id,
+            username: profile?.username || user?.email?.split('@')[0] || 'Officer',
+            role: profile?.role || 'viewer'
+          }, { allowPublish: true, autoPublish: false })
+          if (!ok) {
+            alert('Unable to connect to stream. Please check your connection and try again.')
+            return
+          }
+        } catch (err: any) {
+          console.error('Connect attempt failed during claim:', err)
+          const errorMsg = err.message || 'Unknown error'
+          if (errorMsg.includes('sign in') || errorMsg.includes('Authentication failed')) {
+            alert('Please sign out and sign back in to join the stream.')
+          } else if (errorMsg.includes('No valid user session')) {
+            alert('Your session has expired. Please refresh the page and sign in again.')
+          } else {
+            alert('Unable to connect to stream. Please try again.')
+          }
+          return
+        }
       }
 
       try {
@@ -95,10 +125,10 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
       }
       disconnect()
     }
-  }, [profile, claimSeat, releaseSeat, disconnect, startPublishing, isConnected])
+  }, [profile, claimSeat, releaseSeat, disconnect, startPublishing, isConnected, connect, roomName, user])
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 md:grid-rows-3 gap-2">
       {seats.map((seat, index) => {
         const participant = participantsList?.find((p) => {
           if (!seat?.user_id) return false
@@ -106,6 +136,7 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
           const metadataUserId = parseLiveKitMetadataUserId(p.metadata)
           return metadataUserId === seat.user_id
         })
+        const isSpeaking = Boolean((participant as any)?.audioLevel > 0.05 || (participant as any)?.isSpeaking);
         return (
           <OfficerStreamBox
             key={index}
@@ -113,12 +144,9 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
             seat={seat}
             participant={participant}
             user={user}
-            onClaimClick={() => {
-              if (seat) {
-                onSeatClick?.(index, seat)
-              }
-            }}
+            onClaimClick={() => { if (seat) { onSeatClick?.(index, seat) } }}
             onSeatAction={(action) => handleSeatAction(action, index, seat)}
+            data-speaking={isSpeaking}
           />
         )
       })}
@@ -131,11 +159,12 @@ interface OfficerStreamBoxProps {
   seat: SeatAssignment
   participant?: LiveKitParticipant
   user?: any
+  children?: React.ReactNode
   onClaimClick: () => void
   onSeatAction: (action: 'claim' | 'release' | 'leave') => Promise<void>
 }
 
-const OfficerStreamBox: React.FC<OfficerStreamBoxProps> = ({
+const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> = ({
   seat,
   participant,
   user,
@@ -184,15 +213,19 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps> = ({
     }
   }
 
+  const isSpeaking = Boolean((participant as any)?.audioLevel > 0.05 || (participant as any)?.isSpeaking)
+  const wrapperClass = `relative w-full aspect-video md:aspect-video rounded-2xl overflow-hidden rgb-border ${isSpeaking ? 'speaking' : ''}`
+
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={!seat ? () => onSeatAction('claim') : onClaimClick}
       onKeyDown={handleKeyDown}
-      className="relative w-full aspect-square rounded-2xl overflow-hidden border-2 border-purple-500/60 bg-gradient-to-br from-purple-900 to-indigo-900 shadow-[0_0_25px_rgba(14,165,233,0.35)]"
+      className={wrapperClass}
     >
-      <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+      <div className="tile-inner relative w-full h-full">
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
         {participant && seat && participant.videoTrack?.track ? (
           <>
             <video
@@ -205,9 +238,9 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps> = ({
           </>
         ) : seat ? (
           <div className="text-center text-white">
-            <div className="mb-2 text-lg font-semibold">{seat.username || 'Officer'}</div>
+            <div className="mb-2 text-lg font-semibold">{seat.username || 'User'}</div>
             <div className="text-xs uppercase tracking-[0.4em]">
-              Connecting...
+              {seat.user_id === user?.id ? 'You' : 'Connected'}
             </div>
             {seat.user_id === user?.id && (
               <button
@@ -230,49 +263,76 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps> = ({
         )}
       </div>
 
-      {seat && (
-        <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/60 px-2 py-1 rounded-full backdrop-blur-sm">
+        {seat && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/60 px-2 py-1 rounded-full backdrop-blur-sm">
           <Mic className={`w-4 h-4 ${participant?.isMicrophoneEnabled ? 'text-emerald-400' : 'text-red-500'}`} />
           <Video className={`w-4 h-4 ${participant?.isCameraEnabled ? 'text-cyan-400' : 'text-red-500'}`} />
         </div>
-      )}
+        )}
 
-      {seat && seat.user_id === user?.id && (
-        <div className="absolute inset-x-4 bottom-16 flex justify-center">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onSeatAction('leave')
-            }}
-            className="w-full max-w-[160px] rounded-full border border-red-500/60 bg-red-600/80 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-red-500"
-          >
-            Leave Seat
-          </button>
-        </div>
-      )}
+        {seat && (
+          <div className="absolute top-3 right-3 flex gap-2">
+            {seat.user_id === user?.id ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSeatAction('leave');
+                }}
+                className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-lg font-bold hover:bg-red-700"
+                title="Leave seat"
+              >
+                ×
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSeatAction('release')
+                  }}
+                  className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
+                >
+                  Release
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSeatAction('leave')
+                  }}
+                  className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
+                >
+                  Leave
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
-      {seat && (
-        <div className="absolute top-3 right-3 flex gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onSeatAction('release')
-            }}
-            className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
-          >
-            Release
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onSeatAction('leave')
-            }}
-            className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
-          >
-            Leave
-          </button>
-        </div>
-      )}
+        {seat && (
+          <div className="absolute top-3 right-3 flex gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onSeatAction('release')
+              }}
+              className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
+            >
+              Release
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onSeatAction('leave')
+              }}
+              className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
+            >
+              Leave
+            </button>
+          </div>
+        )}
+
+        {/* children removed - like button moved to BroadcastPage under the grid */}
+      </div>
     </div>
   )
 }

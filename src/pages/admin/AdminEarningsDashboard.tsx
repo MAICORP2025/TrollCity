@@ -119,7 +119,7 @@ const AdminEarningsDashboard: React.FC = () => {
       console.log('Using fallback: loading from user_profiles')
       const { data, error: fallbackError } = await supabase
         .from('user_profiles')
-        .select('id, username, total_earned_coins, troll_coins, troll_coins')
+        .select('id, username, total_earned_coins, troll_coins')
         .gt('total_earned_coins', 0)
         .order('total_earned_coins', { ascending: false })
         .limit(100)
@@ -134,7 +134,6 @@ const AdminEarningsDashboard: React.FC = () => {
           id: p.id,
           username: p.username || '',
           total_earned_coins: p.total_earned_coins || 0,
-          troll_coins: p.troll_coins || 0,
           troll_coins: p.troll_coins || 0,
           current_month_earnings: 0,
           current_month_transactions: 0,

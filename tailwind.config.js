@@ -62,11 +62,22 @@ export default {
         'spin-slow': 'spin 3s linear infinite',
         'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'bounce-glow': 'bounce 1s infinite, glow 2s ease-in-out infinite alternate',
+        'fadeIn': 'fadeIn 0.3s ease-out',
       },
       keyframes: {
         glow: {
           '0%': { boxShadow: '0 0 5px rgba(0, 255, 65, 0.5)' },
           '100%': { boxShadow: '0 0 20px rgba(0, 255, 65, 0.8), 0 0 30px rgba(0, 255, 65, 0.6)' },
+        },
+        fadeIn: {
+          from: {
+            opacity: '0',
+            transform: 'translateY(10px)',
+          },
+          to: {
+            opacity: '1',
+            transform: 'translateY(0)',
+          },
         },
       },
       boxShadow: {

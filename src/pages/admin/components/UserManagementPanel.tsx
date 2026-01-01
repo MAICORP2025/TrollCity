@@ -7,7 +7,7 @@ import { User, Coins, Award, Shield, Save, X, Search } from 'lucide-react'
 interface UserProfile {
   id: string
   username: string
-  email: string
+  email?: string
   role: string
   troll_coins: number
   free_coin_balance: number
@@ -37,17 +37,24 @@ export default function UserManagementPanel({
   const [editingRole, setEditingRole] = useState('user')
   const [saving, setSaving] = useState(false)
 
+  const canViewEmails = adminProfile?.role === 'admin' || (adminProfile as any)?.is_admin === true
+
   const loadUsers = async () => {
     setLoading(true)
     try {
+      const selectFields = canViewEmails
+        ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_admin, is_troller, created_at'
+        : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_admin, is_troller, created_at'
+
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_admin, is_troller, created_at')
+        // supabase-js types can't infer dynamic select strings; cast to keep runtime behavior.
+        .select(selectFields as any)
         .order('created_at', { ascending: false })
         .limit(100)
 
       if (error) throw error
-      setUsers(data || [])
+      setUsers((data as any) || [])
     } catch (error: any) {
       console.error('Error loading users:', error)
       toast.error('Failed to load users')
@@ -163,7 +170,7 @@ export default function UserManagementPanel({
       const search = searchTerm.toLowerCase()
       return (
         user.username?.toLowerCase().includes(search) ||
-        user.email?.toLowerCase().includes(search) ||
+        (canViewEmails && user.email?.toLowerCase().includes(search)) ||
         user.id.toLowerCase().includes(search)
       )
     }
@@ -187,7 +194,7 @@ export default function UserManagementPanel({
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
-          placeholder="Search by username, email, or ID..."
+          placeholder={canViewEmails ? "Search by username, email, or ID..." : "Search by username or ID..."}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -205,7 +212,9 @@ export default function UserManagementPanel({
             <thead>
               <tr className="border-b border-gray-700">
                 <th className="pb-3 text-gray-400 font-semibold">Username</th>
-                <th className="pb-3 text-gray-400 font-semibold">Email</th>
+                {canViewEmails && (
+                  <th className="pb-3 text-gray-400 font-semibold">Email</th>
+                )}
                 <th className="pb-3 text-gray-400 font-semibold">Role</th>
                 <th className="pb-3 text-gray-400 font-semibold">Level</th>
                 <th className="pb-3 text-gray-400 font-semibold">Paid Coins</th>
@@ -217,7 +226,9 @@ export default function UserManagementPanel({
               {filteredUsers.map((user) => (
                 <tr key={user.id} className="border-b border-gray-800 hover:bg-gray-900/50">
                   <td className="py-3 text-white">{user.username}</td>
-                  <td className="py-3 text-gray-400 text-sm">{user.email}</td>
+                  {canViewEmails && (
+                    <td className="py-3 text-gray-400 text-sm">{user.email}</td>
+                  )}
                   <td className="py-3">
                     <span className={`px-2 py-1 rounded text-xs ${
                       user.role === 'admin'

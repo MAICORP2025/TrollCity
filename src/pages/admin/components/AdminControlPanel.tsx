@@ -20,11 +20,10 @@ export default function AdminControlPanel() {
   const { user, profile, refreshProfile } = useAuthStore()
   const [targetUser, setTargetUser] = useState('')
   const [searchUsername, setSearchUsername] = useState('')
-  const [searchResults, setSearchResults] = useState<Array<{ 
+  const [searchResults, setSearchResults] = useState<Array<{
     id: string
     username: string
     email: string
-    troll_coins?: number
     troll_coins?: number
     role?: string
   }>>([])
@@ -56,7 +55,7 @@ export default function AdminControlPanel() {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, email, troll_coins, troll_coins, role')
+        .select('id, username, email, troll_coins, role')
         .ilike('username', `%${searchTerm}%`)
         .limit(20)
         .order('username', { ascending: true })
@@ -138,18 +137,17 @@ export default function AdminControlPanel() {
           // Get current balance
           const { data: currentProfile } = await supabase
             .from('user_profiles')
-            .select('troll_coins, troll_coins')
+            .select('troll_coins')
             .eq('id', selectedUser.id)
             .single()
 
           if (currentProfile) {
-            const totalCoins = (currentProfile.troll_coins || 0) + (currentProfile.troll_coins || 0)
+            const totalCoins = currentProfile.troll_coins || 0
 
             // Set both balances to 0
             const { error: updateError } = await supabase
               .from('user_profiles')
               .update({
-                troll_coins: 0,
                 troll_coins: 0,
                 updated_at: new Date().toISOString()
               })
@@ -459,7 +457,7 @@ export default function AdminControlPanel() {
               {searchResults.length > 0 && (
                 <div className="bg-zinc-900/90 border border-gray-700 rounded-lg max-h-64 overflow-y-auto">
                   {searchResults.map((u) => {
-                    const totalCoins = (u.troll_coins || 0) + (u.troll_coins || 0)
+                    const totalCoins = u.troll_coins || 0
                     return (
                       <div
                         key={u.id}
@@ -496,7 +494,7 @@ export default function AdminControlPanel() {
                               {totalCoins.toLocaleString()} coins
                             </div>
                             <div className="text-xs text-gray-500">
-                              Paid: {(u.troll_coins || 0).toLocaleString()} | Free: {(u.troll_coins || 0).toLocaleString()}
+                              Total: {totalCoins.toLocaleString()}
                             </div>
                           </div>
                         </div>

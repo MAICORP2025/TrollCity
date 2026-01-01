@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 
 const DEFAULT_ROOM = 'officer-stream'
-const SEAT_COUNT = 6
+const SEAT_COUNT = 9
 
 export type SeatAssignment = {
   room: string

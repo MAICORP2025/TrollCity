@@ -1,213 +1,695 @@
-import { useState } from "react";
-import { Heart, Gift, Settings, Plus, Minus } from "lucide-react";
-import ChatBox from "@/components/broadcast/ChatBox";
-import StatsPanel from "@/components/broadcast/StatsPanel";
-import GiftModal from "@/components/broadcast/GiftModal";
-import ProfileModal from "@/components/broadcast/ProfileModal";
-import ParticipantBoxes from "@/components/broadcast/ParticipantBoxes";
-import GiftBox from "@/components/broadcast/GiftBox";
-import CoinStoreModal from "@/components/broadcast/CoinStoreModal";
+import React, { 
+  useCallback, 
+  useEffect, 
+  useMemo, 
+  useRef, 
+  useState 
+} from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useLiveKit } from '../hooks/useLiveKit';
+import { useLiveKitSession } from '../hooks/useLiveKitSession';
+import { useSeatRoster } from '../hooks/useSeatRoster';
+import { useAuthStore } from '../lib/store';
+import { supabase } from '../lib/supabase';
+import { toast } from 'sonner';
+import {
+  Users,
+  Heart,
+} from 'lucide-react';
+import ChatBox from '../components/broadcast/ChatBox';
+import GiftModal from '../components/broadcast/GiftModal';
+import ProfileModal from '../components/broadcast/ProfileModal';
+import GiftBox from '../components/broadcast/GiftBox';
+import CoinStoreModal from '../components/broadcast/CoinStoreModal';
+import { OfficerStreamGrid } from '../components/OfficerStreamGrid';
+import GiftEventOverlay from './GiftEventOverlay';
+import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 
-interface Participant {
-  id: number;
-  name: string;
-  color: string;
-  isSpeaking: boolean;
+// Constants
+const _TEXT_ENCODER = new TextEncoder();
+const SEAT_COUNT = 6;
+const _LOCAL_VIEWER_ID_KEY = "trollcity_viewer_id_v1";
+const STREAM_POLL_INTERVAL = 2000;
+
+// Types
+interface StreamRow {
+  id: string;
+  broadcaster_id: string;
+  status: string;
+  is_live: boolean;
+  viewer_count?: number;
+  total_gifts_coins?: number;
+  total_likes?: number;
+  room_name?: string;
+  start_time?: string;
+  current_viewers?: number;
 }
 
+
+
+interface _ControlMessage {
+  type: 'admin-action'
+  action: 'mute-all' | 'remove'
+  seatIndex?: number
+  initiatorId?: string
+}
+
+interface MediaStreamConfig {
+  video: MediaTrackConstraints;
+  audio: MediaTrackConstraints;
+}
+
+// Media configuration
+const DEFAULT_MEDIA_CONFIG: MediaStreamConfig = {
+  video: {
+    width: { ideal: 1280, max: 1920 },
+    height: { ideal: 720, max: 1080 },
+    facingMode: 'user',
+    frameRate: { ideal: 30, max: 60 }
+  },
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true
+  }
+};
+
+// Custom hooks for state management
+
+const useDisplayName = (profile: any) => {
+  return useMemo(() => {
+    return profile?.username || profile?.email || "Anonymous";
+  }, [profile?.username, profile?.email]);
+};
+
+const useIsBroadcaster = (profile: any, stream: StreamRow | null) => {
+  return useMemo(() => {
+    return Boolean(profile?.id && stream?.broadcaster_id && profile.id === stream.broadcaster_id);
+  }, [profile?.id, stream?.broadcaster_id]);
+};
+
+const useIsAdmin = (profile: any) => {
+  return useMemo(
+    () => Boolean(profile?.role === 'admin' || profile?.is_admin || profile?.is_lead_officer),
+    [profile]
+  );
+};
+
+// Main component
 export default function BroadcastPage() {
-  const [viewerCount, setViewerCount] = useState(1284);
-  const [trollLikeCount, setTrollLikeCount] = useState(3421);
-  const [coinCount, setCoinCount] = useState(5280);
+  // Router and navigation
+  const { streamId } = useParams<{ streamId: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const shouldAutoStart = query.get("start") === "1";
+
+  // Auth and user state
+  const { user, profile } = useAuthStore();
+  const displayName = useDisplayName(profile);
+  
+  // Stream state (defined early for useIsBroadcaster)
+  const [stream, setStream] = useState<StreamRow | null>(null);
+  
+  const isBroadcaster = useIsBroadcaster(profile, stream);
+  const _isAdmin = useIsAdmin(profile);
+
+  // LiveKit integration
+  const liveKit = useLiveKit();
+  const roomName = useMemo(() => `stream-${streamId}`, [streamId]);
+  
+  const {
+    joinAndPublish,
+  } = useLiveKitSession({
+    roomName,
+    user: user
+      ? { ...user, identity: (user as any).identity || (user as any).id || profile?.id, role: profile?.role || 'broadcaster' }
+      : null,
+    role: isBroadcaster ? 'broadcaster' : 'viewer',
+    allowPublish: isBroadcaster,
+    maxParticipants: SEAT_COUNT,
+  });
+
+  const { participants, service: _service } = liveKit;
+  const { seats, claimSeat, releaseSeat: _releaseSeat } = useSeatRoster(roomName);
+
+  // Media state
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
+
+  // Defensive auth check: if Supabase reports no active session or refresh fails,
+  // sign the user out and redirect to auth to avoid unhandled errors during LiveKit actions.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!mounted) return;
+        if (error || !data?.session) {
+          console.warn('[BroadcastPage] No active session or session refresh failed, signing out.');
+          try {
+            await supabase.auth.signOut();
+          } catch (e) {
+            console.warn('Sign out failed during defensive auth handling', e);
+          }
+          navigate('/auth');
+        }
+      } catch (e: any) {
+        console.warn('[BroadcastPage] Auth session check threw:', e?.message || e);
+        try {
+          await supabase.auth.signOut();
+        } catch {}
+        if (mounted) navigate('/auth');
+      }
+    })();
+    return () => { mounted = false };
+  }, [navigate]);
+
+
+
+  // UI state
+  const [trollLikeCount, setTrollLikeCount] = useState(0);
+  const [coinCount, setCoinCount] = useState(0);
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
-  const [selectedProfile, setSelectedProfile] = useState<{
-    name: string;
-  } | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false);
-  const [participants, setParticipants] = useState<Participant[]>([
-    { id: 1, name: "Participant 1", color: "#A78BFA", isSpeaking: false },
-  ]);
-  const [broadcasterSpeaking, setBroadcasterSpeaking] = useState(false);
+  const [_targetSeatIndex, setTargetSeatIndex] = useState<number | null>(null);
 
-  const handleAddParticipant = () => {
-    const newId = Math.max(...participants.map((p) => p.id), 0) + 1;
-    const colors = ["#A78BFA", "#F472B6", "#FB923C", "#34D399", "#60A5FA"];
-    setParticipants([
-      ...participants,
-      {
-        id: newId,
-        name: `Participant ${newId}`,
-        color: colors[newId % colors.length],
-        isSpeaking: false,
-      },
-    ]);
-  };
+  // Seat management state
+  const [currentSeatIndex, setCurrentSeatIndex] = useState<number | null>(null);
+  const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
+  const [permissionErrorSeat, setPermissionErrorSeat] = useState<number | null>(null);
 
-  const handleRemoveParticipant = (id: number) => {
-    setParticipants(participants.filter((p) => p.id !== id));
-  };
+  // Refs for state tracking
+  const autoStartRef = useRef(false);
+  const connectRequestedRef = useRef(false);
+  const prevAuthRef = useRef<boolean>(Boolean(user && profile));
 
-  const handleTrollLike = () => {
-    setTrollLikeCount(trollLikeCount + 1);
-  };
+  // Media access handlers
+  const requestMediaAccess = useCallback(async (): Promise<MediaStream> => {
+    if (localMediaStream && localMediaStream.active) {
+      return localMediaStream;
+    }
 
-  const handleGiftSent = (amount: number) => {
-    setCoinCount(coinCount + amount);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Media devices API not available');
+    }
+
+    if (!window.isSecureContext) {
+      throw new Error('Camera/microphone access requires a secure context');
+    }
+
+    try {
+      console.log('[BroadcastPage] Requesting camera & mic');
+      const stream = await navigator.mediaDevices.getUserMedia(DEFAULT_MEDIA_CONFIG);
+      
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
+      
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+      
+      setLocalMediaStream(stream);
+      return stream;
+    } catch (err: any) {
+      console.error('[BroadcastPage] getUserMedia failed:', err.name, err.message);
+      throw err;
+    }
+  }, [localMediaStream]);
+
+  const cleanupLocalStream = useCallback(() => {
+    if (localMediaStream) {
+      localMediaStream.getTracks().forEach((track) => track.stop());
+      setLocalMediaStream(null);
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+  }, [localMediaStream]);
+
+  // Stream data loading
+  const loadStreamData = useCallback(async () => {
+    if (!streamId) return;
+
+    try {
+      console.log("📡 Loading stream info...", streamId);
+
+      const { data: streamRow, error: streamErr } = await supabase
+        .from("streams")
+        .select("*")
+        .eq("id", streamId)
+        .single();
+
+      if (streamErr || !streamRow) {
+        console.error("❌ Stream load failed:", streamErr);
+        toast.error("Stream not found.");
+        return;
+      }
+
+      setStream(streamRow as StreamRow);
+      setCoinCount(Number(streamRow.total_gifts_coins || 0));
+
+      // Broadcaster profile data loaded separately if needed
+      // const { data: bc, error: bcErr } = await supabase
+      //   .from("user_profiles")
+      //   .select("id, username")
+      //   .eq("id", streamRow.broadcaster_id)
+      //   .single();
+
+      // if (bcErr) console.warn("Broadcaster profile missing:", bcErr);
+    } catch (error) {
+      console.error('Failed to load stream data:', error);
+      toast.error('Failed to load stream information');
+    }
+  }, [streamId]);
+
+  // Seat management handlers
+  const handleSeatClaim = useCallback(
+    async (index: number) => {
+      if (claimingSeat !== null || currentSeatIndex !== null) return;
+      
+      console.log(`[BroadcastPage] Seat ${index + 1} clicked to join`);
+      setClaimingSeat(index);
+      setPermissionErrorSeat(null);
+
+      try {
+        const stream = await requestMediaAccess();
+        console.log('[BroadcastPage] Permissions granted');
+
+        const success = await claimSeat(index, {
+          username: displayName,
+          avatarUrl: profile?.avatar_url,
+          role: profile?.role || 'broadcaster',
+          metadata: {},
+        });
+
+        if (!success) {
+          throw new Error('Seat claim failed');
+        }
+
+        setCurrentSeatIndex(index);
+
+        try {
+          await joinAndPublish(stream);
+        } catch (liveKitErr: any) {
+          // Extract the real error message from LiveKit join attempt
+          const actualError = liveKitErr?.message || 'LiveKit join failed';
+          console.error('LiveKit join error details:', actualError);
+          throw new Error(actualError);
+        }
+
+        // Update stream status if broadcaster
+        if (isBroadcaster) {
+          const { error: updateErr } = await supabase
+            .from("streams")
+            .update({ 
+              status: "live", 
+              is_live: true,
+              start_time: new Date().toISOString(),
+              current_viewers: 1,
+              room_name: roomName
+            })
+            .eq("id", stream?.id);
+            
+          if (updateErr) console.warn("Stream status update failed:", updateErr);
+        }
+      } catch (err: any) {
+        console.error('Failed to claim seat:', err);
+        const permissionDenied = ['NotAllowedError', 'NotFoundError', 'SecurityError', 'PermissionDeniedError'];
+        const errorMsg = err?.message || '';
+        
+        if (permissionDenied.includes(err?.name)) {
+          setPermissionErrorSeat(index);
+          toast.error('Camera/Microphone blocked. Please enable permissions and try again.');
+        } else if (errorMsg.includes('No active session') || errorMsg.includes('session')) {
+          // Session expired during join attempt—redirect to auth
+          toast.error('Your session has expired. Please sign in again.');
+          try {
+            await supabase.auth.signOut();
+          } catch (e) {
+            console.warn('Sign out failed during session error handling', e);
+          }
+          navigate('/auth');
+        } else {
+          // Show the actual error from LiveKit or other sources
+          toast.error(`Failed to join: ${errorMsg || 'Unknown error'}`);
+        }
+      } finally {
+        setClaimingSeat(null);
+      }
+    },
+    [
+      claimingSeat, 
+      currentSeatIndex, 
+      claimSeat, 
+      joinAndPublish, 
+      profile, 
+      requestMediaAccess, 
+      isBroadcaster, 
+      stream?.id, 
+      roomName, 
+      displayName
+    ]
+  );
+
+
+
+  // Admin control handlers
+
+
+
+  // Permission retry handler
+  const handlePermissionRetry = useCallback(async () => {
+    if (permissionErrorSeat === null) return;
+    const seatToRetry = permissionErrorSeat;
+    setPermissionErrorSeat(null);
+    await handleSeatClaim(seatToRetry);
+  }, [permissionErrorSeat, handleSeatClaim]);
+
+  // Stream management handlers
+  const handleEndStream = useCallback(async () => {
+    try {
+      await supabase.from('streams').update({ 
+        is_live: false, 
+        status: 'offline' 
+      }).eq('id', stream?.id);
+      
+      cleanupLocalStream();
+      navigate('/');
+    } catch (err) {
+      console.warn('Failed to end stream', err);
+      toast.error('Failed to end stream');
+    }
+  }, [stream?.id, cleanupLocalStream, navigate]);
+
+
+
+  const handleGiftSent = useCallback(async (amountOrGift: any) => {
+    // Support old numeric API and new object API from GiftBox/GiftModal
+    let totalCoins = 0;
+    let quantity = 1;
+    let giftName = 'Manual Gift';
+    let giftId: number | string | undefined;
+
+    if (typeof amountOrGift === 'number') {
+      totalCoins = amountOrGift;
+    } else if (amountOrGift && typeof amountOrGift === 'object') {
+      const g = amountOrGift;
+      quantity = Math.max(1, Number(g.quantity) || 1);
+      const per = Number(g.coins) || 0;
+      totalCoins = per * quantity;
+      giftName = g.name || giftName;
+      giftId = g.id;
+    }
+
+    setCoinCount(prev => prev + totalCoins);
     setIsGiftModalOpen(false);
-  };
+    try {
+      await supabase.from('gifts').insert({
+        stream_id: stream?.id,
+        sender_id: user?.id,
+        receiver_id: null,
+        coins_spent: totalCoins,
+        gift_type: 'paid',
+        message: giftName,
+        gift_id: giftId,
+        quantity: quantity,
+      });
+    } catch (e) {
+      console.error('Failed to record manual gift event:', e);
+    }
+  }, [stream?.id, user?.id]);
 
-  const handleCoinsPurchased = (amount: number) => {
-    setCoinCount(coinCount + amount);
+  const handleCoinsPurchased = useCallback((amount: number) => {
+    setCoinCount(prev => prev + amount);
     setIsCoinStoreOpen(false);
-  };
+  }, []);
 
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white overflow-hidden">
-      <style jsx global>{`
-        @keyframes rgbRotate {
-          0% {
-            border-color: rgb(255, 0, 0);
-            box-shadow: 0 0 20px rgb(255, 0, 0), inset 0 0 20px rgba(255, 0, 0, 0.3);
-          }
-          33% {
-            border-color: rgb(0, 255, 0);
-            box-shadow: 0 0 20px rgb(0, 255, 0), inset 0 0 20px rgba(0, 255, 0, 0.3);
-          }
-          66% {
-            border-color: rgb(0, 0, 255);
-            box-shadow: 0 0 20px rgb(0, 0, 255), inset 0 0 20px rgba(0, 0, 255, 0.3);
-          }
-          100% {
-            border-color: rgb(255, 0, 0);
-            box-shadow: 0 0 20px rgb(255, 0, 0), inset 0 0 20px rgba(255, 0, 0, 0.3);
-          }
-        }
+  // Computed values
+  const renderSeats = useMemo(() => {
+    return seats.map((seat, index) => ({
+      seat,
+      participant: seat?.user_id ? participants.get(seat.user_id) : undefined,
+      index,
+    }));
+  }, [seats, participants]);
 
-        .rgb-neon {
-          animation: rgbRotate 2s infinite;
-          border: 2px solid;
-        }
+  const lastGift = useGiftEvents(stream?.id);
 
-        .purple-neon {
-          border: 2px solid #A78BFA;
-          box-shadow: 0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2);
-        }
+  
 
-        .red-neon {
-          border: 2px solid #F472B6;
-          box-shadow: 0 0 15px rgba(244, 114, 182, 0.6), inset 0 0 15px rgba(244, 114, 182, 0.2);
-        }
+  // Effects
+  useEffect(() => {
+    return () => {
+      cleanupLocalStream();
+    };
+  }, [cleanupLocalStream]);
 
-        .purple-neon:hover {
-          box-shadow: 0 0 25px rgba(167, 139, 250, 0.8), inset 0 0 15px rgba(167, 139, 250, 0.3);
-        }
+  useEffect(() => {
+    loadStreamData();
+  }, [loadStreamData]);
 
-        .red-neon:hover {
-          box-shadow: 0 0 25px rgba(244, 114, 182, 0.8), inset 0 0 15px rgba(244, 114, 182, 0.3);
-        }
-      `}</style>
+  // Auto-start broadcaster when redirected from setup with ?start=1
+  useEffect(() => {
+    if (!shouldAutoStart || !stream?.id || !profile?.id || !isBroadcaster || autoStartRef.current) {
+      return;
+    }
 
-      <div className="flex h-screen gap-4 p-4">
-        <div className="flex-1 flex flex-col gap-4">
-          <div
-            className="flex-[2] bg-gradient-to-br from-gray-900 to-black rounded-lg overflow-hidden relative"
-            style={{
-              border: broadcasterSpeaking ? "2px solid" : "2px solid #A78BFA",
-              boxShadow: broadcasterSpeaking
-                ? "0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2)"
-                : "0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2)",
-              animation: broadcasterSpeaking ? "rgbRotate 2s infinite" : "none",
-            }}
-          >
-            <video
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              loop
-              src="https://www.w3schools.com/html/mov_bbb.mp4"
-            />
+    autoStartRef.current = true;
+    console.log("🔥 AutoStart detected (?start=1). Starting broadcast...");
+    handleSeatClaim(0);
 
-            <div className="absolute top-4 left-4 bg-black/70 rounded-lg px-4 py-2 purple-neon text-sm">
-              <span className="font-bold">StreamMaster</span>
-            </div>
+    // Clean URL
+    setTimeout(() => {
+      const clean = location.pathname;
+      window.history.replaceState({}, "", clean);
+    }, 300);
+  }, [shouldAutoStart, stream?.id, profile?.id, isBroadcaster, handleSeatClaim, location.pathname]);
 
-            <div className="absolute top-16 left-4 bg-black/70 rounded-lg px-4 py-2 purple-neon text-xs">
-              <span className="font-bold">{viewerCount.toLocaleString()}</span>{" "}
-              watching
-            </div>
+  // Redirect on auth loss
+  useEffect(() => {
+    const hadAuth = Boolean(prevAuthRef.current);
+    const hasAuth = Boolean(user && profile);
+    
+    if (hadAuth && !hasAuth) {
+      console.warn("⚠️ Auth lost — redirecting to login and cleaning up broadcast state");
+      cleanupLocalStream();
+      connectRequestedRef.current = false;
+      autoStartRef.current = false;
+      toast.error("Session expired — please sign in again.");
+      navigate("/auth");
+    }
+    
+    prevAuthRef.current = hasAuth;
+  }, [user, profile, navigate, cleanupLocalStream]);
 
-            <div className="absolute bottom-4 left-4 flex gap-2 bg-black/70 rounded-lg p-3 purple-neon">
-              <button
-                onClick={handleAddParticipant}
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded transition-colors"
-              >
-                <Plus size={18} />
-              </button>
-              <button
-                onClick={() => {
-                  if (participants.length > 1) {
-                    handleRemoveParticipant(
-                      participants[participants.length - 1].id
-                    );
-                  }
-                }}
-                disabled={participants.length === 1}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 px-3 py-2 rounded transition-colors"
-              >
-                <Minus size={18} />
-              </button>
-            </div>
+  // Stream status polling
+  useEffect(() => {
+    if (!streamId) return;
 
-            <button
-              onClick={handleTrollLike}
-              className="absolute bottom-4 right-4 flex items-center gap-2 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 px-4 py-2 rounded-lg font-bold text-white transition-all hover:scale-110 active:scale-95 red-neon"
-            >
-              <Heart size={20} fill="currentColor" />
-              {trollLikeCount}
-            </button>
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from("streams")
+        .select("status,is_live,viewer_count,total_gifts_coins")
+        .eq("id", streamId)
+        .maybeSingle();
 
-            <div className="absolute top-4 right-4 flex gap-2">
-              <button className="p-2 bg-black/70 rounded-lg purple-neon hover:bg-black/80 transition-colors">
-                <Settings size={20} />
-              </button>
-            </div>
-          </div>
+      if (data) {
+        setStream(prev =>
+          prev
+            ? {
+                ...prev,
+                status: data.status,
+                is_live: data.is_live,
+                viewer_count: data.viewer_count,
+                total_gifts_coins: data.total_gifts_coins,
+              }
+            : prev
+        );
+      }
+    }, STREAM_POLL_INTERVAL);
 
-          {participants.length > 0 && (
-            <ParticipantBoxes
-              participants={participants}
-              onRemove={handleRemoveParticipant}
-            />
-          )}
-        </div>
+    return () => clearInterval(interval);
+  }, [streamId]);
 
-        <div className="w-1/3 flex flex-col gap-4 min-w-0">
-          <ChatBox
-            onProfileClick={setSelectedProfile}
-            onCoinSend={(userId, amount) => {
-              setCoinCount(coinCount + amount);
-            }}
-          />
-
-          <StatsPanel
-            viewers={viewerCount}
-            trollCount={trollLikeCount}
-            coins={coinCount}
-            onStoreClick={() => setIsCoinStoreOpen(true)}
-          />
-
-          <GiftBox
-            onSendGift={(gift, recipient) => {
-              setCoinCount(coinCount + gift.coins);
-            }}
-          />
+  // Loading state
+  if (!stream || !profile) {
+    return (
+      <div className="min-h-screen bg-[#03010c] via-[#05031a] to-[#110117] text-white flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 rounded-full border-2 border-purple-500/60 animate-pulse" />
+          <p className="text-sm text-gray-300">Loading stream…</p>
         </div>
       </div>
+    );
+  }
 
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#03010c] via-[#05031a] to-[#110117] text-white">
+      {/* Permission Error Banner */}
+      {permissionErrorSeat !== null && (
+        <div className="fixed top-4 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 px-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-full border border-red-500/60 bg-red-500/90 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg shadow-red-500/50">
+            <span className="flex-1 min-w-0 text-left">
+              Camera/Microphone blocked. Please enable permissions and try again.
+            </span>
+            <button
+              onClick={handlePermissionRetry}
+              className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.3em] text-white transition hover:bg-white/20"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex h-screen flex-col">
+        <main className="flex-1 px-6 py-5">
+          <section className="h-full rounded-[32px] border border-white/10 bg-gradient-to-b from-[#050113] to-[#0b091f] p-6 shadow-[0_30px_70px_rgba(0,0,0,0.55)]">
+            {/* Header */}
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em] text-white/50">Broadcast stream</p>
+                <p className="text-sm text-white/70">Six seats · {participants.size} active</p>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div className="px-4 py-3 bg-gradient-to-r from-[#2a2540] to-[#161018] rounded-lg border border-purple-700/40">
+                  <div className="text-xs text-gray-300">Likes</div>
+                  <div className="text-lg font-bold flex items-center gap-2"><Heart size={16} /> {trollLikeCount}</div>
+                </div>
+                <div className="px-4 py-3 bg-gradient-to-r from-[#2a2540] to-[#161018] rounded-lg border border-yellow-700/30">
+                  <div className="text-xs text-gray-300">Coins</div>
+                  <div className="text-lg font-bold">{coinCount}</div>
+                </div>
+                <div className="px-4 py-3 bg-gradient-to-r from-[#2a2540] to-[#161018] rounded-lg border border-green-700/30">
+                  <div className="text-xs text-gray-300">Viewers</div>
+                  <div className="text-lg font-bold flex items-center gap-2"><Users size={16} /> {(stream.viewer_count || 0).toLocaleString()}</div>
+                </div>
+                {stream.is_live && (
+                  <div className="px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold">LIVE</div>
+                )}
+                <button
+                  onClick={handleEndStream}
+                  className="px-4 py-2 bg-red-700 hover:bg-red-800 rounded text-sm font-semibold"
+                >
+                  End Stream
+                </button>
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="h-full grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Left Column: Broadcast Grid + Like Button + Gifts (stacked) */}
+              <div className="lg:col-span-3 h-full flex flex-col gap-1">
+                {/* Broadcast Grid */}
+                <div className="relative flex-1 min-h-0">
+                  {lastGift && <GiftEventOverlay gift={lastGift} />}
+                  <OfficerStreamGrid
+                    roomName={roomName}
+                    onSeatClick={(idx) => {
+                      setTargetSeatIndex(idx);
+                      // Attempt to claim via existing handler for consistency
+                      handleSeatClaim(idx).catch(() => {});
+                    }}
+                  />
+                </div>
+
+                {/* Like Button Row - aligned right */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      // optimistic
+                      setTrollLikeCount((c) => c + 1);
+                      try {
+                        await supabase
+                          .from('streams')
+                          .update({ total_likes: (stream?.total_likes || 0) + 1 })
+                          .eq('id', stream?.id);
+                      } catch (err) {
+                        console.warn('Failed to persist like:', err);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-green-700 hover:bg-green-600 rounded-xl text-sm font-semibold"
+                    title="Troll Like"
+                  >
+                    🧟 Like
+                  </button>
+                </div>
+
+                {/* Quick Gifts Panel */}
+                <div className="w-full">
+                  <GiftBox
+                    participants={renderSeats.filter(s => s.seat).map((s) => ({ name: s.seat?.username || 'Unknown' }))}
+                    onSendGift={async (gift: any, recipient?: string | null) => {
+                      const qty = Math.max(1, Number(gift?.quantity) || 1);
+                      const per = Number(gift?.coins) || 0;
+                      const total = per * qty;
+
+                      // optimistic UI
+                      setCoinCount(prev => prev + total);
+
+                      try {
+                        // Insert into legacy gifts table to trigger real-time overlay
+                        await supabase.from('gifts').insert({
+                          stream_id: stream?.id,
+                          sender_id: user?.id,
+                          receiver_id: null,
+                          coins_spent: total,
+                          gift_type: 'paid',
+                          message: gift?.name,
+                          gift_id: gift?.id,
+                          quantity: qty,
+                        });
+                      } catch (e) {
+                        console.error('Failed to record gift event:', e);
+                      }
+
+                      if (recipient) {
+                        toast.success(`Sent ${qty}× ${gift?.name} to ${recipient}`);
+                      } else {
+                        toast.success(`Sent ${qty}× ${gift?.name} to all viewers`);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Right Column: Chat */}
+              <div className="lg:col-span-1 h-full flex flex-col gap-4">
+                <div className="flex-1 min-h-0">
+                  <ChatBox
+                    onProfileClick={setSelectedProfile}
+                    onCoinSend={(_userId, amount) => {
+                      setCoinCount(prev => prev + amount);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        
+      </div>
+
+      {/* Hidden video element for local stream */}
+      <video
+        ref={localVideoRef}
+        autoPlay
+        muted
+        playsInline
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+      />
+
+      {/* Modals */}
       {isGiftModalOpen && (
-        <GiftModal
-          onClose={() => setIsGiftModalOpen(false)}
-          onSendGift={handleGiftSent}
+        <GiftModal 
+          onClose={() => setIsGiftModalOpen(false)} 
+          onSendGift={handleGiftSent} 
         />
       )}
 
@@ -215,19 +697,21 @@ export default function BroadcastPage() {
         <ProfileModal
           profile={selectedProfile}
           onClose={() => setSelectedProfile(null)}
-          onSendCoins={(amount) => {
-            setCoinCount(coinCount + amount);
+          onSendCoins={(amount: number) => {
+            setCoinCount(prev => prev + amount);
             setSelectedProfile(null);
           }}
         />
       )}
 
       {isCoinStoreOpen && (
-        <CoinStoreModal
-          onClose={() => setIsCoinStoreOpen(false)}
-          onPurchase={handleCoinsPurchased}
+        <CoinStoreModal 
+          onClose={() => setIsCoinStoreOpen(false)} 
+          onPurchase={handleCoinsPurchased} 
         />
       )}
     </div>
   );
 }
+
+

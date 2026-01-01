@@ -1,8 +1,8 @@
 import React from 'react';
-import LiveBroadcast from './LiveBroadcast';
+import Stream from './Stream';
 
 const LiveStreamPage: React.FC = () => {
-  return <LiveBroadcast />;
+  return <Stream />;
 };
 
 export default LiveStreamPage;

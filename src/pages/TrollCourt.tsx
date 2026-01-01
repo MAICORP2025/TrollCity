@@ -94,17 +94,23 @@ export default function TrollCourt() {
     }
   }
 
-  const handleEndCourtSession = () => {
+  const handleEndCourtSession = async () => {
     if (!courtSession?.id) return
-    ;(async () => {
-      try {
-        const { error } = await supabase.rpc('end_court_session', { p_session_id: String(courtSession.id) })
-        if (error) throw error
-        setCourtSession(null)
-      } catch (err) {
-        toast.error('Failed to end court session')
+    try {
+      console.log('Ending court session RPC, sessionId=', String(courtSession.id))
+      const res = await supabase.rpc('end_court_session', { p_session_id: String(courtSession.id) })
+      console.log('end_court_session RPC response:', res)
+      const error = (res as any).error
+      if (error) {
+        console.error('end_court_session RPC error object:', error)
+        throw error
       }
-    })()
+      setCourtSession(null)
+      toast.success('Court session ended')
+    } catch (err: any) {
+      console.error('Failed to end court session:', err)
+      toast.error(`Failed to end court session: ${err?.message || err}`)
+    }
   }
 
   return (

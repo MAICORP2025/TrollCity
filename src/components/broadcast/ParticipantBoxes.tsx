@@ -1,74 +1,38 @@
-import { X } from "lucide-react";
+import React from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Users } from "lucide-react";
 
-interface Participant {
-  id: number;
-  name: string;
-  color: string;
-  isSpeaking?: boolean;
-}
+type Guest = { name: string };
 
 interface ParticipantBoxesProps {
-  participants: Participant[];
-  onRemove?: (id: number) => void;
+  guests: Guest[];
 }
 
-export default function ParticipantBoxes({
-  participants,
-  onRemove,
-}: ParticipantBoxesProps) {
-  if (!participants || participants.length === 0) {
-    return null;
-  }
+export default function ParticipantBoxes({ guests }: ParticipantBoxesProps) {
 
   return (
-    <div className="flex-[3] grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {participants.map((participant) => (
-        <div
-          key={participant.id}
-          className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg overflow-hidden"
-          style={{
-            border: participant.isSpeaking
-              ? "2px solid"
-              : "2px solid " + participant.color,
-            boxShadow: participant.isSpeaking
-              ? "0 0 20px " +
-                participant.color +
-                ", inset 0 0 20px " +
-                participant.color +
-                "40"
-              : "0 0 15px " +
-                participant.color +
-                "99, inset 0 0 15px " +
-                participant.color +
-                "33",
-            animation: participant.isSpeaking
-              ? "rgbRotate 2s infinite"
-              : "none",
-          }}
-        >
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="text-center">
-              <div
-                className="w-12 h-12 mx-auto mb-2 rounded-full flex items-center justify-center text-xl font-bold text-white"
-                style={{ backgroundColor: participant.color }}
-              >
-                {participant.name.charAt(0)}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <Users className="w-5 h-5 text-purple-400" />
+          Guests ({guests.length})
+        </h3>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {guests.map((guest, index) => (
+          <Card key={index} className="bg-gray-800/50 border-gray-700 relative group">
+            <CardContent className="p-4">
+              <div className="aspect-video bg-gradient-to-br from-purple-500/20 to-green-500/20 rounded-lg flex items-center justify-center mb-2">
+                <Users className="w-12 h-12 text-gray-600" />
               </div>
-            </div>
-          </div>
-          <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-xs font-bold">
-            {participant.name}
-          </div>
-          {participants.length > 1 && (
-            <button
-              onClick={() => onRemove?.(participant.id)}
-              className="absolute top-2 right-2 p-1 bg-red-600/80 hover:bg-red-700 rounded transition-colors"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      ))}
+              <p className="text-sm font-semibold text-white text-center truncate">
+                {guest.name}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

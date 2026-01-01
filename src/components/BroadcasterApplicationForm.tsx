@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { X, Upload, FileText, CreditCard, Building2, User } from 'lucide-react'
+import { X, FileText, Building2, User } from 'lucide-react'
 
 interface BroadcasterApplicationFormProps {
   isOpen: boolean
@@ -110,7 +110,7 @@ export default function BroadcasterApplicationForm({ isOpen, onClose, onSubmitte
       }
 
       // Submit application
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('broadcaster_applications')
         .insert({
           user_id: user.id,
@@ -131,8 +131,6 @@ export default function BroadcasterApplicationForm({ isOpen, onClose, onSubmitte
           tax_form_url: taxUrl,
           application_status: 'pending'
         })
-        .select()
-        .single()
 
       if (error) {
         console.error('Application submission error:', error)

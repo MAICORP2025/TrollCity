@@ -196,10 +196,11 @@ const Auth = () => {
             }
           }
           
-          if (prof) {
+            if (prof) {
             setProfile(prof)
             toast.success('Account created successfully!')
-            navigate('/')
+            // After signup, require agreement acceptance first
+            navigate('/terms')
           } else {
             console.warn('Profile not found after 5 attempts, but user was created')
             toast.success('Account created successfully!')

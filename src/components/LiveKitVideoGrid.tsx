@@ -187,6 +187,9 @@ export function LiveKitRoomWrapper({
     role === UserRole.LEAD_TROLL_OFFICER ||
     role === 'broadcaster'
 
+  // Only allow publishing if both prop allows and role allows
+  const effectiveAllowPublish = allowPublish && roleAllowsPublish
+
   /**
    * IMPORTANT:
    * We DO NOT try to read token permissions from localParticipant because
@@ -228,8 +231,9 @@ export function LiveKitRoomWrapper({
 
     ;(didConnectRef.current as any) = connectKey
 
-    connect(roomName, identity, {
-      allowPublish,
+    const userObj = { id: identity, identity }
+    connect(roomName, userObj, {
+      allowPublish: effectiveAllowPublish,
       role,
     } as any).catch((err) => {
       console.error('LiveKit connect failed:', err)
@@ -239,19 +243,19 @@ export function LiveKitRoomWrapper({
   }, [autoConnect, roomName, identity, role, allowPublish, connect])
 
   /* =======================
-     AUTO-PUBLISH
-  ======================= */
-  useEffect(() => {
-    if (!isConnected) return
-    if (!allowPublish) return
-    if (!canAttemptPublish) return
-    if (isAlreadyPublishing) return
-    if (isPublishing) return
+      AUTO-PUBLISH
+   ======================= */
+   useEffect(() => {
+     if (!isConnected) return
+     if (!effectiveAllowPublish) return
+     if (!canAttemptPublish) return
+     if (isAlreadyPublishing) return
+     if (isPublishing) return
 
-    startPublishing().catch((err) => {
-      console.error('Auto publish failed:', err)
-    })
-  }, [isConnected, allowPublish, canAttemptPublish, isAlreadyPublishing])
+     startPublishing().catch((err) => {
+       console.error('Auto publish failed:', err)
+     })
+   }, [isConnected, effectiveAllowPublish, canAttemptPublish, isAlreadyPublishing])
 
   /* =======================
      STATES

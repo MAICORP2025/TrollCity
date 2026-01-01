@@ -125,12 +125,6 @@ export default function TromodyShow() {
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden">
-      <style jsx global>{`
-        .purple-neon {
-          border: 2px solid #A78BFA;
-          box-shadow: 0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2);
-        }
-      `}</style>
 
       <div className="flex flex-col h-screen">
         {/* Timer Banner */}

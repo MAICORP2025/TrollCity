@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { recordAppEvent, recordEvent } from '../lib/progressionEngine'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import IdVerifyClient from '../components/IdVerifyClient'
 
 const ProfileSetup = () => {
   const navigate = useNavigate()
@@ -79,6 +80,7 @@ const ProfileSetup = () => {
         .update({ username: uname, bio: bio || null, updated_at: now })
         .eq('id', user.id)
       if (error) throw error
+
       const { data: updated } = await supabase
         .from('user_profiles')
         .select('*')

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Minus, TrendingUp, TrendingDown, Coins } from 'lucide-react'
+import { Plus, Minus, TrendingUp, TrendingDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'

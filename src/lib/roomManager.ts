@@ -1,4 +1,4 @@
-import { Room, RoomEvent } from 'livekit-client'
+import { Room, RoomEvent, Track } from 'livekit-client'
 import api from './api'
 import { LIVEKIT_URL } from './LiveKitConfig'
 
@@ -127,12 +127,24 @@ class RoomManager {
       console.log(`[RoomManager] Publishing tracks to room: ${instance.roomName}`)
       
       for (const track of stream.getTracks()) {
-        if (track.kind === 'video') {
-          await instance.room.localParticipant.publishTrack(track)
-          console.log(`✅ [RoomManager] Published video track`)
-        } else if (track.kind === 'audio') {
-          await instance.room.localParticipant.publishTrack(track)
-          console.log(`✅ [RoomManager] Published audio track`)
+        try {
+          if (track.kind === 'video') {
+            await instance.room.localParticipant.publishTrack(track, {
+              name: 'camera',
+              source: Track.Source.Camera,
+            })
+            console.log(`✅ [RoomManager] Published video track (camera)`)
+          } else if (track.kind === 'audio') {
+            await instance.room.localParticipant.publishTrack(track, {
+              name: 'microphone',
+              source: Track.Source.Microphone,
+            })
+            console.log(`✅ [RoomManager] Published audio track (microphone)`)
+          } else {
+            console.log(`[RoomManager] Skipping unsupported track kind=${track.kind}`)
+          }
+        } catch (trackErr) {
+          console.error(`[RoomManager] Failed to publish ${track.kind} track:`, trackErr)
         }
       }
       

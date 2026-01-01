@@ -3,10 +3,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import CourtEntryModal from './CourtEntryModal'
 import ExpandedStatsPanel from './ExpandedStatsPanel'
 import {
-   Home,
-   MessageSquare,
-   Radio,
-   Gift,
+  Home,
+  MessageSquare,
+  Radio,
    Coins,
    Users,
    Shield,
@@ -158,14 +157,7 @@ export default function Sidebar() {
             <span className="text-sm font-semibold">Troll Coins</span>
           </div>
 
-          {/* GIFT STORE */}
-          <div
-            onClick={() => navigate("/gift-store")}
-            className="flex items-center gap-2 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 px-3 py-2 rounded-lg border border-yellow-500/40 text-yellow-300 cursor-pointer hover:border-yellow-300 transition-colors"
-          >
-            <Gift className="w-5 h-5 text-yellow-400" />
-            <span className="text-sm font-semibold">Gift Store</span>
-          </div>
+          {/* Gift Store removed per request */}
         </div>
       </div>
       <div className="flex justify-end px-3 mt-1">
@@ -274,7 +266,7 @@ export default function Sidebar() {
         <button
           onClick={() => navigate('/troll-court')}
           className={`flex items-center gap-3 px-4 py-2 rounded-lg transition w-full text-left ${
-            isActive('/troll-court') || isActive('/court-room')
+            isActive('/troll-court') || location.pathname.startsWith('/court/')
               ? 'bg-purple-600 text-white border border-purple-400'
               : 'hover:bg-[#1F1F2E] text-gray-300'
           }`}

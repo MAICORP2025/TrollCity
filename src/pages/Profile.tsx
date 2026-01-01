@@ -2171,8 +2171,23 @@ export default function Profile() {
                     toast.success(`Account deletion scheduled. You must wait until ${cooldownDate} before creating a new account, or pay $5 to skip.`);
                   }
                   
-                  // Sign out and redirect to login
-                  await supabase.auth.signOut();
+                  // Sign out and redirect to login (defensive)
+                  try {
+                    try {
+                      const { data: sessionData } = await supabase.auth.getSession()
+                      const hasSession = !!sessionData?.session
+                      if (hasSession) {
+                        const { error } = await supabase.auth.signOut()
+                        if (error) console.warn('supabase.signOut returned error:', error)
+                      } else {
+                        console.debug('No active session; skipping supabase.auth.signOut()')
+                      }
+                    } catch (innerErr: any) {
+                      console.warn('Error during sign-out check (ignored):', innerErr?.message || innerErr)
+                    }
+                  } catch (err) {
+                    console.warn('SignOut warning:', err)
+                  }
                   useAuthStore.getState().logout();
                   localStorage.clear();
                   sessionStorage.clear();

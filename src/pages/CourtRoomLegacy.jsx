@@ -133,9 +133,10 @@ function EvidencePanel({ isOfficial }) {
 
 
 export default function CourtRoom() {
-  const { sessionId } = useParams();
+  const { sessionId, courtId } = useParams();
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
+  const routeSessionId = sessionId || courtId;
   const userRole = (() => {
     if (profile?.role === 'admin' || profile?.is_lead_officer) return 'judge';
     if (profile?.role === 'troll_officer') return 'bailiff';
@@ -155,7 +156,7 @@ export default function CourtRoom() {
     error,
     participants,
   } = useLiveKitSession({
-    roomName: sessionId || 'troll-court',
+    roomName: routeSessionId || 'troll-court',
     user: user ? { ...user, role: userRole } : null,
     autoPublish: isOfficial,
     maxParticipants: 6,
@@ -176,18 +177,26 @@ export default function CourtRoom() {
   }, [roomName, user?.id, joinAndPublish]);
 
   useEffect(() => {
-    if (!user || !sessionId) return;
+    if (!user || !routeSessionId) {
+      setLoading(false);
+      return;
+    }
     initCourtroom();
-  }, [user, sessionId]);
+  }, [user, routeSessionId]);
 
   const initCourtroom = async () => {
     try {
       setLoading(true);
 
-      let actualSessionId = sessionId;
+      let actualSessionId = routeSessionId;
+
+      if (!actualSessionId || actualSessionId === 'null' || actualSessionId === 'undefined') {
+        navigate('/troll-court');
+        return;
+      }
 
       // If sessionId is 'active', find the current live session
-      if (sessionId === 'active') {
+      if (actualSessionId === 'active') {
         const { data: currentSession, error: currentError } = await supabase.rpc('get_current_court_session');
         if (currentError || !currentSession?.[0]) {
           toast.error("No active court session found");

@@ -152,41 +152,43 @@ export function LeadOfficerDashboard() {
 
   const loadApplicants = async () => {
     try {
-      // Get users who have taken the quiz but are not yet active officers
-      const { data: results, error: resultsError } = await supabase
-        .from('officer_orientation_results')
-        .select('user_id, score, has_passed, completed_at')
+      // Get troll_officer applications that have completed training and are pending approval
+      const { data: applications, error: applicationsError } = await supabase
+        .from('applications')
+        .select(`
+          id,
+          user_id,
+          training_score,
+          experience,
+          status,
+          training_passed,
+          created_at,
+          user_profiles!user_id (
+            username,
+            email,
+            role,
+            is_troll_officer,
+            is_officer_active
+          )
+        `)
+        .eq('type', 'troll_officer')
+        .eq('training_passed', true)
+        .eq('status', 'pending')
+        .neq('user_profiles.role', 'admin') // Exclude admin users from applicant list
 
-      if (resultsError) throw resultsError
+      if (applicationsError) throw applicationsError
 
-      // Get user profiles for applicants
-      const userIds = results?.map(r => r.user_id) || []
-      if (userIds.length === 0) {
-        setApplicants([])
-        return
-      }
-
-      const { data: profiles, error: profilesError } = await supabase
-        .from('user_profiles')
-        .select('id, username, email, role, is_troll_officer, is_officer_active')
-        .in('id', userIds)
-        .eq('is_troll_officer', true)
-        .eq('is_officer_active', false)
-        .neq('role', 'admin') // Exclude admin users from applicant list
-
-      if (profilesError) throw profilesError
-
-      // Combine results with profiles
-      const applicantsData = (profiles || []).map(profile => {
-        const result = results?.find(r => r.user_id === profile.id)
+      // Transform data to match Applicant type
+      const applicantsData = (applications || []).map((app: any) => {
+        const up = Array.isArray(app.user_profiles) ? app.user_profiles[0] : app.user_profiles
         return {
-          id: profile.id,
-          username: profile.username,
-          email: profile.email,
-          role: profile.role,
-          score: result?.score ?? null,
-          has_passed: result?.has_passed ?? null,
-          completed_at: result?.completed_at ?? null
+          id: app.user_id,
+          username: up?.username || 'Unknown',
+          email: up?.email || '',
+          role: up?.role || 'user',
+          score: app.training_score,
+          has_passed: app.training_passed,
+          completed_at: app.created_at,
         }
       })
 
@@ -210,6 +212,7 @@ export function LeadOfficerDashboard() {
           )
         `)
         .is('lead_officer_approved', null)
+        .eq('training_passed', true) // Only show applications that have completed training
         .neq('user_profiles.role', 'admin') // Exclude admin users from application list
         .order('created_at', { ascending: false })
 
@@ -260,8 +263,7 @@ export function LeadOfficerDashboard() {
           action_type,
           reason,
           created_at,
-          officer:user_profiles!officer_actions_officer_id_fkey(username),
-          acted_by:user_profiles!officer_actions_acted_by_fkey(username)
+          officer:user_profiles!officer_actions_officer_id_fkey(username)
         `)
         .order('created_at', { ascending: false })
         .limit(50)
@@ -277,8 +279,8 @@ export function LeadOfficerDashboard() {
         officer_id: log.officer_id,
         officer_username: log.officer?.username || 'Unknown',
         action_type: log.action_type,
-        acted_by: log.acted_by || log.officer_id,
-        acted_by_username: log.acted_by?.username || log.officer?.username || 'Unknown',
+        acted_by: log.officer_id,
+        acted_by_username: log.officer?.username || 'Unknown',
         reason: log.reason,
         created_at: log.created_at
       }))

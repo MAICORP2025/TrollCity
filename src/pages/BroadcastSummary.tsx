@@ -39,27 +39,6 @@ export default function BroadcastSummary() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950 text-white p-4">
-      <style jsx global>{`
-        .purple-neon {
-          border: 2px solid #A78BFA;
-          box-shadow: 0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2);
-        }
-
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-slideIn {
-          animation: slideIn 0.5s ease-out;
-        }
-      `}</style>
 
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8 animate-slideIn">

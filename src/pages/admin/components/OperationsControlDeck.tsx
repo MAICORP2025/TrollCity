@@ -19,6 +19,9 @@ import {
   XCircle,
   Activity
 } from 'lucide-react'
+import AdminApplications from './AdminApplications'
+import PayoutQueue from './PayoutQueue'
+import ReportsPanel from './ReportsPanel'
 
 interface OperationsControlDeckProps {
   liveStreams: any[]
@@ -159,39 +162,42 @@ export default function OperationsControlDeck({
 
   const renderApplicationsModule = () => (
     <div className="space-y-4">
-      <h4 className="font-medium text-white flex items-center gap-2">
-        <FileText className="w-4 h-4 text-orange-400" />
-        Pending Applications ({stats.pendingApps})
-      </h4>
-      <div className="text-center py-8 text-gray-500">
-        <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        Applications module coming soon
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-white flex items-center gap-2">
+          <FileText className="w-4 h-4 text-orange-400" />
+          Pending Applications ({stats.pendingApps})
+        </h4>
+      </div>
+      <div className="max-h-[500px] overflow-y-auto pr-2">
+        <AdminApplications />
       </div>
     </div>
   )
 
   const renderPayoutsModule = () => (
     <div className="space-y-4">
-      <h4 className="font-medium text-white flex items-center gap-2">
-        <DollarSign className="w-4 h-4 text-green-400" />
-        Pending Payouts ({stats.pendingPayouts})
-      </h4>
-      <div className="text-center py-8 text-gray-500">
-        <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        Payouts module coming soon
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-white flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-green-400" />
+          Pending Payouts ({stats.pendingPayouts})
+        </h4>
+      </div>
+      <div className="max-h-[500px] overflow-y-auto pr-2">
+        <PayoutQueue />
       </div>
     </div>
   )
 
   const renderModerationModule = () => (
     <div className="space-y-4">
-      <h4 className="font-medium text-white flex items-center gap-2">
-        <Shield className="w-4 h-4 text-red-400" />
-        Moderation Queue ({stats.aiFlags})
-      </h4>
-      <div className="text-center py-8 text-gray-500">
-        <Shield className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        Moderation module coming soon
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-white flex items-center gap-2">
+          <Shield className="w-4 h-4 text-red-400" />
+          Moderation Queue ({stats.aiFlags})
+        </h4>
+      </div>
+      <div className="max-h-[500px] overflow-y-auto pr-2">
+        <ReportsPanel />
       </div>
     </div>
   )

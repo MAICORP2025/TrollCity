@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-console.log("✅ LIVEKIT TOKEN DEPLOY MARKER v111 - " + new Date().toISOString());
+console.log("✅ LIVEKIT TOKEN DEPLOY MARKER v113 - " + new Date().toISOString());
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +18,15 @@ interface AuthorizedProfile {
   is_troll_officer?: boolean;
 }
 
+interface TokenRequestParams {
+  room?: string;
+  roomName?: string;
+  identity?: string;
+  allowPublish?: boolean | string;
+  level?: string | number;
+  role?: string;
+}
+
 // ✅ Lazy imports so OPTIONS is instant
 async function getSupabase() {
   const mod = await import("@supabase/supabase-js");
@@ -25,20 +34,23 @@ async function getSupabase() {
 }
 
 async function getLivekit() {
-  // Pin version to reduce surprises
   const mod = await import("livekit-server-sdk");
   return mod;
 }
 
 async function authorizeUser(req: Request): Promise<AuthorizedProfile> {
   const authHeader = req.headers.get("authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) throw new Error("Missing auth token");
+  if (!authHeader.startsWith("Bearer ")) {
+    console.error("[authorizeUser] Missing or invalid authorization header");
+    throw new Error("Missing authorization header");
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
-    throw new Error("Supabase not configured");
+    console.error("[authorizeUser] Missing Supabase environment variables");
+    throw new Error("Server configuration error");
   }
 
   const { createClient } = await getSupabase();
@@ -48,8 +60,48 @@ async function authorizeUser(req: Request): Promise<AuthorizedProfile> {
     global: { headers: { Authorization: authHeader } },
   });
 
+  console.log("[authorizeUser] Validating user session...");
+  
+  // First check if we have a valid session
+  const { data: { session }, error: sessionError } = await supabaseAuth.auth.getSession();
+  
+  if (sessionError) {
+    console.error("[authorizeUser] Session error:", sessionError.message);
+    throw new Error("Session validation failed");
+  }
+  
+  if (!session) {
+    console.error("[authorizeUser] No active session found");
+    throw new Error("No active session. Please sign in again.");
+  }
+  
+  // Check if session is expired
+  const now = Math.floor(Date.now() / 1000);
+  if (session.expires_at && session.expires_at < now) {
+    console.error("[authorizeUser] Session expired:", {
+      expiresAt: session.expires_at,
+      now: now,
+      timeDiff: session.expires_at - now
+    });
+    throw new Error("Session expired. Please sign in again.");
+  }
+
+  // Now get the user
   const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw new Error("Unable to verify session");
+  if (userError) {
+    console.error("[authorizeUser] User validation error:", userError.message);
+    if (userError.message.includes('Invalid JWT') || userError.message.includes('expired')) {
+      throw new Error("Session expired. Please sign in again.");
+    }
+    throw new Error("Unable to verify user session");
+  }
+  
+  if (!user) {
+    console.error("[authorizeUser] No user found in session");
+    throw new Error("Invalid session. Please sign in again.");
+  }
+  
+  console.log("[authorizeUser] Session validated for user:", user.id);
 
   // Use service role to read profile without RLS headaches
   const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
@@ -60,13 +112,21 @@ async function authorizeUser(req: Request): Promise<AuthorizedProfile> {
     .eq("id", user.id)
     .single();
 
-  if (profileError || !profile) throw new Error("Profile not found");
+  if (profileError) {
+    console.error("[authorizeUser] Profile fetch error:", profileError.message);
+    throw new Error("Unable to load user profile");
+  }
+  
+  if (!profile) {
+    console.error("[authorizeUser] No profile found for user:", user.id);
+    throw new Error("User profile not found");
+  }
 
+  console.log("[authorizeUser] Profile loaded for user:", profile.username);
   return profile as AuthorizedProfile;
 }
 
 serve(async (req: Request) => {
-  // ✅ MUST be instant for browser preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -83,14 +143,26 @@ serve(async (req: Request) => {
 
     const profile = await authorizeUser(req);
 
-    const params =
+    const params: TokenRequestParams =
       req.method === "POST"
-        ? await req.json()
-        : Object.fromEntries(new URL(req.url).searchParams);
+        ? await req.json() as TokenRequestParams
+        : Object.fromEntries(new URL(req.url).searchParams) as TokenRequestParams;
 
     const room = params.room || params.roomName;
-    const identity = params.identity || profile.id;
-    const allowPublish = params.allowPublish === true || params.allowPublish === "true";
+
+    // ✅ Fix identity: never allow "null" string to pass through
+    const rawIdentity = params.identity;
+    const identity =
+      rawIdentity && rawIdentity !== "null" && rawIdentity !== null
+        ? rawIdentity
+        : profile.id;
+
+    // ✅ FIX allowPublish parsing ("1" also counts)
+    const allowPublish =
+      params.allowPublish === true ||
+      params.allowPublish === "true" ||
+      params.allowPublish === "1";
+
     const level = params.level;
 
     if (!room) {
@@ -102,7 +174,7 @@ serve(async (req: Request) => {
 
     const apiKey = Deno.env.get("LIVEKIT_API_KEY");
     const apiSecret = Deno.env.get("LIVEKIT_API_SECRET");
-    const livekitUrl = Deno.env.get("LIVEKIT_URL"); // or LIVEKIT_URL if you prefer
+    const livekitUrl = Deno.env.get("LIVEKIT_URL");
 
     if (!apiKey || !apiSecret || !livekitUrl) {
       return new Response(JSON.stringify({ error: "LiveKit not configured" }), {
@@ -111,7 +183,23 @@ serve(async (req: Request) => {
       });
     }
 
-    const canPublish = allowPublish;
+    // ✅ FIX role matching — allow publisher as well
+    let canPublish = Boolean(allowPublish);
+    const roleParam = String(params.role || "").toLowerCase();
+
+    if (roleParam === "broadcaster" || roleParam === "publisher" || roleParam === "admin") {
+      canPublish = true;
+    }
+    if (profile?.is_broadcaster || profile?.is_admin) canPublish = true;
+
+    console.log("[livekit-token] params:", {
+      room,
+      identity,
+      roleParam,
+      allowPublish,
+      canPublish,
+      level,
+    });
 
     const metadata = {
       user_id: profile.id,
@@ -153,6 +241,8 @@ serve(async (req: Request) => {
         room,
         identity: String(identity),
         allowPublish: canPublish,
+        publishAllowed: canPublish,
+        roleParam,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -160,7 +250,6 @@ serve(async (req: Request) => {
     const ms = Math.round(performance.now() - t0);
     console.error("[livekit-token] error", err?.message || err, `${ms}ms`);
 
-    // ✅ Always return CORS headers even on failure
     const status = String(err?.message || "").includes("Unauthorized") ? 403 : 500;
     return new Response(JSON.stringify({ error: err?.message || "Server error" }), {
       status,

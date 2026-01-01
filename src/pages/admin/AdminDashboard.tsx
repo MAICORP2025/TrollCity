@@ -1773,19 +1773,19 @@ export default function AdminDashboard() {
   }
 
   const handleBroadcastMessage = () => {
-    setActiveTab('announcements')
+    navigate('/admin/announcements')
   }
 
   const handleSystemMaintenance = () => {
-    setActiveTab('reset_maintenance')
+    navigate('/admin/reset-maintenance')
   }
 
   const handleViewAnalytics = () => {
-    setActiveTab('reports')
+    navigate('/admin/reports-queue')
   }
 
   const handleExportData = () => {
-    setActiveTab('export_data')
+    navigate('/admin/export-data')
   }
 
   const handleToggleMaintenanceMode = () => {
@@ -1884,7 +1884,6 @@ export default function AdminDashboard() {
             bio: 'New troll in the city!',
             role: isAdmin ? 'admin' : 'user',
             tier: 'Bronze',
-            troll_coins: 0,
             troll_coins: 100,
             total_earned_coins: 100,
             total_spent_coins: 0,
@@ -1908,7 +1907,6 @@ export default function AdminDashboard() {
         id: user!.id,
         username: (user?.email || '').split('@')[0] || '',
         role: isAdmin2 ? 'admin' : 'user',
-        troll_coins: 0,
         troll_coins: 0,
       } as any
       setProfile(minimalProfile)
@@ -1951,9 +1949,6 @@ export default function AdminDashboard() {
 
   const handleSelectTab = (tabId: TabId) => {
     setActiveTab(tabId)
-    if (tabId === 'finance_dashboard') {
-      navigate('/admin/finance')
-    }
   }
 
   const redirectRoutes = useMemo(
@@ -1972,6 +1967,8 @@ export default function AdminDashboard() {
         media_library: '/admin/media-library',
         chat_moderation: '/admin/chat-moderation',
         announcements: '/admin/announcements',
+        reports: '/admin/reports-queue',
+        finance_dashboard: '/admin/finance',
         economy_dashboard: '/admin/economy',
         grant_coins: '/admin/grant-coins',
         tax_reviews: '/admin/tax-reviews',
@@ -1979,7 +1976,9 @@ export default function AdminDashboard() {
         store_pricing: '/admin/store-pricing',
         create_schedule: '/admin/create-schedule',
         officer_shifts: '/admin/officer-shifts',
-        shift_requests_approval: '/admin/shift-requests-approval',
+        // NOTE: /admin/shift-requests-approval route does not exist; keep the action working by
+        // landing on the shifts view instead.
+        shift_requests_approval: '/admin/officer-shifts',
         empire_applications: '/admin/empire-applications',
         referral_bonuses: '/admin/referral-bonuses',
         control_panel: '/admin/control-panel',
@@ -2050,15 +2049,40 @@ export default function AdminDashboard() {
             <button
               onClick={async () => {
                 try {
-                  await supabase.auth.signOut()
-                  useAuthStore.getState().logout()
+                  // Clear local storage first
                   localStorage.clear()
                   sessionStorage.clear()
+
+                  // Call logout from the store
+                  const { logout } = useAuthStore.getState()
+                  if (logout) logout()
+
+                  // Only attempt supabase signOut if there is an active session
+                  try {
+                    const { data: sessionData } = await supabase.auth.getSession()
+                    const hasSession = !!sessionData?.session
+                    if (hasSession) {
+                      const { error } = await supabase.auth.signOut()
+                      if (error) console.warn('supabase.signOut returned error:', error)
+                    } else {
+                      // No active session — nothing to sign out from
+                      console.debug('No active auth session; skipping supabase.auth.signOut()')
+                    }
+                  } catch (innerErr: any) {
+                    // If signOut throws due to missing session, ignore and continue
+                    console.warn('Error during supabase signOut (ignored):', innerErr?.message || innerErr)
+                  }
+
                   toast.success('Logged out')
-                  await supabase.auth.signOut()
                   navigate('/auth', { replace: true })
-                } catch {
-                  toast.error('Logout failed')
+                } catch (error) {
+                  console.error('Logout error:', error)
+                  // Even if signOut fails, clear local state and redirect
+                  localStorage.clear()
+                  sessionStorage.clear()
+                  const { logout } = useAuthStore.getState()
+                  if (logout) logout()
+                  navigate('/auth', { replace: true })
                 }
               }}
               className="px-4 py-2 border border-red-500 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition text-sm"

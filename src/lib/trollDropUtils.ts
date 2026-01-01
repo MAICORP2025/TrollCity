@@ -9,9 +9,8 @@ export async function getTrollDropCount(streamId: string): Promise<number> {
   try {
     const { count, error } = await supabase
       .from('troll_drops')
-      .select('*', { count: 'exact' })
-      .eq('stream_id', streamId)
-      .not('claimed', 'is', null);
+      .select('id', { count: 'exact' })
+      .eq('stream_id', streamId);
 
     if (error) {
       console.error('Error getting troll drop count:', error);
@@ -42,7 +41,8 @@ export async function canDropTroll(streamId: string, broadcastDurationMs: number
 
 export async function createTrollDrop(
   streamId: string,
-  color: 'red' | 'green'
+  color: 'red' | 'green',
+  userId?: string
 ): Promise<TrollDrop | null> {
   try {
     const now = Date.now();
@@ -52,12 +52,9 @@ export async function createTrollDrop(
       .from('troll_drops')
       .insert({
         stream_id: streamId,
-        color,
+        user_id: userId || 'system',
         created_at: new Date(now).toISOString(),
         expires_at: new Date(expiresAt).toISOString(),
-        participants: [],
-        total_amount: 5000,
-        claimed: false,
       })
       .select()
       .single();
@@ -72,12 +69,12 @@ export async function createTrollDrop(
     return {
       id: data.id,
       streamId: data.stream_id,
-      color: data.color,
+      color: color,
       createdAt: new Date(data.created_at).getTime(),
       expiresAt: new Date(data.expires_at).getTime(),
-      participants: data.participants || [],
-      totalAmount: data.total_amount,
-      claimed: data.claimed,
+      participants: [],
+      totalAmount: 5000,
+      claimed: false,
     };
   } catch (err) {
     console.error('Exception in createTrollDrop:', err);
@@ -89,7 +86,7 @@ export async function getTrollDropsByStream(streamId: string): Promise<TrollDrop
   try {
     const { data, error } = await supabase
       .from('troll_drops')
-      .select('*')
+      .select('id, stream_id, created_at, expires_at')
       .eq('stream_id', streamId)
       .order('created_at', { ascending: false });
 
@@ -101,12 +98,12 @@ export async function getTrollDropsByStream(streamId: string): Promise<TrollDrop
     return (data || []).map((drop: any) => ({
       id: drop.id,
       streamId: drop.stream_id,
-      color: drop.color,
+      color: 'red',
       createdAt: new Date(drop.created_at).getTime(),
       expiresAt: new Date(drop.expires_at).getTime(),
-      participants: drop.participants || [],
-      totalAmount: drop.total_amount,
-      claimed: drop.claimed,
+      participants: [],
+      totalAmount: 5000,
+      claimed: false,
     }));
   } catch (err) {
     console.error('Exception in getTrollDropsByStream:', err);

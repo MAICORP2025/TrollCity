@@ -15,16 +15,24 @@ export default function ChatBox({ onProfileClick, onCoinSend }: ChatBoxProps) {
   }>>([]);
   const [inputValue, setInputValue] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const suppressAutoScrollRef = useRef(false);
   const messageTimersRef = useRef<Record<number, NodeJS.Timeout>>({});
   const [showCoinInput, setShowCoinInput] = useState<number | null>(null);
   const [coinAmount, setCoinAmount] = useState(10);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (smooth = true) => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const shouldScroll = el.scrollHeight - (el.scrollTop + el.clientHeight) < 200;
+    if (suppressAutoScrollRef.current) return;
+    if (shouldScroll) {
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    }
   };
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom(true);
   }, [messages]);
 
   useEffect(() => {
@@ -52,8 +60,14 @@ export default function ChatBox({ onProfileClick, onCoinSend }: ChatBoxProps) {
       timestamp: Date.now(),
     };
 
+    // Prevent auto-scrolling when the local user sends a message
+    suppressAutoScrollRef.current = true;
     setMessages([...messages, newMessage]);
     setInputValue("");
+    // re-enable auto-scroll shortly after UI updates
+    setTimeout(() => {
+      suppressAutoScrollRef.current = false;
+    }, 300);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -64,10 +78,10 @@ export default function ChatBox({ onProfileClick, onCoinSend }: ChatBoxProps) {
   };
 
   return (
-    <div className="flex-1 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 flex flex-col purple-neon min-h-0">
+    <div className="h-full flex flex-col min-h-0 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 purple-neon">
       <h3 className="text-sm font-bold mb-3">LIVE CHAT</h3>
 
-      <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-0 pr-2">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-0 pr-2">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -136,22 +150,6 @@ export default function ChatBox({ onProfileClick, onCoinSend }: ChatBoxProps) {
         </button>
       </div>
 
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

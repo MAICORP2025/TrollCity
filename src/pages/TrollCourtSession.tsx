@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Scale, AlertCircle, LogOut, Send, Gavel } from "lucide-react";
 import { courtSystem } from "@/lib/courtSystem";
@@ -13,6 +13,7 @@ export default function TrollCourtSession() {
   const [chatInput, setChatInput] = useState("");
   const [courtRoomRef, setCourtRoomRef] = useState<RoomInstance | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const courtRoomRefRef = useRef<RoomInstance | null>(null);
 
   const currentUser = {
     id: user?.id || "user-default",
@@ -28,8 +29,8 @@ export default function TrollCourtSession() {
     }
 
     return () => {
-      if (courtRoomRef) {
-        roomManager.disconnectRoom(courtRoomRef.id);
+      if (courtRoomRefRef.current) {
+        roomManager.disconnectRoom(courtRoomRefRef.current.id);
       }
     };
   }, [isJudge, user]);
@@ -43,6 +44,7 @@ export default function TrollCourtSession() {
       
       const courtRoom = await roomManager.createCourtRoom();
       setCourtRoomRef(courtRoom);
+      courtRoomRefRef.current = courtRoom;
       console.log(`✅ [TrollCourt] Court room created instantly: ${courtRoom.roomName}`);
 
       const session = courtSystem.startCourtSession(
@@ -64,6 +66,7 @@ export default function TrollCourtSession() {
       console.log("✅ [TrollCourt] Court session started instantly!");
     } catch (error) {
       console.error("[TrollCourt] Initialization error:", error);
+    } finally {
       setIsInitializing(false);
     }
   };

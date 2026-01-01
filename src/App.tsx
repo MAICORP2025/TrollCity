@@ -2,6 +2,7 @@
 import React, { useEffect, Suspense, lazy, useState, useRef } from "react";
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
+
 import { useEligibilityStore } from "./lib/eligibilityStore";
 import { supabase, UserRole } from "./lib/supabase";
 import { Toaster, toast } from "sonner";
@@ -38,8 +39,7 @@ import Leaderboard from "./pages/Leaderboard";
 import TrollCityWall from "./pages/TrollCityWall";
 import TrollCourt from "./pages/TrollCourt";
 import EmpirePartnerDashboard from "./pages/EmpirePartnerDashboard";
-import GiftStorePage from "./pages/GiftStorePage";
-import GiftInventoryPage from "./pages/GiftInventoryPage";
+// Gift store pages removed
 import Application from "./pages/Application";
 import ApplicationPage from "./pages/ApplicationPage";
 import TrollsTownPage from "./pages/TrollsTownPage";
@@ -81,8 +81,9 @@ const VerificationComplete = lazy(() => import("./pages/VerificationComplete"));
 const AIVerificationPage = lazy(() => import("./pages/AIVerificationPage"));
 
 // Lazy-loaded pages
-const GoLiveSetup = lazy(() => import("./pages/GoLiveSetup"));
-const Broadcast = lazy(() => import("./pages/Broadcast"));
+const GoLive = lazy(() => import("./pages/GoLive"));
+const Broadcast = lazy(() => import("./pages/BroadcastPage"));
+const JoinPage = lazy(() => import("./pages/Join"));
 const BroadcastSummary = lazy(() => import("./pages/BroadcastSummary"));
 const KickFee = lazy(() => import("./pages/KickFee"));
 const BanFee = lazy(() => import("./pages/BanFee"));
@@ -162,7 +163,7 @@ const BanManagement = lazy(() => import("./pages/admin/BanManagement"));
 const RoleManagement = lazy(() => import("./pages/admin/RoleManagement"));
 const MediaLibrary = lazy(() => import("./pages/admin/MediaLibrary"));
 const ChatModeration = lazy(() => import("./pages/admin/ChatModeration"));
-const Announcements = lazy(() => import("./pages/admin/Announcements"));
+const Announcements = lazy(() => import("./pages/admin/Announcements").then(m => ({ default: m.default })));
 const ExportData = lazy(() => import("./pages/admin/ExportData"));
 const UserSearch = lazy(() => import("./pages/admin/UserSearch"));
 const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
@@ -182,11 +183,9 @@ const AdminHR = lazy(() => import("./pages/admin/AdminHR"));
 
 function AppContent() {
   console.log('🚀 App component rendering...');
-  const {
-    user,
-    profile,
-    isLoading,
-  } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const isLoading = useAuthStore((s) => s.isLoading);
   console.log('📊 App state:', { hasUser: !!user, hasProfile: !!profile, isLoading });
 
   const location = useLocation();
@@ -277,8 +276,20 @@ function AppContent() {
 
         if (isBanned) {
           toast.error('Your IP address has been banned. Please contact support.')
-          // Sign out user
-          await supabase.auth.signOut()
+          // Sign out user (defensive)
+          try {
+            const { data: sessionData } = await supabase.auth.getSession()
+            const hasSession = !!sessionData?.session
+            if (hasSession) {
+              const { error } = await supabase.auth.signOut()
+              if (error) console.warn('supabase.signOut returned error:', error)
+            } else {
+              console.debug('No active session; skipping supabase.auth.signOut()')
+            }
+          } catch (innerErr) {
+            console.warn('Error during sign-out (ignored):', innerErr)
+          }
+
           useAuthStore.getState().logout()
           navigate('/auth', { replace: true })
           return
@@ -474,15 +485,17 @@ function AppContent() {
                   <Route path="/trolls-night" element={<TrollsNightPage />} />
 
                   {/* 🎥 Streaming */}
-                  <Route path="/go-live" element={<GoLiveSetup />} />
-                  <Route path="/broadcast" element={<Broadcast />} />
+                  <Route path="/go-live" element={<GoLive />} />
+                  <Route path="/broadcast/:streamId" element={<Broadcast />} />
+                  <Route path="/join" element={<JoinPage />} />
+                  <Route path="/broadcast" element={<Navigate to="/go-live" replace />} />
                   <Route path="/broadcast-summary" element={<BroadcastSummary />} />
                   <Route path="/kick-fee" element={<KickFee />} />
                   <Route path="/ban-fee" element={<BanFee />} />
-                  <Route path="/troll-court" element={<TrollCourtSession />} />
+                  <Route path="/troll-court/session" element={<TrollCourtSession />} />
                   <Route path="/tromody" element={<TromodyShow />} />
                   <Route path="/tromody-show/broadcast" element={<TromodyShowBroadcast />} />
-                  <Route path="/live/:streamId" element={<LiveStreamPage />} />
+                  <Route path="/live/:streamId" element={<Stream />} />
                   <Route path="/interview/:sessionId" element={<InterviewRoom />} />
                   <Route path="/stream/:id" element={<Stream />} />
                   <Route path="/stream/:streamId" element={<LiveStreamPage />} />
@@ -511,7 +524,6 @@ function AppContent() {
                   {/* 💰 Earnings & Coins */}
                   <Route path="/store" element={<CoinStore />} />
                   <Route path="/coins" element={<CoinStore />} />
-                  <Route path="/gift-store" element={<GiftStorePage />} />
                   <Route path="/coins/complete" element={<CoinsComplete />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/payouts/setup" element={<PayoutSetupPage />} />
@@ -525,7 +537,7 @@ function AppContent() {
                   <Route path="/shop-partner" element={<ShopPartnerPage />} />
                   <Route path="/sell" element={<SellOnTrollCity />} />
                   <Route path="/seller/earnings" element={<ShopEarnings />} />
-                  <Route path="/gift-inventory" element={<GiftInventoryPage />} />
+                  {/* Gift store routes removed */}
 
                   {/* 👨‍👩‍👧 Family */}
                   <Route path="/family" element={<TrollFamily />} />

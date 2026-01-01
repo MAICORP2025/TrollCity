@@ -189,10 +189,20 @@ const Header = () => {
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        throw error
+      // Check for active session first
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const hasSession = !!sessionData?.session
+        if (hasSession) {
+          const { error } = await supabase.auth.signOut()
+          if (error) console.warn('supabase.signOut returned error:', error)
+        } else {
+          console.debug('No active session; skipping supabase.auth.signOut()')
+        }
+      } catch (innerErr: any) {
+        console.warn('Error checking/signing out session (ignored):', innerErr?.message || innerErr)
       }
+
       useAuthStore.getState().logout()
 
       // Clear client storage

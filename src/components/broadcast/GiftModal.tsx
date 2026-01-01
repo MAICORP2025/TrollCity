@@ -1,37 +1,26 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 
-interface Gift {
-  id: number;
-  name: string;
-  emoji: string;
-  coins: number;
-}
-
-const gifts: Gift[] = [
-  { id: 1, name: "Rose", emoji: "🌹", coins: 10 },
-  { id: 2, name: "Heart", emoji: "💗", coins: 50 },
-  { id: 3, name: "Diamond", emoji: "💎", coins: 100 },
-  { id: 4, name: "Crown", emoji: "👑", coins: 500 },
-  { id: 5, name: "Fireworks", emoji: "🎆", coins: 1000 },
-  { id: 6, name: "Rocket", emoji: "🚀", coins: 5000 },
+const gifts = [
+  { id: 0, name: "Troll", emoji: "🧟", coins: 1, rarity: 'troll' },
+  { id: 1, name: "Rose", emoji: "🌹", coins: 10, rarity: 'common' },
+  { id: 2, name: "Heart", emoji: "💗", coins: 50, rarity: 'common' },
+  { id: 3, name: "Diamond", emoji: "💎", coins: 100, rarity: 'rare' },
+  { id: 4, name: "Crown", emoji: "👑", coins: 500, rarity: 'legendary' },
+  { id: 5, name: "Fireworks", emoji: "🎆", coins: 1000, rarity: 'legendary' },
+  { id: 6, name: "Rocket", emoji: "🚀", coins: 5000, rarity: 'legendary' },
 ];
 
-interface GiftModalProps {
-  onClose: () => void;
-  onSendGift?: (amount: number) => void;
-}
-
-export default function GiftModal({ onClose, onSendGift }: GiftModalProps) {
-  const [selectedGift, setSelectedGift] = useState<Gift | null>(null);
+export default function GiftModal({ onClose, onSendGift }) {
+  const [selectedGift, setSelectedGift] = useState(null);
   const [quantity, setQuantity] = useState(1);
 
   const handleSendGift = () => {
     if (!selectedGift) return;
-    const totalCoins = selectedGift.coins * quantity;
-    onSendGift?.(totalCoins);
-    setSelectedGift(null);
+    const giftPayload = { ...selectedGift, quantity };
+    if (typeof onSendGift === 'function') onSendGift(giftPayload);
     setQuantity(1);
+    if (typeof onClose === 'function') onClose();
   };
 
   return (

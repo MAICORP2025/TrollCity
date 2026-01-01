@@ -48,18 +48,10 @@ export default function PayoutQueue() {
   const loadPayouts = async () => {
     setLoading(true)
     try {
+      // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
       let query = supabase
         .from('payout_requests')
-        .select(`
-          *,
-          user_profiles!payout_requests_user_id_fkey (
-            username,
-            email
-          ),
-          processed_by_user:user_profiles!payout_requests_processed_by_fkey (
-            username
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       // Apply status filter
@@ -73,29 +65,58 @@ export default function PayoutQueue() {
 
       if (error) throw error
 
-      // Transform data to include username and email
-      const transformedPayouts: PayoutRequest[] = (data || []).map((p: any) => ({
-        id: p.id,
-        user_id: p.user_id,
-        username: p.user_profiles?.username || 'Unknown',
-        email: p.user_profiles?.email || '',
-        coins_used: p.coins_redeemed || p.coins_used || p.coin_amount || p.requested_coins || 0,
-        cash_amount: Number(p.cash_amount || p.amount_usd || 0),
-        net_amount: Number(p.net_amount) || Number(p.cash_amount) || 0,
-        fee_amount: Number(p.processing_fee || p.fee_amount || 0),
-        status: p.status,
-        payment_method: p.payment_method || p.payout_method,
-        payment_reference: p.payment_reference || p.payout_address || p.paypal_email,
-        provider_type: p.provider_type || p.payment_method || p.payout_method,
-        provider_username: p.provider_username || p.payment_reference || p.payout_address || p.paypal_email,
-        notes: p.notes,
-        rejection_reason: p.rejection_reason,
-        created_at: p.created_at,
-        approved_at: p.approved_at,
-        paid_at: p.paid_at,
-        processed_by: p.processed_by,
-        processed_by_username: p.processed_by_user?.username || null
-      }))
+      const raw = data || []
+      const userIds = Array.from(
+        new Set(raw.map((p: any) => p.user_id).filter((id: any) => typeof id === 'string' && id.length > 0)),
+      )
+      const processorIds = Array.from(
+        new Set(
+          raw
+            .map((p: any) => p.processed_by || p.admin_id)
+            .filter((id: any) => typeof id === 'string' && id.length > 0),
+        ),
+      )
+
+      const idsToHydrate = Array.from(new Set([...userIds, ...processorIds]))
+      const profileMap = new Map<string, any>()
+      if (idsToHydrate.length) {
+        const { data: profiles, error: profErr } = await supabase
+          .from('user_profiles')
+          .select('id, username, email')
+          .in('id', idsToHydrate)
+        if (profErr) {
+          console.warn('Failed to hydrate user_profiles (non-fatal):', profErr)
+        } else {
+          ;(profiles || []).forEach((p: any) => profileMap.set(p.id, p))
+        }
+      }
+
+      const transformedPayouts: PayoutRequest[] = raw.map((p: any) => {
+        const userProfile = profileMap.get(p.user_id)
+        const processorProfile = profileMap.get(p.processed_by || p.admin_id)
+        return {
+          id: p.id,
+          user_id: p.user_id,
+          username: userProfile?.username || 'Unknown',
+          email: userProfile?.email || '',
+          coins_used: p.coins_redeemed || p.coins_used || p.coin_amount || p.requested_coins || 0,
+          cash_amount: Number(p.cash_amount || p.amount_usd || 0),
+          net_amount: Number(p.net_amount) || Number(p.cash_amount) || 0,
+          fee_amount: Number(p.processing_fee || p.fee_amount || 0),
+          status: p.status,
+          payment_method: p.payment_method || p.payout_method,
+          payment_reference: p.payment_reference || p.payout_address || p.paypal_email,
+          provider_type: p.provider_type || p.payment_method || p.payout_method,
+          provider_username: p.provider_username || p.payment_reference || p.payout_address || p.paypal_email,
+          notes: p.notes,
+          rejection_reason: p.rejection_reason,
+          created_at: p.created_at,
+          approved_at: p.approved_at,
+          paid_at: p.paid_at,
+          processed_by: p.processed_by,
+          processed_by_username: processorProfile?.username || null
+        }
+      })
 
       setPayouts(transformedPayouts)
     } catch (error: any) {

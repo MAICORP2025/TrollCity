@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { Scale, Gavel, Clock, AlertTriangle, CheckCircle, XCircle, Eye } from 'lucide-react';
 
 interface CourtRuling {

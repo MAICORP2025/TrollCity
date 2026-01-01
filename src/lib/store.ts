@@ -28,6 +28,18 @@ export const useAuthStore = create<AuthState>()(
 
       // Called when Supabase auth changes
       setAuth: (user, session) => {
+        try {
+          const prev = get()
+          const sameUser = (!!prev.user && !!user && prev.user.id === user.id) || (!prev.user && !user)
+          const prevToken = (prev.session as any)?.access_token
+          const newToken = (session as any)?.access_token
+          if (sameUser && prevToken === newToken) {
+            // No meaningful change — skip update
+            return
+          }
+        } catch {
+          // ignore and continue
+        }
         console.log('Auth updated', { user: !!user })
         set({ user, session, isLoading: false, isAdmin: user ? null : null })
       },
@@ -37,6 +49,22 @@ export const useAuthStore = create<AuthState>()(
         if (!profile) {
           set({ profile: null, isAdmin: null })
           return
+        }
+
+        // Avoid unnecessary updates: compare with current profile
+        try {
+          const prev = get().profile
+          if (prev) {
+            const sameId = prev.id === (profile as any).id
+            const prevStr = JSON.stringify(prev)
+            const newStr = JSON.stringify(profile)
+            if (sameId && prevStr === newStr) {
+              // No changes — skip state update to prevent re-renders
+              return
+            }
+          }
+        } catch {
+          // If comparison fails, continue with update
         }
 
         // Ensure profile has email (fallback to auth/session)
@@ -78,7 +106,7 @@ export const useAuthStore = create<AuthState>()(
           if (!validation.isValid) {
             console.warn('Profile validation warnings:', validation.warnings)
           }
-        } catch (error) {
+        } catch {
           // Silent fail if validation not available
         }
 
@@ -113,10 +141,43 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
         console.log('Logging out')
+        
+        try {
+          // Check if we have a valid session before attempting to sign out
+          const { data: { session }, error } = await supabase.auth.getSession()
+          
+          // Only attempt signOut if we have a valid session
+          if (session && !error) {
+            const { error: signOutError } = await supabase.auth.signOut()
+            if (signOutError) {
+              // Handle specific auth errors gracefully
+              if (signOutError.message.includes('Auth session missing') || 
+                  signOutError.message.includes('Invalid JWT') ||
+                  signOutError.message.includes('expired')) {
+                console.log('Session already expired or invalid, proceeding with local logout')
+              } else {
+                console.warn('Sign out error:', signOutError.message)
+              }
+            }
+          } else {
+            console.log('No valid session found, proceeding with local logout')
+          }
+        } catch (error) {
+          // If getSession fails, it's likely already logged out
+          console.log('Session check failed, proceeding with local logout:', error)
+        }
+        
+        // Always clear local state regardless of server sign out result
         set({ user: null, session: null, profile: null, isLoading: false, isAdmin: null })
-        supabase.auth.signOut()
+        
+        // Clear any persisted auth data
+        try {
+          localStorage.removeItem('troll-city-auth')
+        } catch (e) {
+          console.warn('Failed to clear local storage:', e)
+        }
       }
     }),
 
@@ -151,6 +212,18 @@ export async function initAuthAndData() {
   }
 
   supabase.auth.onAuthStateChange(async (_event, session) => {
+    try {
+      const prev = useAuthStore.getState()
+      const sameUser = (!!prev.user && !!session?.user && prev.user.id === session.user.id) || (!prev.user && !session?.user)
+      const prevToken = (prev.session as any)?.access_token
+      const newToken = (session as any)?.access_token
+      if (sameUser && prevToken === newToken) {
+        return
+      }
+    } catch {
+      // continue
+    }
+
     if (session?.user) {
       useAuthStore.getState().setAuth(session.user, session)
       await useAuthStore.getState().refreshProfile()

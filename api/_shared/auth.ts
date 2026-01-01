@@ -58,10 +58,29 @@ async function lookupProfile(userId: string): Promise<AuthorizedProfile> {
 
 export async function authorizeUser(req: any): Promise<AuthorizedProfile> {
   const token = extractToken(req)
+
+  // Improved logging for debugging
+  console.log('[authorizeUser] Attempting to authorize with token of length:', token.length)
+
   const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token)
+
   if (userError || !userData?.data) {
-    console.error('[broadcast-auth] Auth lookup failed', userError?.message)
-    throw new Error('Unable to verify session')
+    console.error('[authorizeUser] Auth lookup failed:', {
+      errorMessage: userError?.message,
+      errorCode: userError?.code,
+      hasUserData: !!userData?.data,
+      tokenLength: token.length,
+      tokenPreview: token.substring(0, 20) + '...',
+    })
+
+    // Provide specific error messages based on the error
+    if (userError?.message?.includes('expired') || userError?.message?.includes('invalid')) {
+      throw new Error('No active session. Please sign in again.')
+    } else if (userError?.code === 'session_not_found') {
+      throw new Error('No active session. Please sign in again.')
+    } else {
+      throw new Error('Unable to verify user session')
+    }
   }
 
   return lookupProfile(userData.data.id)

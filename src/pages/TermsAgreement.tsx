@@ -100,7 +100,16 @@ export default function TermsAgreement() {
       }
 
       toast.success('Welcome to Troll City!')
-      navigate('/home')
+      // If this user is an admin, send them to the admin dashboard after accepting
+      try {
+        if (profile?.role === 'admin') {
+          navigate('/admin')
+        } else {
+          navigate('/home')
+        }
+      } catch (e) {
+        navigate('/home')
+      }
     } catch (err: any) {
       console.error('[Terms] Agreement error:', err)
       toast.error(err?.message || 'Failed to save agreement')
@@ -255,9 +264,23 @@ export default function TermsAgreement() {
         {/* Action Buttons */}
         <div className="flex gap-4 justify-center">
           <button
-            onClick={() => {
-              supabase.auth.signOut()
-              navigate('/auth')
+            onClick={async () => {
+              try {
+                try {
+                  const { data: sessionData } = await supabase.auth.getSession()
+                  const hasSession = !!sessionData?.session
+                  if (hasSession) {
+                    const { error } = await supabase.auth.signOut()
+                    if (error) console.warn('supabase.signOut returned error:', error)
+                  } else {
+                    console.debug('No active session; skipping supabase.auth.signOut()')
+                  }
+                } catch (innerErr) {
+                  console.warn('Error during sign-out (ignored):', innerErr)
+                }
+              } finally {
+                navigate('/auth')
+              }
             }}
             className="px-8 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition"
           >

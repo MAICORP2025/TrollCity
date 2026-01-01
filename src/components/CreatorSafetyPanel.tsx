@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, Lock, Unlock, MessageSquare, Users } from 'lucide-react';
+import { Shield, AlertTriangle, Lock, Unlock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';

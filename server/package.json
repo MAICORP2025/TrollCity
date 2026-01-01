@@ -1,0 +1,11 @@
+{
+  "name": "trollcity-livekit-vercel",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "18.x"
+  },
+  "dependencies": {
+    "livekit-server-sdk": "^2.15.0"
+  }
+}

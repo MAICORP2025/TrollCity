@@ -40,6 +40,8 @@ export type LiveKitRoomConfig = {
   roomOptions?: Partial<typeof defaultLiveKitOptions>
 }
 
+export type LiveKitRoomOptions = LiveKitRoomConfig & { enabled?: boolean }
+
 type LiveKitTokenResponse = {
   token: string
   livekitUrl?: string
@@ -58,7 +60,7 @@ const buildTokenBody = (roomName: string, user: LiveKitRoomConfig['user'], allow
 
 const parseParticipantMetadata = (metadata?: string): Record<string, unknown> | undefined => {
   if (!metadata) return undefined
-  try {
+    export type LiveKitConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
     return JSON.parse(metadata)
   } catch (error) {
     console.warn('[useLiveKitRoom] Failed to parse metadata for participant', { metadata, error })
@@ -66,8 +68,8 @@ const parseParticipantMetadata = (metadata?: string): Record<string, unknown> | 
   }
 }
 
-export function useLiveKitRoom(config: LiveKitRoomConfig) {
-  const { roomName, user, allowPublish = false, autoPublish = false, roomOptions } = config
+export function useLiveKitRoom(config: LiveKitRoomOptions) {
+  const { roomName, user, allowPublish = false, autoPublish = false, roomOptions, enabled = true } = config
 
   const [room, setRoom] = useState<Room | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<LiveKitConnectionStatus>('idle')
@@ -86,7 +88,9 @@ export function useLiveKitRoom(config: LiveKitRoomConfig) {
         throw new Error('Missing room or user for LiveKit token')
       }
 
-      const tokenResponse = await api.post<LiveKitTokenResponse>('/livekit-token', buildTokenBody(roomName, user, publish))
+      const body = buildTokenBody(roomName, user, publish)
+      console.log('[useLiveKitRoom] fetching token with body:', body)
+      const tokenResponse = await api.post<LiveKitTokenResponse>('/livekit-token', body)
       const data = tokenResponse.data || tokenResponse
 
       if (!data || !data.token) {
@@ -99,8 +103,8 @@ export function useLiveKitRoom(config: LiveKitRoomConfig) {
     [roomName, user]
   )
 
-  const updateParticipantState = useCallback(
-    (identity: string, patch: Partial<LiveKitParticipantState>) => {
+    export function useLiveKitRoom(config: LiveKitRoomOptions) {
+      const { roomName, user, allowPublish = false, autoPublish = false, roomOptions, enabled = true } = config
       setParticipants((prev) => {
         const next = { ...prev }
         const existing = next[identity] ?? {
@@ -231,10 +235,10 @@ export function useLiveKitRoom(config: LiveKitRoomConfig) {
     if (!currentRoom || !allowPublish) {
       return
     }
-
     setIsPublishing(true)
 
     try {
+      console.log('[useLiveKitRoom] publishLocalTracks: starting publish')
       const [videoTrack, audioTrack] = await Promise.all([
         createLocalVideoTrack(),
         createLocalAudioTrack(),
@@ -253,10 +257,20 @@ export function useLiveKitRoom(config: LiveKitRoomConfig) {
 
       const participant = currentRoom.localParticipant
       if (videoTrack) {
-        await participant.publishTrack(videoTrack)
+        try {
+          await participant.publishTrack(videoTrack)
+          console.log('[useLiveKitRoom] publishLocalTracks: video published')
+        } catch (err) {
+          console.error('[useLiveKitRoom] publishLocalTracks: video publish failed', err)
+        }
       }
       if (audioTrack) {
-        await participant.publishTrack(audioTrack)
+        try {
+          await participant.publishTrack(audioTrack)
+          console.log('[useLiveKitRoom] publishLocalTracks: audio published')
+        } catch (err) {
+          console.error('[useLiveKitRoom] publishLocalTracks: audio publish failed', err)
+        }
       }
     } finally {
       setIsPublishing(false)
@@ -295,23 +309,34 @@ export function useLiveKitRoom(config: LiveKitRoomConfig) {
   }, [])
 
   const connect = useCallback(async () => {
-    if (!roomName || !user) return
+    if (!enabled) {
+      console.log('[useLiveKitRoom] connect called but enabled=false, skipping')
+      return
+    }
+    if (!roomName || !user) {
+      console.log('[useLiveKitRoom] connect missing roomName or user, skipping')
+      return
+    }
     if (connectingRef.current) return
     connectingRef.current = true
 
+    console.log('[useLiveKitRoom] connect start', { roomName, identity: user?.id })
     setConnectionStatus('connecting')
     setError(null)
 
     try {
       const tokenResponse = await fetchToken(allowPublish)
+      console.log('[useLiveKitRoom] token received', tokenResponse)
       const targetUrl = tokenResponse.livekitUrl || LIVEKIT_URL
       const newRoom = new Room({ ...defaultLiveKitOptions, ...roomOptions })
 
       newRoom.on(RoomEvent.Connected, () => {
+        console.log('[useLiveKitRoom] room connected')
         setConnectionStatus('connected')
         addParticipant(newRoom.localParticipant)
         registerExistingParticipants(newRoom)
       if (autoPublish && allowPublish) {
+        console.log('[useLiveKitRoom] autoPublish enabled, publishing local tracks')
         void publishLocalTracks(newRoom)
       }
       })
@@ -361,6 +386,7 @@ export function useLiveKitRoom(config: LiveKitRoomConfig) {
     handleTrackSubscribed,
     handleTrackUnsubscribed,
     publishLocalTracks,
+    enabled,
   ])
 
   const disconnect = useCallback(() => {

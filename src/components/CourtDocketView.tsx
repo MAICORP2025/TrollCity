@@ -40,7 +40,7 @@ const CourtDocketView: React.FC = () => {
     }
   };
 
-  const handleEnterCourtroom = (docketId: string) => {
+  const handleEnterCourtroom = () => {
     // Navigate to court room - the session ID will be determined by the active court session
     navigate('/troll-court/session/active'); // We'll handle session lookup in the component
   };
@@ -170,7 +170,7 @@ const CourtDocketView: React.FC = () => {
 
                   {canEnter && isUpcoming && (
                     <button
-                      onClick={() => handleEnterCourtroom(entry.id)}
+                      onClick={() => handleEnterCourtroom()}
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition-colors"
                     >
                       Enter Courtroom

@@ -7,17 +7,17 @@ export default function Changelog() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
 
-  // Only admins can view this page
-  if (profile?.role !== 'admin') {
-    return <Navigate to="/" replace />
-  }
-
   // Prevent refresh redirect - only redirect if not admin
   useEffect(() => {
     if (profile?.role !== 'admin') {
       navigate('/', { replace: true })
     }
   }, [profile?.role, navigate])
+
+  // Only admins can view this page
+  if (profile?.role !== 'admin') {
+    return <Navigate to="/" replace />
+  }
 
   const updates = [
     {
