@@ -452,3 +452,30 @@ export async function ensureSupabaseSession(client: SupabaseClient) {
 
   return session
 }
+
+/**
+ * ✅ Get active session with automatic refresh
+ * This prevents race conditions by always refreshing before getting session
+ */
+export async function getActiveSession(): Promise<any> {
+  try {
+    // Force refresh to ensure session is current
+    await supabase.auth.refreshSession()
+    const { data, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.warn('[getActiveSession] Session error:', error.message)
+      return null
+    }
+    
+    if (!data.session?.access_token) {
+      console.warn('[getActiveSession] No session found after refresh')
+      return null
+    }
+    
+    return data.session
+  } catch (err: any) {
+    console.error('[getActiveSession] Error getting session:', err?.message)
+    return null
+  }
+}

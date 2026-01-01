@@ -34,16 +34,70 @@ export function useLiveKitSession(options: SessionOptions) {
 
   const maxParticipants = options.maxParticipants ?? 6
 
+  // ✅ Clear stale session errors from context on mount/update
+  useEffect(() => {
+    if (error) {
+      const isSessionError = error.toLowerCase().includes('session') || 
+                           error.toLowerCase().includes('sign in') || 
+                           error.toLowerCase().includes('no active session') ||
+                           error.toLowerCase().includes('no valid user session')
+      if (isSessionError) {
+        // Don't treat session errors as real errors - they're expected on load
+        console.log('[useLiveKitSession] Detected session error in context (expected on load) — ignoring')
+        // Error will be cleared by LiveKitProvider when it detects no session
+      }
+    }
+  }, [error])
+
   const joinAndPublish = useMemo(
     () => async (mediaStream?: MediaStream, tokenOverride?: string) => {
       if (joinStartedRef.current) throw new Error('Join already in progress')
-      if (!options.roomName || !options.user?.identity) {
-        const msg = 'Missing room or user for LiveKit'
-        setSessionError(msg)
-        throw new Error(msg)
+      
+      // ✅ CRITICAL: Early return if roomName is empty (prevents all connection attempts)
+      // This prevents the hook from doing anything when not on a broadcast page
+      if (!options.roomName || options.roomName.trim() === '') {
+        // Silently return - this is expected when not on broadcast page
+        return false
+      }
+      
+      // ✅ Check for stale session errors in context FIRST - don't even try if there's a session error
+      if (error) {
+        const errorLower = error.toLowerCase()
+        const isSessionError = errorLower.includes('session') || 
+                              errorLower.includes('sign in') || 
+                              errorLower.includes('no active session') || 
+                              errorLower.includes('no valid user session') ||
+                              errorLower.includes('please sign in again')
+        if (isSessionError) {
+          console.log("[useLiveKitSession] Session error detected in context — skipping connect (will retry after login)")
+          return false
+        }
+      }
+      
+      // ✅ 1) Add a hard guard before LiveKit ever runs
+      // Check session FIRST - this is expected on load, not an error
+      const { supabase } = await import('../lib/supabase')
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session) {
+        console.log("[useLiveKitSession] No active session yet — skipping connect")
+        return false
       }
 
+      // ✅ 2) Only trigger joinAndPublish when ALL are true
+      const roomName = options.roomName
+      const identity = options.user?.identity
       const allowPublish = options.allowPublish !== false
+      
+      if (!roomName || !identity || !allowPublish) {
+        console.log("[useLiveKitSession] Skipping connect — missing requirements", { 
+          roomName, 
+          identity, 
+          allowPublish,
+          hasUser: !!options.user
+        })
+        return false
+      }
+
       const autoPublish = options.autoPublish !== false
 
       console.log('[useLiveKitSession] joinAndPublish triggered', {
@@ -55,6 +109,13 @@ export function useLiveKitSession(options: SessionOptions) {
       setSessionError(null)
 
       try {
+        // ✅ CRITICAL: Check roomName FIRST before any logging or connection attempts
+        // This prevents errors on home page or any non-broadcast page
+        if (!options.roomName || options.roomName.trim() === '') {
+          // Silently return - this is expected when not on broadcast page
+          return false
+        }
+
         console.log('[useLiveKitSession] Requesting LiveKit token/connect')
         console.log('[useLiveKitSession] connecting to room', options.roomName)
 
@@ -93,10 +154,64 @@ export function useLiveKitSession(options: SessionOptions) {
         })
 
         if (!connected) {
-          console.error('[useLiveKitSession] connect returned false — aborting join')
-          toast.error('LiveKit connection failed: check LIVEKIT_URL, token, or server availability')
+          // ✅ CRITICAL: Check for session errors FIRST before any other processing
+          // This prevents error logging for expected session conditions
+          const serviceError = service?.getLastConnectionError?.() || null
+          const rawError = serviceError || error || ''
+          const errorToCheck = String(rawError).toLowerCase().trim()
+          
+          // Comprehensive check for session-related errors (expected on load/refresh)
+          // Match ANY variation of "no active session" or "sign in" messages
+          const isSessionError = !errorToCheck || // Empty error is fine
+                                errorToCheck.includes('session') || 
+                                errorToCheck.includes('sign in') || 
+                                errorToCheck.includes('no active session') || 
+                                errorToCheck.includes('no valid user session') ||
+                                errorToCheck.includes('please sign in again') ||
+                                errorToCheck.includes('session expired') ||
+                                errorToCheck.includes('session validation') ||
+                                errorToCheck.includes('no valid user session found') ||
+                                errorToCheck.includes('active session')
+          
+          // ✅ CRITICAL: Only log as error if it's NOT a session error (expected condition)
+          // Session errors are expected on app load/refresh - don't spam console
+          if (isSessionError) {
+            // Early return - do NOT log as error, do NOT access room, do NOT show toast
+            console.log('[useLiveKitSession] No session yet — will retry after login')
+            joinStartedRef.current = false
+            return false
+          }
+          
+          // If we get here, it's a REAL error (not session-related)
+          // Only now do we access room and log the error
+          const room = (typeof getRoom === 'function' && getRoom()) || service?.getRoom?.()
+          const errorMessage = rawError || 'LiveKit connection failed'
+          console.error('[useLiveKitSession] connect returned false — aborting join', {
+            error,
+            serviceError,
+            roomState: room?.state,
+            roomConnectionState: room?.connectionState,
+            hasService: !!service
+          })
+          
+          // Show more specific error message for real errors
+          let userMessage = 'LiveKit connection failed'
+          
+          if (errorToCheck.includes('token') || errorToCheck.includes('Token') || errorToCheck.includes('JWT')) {
+            userMessage = 'Failed to get LiveKit token. Please try again or contact support.'
+          } else if (errorToCheck.includes('network') || errorToCheck.includes('Network') || errorToCheck.includes('fetch')) {
+            userMessage = 'Network error connecting to LiveKit. Check your internet connection.'
+          } else if (errorToCheck.includes('timeout') || errorToCheck.includes('Timeout')) {
+            userMessage = 'Connection timeout. The LiveKit server may be unavailable.'
+          } else if (errorToCheck.includes('WebSocket') || errorToCheck.includes('websocket')) {
+            userMessage = 'WebSocket connection failed. Check your network or try again.'
+          } else {
+            userMessage = `Connection failed: ${errorToCheck}`
+          }
+          
+          toast.error(userMessage, { duration: 6000 })
           joinStartedRef.current = false
-          setSessionError('LiveKit connection failed')
+          setSessionError(errorMessage)
           return false
         }
 
@@ -112,18 +227,18 @@ export function useLiveKitSession(options: SessionOptions) {
         }
 
         if (allowPublish && autoPublish) {
-          console.log('[useLiveKitSession] Publishing local tracks via LiveKit session')
+          console.log('[useLiveKitSession] Publishing local tracks via LiveKit session', {
+            hasPreflightStream: !!mediaStream,
+            preflightStreamActive: mediaStream?.active
+          })
+          
+          // ✅ Always call startPublishing - it will use preflight stream if available, otherwise capture new tracks
           try {
-            await room.localParticipant.setCameraEnabled(true)
-            await room.localParticipant.setMicrophoneEnabled(true)
-          } catch (enableErr) {
-            console.warn('[useLiveKitSession] auto-enable camera/mic failed, will attempt startPublishing fallback', enableErr)
-            try {
-              await startPublishing()
-            } catch (spErr) {
-              console.error('[useLiveKitSession] startPublishing fallback also failed', spErr)
-              throw enableErr
-            }
+            await startPublishing()
+            console.log('[useLiveKitSession] ✅ startPublishing completed')
+          } catch (spErr: any) {
+            console.error('[useLiveKitSession] startPublishing failed', spErr)
+            throw new Error(`Failed to publish tracks: ${spErr?.message || 'Unknown error'}`)
           }
 
           // Wait briefly for the server to acknowledge publication (polling)
@@ -133,28 +248,26 @@ export function useLiveKitSession(options: SessionOptions) {
               try {
                 const hasVideo = room.localParticipant.videoTrackPublications.size > 0
                 const hasAudio = room.localParticipant.audioTrackPublications.size > 0
-                if (hasVideo || hasAudio) return true
+                if (hasVideo || hasAudio) {
+                  console.log('[useLiveKitSession] ✅ Tracks confirmed published', { hasVideo, hasAudio })
+                  return true
+                }
               } catch {
                 // ignore and retry
               }
               // small delay
-
               await new Promise((r) => setTimeout(r, 250))
             }
+            console.warn('[useLiveKitSession] ⚠️ Publication check timed out')
             return false
           }
 
           const published = await waitForPublished()
           if (!published) {
-            console.warn('[useLiveKitSession] publication timed out, attempting explicit startPublishing()')
-            try {
-              await startPublishing()
-            } catch (spErr) {
-              console.error('[useLiveKitSession] explicit startPublishing failed after timeout', spErr)
-              throw new Error('publication timed out')
-            }
+            console.warn('[useLiveKitSession] Publication check timed out, but startPublishing was called - tracks may still be publishing')
+            // Don't throw error - tracks might still be publishing asynchronously
           }
-          console.log('[useLiveKitSession] Local tracks enabled/published')
+          console.log('[useLiveKitSession] Local tracks published')
         } else if (allowPublish && !autoPublish) {
           console.log('[useLiveKitSession] Publishing allowed but autoPublish disabled – skipping local track enable')
         } else {

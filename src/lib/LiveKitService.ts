@@ -48,6 +48,7 @@ export class LiveKitService {
   private localAudioTrack: LocalAudioTrack | null = null
   private preflightStream?: MediaStream
   private isConnecting = false
+  private lastConnectionError: string | null = null
 
   constructor(config: LiveKitServiceConfig) {
     this.config = config
@@ -100,16 +101,132 @@ export class LiveKitService {
     })
 
     try {
+      // ✅ Fix #1: Try to get session from store first (fast, no network call)
+      this.log('Getting session...')
+      const { supabase } = await import('./supabase')
+      const { useAuthStore } = await import('./store')
+      
+      // First, try to use cached session from store (instant, no timeout)
+      const storeSession = useAuthStore.getState().session as any
+      let sessionData: any
+      
+      if (storeSession?.access_token) {
+        // Check if token is still valid (not expired)
+        const expiresAt = storeSession.expires_at
+        const now = Math.floor(Date.now() / 1000)
+        const isExpired = expiresAt && expiresAt < now + 60 // Expired or expiring in < 60s
+        
+        if (!isExpired) {
+          this.log('✅ Using cached session from store', {
+            hasToken: !!storeSession.access_token,
+            tokenLength: storeSession.access_token?.length,
+            expiresAt: expiresAt ? new Date(expiresAt * 1000).toISOString() : 'unknown'
+          })
+          
+          // Start background refresh for next time
+          supabase.auth.refreshSession().catch(() => {
+            // Silent fail - we have a valid session
+          })
+          
+          // Use the cached session - set sessionData here
+          sessionData = { data: { session: storeSession }, error: null }
+        } else {
+          this.log('⚠️ Cached session expired, refreshing from Supabase...')
+          // Fall through to get from Supabase
+        }
+      }
+      
+      // If no valid cached session, get from Supabase (with timeout)
+      if (!sessionData) {
+        // Start refresh in background (non-blocking)
+        this.log('Starting session refresh (non-blocking)...')
+        const refreshPromise = supabase.auth.refreshSession().catch((err: any) => {
+          // Silently handle refresh errors - we'll use current session anyway
+          this.log('⚠️ Background session refresh failed (non-fatal)', err?.message || err)
+        })
+        
+        // Get current session with timeout to prevent hanging
+        this.log('Getting session from Supabase...')
+        const getSessionWithTimeout = Promise.race([
+          supabase.auth.getSession(),
+          new Promise<{ data: any; error: any }>((_, reject) => 
+            setTimeout(() => reject(new Error('Get session timeout')), 5000)
+          )
+        ])
+        
+        try {
+          sessionData = await getSessionWithTimeout
+        } catch (getSessionErr: any) {
+          // If getSession times out, try one more time after a brief wait for refresh
+          this.log('⚠️ Get session timeout, waiting briefly for refresh...')
+          await Promise.race([
+            refreshPromise,
+            new Promise(resolve => setTimeout(resolve, 1000))
+          ])
+          
+          // Try getSession one more time with timeout
+          const retryGetSession = Promise.race([
+            supabase.auth.getSession(),
+            new Promise<{ data: any; error: any }>((_, reject) => 
+              setTimeout(() => reject(new Error('Get session retry timeout')), 3000)
+            )
+          ])
+          
+          try {
+            sessionData = await retryGetSession
+          } catch (retryErr: any) {
+            this.log('❌ Get session failed after retry', retryErr?.message || retryErr)
+            // Last resort: try store session even if expired
+            if (storeSession?.access_token) {
+              this.log('⚠️ Using expired store session as fallback')
+              sessionData = { data: { session: storeSession }, error: null }
+            } else {
+              throw new Error('Failed to get session. Please try refreshing the page.')
+            }
+          }
+        }
+      }
+      
+      // At this point, sessionData should be set (either from store or Supabase)
+      if (!sessionData) {
+        throw new Error('Failed to get session. Please try refreshing the page.')
+      }
+      
+      const { data, error: getSessionError } = sessionData
+      
+      if (getSessionError) {
+        this.log('❌ Get session error', getSessionError.message)
+        throw new Error(`Session error: ${getSessionError.message}`)
+      }
+      
+      if (!data.session?.access_token) {
+        this.log('❌ No session or access token')
+        throw new Error('No active session. Please sign in again.')
+      }
+      
+      this.log('✅ Session ready', { 
+        hasToken: !!data.session.access_token,
+        tokenLength: data.session.access_token?.length 
+      })
+
       // Step 1: Get LiveKit token (unless overridden)
       let token: string | undefined = undefined
       if (tokenOverride) {
+        this.log('Using token override')
         token = tokenOverride
       } else {
-        const tokenResponse = await this.getToken()
-        if (!tokenResponse?.token) {
-          throw new Error('Failed to get LiveKit token')
+        this.log('Requesting LiveKit token...')
+        try {
+          const tokenResponse = await this.getToken()
+          if (!tokenResponse?.token) {
+            throw new Error('Failed to get LiveKit token')
+          }
+          token = tokenResponse.token
+          this.log('✅ LiveKit token received', { tokenLength: token.length })
+        } catch (tokenError: any) {
+          this.log('❌ Token request failed:', tokenError?.message || tokenError)
+          throw new Error(`Failed to get LiveKit token: ${tokenError?.message || 'Unknown error'}`)
         }
-        token = tokenResponse.token
       }
 
       // Runtime invariant: ensure token is valid string
@@ -167,35 +284,54 @@ export class LiveKitService {
       try {
         await this.room.connect(LIVEKIT_URL, token)
         console.log("[useLiveKitSession] ✅ Connected successfully")
+        
+        // Ensure local participant exists in map as soon as we connect
+        this.updateLocalParticipantState()
+
+        // ✅ Hydrate participants already in the room
+        this.hydrateExistingRemoteParticipants()
+
+        // Publishing is handled by the caller/session hook to avoid duplicate preflight publishes.
+        if (!this.canPublish()) {
+          this.log('Viewer mode detected - publishing blocked')
+        } else {
+          this.log('✅ Connected. Publishing handled by caller/session hook.')
+        }
+
+        this.log('✅ Connection successful')
+        this.config.onConnected?.()
+        this.isConnecting = false
         return true
-      } catch (err) {
+      } catch (err: any) {
+        const errorMsg = err?.message || String(err) || 'Failed to connect to LiveKit room'
+        this.lastConnectionError = errorMsg
+        
         console.error("[LiveKitService] connect failed", err)
+        console.error("[LiveKitService] Connection error details:", {
+          message: err?.message,
+          name: err?.name,
+          stack: err?.stack,
+          code: err?.code,
+          url: LIVEKIT_URL,
+          roomName: this.config.roomName,
+          identity: this.config.identity,
+          tokenLength: token?.length,
+          tokenPreview: token ? `${token.substring(0, 50)}...` : 'NO TOKEN'
+        })
+        this.log('❌ Connection failed with error:', errorMsg)
+        this.config.onError?.(errorMsg)
+        this.isConnecting = false
         return false
       }
-
-      // Ensure local participant exists in map as soon as we connect
-      this.updateLocalParticipantState()
-
-      // ✅ Hydrate participants already in the room
-      this.hydrateExistingRemoteParticipants()
-
-      // Publishing is handled by the caller/session hook to avoid duplicate preflight publishes.
-      if (!this.canPublish()) {
-        this.log('Viewer mode detected - publishing blocked')
-      } else {
-        this.log('✅ Connected. Publishing handled by caller/session hook.')
-      }
-
-      this.log('✅ Connection successful')
-      this.config.onConnected?.()
-      this.isConnecting = false
-      return true
     } catch (error: any) {
+      const errorMsg = error?.message || String(error) || 'Failed to connect'
+      this.lastConnectionError = errorMsg
+      
       console.error('❌ LiveKitService.connect failed FULL error:', error)
 
-      this.log('❌ Connection failed:', error?.message || String(error))
+      this.log('❌ Connection failed:', errorMsg)
 
-      this.config.onError?.(error?.message || 'Failed to connect')
+      this.config.onError?.(errorMsg)
       this.isConnecting = false
       return false
     }
@@ -226,6 +362,12 @@ export class LiveKitService {
     if (!this.room?.localParticipant) throw new Error('Room not connected')
     if (!this.canPublish()) throw new Error('Publishing not allowed for this user')
 
+    this.log('📹 Publishing preflight stream', {
+      streamActive: stream.active,
+      videoTracks: stream.getVideoTracks().length,
+      audioTracks: stream.getAudioTracks().length
+    })
+
     const videoTrack = stream.getVideoTracks()[0]
     const audioTrack = stream.getAudioTracks()[0]
 
@@ -234,13 +376,29 @@ export class LiveKitService {
     }
 
     if (videoTrack) {
+      this.log('📹 Publishing video track', {
+        enabled: videoTrack.enabled,
+        readyState: videoTrack.readyState,
+        label: videoTrack.label
+      })
       this.localVideoTrack = new LocalVideoTrack(videoTrack)
       await this.room.localParticipant.publishTrack(this.localVideoTrack as any)
+      this.log('✅ Video track published')
+    } else {
+      this.log('⚠️ No video track in preflight stream')
     }
 
     if (audioTrack) {
+      this.log('🎤 Publishing audio track', {
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState,
+        label: audioTrack.label
+      })
       this.localAudioTrack = new LocalAudioTrack(audioTrack)
       await this.room.localParticipant.publishTrack(this.localAudioTrack as any)
+      this.log('✅ Audio track published')
+    } else {
+      this.log('⚠️ No audio track in preflight stream')
     }
 
     this.updateLocalParticipantState()
@@ -400,43 +558,118 @@ export class LiveKitService {
         allowPublish: this.config.allowPublish,
       })
 
-      // Import supabase client to check session
+      // ✅ Fix #2: Always pass Authorization to the token endpoint
+      // Get session from store first, then refresh to ensure it's valid
+      const { useAuthStore } = await import('./store')
       const { supabase } = await import('./supabase')
-      const session = await supabase.auth.getSession()
-
-      if (!session.data.session?.access_token) {
-        throw new Error('No valid user session found. Please sign in again.')
+      
+      let session = useAuthStore.getState().session as any
+      
+      // Always refresh session before token request to ensure it's valid on server
+      this.log('🔑 Refreshing session before token request...')
+      try {
+        // Refresh session with timeout
+        const refreshPromise = supabase.auth.refreshSession()
+        const refreshWithTimeout = Promise.race([
+          refreshPromise,
+          new Promise<any>((_, reject) =>
+            setTimeout(() => reject(new Error('Session refresh timeout')), 5000)
+          )
+        ])
+        
+        const { data: refreshData, error: refreshError } = await refreshWithTimeout as any
+        
+        if (refreshError) {
+          this.log('⚠️ Session refresh error (non-fatal):', refreshError.message)
+          // Continue with existing session if refresh fails
+        } else if (refreshData?.session) {
+          session = refreshData.session
+          this.log('✅ Session refreshed successfully')
+        }
+      } catch (refreshErr: any) {
+        this.log('⚠️ Session refresh timeout/error (non-fatal):', refreshErr?.message)
+        // Continue with existing session
+      }
+      
+      // If still no session, try to get from Supabase
+      if (!session?.access_token) {
+        this.log('🔑 No session in store, getting from Supabase...')
+        try {
+          const { data: sessionData, error: sessionErr } = await supabase.auth.getSession()
+          if (sessionErr || !sessionData.session) {
+            throw new Error('No active session')
+          }
+          session = sessionData.session
+        } catch (sessionErr: any) {
+          this.log('❌ Failed to get session:', sessionErr?.message)
+          throw new Error('No active session. Please sign in again.')
+        }
+      }
+      
+      // Check if session is expired
+      const now = Math.floor(Date.now() / 1000)
+      if (session.expires_at && session.expires_at < now + 60) {
+        this.log('⚠️ Session expiring soon, attempting refresh...')
+        try {
+          const { data: refreshData } = await supabase.auth.refreshSession()
+          if (refreshData?.session) {
+            session = refreshData.session
+            this.log('✅ Session refreshed')
+          }
+        } catch (e) {
+          this.log('⚠️ Failed to refresh expiring session:', e)
+        }
+      }
+      
+      if (!session?.access_token) {
+        throw new Error('No active session. Please sign in again.')
       }
 
       this.log('🔑 Session validated, making API request...', {
-        hasToken: !!session.data.session.access_token,
-        tokenLength: session.data.session.access_token.length,
-        expiresAt: session.data.session.expires_at,
-        now: Math.floor(Date.now() / 1000)
+        hasToken: !!session.access_token,
+        tokenLength: session.access_token.length,
+        expiresAt: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'unknown',
+        expiresIn: session.expires_at ? `${session.expires_at - now}s` : 'unknown'
       })
 
-      // Call external token endpoint (Supabase Edge Function)
+      // Call external token endpoint (Vercel API route)
       const tokenUrl = (import.meta as any).env?.VITE_LIVEKIT_TOKEN_URL ||
-        `${(import.meta as any).env?.VITE_EDGE_FUNCTIONS_URL}/livekit-token` ||
-        '/api/livekit-token'
+        'https://maitrollcity.com/api/livekit-token'
 
-      const resp = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.data.session.access_token}`,
-        },
-        body: JSON.stringify({
-          room: this.config.roomName,
-          identity: this.config.identity,
-          user_id: this.config.user?.id,
-          role: this.config.role || this.config.user?.role || 'viewer',
-          level: this.config.user?.level || 1,
-          allowPublish: this.config.allowPublish !== false,
+      const accessToken = session.access_token
+
+      this.log('🔑 Making fetch request to token endpoint...', { tokenUrl })
+
+      // Add timeout to fetch request to prevent hanging
+      const fetchWithTimeout = Promise.race([
+        fetch(tokenUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            room: this.config.roomName,
+            identity: this.config.identity,
+            user_id: this.config.user?.id,
+            role: this.config.role || this.config.user?.role || 'viewer',
+            level: this.config.user?.level || 1,
+            allowPublish: this.config.allowPublish !== false,
+          }),
         }),
-      })
+        new Promise<Response>((_, reject) =>
+          setTimeout(() => reject(new Error('Token request timeout after 10s')), 10000)
+        )
+      ])
+
+      const resp = await fetchWithTimeout
 
       // ✅ 1) In your token fetch code:
+      this.log('🔑 Token endpoint response received', { 
+        status: resp.status, 
+        statusText: resp.statusText,
+        ok: resp.ok 
+      })
       console.log("[useLiveKitSession] token response:", resp)
 
       let data: any = null
@@ -556,6 +789,21 @@ export class LiveKitService {
     if (!this.canPublish()) throw new Error('Publishing not allowed for this user')
     if (this.isPublishing()) return
 
+    // ✅ Priority 1: Use preflight stream if available (from GoLive/BroadcastPage)
+    if (this.preflightStream && this.preflightStream.active) {
+      this.log('📹 Using preflight stream for publishing')
+      try {
+        await this.publishMediaStream(this.preflightStream)
+        this.log('✅ Preflight stream published successfully')
+        return
+      } catch (err: any) {
+        this.log('⚠️ Preflight stream publish failed, falling back to capture:', err?.message)
+        // Fall through to capture new tracks
+      }
+    }
+
+    // ✅ Priority 2: Capture new tracks if no preflight stream
+    this.log('📹 Capturing new video/audio tracks')
     const [videoTrack, audioTrack] = await Promise.all([
       this.captureVideoTrack(),
       this.captureAudioTrack(),
@@ -571,10 +819,15 @@ export class LiveKitService {
     await this.room.localParticipant.setMicrophoneEnabled(!!audioTrack)
 
     this.updateLocalParticipantState()
+    this.log('✅ New tracks published successfully')
   }
 
   getRoom(): Room | null {
     return this.room
+  }
+
+  getLastConnectionError(): string | null {
+    return this.lastConnectionError
   }
 
   getParticipants(): Map<string, LiveKitParticipant> {

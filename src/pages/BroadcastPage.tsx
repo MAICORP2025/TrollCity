@@ -102,7 +102,18 @@ export default function BroadcastPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const shouldAutoStart = query.get("start") === "1";
+  
+  // ✅ Fix #4: Only autostart if URL has ?start=1 AND user has session
+  const [hasSession, setHasSession] = useState(false);
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setHasSession(!!data.session?.access_token);
+    };
+    checkSession();
+  }, []);
+  
+  const shouldAutoStart = query.get("start") === "1" && hasSession;
 
   // Auth and user state
   const { user, profile } = useAuthStore();
@@ -110,23 +121,31 @@ export default function BroadcastPage() {
   
   // Stream state (defined early for useIsBroadcaster)
   const [stream, setStream] = useState<StreamRow | null>(null);
+  const [isLoadingStream, setIsLoadingStream] = useState(true);
   
   const isBroadcaster = useIsBroadcaster(profile, stream);
   const _isAdmin = useIsAdmin(profile);
 
   // LiveKit integration
+  // ✅ 3) Ensure the hook is only mounted on BroadcastPage (not globally)
+  // Only initialize LiveKit when we have a valid stream and user
   const liveKit = useLiveKit();
   const roomName = useMemo(() => String(streamId || ''), [streamId]);
+  
+  // ✅ Only call useLiveKitSession when we have a valid streamId (prevents hook from running on home page)
+  // Don't initialize LiveKit at all if we don't have a streamId
+  const hasValidStreamId = !!streamId && typeof streamId === 'string' && streamId.trim() !== '';
+  const sessionReady = !!user && !!profile && hasValidStreamId;
   
   const {
     joinAndPublish,
   } = useLiveKitSession({
-    roomName,
-    user: user
+    roomName: sessionReady && hasValidStreamId ? roomName : '', // Empty roomName prevents connection attempts
+    user: sessionReady && user
       ? { ...user, identity: (user as any).identity || (user as any).id || profile?.id, role: profile?.role || 'broadcaster' }
       : null,
     role: isBroadcaster ? 'broadcaster' : 'viewer',
-    allowPublish: isBroadcaster,
+    allowPublish: isBroadcaster && sessionReady,
     maxParticipants: SEAT_COUNT,
   });
 
@@ -179,6 +198,7 @@ export default function BroadcastPage() {
   const [currentSeatIndex, setCurrentSeatIndex] = useState<number | null>(null);
   const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
   const [permissionErrorSeat, setPermissionErrorSeat] = useState<number | null>(null);
+  const [permissionErrorMessage, setPermissionErrorMessage] = useState<string>('');
 
   // Refs for state tracking
   const autoStartRef = useRef(false);
@@ -214,8 +234,18 @@ export default function BroadcastPage() {
       setLocalMediaStream(stream);
       return stream;
     } catch (err: any) {
-      console.error('[BroadcastPage] getUserMedia failed:', err.name, err.message);
-      throw err;
+      console.error('[BroadcastPage] getUserMedia failed:', {
+        name: err?.name,
+        message: err?.message,
+        constraint: err?.constraint,
+        error: err
+      });
+      
+      // Preserve error name and message for better error handling upstream
+      const error = new Error(err?.message || 'Failed to access camera/microphone');
+      (error as any).name = err?.name || 'MediaAccessError';
+      (error as any).originalError = err;
+      throw error;
     }
   }, [localMediaStream]);
 
@@ -229,41 +259,157 @@ export default function BroadcastPage() {
     }
   }, [localMediaStream]);
 
-  // Stream data loading
+  // Stream data loading with retry logic and fallback
   const loadStreamData = useCallback(async () => {
-    if (!streamId) return;
-
-    try {
-      console.log("📡 Loading stream info...", streamId);
-
-      const { data: streamRow, error: streamErr } = await supabase
-        .from("streams")
-        .select("*")
-        .eq("id", streamId)
-        .single();
-
-      if (streamErr || !streamRow) {
-        console.error("❌ Stream load failed:", streamErr);
-        toast.error("Stream not found.");
-        return;
-      }
-
-      setStream(streamRow as StreamRow);
-      setCoinCount(Number(streamRow.total_gifts_coins || 0));
-
-      // Broadcaster profile data loaded separately if needed
-      // const { data: bc, error: bcErr } = await supabase
-      //   .from("user_profiles")
-      //   .select("id, username")
-      //   .eq("id", streamRow.broadcaster_id)
-      //   .single();
-
-      // if (bcErr) console.warn("Broadcaster profile missing:", bcErr);
-    } catch (error) {
-      console.error('Failed to load stream data:', error);
-      toast.error('Failed to load stream information');
+    if (!streamId) {
+      setIsLoadingStream(false);
+      return;
     }
-  }, [streamId]);
+
+    setIsLoadingStream(true);
+    
+    // First, test database connectivity with a simple query
+    try {
+      console.log("🔍 Testing database connectivity...");
+      const connectivityTest = Promise.race([
+        supabase.from("streams").select("id").limit(1),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Connectivity test timeout')), 3000))
+      ]);
+      
+      await connectivityTest;
+      console.log("✅ Database connectivity confirmed");
+    } catch (connectErr: any) {
+      console.warn("⚠️ Database connectivity test failed, but continuing anyway:", connectErr?.message);
+      // Continue anyway - the actual query might still work
+    }
+
+    const maxRetries = 2; // Reduced retries since we test connectivity first
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📡 Loading stream info... (attempt ${attempt}/${maxRetries})`, streamId);
+
+        // Use maybeSingle() instead of single() - more lenient, won't error if not found
+        // Select only essential fields to reduce payload size
+        const timeoutMs = attempt === 1 ? 6000 : 8000;
+        
+        const streamQuery = supabase
+          .from("streams")
+          .select("id, broadcaster_id, title, category, status, start_time, end_time, current_viewers, total_gifts_coins, total_unique_gifters, is_live, thumbnail_url, created_at, updated_at")
+          .eq("id", streamId)
+          .maybeSingle(); // Use maybeSingle() - returns null if not found instead of error
+
+        const streamQueryWithTimeout = Promise.race([
+          streamQuery,
+          new Promise<{ data: null; error: { message: string } }>((_, reject) =>
+            setTimeout(() => reject(new Error(`Stream query timeout after ${timeoutMs}ms`)), timeoutMs)
+          )
+        ]);
+
+        const { data: streamRow, error: streamErr } = await streamQueryWithTimeout as any;
+
+        if (streamErr) {
+          // If it's a timeout error, retry
+          if (streamErr.message?.includes('timeout') || streamErr.message?.includes('Timeout')) {
+            lastError = streamErr;
+            if (attempt < maxRetries) {
+              console.log(`⚠️ Stream query timeout on attempt ${attempt}, retrying...`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+              continue;
+            }
+          }
+          
+          // For other errors, check if it's a "not found" error
+          if (streamErr.code === 'PGRST116' || streamErr.message?.includes('not found')) {
+            console.error("❌ Stream not found:", streamErr);
+            toast.error("Stream not found.");
+            setIsLoadingStream(false);
+            return;
+          }
+          
+          // For other errors, retry if we have attempts left
+          lastError = streamErr;
+          if (attempt < maxRetries) {
+            console.log(`⚠️ Stream query error on attempt ${attempt}, retrying...`, streamErr.message);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+        }
+
+        if (!streamRow) {
+          if (attempt < maxRetries) {
+            console.log(`⚠️ No stream data on attempt ${attempt}, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          console.error("❌ Stream load failed: No data returned");
+          toast.error("Stream not found.");
+          setIsLoadingStream(false);
+          return;
+        }
+
+        // Success!
+        console.log("✅ Stream loaded successfully:", streamRow.id);
+        setStream(streamRow as StreamRow);
+        setCoinCount(Number(streamRow.total_gifts_coins || 0));
+        setIsLoadingStream(false);
+        return;
+
+      } catch (error: any) {
+        lastError = error;
+        
+        // If it's a timeout, retry if we have attempts left
+        if (error?.message?.includes('timeout') && attempt < maxRetries) {
+          console.log(`⚠️ Stream query timeout on attempt ${attempt}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
+        
+        // If it's the last attempt, try fallback
+        if (attempt === maxRetries) {
+          console.error('❌ Failed to load stream data after all retries:', error?.message || error);
+          
+          // Fallback: Create minimal stream object from streamId and profile
+          // This allows the page to continue functioning even if we can't load full stream data
+          if (profile && user) {
+            console.warn('⚠️ Using fallback stream data - some features may be limited');
+            const fallbackStream: StreamRow = {
+              id: streamId,
+              broadcaster_id: profile.id,
+              title: 'Loading...',
+              status: 'live',
+              start_time: new Date().toISOString(),
+              total_gifts_coins: 0,
+              current_viewers: 0,
+            } as StreamRow;
+            
+            setStream(fallbackStream);
+            setCoinCount(0);
+            setIsLoadingStream(false);
+            toast.warning('Stream data loaded with limited information. Some features may not be available.');
+            return;
+          }
+          
+          setIsLoadingStream(false);
+          if (error?.message?.includes('timeout')) {
+            toast.error('Stream loading timed out. Please check your connection and refresh the page.');
+          } else {
+            toast.error('Failed to load stream information. Please try refreshing the page.');
+          }
+          return;
+        }
+      }
+    }
+
+    // If we get here, all retries failed
+    setIsLoadingStream(false);
+    if (lastError?.message?.includes('timeout')) {
+      toast.error('Stream loading timed out. Please check your connection and refresh the page.');
+    } else {
+      toast.error('Failed to load stream information. Please try refreshing the page.');
+    }
+  }, [streamId, profile, user]);
 
   // Seat management handlers
   const handleSeatClaim = useCallback(
@@ -273,6 +419,7 @@ export default function BroadcastPage() {
       console.log(`[BroadcastPage] Seat ${index + 1} clicked to join`);
       setClaimingSeat(index);
       setPermissionErrorSeat(null);
+      setPermissionErrorMessage('');
 
       try {
         const stream = await requestMediaAccess();
@@ -292,6 +439,29 @@ export default function BroadcastPage() {
         setCurrentSeatIndex(index);
 
         try {
+          // ✅ 2) Only trigger joinAndPublish when ALL are true
+          const { data: sessionData } = await supabase.auth.getSession()
+          if (!sessionData.session) {
+            console.log("[BroadcastPage] No session yet — skipping joinAndPublish")
+            throw new Error('No active session. Please sign in again.')
+          }
+          
+          if (!roomName || !user?.id || !profile?.id) {
+            console.log("[BroadcastPage] Missing requirements — skipping joinAndPublish", {
+              roomName,
+              hasUser: !!user,
+              hasProfile: !!profile
+            })
+            throw new Error('Missing required information to join stream')
+          }
+
+          console.log('[BroadcastPage] Calling joinAndPublish with stream', {
+            streamActive: stream?.active,
+            videoTracks: stream?.getVideoTracks().length || 0,
+            audioTracks: stream?.getAudioTracks().length || 0,
+            videoTrackEnabled: stream?.getVideoTracks()[0]?.enabled,
+            audioTrackEnabled: stream?.getAudioTracks()[0]?.enabled
+          });
           await joinAndPublish(stream);
         } catch (liveKitErr: any) {
           // Extract the real error message from LiveKit join attempt
@@ -316,13 +486,46 @@ export default function BroadcastPage() {
           if (updateErr) console.warn("Stream status update failed:", updateErr);
         }
       } catch (err: any) {
-        console.error('Failed to claim seat:', err);
-        const permissionDenied = ['NotAllowedError', 'NotFoundError', 'SecurityError', 'PermissionDeniedError'];
-        const errorMsg = err?.message || '';
+        console.error('Failed to claim seat:', {
+          error: err,
+          name: err?.name,
+          message: err?.message,
+          originalError: err?.originalError
+        });
         
-        if (permissionDenied.includes(err?.name)) {
+        const permissionDenied = ['NotAllowedError', 'NotFoundError', 'SecurityError', 'PermissionDeniedError', 'MediaAccessError'];
+        const errorMsg = err?.message || '';
+        const errorName = err?.name || err?.originalError?.name || '';
+        
+        // Check both the error name and message for permission issues
+        const isPermissionError = permissionDenied.includes(errorName) || 
+                                  errorMsg.toLowerCase().includes('permission') ||
+                                  errorMsg.toLowerCase().includes('not allowed') ||
+                                  errorMsg.toLowerCase().includes('denied');
+        
+        if (isPermissionError) {
           setPermissionErrorSeat(index);
-          toast.error('Camera/Microphone blocked. Please enable permissions and try again.');
+          // Provide helpful guidance based on error type
+          let userMessage = 'Camera/Microphone access blocked. Please enable permissions and try again.';
+          if (errorName === 'NotAllowedError' || errorMsg.includes('permission denied')) {
+            userMessage = 'Camera/Microphone access was denied. Click the camera/mic icon in your browser\'s address bar to allow access, then click Retry.';
+            setPermissionErrorMessage(userMessage);
+            toast.error(userMessage, {
+              duration: 6000
+            });
+          } else if (errorName === 'NotFoundError') {
+            userMessage = 'No camera or microphone found. Please connect a device and try again.';
+            setPermissionErrorMessage(userMessage);
+            toast.error(userMessage, {
+              duration: 5000
+            });
+          } else {
+            userMessage = 'Camera/Microphone access blocked. Please check your browser settings and allow access, then try again.';
+            setPermissionErrorMessage(userMessage);
+            toast.error(userMessage, {
+              duration: 5000
+            });
+          }
         } else if (errorMsg.includes('No active session') || errorMsg.includes('session')) {
           // Session expired during join attempt—redirect to auth
           toast.error('Your session has expired. Please sign in again.');
@@ -365,6 +568,7 @@ export default function BroadcastPage() {
     if (permissionErrorSeat === null) return;
     const seatToRetry = permissionErrorSeat;
     setPermissionErrorSeat(null);
+    setPermissionErrorMessage('');
     await handleSeatClaim(seatToRetry);
   }, [permissionErrorSeat, handleSeatClaim]);
 
@@ -452,8 +656,9 @@ export default function BroadcastPage() {
   }, [loadStreamData]);
 
   // Auto-start broadcaster when redirected from setup with ?start=1
+  // ✅ Fix #4: Only runs if URL has ?start=1 AND user has session
   useEffect(() => {
-    if (!shouldAutoStart || !stream?.id || !profile?.id || !isBroadcaster || autoStartRef.current) {
+    if (!shouldAutoStart || !stream?.id || !profile?.id || !isBroadcaster || autoStartRef.current || !hasSession) {
       return;
     }
 
@@ -466,7 +671,7 @@ export default function BroadcastPage() {
       const clean = location.pathname;
       window.history.replaceState({}, "", clean);
     }, 300);
-  }, [shouldAutoStart, stream?.id, profile?.id, isBroadcaster, handleSeatClaim, location.pathname]);
+  }, [shouldAutoStart, stream?.id, profile?.id, isBroadcaster, hasSession, handleSeatClaim, location.pathname]);
 
   // Redirect on auth loss
   useEffect(() => {
@@ -515,12 +720,14 @@ export default function BroadcastPage() {
   }, [streamId]);
 
   // Loading state
-  if (!stream || !profile) {
+  if (isLoadingStream || !stream || !profile) {
     return (
       <div className="min-h-screen bg-[#03010c] via-[#05031a] to-[#110117] text-white flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 rounded-full border-2 border-purple-500/60 animate-pulse" />
-          <p className="text-sm text-gray-300">Loading stream…</p>
+          <p className="text-sm text-gray-300">
+            {isLoadingStream ? 'Loading stream…' : !profile ? 'Loading profile…' : 'Loading stream…'}
+          </p>
         </div>
       </div>
     );
@@ -532,8 +739,8 @@ export default function BroadcastPage() {
       {permissionErrorSeat !== null && (
         <div className="fixed top-4 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 px-4">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-full border border-red-500/60 bg-red-500/90 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-lg shadow-red-500/50">
-            <span className="flex-1 min-w-0 text-left">
-              Camera/Microphone blocked. Please enable permissions and try again.
+            <span className="flex-1 min-w-0 text-left text-[10px]">
+              {permissionErrorMessage || 'Camera/Microphone blocked. Please enable permissions and try again.'}
             </span>
             <button
               onClick={handlePermissionRetry}

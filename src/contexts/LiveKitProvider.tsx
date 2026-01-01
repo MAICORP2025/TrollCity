@@ -45,28 +45,36 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       user: any,
       options: Partial<LiveKitServiceConfig> = {}
     ) => {
+      // ✅ Early return for missing requirements - don't set error, just skip
       if (!roomName || !user) {
-        setError("Missing room or user for LiveKit connect");
+        console.log("[LiveKitProvider] Skipping connect — missing room or user", { roomName: !!roomName, user: !!user });
         return false;
       }
 
       // Require stable identity
       const identity = user.id || user.identity;
-      if (!identity) return false;
+      if (!identity) {
+        console.log("[LiveKitProvider] Skipping connect — missing identity");
+        return false;
+      }
 
       // ✅ DEFENSIVE: Validate Supabase session before attempting LiveKit connection
+      // Do NOT set error for expected "no session" condition on app load
       try {
-        const { data: sessionData, error: sessionError } = await (window as any).supabase?.auth?.getSession?.() || {};
-        if (sessionError || !sessionData?.session) {
-          setError("No active session. Please sign in again.");
-          // Emit error to parent so it can redirect
-          options.onError?.("Session expired. Please sign in again.");
+        const { supabase } = await import('../lib/supabase');
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          // This is expected on app load - don't treat as error, clear any existing error
+          console.log("[LiveKitProvider] No active session yet — skipping connect");
+          setError(null); // Clear error state for expected condition
           return false;
         }
+        console.log("[LiveKitProvider] ✅ Session validated before connection");
+        setError(null); // Clear any previous errors
       } catch (e: any) {
-        console.warn("[LiveKitProvider] Session check threw:", e?.message);
-        setError("Session validation failed. Please sign in again.");
-        options.onError?.("Session validation failed.");
+        // Only log as info, don't set error for expected conditions
+        console.log("[LiveKitProvider] Session check: will retry after login", e?.message);
+        setError(null); // Clear error state
         return false;
       }
 
@@ -191,6 +199,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
           },
 
           onError: (errorMsg) => {
+            // Ignore expected/non-critical errors
             if (
               errorMsg.includes("Client initiated disconnect") ||
               errorMsg.includes("Abort connection attempt") ||
@@ -198,6 +207,19 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
             ) {
               console.log("[LiveKit non-error]", errorMsg);
               return;
+            }
+
+            // ✅ Don't set error for session-related messages (expected on load)
+            const errorLower = errorMsg.toLowerCase();
+            const isSessionError = errorLower.includes('session') || 
+                                 errorLower.includes('sign in') || 
+                                 errorLower.includes('no active session') ||
+                                 errorLower.includes('please sign in again');
+            
+            if (isSessionError) {
+              console.log("[LiveKitProvider] Session error (expected) — not setting error state", errorMsg);
+              setIsConnecting(false);
+              return; // Don't set error or call onError for session issues
             }
 
             console.error("[LiveKit error]", errorMsg);
@@ -293,6 +315,21 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
   const getRoom = useCallback(() => {
     return serviceRef.current?.getRoom() || null;
   }, []);
+
+  // ✅ Clear stale session errors on mount/refresh
+  useEffect(() => {
+    if (error) {
+      const errorLower = error?.toLowerCase() || '';
+      const isSessionError = errorLower.includes('session') || 
+                           errorLower.includes('sign in') || 
+                           errorLower.includes('no active session') ||
+                           errorLower.includes('please sign in again');
+      if (isSessionError) {
+        console.log("[LiveKitProvider] Clearing stale session error on mount");
+        setError(null);
+      }
+    }
+  }, []); // Only run on mount
 
   useEffect(() => {
     return () => {

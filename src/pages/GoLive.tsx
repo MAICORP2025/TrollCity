@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 // import api from '../lib/api'; // Uncomment if needed
 import { supabase } from '../lib/supabase';
@@ -26,6 +26,11 @@ const GoLive: React.FC = () => {
   const [category, setCategory] = useState<string>('Chat');
   const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
   const [enablePaidGuestBoxes, setEnablePaidGuestBoxes] = useState<boolean>(false);
+
+  // Media permission state
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const [_broadcasterStatus, setBroadcasterStatus] = useState<{
     isApproved: boolean;
@@ -97,6 +102,15 @@ const GoLive: React.FC = () => {
       return;
     }
 
+    // Check if we have camera/mic permissions
+    if (permissionStatus !== 'granted' || !mediaStream) {
+      toast.error('Camera and microphone access is required. Please allow permissions first.');
+      const stream = await requestMediaPermissions();
+      if (!stream) {
+        return; // User denied permissions
+      }
+    }
+
     if (!streamTitle.trim()) {
       toast.error('Enter a stream title.');
       return;
@@ -141,51 +155,17 @@ const GoLive: React.FC = () => {
         setUploadingThumbnail(false);
       }
 
-      // Enhanced DB health check with comprehensive logging
-      try {
-        console.log('[GoLive] Running enhanced DB health check...');
-        
-        // Log environment variables (safely)
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        console.log('[GoLive] Environment check:', {
-          hasUrl: !!supabaseUrl,
-          urlLength: supabaseUrl?.length || 0,
-          hasAnonKey: !!supabaseAnonKey,
-          anonKeyLength: supabaseAnonKey?.length || 0,
-          url: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'MISSING'
-        });
-        
-        // Use the healthcheck RPC function for reliable connectivity testing
-        const healthQuery = supabase.rpc('healthcheck');
-        const health = await withTimeout(Promise.resolve(healthQuery), 5000);
-        
-        console.log('[GoLive] DB health check result:', {
-          data: health.data,
-          error: health.error,
-          status: health.status,
-          statusText: health.statusText,
-          fullResponse: health
-        });
-        
-        if (health.error) {
-          console.error('[GoLive] Health check Supabase error:', health.error);
-          throw new Error(`Supabase health check failed: ${health.error.message || health.error}`);
-        }
-        
-        console.log('[GoLive] ✅ Database health check passed');
-      } catch (hErr: any) {
-        console.error('[GoLive] DB health check failed:', hErr);
-        
-        // Show the exact Supabase error message in toast
-        const errorMessage = hErr?.message || hErr?.error?.message || 'Unknown database error';
-        toast.error(`Database health check failed: ${errorMessage}`);
-        
-        // continue to attempt insert; health check is advisory
-      }
-
       // Insert into streams table (use timeout to avoid hanging UI)
-      console.log('[GoLive] Inserting stream row into DB...');
+      console.log('[GoLive] Inserting stream row into DB...', { streamId, broadcasterId: profile.id });
+
+      // Verify session before insert
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session?.access_token) {
+        console.error('[GoLive] No active session before insert');
+        toast.error('Session expired. Please sign in again.');
+        return;
+      }
+      console.log('[GoLive] Session verified, proceeding with insert');
 
       const insertOperation = supabase
         .from('streams')
@@ -207,7 +187,49 @@ const GoLive: React.FC = () => {
         .select()
         .single();
 
-      const result: any = await withTimeout(Promise.resolve(insertOperation), 30000);
+      console.log('[GoLive] Executing insert with 15s timeout...');
+      
+      // Use AbortController for proper timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 15000); // 15 second timeout
+      
+      const startTime = Date.now();
+      let result: any;
+      
+      try {
+        // Note: Supabase doesn't directly support AbortController, but we can wrap it
+        const insertPromise = insertOperation;
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Insert operation timed out after 15 seconds')), 15000);
+        });
+        
+        result = await Promise.race([insertPromise, timeoutPromise]);
+        clearTimeout(timeoutId);
+        
+        const duration = Date.now() - startTime;
+        console.log(`[GoLive] Insert completed in ${duration}ms`, { hasError: !!result.error, hasData: !!result.data });
+      } catch (insertErr: any) {
+        clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
+        console.error(`[GoLive] Insert failed after ${duration}ms`, insertErr);
+        
+        // Check if it's a timeout
+        if (insertErr?.message?.includes('timeout') || duration >= 15000) {
+          toast.error('Stream creation timed out. Please check your network connection and try again.');
+          return;
+        }
+        
+        // Check if it's a network/connection error
+        if (insertErr?.message?.includes('fetch') || insertErr?.message?.includes('network') || insertErr?.code === 'ECONNREFUSED') {
+          toast.error('Network error: Unable to connect to database. Please check your internet connection.');
+          return;
+        }
+        
+        // Re-throw other errors to be caught by outer catch
+        throw insertErr;
+      }
 
       if (result.error) {
         console.error('[GoLive] Supabase insert immediate error:', {
@@ -237,15 +259,31 @@ const GoLive: React.FC = () => {
 
       const insertedStream = result.data ?? result;
       const createdId = insertedStream?.id;
+      console.log('[GoLive] Insert result check', { 
+        hasData: !!result.data, 
+        hasInsertedStream: !!insertedStream, 
+        createdId,
+        insertedStream,
+        result 
+      });
+      
       if (!createdId) {
-        console.error('[GoLive] Stream insert did not return an id', insertedStream);
+        console.error('[GoLive] Stream insert did not return an id', { insertedStream, result });
         toast.error('Failed to start stream (no id returned).');
         return;
       }
 
+      console.log('[GoLive] Setting streaming state and navigating...');
       setIsStreaming(true);
       console.log('[GoLive] Stream created successfully, navigating to broadcast', { createdId });
-      navigate(`/broadcast/${createdId}?start=1`);
+      
+      try {
+        navigate(`/broadcast/${createdId}?start=1`);
+        console.log('[GoLive] ✅ Navigation called successfully');
+      } catch (navErr: any) {
+        console.error('[GoLive] ❌ Navigation error', navErr);
+        toast.error('Stream created but navigation failed. Please navigate manually.');
+      }
     } catch (err: any) {
       console.error('[GoLive] Error starting stream:', {
         error: err,
@@ -277,33 +315,110 @@ const GoLive: React.FC = () => {
   };
 
   // -------------------------------
-  // Camera preview
+  // Request Camera/Microphone Permissions
+  // -------------------------------
+  const requestMediaPermissions = useCallback(async () => {
+    if (mediaStream && mediaStream.active) {
+      return mediaStream;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const error = 'Media devices API not available. Please use a modern browser.';
+      setPermissionError(error);
+      setPermissionStatus('denied');
+      toast.error(error);
+      return null;
+    }
+
+    if (!window.isSecureContext) {
+      const error = 'Camera/microphone access requires a secure context (HTTPS).';
+      setPermissionError(error);
+      setPermissionStatus('denied');
+      toast.error(error);
+      return null;
+    }
+
+    setPermissionStatus('requesting');
+    setPermissionError(null);
+
+    try {
+      console.log('[GoLive] Requesting camera & microphone permissions...');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      console.log('[GoLive] ✅ Permissions granted');
+      setMediaStream(stream);
+      setPermissionStatus('granted');
+      setPermissionError(null);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+
+      toast.success('Camera and microphone access granted!');
+      return stream;
+    } catch (err: any) {
+      console.error('[GoLive] Permission request failed:', {
+        name: err?.name,
+        message: err?.message,
+        error: err
+      });
+
+      setPermissionStatus('denied');
+      
+      let errorMessage = 'Camera/Microphone access was denied.';
+      if (err?.name === 'NotAllowedError') {
+        errorMessage = 'Camera/Microphone access was denied. Please click the camera/mic icon in your browser\'s address bar to allow access, then try again.';
+      } else if (err?.name === 'NotFoundError') {
+        errorMessage = 'No camera or microphone found. Please connect a device and try again.';
+      } else if (err?.name === 'SecurityError') {
+        errorMessage = 'Camera/Microphone access blocked by browser security settings.';
+      } else {
+        errorMessage = err?.message || 'Failed to access camera/microphone.';
+      }
+
+      setPermissionError(errorMessage);
+      toast.error(errorMessage, { duration: 6000 });
+      return null;
+    }
+  }, [mediaStream]);
+
+  // -------------------------------
+  // Camera preview - Request permissions on mount
   // -------------------------------
   useEffect(() => {
-    let previewStream: MediaStream | null = null;
-
-    if (videoRef.current && !isStreaming) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-        previewStream = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }).catch((err) => {
-        console.error('Error accessing camera/microphone:', err);
-      });
+    if (videoRef.current && !isStreaming && permissionStatus === 'idle') {
+      // Request permissions when component mounts
+      requestMediaPermissions();
     }
+
     // Cleanup: Stop all tracks when component unmounts or when streaming starts
     return () => {
-      if (previewStream) {
-        previewStream.getTracks().forEach(track => {
+      if (mediaStream && isStreaming) {
+        // Don't stop stream if we're about to use it for streaming
+        return;
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => {
           track.stop();
         });
+        setMediaStream(null);
       }
-      if (videoRef.current) {
+      if (videoRef.current && !isStreaming) {
         videoRef.current.srcObject = null;
       }
     };
-  }, [isStreaming]);
+  }, [isStreaming, permissionStatus, requestMediaPermissions, mediaStream]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 go-live-wrapper">
@@ -321,6 +436,34 @@ const GoLive: React.FC = () => {
           muted
           className="w-full h-32 md:h-40 lg:h-48 object-cover bg-black"
         />
+        {permissionStatus === 'requesting' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+            <div className="text-center text-white">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+              <p className="text-sm">Requesting camera & microphone access...</p>
+            </div>
+          </div>
+        )}
+        {permissionStatus === 'denied' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+            <div className="text-center text-white p-4">
+              <p className="text-sm text-red-400 mb-3">{permissionError || 'Camera/Microphone access denied'}</p>
+              <button
+                onClick={requestMediaPermissions}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition"
+              >
+                Grant Permissions
+              </button>
+            </div>
+          </div>
+        )}
+        {permissionStatus === 'granted' && !mediaStream && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+            <div className="text-center text-white">
+              <p className="text-sm text-yellow-400 mb-3">Camera ready</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {!isStreaming ? (

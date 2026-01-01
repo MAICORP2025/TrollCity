@@ -19,6 +19,7 @@
     "@paypal/paypal-server-sdk": "^2.1.0",
     "@paypal/react-paypal-js": "^8.9.2",
     "@supabase/supabase-js": "^2.45.4",
+    "@vercel/node": "^3.0.0",
     "face-api.js": "^0.22.2",
     "tesseract.js": "^2.1.5",
     "agora-rtc-sdk-ng": "^4.24.1",
