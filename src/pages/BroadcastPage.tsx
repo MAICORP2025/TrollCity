@@ -116,7 +116,7 @@ export default function BroadcastPage() {
 
   // LiveKit integration
   const liveKit = useLiveKit();
-  const roomName = useMemo(() => `stream-${streamId}`, [streamId]);
+  const roomName = useMemo(() => String(streamId || ''), [streamId]);
   
   const {
     joinAndPublish,

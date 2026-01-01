@@ -164,7 +164,7 @@ const GoLive: React.FC = () => {
           id: streamId,
           broadcaster_id: profile.id,
           title: streamTitle,
-          room_name: `stream-${streamId}`,
+          room_name: String(streamId),
           is_live: true,
           status: 'live',
           start_time: new Date().toISOString(),
