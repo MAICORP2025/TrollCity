@@ -105,10 +105,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       canPublishData: canPublish,
     });
 
-    const tokenJwt = token.toJwt();
+    // ✅ CRITICAL FIX: Ensure toJwt() returns a string, not an object
+    // Handle both sync and async toJwt() methods
+    let jwtString: string;
+    try {
+      const jwtResult = token.toJwt();
+      
+      // If it's a Promise, await it
+      const jwt = jwtResult instanceof Promise ? await jwtResult : jwtResult;
+      
+      // ✅ STRICT VALIDATION: Ensure jwt is a string
+      if (typeof jwt !== 'string') {
+        console.error('[livekit-token] toJwt() returned non-string:', {
+          type: typeof jwt,
+          value: jwt,
+          stringified: JSON.stringify(jwt)
+        });
+        throw new Error(`toJwt() returned ${typeof jwt} instead of string`);
+      }
+      
+      // ✅ Validate JWT format (should start with 'eyJ')
+      if (!jwt.startsWith('eyJ')) {
+        console.error('[livekit-token] JWT does not have expected format:', {
+          jwtPreview: jwt.substring(0, 50),
+          jwtLength: jwt.length
+        });
+        throw new Error('Invalid JWT format');
+      }
+      
+      jwtString = jwt;
+    } catch (jwtError: any) {
+      console.error('[livekit-token] Failed to generate JWT:', jwtError);
+      throw new Error(`JWT generation failed: ${jwtError?.message || jwtError}`);
+    }
 
+    // ✅ Return string, NOT object
     return res.status(200).json({
-      token: tokenJwt,
+      token: jwtString, // ✅ String JWT, not AccessToken object
       livekitUrl: livekitUrl || null,
       room: roomName,
       identity: String(identity),
