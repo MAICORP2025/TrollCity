@@ -26,6 +26,12 @@ try {
   console.warn('Unable to evaluate app version guard', error)
 }
 
+// Debug helper to access environment variables in browser console
+// Usage: window.__ENV.VITE_LIVEKIT_URL
+if (typeof window !== 'undefined') {
+  (window as any).__ENV = import.meta.env
+}
+
 const rootElement = document.getElementById('root')
 
 if (!rootElement) {

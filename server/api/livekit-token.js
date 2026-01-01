@@ -20,6 +20,12 @@ module.exports = async (req, res) => {
   }
 
   try {
+    console.log("✅ /api/livekit-token HIT", {
+      method: req.method,
+      hasAuth: !!req.headers.authorization,
+      origin: req.headers.origin,
+    });
+
     const body = req.body || {};
     const room = body.room || body.roomName;
     let identity = body.identity;
@@ -62,6 +68,12 @@ module.exports = async (req, res) => {
     });
 
     const jwt = await token.toJwt();
+
+    console.log("✅ TOKEN ISSUED", {
+      room,
+      identity,
+      allowPublish: allowPublish,
+    });
 
     return sendJson(res, 200, { token: jwt, livekitUrl, room, identity: String(identity), allowPublish: !!allowPublish });
   } catch (err) {
