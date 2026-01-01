@@ -25,7 +25,7 @@ export type LiveKitParticipantState = {
   metadata?: Record<string, unknown>
 }
 
-export type LiveKitConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
+export type LiveKitConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
 
 export type LiveKitRoomConfig = {
   roomName?: string
@@ -49,10 +49,30 @@ type LiveKitTokenResponse = {
   allowPublish?: boolean
 }
 
+// JWT Token decoding helper function
+const decodeJWTPayload = (token: string): Record<string, any> | null => {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) {
+      console.warn('[useLiveKitRoom] Invalid JWT structure - expected 3 parts, got', parts.length)
+      return null
+    }
+
+    const payload = parts[1]
+    // Add padding if needed for base64 decode
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4)
+    const decoded = atob(padded.replace(/-/g, '+').replace(/_/g, '/'))
+    return JSON.parse(decoded)
+  } catch (error) {
+    console.warn('[useLiveKitRoom] Failed to decode JWT payload', { error, tokenLength: token?.length })
+    return null
+  }
+}
+
 const buildTokenBody = (roomName: string, user: LiveKitRoomConfig['user'], allowPublish: boolean) => ({
   room: roomName,
   participantName: user?.username || user?.id,
-  identity: user?.id,
+  identity: user?.id, // Always use user.id for stable identity
   role: user?.role || 'viewer',
   level: user?.level || 1,
   allowPublish,
@@ -60,7 +80,7 @@ const buildTokenBody = (roomName: string, user: LiveKitRoomConfig['user'], allow
 
 const parseParticipantMetadata = (metadata?: string): Record<string, unknown> | undefined => {
   if (!metadata) return undefined
-    export type LiveKitConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
+  try {
     return JSON.parse(metadata)
   } catch (error) {
     console.warn('[useLiveKitRoom] Failed to parse metadata for participant', { metadata, error })
@@ -90,38 +110,99 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
 
       const body = buildTokenBody(roomName, user, publish)
       console.log('[useLiveKitRoom] fetching token with body:', body)
-      const tokenResponse = await api.post<LiveKitTokenResponse>('/livekit-token', body)
-      const data = tokenResponse.data || tokenResponse
 
-      if (!data || !data.token) {
-        const message = (data as any)?.error || (tokenResponse as any)?.error || 'LiveKit token request failed'
-        throw new Error(message)
+      let tokenResponse: any
+      let data: LiveKitTokenResponse
+
+      try {
+        tokenResponse = await api.post<LiveKitTokenResponse>('/livekit-token', body)
+        data = tokenResponse.data || tokenResponse
+      } catch (error: any) {
+        console.error('[useLiveKitRoom] Token API call failed', {
+          error: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        })
+        throw new Error(`Token API call failed: ${error.message}`)
       }
 
-      return data as LiveKitTokenResponse
+      // Comprehensive logging of token response
+      console.log('[useLiveKitRoom] Full token response received:', {
+        success: true,
+        tokenLength: data?.token?.length || 0,
+        hasToken: !!data?.token,
+        livekitUrl: data?.livekitUrl,
+        room: data?.room,
+        allowPublish: data?.allowPublish,
+        rawResponse: data,
+        tokenPreview: data?.token ? `${data.token.substring(0, 50)}...` : null
+      })
+
+      // Validate token response
+      if (!data || !data.token) {
+        const errorDetails = {
+          hasData: !!data,
+          hasToken: !!data?.token,
+          tokenLength: data?.token?.length || 0,
+          rawResponse: data,
+          apiError: (data as any)?.error || tokenResponse?.error
+        }
+        console.error('[useLiveKitRoom] Invalid token response:', errorDetails)
+        throw new Error(`Invalid token response: ${JSON.stringify(errorDetails)}`)
+      }
+
+      // Decode and log JWT payload for debugging
+      const decodedPayload = decodeJWTPayload(data.token)
+      if (decodedPayload) {
+        console.log('[useLiveKitRoom] JWT Token decoded payload:', {
+          iss: decodedPayload.iss,
+          sub: decodedPayload.sub,
+          video: decodedPayload.video,
+          room: decodedPayload.video?.room,
+          roomJoin: decodedPayload.video?.roomJoin,
+          canPublish: decodedPayload.video?.canPublish,
+          canSubscribe: decodedPayload.video?.canSubscribe,
+          exp: decodedPayload.exp,
+          iat: decodedPayload.iat
+        })
+
+        // Check for potential issues in JWT
+        if (decodedPayload.exp && decodedPayload.exp * 1000 < Date.now()) {
+          console.warn('[useLiveKitRoom] Token is expired!', {
+            exp: new Date(decodedPayload.exp * 1000).toISOString(),
+            now: new Date().toISOString()
+          })
+        }
+      }
+
+      // Attach token to window for debugging in development
+      if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+        ; (window as any).__LK_TOKEN = data.token
+        console.log('[useLiveKitRoom] Token attached to window.__LK_TOKEN for debugging')
+      }
+
+      return data
     },
     [roomName, user]
   )
 
-    export function useLiveKitRoom(config: LiveKitRoomOptions) {
-      const { roomName, user, allowPublish = false, autoPublish = false, roomOptions, enabled = true } = config
-      setParticipants((prev) => {
-        const next = { ...prev }
-        const existing = next[identity] ?? {
-          identity,
-          name: identity,
-          isLocal: false,
-          isCameraOn: false,
-          isMicrophoneOn: false,
-          isMuted: true,
-        }
-        const metadata = patch.metadata ?? existing.metadata
-        next[identity] = { ...existing, ...patch, metadata }
-        return next
-      })
-    },
-    []
-  )
+  const updateParticipantState = useCallback((identity: string, patch: Partial<LiveKitParticipantState>) => {
+    setParticipants((prev) => {
+      const next = { ...prev }
+      const existing = next[identity] ?? {
+        identity,
+        name: identity,
+        isLocal: false,
+        isCameraOn: false,
+        isMicrophoneOn: false,
+        isMuted: true,
+      }
+      const metadata = patch.metadata ?? existing.metadata
+      next[identity] = { ...existing, ...patch, metadata }
+      return next
+    })
+  }, [])
 
   const removeParticipantState = useCallback((identity: string) => {
     setParticipants((prev) => {
@@ -320,42 +401,59 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
     if (connectingRef.current) return
     connectingRef.current = true
 
-    console.log('[useLiveKitRoom] connect start', { roomName, identity: user?.id })
+    console.log('[useLiveKitRoom] connect start', {
+      roomName,
+      identity: user?.id, // Using stable identity
+      allowPublish,
+      autoPublish,
+      livekitUrl: LIVEKIT_URL
+    })
     setConnectionStatus('connecting')
     setError(null)
 
     try {
       const tokenResponse = await fetchToken(allowPublish)
-      console.log('[useLiveKitRoom] token received', tokenResponse)
       const targetUrl = tokenResponse.livekitUrl || LIVEKIT_URL
+
+      console.log('[useLiveKitRoom] Connecting to LiveKit:', {
+        url: targetUrl,
+        tokenLength: tokenResponse.token?.length,
+        tokenPreview: tokenResponse.token ? `${tokenResponse.token.substring(0, 50)}...` : null,
+        room: tokenResponse.room || roomName
+      })
+
       const newRoom = new Room({ ...defaultLiveKitOptions, ...roomOptions })
 
       newRoom.on(RoomEvent.Connected, () => {
-        console.log('[useLiveKitRoom] room connected')
+        console.log('[useLiveKitRoom] ✅ Room connected successfully')
         setConnectionStatus('connected')
         addParticipant(newRoom.localParticipant)
         registerExistingParticipants(newRoom)
-      if (autoPublish && allowPublish) {
-        console.log('[useLiveKitRoom] autoPublish enabled, publishing local tracks')
-        void publishLocalTracks(newRoom)
-      }
+        if (autoPublish && allowPublish) {
+          console.log('[useLiveKitRoom] autoPublish enabled, publishing local tracks')
+          void publishLocalTracks(newRoom)
+        }
       })
 
       newRoom.on(RoomEvent.Reconnecting, () => {
+        console.log('[useLiveKitRoom] 🔄 Reconnecting...')
         setConnectionStatus('reconnecting')
       })
 
       newRoom.on(RoomEvent.Disconnected, () => {
+        console.log('[useLiveKitRoom] 📡 Room disconnected')
         setConnectionStatus('disconnected')
         setRoom(null)
         setParticipants({})
       })
 
       newRoom.on(RoomEvent.ParticipantConnected, (participant) => {
+        console.log('[useLiveKitRoom] 👤 Participant connected:', participant.identity)
         addParticipant(participant)
       })
 
       newRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        console.log('[useLiveKitRoom] 👋 Participant disconnected:', participant.identity)
         removeParticipantState(participant.identity)
       })
 
@@ -363,12 +461,53 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
       newRoom.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
 
       roomRef.current = newRoom
+
+      console.log('[useLiveKitRoom] 🔗 Attempting LiveKit connection...')
       await newRoom.connect(targetUrl, tokenResponse.token)
       setRoom(newRoom)
+
     } catch (err: any) {
-      console.error('LiveKit connect failed', err)
+      // Comprehensive error logging for debugging
+      const errorDetails = {
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack,
+        code: err?.code,
+        reason: err?.reason,
+        statusCode: err?.statusCode,
+        status: err?.status,
+        raw: err,
+        // Connection context
+        roomName,
+        identity: user?.id,
+        allowPublish,
+        targetUrl: (err as any)?.url || LIVEKIT_URL
+      }
+
+      console.error('[useLiveKitRoom] ❌ LiveKit connect failed:', errorDetails)
+
+      // Provide specific error analysis
+      let errorType = 'unknown'
+      let errorSuggestion = ''
+
+      if (err?.message?.includes('token') || err?.message?.includes('Token')) {
+        errorType = 'invalid_token'
+        errorSuggestion = 'Token validation failed - check JWT structure, expiry, and grants'
+      } else if (err?.message?.includes('401') || err?.message?.includes('403')) {
+        errorType = 'auth_failed'
+        errorSuggestion = 'Authentication failed - verify LiveKit project keys and API credentials'
+      } else if (err?.message?.includes('room') && err?.message?.includes('not found')) {
+        errorType = 'room_not_found'
+        errorSuggestion = 'Room does not exist or is not accessible - check room name and permissions'
+      } else if (err?.message?.includes('connection') || err?.message?.includes('connect')) {
+        errorType = 'connection_failed'
+        errorSuggestion = 'Connection failed - check LiveKit URL and network connectivity'
+      }
+
+      console.error(`[useLiveKitRoom] 🔍 Error Analysis: ${errorType} - ${errorSuggestion}`)
+
       setError(err?.message || 'Failed to connect to LiveKit')
-      setConnectionStatus('disconnected')
+      setConnectionStatus('error')
       setRoom(null)
     } finally {
       connectingRef.current = false
