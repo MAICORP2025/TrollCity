@@ -3,9 +3,8 @@ import { AuthApiError } from '@supabase/supabase-js'
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// Normalize base URL, remove trailing slash if needed
-const API_BASE_URL = import.meta.env.VITE_EDGE_FUNCTIONS_URL?.replace(/\/$/, '')
-  || 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1';
+// Use relative API path for same-domain deployment
+const API_BASE_URL = '/api';
 // Centralized API endpoint definitions
 export const API_ENDPOINTS = {
   auth: {
