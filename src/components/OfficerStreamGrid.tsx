@@ -1,9 +1,11 @@
-﻿import React, { useMemo, useRef, useCallback, useEffect } from 'react'
+﻿import React, { useMemo, useRef, useCallback } from 'react'
 import { Mic, Video } from 'lucide-react'
 import { useSeatRoster, type SeatAssignment } from '../hooks/useSeatRoster'
 import { useLiveKit } from '../hooks/useLiveKit'
+import { useLiveKitSession } from '../hooks/useLiveKitSession'
 import { LiveKitParticipant } from '../lib/LiveKitService'
 import { useAuthStore } from '../lib/store'
+import { supabase } from '../lib/supabase'
 
 interface OfficerStreamGridProps {
   roomName?: string
@@ -30,26 +32,35 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
   const { seats, claimSeat, releaseSeat } = useSeatRoster(roomName)
   const { user, profile } = useAuthStore()
 
+  // LiveKit integration - same pattern as BroadcastPage
+  const liveKit = useLiveKit()
   const liveKitUser = useMemo(() => {
     if (!user) return null
     return {
-      id: user.id,
-      username: profile?.username || user.email?.split('@')[0] || 'Officer',
-      role: profile?.role || 'viewer',
+      ...user,
+      identity: (user as any).identity || user.id || profile?.id,
+      role: profile?.role || 'broadcaster',
       level: profile?.level ?? 1,
     }
   }, [user, profile])
 
-  const { participants, disconnect, startPublishing, connect, isConnected } = useLiveKit()
+  // Use useLiveKitSession hook like BroadcastPage - handles token flow properly
+  const hasValidRoomName = !!roomName && typeof roomName === 'string' && roomName.trim() !== ''
+  const sessionReady = !!user && !!profile && hasValidRoomName
 
+  const {
+    joinAndPublish,
+    disconnect,
+  } = useLiveKitSession({
+    roomName: sessionReady && hasValidRoomName ? roomName : '', // Empty roomName prevents connection attempts
+    user: sessionReady && liveKitUser ? liveKitUser : null,
+    role: 'broadcaster',
+    allowPublish: sessionReady,
+    maxParticipants: 9, // Officer stream has 9 seats
+  })
+
+  const { participants } = liveKit
   const participantsList = useMemo(() => Array.from(participants.values()), [participants])
-
-  useEffect(() => {
-    if (!liveKitUser) return
-
-    // auto-connect to the provided roomName so boxes can be claimed immediately
-    connect(roomName, liveKitUser, { allowPublish: true, autoPublish: false })
-  }, [liveKitUser, connect, roomName])
 
   const handleSeatAction = useCallback(async (action: 'claim' | 'release' | 'leave', seatIndex: number, seat?: SeatAssignment) => {
     if (action === 'claim' && profile) {
@@ -60,12 +71,12 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
       }
 
       try {
-        console.log('Requesting camera and microphone permissions...')
+        console.log('[OfficerStreamGrid] Requesting camera and microphone permissions...')
         if (!navigator.mediaDevices?.getUserMedia) {
           throw new Error('Media devices API not available')
         }
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        console.log('Permissions granted, claiming seat with active stream...', {
+        console.log('[OfficerStreamGrid] Permissions granted, claiming seat with active stream...', {
           streamActive: stream.active,
           videoTracks: stream.getVideoTracks().length,
           audioTracks: stream.getAudioTracks().length
@@ -77,41 +88,44 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
           role: 'officer',
         })
 
-        console.log('Claim successful, connecting to LiveKit with stream...')
+        console.log('[OfficerStreamGrid] Claim successful, connecting to LiveKit with stream...')
         
-        // ✅ Disconnect if already connected, then reconnect with the media stream as preflightStream
-        if (isConnected) {
-          console.log('Disconnecting to reconnect with media stream...')
-          disconnect()
-          // Wait a moment for disconnect to complete
-          await new Promise(resolve => setTimeout(resolve, 500))
-        }
-        
-        // Connect with the media stream as preflightStream
-        const connectOk = await connect(roomName, liveKitUser, { 
-          allowPublish: true, 
-          autoPublish: false,
-          preflightStream: stream 
-        })
-        
-        if (!connectOk) {
-          throw new Error('Failed to connect to LiveKit with stream')
-        }
-        
-        console.log('Connected to LiveKit, starting to publish...', { startPublishing: typeof startPublishing })
-        if (typeof startPublishing === 'function') {
-          try {
-            await startPublishing()
-            console.log('✅ Publishing started successfully')
-          } catch (e: any) {
-            console.error('Failed to start publishing:', e.message)
-            alert('Failed to start publishing. Please try again.')
+        // ✅ Use joinAndPublish from useLiveKitSession (same as BroadcastPage)
+        // This handles token flow properly via Vercel
+        try {
+          // ✅ Check session before joinAndPublish (same pattern as BroadcastPage)
+          const { data: sessionData } = await supabase.auth.getSession()
+          if (!sessionData.session) {
+            console.log("[OfficerStreamGrid] No session yet — skipping joinAndPublish")
+            throw new Error('No active session. Please sign in again.')
           }
-        } else {
-          console.error('startPublishing is not a function', startPublishing)
+          
+          if (!roomName || !user?.id || !profile?.id) {
+            console.log("[OfficerStreamGrid] Missing requirements — skipping joinAndPublish", {
+              roomName,
+              hasUser: !!user,
+              hasProfile: !!profile
+            })
+            throw new Error('Missing required information to join stream')
+          }
+
+          console.log('[OfficerStreamGrid] Calling joinAndPublish with stream', {
+            streamActive: stream?.active,
+            videoTracks: stream?.getVideoTracks().length || 0,
+            audioTracks: stream?.getAudioTracks().length || 0,
+            videoTrackEnabled: stream?.getVideoTracks()[0]?.enabled,
+            audioTrackEnabled: stream?.getAudioTracks()[0]?.enabled
+          })
+          await joinAndPublish(stream)
+          console.log('[OfficerStreamGrid] ✅ Publishing started successfully')
+        } catch (liveKitErr: any) {
+          // Extract the real error message from LiveKit join attempt
+          const actualError = liveKitErr?.message || 'LiveKit join failed'
+          console.error('[OfficerStreamGrid] LiveKit join error details:', actualError)
+          throw new Error(actualError)
         }
       } catch (err: any) {
-        console.error('Permission denied:', err)
+        console.error('[OfficerStreamGrid] Permission denied:', err)
         alert('Camera and microphone access is required to join the officer stream. Please allow permissions and try again.')
         return
       }
@@ -123,7 +137,7 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
       }
       disconnect()
     }
-  }, [profile, claimSeat, releaseSeat, disconnect, startPublishing, isConnected, connect, roomName, user, liveKitUser])
+  }, [profile, claimSeat, releaseSeat, disconnect, joinAndPublish, roomName, user, liveKitUser])
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 md:grid-rows-3 gap-2">
@@ -142,7 +156,11 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
             seat={seat}
             participant={participant}
             user={user}
-            onClaimClick={() => { if (seat) { onSeatClick?.(index, seat) } }}
+            onClaimClick={() => { 
+              // Always use the parent's onSeatClick callback for consistency
+              // This ensures BroadcastPage's handleSeatClaim is used
+              onSeatClick?.(index, seat);
+            }}
             onSeatAction={(action) => handleSeatAction(action, index, seat)}
             data-speaking={isSpeaking}
           />
@@ -215,11 +233,17 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
   const isOccupied = Boolean(seat && seat.user_id)
   const wrapperClass = `relative w-full aspect-video md:aspect-video rounded-2xl overflow-hidden rgb-border ${isSpeaking ? 'speaking' : ''} ${isOccupied ? 'occupied' : ''}`
 
+  const handleClick = () => {
+    // Always use onClaimClick which will delegate to parent's onSeatClick
+    // This ensures consistent behavior with BroadcastPage's handleSeatClaim
+    onClaimClick();
+  };
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={!seat ? () => onSeatAction('claim') : onClaimClick}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={wrapperClass}
     >
@@ -304,29 +328,6 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
                 </button>
               </>
             )}
-          </div>
-        )}
-
-        {seat && (
-          <div className="absolute top-3 right-3 flex gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onSeatAction('release')
-              }}
-              className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
-            >
-              Release
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onSeatAction('leave')
-              }}
-              className="text-xs font-semibold text-white opacity-0 hover:opacity-100 transition-opacity"
-            >
-              Leave
-            </button>
           </div>
         )}
 

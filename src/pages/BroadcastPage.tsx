@@ -604,19 +604,43 @@ export default function BroadcastPage() {
 
   // Stream management handlers
   const handleEndStream = useCallback(async () => {
-    try {
-      await supabase.from('streams').update({ 
-        is_live: false, 
-        status: 'offline' 
-      }).eq('id', stream?.id);
-      
-      cleanupLocalStream();
-      navigate('/');
-    } catch (err) {
-      console.warn('Failed to end stream', err);
-      toast.error('Failed to end stream');
+    if (!stream?.id) {
+      toast.error('Stream ID not found');
+      return;
     }
-  }, [stream?.id, cleanupLocalStream, navigate]);
+
+    try {
+      // Get LiveKit room for proper disconnection
+      const room = liveKit.getRoom();
+      
+      // Import and use the endStream utility function
+      const { endStream } = await import('../lib/endStream');
+      const success = await endStream(stream.id, room);
+      
+      if (!success) {
+        toast.error('Failed to end stream properly');
+        return;
+      }
+      
+      // Cleanup local media stream
+      cleanupLocalStream();
+      
+      // Disconnect from LiveKit
+      liveKit.disconnect();
+      
+      // Navigate to stream summary page
+      navigate(`/stream/${stream.id}/summary`);
+    } catch (err) {
+      console.error('Failed to end stream', err);
+      toast.error('Failed to end stream');
+      // Still try to navigate even if there's an error
+      if (stream?.id) {
+        navigate(`/stream/${stream.id}/summary`);
+      } else {
+        navigate('/');
+      }
+    }
+  }, [stream?.id, cleanupLocalStream, navigate, liveKit]);
 
 
 
@@ -687,14 +711,20 @@ export default function BroadcastPage() {
 
   // Auto-start broadcaster when redirected from setup with ?start=1
   // ✅ Fix #4: Only runs if URL has ?start=1 AND user has session
+  // ✅ Ensure broadcaster is placed in box 1 (seat index 0) with username shown
   useEffect(() => {
     if (!shouldAutoStart || !stream?.id || !profile?.id || !isBroadcaster || autoStartRef.current || !hasSession) {
       return;
     }
 
     autoStartRef.current = true;
-    console.log("🔥 AutoStart detected (?start=1). Starting broadcast...");
-    handleSeatClaim(0);
+    console.log("🔥 AutoStart detected (?start=1). Starting broadcast in box 1...");
+    
+    // Automatically claim seat 0 (box 1) for broadcaster
+    handleSeatClaim(0).catch((err) => {
+      console.error('Failed to auto-start broadcaster in box 1:', err);
+      toast.error('Failed to start broadcast. Please try clicking box 1 manually.');
+    });
 
     // Clean URL
     setTimeout(() => {

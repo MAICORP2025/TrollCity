@@ -448,11 +448,8 @@ const GoLive: React.FC = () => {
 
     // Cleanup: Stop all tracks when component unmounts or when streaming starts
     return () => {
-      if (mediaStream && isStreaming) {
-        // Don't stop stream if we're about to use it for streaming
-        return;
-      }
-      if (mediaStream) {
+      // Only cleanup if we're not streaming (stream will be transferred to BroadcastPage)
+      if (!isStreaming && mediaStream) {
         mediaStream.getTracks().forEach(track => {
           track.stop();
         });
