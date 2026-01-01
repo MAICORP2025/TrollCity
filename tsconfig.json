@@ -24,6 +24,6 @@
     },
     "types": ["node"]   // 👈 Express removed
   },
-  "include": ["src"],     // 👈 API folder removed (backend not used in Vercel)
+  "include": ["src", "api"],     // 👈 Include src and api folders
   "exclude": ["supabase"]     // 👈 Exclude Supabase Edge Functions (Deno runtime)
 }

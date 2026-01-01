@@ -62,13 +62,13 @@ export async function authorizeUser(req: any): Promise<AuthorizedProfile> {
   // Improved logging for debugging
   console.log('[authorizeUser] Attempting to authorize with token of length:', token.length)
 
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token)
+  const { data, error: userError } = await supabaseAdmin.auth.getUser(token)
 
-  if (userError || !userData?.data) {
+  if (userError || !data?.user) {
     console.error('[authorizeUser] Auth lookup failed:', {
       errorMessage: userError?.message,
       errorCode: userError?.code,
-      hasUserData: !!userData?.data,
+      hasUser: !!data?.user,
       tokenLength: token.length,
       tokenPreview: token.substring(0, 20) + '...',
     })
@@ -83,7 +83,7 @@ export async function authorizeUser(req: any): Promise<AuthorizedProfile> {
     }
   }
 
-  return lookupProfile(userData.data.id)
+  return lookupProfile(data.user.id)
 }
 
 export async function authorizeOfficer(req: any): Promise<AuthorizedProfile> {

@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from 'vercel'
+import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { supabaseAdmin } from '../lib/supabaseAdmin'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
