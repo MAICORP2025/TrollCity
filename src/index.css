@@ -74,7 +74,37 @@
   background-image: linear-gradient(90deg, var(--troll-blue-neon), #4cc1ff, var(--troll-cyan-neon), var(--troll-blue-neon));
   background-size: 400% 400%;
   animation: rgbGradient 6s linear infinite;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px rgba(0, 200, 255, 0.2);
 }
+
+/* ✅ Hover glow effect */
+.rgb-border:hover {
+  box-shadow: 0 0 25px rgba(0, 200, 255, 0.5), 0 0 40px rgba(0, 200, 255, 0.3);
+  transform: scale(1.02);
+}
+
+/* ✅ Active/clicked glow effect */
+.rgb-border:active {
+  box-shadow: 0 0 30px rgba(0, 200, 255, 0.7), 0 0 50px rgba(0, 200, 255, 0.5);
+  transform: scale(0.98);
+}
+
+/* ✅ Glow when box is occupied (user entered) */
+.rgb-border.occupied {
+  box-shadow: 0 0 20px rgba(0, 255, 150, 0.4), 0 0 35px rgba(0, 255, 150, 0.2);
+  animation: occupiedGlow 2s ease-in-out infinite;
+}
+
+@keyframes occupiedGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 255, 150, 0.4), 0 0 35px rgba(0, 255, 150, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(0, 255, 150, 0.6), 0 0 50px rgba(0, 255, 150, 0.4);
+  }
+}
+
 .rgb-border > .tile-inner {
   border-radius: 10px;
   overflow: hidden;
