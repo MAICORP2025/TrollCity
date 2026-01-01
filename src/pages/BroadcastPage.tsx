@@ -268,6 +268,9 @@ export default function BroadcastPage() {
 
     setIsLoadingStream(true);
     
+    // ✅ Add delay before first query to account for replication delay
+    await new Promise(r => setTimeout(r, 500));
+    
     // ✅ Optimized: Skip connectivity test and go straight to stream query for faster loading
     // The stream was just created, so it should be available immediately
     const maxRetries = 3; // Increased retries for newly created streams
@@ -279,8 +282,8 @@ export default function BroadcastPage() {
 
         // Use maybeSingle() instead of single() - more lenient, won't error if not found
         // Select only essential fields to reduce payload size
-        // ✅ Faster timeout for first attempt (newly created streams should be quick)
-        const timeoutMs = attempt === 1 ? 3000 : attempt === 2 ? 5000 : 8000;
+        // ✅ Increased timeout for slow queries and replication delay
+        const timeoutMs = attempt === 1 ? 3000 : attempt === 2 ? 5000 : 15000;
         
         const streamQuery = supabase
           .from("streams")
