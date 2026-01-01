@@ -816,7 +816,7 @@ export default function StreamRoom() {
     const publishTracks = async () => {
       try {
         // Wait for room to be connected with better state checking
-        if (room.state !== ConnectionState.Connected) {
+        if (room.state !== 'connected') {
           console.log('⏳ Room not connected yet, state:', room.state);
           
           // Set up persistent listener for connection
@@ -2272,6 +2272,10 @@ const VideoGrid = React.memo<{
           />
         </div>
       ))}
+    </div>
+  );
+});
+
     </div>
   );
 });
