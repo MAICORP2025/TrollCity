@@ -2275,7 +2275,3 @@ const VideoGrid = React.memo<{
     </div>
   );
 });
-
-    </div>
-  );
-});

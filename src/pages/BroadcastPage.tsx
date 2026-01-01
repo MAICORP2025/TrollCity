@@ -738,41 +738,43 @@ export default function BroadcastPage() {
   useEffect(() => {
     if (!participants || !profile) return;
 
-    participants.forEach((participant) => {
-      if (participant.isLocal) return; // Skip local participant
-      if (shownParticipantsRef.current.has(participant.identity)) return; // Already shown
-      
-      // Get participant role - check seat first, then metadata
-      let participantRole: string | null = null;
-      const seat = seats.find(s => s?.user_id === participant.identity);
-      if (seat?.role) {
-        participantRole = seat.role;
-      } else {
-        // Try to get from metadata
-        try {
-          const metadata = (participant as any).metadata;
-          if (typeof metadata === 'string') {
-            const parsed = JSON.parse(metadata);
-            participantRole = parsed?.role;
-          } else if (metadata?.role) {
-            participantRole = metadata.role;
+    (async () => {
+      for (const participant of participants.values()) {
+        if (participant.isLocal) continue; // Skip local participant
+        if (shownParticipantsRef.current.has(participant.identity)) continue; // Already shown
+        
+        // Get participant role - check seat first, then metadata
+        let participantRole: string | null = null;
+        const seat = seats.find(s => s?.user_id === participant.identity);
+        if (seat?.role) {
+          participantRole = seat.role;
+        } else {
+          // Try to get from metadata
+          try {
+            const metadata = (participant as any).metadata;
+            if (typeof metadata === 'string') {
+              const parsed = JSON.parse(metadata);
+              participantRole = parsed?.role;
+            } else if (metadata?.role) {
+              participantRole = metadata.role;
+            }
+          } catch (e) {
+            // Ignore parse errors
           }
-        } catch (e) {
-          // Ignore parse errors
         }
-      }
-      
-      // Also check if we need to fetch profile for role
-      if (!participantRole && participant.identity) {
-        // Check if it's the broadcaster
-        if (participant.identity === stream?.broadcaster_id) {
-          // Fetch broadcaster profile to get role
-          supabase
-            .from('user_profiles')
-            .select('role')
-            .eq('id', participant.identity)
-            .single()
-            .then(({ data }) => {
+        
+        // Also check if we need to fetch profile for role
+        if (!participantRole && participant.identity) {
+          // Check if it's the broadcaster
+          if (participant.identity === stream?.broadcaster_id) {
+            // Fetch broadcaster profile to get role
+            try {
+              const { data } = await supabase
+                .from('user_profiles')
+                .select('role')
+                .eq('id', participant.identity)
+                .single();
+                
               if (data?.role && (data.role === 'admin' || data.role === 'lead_troll_officer' || data.role === 'troll_officer')) {
                 if (!shownParticipantsRef.current.has(participant.identity)) {
                   shownParticipantsRef.current.add(participant.identity);
@@ -784,26 +786,28 @@ export default function BroadcastPage() {
                   setTimeout(() => setEntranceEffect(null), 5000);
                 }
               }
-            })
-            .catch(() => {});
+            } catch (e) {
+              console.warn('Failed to fetch broadcaster profile for entrance effect:', e);
+            }
+          }
+        }
+        
+        if (participantRole === 'admin' || participantRole === 'lead_troll_officer' || participantRole === 'troll_officer') {
+          const username = participant.name || participant.identity || 'User';
+          shownParticipantsRef.current.add(participant.identity);
+          
+          setEntranceEffect({
+            username,
+            role: participantRole as 'admin' | 'lead_troll_officer' | 'troll_officer'
+          });
+          
+          // Clear entrance effect after 5 seconds
+          setTimeout(() => {
+            setEntranceEffect(null);
+          }, 5000);
         }
       }
-      
-      if (participantRole === 'admin' || participantRole === 'lead_troll_officer' || participantRole === 'troll_officer') {
-        const username = participant.name || participant.identity || 'User';
-        shownParticipantsRef.current.add(participant.identity);
-        
-        setEntranceEffect({
-          username,
-          role: participantRole as 'admin' | 'lead_troll_officer' | 'troll_officer'
-        });
-        
-        // Clear entrance effect after 5 seconds
-        setTimeout(() => {
-          setEntranceEffect(null);
-        }, 5000);
-      }
-    });
+    })();
   }, [participants, profile, seats, stream?.broadcaster_id]);
 
   // Effects
@@ -941,9 +945,16 @@ export default function BroadcastPage() {
       <div className="min-h-screen bg-[#03010c] via-[#05031a] to-[#110117] text-white flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 rounded-full border-2 border-purple-500/60 animate-pulse" />
-          <p className="text-sm text-gray-300">
-            {isLoadingStream ? 'Loading stream…' : !profile ? 'Loading profile…' : 'Loading stream…'}
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-gray-300">
+              {isLoadingStream ? 'Loading stream…' : !profile ? 'Loading profile…' : 'Loading stream…'}
+            </p>
+            {isLoadingStream && (
+              <div className="text-xs text-gray-400 max-w-md">
+                If this takes too long, try refreshing the page or check your internet connection.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );

@@ -114,6 +114,13 @@ const GoLive: React.FC = () => {
     }
 
     setIsConnecting(true);
+    
+    // Reset connecting state on function exit to prevent getting stuck
+    const cleanup = () => {
+      try {
+        setIsConnecting(false);
+      } catch {}
+    };
 
     // small helper to add timeouts to long-running promises
     const withTimeout = async <T,>(p: Promise<T>, ms = 30000): Promise<T> => {
@@ -160,6 +167,7 @@ const GoLive: React.FC = () => {
       if (!sessionData.session?.access_token) {
         console.error('[GoLive] No active session before insert');
         toast.error('Session expired. Please sign in again.');
+        cleanup();
         return;
       }
       console.log('[GoLive] Session verified, proceeding with insert');
@@ -214,12 +222,14 @@ const GoLive: React.FC = () => {
         // Check if it's a timeout
         if (insertErr?.message?.includes('timeout') || duration >= 15000) {
           toast.error('Stream creation timed out. Please check your network connection and try again.');
+          cleanup();
           return;
         }
         
         // Check if it's a network/connection error
         if (insertErr?.message?.includes('fetch') || insertErr?.message?.includes('network') || insertErr?.code === 'ECONNREFUSED') {
           toast.error('Network error: Unable to connect to database. Please check your internet connection.');
+          cleanup();
           return;
         }
         
@@ -250,6 +260,7 @@ const GoLive: React.FC = () => {
         }
         
         toast.error(errorMessage);
+        cleanup();
         return;
       }
 
@@ -266,6 +277,7 @@ const GoLive: React.FC = () => {
       if (!createdId) {
         console.error('[GoLive] Stream insert did not return an id', { insertedStream, result });
         toast.error('Failed to start stream (no id returned).');
+        cleanup();
         return;
       }
 
@@ -299,6 +311,8 @@ const GoLive: React.FC = () => {
       } catch (navErr: any) {
         console.error('[GoLive] ❌ Navigation error', navErr);
         toast.error('Stream created but navigation failed. Please navigate manually.');
+        cleanup();
+        // Don't return here, let it fall through to finally block
       }
     } catch (err: any) {
       console.error('[GoLive] Error starting stream:', {
@@ -324,9 +338,7 @@ const GoLive: React.FC = () => {
         toast.error('Error starting stream. Please try again.');
       }
     } finally {
-      try {
-        setIsConnecting(false);
-      } catch {}
+      cleanup();
     }
   };
 
