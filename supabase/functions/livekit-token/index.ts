@@ -228,14 +228,76 @@ serve(async (req: Request) => {
       canPublishSources: canPublish ? [TrackSource.CAMERA, TrackSource.MICROPHONE] : [],
     });
 
-    const jwt = await token.toJwt();
+    // ✅ CRITICAL: Ensure toJwt() returns a string, not an object
+    // Handle both sync and async toJwt() methods
+    let jwt: string;
+    try {
+      // Try calling toJwt() - it might be sync or async
+      let jwtResult: any = token.toJwt();
+      
+      console.log('[livekit-token] toJwt() initial result:', {
+        type: typeof jwtResult,
+        isPromise: jwtResult instanceof Promise,
+        isString: typeof jwtResult === 'string',
+        preview: typeof jwtResult === 'string' ? jwtResult.substring(0, 50) : JSON.stringify(jwtResult).substring(0, 100)
+      });
+      
+      // If it's a Promise, await it
+      if (jwtResult instanceof Promise) {
+        jwtResult = await jwtResult;
+        console.log('[livekit-token] toJwt() Promise resolved:', {
+          type: typeof jwtResult,
+          isString: typeof jwtResult === 'string',
+          preview: typeof jwtResult === 'string' ? jwtResult.substring(0, 50) : JSON.stringify(jwtResult).substring(0, 100)
+        });
+      }
+      
+      // ✅ STRICT VALIDATION: Ensure jwt is a string
+      if (typeof jwtResult !== 'string') {
+        console.error('[livekit-token] toJwt() returned non-string:', {
+          type: typeof jwtResult,
+          value: jwtResult,
+          stringified: JSON.stringify(jwtResult),
+          isPromise: jwtResult instanceof Promise,
+          isObject: typeof jwtResult === 'object',
+          constructor: jwtResult?.constructor?.name,
+          keys: typeof jwtResult === 'object' && jwtResult !== null ? Object.keys(jwtResult) : 'N/A'
+        });
+        throw new Error(`toJwt() returned ${typeof jwtResult} instead of string. Value: ${JSON.stringify(jwtResult)}`);
+      }
+      
+      jwt = jwtResult;
+      
+      // ✅ Validate JWT format (should start with 'eyJ')
+      if (!jwt.startsWith('eyJ')) {
+        console.error('[livekit-token] JWT does not have expected format:', {
+          jwtPreview: jwt.substring(0, 50),
+          jwtLength: jwt.length,
+          firstChars: jwt.substring(0, 10)
+        });
+        throw new Error(`Invalid JWT format: expected string starting with 'eyJ', got '${jwt.substring(0, 20)}...'`);
+      }
+    } catch (jwtError: any) {
+      console.error('[livekit-token] Failed to generate JWT:', jwtError);
+      throw new Error(`JWT generation failed: ${jwtError?.message || jwtError}`);
+    }
 
     const ms = Math.round(performance.now() - t0);
-    console.log(`[livekit-token] ok room=${room} user=${profile.id} publish=${canPublish} ${ms}ms`);
+    console.log(`[livekit-token] ok room=${room} user=${profile.id} publish=${canPublish} jwtLen=${jwt.length} ${ms}ms`);
+
+    // ✅ FINAL VALIDATION: Ensure jwt is still a string before returning
+    if (typeof jwt !== 'string') {
+      console.error('[livekit-token] JWT became non-string before return!', {
+        jwt,
+        type: typeof jwt,
+        value: jwt
+      });
+      throw new Error(`JWT validation failed: expected string, got ${typeof jwt}`);
+    }
 
     return new Response(
       JSON.stringify({
-        token: jwt,
+        token: String(jwt), // Explicit string conversion
         livekitUrl,
         url: livekitUrl,
         room,
