@@ -654,9 +654,64 @@ export class LiveKitService {
       const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
       console.log("🔥 LiveKit tokenUrl selected:", tokenUrl);
 
-      const accessToken = session.access_token
+      // ✅ CRITICAL: Ensure accessToken is a string, not an object
+      // Handle both direct access and nested structure
+      let accessToken: string | undefined = session?.access_token
+      
+      // If access_token is an object (shouldn't happen, but defensive check)
+      if (accessToken && typeof accessToken === 'object') {
+        this.log('⚠️ access_token is an object, attempting to extract string value', accessToken)
+        // Try to get string value from object
+        if ('token' in accessToken && typeof (accessToken as any).token === 'string') {
+          accessToken = (accessToken as any).token
+        } else if ('value' in accessToken && typeof (accessToken as any).value === 'string') {
+          accessToken = (accessToken as any).value
+        } else {
+          this.log('❌ Cannot extract string from access_token object', accessToken)
+          throw new Error('Invalid session token: access_token is an object and cannot be converted to string')
+        }
+      }
+      
+      // Validate accessToken is a string
+      if (!accessToken || typeof accessToken !== 'string') {
+        this.log('❌ Invalid access token type', { 
+          type: typeof accessToken, 
+          value: accessToken,
+          isString: typeof accessToken === 'string',
+          isObject: typeof accessToken === 'object',
+          sessionKeys: session ? Object.keys(session) : 'no session',
+          sessionAccessToken: session?.access_token,
+          sessionAccessTokenType: typeof session?.access_token
+        })
+        throw new Error('Invalid session token: access_token must be a string')
+      }
+      
+      // Ensure token starts with expected JWT format
+      if (!accessToken.startsWith('eyJ')) {
+        this.log('❌ Access token does not have JWT format', {
+          tokenPreview: accessToken.substring(0, 50),
+          tokenLength: accessToken.length,
+          firstChars: accessToken.substring(0, 10)
+        })
+        throw new Error('Invalid session token format: expected JWT starting with eyJ')
+      }
 
-      this.log('🔑 Making fetch request to token endpoint...', { tokenUrl })
+      this.log('🔑 Making fetch request to token endpoint...', { 
+        tokenUrl,
+        tokenLength: accessToken.length,
+        tokenPreview: accessToken.substring(0, 20) + '...'
+      })
+      
+      // ✅ Final validation: ensure Authorization header will be correct
+      const authHeader = `Bearer ${accessToken}`
+      if (authHeader.includes('[object Object]') || authHeader.includes('undefined') || authHeader.includes('null')) {
+        this.log('❌ Authorization header contains invalid value', {
+          authHeader,
+          accessTokenType: typeof accessToken,
+          accessTokenValue: accessToken
+        })
+        throw new Error('Invalid Authorization header: token is not a valid string')
+      }
 
       // Add timeout to fetch request to prevent hanging
       const fetchWithTimeout = Promise.race([
@@ -664,7 +719,7 @@ export class LiveKitService {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
+            'Authorization': authHeader,
           },
           body: JSON.stringify({
             room: this.config.roomName,
