@@ -16,9 +16,6 @@ const GoLive: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  
-  const [isTestingMode, _setIsTestingMode] = useState(false); // Testing mode state
-
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [_uploadingThumbnail, setUploadingThumbnail] = useState(false); // Thumbnail upload state
@@ -97,7 +94,7 @@ const GoLive: React.FC = () => {
       return;
     }
 
-    if (!profile.is_broadcaster && !isTestingMode) {
+    if (!profile.is_broadcaster) {
       toast.error('🚫 You must be an approved broadcaster to go live.');
       return;
     }
@@ -178,7 +175,6 @@ const GoLive: React.FC = () => {
           status: 'live',
           start_time: new Date().toISOString(),
           thumbnail_url: thumbnailUrl,
-          is_testing_mode: isTestingMode,
           viewer_count: 0,
           current_viewers: 0,
           total_gifts_coins: 0,
