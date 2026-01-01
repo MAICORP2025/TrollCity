@@ -774,6 +774,7 @@ export class LiveKitService {
           },
           body: JSON.stringify({
             room: this.config.roomName,
+            roomName: this.config.roomName, // Support both formats
             identity: this.config.identity,
             user_id: this.config.user?.id,
             role: this.config.role || this.config.user?.role || 'viewer',
@@ -786,99 +787,61 @@ export class LiveKitService {
         )
       ])
 
-      const resp = await fetchWithTimeout
+      const res = await fetchWithTimeout
 
-      // ✅ 1) In your token fetch code:
       this.log('🔑 Token endpoint response received', { 
-        status: resp.status, 
-        statusText: resp.statusText,
-        ok: resp.ok 
+        status: res.status, 
+        statusText: res.statusText,
+        ok: res.ok 
       })
-      console.log("[useLiveKitSession] token response:", resp)
 
-      const json = await resp.json()
-      console.log("[useLiveKitSession] token json:", json)
-      console.log("[useLiveKitSession] token json keys:", Object.keys(json || {}))
-      console.log("[useLiveKitSession] json.token type:", typeof json?.token)
-      console.log("[useLiveKitSession] json.token value:", json?.token)
+      // ✅ Parse JSON with error handling
+      const json = await res.json().catch(() => null)
 
-      if (!resp.ok) {
-        this.log('🔑 Token endpoint returned error', { status: resp.status, body: json })
-        const msg = json?.error || json?.message || `Token endpoint error ${resp.status}`
+      if (!res.ok) {
+        this.log('🔑 Token endpoint returned error', { status: res.status, body: json })
+        const msg = json?.error || json?.message || `Token request failed: ${res.status}`
         throw new Error(msg)
       }
 
-      // Extract token from response (handle both { token: "..." } and { data: { token: "..." } } formats)
-      let token = json.token || json.data?.token
+      // ✅ Strict token extraction - ONLY from json.token (not json.data.token since we use fetch, not supabase.invoke)
+      const token = json?.token
 
-      // ✅ STRICT VALIDATION: Token must be a string, not an object
-      if (typeof token !== 'string') {
-        console.error('🚨 CRITICAL: Token is not a string!', {
-          tokenType: typeof token,
-          tokenValue: token,
-          jsonToken: json.token,
-          jsonTokenType: typeof json.token,
-          jsonDataToken: json.data?.token,
-          jsonDataTokenType: typeof json.data?.token,
-          fullJson: JSON.stringify(json, null, 2),
-          jsonKeys: Object.keys(json || {}),
-          jsonStringified: JSON.stringify(json)
-        })
+      // ✅ STRICT VALIDATION: Token must be a string
+      if (!token || typeof token !== 'string') {
+        console.error('❌ Token response invalid:', json)
         this.log('❌ Token extraction failed: token is not a string', {
           token,
           tokenType: typeof token,
+          jsonToken: json?.token,
           fullJsonResponse: json
         })
-        throw new Error(`Invalid token type: expected string, got ${typeof token}. Full response: ${JSON.stringify(json, null, 2)}`)
+        throw new Error('Token endpoint returned invalid token type')
       }
 
-      // Validate token exists and is not empty
-      if (!token || token.trim() === '') {
-        this.log('❌ No token in endpoint response', { 
-          json, 
-          hasToken: !!json.token, 
-          hasDataToken: !!json.data?.token,
-          jsonKeys: Object.keys(json || {}),
-          fullJson: JSON.stringify(json, null, 2)
-        })
-        throw new Error('No token returned from token endpoint')
-      }
-
-      // Trim whitespace from token
-      token = token.trim()
-
-      // Validate token format (should be a JWT starting with 'eyJ')
+      // ✅ STRICT VALIDATION: Token must be JWT format
       if (!token.startsWith('eyJ')) {
+        console.error('❌ Token not JWT:', token.substring(0, 50))
         this.log('❌ Token does not have valid JWT format', {
           tokenPreview: token.substring(0, 50),
           tokenLength: token.length,
           firstChars: token.substring(0, 10)
         })
-        throw new Error(`Invalid token format: expected JWT starting with 'eyJ', got '${token.substring(0, 20)}...'`)
+        throw new Error('Token endpoint returned non-JWT token')
       }
 
-      // ✅ FINAL VALIDATION: Ensure token is still a string before returning
-      if (typeof token !== 'string') {
-        console.error('🚨 CRITICAL: Token became non-string before return!', {
-          token,
-          tokenType: typeof token,
-          tokenValue: token,
-          fullJson: JSON.stringify(json, null, 2)
-        })
-        throw new Error(`Token validation failed: expected string, got ${typeof token}. Full response: ${JSON.stringify(json, null, 2)}`)
-      }
+      // Trim whitespace
+      const trimmedToken = token.trim()
 
       this.log('✅ Token received successfully:', {
-        tokenLength: token.length,
-        tokenType: typeof token,
-        tokenIsString: typeof token === 'string',
-        tokenPreview: typeof token === 'string' ? token.substring(0, 20) + '...' : 'N/A',
+        tokenLength: trimmedToken.length,
+        tokenPreview: trimmedToken.substring(0, 20) + '...',
         livekitUrl: json.livekitUrl,
         allowPublish: json.allowPublish,
       })
 
-      // ✅ Return token as string (json.token)
-      return { token: String(token), livekitUrl: json.livekitUrl, allowPublish: json.allowPublish }
+      // ✅ Return ONLY the token string (not wrapped in data object)
+      return { token: trimmedToken, livekitUrl: json.livekitUrl, allowPublish: json.allowPublish }
     } catch (error: any) {
       this.log('❌ Token fetch failed:', {
         message: error.message,
