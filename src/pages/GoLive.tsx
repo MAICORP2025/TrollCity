@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 // import api from '../lib/api'; // Uncomment if needed
-import { supabase } from '../lib/supabase';
+import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,10 +24,7 @@ const GoLive: React.FC = () => {
   const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
   const [enablePaidGuestBoxes, setEnablePaidGuestBoxes] = useState<boolean>(false);
 
-  // Media permission state
-  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [permissionStatus, setPermissionStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
-  const [permissionError, setPermissionError] = useState<string | null>(null);
+
 
   const [_broadcasterStatus, setBroadcasterStatus] = useState<{
     isApproved: boolean;
@@ -99,14 +96,7 @@ const GoLive: React.FC = () => {
       return;
     }
 
-    // Check if we have camera/mic permissions
-    if (permissionStatus !== 'granted' || !mediaStream) {
-      toast.error('Camera and microphone access is required. Please allow permissions first.');
-      const stream = await requestMediaPermissions();
-      if (!stream) {
-        return; // User denied permissions
-      }
-    }
+    // Note: Camera/microphone permissions will be requested when joining seats in broadcast
 
     if (!streamTitle.trim()) {
       toast.error('Enter a stream title.');
@@ -343,136 +333,11 @@ const GoLive: React.FC = () => {
     }
   };
 
-  // -------------------------------
-  // Request Camera/Microphone Permissions
-  // -------------------------------
-  const requestMediaPermissions = useCallback(async () => {
-    if (mediaStream && mediaStream.active) {
-      return mediaStream;
-    }
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-      const error = 'Media devices API not available. Please use a modern browser.';
-      setPermissionError(error);
-      setPermissionStatus('denied');
-      toast.error(error);
-      return null;
-    }
 
-    if (!window.isSecureContext) {
-      const error = 'Camera/microphone access requires a secure context (HTTPS).';
-      setPermissionError(error);
-      setPermissionStatus('denied');
-      toast.error(error);
-      return null;
-    }
 
-    setPermissionStatus('requesting');
-    setPermissionError(null);
 
-    try {
-      console.log('[GoLive] Requesting camera & microphone permissions...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
 
-      console.log('[GoLive] ✅ Permissions granted', {
-        hasStream: !!stream,
-        videoTracks: stream.getVideoTracks().length,
-        audioTracks: stream.getAudioTracks().length,
-        videoTrackEnabled: stream.getVideoTracks()[0]?.enabled
-      });
-      
-      setMediaStream(stream);
-      setPermissionStatus('granted');
-      setPermissionError(null);
-
-      // Stream will be attached via useEffect when mediaStream state updates
-      // This ensures the video element is ready
-
-      toast.success('Camera and microphone access granted!');
-      return stream;
-    } catch (err: any) {
-      console.error('[GoLive] Permission request failed:', {
-        name: err?.name,
-        message: err?.message,
-        error: err
-      });
-
-      setPermissionStatus('denied');
-      
-      let errorMessage = 'Camera/Microphone access was denied.';
-      if (err?.name === 'NotAllowedError') {
-        errorMessage = 'Camera/Microphone access was denied. Please click the camera/mic icon in your browser\'s address bar to allow access, then try again.';
-      } else if (err?.name === 'NotFoundError') {
-        errorMessage = 'No camera or microphone found. Please connect a device and try again.';
-      } else if (err?.name === 'SecurityError') {
-        errorMessage = 'Camera/Microphone access blocked by browser security settings.';
-      } else {
-        errorMessage = err?.message || 'Failed to access camera/microphone.';
-      }
-
-      setPermissionError(errorMessage);
-      toast.error(errorMessage, { duration: 6000 });
-      return null;
-    }
-  }, [mediaStream]);
-
-  // -------------------------------
-  // Attach media stream to video element
-  // -------------------------------
-  useEffect(() => {
-    if (videoRef.current && mediaStream) {
-      console.log('[GoLive] Attaching stream to video element', {
-        hasStream: !!mediaStream,
-        videoTracks: mediaStream.getVideoTracks().length,
-        audioTracks: mediaStream.getAudioTracks().length,
-        videoTrackEnabled: mediaStream.getVideoTracks()[0]?.enabled
-      });
-      
-      videoRef.current.srcObject = mediaStream;
-      
-      // Ensure video plays
-      videoRef.current.play().catch((err) => {
-        console.error('[GoLive] Video play error:', err);
-      });
-    } else if (videoRef.current && !mediaStream) {
-      videoRef.current.srcObject = null;
-    }
-  }, [mediaStream]);
-
-  // -------------------------------
-  // Camera preview - Request permissions on mount
-  // -------------------------------
-  useEffect(() => {
-    if (videoRef.current && !isStreaming && permissionStatus === 'idle') {
-      // Request permissions when component mounts
-      requestMediaPermissions();
-    }
-
-    // Cleanup: Stop all tracks when component unmounts or when streaming starts
-    return () => {
-      // Only cleanup if we're not streaming (stream will be transferred to BroadcastPage)
-      if (!isStreaming && mediaStream) {
-        mediaStream.getTracks().forEach(track => {
-          track.stop();
-        });
-        setMediaStream(null);
-      }
-      if (videoRef.current && !isStreaming) {
-        videoRef.current.srcObject = null;
-      }
-    };
-  }, [isStreaming, permissionStatus, requestMediaPermissions, mediaStream]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 go-live-wrapper">
@@ -483,41 +348,12 @@ const GoLive: React.FC = () => {
       </h1>
 
       <div className="host-video-box relative rounded-xl overflow-hidden border border-purple-700/30">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-32 md:h-40 lg:h-48 object-cover bg-black"
-        />
-        {permissionStatus === 'requesting' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-            <div className="text-center text-white">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-              <p className="text-sm">Requesting camera & microphone access...</p>
-            </div>
+        <div className="w-full h-32 md:h-40 lg:h-48 object-cover bg-black flex items-center justify-center">
+          <div className="text-center text-gray-400">
+            <Video className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">Camera preview will appear when you join a seat</p>
           </div>
-        )}
-        {permissionStatus === 'denied' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-            <div className="text-center text-white p-4">
-              <p className="text-sm text-red-400 mb-3">{permissionError || 'Camera/Microphone access denied'}</p>
-              <button
-                onClick={requestMediaPermissions}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition"
-              >
-                Grant Permissions
-              </button>
-            </div>
-          </div>
-        )}
-        {permissionStatus === 'granted' && !mediaStream && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-            <div className="text-center text-white">
-              <p className="text-sm text-yellow-400 mb-3">Camera ready</p>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {!isStreaming ? (
