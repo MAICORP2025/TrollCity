@@ -156,10 +156,9 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
             seat={seat}
             participant={participant}
             user={user}
-            onClaimClick={() => { 
-              // Always use the parent's onSeatClick callback for consistency
-              // This ensures BroadcastPage's handleSeatClaim is used
-              onSeatClick?.(index, seat);
+            onClaimClick={() => {
+              // Use handleSeatAction directly to ensure the same component that renders the seat also claims and publishes
+              handleSeatAction('claim', index, seat);
             }}
             onSeatAction={(action) => handleSeatAction(action, index, seat)}
             data-speaking={isSpeaking}
@@ -283,7 +282,7 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
   }
 
   const isSpeaking = Boolean((participant as any)?.audioLevel > 0.05 || (participant as any)?.isSpeaking)
-  const isOccupied = Boolean(seat && seat.user_id)
+  const isOccupied = !!seat?.user_id
   const wrapperClass = `relative w-full aspect-video md:aspect-video rounded-2xl overflow-hidden rgb-border ${isSpeaking ? 'speaking' : ''} ${isOccupied ? 'occupied' : ''}`
 
   const handleClick = () => {
@@ -313,7 +312,7 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
             />
             <audio ref={audioRef} autoPlay />
           </>
-        ) : seat ? (
+        ) : isOccupied ? (
           <div className="text-center text-white">
             <div className="mb-2 text-lg font-semibold">{seat.username || 'User'}</div>
             <div className="text-xs uppercase tracking-[0.4em]">
