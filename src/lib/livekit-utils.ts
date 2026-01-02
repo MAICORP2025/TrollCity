@@ -100,7 +100,7 @@ export async function diagnoseLiveKitConnection(): Promise<LiveKitDiagnosticResu
     // 4. Basic connectivity check (ping the LiveKit URL)
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
       
       const response = await fetch(livekitUrl.replace('wss://', 'https://').replace('/ws', '/health'), {
         method: 'GET',

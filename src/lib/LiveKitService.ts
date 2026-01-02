@@ -150,7 +150,7 @@ export class LiveKitService {
         const getSessionWithTimeout = Promise.race([
           supabase.auth.getSession(),
           new Promise<{ data: any; error: any }>((_, reject) => 
-            setTimeout(() => reject(new Error('Get session timeout')), 5000)
+            setTimeout(() => reject(new Error('Get session timeout')), 10000)
           )
         ])
         
@@ -168,7 +168,7 @@ export class LiveKitService {
           const retryGetSession = Promise.race([
             supabase.auth.getSession(),
             new Promise<{ data: any; error: any }>((_, reject) => 
-              setTimeout(() => reject(new Error('Get session retry timeout')), 3000)
+              setTimeout(() => reject(new Error('Get session retry timeout')), 8000)
             )
           ])
           
@@ -638,7 +638,7 @@ export class LiveKitService {
         const refreshWithTimeout = Promise.race([
           refreshPromise,
           new Promise<any>((_, reject) =>
-            setTimeout(() => reject(new Error('Session refresh timeout')), 5000)
+            setTimeout(() => reject(new Error('Session refresh timeout')), 10000)
           )
         ])
         
