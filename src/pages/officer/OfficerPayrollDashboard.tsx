@@ -79,11 +79,35 @@ export default function OfficerPayrollDashboard() {
       const totalHours = sessionsData.reduce((sum, session) => sum + (session.hours_worked || 0), 0)
       const basePay = calculateOfficerBaseCoins(totalHours)
 
-      // For now, we'll set live earnings and bonuses to 0 as they need to be calculated from other sources
-      // This would need to be implemented based on your specific requirements
-      const liveEarnings = 0 // TODO: Calculate from live streaming earnings
-      const courtBonuses = 0 // TODO: Calculate from court activities
-      const otherBonuses = 0 // TODO: Calculate from other bonus sources
+      // Calculate live streaming earnings from officer streams
+      const { data: officerStreams } = await supabase
+        .from('streams')
+        .select('total_gifts_coins')
+        .eq('broadcaster_id', user.id)
+        .gte('start_time', startDate.toISOString())
+        .eq('is_live', false) // Only completed streams
+
+      const liveEarnings = officerStreams?.reduce((sum, stream) => sum + (stream.total_gifts_coins || 0), 0) || 0
+
+      // Calculate court bonuses from officer court activities
+      const { data: courtActions } = await supabase
+        .from('officer_actions')
+        .select('action_type, coins_awarded')
+        .eq('officer_id', user.id)
+        .gte('created_at', startDate.toISOString())
+        .not('coins_awarded', 'is', null)
+
+      const courtBonuses = courtActions?.reduce((sum, action) => sum + (action.coins_awarded || 0), 0) || 0
+
+      // Calculate other bonuses from moderation events and special activities
+      const { data: moderationEvents } = await supabase
+        .from('moderation_events')
+        .select('bonus_coins')
+        .eq('officer_id', user.id)
+        .gte('created_at', startDate.toISOString())
+        .not('bonus_coins', 'is', null)
+
+      const otherBonuses = moderationEvents?.reduce((sum, event) => sum + (event.bonus_coins || 0), 0) || 0
 
       const total = calculateTotalOfficerEarnings(totalHours, liveEarnings, courtBonuses, otherBonuses)
 

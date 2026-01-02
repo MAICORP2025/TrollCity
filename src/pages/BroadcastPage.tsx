@@ -506,57 +506,29 @@ export default function BroadcastPage() {
           
           await joinAndPublish(stream);
           
-          // ✅ Attach local video track to the correct seat video element
-          try {
-            const videoEl = document.getElementById(`seat-video-${index}`) as HTMLVideoElement;
-            if (videoEl && localMediaStream) {
-              // Create a video track from the local media stream and attach it
-              const videoTrack = localMediaStream.getVideoTracks()[0];
-              if (videoTrack) {
-                // Import LiveKit video track creation
-                const { createLocalVideoTrack } = await import('livekit-client');
-                const liveKitVideoTrack = await createLocalVideoTrack({
-                  facingMode: 'user',
-                  resolution: { width: 1280, height: 720 }
-                });
-                
-                // Get the room and attach the track
-                const room = liveKit.getRoom();
-                if (room && room.localParticipant) {
-                  const publications = Array.from(room.localParticipant.videoTrackPublications.values()) as any[];
-                  const videoPublication = publications.find(p => p.track?.kind === 'video');
-                  if (videoPublication?.track) {
-                    videoPublication.track.attach(videoEl);
-                    console.log(`[BroadcastPage] Local video track attached to seat-video-${index}`);
-                  }
-                }
-              }
-            }
-          } catch (err) {
-            console.error('[BroadcastPage] Failed to attach local video track:', err);
-          }
-          
-          // ✅ Verify tracks were published after a short delay
+          // ✅ FIXED: Properly attach local video track to the correct seat video element
+          // Wait a moment for tracks to be published, then attach
           setTimeout(async () => {
             try {
-              const room = liveKit.getRoom();
-              if (room?.localParticipant) {
-                const hasVideo = room.localParticipant.videoTrackPublications.size > 0;
-                const hasAudio = room.localParticipant.audioTrackPublications.size > 0;
-                console.log('[BroadcastPage] Track publication status:', { hasVideo, hasAudio });
-                
-                if (!hasVideo && !hasAudio) {
-                  console.warn('[BroadcastPage] ⚠️ No tracks published after joinAndPublish, attempting manual publish...');
-                  const { startPublishing } = liveKit;
-                  if (typeof startPublishing === 'function') {
-                    await startPublishing();
+              const videoEl = document.getElementById(`seat-video-${index}`) as HTMLVideoElement;
+              if (videoEl) {
+                const room = liveKit.getRoom();
+                if (room && room.localParticipant) {
+                  // Get the camera track that was published
+                  const cameraTrack = room.localParticipant.getTrackPublication("camera")?.track;
+                  if (cameraTrack) {
+                    cameraTrack.attach(videoEl);
+                    console.log(`[BroadcastPage] ✅ Local video track attached to seat-video-${index}`);
+                  } else {
+                    console.warn(`[BroadcastPage] No camera track found for seat ${index}`);
                   }
                 }
               }
-            } catch (e) {
-              console.error('[BroadcastPage] Failed to verify/manually publish tracks:', e);
+            } catch (err) {
+              console.error('[BroadcastPage] Failed to attach local video track:', err);
             }
-          }, 1500);
+          }, 500); // Small delay to ensure tracks are published
+          
         } catch (liveKitErr: any) {
           // Extract the real error message from LiveKit join attempt
           const actualError = liveKitErr?.message || 'LiveKit join failed';
@@ -646,7 +618,8 @@ export default function BroadcastPage() {
       isBroadcaster, 
       stream?.id, 
       roomName, 
-      displayName
+      displayName,
+      liveKit
     ]
   );
 

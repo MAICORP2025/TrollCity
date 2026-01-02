@@ -56,8 +56,8 @@
 - ✅ Removed SquarePanel import
 - ✅ Added PayPalTestPanel import
 - ✅ Changed tab from 'square' to 'paypal'
-- ⚠️ **TODO**: Remove `testSquare` function and replace with PayPal test
-- ⚠️ **TODO**: Replace `case 'square'` with `case 'paypal'` showing PayPalTestPanel
+- ✅ Removed `testSquare` function and replaced with PayPal test
+- ✅ Replaced `case 'square'` with `case 'paypal'` showing PayPalTestPanel
 
 ### 6. Profile Page
 - ✅ Already removed card/payment method UI in previous refactor
