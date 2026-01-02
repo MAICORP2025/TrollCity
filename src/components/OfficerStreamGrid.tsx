@@ -181,6 +181,7 @@ interface OfficerStreamBoxProps {
 }
 
 const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> = ({
+  seatIndex,
   seat,
   participant,
   user,
@@ -255,6 +256,7 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
               ref={videoRef}
               autoPlay
               playsInline
+              muted={participant?.isLocal || false}
               className="w-full h-full object-cover"
             />
             <audio ref={audioRef} autoPlay />
@@ -279,10 +281,20 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
             )}
           </div>
         ) : (
-          <div className="text-white flex flex-col items-center gap-2">
-            <div className="text-3xl font-bold">+</div>
-            <div className="text-sm font-semibold">Click to Join</div>
-          </div>
+          <>
+            {/* Video element for this seat */}
+            <video
+              id={`seat-video-${seatIndex}`}
+              autoPlay
+              playsInline
+              muted
+              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+            />
+            <div className="text-white flex flex-col items-center gap-2">
+              <div className="text-3xl font-bold">+</div>
+              <div className="text-sm font-semibold">Click to Join</div>
+            </div>
+          </>
         )}
       </div>
 

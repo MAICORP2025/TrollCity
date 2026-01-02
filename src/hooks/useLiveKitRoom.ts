@@ -228,6 +228,21 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
           isCameraOn: participant.isCameraEnabled,
           metadata: parseParticipantMetadata(participant.metadata),
         })
+        
+        // ✅ Attach remote video track to the correct seat video element
+        try {
+          const seatId = parseParticipantMetadata(participant.metadata)?.seatId || identity
+          const videoEl = document.getElementById(`seat-video-${seatId}`) as HTMLVideoElement
+          
+          if (videoEl) {
+            track.attach(videoEl)
+            console.log(`[useLiveKitRoom] Remote video track attached to seat-video-${seatId} for participant ${identity}`)
+          } else {
+            console.warn(`[useLiveKitRoom] Video element seat-video-${seatId} not found for participant ${identity}`)
+          }
+        } catch (err) {
+          console.error('[useLiveKitRoom] Failed to attach remote video track:', err)
+        }
       }
       if (track.kind === 'audio') {
         updateParticipantState(identity, {
@@ -370,6 +385,31 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
       }
       
       console.log('[useLiveKitRoom] publishLocalTracks: all tracks published successfully')
+      
+      // ✅ Attach local video track to the correct seat video element
+      if (videoTrack) {
+        // Try to get seatId from metadata, default to '0' for first seat
+        let seatId = '0'
+        try {
+          const metadata = parseParticipantMetadata(currentRoom.localParticipant.metadata)
+          seatId = metadata?.seatId?.toString() || '0'
+        } catch {
+          // Use default seatId if metadata parsing fails
+        }
+        
+        const videoEl = document.getElementById(`seat-video-${seatId}`) as HTMLVideoElement
+        
+        if (videoEl) {
+          try {
+            videoTrack.attach(videoEl)
+            console.log(`[useLiveKitRoom] Local video track attached to seat-video-${seatId}`)
+          } catch (err) {
+            console.error('[useLiveKitRoom] Failed to attach local video track:', err)
+          }
+        } else {
+          console.warn(`[useLiveKitRoom] Video element seat-video-${seatId} not found`)
+        }
+      }
     } catch (error) {
       console.error('[useLiveKitRoom] publishLocalTracks: failed', error)
       throw error
@@ -407,6 +447,40 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
     const connectedRoom = roomRef.current
     if (!connectedRoom) return
     connectedRoom.removeAllListeners()
+  }, [])
+
+  // ✅ Helper function to attach local video track to seat video element
+  const attachLocalVideoToSeat = useCallback(async (seatId: string | number) => {
+    const currentRoom = roomRef.current
+    if (!currentRoom) {
+      console.warn('[useLiveKitRoom] No room available for local video attachment')
+      return
+    }
+
+    try {
+      // Find the video track publication
+      let localVideoTrack: any = null
+      currentRoom.localParticipant.videoTrackPublications.forEach((publication) => {
+        if (publication.track && publication.track.kind === 'video') {
+          localVideoTrack = publication.track
+        }
+      })
+      
+      if (localVideoTrack) {
+        const videoEl = document.getElementById(`seat-video-${seatId}`) as HTMLVideoElement
+        
+        if (videoEl) {
+          localVideoTrack.attach(videoEl)
+          console.log(`[useLiveKitRoom] Local video track attached to seat-video-${seatId}`)
+        } else {
+          console.warn(`[useLiveKitRoom] Video element seat-video-${seatId} not found`)
+        }
+      } else {
+        console.warn('[useLiveKitRoom] No local video track found')
+      }
+    } catch (err) {
+      console.error('[useLiveKitRoom] Failed to attach local video track:', err)
+    }
   }, [])
 
   const connect = useCallback(async () => {
@@ -591,5 +665,6 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
     disconnect,
     publishLocalTracks,
     stopLocalTracks,
+    attachLocalVideoToSeat,
   }
 }

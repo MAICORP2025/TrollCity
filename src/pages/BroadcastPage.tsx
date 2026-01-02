@@ -508,6 +508,36 @@ export default function BroadcastPage() {
           
           await joinAndPublish(stream);
           
+          // ✅ Attach local video track to the correct seat video element
+          try {
+            const videoEl = document.getElementById(`seat-video-${index}`) as HTMLVideoElement;
+            if (videoEl && localMediaStream) {
+              // Create a video track from the local media stream and attach it
+              const videoTrack = localMediaStream.getVideoTracks()[0];
+              if (videoTrack) {
+                // Import LiveKit video track creation
+                const { createLocalVideoTrack } = await import('livekit-client');
+                const liveKitVideoTrack = await createLocalVideoTrack({
+                  facingMode: 'user',
+                  resolution: { width: 1280, height: 720 }
+                });
+                
+                // Get the room and attach the track
+                const room = liveKit.getRoom();
+                if (room && room.localParticipant) {
+                  const publications = Array.from(room.localParticipant.videoTrackPublications.values()) as any[];
+                  const videoPublication = publications.find(p => p.track?.kind === 'video');
+                  if (videoPublication?.track) {
+                    videoPublication.track.attach(videoEl);
+                    console.log(`[BroadcastPage] Local video track attached to seat-video-${index}`);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('[BroadcastPage] Failed to attach local video track:', err);
+          }
+          
           // ✅ Verify tracks were published after a short delay
           setTimeout(async () => {
             try {
