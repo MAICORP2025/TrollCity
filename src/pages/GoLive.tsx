@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 // import api from '../lib/api'; // Uncomment if needed
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
-import { Video } from 'lucide-react';
+import { Video, Camera, Mic, MicOff, CameraOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 const GoLive: React.FC = () => {
@@ -24,6 +24,13 @@ const GoLive: React.FC = () => {
   const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
   const [enablePaidGuestBoxes, setEnablePaidGuestBoxes] = useState<boolean>(false);
 
+  // Camera preview state
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean>(false);
+  const [isCameraOn, setIsCameraOn] = useState<boolean>(false);
+  const [isMicOn, setIsMicOn] = useState<boolean>(true);
+  const [isPreviewLoading, setIsPreviewLoading] = useState<boolean>(false);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
 
 
   const [_broadcasterStatus, setBroadcasterStatus] = useState<{
@@ -31,6 +38,104 @@ const GoLive: React.FC = () => {
     hasApplication: boolean;
     applicationStatus: string | null;
   } | null>(null); // Broadcaster approval status
+
+  // -------------------------------
+  // CAMERA PREVIEW FUNCTIONS
+  // -------------------------------
+  const startCameraPreview = useCallback(async () => {
+    try {
+      setIsPreviewLoading(true);
+      
+      // Stop any existing stream
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+      }
+
+      // Request camera and microphone permissions
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user'
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      mediaStreamRef.current = stream;
+      
+      // Set video element source
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(console.error);
+      }
+
+      setHasCameraPermission(true);
+      setIsCameraOn(true);
+      setIsMicOn(true);
+      
+    } catch (error: any) {
+      console.error('Camera preview error:', error);
+      if (error.name === 'NotAllowedError') {
+        toast.error('Camera/microphone access denied. Please allow permissions and try again.');
+      } else if (error.name === 'NotFoundError') {
+        toast.error('No camera/microphone found. Please connect a device and try again.');
+      } else {
+        toast.error('Failed to start camera preview. Please check your devices and permissions.');
+      }
+      setHasCameraPermission(false);
+      setIsCameraOn(false);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }, []);
+
+  const stopCameraPreview = useCallback(() => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    
+    setIsCameraOn(false);
+    setHasCameraPermission(false);
+  }, []);
+
+  const toggleCamera = useCallback(() => {
+    if (!mediaStreamRef.current) return;
+    
+    const videoTrack = mediaStreamRef.current.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+      setIsCameraOn(videoTrack.enabled);
+    }
+  }, []);
+
+  const toggleMicrophone = useCallback(() => {
+    if (!mediaStreamRef.current) return;
+    
+    const audioTrack = mediaStreamRef.current.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      setIsMicOn(audioTrack.enabled);
+    }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   // -------------------------------
   // CHECK BROADCASTER STATUS
@@ -272,9 +377,10 @@ const GoLive: React.FC = () => {
         return;
       }
 
-      console.log('[GoLive] Setting streaming state and navigating...');
-      setIsStreaming(true);
-      console.log('[GoLive] Stream created successfully, navigating to broadcast', { createdId });
+      console.log('[GoLive] Stream created successfully, stopping camera preview...');
+      
+      // Stop camera preview before going to broadcast
+      stopCameraPreview();
       
       // ✅ Pass stream data directly via navigation state to avoid database query
       // This eliminates replication delay issues
@@ -283,8 +389,8 @@ const GoLive: React.FC = () => {
         broadcaster_id: insertedStream.broadcaster_id || profile.id,
         title: insertedStream.title || streamTitle,
         category: insertedStream.category || category,
-        status: insertedStream.status || 'live',
-        is_live: insertedStream.is_live !== undefined ? insertedStream.is_live : true,
+        status: 'ready_to_join', // Changed from 'live' to wait for seat joining
+        is_live: false, // Will be set to true when they join a seat
         start_time: insertedStream.start_time || new Date().toISOString(),
         current_viewers: insertedStream.current_viewers || 0,
         total_gifts_coins: insertedStream.total_gifts_coins || 0,
@@ -295,10 +401,11 @@ const GoLive: React.FC = () => {
       };
       
       try {
-        navigate(`/broadcast/${createdId}?start=1`, { 
-          state: { streamData: streamDataForNavigation } 
+        navigate(`/broadcast/${createdId}?setup=1`, { 
+          state: { streamData: streamDataForNavigation, needsSeatJoin: true } 
         });
-        console.log('[GoLive] ✅ Navigation called successfully with stream data');
+        console.log('[GoLive] ✅ Navigation called successfully - waiting for seat join');
+        toast.success('Stream created! Please join a seat to start broadcasting.');
       } catch (navErr: any) {
         console.error('[GoLive] ❌ Navigation error', navErr);
         toast.error('Stream created but navigation failed. Please navigate manually.');
@@ -348,11 +455,79 @@ const GoLive: React.FC = () => {
       </h1>
 
       <div className="host-video-box relative rounded-xl overflow-hidden border border-purple-700/30">
-        <div className="w-full h-32 md:h-40 lg:h-48 object-cover bg-black flex items-center justify-center">
-          <div className="text-center text-gray-400">
-            <Video className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Camera preview will appear when you join a seat</p>
-          </div>
+        <div className="w-full h-32 md:h-40 lg:h-48 relative bg-black">
+          {!hasCameraPermission ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center text-gray-400">
+                <Camera className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm mb-3">Camera preview</p>
+                <button
+                  onClick={startCameraPreview}
+                  disabled={isPreviewLoading}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {isPreviewLoading ? 'Starting...' : 'Enable Camera'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                muted
+                playsInline
+                autoPlay
+              />
+              
+              {/* Camera Controls Overlay */}
+              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleCamera}
+                    className={`p-2 rounded-full transition-colors ${
+                      isCameraOn 
+                        ? 'bg-gray-800/80 hover:bg-gray-700/80 text-white' 
+                        : 'bg-red-600/80 hover:bg-red-500/80 text-white'
+                    }`}
+                    title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+                  >
+                    {isCameraOn ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
+                  </button>
+                  
+                  <button
+                    onClick={toggleMicrophone}
+                    className={`p-2 rounded-full transition-colors ${
+                      isMicOn 
+                        ? 'bg-gray-800/80 hover:bg-gray-700/80 text-white' 
+                        : 'bg-red-600/80 hover:bg-red-500/80 text-white'
+                    }`}
+                    title={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
+                  >
+                    {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  </button>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    isCameraOn && isMicOn 
+                      ? 'bg-green-600/80 text-white' 
+                      : 'bg-yellow-600/80 text-white'
+                  }`}>
+                    {isCameraOn && isMicOn ? 'Ready' : 'Check Settings'}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Status indicator */}
+              <div className="absolute top-3 left-3">
+                <div className="flex items-center gap-2 px-3 py-1 bg-black/60 rounded-full">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span className="text-white text-sm font-medium">Preview</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -434,13 +609,20 @@ const GoLive: React.FC = () => {
           <div className="flex items-center gap-4">
             <button
               onClick={handleStartStream}
-              disabled={isConnecting}
-              className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-semibold"
+              disabled={isConnecting || !streamTitle.trim() || !broadcasterName.trim() || !hasCameraPermission || !isCameraOn}
+              className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isConnecting ? 'Starting…' : 'Go Live Now!'}
             </button>
 
-            {/* Broadcaster options removed per design */}
+            {/* Camera status indicator */}
+            <div className="text-sm text-gray-400">
+              {hasCameraPermission ? (
+                <span className="text-green-400">✓ Camera Ready</span>
+              ) : (
+                <span className="text-yellow-400">⚠ Enable Camera</span>
+              )}
+            </div>
           </div>
         </div>
       ) : (

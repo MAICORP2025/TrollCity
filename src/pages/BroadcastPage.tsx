@@ -113,6 +113,8 @@ export default function BroadcastPage() {
   }, []);
   
   const shouldAutoStart = query.get("start") === "1" && hasSession;
+  const needsSetup = query.get("setup") === "1";
+  const needsSeatJoin = location.state?.needsSeatJoin === true;
 
   // Auth and user state
   const { user, profile } = useAuthStore();
@@ -199,6 +201,7 @@ export default function BroadcastPage() {
   const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
   const [permissionErrorSeat, setPermissionErrorSeat] = useState<number | null>(null);
   const [permissionErrorMessage, setPermissionErrorMessage] = useState<string>('');
+  const [broadcasterHasJoined, setBroadcasterHasJoined] = useState<boolean>(false);
   
   // ✅ Entrance effects state
   const [entranceEffect, setEntranceEffect] = useState<{ username: string; role: 'admin' | 'lead_troll_officer' | 'troll_officer' } | null>(null);
@@ -470,6 +473,11 @@ export default function BroadcastPage() {
         }
 
         setCurrentSeatIndex(index);
+        
+        // Track if broadcaster has joined a seat (for setup flow)
+        if (isBroadcaster) {
+          setBroadcasterHasJoined(true);
+        }
 
         try {
           // ✅ 2) Only trigger joinAndPublish when ALL are true
@@ -821,16 +829,24 @@ export default function BroadcastPage() {
     loadStreamData();
   }, [loadStreamData]);
 
-  // Auto-start broadcaster when redirected from setup with ?start=1
+  // Auto-start broadcaster when redirected from setup with ?start=1 or ?setup=1
   // ✅ Fix #4: Only runs if URL has ?start=1 AND user has session
+  // ✅ For setup flow (?setup=1): only auto-start after broadcaster joins a seat
   // ✅ Ensure broadcaster is placed in box 1 (seat index 0) with username shown
   useEffect(() => {
     if (!shouldAutoStart || !stream?.id || !profile?.id || !isBroadcaster || autoStartRef.current || !hasSession) {
       return;
     }
 
+    // For setup flow, only proceed after broadcaster has joined a seat
+    if (needsSetup && needsSeatJoin && !broadcasterHasJoined) {
+      console.log("🔄 Setup mode: Waiting for broadcaster to join a seat before starting...");
+      return;
+    }
+
     autoStartRef.current = true;
-    console.log("🔥 AutoStart detected (?start=1). Starting broadcast in box 1...");
+    const mode = needsSetup ? "setup" : "normal";
+    console.log(`🔥 AutoStart detected (?start=1, mode: ${mode}). Starting broadcast in box 1...`);
     
     // Automatically claim seat 0 (box 1) for broadcaster
     handleSeatClaim(0).catch((err) => {
@@ -843,7 +859,40 @@ export default function BroadcastPage() {
       const clean = location.pathname;
       window.history.replaceState({}, "", clean);
     }, 300);
-  }, [shouldAutoStart, stream?.id, profile?.id, isBroadcaster, hasSession, handleSeatClaim, location.pathname]);
+  }, [shouldAutoStart, needsSetup, needsSeatJoin, broadcasterHasJoined, stream?.id, profile?.id, isBroadcaster, hasSession, handleSeatClaim, location.pathname]);
+
+  // Auto-start when broadcaster joins a seat in setup mode
+  useEffect(() => {
+    if (needsSetup && needsSeatJoin && broadcasterHasJoined && shouldAutoStart && !autoStartRef.current) {
+      autoStartRef.current = true;
+      console.log("🔥 Broadcaster joined seat in setup mode. Starting stream...");
+      
+      // Update stream status to live
+      if (isBroadcaster && stream?.id) {
+        supabase
+          .from("streams")
+          .update({ 
+            status: "live", 
+            is_live: true,
+            start_time: new Date().toISOString()
+          })
+          .eq("id", stream.id)
+          .then(({ error }) => {
+            if (error) {
+              console.warn("Stream status update failed:", error);
+            } else {
+              console.log("✅ Stream status updated to live");
+            }
+          });
+      }
+      
+      // Clean URL
+      setTimeout(() => {
+        const clean = location.pathname;
+        window.history.replaceState({}, "", clean);
+      }, 300);
+    }
+  }, [needsSetup, needsSeatJoin, broadcasterHasJoined, shouldAutoStart, isBroadcaster, stream?.id, location.pathname]);
 
   // Redirect on auth loss
   useEffect(() => {
@@ -1007,8 +1056,14 @@ export default function BroadcastPage() {
                   <div className="text-xs text-gray-300">Viewers</div>
                   <div className="text-lg font-bold flex items-center gap-2"><Users size={16} /> {(stream.current_viewers || 0).toLocaleString()}</div>
                 </div>
-                {stream.is_live && (
+                {needsSetup && needsSeatJoin && !broadcasterHasJoined ? (
+                  <div className="px-3 py-2 bg-yellow-600 text-white rounded-full text-sm font-semibold animate-pulse">
+                    ⏳ Waiting for Broadcaster
+                  </div>
+                ) : stream.is_live ? (
                   <div className="px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold">LIVE</div>
+                ) : (
+                  <div className="px-3 py-2 bg-gray-600 text-white rounded-full text-sm font-semibold">SETUP</div>
                 )}
                 <button
                   onClick={handleEndStream}
@@ -1026,6 +1081,25 @@ export default function BroadcastPage() {
                 {/* Broadcast Grid */}
                 <div className="relative flex-1 min-h-0">
                   {lastGift && <GiftEventOverlay gift={lastGift} />}
+                  
+                  {/* Setup Mode Message */}
+                  {needsSetup && needsSeatJoin && !broadcasterHasJoined && isBroadcaster && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                      <div className="text-center space-y-4 p-6 bg-gradient-to-b from-[#1a1530] to-[#0f0a1f] rounded-2xl border border-purple-500/30 shadow-2xl">
+                        <div className="text-6xl">🎥</div>
+                        <h3 className="text-2xl font-bold text-white">Ready to Go Live!</h3>
+                        <p className="text-gray-300 max-w-md">
+                          Click on any seat below to join and start broadcasting. 
+                          Your camera preview will appear once you join a seat.
+                        </p>
+                        <div className="flex items-center justify-center gap-2 text-purple-300">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                          <span className="text-sm font-medium">Waiting for you to join a seat</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <OfficerStreamGrid
                     roomName={roomName}
                     onSeatClick={(idx) => {
