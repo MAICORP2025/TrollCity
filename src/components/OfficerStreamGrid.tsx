@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useRef, useCallback } from 'react'
+﻿import React, { useMemo, useRef, useCallback, useState } from 'react'
 import { Mic, Video } from 'lucide-react'
 import { useSeatRoster, type SeatAssignment } from '../hooks/useSeatRoster'
 import { useLiveKit } from '../hooks/useLiveKit'
@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 interface OfficerStreamGridProps {
   roomName?: string
   onSeatClick?: (seatIndex: number, seat: SeatAssignment) => void
+  streamId?: string
 }
 
 const parseLiveKitMetadataUserId = (metadata?: string): string | undefined => {
@@ -28,10 +29,14 @@ const parseLiveKitMetadataUserId = (metadata?: string): string | undefined => {
 const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
   roomName = 'officer-stream',
   onSeatClick,
+  streamId,
 }) => {
   const { seats, claimSeat, releaseSeat } = useSeatRoster(roomName)
   const { user, profile } = useAuthStore()
 
+  // Track claimed seats optimistically
+  const [claimedSeats, setClaimedSeats] = useState<Set<number>>(new Set())
+  
   // LiveKit integration - same pattern as BroadcastPage
   const liveKit = useLiveKit()
   const liveKitUser = useMemo(() => {
@@ -59,8 +64,37 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
     maxParticipants: 9, // Officer stream has 9 seats
   })
 
-  const { participants } = liveKit
+  const { participants, localParticipant } = liveKit
   const participantsList = useMemo(() => Array.from(participants.values()), [participants])
+
+  // Listen for stream end events and redirect
+  React.useEffect(() => {
+    if (!streamId) return
+    
+    const channel = supabase
+      .channel(`stream-${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+          filter: `id=eq.${streamId}`,
+        },
+        (payload) => {
+          const newRecord = payload.new as any
+          if (newRecord?.status === 'ended' || newRecord?.is_live === false) {
+            console.log('[OfficerStreamGrid] Stream ended detected, redirecting to summary...')
+            window.location.href = `/stream-summary/${streamId}`
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [streamId])
 
   const handleSeatAction = useCallback(async (action: 'claim' | 'release' | 'leave', seatIndex: number, seat?: SeatAssignment) => {
     if (action === 'claim' && profile) {
@@ -70,6 +104,9 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
         return
       }
 
+      // Optimistically update UI to show claiming state
+      setClaimedSeats(prev => new Set([...prev, seatIndex]))
+      
       try {
         console.log('[OfficerStreamGrid] Requesting camera and microphone permissions...')
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -89,7 +126,7 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
         })
 
         console.log('[OfficerStreamGrid] Claim successful, connecting to LiveKit with stream...')
-        
+         
         // ✅ Use joinAndPublish from useLiveKitSession (same as BroadcastPage)
         // This handles token flow properly via Vercel
         try {
@@ -122,10 +159,26 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
           // Extract the real error message from LiveKit join attempt
           const actualError = liveKitErr?.message || 'LiveKit join failed'
           console.error('[OfficerStreamGrid] LiveKit join error details:', actualError)
+          
+          // Remove optimistic claim on error
+          setClaimedSeats(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(seatIndex)
+            return newSet
+          })
+          
           throw new Error(actualError)
         }
       } catch (err: any) {
         console.error('[OfficerStreamGrid] Permission denied:', err)
+        
+        // Remove optimistic claim on error
+        setClaimedSeats(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(seatIndex)
+          return newSet
+        })
+        
         alert('Camera and microphone access is required to join the officer stream. Please allow permissions and try again.')
         return
       }
@@ -142,13 +195,25 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 md:grid-rows-3 gap-2">
       {seats.map((seat, index) => {
-        const participant = participantsList?.find((p) => {
+        // Check if this is the current user's seat
+        const isCurrentUserSeat = seat?.user_id === user?.id
+        const isClaimingSeat = claimedSeats.has(index)
+        
+        // Find participant by seat user_id or by local participant for current user
+        let participant = participantsList?.find((p) => {
           if (!seat?.user_id) return false
           if (p.identity === seat.user_id) return true
           const metadataUserId = parseLiveKitMetadataUserId(p.metadata)
           return metadataUserId === seat.user_id
         })
-        const isSpeaking = Boolean((participant as any)?.audioLevel > 0.05 || (participant as any)?.isSpeaking);
+        
+        // If no participant found but this is the current user's seat, use localParticipant
+        if (!participant && isCurrentUserSeat && localParticipant) {
+          participant = localParticipant as any
+        }
+        
+        const isSpeaking = Boolean((participant as any)?.audioLevel > 0.05 || (participant as any)?.isSpeaking)
+        
         return (
           <OfficerStreamBox
             key={index}
@@ -156,9 +221,10 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
             seat={seat}
             participant={participant}
             user={user}
+            isCurrentUserSeat={isCurrentUserSeat}
+            isClaimingSeat={isClaimingSeat}
             onClaimClick={() => {
-              // Use handleSeatAction directly to ensure the same component that renders the seat also claims and publishes
-              handleSeatAction('claim', index, seat);
+              handleSeatAction('claim', index, seat)
             }}
             onSeatAction={(action) => handleSeatAction(action, index, seat)}
             data-speaking={isSpeaking}
@@ -174,6 +240,8 @@ interface OfficerStreamBoxProps {
   seat: SeatAssignment
   participant?: LiveKitParticipant
   user?: any
+  isCurrentUserSeat: boolean
+  isClaimingSeat: boolean
   children?: React.ReactNode
   onClaimClick: () => void
   onSeatAction: (action: 'claim' | 'release' | 'leave') => Promise<void>
@@ -184,6 +252,8 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
   seat,
   participant,
   user,
+  isCurrentUserSeat,
+  isClaimingSeat,
   onClaimClick,
   onSeatAction,
 }) => {
@@ -282,14 +352,17 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
   }
 
   const isSpeaking = Boolean((participant as any)?.audioLevel > 0.05 || (participant as any)?.isSpeaking)
-  const isOccupied = !!seat?.user_id
+  const isOccupied = !!seat?.user_id || isClaimingSeat
   const wrapperClass = `relative w-full aspect-video md:aspect-video rounded-2xl overflow-hidden rgb-border ${isSpeaking ? 'speaking' : ''} ${isOccupied ? 'occupied' : ''}`
 
   const handleClick = () => {
     // Always use onClaimClick which will delegate to parent's onSeatClick
     // This ensures consistent behavior with BroadcastPage's handleSeatClaim
-    onClaimClick();
-  };
+    onClaimClick()
+  }
+
+  // Show video if participant exists and has video track, OR if it's the current user's seat
+  const shouldShowVideo = (participant && participant.videoTrack?.track) || isCurrentUserSeat
 
   return (
     <div
@@ -301,7 +374,7 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
     >
       <div className="tile-inner relative w-full h-full">
         <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-        {participant && seat && participant.videoTrack?.track ? (
+        {shouldShowVideo ? (
           <>
             <video
               ref={videoRef}
@@ -314,11 +387,11 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
           </>
         ) : isOccupied ? (
           <div className="text-center text-white">
-            <div className="mb-2 text-lg font-semibold">{seat.username || 'User'}</div>
+            <div className="mb-2 text-lg font-semibold">{seat?.username || 'User'}</div>
             <div className="text-xs uppercase tracking-[0.4em]">
-              {seat.user_id === user?.id ? 'You' : 'Connected'}
+              {isCurrentUserSeat ? 'You' : 'Connected'}
             </div>
-            {seat.user_id === user?.id && (
+            {isCurrentUserSeat && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -330,6 +403,11 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
                 ×
               </button>
             )}
+          </div>
+        ) : isClaimingSeat ? (
+          <div className="text-white flex flex-col items-center gap-2">
+            <div className="text-3xl font-bold animate-pulse">⟳</div>
+            <div className="text-sm font-semibold">Joining...</div>
           </div>
         ) : (
           <>
@@ -358,11 +436,11 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
 
         {seat && (
           <div className="absolute top-3 right-3 flex gap-2">
-            {seat.user_id === user?.id ? (
+            {isCurrentUserSeat ? (
               <button
                 onClick={(e) => {
-                  e.stopPropagation();
-                  onSeatAction('leave');
+                  e.stopPropagation()
+                  onSeatAction('leave')
                 }}
                 className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-lg font-bold hover:bg-red-700"
                 title="Leave seat"

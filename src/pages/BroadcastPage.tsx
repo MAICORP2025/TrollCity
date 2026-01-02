@@ -9,6 +9,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useLiveKit } from '../hooks/useLiveKit';
 import { useLiveKitSession } from '../hooks/useLiveKitSession';
 import { useSeatRoster } from '../hooks/useSeatRoster';
+import { useStreamEndListener } from '../hooks/useStreamEndListener';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -198,6 +199,7 @@ export default function BroadcastPage() {
 
   // Seat management state
   const [currentSeatIndex, setCurrentSeatIndex] = useState<number | null>(null);
+  const [mySeatNumber, setMySeatNumber] = useState<number | null>(null);
   const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
   const [permissionErrorSeat, setPermissionErrorSeat] = useState<number | null>(null);
   const [permissionErrorMessage, setPermissionErrorMessage] = useState<string>('');
@@ -485,6 +487,14 @@ export default function BroadcastPage() {
           throw new Error('Seat claim failed');
         }
 
+        // ✅ Step 1: Get the claimed seat data with seatNumber and user_id
+        const claimedSeat = {
+          seat_number: index,
+          user_id: profile?.id
+        };
+        
+        console.log("CLAIMED SEAT", claimedSeat);
+
         setCurrentSeatIndex(index);
         
         // Track if broadcaster has joined a seat (for setup flow)
@@ -744,13 +754,13 @@ export default function BroadcastPage() {
         return;
       }
       
-      // Navigate to stream summary page
-      navigate(`/broadcast-summary`);
+      // Navigate to stream summary page with stream ID
+      navigate(`/stream-summary/${stream.id}`);
     } catch (err) {
       console.error('Failed to end stream', err);
       toast.error('Failed to end stream');
       // Still try to navigate even if there's an error
-      navigate(`/broadcast-summary`);
+      navigate(`/stream-summary/${stream?.id}`);
     }
   }, [stream?.id, currentSeatIndex, leaveSeat, navigate, liveKit]);
 
@@ -1010,6 +1020,13 @@ export default function BroadcastPage() {
     return () => clearInterval(interval);
   }, [streamId]);
 
+  // ✅ Listen for stream end events and redirect users
+  useStreamEndListener({
+    streamId: streamId || '',
+    enabled: !!streamId,
+    redirectToSummary: true,
+  });
+
   // ✅ Real-time subscription for gifts to update coin counter
   useEffect(() => {
     if (!stream?.id) return;
@@ -1168,6 +1185,7 @@ export default function BroadcastPage() {
                   
                   <OfficerStreamGrid
                     roomName={roomName}
+                    streamId={streamId}
                     onSeatClick={(idx) => {
                       setTargetSeatIndex(idx);
                       // Attempt to claim via existing handler for consistency
@@ -1292,5 +1310,6 @@ export default function BroadcastPage() {
     </div>
   );
 }
+
 
 
