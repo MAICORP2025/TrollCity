@@ -197,20 +197,64 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
     const videoTrack = participant.videoTrack?.track
     const audioTrack = participant.audioTrack?.track
     
-    // Ensure tracks are properly initialized
+    // Enhanced logging for debugging track issues
     console.log('OfficerStreamGrid: Participant tracks:', {
+      identity: participant.identity,
+      isLocal: participant.isLocal,
       videoTrack: videoTrack ? 'available' : 'missing',
       audioTrack: audioTrack ? 'available' : 'missing',
       videoTrackObj: participant.videoTrack,
-      audioTrackObj: participant.audioTrack
-    });
+      audioTrackObj: participant.audioTrack,
+      seatIndex
+    })
 
-    if (videoTrack && videoRef.current) {
-      videoTrack.attach(videoRef.current)
-    }
+    // For local participant, ensure tracks are properly attached
+    if (participant.isLocal) {
+      console.log('OfficerStreamGrid: Handling local participant tracks for seat', seatIndex)
+      
+      // Wait a bit for tracks to be ready, then attach
+      const attachLocalTracks = () => {
+        if (videoTrack && videoRef.current) {
+          try {
+            videoTrack.attach(videoRef.current)
+            console.log('OfficerStreamGrid: ✅ Local video track attached for seat', seatIndex)
+          } catch (e) {
+            console.warn('OfficerStreamGrid: Failed to attach local video track:', e)
+          }
+        }
+        
+        if (audioTrack && audioRef.current) {
+          try {
+            audioTrack.attach(audioRef.current)
+            console.log('OfficerStreamGrid: ✅ Local audio track attached for seat', seatIndex)
+          } catch (e) {
+            console.warn('OfficerStreamGrid: Failed to attach local audio track:', e)
+          }
+        }
+      }
+      
+      // Attach immediately, then try again after a short delay
+      attachLocalTracks()
+      setTimeout(attachLocalTracks, 500)
+    } else {
+      // For remote participants, attach normally
+      if (videoTrack && videoRef.current) {
+        try {
+          videoTrack.attach(videoRef.current)
+          console.log('OfficerStreamGrid: ✅ Remote video track attached for seat', seatIndex)
+        } catch (e) {
+          console.warn('OfficerStreamGrid: Failed to attach remote video track:', e)
+        }
+      }
 
-    if (audioTrack && audioRef.current) {
-      audioTrack.attach(audioRef.current)
+      if (audioTrack && audioRef.current) {
+        try {
+          audioTrack.attach(audioRef.current)
+          console.log('OfficerStreamGrid: ✅ Remote audio track attached for seat', seatIndex)
+        } catch (e) {
+          console.warn('OfficerStreamGrid: Failed to attach remote audio track:', e)
+        }
+      }
     }
 
     return () => {
@@ -229,7 +273,7 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
         console.warn('Audio detach failed:', e)
       }
     }
-  }, [participant?.videoTrack?.track, participant?.audioTrack?.track])
+  }, [participant?.videoTrack?.track, participant?.audioTrack?.track, seatIndex, participant?.isLocal])
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {

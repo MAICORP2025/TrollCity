@@ -514,53 +514,10 @@ export default function BroadcastPage() {
           
           await joinAndPublish(stream);
           
-          // ✅ FIXED: Improved track attachment with better timing and error handling
-          setTimeout(async () => {
-            try {
-              const videoEl = document.getElementById(`seat-video-${index}`) as HTMLVideoElement;
-              if (videoEl) {
-                const room = liveKit.getRoom();
-                if (room && room.localParticipant) {
-                  // Wait for tracks to be published with a more reliable check
-                  let attempts = 0;
-                  const maxAttempts = 20; // 5 seconds total
-                  
-                  while (attempts < maxAttempts) {
-                    const cameraTrack = room.localParticipant.getTrackPublication("camera")?.track;
-                    const microphoneTrack = room.localParticipant.getTrackPublication("microphone")?.track;
-                    
-                    if (cameraTrack || microphoneTrack) {
-                      // Attach video track if available
-                      if (cameraTrack) {
-                        cameraTrack.attach(videoEl);
-                        console.log(`[BroadcastPage] ✅ Local video track attached to seat-video-${index}`);
-                      }
-                      
-                      // Ensure tracks are enabled
-                      if (cameraTrack && cameraTrack.isEnabled !== undefined) {
-                        cameraTrack.enabled = true;
-                      }
-                      if (microphoneTrack && microphoneTrack.isEnabled !== undefined) {
-                        microphoneTrack.enabled = true;
-                      }
-                      
-                      break;
-                    }
-                    
-                    // Wait 250ms before next attempt
-                    await new Promise(resolve => setTimeout(resolve, 250));
-                    attempts++;
-                  }
-                  
-                  if (attempts >= maxAttempts) {
-                    console.warn(`[BroadcastPage] Track attachment timeout for seat ${index}`);
-                  }
-                }
-              }
-            } catch (err) {
-              console.error('[BroadcastPage] Failed to attach local video track:', err);
-            }
-          }, 1000); // Increased delay to 1 second for more reliable track publication
+          // ✅ FIXED: Simplified track attachment - OfficerStreamGrid handles its own track attachment
+          // No need for delayed attachment as OfficerStreamGrid component manages video elements
+          console.log(`[BroadcastPage] Seat ${index} claimed and tracks published successfully`);
+          toast.success(`Joined seat ${index + 1} successfully!`);
           
         } catch (liveKitErr: any) {
           // Extract the real error message from LiveKit join attempt
