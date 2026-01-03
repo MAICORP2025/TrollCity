@@ -149,6 +149,8 @@ export default function BroadcastPage() {
 
   const {
     joinAndPublish,
+    isConnected,
+    isConnecting,
   } = useLiveKitSession({
     roomName: sessionReady && hasValidStreamId ? roomName : '', // Empty roomName prevents connection attempts
     user: sessionReady && user
@@ -163,54 +165,7 @@ export default function BroadcastPage() {
   const { participants, service: _service } = liveKit;
   const { seats, seatsLoading, claimSeat, releaseSeat: _releaseSeat } = useSeatRoster(roomName);
 
-  // ✅ Reconnect logic for page refresh
-  useEffect(() => {
-    // Only run if seats are loaded, we have a user, and are not connected/connecting
-    if (seatsLoading || !seats || !user || isConnected || isConnecting || connectRequestedRef.current) return;
 
-    // Find if user is in any seat
-    const mySeatIndex = seats.findIndex(s => s?.user_id === user.id);
-    
-    if (mySeatIndex !== -1) {
-      console.log('[BroadcastPage] Found user in seat after refresh, attempting reconnect...', mySeatIndex);
-      connectRequestedRef.current = true;
-
-      // Set seat state locally so UI reflects it
-      setCurrentSeatIndex(mySeatIndex);
-      joinBox(`seat-${mySeatIndex}`);
-
-      // Attempt to rejoin
-      const rejoin = async () => {
-        try {
-           // We need to request media access again
-           const stream = await requestMediaAccess();
-           
-           // Ensure tracks are enabled
-           stream.getVideoTracks().forEach(t => t.enabled = true);
-           stream.getAudioTracks().forEach(t => t.enabled = true);
-
-           // Call joinAndPublish
-           await joinAndPublish(stream);
-           
-           // Force enable camera/mic state in LiveKit if needed
-           // (joinAndPublish usually handles this via startPublishing, but user requested explicit check)
-           if (liveKit.service?.room?.localParticipant) {
-             const lp = liveKit.service.room.localParticipant;
-             if (!lp.isCameraEnabled) await lp.setCameraEnabled(true);
-             if (!lp.isMicrophoneEnabled) await lp.setMicrophoneEnabled(true);
-           }
-
-           toast.success('Restored connection to seat');
-        } catch (err) {
-           console.error('[BroadcastPage] Failed to restore connection:', err);
-           toast.error('Failed to restore connection. Please click the seat to rejoin.');
-           connectRequestedRef.current = false; 
-        }
-      };
-      
-      rejoin();
-    }
-  }, [seats, user, isConnected, isConnecting, seatsLoading, joinAndPublish, requestMediaAccess, joinBox, liveKit.service]);
 
   // Media state - useRef to prevent re-renders that cause cleanup loops
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -1001,6 +956,56 @@ export default function BroadcastPage() {
     setCoinCount(prev => prev + amount);
     setIsCoinStoreOpen(false);
   }, []);
+
+  // ✅ Reconnect logic for page refresh
+  useEffect(() => {
+    // Only run if seats are loaded, we have a user, and are not connected/connecting
+    if (seatsLoading || !seats || !user || isConnected || isConnecting || connectRequestedRef.current) return;
+
+    // Find if user is in any seat
+    const mySeatIndex = seats.findIndex(s => s?.user_id === user.id);
+    
+    if (mySeatIndex !== -1) {
+      console.log('[BroadcastPage] Found user in seat after refresh, attempting reconnect...', mySeatIndex);
+      connectRequestedRef.current = true;
+
+      // Set seat state locally so UI reflects it
+      setCurrentSeatIndex(mySeatIndex);
+      joinBox(`seat-${mySeatIndex}`);
+
+      // Attempt to rejoin
+      const rejoin = async () => {
+        try {
+           // We need to request media access again
+           const stream = await requestMediaAccess();
+           
+           // Ensure tracks are enabled
+           stream.getVideoTracks().forEach(t => t.enabled = true);
+           stream.getAudioTracks().forEach(t => t.enabled = true);
+
+           // Call joinAndPublish
+           await joinAndPublish(stream);
+           
+           // Force enable camera/mic state in LiveKit if needed
+           // (joinAndPublish usually handles this via startPublishing, but user requested explicit check)
+           const room = liveKit.getRoom();
+           if (room?.localParticipant) {
+             const lp = room.localParticipant;
+             if (!lp.isCameraEnabled) await lp.setCameraEnabled(true);
+             if (!lp.isMicrophoneEnabled) await lp.setMicrophoneEnabled(true);
+           }
+
+           toast.success('Restored connection to seat');
+        } catch (err) {
+           console.error('[BroadcastPage] Failed to restore connection:', err);
+           toast.error('Failed to restore connection. Please click the seat to rejoin.');
+           connectRequestedRef.current = false; 
+        }
+      };
+      
+      rejoin();
+    }
+  }, [seats, user, isConnected, isConnecting, seatsLoading, joinAndPublish, requestMediaAccess, joinBox, liveKit]);
 
   // Computed values
   const renderSeats = useMemo(() => {
