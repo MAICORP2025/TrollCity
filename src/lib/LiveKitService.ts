@@ -302,6 +302,11 @@ export class LiveKitService {
 
       // Step 3: Set up event listeners BEFORE connecting
       this.setupEventListeners()
+      
+      // ✅ Listen for connection state changes to capture close codes
+      this.room.on('connectionStateChanged', (state) => {
+        this.log('📡 Connection state changed:', state)
+      });
 
       // Step 4: Connect to room
       this.log('Connecting to LiveKit room...', { LIVEKIT_URL, roomName: this.config.roomName, identity: this.config.identity })
@@ -630,6 +635,17 @@ export class LiveKitService {
       
       let session = useAuthStore.getState().session as any
       
+      // ✅ Force refresh session if roomName changed to prevent token reuse
+      const lastRoomName = localStorage.getItem('last_livekit_room');
+      if (lastRoomName && lastRoomName !== this.config.roomName) {
+        this.log('🔄 Room changed, forcing session refresh to invalidate cached token', {
+          lastRoom: lastRoomName,
+          newRoom: this.config.roomName
+        });
+        session = null; // Force fetch from Supabase
+      }
+      localStorage.setItem('last_livekit_room', this.config.roomName);
+
       // Always refresh session before token request to ensure it's valid on server
       this.log('🔑 Refreshing session before token request...')
       try {
@@ -859,6 +875,12 @@ export class LiveKitService {
       })
 
       // ✅ Return ONLY the token string (not wrapped in data object)
+      this.log('✅ Token decoded for verification:', {
+        requestedRoom: this.config.roomName,
+        tokenRoom: json.room || json.r, // LiveKit uses 'r' or 'room' in JWT claims
+        tokenIdentity: json.identity || json.sub // 'sub' is standard JWT subject
+      })
+      
       return { token: trimmedToken, livekitUrl: json.livekitUrl, allowPublish: json.allowPublish }
     } catch (error: any) {
       this.log('❌ Token fetch failed:', {

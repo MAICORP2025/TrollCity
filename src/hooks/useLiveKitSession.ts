@@ -186,12 +186,16 @@ export function useLiveKitSession(options: SessionOptions) {
           // Only now do we access room and log the error
           const room = (typeof getRoom === 'function' && getRoom()) || service?.getRoom?.()
           const errorMessage = rawError || 'LiveKit connection failed'
-          console.error('[useLiveKitSession] connect returned false — aborting join', {
-            error,
+          
+          // ✅ Capture full connection failure details
+          console.error('[useLiveKitSession] ❌ connect returned false. Full failure details:', {
+            error: rawError,
             serviceError,
             roomState: room?.state,
             roomConnectionState: room?.connectionState,
-            hasService: !!service
+            lastDisconnectReason: room?.disconnectReason,
+            hasService: !!service,
+            roomName: options.roomName
           })
           
           // Show more specific error message for real errors
