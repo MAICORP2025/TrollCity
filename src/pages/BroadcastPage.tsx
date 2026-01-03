@@ -27,6 +27,7 @@ import GiftEventOverlay from './GiftEventOverlay';
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
+import { attachLiveKitDebug } from '../lib/livekit-debug';
 
 // Constants
 const _TEXT_ENCODER = new TextEncoder();
@@ -174,6 +175,14 @@ export default function BroadcastPage() {
     streamId,
     connected: isConnected,
   });
+
+  // ✅ Debug LiveKit
+  useEffect(() => {
+    if (isConnected) {
+      const room = liveKit.getRoom();
+      attachLiveKitDebug(room);
+    }
+  }, [isConnected, liveKit]);
 
   // ✅ IMPORTANT: useSeatRoster uses roomName, must match EXACTLY livekitIdentity
   const { seats, seatsLoading, claimSeat, releaseSeat: _releaseSeat } = useSeatRoster(roomName);
