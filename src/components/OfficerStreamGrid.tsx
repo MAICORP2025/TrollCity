@@ -117,9 +117,9 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
 
   const handleSeatAction = useCallback(async (action: 'claim' | 'release' | 'leave', seatIndex: number, seat?: SeatAssignment) => {
     // ✅ NEW: Delegate claim action to parent if handler exists
-    if (action === 'claim' && onSeatClick && seat) {
+    if (action === 'claim' && onSeatClick) {
       console.log('[OfficerStreamGrid] Delegating claim action to parent onSeatClick', { seatIndex, seat });
-      onSeatClick(seatIndex, seat);
+      onSeatClick(seatIndex, seat!);
       return;
     }
 

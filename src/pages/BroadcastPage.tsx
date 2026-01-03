@@ -549,6 +549,7 @@ export default function BroadcastPage() {
   // Seat management handlers
   const handleSeatClaim = useCallback(
     async (index: number) => {
+      console.log('[BroadcastPage] handleSeatClaim CALLED for index:', index);
       // ✅ NEW: Check if already in a box
       const boxId = `seat-${index}`;
       const canJoin = await joinBox(boxId);
