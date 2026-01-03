@@ -425,7 +425,7 @@ const ViewerVideoPanel: React.FC<{
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white text-center px-6">
           <p className="text-xs uppercase tracking-[0.4em] text-gray-300">{statusLabel}</p>
-          <p className="text-2xl font-semibold mt-2">Waiting for the broadcaster</p>
+          {/* <p className="text-2xl font-semibold mt-2">Waiting for the broadcaster</p> */}
           {error && <p className="mt-2 text-xs text-red-400 uppercase tracking-[0.3em]">{error}</p>}
         </div>
       )}

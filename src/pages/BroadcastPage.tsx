@@ -1260,9 +1260,7 @@ export default function BroadcastPage() {
                   <div className="text-lg font-bold flex items-center gap-2"><Users size={16} /> {(stream.current_viewers || 0).toLocaleString()}</div>
                 </div>
                 {needsSetup && needsSeatJoin && !broadcasterHasJoined && !activeBoxId ? (
-                  <div className="px-3 py-2 bg-yellow-600 text-white rounded-full text-sm font-semibold animate-pulse">
-                    ⏳ Waiting for Broadcaster
-                  </div>
+                  null
                 ) : stream.is_live ? (
                   <div className="px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold">🔴 LIVE</div>
                 ) : (
@@ -1294,15 +1292,15 @@ export default function BroadcastPage() {
                 <div className="relative flex-1 min-h-0">
                   {lastGift && <GiftEventOverlay gift={lastGift} />}
                   
-                  {/* Setup Mode Notification - non-blocking */}
-                  {needsSetup && needsSeatJoin && !broadcasterHasJoined && !activeBoxId && isBroadcaster && (
+                  {/* Setup Mode Notification - non-blocking - REMOVED */}
+                  {/* {needsSetup && needsSeatJoin && !broadcasterHasJoined && !activeBoxId && isBroadcaster && (
                     <div className="absolute top-4 left-4 z-20">
                       <div className="flex items-center gap-2 px-4 py-2 bg-yellow-600/90 backdrop-blur-sm rounded-full border border-yellow-500/30">
                         <div className="w-2 h-2 bg-yellow-300 rounded-full animate-pulse"></div>
                         <span className="text-sm font-medium text-white">Ready to Go Live - Click any seat to start broadcasting</span>
                       </div>
                     </div>
-                  )}
+                  )} */}
                   
                   {/* Connection Progress Notification */}
                   {claimingSeat !== null && (
