@@ -20,6 +20,7 @@ import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
 import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
 import { RequireLeadOrOwner } from "./components/auth/RequireLeadOrOwner";
+import TrollsNightGuard from "./components/auth/TrollsNightGuard";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // Static pages (fast load)
@@ -66,6 +67,8 @@ import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 import TrollsNightPage from "./pages/TrollsNightPage";
 
 // Lazy-loaded pages
+const TrollsNightRules = lazy(() => import("./pages/legal/TrollsNightRules"));
+const TrollsNightApplication = lazy(() => import("./pages/TrollsNightApplication"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 const StreamEnded = lazy(() => import("./pages/StreamEnded"));
@@ -460,6 +463,7 @@ function AppContent() {
                 <Route path="/legal/creator-earnings" element={<CreatorEarnings />} />
                 <Route path="/legal/gambling-disclosure" element={<GamblingDisclosure />} />
                 <Route path="/legal/partner-program" element={<PartnerProgram />} />
+                <Route path="/legal/trolls-night-rules" element={<TrollsNightRules />} />
                  
                 {/* Safety Page (standalone) */}
                 <Route path="/safety" element={<Safety />} />
@@ -482,7 +486,12 @@ function AppContent() {
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
-                  <Route path="/trolls-night" element={<TrollsNightPage />} />
+                  
+                  {/* 🌙 Trolls@Night Restricted Section */}
+                  <Route path="/trolls-night/apply" element={<TrollsNightApplication />} />
+                  <Route element={<TrollsNightGuard />}>
+                    <Route path="/trolls-night" element={<TrollsNightPage />} />
+                  </Route>
 
                   {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLive />} />

@@ -453,6 +453,7 @@ export class LiveKitService {
       })
       this.localVideoTrack = new LocalVideoTrack(videoTrack)
       await this.room.localParticipant.publishTrack(this.localVideoTrack as any)
+      await this.room.localParticipant.setCameraEnabled(true) // ✅ Ensure camera is marked enabled
       this.log('✅ Video track published')
     } else {
       this.log('⚠️ No video track in preflight stream')
@@ -466,6 +467,7 @@ export class LiveKitService {
       })
       this.localAudioTrack = new LocalAudioTrack(audioTrack)
       await this.room.localParticipant.publishTrack(this.localAudioTrack as any)
+      await this.room.localParticipant.setMicrophoneEnabled(true) // ✅ Ensure mic is marked enabled
       this.log('✅ Audio track published')
     } else {
       this.log('⚠️ No audio track in preflight stream')

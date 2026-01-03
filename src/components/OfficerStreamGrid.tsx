@@ -239,9 +239,9 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
         const isCurrentUserSeat = seat?.user_id === user?.id
         const isClaimingSeat = claimedSeats.has(index)
         
-  // Use the getParticipantForSeat function to get the correct participant
-  const room = liveKit.getRoom()
-  const participant = getParticipantForSeat(seat, room, user)
+        // Use the getParticipantForSeat function to get the correct participant
+        const room = liveKit.getRoom()
+        const participant = getParticipantForSeat(seat, room, user)
         
         const isSpeaking = Boolean((participant as any)?.audioLevel > 0.05 || (participant as any)?.isSpeaking)
         
@@ -298,7 +298,14 @@ const OfficerStreamVideoContent = ({ participant }: { participant: any }) => {
   // ✅ Force local participant rendering even if tracks are not fully published yet
   // This uses the participant object directly if it's the local participant
   if (!participantTrack && participant.isLocal) {
-    return <ParticipantTile participant={participant} />
+    // Create a fake track ref to satisfy ParticipantTile if it requires one
+    // or if participant prop is not supported by types
+    const fakeTrackRef = {
+      participant: participant,
+      source: Track.Source.Camera,
+      publication: undefined
+    } as unknown as import('livekit-client').TrackPublication; // Cast to satisfy strict types
+    return <ParticipantTile trackRef={fakeTrackRef as any} />
   }
 
   if (!participantTrack) {
@@ -355,6 +362,8 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
           <LiveKitRoom 
             room={room} 
             connect={false}
+            serverUrl=""
+            token=""
             style={{ width: '100%', height: '100%' }}
           >
             <OfficerStreamVideoContent participant={participant} />

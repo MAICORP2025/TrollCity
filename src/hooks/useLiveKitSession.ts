@@ -195,7 +195,9 @@ export function useLiveKitSession(options: SessionOptions) {
             roomConnectionState: room?.connectionState,
             lastDisconnectReason: room?.disconnectReason,
             hasService: !!service,
-            roomName: options.roomName
+            roomName: options.roomName,
+            identity: options.user?.identity,
+            tokenDetails: service?.getLastConnectionError?.() // or any other details exposed
           })
           
           // Show more specific error message for real errors

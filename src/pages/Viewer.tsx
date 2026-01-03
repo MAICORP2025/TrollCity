@@ -16,8 +16,14 @@ import {
   StreamHeader,
   StreamSidePanel,
   TrollmodShowPanel,
-  connectionStatusLabel,
 } from '../components/stream/StudioComponents'
+
+const connectionStatusLabel = (isConnected: boolean, isConnecting: boolean, error: string | null) => {
+  if (error) return 'Error'
+  if (isConnected) return 'Live'
+  if (isConnecting) return 'Connecting'
+  return 'Idle'
+}
 
 export default function ViewerPage() {
   const { user, profile } = useAuthStore()
@@ -28,6 +34,13 @@ export default function ViewerPage() {
   const [showGiftModal, setShowGiftModal] = useState(false)
   const [showEntrance, setShowEntrance] = useState(false)
   const [broadcasterProfile, setBroadcasterProfile] = useState<{ username: string; avatar_url?: string } | null>(null)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
   const liveKitUser = useMemo(() => {
     if (!user) return null
     return {
@@ -62,19 +75,25 @@ export default function ViewerPage() {
 
     let isMounted = true
 
-    supabase
-      .from('user_profiles')
-      .select('username, avatar_url')
-      .eq('id', streamData.broadcaster_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!isMounted) return
-        setBroadcasterProfile(data || null)
-      })
-      .catch(() => {
-        if (!isMounted) return
-        setBroadcasterProfile(null)
-      })
+    const loadProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('username, avatar_url')
+          .eq('id', streamData.broadcaster_id)
+          .maybeSingle()
+        
+        if (isMounted) {
+          setBroadcasterProfile(data || null)
+        }
+      } catch (e) {
+        if (isMounted) {
+          setBroadcasterProfile(null)
+        }
+      }
+    }
+
+    loadProfile()
 
     return () => {
       isMounted = false
@@ -389,6 +408,7 @@ const connectionStatusLabels: Record<LiveKitConnectionStatus, string> = {
   connected: 'Live',
   reconnecting: 'Reconnecting',
   disconnected: 'Disconnected',
+  error: 'Error',
 }
 
 const ViewerVideoPanel: React.FC<{
@@ -450,7 +470,7 @@ const ParticipantMedia: React.FC<{
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
-    const track = participant.videoTrack?.track
+    const track = participant.videoTrack
     const el = videoRef.current
     if (!track || !el) return
     track.attach(el)
@@ -461,11 +481,11 @@ const ParticipantMedia: React.FC<{
         //
       }
     }
-  }, [participant.videoTrack?.track])
+  }, [participant.videoTrack])
 
   useEffect(() => {
     if (!withAudio) return
-    const track = participant.audioTrack?.track
+    const track = participant.audioTrack
     const el = audioRef.current
     if (!track || !el) return
     track.attach(el)
@@ -476,11 +496,11 @@ const ParticipantMedia: React.FC<{
         //
       }
     }
-  }, [participant.audioTrack?.track, withAudio])
+  }, [participant.audioTrack, withAudio])
 
   return (
     <div className={`relative overflow-hidden bg-black ${className}`}>
-      {participant.videoTrack?.track ? (
+      {participant.videoTrack ? (
         <video
           ref={videoRef}
           autoPlay

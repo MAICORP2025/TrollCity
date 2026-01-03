@@ -139,12 +139,19 @@ export default function BroadcastPage() {
   const hasValidStreamId = !!streamId && typeof streamId === 'string' && streamId.trim() !== '';
   const sessionReady = !!user && !!profile && hasValidStreamId;
   
+  // ✅ Fix #2: Consistent identity - defined at top level to be available for all hooks
+  const livekitIdentity = useMemo(() => {
+    const id = profile?.id || user?.id;
+    if (!id) console.warn('[BroadcastPage] No identity found for LiveKit');
+    return id;
+  }, [profile?.id, user?.id]);
+
   const {
     joinAndPublish,
   } = useLiveKitSession({
     roomName: sessionReady && hasValidStreamId ? roomName : '', // Empty roomName prevents connection attempts
     user: sessionReady && user
-      ? { ...user, identity: (user as any).identity || (user as any).id || profile?.id, role: profile?.role || 'broadcaster' }
+      ? { ...user, identity: livekitIdentity, role: profile?.role || 'broadcaster' }
       : null,
     role: isBroadcaster ? 'broadcaster' : 'viewer',
     allowPublish: isBroadcaster && sessionReady,
@@ -550,12 +557,13 @@ export default function BroadcastPage() {
   const handleSeatClaim = useCallback(
     async (index: number) => {
       console.log('[BroadcastPage] handleSeatClaim CALLED for index:', index);
-      // ✅ NEW: Check if already in a box
+      
+      // ✅ Fix #3: Don't set activeBoxId early. Wait for success.
       const boxId = `seat-${index}`;
-      const canJoin = await joinBox(boxId);
-      if (!canJoin) {
-        return;
-      }
+      // const canJoin = await joinBox(boxId); // <-- REMOVED early call
+      // if (!canJoin) {
+      //   return;
+      // }
 
       if (claimingSeat !== null || currentSeatIndex !== null) {
         console.log('[BroadcastPage] Already claiming or in seat, ignoring click');
@@ -594,13 +602,16 @@ export default function BroadcastPage() {
         }
 
         // ✅ Step 1: Get the claimed seat data with seatNumber and user_id
+        // ✅ Fix #2: Use consistent livekitIdentity
         const claimedSeat = {
           seat_number: index,
-          user_id: profile?.id
+          user_id: livekitIdentity
         };
         
         console.log("CLAIMED SEAT", claimedSeat);
 
+        // ✅ Fix #3: Set state ONLY after success
+        await joinBox(boxId); // Now we join the box
         setCurrentSeatIndex(index);
         
         // Track if broadcaster has joined a seat (for setup flow)
@@ -618,11 +629,10 @@ export default function BroadcastPage() {
             throw new Error('No active session. Please sign in again.')
           }
           
-          if (!roomName || !user?.id || !profile?.id) {
+          if (!roomName || !livekitIdentity) {
             console.log("[BroadcastPage] ❌ Missing requirements — skipping joinAndPublish", {
               roomName,
-              hasUser: !!user,
-              hasProfile: !!profile
+              hasIdentity: !!livekitIdentity
             })
             throw new Error('Missing required information to join stream')
           }
@@ -644,8 +654,7 @@ export default function BroadcastPage() {
             videoTrackEnabled: stream?.getVideoTracks()[0]?.enabled,
             audioTrackEnabled: stream?.getAudioTracks()[0]?.enabled,
             roomName,
-            userId: user?.id,
-            profileId: profile?.id
+            identity: livekitIdentity
           });
           
           // Add timeout wrapper for joinAndPublish - increased for slower networks
@@ -726,8 +735,7 @@ export default function BroadcastPage() {
             code: liveKitErr?.code,
             reason: liveKitErr?.reason,
             roomName,
-            userId: user?.id,
-            profileId: profile?.id
+            identity: livekitIdentity
           });
           
           // Provide specific error messages based on error type
@@ -836,7 +844,8 @@ export default function BroadcastPage() {
       displayName,
       liveKit,
       joinBox,
-      leaveBox
+      leaveBox,
+      livekitIdentity
     ]
   );
 

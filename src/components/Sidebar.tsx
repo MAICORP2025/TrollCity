@@ -301,6 +301,13 @@ export default function Sidebar() {
           active={isActive('/apply')}
           collapsed={isSidebarCollapsed}
         />
+        <MenuLink
+          to="/trolls-night/apply"
+          icon={<Shield className="w-5 h-5 text-pink-500" />}
+          label="Trolls@Night App"
+          active={isActive('/trolls-night/apply')}
+          collapsed={isSidebarCollapsed}
+        />
 
         {/* Troll Officer Lounge - Only for admin and troll_officer role */}
         {canSeeOfficer && (
