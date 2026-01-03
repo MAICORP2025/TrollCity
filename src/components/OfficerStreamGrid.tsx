@@ -295,6 +295,12 @@ const OfficerStreamVideoContent = ({ participant }: { participant: any }) => {
     return t.participant?.identity === participant.identity
   })
 
+  // ✅ Force local participant rendering even if tracks are not fully published yet
+  // This uses the participant object directly if it's the local participant
+  if (!participantTrack && participant.isLocal) {
+    return <ParticipantTile participant={participant} />
+  }
+
   if (!participantTrack) {
     return (
       <div className="flex items-center justify-center w-full h-full text-white/50">
