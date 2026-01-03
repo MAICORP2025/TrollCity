@@ -136,6 +136,7 @@ const TromodyShowBroadcast = () => {
 
 // Memoized Tromody Video Grid
 const TromodyVideoGrid = memo(() => {
+  // Only attempt to use tracks if inside a room context
   const tracks = useTracks(
     [Track.Source.Camera],
     { onlySubscribed: false }
@@ -260,7 +261,7 @@ TromodyVideoGrid.displayName = 'TromodyVideoGrid';
           onDisconnected={() => console.log("LK disconnected", roomName)}
           onConnected={() => console.log("LK connected", roomName)}
         >
-          <TromodyVideoGrid />
+          {shouldConnect && !!token ? <TromodyVideoGrid /> : null}
         </LiveKitRoom>
 
         {/* Fallback Video Grid when not connected */}
