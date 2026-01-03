@@ -929,6 +929,15 @@ export default function StreamRoom() {
               autoGainControl: true
             });
             
+            if (audioTrack.mediaStreamTrack) {
+                console.log('[StreamRoom] Audio Track Diagnostics:', {
+                  readyState: audioTrack.mediaStreamTrack.readyState,
+                  enabled: audioTrack.mediaStreamTrack.enabled,
+                  muted: audioTrack.mediaStreamTrack.muted,
+                  settings: audioTrack.mediaStreamTrack.getSettings()
+                });
+            }
+
             await room.localParticipant.publishTrack(audioTrack, {
               name: 'microphone'
             });

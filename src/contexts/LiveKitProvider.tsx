@@ -48,14 +48,14 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       // ✅ Early return for missing requirements - don't set error, just skip
       if (!roomName || !user) {
         console.log("[LiveKitProvider] Skipping connect — missing room or user", { roomName: !!roomName, user: !!user });
-        return false;
+        return null;
       }
 
       // Require stable identity
       const identity = user.id || user.identity;
       if (!identity) {
         console.log("[LiveKitProvider] Skipping connect — missing identity");
-        return false;
+        return null;
       }
 
       // ✅ DEFENSIVE: Validate Supabase session before attempting LiveKit connection
@@ -67,7 +67,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
           // This is expected on app load - don't treat as error, clear any existing error
           console.log("[LiveKitProvider] No active session yet — skipping connect");
           setError(null); // Clear error state for expected condition
-          return false;
+          return null;
         }
         console.log("[LiveKitProvider] ✅ Session validated before connection");
         setError(null); // Clear any previous errors
@@ -75,7 +75,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
         // Only log as info, don't set error for expected conditions
         console.log("[LiveKitProvider] Session check: will retry after login", e?.message);
         setError(null); // Clear error state
-        return false;
+        return null;
       }
 
       const allowPublish = options.allowPublish === true;
@@ -86,12 +86,12 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       // ✅ Prevent duplicate connect spam
       if (lastInitRef.current === initKey && serviceRef.current?.isConnected()) {
         console.log("[CONNECT SKIPPED - already connected]", initKey);
-        return true;
+        return serviceRef.current;
       }
 
       if (connectLockRef.current) {
         console.log("[CONNECT LOCK ACTIVE] skipping connect until unlocked");
-        return false;
+        return null;
       }
 
       connectLockRef.current = true;
@@ -107,11 +107,24 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
         setError(null);
         setIsConnecting(true);
 
-        // Disconnect existing service if switching mode/room
+        // Fix B: Stop auto-disconnecting "existing session"
         if (serviceRef.current) {
-          console.log("[DISCONNECTING EXISTING SESSION]");
-          serviceRef.current.disconnect();
-          serviceRef.current = null;
+           const isSameRoom = serviceRef.current.roomName === roomName; 
+           const isSameUser = serviceRef.current.identity === identity;
+           
+           if (isSameRoom && isSameUser && serviceRef.current.isConnected()) {
+               console.log("[LiveKitProvider] Re-using existing service (same room/user)");
+               return serviceRef.current;
+           }
+
+           if (serviceRef.current.publishingInProgress) {
+               console.warn("[LiveKitProvider] 🚫 Prevented disconnect during publish");
+               return serviceRef.current;
+           }
+
+           console.log("[DISCONNECTING EXISTING SESSION] - Room/User mismatch or forced reconnect");
+           serviceRef.current.disconnect();
+           serviceRef.current = null;
         }
 
         // Create service instance with correct allowPublish mode
@@ -237,7 +250,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
 
         const ok = await serviceRef.current.connect(tokenOverride);
         syncLocalParticipant();
-        return ok;
+        return ok ? serviceRef.current : null;
       } catch (err: any) {
         console.error("[LiveKitProvider] connect failed", err);
         setIsConnecting(false);

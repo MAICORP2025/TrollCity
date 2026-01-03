@@ -12,7 +12,7 @@ export interface LiveKitContextValue {
     roomName: string,
     user: any,
     options?: Partial<LiveKitServiceConfig>
-  ) => Promise<boolean>
+  ) => Promise<LiveKitService | null>
   disconnect: () => void
   toggleCamera: () => Promise<boolean>
   toggleMicrophone: () => Promise<boolean>

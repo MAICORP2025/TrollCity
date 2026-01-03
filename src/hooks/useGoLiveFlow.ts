@@ -1,4 +1,4 @@
-﻿import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { ConnectionState, Room, RoomEvent, ParticipantEvent, Track } from 'livekit-client'
@@ -271,6 +271,13 @@ export const useGoLiveFlow = () => {
         })
 
         console.log('[useGoLiveFlow] Publishing audio track...')
+        console.log('[useGoLiveFlow] Audio Track Diagnostics:', {
+          readyState: audioTrack.readyState,
+          enabled: audioTrack.enabled,
+          muted: audioTrack.muted,
+          settings: audioTrack.getSettings()
+        });
+
         await currentRoom.localParticipant.publishTrack(audioTrack, {
           name: 'microphone',
           source: Track.Source.Microphone,

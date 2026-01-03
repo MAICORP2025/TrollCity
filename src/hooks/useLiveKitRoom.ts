@@ -374,6 +374,15 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
       }
       if (audioTrack) {
         try {
+          if (audioTrack.mediaStreamTrack) {
+             console.log('[useLiveKitRoom] Audio Track Diagnostics:', {
+               readyState: audioTrack.mediaStreamTrack.readyState,
+               enabled: audioTrack.mediaStreamTrack.enabled,
+               muted: audioTrack.mediaStreamTrack.muted,
+               settings: audioTrack.mediaStreamTrack.getSettings()
+             });
+          }
+
           await participant.publishTrack(audioTrack, {
             name: 'microphone'
           })

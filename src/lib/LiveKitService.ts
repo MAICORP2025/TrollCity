@@ -9,6 +9,9 @@ import {
 import { LIVEKIT_URL, defaultLiveKitOptions } from './LiveKitConfig'
 import { toast } from 'sonner'
 
+// Fix D: Audio toggle for debugging
+const ENABLE_AUDIO_PUBLISH = false;
+
 export interface LiveKitParticipant {
   identity: string
   name?: string
@@ -49,6 +52,7 @@ export class LiveKitService {
   private preflightStream?: MediaStream
   private isConnecting = false
   private lastConnectionError: string | null = null
+  public publishingInProgress = false;
 
   constructor(config: LiveKitServiceConfig) {
     this.config = config
@@ -67,6 +71,14 @@ export class LiveKitService {
      PUBLISH GUARDS
   ========================= */
 
+  public get roomName(): string {
+    return this.config.roomName
+  }
+
+  public get identity(): string {
+    return this.config.identity
+  }
+
   private isPublishing(): boolean {
     if (!this.room?.localParticipant) return false
     return (
@@ -84,14 +96,54 @@ export class LiveKitService {
   }
 
   /* =========================
-     Main connection method
+     Methods to Publish Tracks (Fix C)
   ========================= */
+  
+  async publishVideoTrack(mediaStreamTrack: MediaStreamTrack) {
+     if (!this.room?.localParticipant) throw new Error('Room not connected');
+     
+     this.log('📹 Publishing video track directly', { label: mediaStreamTrack.label });
+     
+     // Modern Publishing: Let LiveKit manage the track
+     await this.room.localParticipant.publishTrack(mediaStreamTrack, { name: 'camera' });
+     await this.room.localParticipant.setCameraEnabled(true);
+     this.updateLocalParticipantState();
+     this.log('✅ Video track published');
+  }
+
+  async publishAudioTrack(mediaStreamTrack: MediaStreamTrack) {
+      if (!this.room?.localParticipant) throw new Error('Room not connected');
+      
+      // Audio Guard Logic
+      if (!ENABLE_AUDIO_PUBLISH) {
+         this.log('🚫 Audio publishing disabled by ENABLE_AUDIO_PUBLISH flag');
+         console.warn('🚫 Audio publishing disabled by ENABLE_AUDIO_PUBLISH flag');
+         return;
+      }
+ 
+      this.log('🎤 Publishing audio track directly', { label: mediaStreamTrack.label });
+      
+      // Modern Publishing: Let LiveKit manage the track
+      await this.room.localParticipant.publishTrack(mediaStreamTrack, { name: 'microphone' });
+      await this.room.localParticipant.setMicrophoneEnabled(true);
+      this.updateLocalParticipantState();
+      this.log('✅ Audio track published');
+   }
+ 
+   /* =========================
+      Main connection method
+   ========================= */
 
   async connect(tokenOverride?: string): Promise<boolean> {
-    // Hard guard: prevent multiple connections
-    if (this.room || this.isConnecting) {
-      this.log('Already connected or connecting')
-      return true
+    // Idempotent Connection: Disconnect existing room to prevent ghosts
+    if (this.room) {
+       this.log('♻️ Disconnecting existing room before new connection...');
+       try {
+         await this.room.disconnect();
+       } catch (e) {
+         this.log('⚠️ Error disconnecting existing room', e);
+       }
+       this.room = null;
     }
 
     this.isConnecting = true
@@ -137,38 +189,29 @@ export class LiveKitService {
       if (!sessionData) {
         this.log('Getting session from Supabase...')
         
-        // ✅ Fix #2: Check session first, ONLY refresh if missing
         try {
            const { data } = await supabase.auth.getSession()
            
            if (data.session?.access_token) {
              sessionData = { data, error: null }
            } else {
-             // Only refresh if truly missing
              this.log('⚠️ No active session found, attempting refresh...')
              
-             // ✅ Fix #3: Safe refresh with error handling
              const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
              
+             // Strict Session Handling: Abort if refresh fails
              if (refreshError || !refreshData.session) {
-               // Don't throw immediately, check if we have an expired store session to fall back on
-               this.log('⚠️ Refresh failed', refreshError)
+               this.log('❌ Refresh failed', refreshError)
+               const msg = 'Session expired. Please sign in again.';
+               this.config.onError?.(msg);
+               throw new Error(msg);
              } else {
                sessionData = { data: refreshData, error: null }
              }
            }
         } catch (err: any) {
            this.log('❌ Session check failed', err)
-        }
-
-        // Final fallback if sessionData is still missing
-        if (!sessionData) {
-            if (storeSession?.access_token) {
-                this.log('⚠️ Using expired store session as fallback')
-                sessionData = { data: { session: storeSession }, error: null }
-            } else {
-                throw new Error('Failed to get session. Please try refreshing the page.')
-            }
+           throw err;
         }
       }
       
@@ -270,8 +313,9 @@ export class LiveKitService {
           this.log('🔐 LiveKit token payload', payload)
           // Helpful quick fields
           this.log('🔐 Token room/canPublish', {
-            tokenRoom: payload?.room ?? payload?.r ?? null,
-            canPublish: payload?.allowPublish ?? payload?.canPublish ?? null,
+            tokenRoom: payload?.video?.room ?? payload?.room ?? payload?.r ?? null,
+            canPublish: payload?.video?.canPublish ?? payload?.allowPublish ?? payload?.canPublish ?? null,
+            videoGrant: payload?.video
           })
         } else {
           this.log('🔐 LiveKit token (raw preview)', typeof token === 'string' ? token.substring(0, 60) + '...' : 'N/A')
@@ -452,8 +496,8 @@ export class LiveKitService {
         readyState: videoTrack.readyState,
         label: videoTrack.label
       })
-      this.localVideoTrack = new LocalVideoTrack(videoTrack)
-      await this.room.localParticipant.publishTrack(this.localVideoTrack as any)
+      // Modern Publishing: Let LiveKit manage the track
+      await this.room.localParticipant.publishTrack(videoTrack, { name: 'camera' });
       await this.room.localParticipant.setCameraEnabled(true) // ✅ Ensure camera is marked enabled
       this.log('✅ Video track published')
     } else {
@@ -461,15 +505,21 @@ export class LiveKitService {
     }
 
     if (audioTrack) {
-      this.log('🎤 Publishing audio track', {
-        enabled: audioTrack.enabled,
-        readyState: audioTrack.readyState,
-        label: audioTrack.label
-      })
-      this.localAudioTrack = new LocalAudioTrack(audioTrack)
-      await this.room.localParticipant.publishTrack(this.localAudioTrack as any)
-      await this.room.localParticipant.setMicrophoneEnabled(true) // ✅ Ensure mic is marked enabled
-      this.log('✅ Audio track published')
+      if (ENABLE_AUDIO_PUBLISH) {
+         this.log('🎤 Publishing audio track', {
+            enabled: audioTrack.enabled,
+            readyState: audioTrack.readyState,
+            label: audioTrack.label,
+            muted: audioTrack.muted,
+            settings: audioTrack.getSettings()
+         })
+         // Modern Publishing: Let LiveKit manage the track
+         await this.room.localParticipant.publishTrack(audioTrack, { name: 'microphone' });
+         await this.room.localParticipant.setMicrophoneEnabled(true) // ✅ Ensure mic is marked enabled
+         this.log('✅ Audio track published')
+      } else {
+         this.log('🚫 Audio publishing disabled by ENABLE_AUDIO_PUBLISH flag')
+      }
     } else {
       this.log('⚠️ No audio track in preflight stream')
     }
@@ -536,6 +586,18 @@ export class LiveKitService {
       this.isConnecting = false
       this.updateLocalParticipantState()
       this.hydrateExistingRemoteParticipants()
+    })
+
+    this.room.on(RoomEvent.Reconnecting, () => {
+      this.log('📡 Room Reconnecting...')
+      toast.warning('Reconnecting to stream...', {
+        description: 'Network connection interrupted. Please wait.'
+      })
+    })
+
+    this.room.on(RoomEvent.Reconnected, () => {
+      this.log('📡 Room Reconnected')
+      toast.success('Reconnected to stream')
     })
 
     this.room.on(RoomEvent.Disconnected, () => {
@@ -993,13 +1055,25 @@ export class LiveKitService {
   }
 
   disconnect(): void {
+    if (this.publishingInProgress) {
+        console.warn("🚫 Prevented disconnect during publish (LiveKitService guard)");
+        return;
+    }
+
     this.log('🔌 Disconnecting from LiveKit room...')
     if (this.room) {
       try {
         this.room.disconnect()
       } catch { }
+      this.room = null; // Ensure room is cleared
     }
+    
+    // Clear participants
+    this.participants.clear();
+    this.isConnecting = false;
+    
     this.cleanup()
+    this.config.onDisconnected?.();
   }
 
   private cleanup(): void {
@@ -1029,6 +1103,18 @@ export class LiveKitService {
   }
 
   destroy(): void {
+    this.log('💥 Destroying LiveKitService instance...');
+    
+    // Stop all local tracks explicitly to ensure hardware light turns off
+    if (this.room?.localParticipant) {
+       this.room.localParticipant.videoTrackPublications.forEach(pub => {
+         try { pub.track?.stop(); } catch {}
+       });
+       this.room.localParticipant.audioTrackPublications.forEach(pub => {
+         try { pub.track?.stop(); } catch {}
+       });
+    }
+
     this.disconnect()
   }
 }

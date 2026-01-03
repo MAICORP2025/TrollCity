@@ -618,7 +618,15 @@ export default function BroadcastPage() {
                  }
 
                  preflightStreamRef.current?.getVideoTracks().forEach(track => track.enabled = true);
-                 preflightStreamRef.current?.getAudioTracks().forEach(track => track.enabled = true);
+                 preflightStreamRef.current?.getAudioTracks().forEach(track => {
+                    track.enabled = true;
+                    console.log('[BroadcastPage] Audio Track Diagnostics:', {
+                      readyState: track.readyState,
+                      enabled: track.enabled,
+                      muted: track.muted,
+                      settings: track.getSettings()
+                    });
+                 });
                  
                  let joined = false;
                  for (let attempt = 1; attempt <= LIVEKIT_JOIN_MAX_RETRIES; attempt++) {
@@ -858,6 +866,12 @@ export default function BroadcastPage() {
 
   // Stream management handlers
   const handleEndStream = useCallback(async () => {
+    if (publishingRef.current) {
+      console.warn('[BroadcastPage] Cannot end stream while publishing/joining logic is active');
+      toast.warning('Please wait, connection in progress...');
+      return;
+    }
+
     if (!stream?.id) {
       toast.error('Stream ID not found');
       return;
