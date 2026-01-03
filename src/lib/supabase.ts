@@ -459,21 +459,29 @@ export async function ensureSupabaseSession(client: SupabaseClient) {
  */
 export async function getActiveSession(): Promise<any> {
   try {
-    // Force refresh to ensure session is current
-    await supabase.auth.refreshSession()
-    const { data, error } = await supabase.auth.getSession()
+    // ✅ Fix: Check session first, ONLY refresh if missing
+    // This avoids triggering unnecessary global auth updates
+    const { data } = await supabase.auth.getSession()
     
-    if (error) {
-      console.warn('[getActiveSession] Session error:', error.message)
+    if (data.session?.access_token) {
+      return data.session
+    }
+
+    // Only refresh if truly missing
+    console.log('[getActiveSession] No active session found, attempting refresh...')
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+    
+    if (refreshError) {
+      console.warn('[getActiveSession] Session error:', refreshError.message)
       return null
     }
     
-    if (!data.session?.access_token) {
+    if (!refreshData.session?.access_token) {
       console.warn('[getActiveSession] No session found after refresh')
       return null
     }
     
-    return data.session
+    return refreshData.session
   } catch (err: any) {
     console.error('[getActiveSession] Error getting session:', err?.message)
     return null

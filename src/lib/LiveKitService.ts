@@ -638,55 +638,21 @@ export class LiveKitService {
       
       let session = useAuthStore.getState().session as any
       
-      // ✅ Force refresh session if roomName changed to prevent token reuse
-      const lastRoomName = localStorage.getItem('last_livekit_room');
-      if (lastRoomName && lastRoomName !== this.config.roomName) {
-        this.log('🔄 Room changed, forcing session refresh to invalidate cached token', {
-          lastRoom: lastRoomName,
-          newRoom: this.config.roomName
-        });
-        session = null; // Force fetch from Supabase
-      }
-      localStorage.setItem('last_livekit_room', this.config.roomName);
-
-      // Always refresh session before token request to ensure it's valid on server
-      this.log('🔑 Refreshing session before token request...')
-      try {
-        // Refresh session with timeout
-        const refreshPromise = supabase.auth.refreshSession()
-        const refreshWithTimeout = Promise.race([
-          refreshPromise,
-          new Promise<any>((_, reject) =>
-            setTimeout(() => reject(new Error('Session refresh timeout')), 15000)
-          )
-        ])
-        
-        const { data: refreshData, error: refreshError } = await refreshWithTimeout as any
-        
-        if (refreshError) {
-          this.log('⚠️ Session refresh error (non-fatal):', { message: refreshError.message })
-          // Continue with existing session if refresh fails
-        } else if (refreshData?.session) {
-          session = refreshData.session
-          this.log('✅ Session refreshed successfully', {})
-        }
-      } catch (refreshErr: any) {
-        this.log('⚠️ Session refresh timeout/error (non-fatal):', { message: refreshErr?.message })
-        // Continue with existing session
-      }
-      
-      // If still no session, try to get from Supabase
+      // ✅ Fix: Only refresh if session is missing or expired
       if (!session?.access_token) {
-        this.log('🔑 No session in store, getting from Supabase...')
-        try {
-          const { data: sessionData, error: sessionErr } = await supabase.auth.getSession()
-          if (sessionErr || !sessionData.session) {
-            throw new Error('No active session')
-          }
-          session = sessionData.session
-        } catch (sessionErr: any) {
-          this.log('❌ Failed to get session:', { message: sessionErr?.message })
-          throw new Error('No active session. Please sign in again.')
+        this.log('🔑 No session in store, checking Supabase...')
+        const { data } = await supabase.auth.getSession()
+        
+        if (data.session?.access_token) {
+           session = data.session
+        } else {
+           this.log('⚠️ No active session found, refreshing...')
+           const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+           
+           if (refreshError || !refreshData.session?.access_token) {
+             throw new Error('No valid Supabase session — cannot request token')
+           }
+           session = refreshData.session
         }
       }
       
