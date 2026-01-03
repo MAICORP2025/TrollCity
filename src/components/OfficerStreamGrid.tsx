@@ -59,7 +59,8 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
     if (!user) return null
     return {
       ...user,
-      identity: (user as any).identity || user.id || profile?.id,
+      // Always prefer user.id (auth source of truth) to match useSeatRoster and BroadcastPage logic
+      identity: user.id || profile?.id,
       role: profile?.role || 'broadcaster',
       level: profile?.level ?? 1,
     }
@@ -232,7 +233,7 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
     }
   }, [profile, claimSeat, releaseSeat, disconnect, joinAndPublish, roomName, user, liveKitUser, activeBoxId])
 
-  return (
+  const gridContent = (
     <div className="grid grid-cols-1 md:grid-cols-3 md:grid-rows-3 gap-2">
       {seats.map((seat, index) => {
         // Check if this is the current user's seat
@@ -265,6 +266,24 @@ const OfficerStreamGrid: React.FC<OfficerStreamGridProps> = ({
       })}
     </div>
   )
+
+  // ✅ Wrap the entire grid in LiveKitRoom to provide context for all tiles
+  // This prevents mounting/unmounting LiveKitRoom for individual seats which triggers disconnects
+  if (room) {
+    return (
+      <LiveKitRoom
+        room={room}
+        connect={false}
+        serverUrl=""
+        token=""
+        style={{ height: '100%' }}
+      >
+        {gridContent}
+      </LiveKitRoom>
+    )
+  }
+
+  return gridContent
 }
 
 interface OfficerStreamBoxProps {
@@ -358,16 +377,10 @@ const OfficerStreamBox: React.FC<OfficerStreamBoxProps & { [k: string]: any }> =
       <div className="tile-inner relative w-full h-full">
         <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
         {participant && room ? (
-          // Wrap in LiveKitRoom to provide context for ParticipantTile
-          <LiveKitRoom 
-            room={room} 
-            connect={false}
-            serverUrl=""
-            token=""
-            style={{ width: '100%', height: '100%' }}
-          >
+          // ✅ LiveKitRoom context is now provided by parent OfficerStreamGrid
+          <div style={{ width: '100%', height: '100%' }}>
             <OfficerStreamVideoContent participant={participant} />
-          </LiveKitRoom>
+          </div>
         ) : (
           <button onClick={() => onClaimClick()} className="text-white flex flex-col items-center gap-2">
             <div className="text-3xl font-bold">+</div>
