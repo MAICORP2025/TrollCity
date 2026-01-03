@@ -1265,7 +1265,7 @@ export default function BroadcastPage() {
                 ) : stream.is_live ? (
                   <div className="px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold">🔴 LIVE</div>
                 ) : (
-                  <div className="px-3 py-2 bg-gray-600 text-white rounded-full text-sm font-semibold">⚙️ SETUP</div>
+                  null
                 )}
                 <button
                   onClick={handleEndStream}
