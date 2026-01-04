@@ -10,7 +10,7 @@ import { LIVEKIT_URL, defaultLiveKitOptions } from './LiveKitConfig'
 import { toast } from 'sonner'
 
 // Fix D: Audio toggle for debugging
-const ENABLE_AUDIO_PUBLISH = false;
+const ENABLE_AUDIO_PUBLISH = true;
 
 // Gold Standard: Cache LiveKit tokens per room/identity
 const tokenCache = new Map<string, { token: string, expiresAt: number }>();

@@ -236,7 +236,7 @@ export function useLiveKitSession(options: SessionOptions) {
 
           try {
               // Fix D: Temporarily disable audio to prove it's the issue
-              const ENABLE_AUDIO_PUBLISH = false;
+              const ENABLE_AUDIO_PUBLISH = true;
 
               console.log('[useLiveKitSession] Publishing local tracks via LiveKit createLocalTracks', {
                 hasPreflightStream: !!mediaStream,
