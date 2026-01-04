@@ -10,6 +10,7 @@ import type { LiveKitServiceConfig } from '../lib/LiveKitService';
 
 const GoLive: React.FC = () => {
   const navigate = useNavigate();
+  const liveKit = useLiveKit();
   // Note: videoRef removed - no camera preview in setup
 
   // const { user, profile } = useAuthStore(); // Using getState() instead for async operations
@@ -111,7 +112,6 @@ const GoLive: React.FC = () => {
     }
 
     setIsConnecting(true);
-    const livekit = useLiveKit();
     
     // Reset connecting state on function exit to prevent getting stuck
     const cleanup = () => {
@@ -305,7 +305,7 @@ const GoLive: React.FC = () => {
 
       // Connect to LiveKit and publish both tracks before navigation
       const identity = user.id;
-      const service = await livekit.connect(roomName, { id: identity }, {
+      const service = await liveKit.connect(roomName, { id: identity }, {
         allowPublish: true,
         autoPublish: true,
         preflightStream,
