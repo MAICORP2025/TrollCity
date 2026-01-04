@@ -5,6 +5,8 @@ import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { Video } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLiveKit } from '../hooks/useLiveKit';
+import type { LiveKitServiceConfig } from '../lib/LiveKitService';
 
 const GoLive: React.FC = () => {
   const navigate = useNavigate();
@@ -101,7 +103,7 @@ const GoLive: React.FC = () => {
       return;
     }
 
-    // Note: Camera/microphone permissions will be requested when joining seats in broadcast
+    // Immediate Go Live flow requires camera/mic and LiveKit connection before navigation
 
     if (!streamTitle.trim()) {
       toast.error('Enter a stream title.');
@@ -109,6 +111,7 @@ const GoLive: React.FC = () => {
     }
 
     setIsConnecting(true);
+    const livekit = useLiveKit();
     
     // Reset connecting state on function exit to prevent getting stuck
     const cleanup = () => {
@@ -135,6 +138,7 @@ const GoLive: React.FC = () => {
 
     try {
       const streamId = crypto.randomUUID();
+      const roomName = streamId; // Use streamId as LiveKit room name
       let thumbnailUrl: string | null = null;
 
       // Optimized thumbnail upload (skip if not needed for faster stream creation)
@@ -193,21 +197,21 @@ const GoLive: React.FC = () => {
       }
       console.log('[GoLive] Session verified');
 
-      // Prepare stream data
+      // Prepare stream data (status live, is_live true)
       const streamData = {
         id: streamId,
         broadcaster_id: profile.id,
         title: streamTitle,
         category: category,
-        is_live: false, // Will be set to true when joining seat
-        status: 'ready_to_join',
+        is_live: true,
+        status: 'live',
         start_time: new Date().toISOString(),
         thumbnail_url: thumbnailUrl,
         current_viewers: 0,
         total_gifts_coins: 0,
         total_unique_gifters: 0,
         popularity: 0,
-        agora_channel: `stream_${streamId}`,
+        agora_channel: roomName,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -275,7 +279,45 @@ const GoLive: React.FC = () => {
       
       console.log('[GoLive] Stream created successfully:', createdId);
 
-      console.log('[GoLive] Stream created successfully - camera/mic will be requested when joining seat');
+      // Request camera and microphone access (preflight stream)
+      let preflightStream: MediaStream | null = null;
+      try {
+        preflightStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            facingMode: 'user',
+            frameRate: { ideal: 30, max: 60 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        console.log('[GoLive] ✅ Camera & mic granted');
+      } catch (permErr: any) {
+        console.error('[GoLive] Camera/mic permission failed:', permErr);
+        toast.error('Camera/microphone access denied. Please allow permissions.');
+        cleanup();
+        return;
+      }
+
+      // Connect to LiveKit and publish both tracks before navigation
+      const identity = user.id;
+      const service = await livekit.connect(roomName, { id: identity }, {
+        allowPublish: true,
+        autoPublish: true,
+        preflightStream,
+      } as Partial<LiveKitServiceConfig>);
+
+      if (!service) {
+        console.error('[GoLive] LiveKit connect failed');
+        toast.error('Failed to connect to LiveKit. Please try again.');
+        cleanup();
+        return;
+      }
+      console.log('[GoLive] ✅ Connected to LiveKit and publishing');
       
       // ✅ Pass stream data directly via navigation state to avoid database query
       // This eliminates replication delay issues
@@ -284,8 +326,8 @@ const GoLive: React.FC = () => {
         broadcaster_id: insertedStream.broadcaster_id || profile.id,
         title: insertedStream.title || streamTitle,
         category: insertedStream.category || category,
-        status: 'ready_to_join', // Changed from 'live' to wait for seat joining
-        is_live: false, // Will be set to true when they join a seat
+        status: 'live',
+        is_live: true,
         start_time: insertedStream.start_time || new Date().toISOString(),
         current_viewers: insertedStream.current_viewers || 0,
         total_gifts_coins: insertedStream.total_gifts_coins || 0,
@@ -293,14 +335,15 @@ const GoLive: React.FC = () => {
         thumbnail_url: insertedStream.thumbnail_url || thumbnailUrl,
         created_at: insertedStream.created_at || new Date().toISOString(),
         updated_at: insertedStream.updated_at || new Date().toISOString(),
+        livekit_room_name: roomName,
       };
       
       try {
-        navigate(`/broadcast/${createdId}?setup=1`, { 
-          state: { streamData: streamDataForNavigation, needsSeatJoin: true } 
+        navigate(`/broadcast/${createdId}`, { 
+          state: { streamData: streamDataForNavigation, isBroadcaster: true, roomName } 
         });
-        console.log('[GoLive] ✅ Navigation called successfully - waiting for seat join');
-        toast.success('Stream created! Please join a seat to start broadcasting.');
+        console.log('[GoLive] ✅ Navigation called successfully - already publishing');
+        toast.success('You are live!');
       } catch (navErr: any) {
         console.error('[GoLive] ❌ Navigation error', navErr);
         toast.error('Stream created but navigation failed. Please navigate manually.');

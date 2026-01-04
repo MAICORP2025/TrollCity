@@ -28,6 +28,8 @@ import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
+import VideoFeed from '../components/stream/VideoFeed';
+import { Camera, Mic, MicOff, CameraOff, Square } from 'lucide-react';
 
 // Constants
 const _TEXT_ENCODER = new TextEncoder();
@@ -197,6 +199,52 @@ export default function BroadcastPage() {
 
   // ✅ IMPORTANT: useSeatRoster uses roomName, must match EXACTLY livekitIdentity
   const { seats, seatsLoading, claimSeat, releaseSeat: _releaseSeat } = useSeatRoster(roomName);
+
+  // ✅ Simple broadcaster-first layout: if we arrive already publishing from GoLiveSetup
+  const [cameraOn, setCameraOn] = useState(true);
+  const [micOn, setMicOn] = useState(true);
+
+  const toggleCamera = useCallback(async () => {
+    const ok = await liveKit.toggleCamera();
+    setCameraOn(Boolean(ok));
+  }, [liveKit]);
+
+  const toggleMic = useCallback(async () => {
+    const ok = await liveKit.toggleMicrophone();
+    setMicOn(Boolean(ok));
+  }, [liveKit]);
+
+  const endStream = useCallback(async () => {
+    try {
+      if (streamId) {
+        await supabase.from('streams').update({ status: 'ended', is_live: false }).eq('id', streamId);
+      }
+    } catch {}
+    liveKit.disconnect();
+    navigate('/stream-ended');
+  }, [streamId, liveKit, navigate]);
+
+  if (location.state?.isBroadcaster) {
+    return (
+      <div className="max-w-6xl mx-auto p-4 space-y-4">
+        <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black">
+          <VideoFeed room={liveKit.getRoom()} isHost={true} />
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={toggleMic} className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600">
+            {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+          </button>
+          <button onClick={toggleCamera} className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600">
+            {cameraOn ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
+          </button>
+          <button onClick={endStream} className="px-4 py-2 rounded bg-red-700 hover:bg-red-600 flex items-center gap-2">
+            <Square className="w-4 h-4" />
+            End Stream
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Media state - useRef to prevent re-renders that cause cleanup loops
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
