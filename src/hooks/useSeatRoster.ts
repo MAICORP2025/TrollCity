@@ -187,7 +187,7 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
     return () => {
       cleanupPromise.then(cleanup => cleanup && cleanup())
     }
-  }, [roomName, user?.id]) // Removed 'refresh' and 'user' full object from dependencies
+  }, [roomName, user?.id, refresh]) // Added refresh to dependencies
 
   const claimSeat = useCallback(
     async (
@@ -273,7 +273,7 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
         setIsClaimingSeat(null)
       }
     },
-    [refresh, normalizeSeatIndex, profile, user, roomName, seats, stableUserId]
+    [normalizeSeatIndex, profile, user, roomName, seats, stableUserId]
   )
 
   const releaseSeat = useCallback(
@@ -286,7 +286,7 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
       }
 
       try {
-        const { data, error: invokeError } = await supabase.functions.invoke('broadcast-seats', {
+        const { error: invokeError } = await supabase.functions.invoke('broadcast-seats', {
           body: {
             action: 'release',
             room: roomName,
@@ -322,7 +322,7 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
         console.warn('[useSeatRoster] releaseSeat failed', err)
       }
     },
-    [refresh, normalizeSeatIndex, stableUserId, roomName]
+    [normalizeSeatIndex, stableUserId, roomName]
   )
 
   const currentOccupants = useMemo(

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { X, Search } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
@@ -16,15 +16,7 @@ export default function NewMessageModal({ isOpen, onClose, onSelectUser }: NewMe
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    if (isOpen && searchQuery.length >= 2) {
-      searchUsers()
-    } else {
-      setUsers([])
-    }
-    }, [searchQuery, isOpen])
-
-  const searchUsers = async () => {
+  const searchUsers = useCallback(async () => {
     if (!searchQuery.trim() || searchQuery.length < 2) return
 
     setLoading(true)
@@ -43,7 +35,15 @@ export default function NewMessageModal({ isOpen, onClose, onSelectUser }: NewMe
     } finally {
       setLoading(false)
     }
-  }
+  }, [searchQuery, profile?.id])
+
+  useEffect(() => {
+    if (isOpen && searchQuery.length >= 2) {
+      searchUsers()
+    } else {
+      setUsers([])
+    }
+    }, [searchQuery, isOpen, searchUsers])
 
   const handleSelectUser = (userId: string) => {
     onSelectUser(userId)

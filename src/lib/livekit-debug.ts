@@ -1,7 +1,6 @@
 import { 
    RoomEvent, 
-   ConnectionState, 
-   Track 
+   ConnectionState
  } from "livekit-client" 
  
  export function attachLiveKitDebug(room: any) { 
@@ -41,9 +40,9 @@ import {
      console.warn("🎥 LocalTrackUnpublished:", pub.trackSid, pub.source) 
    }) 
  
-   room.on(RoomEvent.TrackPublishFailed, (track: Track, err: any) => { 
-     console.error("❌ TrackPublishFailed:", track?.source, err) 
-   }) 
+   // room.on(RoomEvent.TrackPublishFailed, (track: Track, err: any) => { 
+  //   console.error("❌ TrackPublishFailed:", track?.source, err) 
+  // }) 
  
    room.on(RoomEvent.MediaDevicesError, (err: any) => { 
      console.error("❌ MediaDevicesError:", err) 

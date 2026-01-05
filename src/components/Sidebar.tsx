@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Video,
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -100,7 +101,7 @@ export default function Sidebar() {
       }
     }
     checkAccess()
-  }, [profile?.id, profile?.role])
+  }, [profile])
 
   if (!user) return null
 
@@ -126,14 +127,18 @@ export default function Sidebar() {
 
         <button
           onClick={() => setShowStatsPanel(true)}
-          className="mt-3 font-bold text-lg flex items-center justify-center gap-2 hover:text-purple-300 transition-colors cursor-pointer"
+          className={`mt-3 font-bold text-lg flex items-center justify-center gap-2 hover:text-purple-300 transition-colors cursor-pointer ${
+            profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date()
+              ? 'rgb-username'
+              : ''
+          }`}
         >
           @{profile?.username || 'Guest'}
           {badge && <span className="text-yellow-400">{badge}</span>}
         </button>
 
         <p className="text-xs text-gray-400">
-          {profile?.role === 'admin' ? 'Admin' : profile?.role === 'troll_officer' ? 'Troll Officer' : 'Member'}
+          {(profile?.troll_role === 'admin' || profile?.role === 'admin') ? 'Admin' : (profile?.troll_role === 'troll_officer' || profile?.role === 'troll_officer') ? 'Troll Officer' : 'Member'}
         </p>
 
         {/* Go Live Button - Under username */}
@@ -260,6 +265,13 @@ export default function Sidebar() {
           icon={<MessageCircle className="w-5 h-5 text-cyan-400" />}
           label="Troll City Wall"
           active={isActive('/wall')}
+          collapsed={isSidebarCollapsed}
+        />
+        <MenuLink
+          to="/treeds"
+          icon={<Video className="w-5 h-5 text-purple-400" />}
+          label="Treeds"
+          active={isActive('/treeds')}
           collapsed={isSidebarCollapsed}
         />
 

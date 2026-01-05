@@ -1,19 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Gift, Heart, Users, AlertCircle, TrendingUp, X } from "lucide-react";
+import { Gift, Heart, Users, AlertCircle, TrendingUp } from "lucide-react";
 
-interface SummaryData {
-  title: string;
-  category: string;
-  duration: number;
-  totalGifts: number;
-  totalCoins: number;
-  coinsPerDollar: number;
-  viewerCount: number;
-  newFollowers: string[];
-  reports: string[];
-  violations: number;
-  level: number;
-}
 
 export default function BroadcastSummary() {
   const navigate = useNavigate();

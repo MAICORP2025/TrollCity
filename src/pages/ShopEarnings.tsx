@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 
@@ -7,12 +7,7 @@ export default function ShopEarnings() {
   const [stats, setStats] = useState({ sales: 0, coins: 0, orders: 0 })
   const [orders, setOrders] = useState<any[]>([])
 
-  useEffect(() => {
-    if (!user) return
-    load()
-  }, [user?.id])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     const { data: shops } = await supabase
       .from('trollcity_shops')
       .select('id')
@@ -32,7 +27,12 @@ export default function ShopEarnings() {
     const totalCoins = list.reduce((sum, o: any) => sum + (o.coins_paid || 0), 0)
     setStats({ sales: list.length, coins: totalCoins, orders: list.length })
     setOrders(list)
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    load()
+  }, [user, load])
 
   if (!user) return <div className="p-6 text-white">Please log in</div>
 

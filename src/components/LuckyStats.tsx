@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { TrendingUp, Zap, Trophy, Target } from 'lucide-react';
 
 interface LuckyStatsData {
@@ -28,25 +28,25 @@ const LuckyStats: React.FC<LuckyStatsProps> = ({ userId, compact = false }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_lucky_stats', {
+          p_user_id: userId
+        });
+  
+        if (error) throw error;
+        if (data && data.length > 0) {
+          setStats(data[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching lucky stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchStats();
   }, [userId]);
-
-  const fetchStats = async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_lucky_stats', {
-        p_user_id: userId
-      });
-
-      if (error) throw error;
-      if (data && data.length > 0) {
-        setStats(data[0]);
-      }
-    } catch (error) {
-      console.error('Error fetching lucky stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return (

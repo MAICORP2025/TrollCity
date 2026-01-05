@@ -106,7 +106,7 @@ export default function GiftBurst({
   amount,
   trigger,
   onComplete,
-  targetUserId,
+  // targetUserId,
   side,
   intensity = 'medium',
   position,

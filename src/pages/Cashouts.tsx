@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import PayoutHistoryCard from '../components/PayoutHistoryCard'
 import { DollarSign, Coins, Clock } from 'lucide-react'
 import { supabase, CashoutTier, UserProfile } from '../lib/supabase'
@@ -24,11 +24,7 @@ const Cashouts = () => {
   const [requesting, setRequesting] = useState<string | null>(null)
   const [availableEarnedCoins, setAvailableEarnedCoins] = useState(0)
 
-  useEffect(() => {
-    loadData()
-  }, [profile?.id])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -64,12 +60,16 @@ const Cashouts = () => {
         const avail = Math.max(0, ((prof as UserProfile).total_earned_coins || 0) - reserved)
         setAvailableEarnedCoins(avail)
       }
-    } catch (e) {
+    } catch {
       toast.error('Failed to load cashouts')
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile])
+
+  useEffect(() => {
+    loadData()
+  }, [profile?.id, loadData])
 
   const requestCashout = async (tier: CashoutTier) => {
     if (!profile) return
@@ -146,7 +146,6 @@ const Cashouts = () => {
                 <DollarSign className="w-6 h-6 text-troll-green" />
               </div>
               <div className="text-sm text-troll-purple-300 mb-4">
-const feePercent = Number(tier.processing_fee_percentage) || 0
                 Processing fee: {(Number(tier.processing_fee_percentage) || 0).toFixed(1)}%
               </div>
               <button

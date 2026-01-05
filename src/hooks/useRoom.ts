@@ -9,7 +9,7 @@ interface UseRoomOptions {
 }
 
 export function useRoom({ url, token, onConnected, onDisconnected }: UseRoomOptions = {}) {
-  const [room, setRoom] = useState<Room | null>(null)
+  const [room, _setRoom] = useState<Room | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [participants, setParticipants] = useState<RemoteParticipant[]>([])
   const [localParticipant, setLocalParticipant] = useState<LocalParticipant | null>(null)
@@ -88,7 +88,7 @@ export function useRoom({ url, token, onConnected, onDisconnected }: UseRoomOpti
         roomRef.current = null
       }
     }
-  }, [url, token])
+  }, [url, token, onConnected, onDisconnected])
 
   const toggleCamera = async () => {
     if (!room?.localParticipant) return

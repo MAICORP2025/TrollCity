@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Scale, AlertCircle, LogOut, Send, Gavel } from "lucide-react";
 import { courtSystem } from "@/lib/courtSystem";
@@ -23,19 +23,7 @@ export default function TrollCourtSession() {
 
   const isJudge = currentUser.role === "admin" || currentUser.role === "lead_troll_officer";
 
-  useEffect(() => {
-    if (isJudge) {
-      initializeInstantCourt();
-    }
-
-    return () => {
-      if (courtRoomRefRef.current) {
-        roomManager.disconnectRoom(courtRoomRefRef.current.id);
-      }
-    };
-  }, [isJudge, user]);
-
-  const initializeInstantCourt = async () => {
+  const initializeInstantCourt = useCallback(async () => {
     if (isInitializing) return;
     setIsInitializing(true);
 
@@ -69,7 +57,19 @@ export default function TrollCourtSession() {
     } finally {
       setIsInitializing(false);
     }
-  };
+  }, [isInitializing, currentUser.id, currentUser.name, currentUser.role]);
+
+  useEffect(() => {
+    if (isJudge) {
+      initializeInstantCourt();
+    }
+
+    return () => {
+      if (courtRoomRefRef.current) {
+        roomManager.disconnectRoom(courtRoomRefRef.current.id);
+      }
+    };
+  }, [isJudge, user, initializeInstantCourt]);
 
   const handleSendChat = () => {
     if (chatInput.trim()) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Download, Filter, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
@@ -20,41 +20,7 @@ export default function ReferralBonusPanel() {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [months, setMonths] = useState<string[]>([])
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      // Get all unique months from bonuses
-      const { data: bonusesData } = await supabase
-        .from('referral_monthly_bonus')
-        .select('month')
-        .order('month', { ascending: false })
-
-      const uniqueMonths = Array.from(
-        new Set((bonusesData || []).map((b: any) => b.month))
-      ) as string[]
-      setMonths(uniqueMonths)
-
-      // Set current month as default
-      const now = new Date()
-      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-      if (!selectedMonth) {
-        setSelectedMonth(currentMonth)
-      }
-
-      await loadReferralData(selectedMonth || currentMonth)
-    } catch (error: any) {
-      console.error('Error loading data:', error)
-      toast.error('Failed to load referral data')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadReferralData = async (month: string) => {
+  const loadReferralData = useCallback(async (month: string) => {
     try {
       // Get all referrals with user info
       const { data: allReferrals, error: referralsError } = await supabase
@@ -117,7 +83,41 @@ export default function ReferralBonusPanel() {
       console.error('Error loading referral data:', error)
       toast.error('Failed to load referral data')
     }
-  }
+  }, [])
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      // Get all unique months from bonuses
+      const { data: bonusesData } = await supabase
+        .from('referral_monthly_bonus')
+        .select('month')
+        .order('month', { ascending: false })
+
+      const uniqueMonths = Array.from(
+        new Set((bonusesData || []).map((b: any) => b.month))
+      ) as string[]
+      setMonths(uniqueMonths)
+
+      // Set current month as default
+      const now = new Date()
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      if (!selectedMonth) {
+        setSelectedMonth(currentMonth)
+      }
+
+      await loadReferralData(selectedMonth || currentMonth)
+    } catch (error: any) {
+      console.error('Error loading data:', error)
+      toast.error('Failed to load referral data')
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedMonth, loadReferralData])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const handleMonthChange = (month: string) => {
     setSelectedMonth(month)
@@ -272,7 +272,7 @@ export default function ReferralBonusPanel() {
                   </td>
                 </tr>
               ) : (
-                referrals.map((ref, idx) => (
+                referrals.map((ref) => (
                   <tr key={`${ref.recruiter_id}-${ref.referred_user_id}`} className="border-t border-[#2C2C2C] hover:bg-[#1A1A1A]">
                     <td className="py-3 px-4">{ref.recruiter_username}</td>
                     <td className="py-3 px-4">{ref.referred_username}</td>
@@ -322,4 +322,3 @@ export default function ReferralBonusPanel() {
     </div>
   )
 }
-

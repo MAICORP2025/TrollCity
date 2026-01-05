@@ -44,7 +44,6 @@ async function runTest() {
         username: `tester_${Date.now()}`,
         role: 'troll',
         troll_coins: 0,
-        troll_coins: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })

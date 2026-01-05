@@ -21,67 +21,39 @@ export default function VideoFeed({ room, isHost = false }: VideoFeedProps) {
   useEffect(() => {
     if (!room) return
 
-    let published = false
-
     /* ===============================
-       HOST: PUBLISH LOCAL TRACKS
+       HOST: HANDLE LOCAL TRACKS
     =============================== */
-    const publishLocalTracks = async () => {
-      if (!isHost || published) return
-
-      try {
-        const permissions =
-          (room.localParticipant as any)?.permissions ||
-          (room.localParticipant as any)?.participantInfo?.permissions
-
-        if (permissions?.canPublish === false) {
-          console.warn('[LiveKit] Token blocks publishing')
-          return
-        }
-
-        const alreadyPublishing =
-          room.localParticipant.videoTrackPublications.size > 0 ||
-          room.localParticipant.audioTrackPublications.size > 0
-
-        if (alreadyPublishing) {
-          published = true
-          // ✅ Attach existing video track if available
-          const videoTrackPub = Array.from(room.localParticipant.videoTrackPublications.values())[0];
-          if (videoTrackPub && videoTrackPub.track && localVideoRef.current) {
-             videoTrackPub.track.attach(localVideoRef.current);
-             localVideoRef.current.muted = true;
-             localVideoRef.current.playsInline = true;
-             await localVideoRef.current.play().catch(() => {});
-          }
-          return
-        }
-
-        const [videoTrack, audioTrack] = await Promise.all([
-          createLocalVideoTrack({
-            resolution: { width: 1280, height: 720 },
-          }),
-          createLocalAudioTrack(),
-        ])
-
-        await room.localParticipant.publishTrack(videoTrack)
-        await room.localParticipant.publishTrack(audioTrack)
-
-        published = true
-
-        if (localVideoRef.current) {
-          videoTrack.attach(localVideoRef.current)
-          localVideoRef.current.muted = true
-          localVideoRef.current.playsInline = true
-          await localVideoRef.current.play().catch(() => {})
-        }
-      } catch (err) {
-        console.error('[LiveKit] Publish failed:', err)
+    const handleLocalTrackPublished = (
+      publication: TrackPublication,
+      participant: Participant
+    ) => {
+      if (!isHost || !localVideoRef.current) return
+      
+      if (publication.kind === 'video' && publication.track) {
+        console.log('[VideoFeed] Attaching local video track')
+        publication.track.attach(localVideoRef.current)
+        localVideoRef.current.muted = true
+        localVideoRef.current.playsInline = true
+        localVideoRef.current.play().catch(console.error)
       }
     }
 
+    // 1. Check if tracks are ALREADY published (e.g. by useLiveKitSession)
+    if (isHost && room.localParticipant) {
+       const videoTrackPub = Array.from(room.localParticipant.videoTrackPublications.values())[0];
+       if (videoTrackPub && videoTrackPub.track && localVideoRef.current) {
+          console.log('[VideoFeed] Found existing local video track, attaching...')
+          videoTrackPub.track.attach(localVideoRef.current);
+          localVideoRef.current.muted = true;
+          localVideoRef.current.playsInline = true;
+          localVideoRef.current.play().catch(() => {});
+       }
+    }
+
+    // 2. Listen for future track publishing
     if (isHost) {
-      if (room.state === 'connected') publishLocalTracks()
-      else room.once(RoomEvent.Connected, publishLocalTracks)
+      room.on(RoomEvent.LocalTrackPublished, handleLocalTrackPublished)
     }
 
     /* ===============================
@@ -102,7 +74,8 @@ export default function VideoFeed({ room, isHost = false }: VideoFeedProps) {
       }
 
       if (track.kind === Track.Kind.Audio) {
-        track.attach()
+        const el = track.attach()
+        remoteContainerRef.current.appendChild(el)
       }
     }
 
@@ -112,6 +85,15 @@ export default function VideoFeed({ room, isHost = false }: VideoFeedProps) {
 
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
     room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
+
+    // Handle existing remote tracks (in case we joined before mounting or missed events)
+    room.remoteParticipants.forEach((participant) => {
+      participant.trackPublications.forEach((publication) => {
+        if (publication.track && publication.isSubscribed) {
+          handleTrackSubscribed(publication.track, publication, participant)
+        }
+      })
+    })
 
     return () => {
       room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
@@ -127,7 +109,8 @@ export default function VideoFeed({ room, isHost = false }: VideoFeedProps) {
           autoPlay
           muted
           playsInline
-          className="absolute inset-0 w-full h-full object-cover z-10"
+          className="absolute inset-0 w-full h-full object-cover z-10 scale-x-[-1]"
+          style={{ transform: 'scaleX(-1)' }}
         />
       )}
 

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { Phone, PhoneOff, Video } from 'lucide-react';
-import { useAuthStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
 
 interface IncomingCallPopupProps {
@@ -25,17 +24,20 @@ export default function IncomingCallPopup({
   onDecline,
 }: IncomingCallPopupProps) {
   const navigate = useNavigate();
-  const { profile } = useAuthStore();
+  // const [isMinimized, setIsMinimized] = React.useState(false);
+  // const { profile } = useAuthStore();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
 
+    const audioEl = audioRef.current;
+
     // Play ringtone
-    if (audioRef.current) {
-      audioRef.current.loop = true;
-      audioRef.current.play().catch(console.error);
+    if (audioEl) {
+      audioEl.loop = true;
+      audioEl.play().catch(console.error);
     }
 
     // Auto-decline after 20 seconds
@@ -44,9 +46,9 @@ export default function IncomingCallPopup({
     }, 20000);
 
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.currentTime = 0;
       }
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);

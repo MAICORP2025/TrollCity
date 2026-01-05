@@ -1,8 +1,7 @@
 // Hook for profile view payment checking
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
-import { supabase } from '../lib/supabase'
 import { checkProfileViewPayment, chargeProfileView, redirectToStore } from '../lib/profileViewPayment'
 import { toast } from 'sonner'
 
@@ -17,7 +16,7 @@ export function useProfileViewPayment({
   profileViewPrice,
   onPaymentComplete
 }: UseProfileViewPaymentOptions) {
-  const { user, profile } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
   const [checking, setChecking] = useState(true)
   const [canView, setCanView] = useState(false)

@@ -12,6 +12,7 @@ interface ClickableUsernameProps {
    prefix?: string // like '@'
    onClick?: () => void
    profile?: {
+     id?: string
      is_troll_officer?: boolean
      is_admin?: boolean
      is_troller?: boolean
@@ -21,6 +22,7 @@ interface ClickableUsernameProps {
      troller_level?: number
      role?: string
      empire_role?: string | null
+     rgb_username_expires_at?: string
    }
    royalTitle?: {
      title_type: string
@@ -42,16 +44,25 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   const usernameRef = useRef<HTMLSpanElement>(null)
   const targetUserId = userId || profile?.id
 
+  // Use profile prop directly (parent component should fetch and pass it)
+  const userProfile = profile
+
   useEffect(() => {
     if (!targetUserId || !usernameRef.current) {
       return
     }
-    applyGlowingUsername(usernameRef.current, targetUserId)
-  }, [targetUserId, username])
+    
+    // Check profile prop first for instant RGB feedback
+    const el = usernameRef.current
+    const hasRgb = userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > new Date()
+    if (hasRgb) {
+      el.classList.add('rgb-username')
+    } else {
+      el.classList.remove('rgb-username')
+      applyGlowingUsername(el, targetUserId)
+    }
+  }, [targetUserId, username, userProfile])
   
-  // Use profile prop directly (parent component should fetch and pass it)
-  const userProfile = profile
-
   // Determine admin, officer, and troller status from profile
   const isAdmin = userProfile?.is_admin || userProfile?.role === 'admin'
   const isOfficer = !isAdmin && (
@@ -90,8 +101,14 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     try {
       if (onClick) {
         onClick()
+        return
       }
-      navigate(`/profile/${encodeURIComponent(username)}`)
+      
+      if (userId) {
+        navigate(`/profile/id/${userId}`)
+      } else {
+        navigate(`/profile/${encodeURIComponent(username)}`)
+      }
     } catch (error) {
       console.error('Error navigating to profile:', error)
     }

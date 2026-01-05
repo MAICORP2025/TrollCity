@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar,
-  Users,
   Trophy,
   Gift,
   Play,
@@ -56,8 +55,8 @@ interface EventFormData {
   end_time: string;
   global_announcement: boolean;
   is_active: boolean;
-  event_config: Record<string, any>;
-  rewards_config: Record<string, any>;
+  event_config: Record<string, unknown>;
+  rewards_config: Record<string, unknown>;
 }
 
 const buildEventFormData = (event?: CityEvent | null): EventFormData => {
@@ -99,11 +98,7 @@ export default function CityEventsManager() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CityEvent | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -137,9 +132,13 @@ export default function CityEventsManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
 
-  const createEvent = async (eventData: any) => {
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const createEvent = async (eventData: EventFormData) => {
     try {
       await supabase.rpc('create_city_event', {
         p_event_type: eventData.event_type,
@@ -158,6 +157,31 @@ export default function CityEventsManager() {
     } catch (error) {
       console.error('Error creating event:', error);
       alert('Error creating event. Please try again.');
+    }
+  };
+
+  const updateEvent = async (eventData: EventFormData) => {
+    try {
+      if (!editingEvent) return;
+      await supabase
+        .from('city_events')
+        .update({
+          event_type: eventData.event_type,
+          title: eventData.title,
+          description: eventData.description,
+          start_time: eventData.start_time,
+          end_time: eventData.end_time,
+          global_announcement: eventData.global_announcement,
+          is_active: eventData.is_active,
+        })
+        .eq('id', editingEvent.id);
+
+      await loadData();
+      setShowCreateModal(false);
+      setEditingEvent(null);
+    } catch (error) {
+      console.error('Error updating event:', error);
+      alert('Error updating event. Please try again.');
     }
   };
 
@@ -461,7 +485,7 @@ export default function CityEventsManager() {
             <EventModal
               key={editingEvent?.id ?? 'create'}
               event={editingEvent}
-              onSave={editingEvent ? (data) => updateEventStatus(editingEvent.id, data.is_active) : createEvent}
+              onSave={editingEvent ? updateEvent : createEvent}
               onClose={() => {
                 setShowCreateModal(false);
                 setEditingEvent(null);

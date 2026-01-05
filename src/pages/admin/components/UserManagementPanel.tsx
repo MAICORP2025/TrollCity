@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
 import { User, Coins, Award, Shield, Save, X, Search } from 'lucide-react'
+import ClickableUsername from '../../../components/ClickableUsername'
 
 interface UserProfile {
   id: string
@@ -16,6 +17,7 @@ interface UserProfile {
   is_admin: boolean
   is_troller: boolean
   created_at: string
+  updated_at?: string
 }
 
 interface UserManagementPanelProps {
@@ -37,9 +39,9 @@ export default function UserManagementPanel({
   const [editingRole, setEditingRole] = useState('user')
   const [saving, setSaving] = useState(false)
 
-  const canViewEmails = adminProfile?.role === 'admin' || (adminProfile as any)?.is_admin === true
+  const canViewEmails = adminProfile?.role === 'admin' || adminProfile?.is_admin === true
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true)
     try {
       const selectFields = canViewEmails
@@ -48,20 +50,20 @@ export default function UserManagementPanel({
 
       const { data, error } = await supabase
         .from('user_profiles')
-        // supabase-js types can't infer dynamic select strings; cast to keep runtime behavior.
-        .select(selectFields as any)
+        // supabase-js types can't infer dynamic select strings; using explicit return type cast below
+        .select(selectFields)
         .order('created_at', { ascending: false })
         .limit(100)
 
       if (error) throw error
-      setUsers((data as any) || [])
-    } catch (error: any) {
+      setUsers((data as unknown as UserProfile[]) || [])
+    } catch (error: unknown) {
       console.error('Error loading users:', error)
       toast.error('Failed to load users')
     } finally {
       setLoading(false)
     }
-  }
+  }, [canViewEmails])
 
   useEffect(() => {
     loadUsers()
@@ -77,7 +79,7 @@ export default function UserManagementPanel({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [loadUsers])
 
   const handleEditUser = (user: UserProfile) => {
     setSelectedUser(user)
@@ -100,7 +102,7 @@ export default function UserManagementPanel({
 
     setSaving(true)
     try {
-      const updates: any = {
+      const updates: Partial<UserProfile> = {
         troll_coins: editingCoins.paid,
         free_coin_balance: editingCoins.free,
         level: editingLevel,
@@ -157,9 +159,9 @@ export default function UserManagementPanel({
       toast.success('User updated successfully')
       setSelectedUser(null)
       loadUsers()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating user:', error)
-      toast.error(error?.message || 'Failed to update user')
+      toast.error((error as Error)?.message || 'Failed to update user')
     } finally {
       setSaving(false)
     }
@@ -225,7 +227,14 @@ export default function UserManagementPanel({
             <tbody>
               {filteredUsers.map((user) => (
                 <tr key={user.id} className="border-b border-gray-800 hover:bg-gray-900/50">
-                  <td className="py-3 text-white">{user.username}</td>
+                  <td className="py-3 text-white">
+                    <ClickableUsername 
+                      username={user.username} 
+                      userId={user.id} 
+                      profile={user}
+                      className="text-white hover:text-purple-400"
+                    />
+                  </td>
                   {canViewEmails && (
                     <td className="py-3 text-gray-400 text-sm">{user.email}</td>
                   )}

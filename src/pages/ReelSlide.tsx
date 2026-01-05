@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import ReelActions from "./ReelActions";
 import ReelCommentsOverlay from "../components/ReelCommentsOverlay";
 import { supabase } from "../lib/supabase";
@@ -12,20 +12,7 @@ const ReelSlide: React.FC<{ post: any; isActive: boolean }> = ({
   const [showComments, setShowComments] = useState(false);
   const { user } = useAuthStore();
 
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isActive) {
-        videoRef.current.play().catch(() => {});
-        // Record view and trigger earnings when reel becomes active
-        recordView(post.id);
-        triggerEarnings(post.id);
-      } else {
-        videoRef.current.pause();
-      }
-    }
-  }, [isActive, post.id]);
-
-  const recordView = async (postId: string) => {
+  const recordView = useCallback(async (postId: string) => {
     if (!user) return;
 
     try {
@@ -40,21 +27,31 @@ const ReelSlide: React.FC<{ post: any; isActive: boolean }> = ({
     } catch (err) {
       console.warn("Failed to record view:", err);
     }
-  };
+  }, [user]);
 
-  const triggerEarnings = async (postId: string) => {
+  const triggerEarnings = useCallback(async (postId: string) => {
     try {
       const { error } = await supabase.functions.invoke("calc_post_earnings", {
         body: { postId },
       });
-
-      if (error) {
-        console.warn("Error calculating earnings:", error);
-      }
+      if (error) console.error("Earnings error:", error);
     } catch (err) {
-      console.warn("Failed to trigger earnings:", err);
+      console.error("Earnings error:", err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isActive) {
+        videoRef.current.play().catch(() => {});
+        // Record view and trigger earnings when reel becomes active
+        recordView(post.id);
+        triggerEarnings(post.id);
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isActive, post.id, recordView, triggerEarnings]);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">

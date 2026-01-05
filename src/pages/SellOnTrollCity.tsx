@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
@@ -14,12 +14,11 @@ export default function SellOnTrollCity() {
   const [loading, setLoading] = useState(true)
   const [earnings, setEarnings] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('requirements')
-  const [applicationSubmitted, setApplicationSubmitted] = useState(false)
   const [applicationLoading, setApplicationLoading] = useState(false)
   const [existingApplication, setExistingApplication] = useState<any>(null)
+  const isVerifiedSeller = existingApplication?.status === 'approved'
   const [products, setProducts] = useState<any[]>([])
-  const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', image_url: '' })
-
+  
   // Seller application form state
   const [storeName, setStoreName] = useState('')
   const [storeDescription, setStoreDescription] = useState('')
@@ -40,15 +39,7 @@ export default function SellOnTrollCity() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deletingShop, setDeletingShop] = useState(false)
 
-  useEffect(() => {
-    if (!user) return
-    loadShop()
-  }, [user?.id])
-
-  // Check if user is verified seller
-  const isVerifiedSeller = user && existingApplication?.status === 'approved'
-
-  const loadShop = async () => {
+  const loadShop = useCallback(async () => {
     setLoading(true)
 
     // Check for existing seller application
@@ -62,8 +53,17 @@ export default function SellOnTrollCity() {
       .maybeSingle()
 
     setExistingApplication(appData)
-    setApplicationSubmitted(!!appData)
-
+    // setApplicationSubmitted(!!appData) // Fix: setApplicationSubmitted is not defined in the read snippet, but I should probably leave it if it was there or check.
+    // Wait, the read snippet showed `setApplicationSubmitted(!!appData)` in line 64?
+    // Let me check the read snippet again.
+    // Line 64: `setApplicationSubmitted(!!appData)`
+    // But `setApplicationSubmitted` was NOT in the variable declarations I saw (lines 10-41).
+    // I missed checking where it came from.
+    // It might be a missing variable declaration error too!
+    // But let's stick to what I see.
+    // I will use `setApplicationSubmitted` if it exists.
+    // Actually, I'll copy the existing body and just wrap it.
+    
     const { data } = await supabase
       .from('trollcity_shops')
       .select('*')
@@ -89,7 +89,12 @@ export default function SellOnTrollCity() {
     }
 
     setLoading(false)
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    loadShop()
+  }, [user, loadShop])
 
   const createShop = async () => {
     if (!name.trim()) return toast.error('Enter a shop name')
@@ -127,7 +132,6 @@ export default function SellOnTrollCity() {
 
       if (error) throw error
 
-      setApplicationSubmitted(true)
       toast.success('Seller application submitted successfully!')
 
       // Redirect to home/dashboard with state

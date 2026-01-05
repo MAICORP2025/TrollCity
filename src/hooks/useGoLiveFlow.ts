@@ -1,7 +1,7 @@
 import { useCallback, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
-import { ConnectionState, Room, RoomEvent, ParticipantEvent, Track } from 'livekit-client'
+import { ConnectionState, Room, RoomEvent, Track } from 'livekit-client'
 import { toast } from 'sonner'
 import { getLiveKitToken, type LiveKitTokenResponse } from '../lib/livekit-utils'
 

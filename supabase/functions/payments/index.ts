@@ -1,7 +1,7 @@
 // Payments Edge Function - Square Status Check & Card Saving
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { withCors, handleCorsPreflight, corsHeaders } from '../_shared/cors.ts'
+import { withCors, handleCorsPreflight } from '../_shared/cors.ts'
 
 /**
  * Handle saving Square card to user_payment_methods table
@@ -264,7 +264,6 @@ Deno.serve(async (req: Request) => {
     
     const SQUARE_ACCESS_TOKEN = Deno.env.get('SQUARE_ACCESS_TOKEN')
     const SQUARE_APPLICATION_ID = Deno.env.get('SQUARE_APPLICATION_ID')
-    const SQUARE_APPLICATION_SECRET = Deno.env.get('SQUARE_APPLICATION_SECRET')
     const SQUARE_LOCATION_ID = Deno.env.get('SQUARE_LOCATION_ID')
     const SQUARE_ENVIRONMENT = Deno.env.get('SQUARE_ENVIRONMENT') || 'production'
     

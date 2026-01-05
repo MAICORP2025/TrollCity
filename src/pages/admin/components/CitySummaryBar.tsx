@@ -26,10 +26,9 @@ interface CitySummaryBarProps {
     kick_ban_revenue: number
   }
   liveStreamsCount: number
-  economySummary: any
 }
 
-export default function CitySummaryBar({ stats, liveStreamsCount, economySummary }: CitySummaryBarProps) {
+export default function CitySummaryBar({ stats, liveStreamsCount }: CitySummaryBarProps) {
   const summaryItems = [
     {
       label: 'Total Citizens',

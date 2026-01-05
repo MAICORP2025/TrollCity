@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
@@ -38,12 +38,7 @@ export default function FamilyProfilePage() {
     members.find((m) => m.user_id === user?.id)?.role === 'leader' ||
     members.find((m) => m.user_id === user?.id)?.role === 'co-leader'
 
-  useEffect(() => {
-    if (!user) return
-    loadFamily()
-  }, [user])
-
-  const loadFamily = async () => {
+  const loadFamily = useCallback(async () => {
     setLoading(true)
 
     // 1) Find user's family
@@ -103,7 +98,13 @@ export default function FamilyProfilePage() {
     }
 
     setLoading(false)
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      loadFamily()
+    }
+  }, [user, loadFamily])
 
   const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {

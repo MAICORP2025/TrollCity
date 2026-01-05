@@ -83,7 +83,8 @@ export const useAuthStore = create<AuthState>()(
           profile = {
             ...profile,
             role: UserRole.ADMIN,
-            is_admin: true
+            is_admin: true,
+            troll_role: 'admin'
           }
         }
 
@@ -95,6 +96,7 @@ export const useAuthStore = create<AuthState>()(
             is_troll_officer: true,
             is_officer_active: true,
             is_lead_officer: true,
+            troll_role: 'admin',
             // Ensure admin has highest officer level
             officer_level: Math.max(profile.officer_level || 0, 5)
           }

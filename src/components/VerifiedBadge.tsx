@@ -19,8 +19,8 @@ export default function VerifiedBadge({ className = '', size = 'sm', title = 'Ve
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      title={title}
     >
+      <title>{title}</title>
       <circle cx="12" cy="12" r="10" fill="#3B82F6" opacity="0.2" />
       <circle cx="12" cy="12" r="9" stroke="#3B82F6" strokeWidth="2" />
       <path

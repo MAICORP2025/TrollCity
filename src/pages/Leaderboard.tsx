@@ -14,7 +14,7 @@ export default function Leaderboard() {
       try {
         const { data: users } = await supabase
           .from('user_profiles')
-          .select('id, username, total_earned_coins, troll_coins')
+          .select('id, username, total_earned_coins, troll_coins, rgb_username_expires_at')
           .order('total_earned_coins', { ascending: false })
           .limit(50) // Get more to filter
 
@@ -81,7 +81,12 @@ export default function Leaderboard() {
                   <div key={u.id} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <span className="text-gray-400">{i+1}.</span>
-                      <ClickableUsername username={u.username} className="text-white" />
+                      <ClickableUsername 
+                        username={u.username} 
+                        userId={u.id} 
+                        profile={u}
+                        className="text-white" 
+                      />
                     </div>
                     <div className="flex items-center gap-1 text-yellow-300"><Coins className="w-4 h-4" /> {u.total_earned_coins || 0}</div>
                   </div>

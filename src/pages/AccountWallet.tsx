@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import api from '../lib/api';
 import { useAuthStore } from '../lib/store';
@@ -14,12 +14,8 @@ export default function AccountWallet() {
   const [loading, setLoading] = useState(false);
 
   // Fetch saved cards on load
-  useEffect(() => {
+  const fetchSavedCards = useCallback(async () => {
     if (!user) return;
-    fetchSavedCards();
-  }, [user]);
-
-  const fetchSavedCards = async () => {
     const { data, error } = await supabase
       .from('user_payment_methods')
       .select('id, provider, display_name, brand, last4, is_default, created_at')
@@ -32,7 +28,11 @@ export default function AccountWallet() {
     } else {
       setSavedMethods(data || []);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    fetchSavedCards();
+  }, [fetchSavedCards]);
 
   const handleRemove = async (id: string) => {
     if (!user) return

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
@@ -9,7 +9,6 @@ import {
   FileText,
   AlertTriangle,
   TrendingUp,
-  Bell,
   LogOut,
   Menu,
   X
@@ -45,26 +44,17 @@ export default function MobileAdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  useEffect(() => {
-    // Check admin access
-    if (!user) {
-      navigate('/auth')
-      return
-    }
+  // Currency formatter
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
 
-    // Check admin access - support both is_admin field and role = 'admin'
-    const isAdmin = profile?.role === 'admin' || (profile as any)?.is_admin === true
-    if (!isAdmin) {
-      toast.error('Access Denied: Admins Only 🔒')
-      navigate('/')
-      return
-    }
-
-    loadStats()
-    setupRealtime()
-  }, [user, profile, navigate])
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     setLoading(true)
     try {
       // Total Payout Liability (pending + approved)
@@ -146,15 +136,15 @@ export default function MobileAdminDashboard() {
         newApplications: newAppsData?.length || 0,
         newReports: newReportsData?.length || 0
       })
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading stats:', error)
       toast.error('Failed to load dashboard stats')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const setupRealtime = () => {
+  const setupRealtime = useCallback(() => {
     // Real-time updates for payouts
     const payoutChannel = supabase
       .channel('admin_payouts_mobile')
@@ -187,21 +177,33 @@ export default function MobileAdminDashboard() {
       supabase.removeChannel(appChannel)
       supabase.removeChannel(reportChannel)
     }
-  }
+  }, [loadStats])
+
+  useEffect(() => {
+    // Check admin access
+    if (!user) {
+      navigate('/auth')
+      return
+    }
+
+    // Check admin access - support both is_admin field and role = 'admin'
+    const isAdmin = profile?.role === 'admin' || (profile && 'is_admin' in profile && (profile as { is_admin: boolean }).is_admin === true)
+    if (!isAdmin) {
+      toast.error('Access Denied: Admins Only 🔒')
+      navigate('/')
+      return
+    }
+
+    loadStats()
+    setupRealtime()
+  }, [user, profile, navigate, loadStats, setupRealtime])
 
   const handleLogout = async () => {
     await logout()
     navigate('/auth')
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount)
-  }
+ 
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -405,11 +407,7 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
   const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    loadApplications()
-  }, [])
-
-  const loadApplications = async () => {
+  const loadApplications = useCallback(async () => {
     setLoading(true)
     try {
       // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
@@ -446,13 +444,32 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
           user_profiles: profileMap.get(a.user_id) || null,
         })),
       )
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading applications:', error)
       toast.error('Failed to load applications')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadApplications()
+
+    const channel = supabase
+      .channel('mobile_applications_list')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'broadcaster_applications' },
+        () => {
+          loadApplications()
+          onStatsUpdate()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [loadApplications, onStatsUpdate])
 
   return (
     <div className="space-y-3 mt-4">
@@ -494,15 +511,26 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
   )
 }
 
+interface Payout {
+  id: string
+  user_id: string
+  amount: number
+  net_amount?: number
+  cash_amount?: number
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  coins_used?: number
+  user_profiles?: {
+    username: string
+    email: string
+  } | null
+}
+
 function MobilePayoutQueue({ onStatsUpdate }: { onStatsUpdate: () => void }) {
-  const [payouts, setPayouts] = useState<any[]>([])
+  const [payouts, setPayouts] = useState<Payout[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    loadPayouts()
-  }, [])
-
-  const loadPayouts = async () => {
+  const loadPayouts = useCallback(async () => {
     setLoading(true)
     try {
       // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
@@ -515,12 +543,12 @@ function MobilePayoutQueue({ onStatsUpdate }: { onStatsUpdate: () => void }) {
 
       if (error) throw error
 
-      const raw = data || []
+      const raw = (data || []) as Payout[]
       const userIds = Array.from(
-        new Set(raw.map((p: any) => p.user_id).filter((id: any) => typeof id === 'string' && id.length > 0)),
+        new Set(raw.map((p) => p.user_id).filter((id) => typeof id === 'string' && id.length > 0)),
       )
 
-      const profileMap = new Map<string, any>()
+      const profileMap = new Map<string, { id: string; username: string; email: string }>()
       if (userIds.length) {
         const { data: profiles, error: profErr } = await supabase
           .from('user_profiles')
@@ -530,23 +558,42 @@ function MobilePayoutQueue({ onStatsUpdate }: { onStatsUpdate: () => void }) {
         if (profErr) {
           console.warn('Failed to hydrate user profiles (non-fatal):', profErr)
         } else {
-          ;(profiles || []).forEach((p: any) => profileMap.set(p.id, p))
+          ;(profiles || []).forEach((p) => profileMap.set(p.id, p))
         }
       }
 
       setPayouts(
-        raw.map((p: any) => ({
+        raw.map((p) => ({
           ...p,
           user_profiles: profileMap.get(p.user_id) || null,
         })),
       )
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading payouts:', error)
       toast.error('Failed to load payouts')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadPayouts()
+
+    const channel = supabase
+      .channel('mobile_payouts_queue')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'payout_requests' },
+        () => {
+          loadPayouts()
+          onStatsUpdate()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [loadPayouts, onStatsUpdate])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -600,11 +647,7 @@ function MobileFlaggedReports({ onStatsUpdate }: { onStatsUpdate: () => void }) 
   const [reports, setReports] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    loadReports()
-  }, [])
-
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     setLoading(true)
     try {
       const { data, error } = await supabase
@@ -616,13 +659,32 @@ function MobileFlaggedReports({ onStatsUpdate }: { onStatsUpdate: () => void }) 
 
       if (error) throw error
       setReports(data || [])
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading reports:', error)
       toast.error('Failed to load reports')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadReports()
+
+    const channel = supabase
+      .channel('mobile_reports_list')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'stream_reports' },
+        () => {
+          loadReports()
+          onStatsUpdate()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [loadReports, onStatsUpdate])
 
   return (
     <div className="space-y-3 mt-4">
@@ -668,11 +730,7 @@ function MobileEarningsTax({ onStatsUpdate }: { onStatsUpdate: () => void }) {
   const [irsUsers, setIrsUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    loadIRSUsers()
-  }, [])
-
-  const loadIRSUsers = async () => {
+  const loadIRSUsers = useCallback(async () => {
     setLoading(true)
     try {
       // Get creators over $600 threshold
@@ -704,13 +762,32 @@ function MobileEarningsTax({ onStatsUpdate }: { onStatsUpdate: () => void }) {
         username: profileMap.get(id) || 'Unknown',
         total_earnings: total
       })))
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading IRS users:', error)
       toast.error('Failed to load IRS risk users')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadIRSUsers()
+
+    const channel = supabase
+      .channel('mobile_earnings_tax')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'broadcaster_earnings' },
+        () => {
+          loadIRSUsers()
+          onStatsUpdate()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [loadIRSUsers, onStatsUpdate])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {

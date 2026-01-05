@@ -259,7 +259,7 @@ Supabase Dashboard → Database → Logs:
    - Verify sandbox/production mode correct
    - Check payment processing
 
-4. **Agora Tokens**
+4. **LiveKit Tokens**
    - Start test stream
    - Verify RTC token generated
    - Check stream quality

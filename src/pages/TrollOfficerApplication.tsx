@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuthStore } from '../lib/store'
 import { Trophy, Crown, Users, Star, Map } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -11,7 +10,6 @@ interface FamilyRow {
 }
 
 export default function TrollFamilyCity() {
-  const { user } = useAuthStore()
   const navigate = useNavigate()
   const [rows, setRows] = useState<FamilyRow[]>([])
   const [loading, setLoading] = useState(true)

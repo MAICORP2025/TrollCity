@@ -243,7 +243,7 @@ export default function CreatorOnboarding() {
             <select
               required
               value={formData.tax_classification}
-              onChange={(e) => setFormData({ ...formData, tax_classification: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, tax_classification: e.target.value as 'individual' | 'business' })}
               className="w-full px-4 py-2 bg-[#0A0814] border border-[#2C2C2C] rounded-lg focus:outline-none focus:border-purple-500"
             >
               <option value="individual">Individual</option>

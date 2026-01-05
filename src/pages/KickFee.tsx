@@ -1,10 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, CreditCard, Home } from "lucide-react";
-import { useState } from "react";
 
 export default function KickFee() {
   const navigate = useNavigate();
-  const [paymentMethod, setPaymentMethod] = useState<"coins" | "paypal" | null>(null);
   const kickCount = localStorage.getItem("kickCount") ? parseInt(localStorage.getItem("kickCount")!) : 0;
   const reinstatementFee = 500 + kickCount * 500;
 

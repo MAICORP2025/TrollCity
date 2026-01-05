@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { 
-  Shield, AlertTriangle, Eye, EyeOff, Ban, 
-  CheckCircle, XCircle, Clock, Filter, Search
+  Shield, AlertTriangle, Eye, 
+  CheckCircle, XCircle, Clock, Search
 } from 'lucide-react'
 import { ModerationReport } from '../types/moderation'
 import ReportDetailsModal from '../components/ReportDetailsModal'
@@ -22,6 +22,29 @@ export default function OfficerModeration() {
 
   const isAdmin = profile?.is_admin || profile?.role === 'admin' || (user?.email && isAdminEmail(user.email))
   const isOfficer = profile?.is_troll_officer || profile?.role === 'troll_officer'
+
+  const loadReports = useCallback(async () => {
+    if (!profile) return
+
+    setLoading(true)
+    try {
+      const response = await api.post('/moderation', {
+        action: 'list_reports',
+        status_filter: statusFilter === 'all' ? null : statusFilter
+      })
+
+      if (response.success) {
+        setReports(response.reports || [])
+      } else {
+        toast.error(response.error || 'Failed to load reports')
+      }
+    } catch (err: any) {
+      console.error('Error loading reports:', err)
+      toast.error('Failed to load reports')
+    } finally {
+      setLoading(false)
+    }
+  }, [profile, statusFilter])
 
   useEffect(() => {
     if (!profile || (!isOfficer && !isAdmin)) {
@@ -47,30 +70,7 @@ export default function OfficerModeration() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [profile, navigate, statusFilter])
-
-  const loadReports = async () => {
-    if (!profile) return
-
-    setLoading(true)
-    try {
-      const response = await api.post('/moderation', {
-        action: 'list_reports',
-        status_filter: statusFilter === 'all' ? null : statusFilter
-      })
-
-      if (response.success) {
-        setReports(response.reports || [])
-      } else {
-        toast.error(response.error || 'Failed to load reports')
-      }
-    } catch (err: any) {
-      console.error('Error loading reports:', err)
-      toast.error('Failed to load reports')
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [profile, navigate, isOfficer, isAdmin, loadReports])
 
   const filteredReports = reports.filter(report => {
     if (searchTerm) {

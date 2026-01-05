@@ -12,7 +12,6 @@ export default function BroadcasterBox({ broadcasterName, thumbnail }: Broadcast
     <Card className="bg-gray-800/50 border-gray-700 overflow-hidden">
       <div className="relative aspect-video bg-gradient-to-br from-green-500/20 to-purple-500/20">
         {thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={thumbnail} alt="Stream" className="w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">

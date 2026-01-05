@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
-import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
-import { CreditCard, RefreshCw, CheckCircle, XCircle, Search, Filter } from 'lucide-react'
+import { CreditCard, RefreshCw, Search } from 'lucide-react'
 
 interface PayPalTransaction {
   id: string
@@ -21,13 +20,12 @@ interface PayPalTransaction {
 }
 
 export default function PayPalPaymentsPanel() {
-  const { profile } = useAuthStore()
   const [transactions, setTransactions] = useState<PayPalTransaction[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>('all')
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     setLoading(true)
     try {
       let query = supabase
@@ -56,7 +54,7 @@ export default function PayPalPaymentsPanel() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter])
 
   useEffect(() => {
     loadTransactions()
@@ -72,7 +70,7 @@ export default function PayPalPaymentsPanel() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [statusFilter])
+  }, [loadTransactions])
 
   const handleVerifyTransaction = async (transactionId: string, orderId: string | null) => {
     if (!orderId) {

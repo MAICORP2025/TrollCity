@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users } from "lucide-react";
 
-type Guest = { name: string };
+type Guest = { name: string; rgb_username_expires_at?: string };
 
 interface ParticipantBoxesProps {
   guests: Guest[];
@@ -26,7 +26,14 @@ export default function ParticipantBoxes({ guests }: ParticipantBoxesProps) {
               <div className="aspect-video bg-gradient-to-br from-purple-500/20 to-green-500/20 rounded-lg flex items-center justify-center mb-2">
                 <Users className="w-12 h-12 text-gray-600" />
               </div>
-              <p className="text-sm font-semibold text-white text-center truncate">
+              <p
+                className={`text-sm font-semibold text-white text-center truncate ${
+                  guest.rgb_username_expires_at &&
+                  new Date(guest.rgb_username_expires_at) > new Date()
+                    ? "rgb-username font-bold"
+                    : ""
+                }`}
+              >
                 {guest.name}
               </p>
             </CardContent>

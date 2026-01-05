@@ -42,18 +42,20 @@ export function useGiftEvents(streamId?: string | null) {
       try {
         // Fetch sender username for display
         let senderUsername = 'Anonymous'
+        let senderAvatar = null
         const senderId = tableType === 'stream_gifts' ? gift.from_user_id : gift.sender_id
         
         if (senderId) {
           try {
             const { data: senderProfile } = await supabase
               .from('user_profiles')
-              .select('username')
+              .select('username, avatar_url')
               .eq('id', senderId)
               .single()
               
             if (senderProfile?.username) {
               senderUsername = senderProfile.username
+              senderAvatar = senderProfile.avatar_url
             }
           } catch (e) {
             console.warn('Failed to fetch sender username:', e)
@@ -68,6 +70,8 @@ export function useGiftEvents(streamId?: string | null) {
             : Number(gift.coins_spent || 0),
           name: gift.message || gift.gift_type || 'Gift',
           sender_username: senderUsername,
+          sender_id: senderId,
+          sender_avatar: senderAvatar,
           quantity: gift.quantity || 1,
           icon: getGiftIcon(gift.message || gift.gift_type || 'Gift'),
           ...gift

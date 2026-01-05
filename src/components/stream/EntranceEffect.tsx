@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
+import { UserBadge } from '../UserBadge'
 
 type UserRole = 'viewer' | 'troller' | 'officer' | 'vip' | 'donor'
 
@@ -32,6 +33,8 @@ export function FullScreenEntrance({ username, role, onComplete, profile: userPr
 
     return () => clearTimeout(timer)
   }, [onComplete])
+
+  const hasRgbUsername = userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > new Date()
 
   return (
     <AnimatePresence>
@@ -88,8 +91,8 @@ export function FullScreenEntrance({ username, role, onComplete, profile: userPr
                 </motion.div>
 
                 <motion.h3
-                  className="text-3xl font-bold mb-2 flex items-center justify-center gap-2"
-                  style={{ color: config.color }}
+                  className={`text-3xl font-bold mb-2 flex items-center justify-center gap-2 ${hasRgbUsername ? 'rgb-username' : ''}`}
+                  style={{ color: hasRgbUsername ? undefined : config.color }}
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.2 }}
@@ -148,7 +151,7 @@ export function FullScreenEntrance({ username, role, onComplete, profile: userPr
 }
 
 // Compact entrance banner (for chat panel)
-export default function EntranceBanner({ username, role, onComplete, profile }: EntranceEffectProps) {
+export default function EntranceBanner({ username, role, onComplete, profile: userProfile }: EntranceEffectProps) {
   const [visible, setVisible] = useState(true)
   const config = roleConfigs[role]
 
@@ -160,6 +163,8 @@ export default function EntranceBanner({ username, role, onComplete, profile }: 
 
     return () => clearTimeout(timer)
   }, [onComplete])
+
+  const hasRgbUsername = userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > new Date()
 
   return (
     <AnimatePresence>
@@ -191,7 +196,10 @@ export default function EntranceBanner({ username, role, onComplete, profile }: 
           >
             {config.emoji}
           </motion.span>
-          <span style={{ color: config.color }} className="font-semibold">
+          <span 
+            className={`font-semibold ${hasRgbUsername ? 'rgb-username' : ''}`}
+            style={{ color: hasRgbUsername ? undefined : config.color }} 
+          >
             {username}
             {userProfile && <UserBadge profile={userProfile} />}
           </span>{' '}

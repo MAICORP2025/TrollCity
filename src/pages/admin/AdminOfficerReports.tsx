@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
-import { FileText, Calendar, User, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
+import { FileText, Calendar, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
 import '../../styles/LeadOfficerDashboard.css'
 
@@ -35,7 +35,7 @@ function ReportBodyDisplay({ body }: { body: string }) {
         <Section title="💡 Recommendations" text={parsed.recommendations} />
       </div>
     );
-  } catch (error) {
+  } catch {
     // Fallback for malformed JSON
     return (
       <div className="rounded-xl border border-purple-700 bg-black/40 p-4 text-purple-100 whitespace-pre-wrap font-mono text-sm">
@@ -81,14 +81,14 @@ export default function AdminOfficerReports() {
 
       if (error) throw error
 
-      const transformed = (data || []).map((report: any) => ({
+      const transformed = (data || []).map((report) => ({
         ...report,
         lead_officer: Array.isArray(report.lead_officer) ? report.lead_officer[0] : report.lead_officer,
         incidents: Array.isArray(report.incidents) ? report.incidents : []
-      }))
+      })) as WeeklyReport[]
 
       setReports(transformed)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading reports:', error)
       toast.error('Failed to load reports')
     } finally {

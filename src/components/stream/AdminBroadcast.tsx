@@ -6,10 +6,9 @@ import { translateMessage } from '../../lib/translation'
 interface AdminBroadcastProps {
   message: string
   userLanguage?: string
-  onComplete?: () => void
 }
 
-export default function AdminBroadcast({ message, userLanguage = 'en', onComplete }: AdminBroadcastProps) {
+export default function AdminBroadcast({ message, userLanguage = 'en' }: AdminBroadcastProps) {
   const [translatedMessage, setTranslatedMessage] = useState(message)
 
   useEffect(() => {

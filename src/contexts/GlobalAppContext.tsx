@@ -20,13 +20,13 @@ interface GlobalAppProviderProps {
 }
 
 export const GlobalAppProvider: React.FC<GlobalAppProviderProps> = ({ children }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState('');
+  const [isLoading, _setIsLoading] = useState(false);
+  const [loadingMessage, _setLoadingMessage] = useState('');
   const [error, setErrorState] = useState<string | null>(null);
-  const [isReconnecting, setIsReconnecting] = useState(false);
-  const [reconnectMessage, setReconnectMessage] = useState('');
+  const [isReconnecting, _setIsReconnecting] = useState(false);
+  const [reconnectMessage, _setReconnectMessage] = useState('');
   const [retryAction, setRetryActionState] = useState<(() => void) | null>(null);
-  const [isStreamEnded, setIsStreamEndedState] = useState(false);
+  const [_isStreamEnded, setIsStreamEndedState] = useState(false);
 
   const setError = useCallback((message: string | null) => {
     setErrorState(message);
@@ -72,7 +72,8 @@ export const GlobalAppProvider: React.FC<GlobalAppProviderProps> = ({ children }
   );
 };
 
-export const useGlobalApp = (): GlobalAppContextType => {
+// eslint-disable-next-line react-refresh/only-export-components
+export const useGlobalApp = () => {
   const context = useContext(GlobalAppContext);
   if (context === undefined) {
     throw new Error('useGlobalApp must be used within a GlobalAppProvider');

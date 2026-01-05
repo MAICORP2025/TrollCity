@@ -107,7 +107,7 @@ export default function TermsAgreement() {
         } else {
           navigate('/home')
         }
-      } catch (e) {
+      } catch {
         navigate('/home')
       }
     } catch (err: any) {

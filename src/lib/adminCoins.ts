@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabase'
-import { ADMIN_EMAIL, isAdminEmail } from './supabase'
+import { isAdminEmail } from './supabase'
 import { recordCoinTransaction } from './coinTransactions'
 
 /**
@@ -195,7 +195,7 @@ export async function deductAdminCoins(
 export async function grantAdminLevels(
   targetUserId: string,
   levelAmount: number,
-  reason?: string
+  _reason?: string
 ): Promise<{ success: boolean; error?: string; newLevel?: number }> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
@@ -247,7 +247,7 @@ export async function grantAdminLevels(
 export async function deductAdminLevels(
   targetUserId: string,
   levelAmount: number,
-  reason?: string
+  _reason?: string
 ): Promise<{ success: boolean; error?: string; newLevel?: number }> {
   try {
     const { data: { user } } = await supabase.auth.getUser()

@@ -30,7 +30,7 @@ interface ChatMessage {
   }
 }
 
-export default function ChatOverlay({ streamId, compact = false }: ChatOverlayProps) {
+export default function ChatOverlay({ streamId }: ChatOverlayProps) {
   const { profile } = useAuthStore()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({})
@@ -121,7 +121,7 @@ export default function ChatOverlay({ streamId, compact = false }: ChatOverlayPr
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [streamId])
+  }, [streamId, userLanguage])
 
   // Always render as message list for chat container
   return (

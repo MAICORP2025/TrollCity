@@ -1,9 +1,7 @@
 import React, { useState } from 'react'
 import {
   Activity,
-  Server,
   Database,
-  Wifi,
   Shield,
   AlertTriangle,
   CheckCircle,
@@ -14,7 +12,6 @@ import {
   CreditCard,
   Camera,
   Play,
-  Pause,
   Zap
 } from 'lucide-react'
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { Shield, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { Shield, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
 
 interface TrainingScenario {
   id: string
@@ -25,7 +25,7 @@ const ACTIONS = [
 ]
 
 export default function OfficerTrainingSimulator() {
-  const { user, profile } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
   const [scenario, setScenario] = useState<TrainingScenario | null>(null)
   const [loading, setLoading] = useState(true)

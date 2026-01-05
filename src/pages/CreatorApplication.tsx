@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../lib/store';
+;
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -14,7 +14,6 @@ interface FormErrors {
 }
 
 export function CreatorApplication() {
-  const { user } = useAuthStore();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);

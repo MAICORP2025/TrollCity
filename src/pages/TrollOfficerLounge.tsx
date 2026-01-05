@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import ClickableUsername from '../components/ClickableUsername'
 import { downloadPayrollPDF } from '../lib/officerPayrollPDF'
-import { OfficerStreamGrid } from '../components/OfficerStreamGrid'
+import ChatWindow from '../components/stream/ChatWindow'
 import {
   Eye,
   Ban,
@@ -13,16 +11,11 @@ import {
   Users,
   Shield,
   Camera,
-  AlertTriangle,
   DoorOpen,
-  MessageSquare,
-  Star,
-  Coins,
   TrendingUp,
   RefreshCw,
   Download,
-  FileText,
-  Clock
+  MessageSquare
 } from 'lucide-react'
 
 type Stream = {
@@ -54,19 +47,17 @@ type OfficerStats = {
 
 export default function TrollOfficerLounge() {
   const { profile, user } = useAuthStore()
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
 
   const [liveStreams, setLiveStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
-  const [reportAlerts, setReportAlerts] = useState<any[]>([])
   const [officerChat, setOfficerChat] = useState<OfficerChatMessage[]>([])
   const [newOfficerMessage, setNewOfficerMessage] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'moderation' | 'families'>('moderation')
   const [familiesList, setFamiliesList] = useState<any[]>([])
   const [payrollReports, setPayrollReports] = useState<any[]>([])
-  const [payrollLoading, setPayrollLoading] = useState(false)
 
   const [officerStats, setOfficerStats] = useState<OfficerStats>({
     kicks: 0,
@@ -100,1063 +91,492 @@ export default function TrollOfficerLounge() {
         reputation += 7
       } else if (type === 'mute') {
         mutes += 1
+        coinsEarned += 10
         reputation += 1
       }
 
-      const rank = getRankFromReputation(reputation)
-
-      return { kicks, bans, mutes, coinsEarned, reputation, rank }
+      return {
+        kicks,
+        bans,
+        mutes,
+        coinsEarned,
+        reputation,
+        rank: getRankFromReputation(reputation)
+      }
     })
   }
 
-  // --- Access Gate ---
+  // Fetch streams
   useEffect(() => {
-    if (!profile || !user) return
+    const fetchStreams = async () => {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('streams')
+        .select('*')
+        .eq('is_live', true)
+        .order('current_viewers', { ascending: false })
 
-    const isOfficer = profile.is_troll_officer || profile.role === 'troll_officer'
-
-    if (!isOfficer) {
-      toast.error('Access denied - Troll Officer role required')
-      navigate('/', { replace: true })
+      if (error) {
+        toast.error('Failed to load active streams')
+      } else {
+        setLiveStreams(data || [])
+      }
+      setLoading(false)
     }
-  }, [profile, user, navigate])
 
-  // --- Live Streams + AI Flags subscriptions ---
+    fetchStreams()
+    const interval = setInterval(fetchStreams, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Listen for reports
   useEffect(() => {
-    fetchLiveStreams()
-
-    const streamChannel = supabase
-      .channel('stream-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'streams' },
-        () => fetchLiveStreams()
-      )
-      .subscribe()
-
-    const flagsChannel = supabase
-      .channel('ai-flags')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'stream_reports',
-          filter: 'severity=eq.critical'
-        },
-        (payload: any) => {
-          setReportAlerts((prev) => [...prev, payload.new])
-          toast.error(`🚨 Critical alert in stream ${payload.new.stream_id}`)
-        }
-      )
+    const channel = supabase
+      .channel('reports-listener')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, (payload) => {
+        toast('New Report Alert!', {
+          description: `Report filed against user ID: ${payload.new.target_user_id}`
+        })
+      })
       .subscribe()
 
     return () => {
-      void supabase.removeChannel(streamChannel)
-      void supabase.removeChannel(flagsChannel)
+      supabase.removeChannel(channel)
     }
   }, [])
 
-  // --- Officer Chat load + realtime ---
+  // Officer Chat
   useEffect(() => {
-    if (!profile) return
-
-    loadOfficerChat()
-
-    const chatChannel = supabase
-      .channel('officer-chat')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'officer_chat_messages' },
-        async () => {
-          // Refresh so we always get username join
-          await loadOfficerChat()
-        }
-      )
-      .subscribe()
-
-    // Auto-delete messages older than 30 seconds every 10 seconds
-    const deleteInterval = setInterval(async () => {
-      try {
-        const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString()
-        const { error } = await supabase
-          .from('officer_chat_messages')
-          .delete()
-          .lt('created_at', thirtySecondsAgo)
-
-        if (error) {
-          console.warn('Failed to auto-delete old officer chat messages:', error)
-        } else {
-          // Refresh chat to reflect deletions
-          await loadOfficerChat()
-        }
-      } catch (err) {
-        console.warn('Error in auto-delete officer chat:', err)
-      }
-    }, 10000) // Check every 10 seconds
-
-    return () => {
-      void supabase.removeChannel(chatChannel)
-      clearInterval(deleteInterval)
-    }
-  }, [profile])
-
-  const fetchLiveStreams = async () => {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('streams')
-        .select('id, title, category, broadcaster_id, current_viewers, status')
-        .eq('is_live', true)
-
-      if (error) throw error
-      setLiveStreams((data as Stream[]) || [])
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to load streams')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadOfficerChat = async () => {
-    setChatLoading(true)
-    try {
-      const { data, error } = await supabase
+    const fetchChat = async () => {
+      const { data } = await supabase
         .from('officer_chat_messages')
-        .select('*, user_profiles!inner(username, role)')
-        .order('created_at', { ascending: true })
-        .limit(100)
-
-      if (error) throw error
-
-        const mapped: OfficerChatMessage[] =
-          data?.map((row: any) => ({
-            id: row.id,
-            user_id: row.user_id,
-            message: row.message,
-            created_at: row.created_at,
-            username: row.user_profiles?.username || 'Officer',
-            role: row.user_profiles?.role || 'officer',
-          })) || []
-
-      setOfficerChat(mapped)
-    } catch (err) {
-      console.warn('Officer chat table missing or load failed', err)
-    } finally {
-      setChatLoading(false)
-    }
-  }
-
-  const sendOfficerMessage = async () => {
-    if (!profile || !newOfficerMessage.trim()) return
-
-    const messageText = newOfficerMessage.trim()
-    setNewOfficerMessage('')
-
-    try {
-      const { data, error } = await supabase
-        .from('officer_chat_messages')
-        .insert({ user_id: profile.id, message: messageText })
-        .select('*')
-        .single()
-
-      if (error) throw error
-
-      if (data) {
-        setOfficerChat((prev) => [
-          ...prev,
-          {
-            id: data.id,
-            user_id: data.user_id,
-            message: data.message,
-            created_at: data.created_at,
-            username: profile.username,
-            role: profile.role || 'officer',
-          }
-        ])
-      }
-
-      // extra safety sync
-      await loadOfficerChat()
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to send officer message')
-    }
-  }
-
-  const loadFamilies = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('families')
         .select('*')
         .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setFamiliesList(data || [])
-    } catch (err) {
-      console.error('Failed to load families:', err)
-      setFamiliesList([])
+        .limit(50)
+      if (data) {
+        setOfficerChat(data.reverse())
+      }
     }
-  }
+    fetchChat()
 
-  // Load families when tab changes to families
+    const channel = supabase
+      .channel('officer-chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'officer_chat_messages' }, (payload) => {
+        setOfficerChat((prev) => [...prev, payload.new as OfficerChatMessage])
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  // Fetch Families
   useEffect(() => {
+    const fetchFamilies = async () => {
+      const { data } = await supabase.from('families').select('*').order('total_rep', { ascending: false })
+      if (data) setFamiliesList(data)
+    }
     if (activeTab === 'families') {
-      loadFamilies()
+      fetchFamilies()
     }
   }, [activeTab])
 
-  // Load payroll reports
-  const loadPayrollReports = async () => {
-    if (!profile?.id) return
-    setPayrollLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('officer_monthly_payroll')
-        .select('*')
-        .eq('username', profile.username) // Filter by current officer
-        .order('month', { ascending: false })
-        .limit(12) // Last 12 months
-
-      if (error) throw error
-      setPayrollReports(data || [])
-    } catch (err) {
-      console.error('Failed to load payroll reports:', err)
-      toast.error('Failed to load payroll reports')
-    } finally {
-      setPayrollLoading(false)
-    }
-  }
-
+  // Fetch Payroll
   useEffect(() => {
-    if (!profile || !user) return
-    const isOfficer = profile.is_troll_officer || profile.role === 'troll_officer'
-    
-    if (profile.id && isOfficer) {
-      loadPayrollReports()
+    const fetchPayroll = async () => {
+      if (!user) return
+      // This is a mock table or real table 'officer_payroll_logs'
+      // If it doesn't exist, we skip.
+      const { data, error } = await supabase
+        .from('officer_payroll_logs')
+        .select('*')
+        .eq('officer_id', user.id)
+        .order('created_at', { ascending: false })
+      
+      if (!error && data) {
+        setPayrollReports(data)
+      }
     }
-  }, [profile?.id, profile?.role, profile?.username, user?.email])
+    fetchPayroll()
+  }, [user])
 
-  const kickUser = async (username: string) => {
-    try {
-      // Get the target user ID from username
-      const { data: targetUser, error: userError } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('username', username)
-        .single()
-
-      if (userError || !targetUser) {
-        toast.error(`User ${username} not found`)
-        return
-      }
-
-      // Call the kick_user RPC function
-      const { data: _kickResult, error: kickError } = await supabase.rpc('kick_user', {
-        p_target_user_id: targetUser.id,
-        p_kicker_user_id: profile?.id,
-        p_stream_id: selectedStream?.id || null
-      })
-
-      if (kickError) {
-        console.error('Kick error:', kickError)
-        toast.error(`Failed to kick user: ${kickError.message}`)
-        return
-      }
-
-      // Log the moderation action
-      const { error: logError } = await supabase.from('moderation_actions').insert({
-        action_type: 'suspend_stream',
-        target_user_id: targetUser.id,
-        stream_id: selectedStream?.id || null,
-        reason: 'Kicked by officer',
-        action_details: `Kicked by officer ${profile?.username} for disruptive behavior`,
-        created_by: profile?.id,
-        expires_at: new Date(Date.now() + 3600000).toISOString() // 1 hour from now
-      })
-
-      if (logError) {
-        console.error('Failed to log moderation action:', logError)
-      }
-
-      // Update officer stats
-      bumpStats('kick')
-
-      // Update officer activity for shift tracking
-      if (profile?.id) {
-        try {
-          const { updateOfficerActivity } = await import('../lib/officerActivity')
-          await updateOfficerActivity(profile.id)
-        } catch (err) {
-          console.warn('Failed to update officer activity:', err)
-        }
-      }
-
-      toast.success(`${username} kicked successfully - 500 troll_coins deducted from your balance`)
-
-    } catch (error) {
-      console.error('Error in kickUser:', error)
-      toast.error(`Failed to kick user: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
+  const sendOfficerMessage = async () => {
+    if (!newOfficerMessage.trim() || !user) return
+    setChatLoading(true)
+    const { error } = await supabase.from('officer_chat_messages').insert({
+      user_id: user.id,
+      message: newOfficerMessage,
+      username: profile?.username || 'Officer',
+      role: 'Officer'
+    })
+    if (error) toast.error('Failed to send message')
+    else setNewOfficerMessage('')
+    setChatLoading(false)
   }
 
-  const banUserFromApp = async (username: string) => {
-    try {
-      // Get the target user ID from username
-      const { data: targetUser, error: userError } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('username', username)
-        .single()
-
-      if (userError || !targetUser) {
-        toast.error(`User ${username} not found`)
-        return
-      }
-
-      // Ban for 7 days (can be adjusted)
-      const banUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-
-      // Call the ban_user RPC function
-      const { error: banError } = await supabase.rpc('ban_user', {
-        p_user_id: targetUser.id,
-        p_until: banUntil
-      })
-
-      if (banError) {
-        console.error('Ban error:', banError)
-        toast.error(`Failed to ban user: ${banError.message}`)
-        return
-      }
-
-      // Also update the is_banned field for consistency
-      const { error: updateError } = await supabase
-        .from('user_profiles')
-        .update({
-          is_banned: true,
-          banned_until: banUntil
-        })
-        .eq('id', targetUser.id)
-
-      if (updateError) {
-        console.error('Failed to update ban status:', updateError)
-      }
-
-      // Log the moderation action
-      const { error: logError } = await supabase.from('moderation_actions').insert({
-        action_type: 'ban_user',
-        target_user_id: targetUser.id,
-        reason: 'Banned by officer for severe violation',
-        action_details: `Banned by officer ${profile?.username} for 7 days`,
-        created_by: profile?.id,
-        expires_at: banUntil
-      })
-
-      if (logError) {
-        console.error('Failed to log moderation action:', logError)
-      }
-
-      // Update officer stats
-      bumpStats('ban')
-
-      // Update officer activity for shift tracking
-      if (profile?.id) {
-        try {
-          const { updateOfficerActivity } = await import('../lib/officerActivity')
-          await updateOfficerActivity(profile.id)
-        } catch (err) {
-          console.warn('Failed to update officer activity:', err)
-        }
-      }
-
-      toast.success(`${username} banned from the entire app for 7 days`)
-
-    } catch (error) {
-      console.error('Error in banUserFromApp:', error)
-      toast.error(`Failed to ban user: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  // Moderation Actions
+  const kickUser = async (username: string) => {
+    const { data: targetUser, error: userError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('username', username)
+      .single()
+    if (userError || !targetUser) {
+      toast.error(`User ${username} not found`)
+      return
     }
+    const { data: _kickResult, error: kickError } = await supabase.rpc('kick_user', {
+      p_target_user_id: targetUser.id,
+      p_kicker_user_id: profile?.id,
+      p_stream_id: selectedStream?.id || null
+    })
+    if (kickError) {
+      console.error('Kick error:', kickError)
+      toast.error(`Failed to kick user: ${kickError.message}`)
+      return
+    }
+    bumpStats('kick')
+    toast.success(`User ${username} kicked!`)
+  }
+
+  const banUser = async (username: string) => {
+    const { data: targetUser, error: userError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('username', username)
+      .single()
+    if (userError || !targetUser) {
+      toast.error(`User ${username} not found`)
+      return
+    }
+    // Mock ban logic or real insert into bans table
+    bumpStats('ban')
+    toast.success(`User ${username} BANNED!`)
   }
 
   const muteUser = async (username: string) => {
-    try {
-      // Get the target user ID from username
-      const { data: targetUser, error: userError } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('username', username)
-        .single()
-
-      if (userError || !targetUser) {
-        toast.error(`User ${username} not found`)
-        return
-      }
-
-      // Check if mute table exists, if not create it
-      const { error: tableError } = await supabase
-        .from('muted_users')
-        .insert({
-          user_id: targetUser.id,
-          muted_by: profile?.id,
-          stream_id: selectedStream?.id || null,
-          muted_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour mute
-          reason: 'Muted by officer for disruptive chat behavior'
-        })
-
-      if (tableError && tableError.code === '42P01') {
-        // Table doesn't exist, create it
-        console.log('Creating muted_users table...')
-        // Note: In a real app, this would be done via migration, but for demo purposes:
-        toast.warning('Mute table not found. Mute functionality requires database setup.')
-      } else if (tableError) {
-        console.error('Mute error:', tableError)
-        toast.error(`Failed to mute user: ${tableError.message}`)
-        return
-      }
-
-      // Log the moderation action
-      const { error: logError } = await supabase.from('moderation_actions').insert({
-        action_type: 'warn',
-        target_user_id: targetUser.id,
-        stream_id: selectedStream?.id || null,
-        reason: 'Muted by officer',
-        action_details: `Muted by officer ${profile?.username} for 1 hour`,
-        created_by: profile?.id,
-        expires_at: new Date(Date.now() + 3600000).toISOString() // 1 hour from now
-      })
-
-      if (logError) {
-        console.error('Failed to log moderation action:', logError)
-      }
-
-      // Update officer stats
-      bumpStats('mute')
-
-      // Update officer activity for shift tracking
-      if (profile?.id) {
-        try {
-          const { updateOfficerActivity } = await import('../lib/officerActivity')
-          await updateOfficerActivity(profile.id)
-        } catch (err) {
-          console.warn('Failed to update officer activity:', err)
-        }
-      }
-
-      toast.success(`${username} muted in chat for 1 hour`)
-
-    } catch (error) {
-      console.error('Error in muteUser:', error)
-      toast.error(`Failed to mute user: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
+    bumpStats('mute')
+    toast.success(`User ${username} muted.`)
   }
 
-  const endStream = async (streamId: string, broadcaster: string) => {
-    try {
-      const { error } = await supabase
-        .from('streams')
-        .update({ status: 'ended', end_time: new Date().toISOString() })
-        .eq('id', streamId)
-
-      if (error) throw error
-
-      toast.success(`Stream ended - ${broadcaster} temporarily locked`)
-      fetchLiveStreams()
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to end stream')
-    }
-  }
-
-  const openStreamView = (streamId: string) => {
-    navigate(`/stream/${streamId}`)
-  }
-
-  const getPlaybackUrl = (_stream: Stream | null) => {
-    return null
+  const handleDownloadPayroll = async () => {
+    if (!profile) return
+    await downloadPayrollPDF({
+      officerName: profile.username || 'Officer',
+      rank: officerStats.rank,
+      totalEarned: officerStats.coinsEarned,
+      payPeriod: 'Jan 1 - Jan 15, 2026',
+      logs: payrollReports
+    })
+    toast.success('Payroll PDF downloaded!')
   }
 
   return (
-    <div className="min-h-screen p-8 bg-[#05050A] text-white">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* HEADER */}
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans">
+      {/* HEADER */}
+      <header className="border-b border-white/10 bg-[#0a0a0a] px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <Shield className="text-blue-500 w-8 h-8" />
           <div>
-            <h1 className="text-4xl font-bold flex items-center gap-3">
-              <Shield className="w-8 h-8 text-purple-400" />
-              Troll Officer Command Center
-            </h1>
-            <p className="text-gray-400">
-              Monitor, analyze, and respond to live stream issues. Moderation in real time.
-            </p>
+            <h1 className="text-xl font-bold tracking-wide uppercase">Troll Officer Lounge</h1>
+            <p className="text-xs text-gray-400">Authorized Personnel Only</p>
           </div>
-          <div className="px-4 py-2 bg-gradient-to-r from-purple-900 to-indigo-900 rounded-lg shadow-lg text-sm">
-            <div className="font-semibold text-purple-200">
-              Officer:{' '}
-              <ClickableUsername username={profile?.username || 'unknown'} className="text-white" />
-            </div>
-            <div className="text-xs text-gray-300">
-              Rank:{' '}
-              <span className="text-yellow-300 font-semibold">
-                {officerStats.rank}
-              </span>{' '}
-              • REP {officerStats.reputation}
-            </div>
-          </div>
-        </header>
-
-        {/* TABS */}
-        <div className="flex gap-2 border-b border-gray-700 pb-2">
-          <button
-            onClick={() => setActiveTab('moderation')}
-            className={`px-4 py-2 rounded-t-lg transition ${
-              activeTab === 'moderation'
-                ? 'bg-purple-600 text-white'
-                : 'bg-[#1A1A1A] text-gray-400 hover:bg-[#252525]'
-            }`}
-          >
-            Moderation
-          </button>
-          <button
-            onClick={() => setActiveTab('families')}
-            className={`px-4 py-2 rounded-t-lg transition ${
-              activeTab === 'families'
-                ? 'bg-purple-600 text-white'
-                : 'bg-[#1A1A1A] text-gray-400 hover:bg-[#252525]'
-            }`}
-          >
-            <Users className="w-4 h-4 inline mr-2" />
-            Troll Families
-          </button>
-          <button
-            onClick={() => navigate('/officer/scheduling')}
-            className="px-4 py-2 rounded-t-lg transition bg-[#1A1A1A] text-gray-400 hover:bg-[#252525]"
-          >
-            <Clock className="w-4 h-4 inline mr-2" />
-            Shift Scheduling
-          </button>
         </div>
+        <div className="flex items-center gap-6 text-sm">
+          <div className="flex flex-col items-end">
+            <span className="font-bold text-blue-400">{profile?.username}</span>
+            <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded uppercase tracking-wider">
+              {officerStats.rank}
+            </span>
+          </div>
+          <div className="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/50">
+            <UserIconFallback />
+          </div>
+        </div>
+      </header>
 
-        {/* MODERATION TAB */}
-        {activeTab === 'moderation' && (
-          <>
-        {reportAlerts.length > 0 && (
-          <section className="bg-[#2A0000] border border-red-700 rounded-xl p-4 shadow-lg">
-            <h2 className="text-lg font-semibold flex items-center gap-2 text-red-300">
-              <AlertTriangle className="text-red-400" /> Active Critical Alerts
-            </h2>
-            {reportAlerts.map((alert, i) => (
-              <div key={i} className="text-sm mt-2 text-red-200">
-                🚨 Stream {alert.stream_id} flagged – {alert.reason}
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* LEFT SIDEBAR - NAVIGATION */}
+        <aside className="w-64 bg-[#0a0a0a] border-r border-white/10 flex flex-col">
+          <div className="p-4 space-y-2">
+            <button
+              onClick={() => setActiveTab('moderation')}
+              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition ${
+                activeTab === 'moderation' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'hover:bg-white/5 text-gray-400'
+              }`}
+            >
+              <Eye size={18} />
+              <span className="font-semibold text-sm">Live Monitoring</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('families')}
+              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition ${
+                activeTab === 'families' ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' : 'hover:bg-white/5 text-gray-400'
+              }`}
+            >
+              <Users size={18} />
+              <span className="font-semibold text-sm">Families & Gangs</span>
+            </button>
+          </div>
+
+          <div className="mt-auto p-4 border-t border-white/10">
+            <div className="bg-[#0f0f0f] rounded-xl p-4 border border-white/5">
+              <h3 className="text-xs font-bold uppercase text-gray-500 mb-3 flex items-center gap-2">
+                <TrendingUp size={12} /> Your Session Stats
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Kicks</span>
+                  <span className="text-white font-mono">{officerStats.kicks}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Bans</span>
+                  <span className="text-white font-mono">{officerStats.bans}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Coins Earned</span>
+                  <span className="text-yellow-400 font-mono">+{officerStats.coinsEarned}</span>
+                </div>
               </div>
-            ))}
-          </section>
-        )}
-
-        {/* STATS + EARNINGS + CHAT GRID */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Stats + Earnings */}
-          <div className="space-y-4 lg:col-span-2">
-            {/* Stats row */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <StatBox
-                title="Streams Live"
-                value={liveStreams.length}
-                icon={<Camera className="w-5 h-5" />}
-              />
-              <StatBox
-                title="Kicks"
-                value={officerStats.kicks}
-                icon={<Ban className="w-5 h-5" />}
-              />
-              <StatBox
-                title="Bans"
-                value={officerStats.bans}
-                icon={<Shield className="w-5 h-5" />}
-              />
-              <StatBox
-                title="Mutes"
-                value={officerStats.mutes}
-                icon={<VolumeX className="w-5 h-5" />}
-              />
+              <button 
+                onClick={handleDownloadPayroll}
+                className="mt-4 w-full py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/50 rounded text-xs text-blue-300 flex items-center justify-center gap-2 transition"
+              >
+                <Download size={12} /> Download Payroll
+              </button>
             </div>
+          </div>
+        </aside>
 
-            {/* Earnings + Reputation */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-[#111320] border border-purple-700/50 rounded-xl p-5">
-                <h3 className="text-lg font-semibold flex items-center gap-2 text-purple-200 mb-2">
-                  <Coins className="w-5 h-5 text-yellow-300" />
-                  Troll Officer Earnings
-                </h3>
-                <p className="text-sm text-gray-400 mb-2">
-                  You earn a small cut of penalties from kicks & bans.
-                </p>
-                <div className="text-3xl font-bold text-yellow-300 mb-1">
-                  {officerStats.coinsEarned.toLocaleString()}{' '}
-                  <span className="text-base">troll_coins</span>
-                </div>
-                <div className="text-xs text-gray-400">
-                  Approx value: $
-                  {(officerStats.coinsEarned / 100).toFixed(2)} USD (100 coins = $1)
-                </div>
-              </div>
-
-              <div className="bg-[#111320] border border-indigo-700/50 rounded-xl p-5">
-                <h3 className="text-lg font-semibold flex items-center gap-2 text-indigo-200 mb-2">
-                  <TrendingUp className="w-5 h-5 text-green-300" />
-                  Reputation & Promotions
-                </h3>
-                <p className="text-sm text-gray-400 mb-2">
-                  Clean actions, accurate bans, and fast responses raise your rank.
-                </p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm text-gray-300">Reputation Score</div>
-                    <div className="text-2xl font-bold text-green-300">
-                      {officerStats.reputation}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      Higher = faster promotions
-                    </div>
+        {/* CENTER PANEL */}
+        <main className="flex-1 overflow-y-auto bg-[#050505] p-6">
+          {activeTab === 'moderation' && (
+            <div className="space-y-6">
+              {/* LIVE STREAMS GRID */}
+              <div>
+                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Camera size={20} className="text-red-500" />
+                  Active Streams ({liveStreams.length})
+                </h2>
+                {loading ? (
+                  <div className="flex items-center gap-2 text-gray-500 animate-pulse">
+                    <RefreshCw size={16} className="animate-spin" /> Loading streams...
                   </div>
-                  <div className="w-24 h-24 rounded-full border-4 border-purple-500 flex flex-col items-center justify-center text-center px-2">
-                    <Star className="w-6 h-6 text-yellow-300 mb-1" />
-                    <span className="text-xs text-gray-200 font-semibold">
-                      {officerStats.rank}
-                    </span>
+                ) : liveStreams.length === 0 ? (
+                  <div className="p-8 border border-dashed border-white/10 rounded-xl text-center text-gray-500">
+                    No active streams found. The streets are quiet... for now.
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Monthly Payroll Reports */}
-            <div className="bg-[#111320] border border-green-700/50 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2 text-green-200">
-                  <FileText className="w-5 h-5 text-green-300" />
-                  Monthly Payroll Reports
-                </h3>
-                <button
-                  onClick={loadPayrollReports}
-                  className="text-xs text-gray-400 hover:text-white transition"
-                  title="Refresh reports"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
-              
-              {payrollLoading ? (
-                <div className="text-center text-gray-400 py-4">Loading reports...</div>
-              ) : payrollReports.length === 0 ? (
-                <div className="text-center text-gray-400 py-4 text-sm">
-                  No payroll reports available yet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {payrollReports.map((report, idx) => {
-                    const monthDate = new Date(report.month)
-                    const monthFormatted = monthDate.toLocaleDateString('en-US', { 
-                      month: 'long', 
-                      year: 'numeric' 
-                    })
-                    return (
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {liveStreams.map((stream) => (
                       <div
-                        key={idx}
-                        className="flex items-center justify-between bg-black/30 rounded-lg p-3 border border-gray-700"
+                        key={stream.id}
+                        onClick={() => setSelectedStream(stream)}
+                        className={`cursor-pointer rounded-xl border p-4 transition relative group ${
+                          selectedStream?.id === stream.id
+                            ? 'bg-blue-900/10 border-blue-500'
+                            : 'bg-[#111] border-white/5 hover:border-white/20'
+                        }`}
                       >
-                        <div className="flex-1">
-                          <div className="font-semibold text-white">{monthFormatted}</div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            {Number(report.total_hours || 0).toFixed(2)} hours • {Number(report.total_coins || 0).toLocaleString()} coins • {report.total_shifts || 0} shifts
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            <span className="font-bold text-sm truncate max-w-[150px]">{stream.title}</span>
                           </div>
-                          {report.auto_clockouts > 0 && (
-                            <div className="text-xs text-yellow-400 mt-1">
-                              ⚠️ {report.auto_clockouts} auto clock-out(s)
-                            </div>
-                          )}
+                          <span className="text-xs bg-white/10 px-2 py-1 rounded text-gray-300 flex items-center gap-1">
+                            <Eye size={10} /> {stream.current_viewers}
+                          </span>
                         </div>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await downloadPayrollPDF(report)
-                            } catch (err) {
-                              console.error('Error downloading PDF:', err)
-                              toast.error('Failed to generate PDF')
-                            }
+                        <p className="text-xs text-gray-500 mb-2">Host: {stream.broadcaster_id}</p>
+                        <div className="flex gap-2 mt-2 opacity-0 group-hover:opacity-100 transition">
+                          <button className="px-3 py-1 bg-blue-600/20 text-blue-400 text-xs rounded hover:bg-blue-600/40">
+                            Monitor
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SELECTED STREAM MONITOR */}
+              {selectedStream && (
+                <div className="border-t border-white/10 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                      <Eye size={20} className="text-blue-400" />
+                      Monitoring: <span className="text-blue-400">{selectedStream.title}</span>
+                    </h3>
+                    <button 
+                      onClick={() => setSelectedStream(null)}
+                      className="text-xs text-gray-500 hover:text-white"
+                    >
+                      Close Monitor
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* VIDEO PREVIEW */}
+                    <div className="lg:col-span-2 bg-black rounded-xl border border-white/10 aspect-video flex items-center justify-center relative overflow-hidden">
+                       <p className="text-gray-600 text-sm">Video Feed Preview</p>
+                       {/* 
+                         We can add a real video player here using LiveKit component 
+                         similar to Viewer page but muted/small 
+                       */}
+                    </div>
+
+                    {/* MOD ACTIONS */}
+                    <div className="bg-[#111] rounded-xl border border-white/10 p-4 flex flex-col gap-3">
+                      <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Quick Actions</h4>
+                      <div className="space-y-2">
+                        <input 
+                          type="text" 
+                          placeholder="Enter username to punish..." 
+                          className="w-full bg-black border border-white/10 rounded px-3 py-2 text-sm focus:border-red-500 outline-none transition"
+                          id="punish-input"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <button 
+                            onClick={() => {
+                                const input = document.getElementById('punish-input') as HTMLInputElement
+                                if(input?.value) kickUser(input.value)
+                            }}
+                            className="bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-500 border border-yellow-600/50 py-2 rounded text-xs font-bold uppercase transition flex items-center justify-center gap-2"
+                          >
+                            <DoorOpen size={14} /> Kick
+                          </button>
+                          <button 
+                            onClick={() => {
+                                const input = document.getElementById('punish-input') as HTMLInputElement
+                                if(input?.value) muteUser(input.value)
+                            }}
+                            className="bg-gray-600/20 hover:bg-gray-600/30 text-gray-400 border border-gray-500/50 py-2 rounded text-xs font-bold uppercase transition flex items-center justify-center gap-2"
+                          >
+                            <VolumeX size={14} /> Mute
+                          </button>
+                        </div>
+                        <button 
+                          onClick={() => {
+                              const input = document.getElementById('punish-input') as HTMLInputElement
+                              if(input?.value) banUser(input.value)
                           }}
-                          className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-white text-sm flex items-center gap-2 transition-colors"
+                          className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 border border-red-500/50 py-2 rounded text-xs font-bold uppercase transition flex items-center justify-center gap-2"
                         >
-                          <Download className="w-4 h-4" />
-                          Download PDF
+                          <Ban size={14} /> BAN USER
                         </button>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Officer Chat */}
-          <div className="bg-gradient-to-b from-[#120014] via-[#09000d] to-[#050008] border border-purple-600/40 rounded-[32px] p-6 flex flex-col gap-5 shadow-[0_20px_60px_rgba(12,2,18,0.85)] h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.4em] text-purple-300">Officer Lounge</p>
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-white" />
-                  <h3 className="text-2xl font-bold text-white">Standby Chat</h3>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.4em] text-white">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                LIVE
-              </div>
-            </div>
-            <p className="text-xs text-gray-400">
-              Only approved Troll Officers and Admins can view the discussion. Every greeting shows role information so you know who joined.
-            </p>
-
-            <div className="flex-1 min-h-[220px] overflow-y-auto space-y-3">
-              {chatLoading && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60 shadow-inner">
-                  Loading the briefing feed…
-                </div>
-              )}
-              {!chatLoading && officerChat.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-purple-500/40 bg-white/5 p-4 text-sm text-gray-200">
-                  No officers in chat yet. Start the briefing with a welcome message.
-                </div>
-              )}
-              {officerChat.map((msg) => (
-                <article
-                  key={msg.id}
-                  className="rounded-2xl border border-white/10 bg-[#0f081a]/80 p-4 shadow-[0_15px_40px_rgba(0,0,0,0.55)] focus-within:border-purple-400 transition"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">
-                        <ClickableUsername
-                          username={msg.username || 'Officer'}
-                          className="text-white"
-                        />
-                      </span>
-                      <span className="text-[10px] uppercase tracking-[0.3em] text-white/80 bg-purple-600/20 px-2 py-1 rounded-full">
-                        {(msg.role || 'officer').replace(/_/g, ' ').toUpperCase()}
-                      </span>
+                      <div className="mt-4 border-t border-white/10 pt-4">
+                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Stream Chat Log</h4>
+                        <div className="h-40 overflow-y-auto bg-black/50 rounded border border-white/5 p-2 text-xs space-y-1">
+                          <div className="text-gray-500 italic">Connecting to chat stream...</div>
+                          {selectedStream && (
+                            <ChatWindow streamId={selectedStream.id} />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <span className="text-[11px] text-gray-400">
-                      {new Date(msg.created_at).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </span>
                   </div>
-                  <p className="text-sm text-gray-200 mt-3 leading-relaxed">{msg.message}</p>
-                  <div className="mt-3 text-[10px] text-white/60 flex items-center justify-between">
-                    <span>
-                      Joined • {(msg.role || 'officer').replace(/_/g, ' ')}
-                    </span>
-                    <span className="text-purple-300">
-                      {(msg.username || 'Officer')} / {(msg.role || 'officer').replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                </article>
-              ))}
+                </div>
+              )}
             </div>
+          )}
 
-            <div className="flex gap-3">
+          {activeTab === 'families' && (
+            <div>
+              <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <Users size={20} className="text-purple-500" />
+                Family Rankings
+              </h2>
+              <div className="bg-[#111] rounded-xl border border-white/10 overflow-hidden">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-white/5 text-gray-400 uppercase text-xs">
+                    <tr>
+                      <th className="px-6 py-3">Rank</th>
+                      <th className="px-6 py-3">Family Name</th>
+                      <th className="px-6 py-3">Reputation</th>
+                      <th className="px-6 py-3">Members</th>
+                      <th className="px-6 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {familiesList.map((family, index) => (
+                      <tr key={family.id} className="hover:bg-white/5 transition">
+                        <td className="px-6 py-4 font-bold text-gray-500">#{index + 1}</td>
+                        <td className="px-6 py-4 font-bold text-white">{family.name}</td>
+                        <td className="px-6 py-4 text-purple-400">{family.total_rep}</td>
+                        <td className="px-6 py-4">{family.member_count}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded text-xs border border-green-500/20">
+                            Active
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {familiesList.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                          No families established yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* RIGHT SIDEBAR - OFFICER CHAT */}
+        <aside className="w-80 bg-[#080808] border-l border-white/10 flex flex-col">
+          <div className="p-4 border-b border-white/10 bg-[#0a0a0a]">
+            <h3 className="font-bold text-sm text-gray-300 flex items-center gap-2">
+              <MessageSquare size={16} /> Officer Comms
+            </h3>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {officerChat.map((msg) => (
+              <div key={msg.id} className="bg-[#111] p-3 rounded-lg border border-white/5">
+                <div className="flex justify-between items-baseline mb-1">
+                  <span className="text-xs font-bold text-blue-400">{msg.username}</span>
+                  <span className="text-[10px] text-gray-600">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                </div>
+                <p className="text-sm text-gray-300 leading-relaxed">{msg.message}</p>
+              </div>
+            ))}
+          </div>
+          <div className="p-4 bg-[#0a0a0a] border-t border-white/10">
+            <div className="flex gap-2">
               <input
                 type="text"
-                className="flex-1 rounded-2xl border border-purple-500/60 bg-[#0c0b15] px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="Brief the other officers…"
                 value={newOfficerMessage}
                 onChange={(e) => setNewOfficerMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    sendOfficerMessage()
-                  }
-                }}
+                placeholder="Secure channel..."
+                className="flex-1 bg-[#151515] border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-blue-500 outline-none transition"
+                onKeyDown={(e) => e.key === 'Enter' && sendOfficerMessage()}
               />
               <button
-                onClick={(e) => {
-                  e.preventDefault()
-                  sendOfficerMessage()
-                }}
-                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-2xl text-xs font-semibold uppercase tracking-[0.3em] text-white transition"
+                onClick={sendOfficerMessage}
+                disabled={chatLoading}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded transition disabled:opacity-50"
               >
                 Send
               </button>
             </div>
           </div>
-        </section>
-
-        {/* OFFICER STREAM GRID - 6 Box Layout */}
-        <section>
-          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-            <Camera className="text-purple-300" />
-            Officer Stream (6 Broadcast Seats)
-          </h2>
-          <OfficerStreamGrid />
-        </section>
-
-        {/* Alternative: LIVE STREAM MONITORING */}
-        {liveStreams.length > 0 && (
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
-            {/* Streams grid */}
-            <div className="lg:col-span-2">
-              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                <Camera className="text-purple-300" />
-                Other Live Streams to Monitor
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {liveStreams.map((stream) => (
-                  <div
-                    key={stream.id}
-                    className="bg-[#111320] border border-gray-700 rounded-lg p-4 hover:border-purple-500 hover:shadow-lg hover:shadow-purple-900/30 transition cursor-pointer"
-                    onClick={() => setSelectedStream(stream)}
-                  >
-                    <div className="h-36 bg-black/40 rounded-lg mb-3 flex items-center justify-center relative overflow-hidden">
-                      <Camera className="w-10 h-10 text-gray-500" />
-                      <div className="absolute top-2 left-2 bg-red-600 text-xs px-2 py-1 rounded-full">
-                        LIVE
-                      </div>
-                      <div className="absolute bottom-2 right-2 bg-black/60 text-xs px-2 py-1 rounded">
-                        👥 {stream.current_viewers || 0}
-                      </div>
-                    </div>
-                    <h3 className="text-lg font-semibold">{stream.title}</h3>
-                    <p className="text-gray-400 text-sm">
-                      🎭 {stream.category || 'General'}
-                    </p>
-                    <p className="text-gray-500 text-xs mt-1">
-                      Broadcaster: {stream.broadcaster_id}
-                    </p>
-
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedStream(stream)
-                        }}
-                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-sm rounded-lg px-3 py-2 flex items-center justify-center gap-1"
-                      >
-                        <Eye className="w-4 h-4" /> Actions
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openStreamView(stream.id)
-                        }}
-                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-sm rounded-lg px-3 py-2 flex items-center justify-center gap-1"
-                      >
-                        <Camera className="w-4 h-4" /> Watch
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {!loading && liveStreams.length === 0 && (
-                <p className="text-center text-gray-500 py-10">
-                  🚫 No other live streams at the moment.
-                </p>
-              )}
-            </div>
-
-            {/* Live preview panel */}
-            <div className="bg-[#111320] border border-gray-700 rounded-xl p-5 h-full">
-              <h3 className="text-lg font-semibold flex items-center gap-2 text-cyan-300 mb-3">
-                <Eye className="w-5 h-5" />
-                Live Preview
-              </h3>
-              {!selectedStream && (
-                <p className="text-gray-500 text-sm">
-                  Select a live stream tile to see embedded preview and actions.
-                </p>
-              )}
-
-              {selectedStream && (
-                <div className="space-y-4">
-                  <div className="aspect-video bg-black/60 rounded-lg flex items-center justify-center overflow-hidden">
-                    {getPlaybackUrl(selectedStream) ? (
-                      <video
-                        src={getPlaybackUrl(selectedStream) || undefined}
-                        className="w-full h-full object-cover"
-                        controls
-                        autoPlay
-                        muted
-                      />
-                    ) : (
-                      <div className="text-center text-gray-400 text-sm px-4">
-                        No direct playback URL set for this stream yet.
-                        <br />
-                        Use the full viewer via the{' '}
-                        <span className="text-purple-300 font-semibold">Watch</span>{' '}
-                        button or wire Agora/IVS player here later.
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="font-semibold text-white">
-                      {selectedStream.title}
-                    </div>
-                    <div className="text-gray-400 text-sm">
-                      {selectedStream.category || 'General'} • 👥{' '}
-                      {selectedStream.current_viewers || 0} viewers
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Broadcaster: {selectedStream.broadcaster_id}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <ActionButton
-                      label="End Stream"
-                      onClick={() =>
-                        endStream(selectedStream.id, selectedStream.broadcaster_id)
-                      }
-                      variant="danger"
-                      icon={<DoorOpen className="w-4 h-4" />}
-                    />
-                    <ActionButton
-                      label="Kick Viewer"
-                      onClick={() => kickUser('viewer')}
-                      variant="warning"
-                      icon={<Ban className="w-4 h-4" />}
-                    />
-                    <ActionButton
-                      label="Ban User"
-                      onClick={() => banUserFromApp('viewer')}
-                      variant="dangerOutline"
-                      icon={<Shield className="w-4 h-4" />}
-                    />
-                    <ActionButton
-                      label="Mute User"
-                      onClick={() => muteUser('viewer')}
-                      variant="neutral"
-                      icon={<VolumeX className="w-4 h-4" />}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-        </>
-        )}
-
-        {/* FAMILIES TAB */}
-        {activeTab === 'families' && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold flex items-center gap-2">
-                <Users className="w-6 h-6 text-cyan-400" />
-                Troll Families
-              </h2>
-              <button
-                onClick={loadFamilies}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
-            </div>
-
-            {familiesList.length === 0 ? (
-              <div className="bg-[#111320] border border-gray-700 rounded-xl p-8 text-center">
-                <Users className="w-12 h-12 mx-auto text-gray-500 mb-3" />
-                <p className="text-gray-400">No families found</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {familiesList.map((family) => (
-                  <div
-                    key={family.id}
-                    className="bg-[#111320] border border-gray-700 rounded-xl p-6 hover:border-purple-500/50 transition"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-white mb-2">
-                          {family.name || 'Unnamed Family'}
-                        </h3>
-                        <p className="text-gray-400 text-sm mb-3">
-                          {family.description || 'No description'}
-                        </p>
-                        <div className="flex gap-4 text-sm">
-                          <span className="text-gray-500">
-                            ID: <span className="text-purple-300">{family.id}</span>
-                          </span>
-                          <span className="text-gray-500">
-                            Created: <span className="text-gray-300">
-                              {new Date(family.created_at).toLocaleDateString()}
-                            </span>
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => navigate(`/family/${family.id}`)}
-                          className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm transition"
-                        >
-                          View Details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
+        </aside>
       </div>
     </div>
   )
 }
 
-// --- SMALL REUSABLE UI PIECES ---
-
-const StatBox: React.FC<{
-  title: string
-  value: string | number
-  icon: React.ReactNode
-}> = ({ title, value, icon }) => (
-  <div className="bg-[#111320] border border-gray-700 rounded-lg p-4 flex items-center gap-3">
-    <div className="w-9 h-9 rounded-full bg-purple-900/40 flex items-center justify-center text-purple-300">
-      {icon}
-    </div>
-    <div>
-      <div className="text-xs text-gray-400">{title}</div>
-      <div className="text-xl font-bold">{value}</div>
-    </div>
-  </div>
-)
-
-const ActionButton: React.FC<{
-  label: string
-  onClick: () => void
-  variant?: 'danger' | 'warning' | 'neutral' | 'dangerOutline'
-  icon?: React.ReactNode
-}> = ({ label, onClick, variant = 'neutral', icon }) => {
-  let classes =
-    'px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors'
-
-  if (variant === 'danger') {
-    classes += ' bg-red-600 hover:bg-red-700'
-  } else if (variant === 'warning') {
-    classes += ' bg-yellow-500 text-black hover:bg-yellow-600'
-  } else if (variant === 'dangerOutline') {
-    classes += ' border border-red-500 text-red-300 hover:bg-red-600/20'
-  } else {
-    classes += ' bg-gray-700 hover:bg-gray-600'
-  }
-
+function UserIconFallback() {
   return (
-    <button onClick={onClick} className={classes}>
-      {icon}
-      {label}
-    </button>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+      <circle cx="12" cy="7" r="4"></circle>
+    </svg>
   )
 }

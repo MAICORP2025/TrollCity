@@ -1,10 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
-import { toast } from 'sonner'
 import { 
-  DollarSign, CreditCard, Shield, Eye, EyeOff, 
-  Check, X, AlertCircle, Clock, RefreshCw 
+  Shield, 
+  DollarSign, 
+  RefreshCw, 
+  Eye, 
+  EyeOff, 
+  Check, 
+  X, 
+  Clock, 
+  CreditCard, 
+  AlertCircle 
 } from 'lucide-react'
 
 interface PayoutRequest {
@@ -24,10 +32,10 @@ interface PayoutRequest {
 export default function PayPalPayoutManager() {
   const { profile } = useAuthStore()
   const [payouts, setPayouts] = useState<PayoutRequest[]>([])
-  const [loading, setLoading] = useState(false)
-  const [processingPayout, setProcessingPayout] = useState<string | null>(null)
-  const [showPayPalEmail, setShowPayPalEmail] = useState<{[key: string]: boolean}>({})
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved'>('pending')
+  const [processingPayout, setProcessingPayout] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [showPayPalEmail, setShowPayPalEmail] = useState<Record<string, boolean>>({})
 
   // Check if user is admin or lead officer
   const isAdmin = profile?.role === 'admin' || (profile as any)?.is_admin === true
@@ -38,13 +46,7 @@ export default function PayPalPayoutManager() {
   const canViewPaymentInfo = isAdmin // Only admins can see full payment info
   const canProcessPayouts = isAdmin || isLeadOfficer
 
-  useEffect(() => {
-    if (canProcessPayouts) {
-      loadPayouts()
-    }
-  }, [statusFilter, canProcessPayouts])
-
-  const loadPayouts = async () => {
+  const loadPayouts = useCallback(async () => {
     setLoading(true)
     try {
       // NOTE: Avoid FK-name joins (e.g. user_profiles!payout_requests_user_id_fkey) because
@@ -118,7 +120,13 @@ export default function PayPalPayoutManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter, canViewPaymentInfo])
+
+  useEffect(() => {
+    if (canProcessPayouts) {
+      loadPayouts()
+    }
+  }, [statusFilter, canProcessPayouts, loadPayouts])
 
   const processPayPalPayout = async (payout: PayoutRequest) => {
     if (!canProcessPayouts) {
@@ -147,12 +155,13 @@ export default function PayPalPayoutManager() {
 
       // Call PayPal payout processing function
       const response = await fetch(
-        `${import.meta.env.VITE_EDGE_FUNCTIONS_URL || 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'}/paypal-payout-process`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-payout-process`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
           },
           body: JSON.stringify({
             payout_request_id: payout.id,

@@ -15,7 +15,7 @@ interface LiveKitGuardProps {
 export function LiveKitGuard({ 
   children, 
   fallback = null,
-  requireConnection = false 
+  requireConnection: _requireConnection = false 
 }: LiveKitGuardProps) {
   const isAvailable = useLiveKitAvailable()
   const { setError } = useGlobalApp()
@@ -37,10 +37,11 @@ export function LiveKitGuard({
 /**
  * Higher-order component version of LiveKitGuard
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function withLiveKitGuard<P extends object>(
   Component: React.ComponentType<P>,
   guardProps: Omit<LiveKitGuardProps, 'children'> = {}
-) {
+): React.FC<P> {
   const WrappedComponent = (props: P) => (
     <LiveKitGuard {...guardProps}>
       <Component {...props} />

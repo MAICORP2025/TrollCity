@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Clock, CheckCircle, XCircle, AlertTriangle, Gavel, FileText, Trash2 } from 'lucide-react';
+import ClickableUsername from './ClickableUsername';
 
 interface DocketEntry {
   id: string;
@@ -19,6 +20,7 @@ interface DocketEntry {
 const CourtDocketDashboard: React.FC = (): JSX.Element => {
   const { profile } = useAuthStore();
   const [docketEntries, setDocketEntries] = useState<DocketEntry[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'scheduled' | 'in_session' | 'completed' | 'missed'>('all');
 
@@ -33,6 +35,22 @@ const CourtDocketDashboard: React.FC = (): JSX.Element => {
 
       if (error) throw error;
       setDocketEntries(data || []);
+
+      // Fetch profiles for RGB
+      const userIds = (data || []).map((e: any) => e.user_id).filter(Boolean);
+      const officerIds = (data || []).map((e: any) => e.assigned_officer).filter((id: any) => id && typeof id === 'string' && id.length > 10); // Simple check for UUID-like
+      const allIds = Array.from(new Set([...userIds, ...officerIds]));
+
+      if (allIds.length > 0) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('id, username, role, is_admin, is_troll_officer, is_troller, is_verified, rgb_username_expires_at')
+          .in('id', allIds);
+        
+        const profileMap: Record<string, any> = {};
+        profileData?.forEach(p => profileMap[p.id] = p);
+        setProfiles(profileMap);
+      }
     } catch (error) {
       console.error('Error loading docket entries:', error);
     } finally {
@@ -258,8 +276,17 @@ const CourtDocketDashboard: React.FC = (): JSX.Element => {
                 )}
 
                 {entry.assigned_officer && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    Assigned: {entry.officer_username || entry.assigned_officer}
+                  <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                    Assigned: 
+                    {profiles[entry.assigned_officer] ? (
+                      <ClickableUsername 
+                        username={profiles[entry.assigned_officer].username} 
+                        userId={entry.assigned_officer}
+                        profile={profiles[entry.assigned_officer]}
+                      />
+                    ) : (
+                      entry.officer_username || entry.assigned_officer
+                    )}
                   </div>
                 )}
               </div>

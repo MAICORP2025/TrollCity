@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
-import { DollarSign, TrendingUp, Award, Coins, AlertCircle, CheckCircle, X, ArrowRight, Loader2, Clock } from 'lucide-react';
+import { DollarSign, Award, Coins, AlertCircle, ArrowRight, Loader2, CheckCircle, Clock } from 'lucide-react';
 import { cashoutTiers, getEligibleTier, calculateTotalCoins, formatCoins, formatUSD } from '../lib/coinMath';
 import RequireRole from '../components/RequireRole';
 
@@ -15,23 +15,7 @@ export default function EarningsPage() {
   const [earningsData, setEarningsData] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!user || !profile) {
-      navigate('/auth', { replace: true });
-      return;
-    }
-
-    // Check if user has broadcaster or admin role
-    const allowedRoles = ['broadcaster', 'admin'];
-    if (!allowedRoles.includes(profile.role)) {
-      navigate('/live', { replace: true });
-      return;
-    }
-
-    loadEarningsData();
-  }, [user, profile, navigate]);
-
-  const loadEarningsData = async () => {
+  const loadEarningsData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -86,7 +70,23 @@ export default function EarningsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, profile]);
+
+  useEffect(() => {
+    if (!user || !profile) {
+      navigate('/auth', { replace: true });
+      return;
+    }
+
+    // Check if user has broadcaster or admin role
+    const allowedRoles = ['broadcaster', 'admin'];
+    if (!allowedRoles.includes(profile.role)) {
+      navigate('/live', { replace: true });
+      return;
+    }
+
+    loadEarningsData();
+  }, [user, profile, navigate, loadEarningsData]);
 
   const handleCashoutRequest = async (tier) => {
     if (!tier || processing) return;
@@ -102,7 +102,7 @@ export default function EarningsPage() {
       }
 
       // Insert payout request into Supabase
-      const { data, error } = await supabase.from('payout_requests').insert({
+      const { error } = await supabase.from('payout_requests').insert({
         user_id: user.id,
         requested_coins: tier.coins,
         amount_usd: tier.payout,
@@ -188,7 +188,6 @@ export default function EarningsPage() {
 
   const totalCoins = earningsData.totalCoins;
   const eligibleTier = getEligibleTier(totalCoins);
-  const allEligibleTiers = cashoutTiers.filter(tier => totalCoins >= tier.coins);
 
   return (
     <RequireRole roles={['broadcaster', 'admin']} fallbackPath="/dashboard">

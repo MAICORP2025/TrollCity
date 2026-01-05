@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, Suspense, lazy, useState, useRef } from "react";
+import React, { useEffect, Suspense, useState, useRef } from "react";
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
 
@@ -66,123 +66,121 @@ import ReferralBonusPanel from "./pages/admin/ReferralBonusPanel";
 import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 import TrollsNightPage from "./pages/TrollsNightPage";
 
-// Lazy-loaded pages
-const TrollsNightRules = lazy(() => import("./pages/legal/TrollsNightRules"));
-const TrollsNightApplication = lazy(() => import("./pages/TrollsNightApplication"));
-const TermsOfService = lazy(() => import("./pages/TermsOfService"));
-const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
-const StreamEnded = lazy(() => import("./pages/StreamEnded"));
-const LandingPage = lazy(() => import("./pages/LandingPage"));
-const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
-const PaymentTerms = lazy(() => import("./pages/PaymentTerms"));
-const CreatorAgreement = lazy(() => import("./pages/CreatorAgreement"));
-const TaxOnboarding = lazy(() => import("./pages/TaxOnboarding"));
-const MyEarnings = lazy(() => import("./pages/MyEarnings"));
-const EarningsPage = lazy(() => import("./pages/EarningsPage"));
-const VerificationPage = lazy(() => import("./pages/VerificationPage"));
-const VerificationComplete = lazy(() => import("./pages/VerificationComplete"));
-const AIVerificationPage = lazy(() => import("./pages/AIVerificationPage"));
+// Static imports (previously lazy)
+import TrollsNightRules from "./pages/legal/TrollsNightRules";
+import TrollsNightApplication from "./pages/TrollsNightApplication";
+import TermsOfService from "./pages/TermsOfService";
+import RefundPolicy from "./pages/RefundPolicy";
+import LandingPage from "./pages/LandingPage";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import PaymentTerms from "./pages/PaymentTerms";
+import CreatorAgreement from "./pages/CreatorAgreement";
+import TaxOnboarding from "./pages/TaxOnboarding";
+import MyEarnings from "./pages/MyEarnings";
+import EarningsPage from "./pages/EarningsPage";
+import VerificationPage from "./pages/VerificationPage";
+import VerificationComplete from "./pages/VerificationComplete";
+import AIVerificationPage from "./pages/AIVerificationPage";
 
-// Lazy-loaded pages
-const GoLive = lazy(() => import("./pages/GoLive"));
-const Broadcast = lazy(() => import("./pages/BroadcastPage"));
-const JoinPage = lazy(() => import("./pages/Join"));
-const BroadcastSummary = lazy(() => import("./pages/BroadcastSummary"));
-const KickFee = lazy(() => import("./pages/KickFee"));
-const BanFee = lazy(() => import("./pages/BanFee"));
-const TrollCourtSession = lazy(() => import("./pages/TrollCourtSession"));
-const TromodyShow = lazy(() => import("./pages/TromodyShow"));
-const TromodyShowBroadcast = lazy(() => import("./pages/TromodyShowBroadcast"));
-const OfficerLoungeStream = lazy(() => import("./pages/OfficerLoungeStream"));
-const LiveStreamPage = lazy(() => import("./pages/LiveStreamPage"));
-const Stream = lazy(() => import("./pages/Stream"));
-const StreamSummary = lazy(() => import("./pages/StreamSummary"));
-const Call = lazy(() => import("./pages/Call"));
-const Notifications = lazy(() => import("./pages/Notifications"));
-const Trollifications = lazy(() => import("./pages/Trollifications"));
-const OfficerScheduling = lazy(() => import("./pages/OfficerScheduling"));
-const Orientation = lazy(() => import("./pages/officer/Orientation"));
-const OrientationQuiz = lazy(() => import("./pages/officer/OrientationQuiz"));
-const OfficerOnboarding = lazy(() => import("./pages/officer/OfficerOnboarding"));
-const OfficerTrainingSimulator = lazy(() => import("./pages/officer/OfficerTrainingSimulator"));
-const OfficerTrainingProgress = lazy(() => import("./pages/officer/OfficerTrainingProgress"));
-const OfficerPayrollDashboard = lazy(() => import("./pages/officer/OfficerPayrollDashboard"));
-const OfficerDashboard = lazy(() => import("./pages/officer/OfficerDashboard"));
-const OfficerOWCDashboard = lazy(() => import("./pages/OfficerOWCDashboard"));
-const ReportDetailsPage = lazy(() => import("./pages/ReportDetailsPage"));
-const TrollFamilyCity = lazy(() => import("./pages/TrollFamilyCity"));
-const FamilyProfilePage = lazy(() => import("./pages/FamilyProfilePage"));
-const FamilyWarsPage = lazy(() => import("./pages/FamilyWarsPage"));
-const FamilyChatPage = lazy(() => import("./pages/FamilyChatPage"));
-const TransactionHistory = lazy(() => import("./pages/TransactionHistory"));
-const ReelFeed = lazy(() => import("./pages/ReelFeed"));
-const CashoutPage = lazy(() => import("./pages/CashoutPage"));
-const FamilyApplication = lazy(() => import("./pages/FamilyApplication"));
-const OfficerApplication = lazy(() => import("./pages/OfficerApplication"));
-const TrollerApplication = lazy(() => import("./pages/TrollerApplication"));
-const LeadOfficerApplication = lazy(() => import("./pages/LeadOfficerApplication"));
-const ShopEarnings = lazy(() => import("./pages/ShopEarnings"));
-const AdminPayoutMobile = lazy(() => import("./pages/admin/AdminPayoutMobile"));
-const MobileAdminDashboard = lazy(() => import("./pages/admin/MobileAdminDashboard"));
-const PaymentsDashboard = lazy(() => import("./pages/admin/PaymentsDashboard"));
-const EconomyDashboard = lazy(() => import("./pages/admin/EconomyDashboard"));
-const TaxUpload = lazy(() => import("./pages/TaxUpload"));
-const TaxReviewPanel = lazy(() => import("./pages/admin/TaxReviewPanel"));
-const PaymentCallback = lazy(() => import("./pages/PaymentCallback"));
-const CoinsComplete = lazy(() => import("./pages/CoinsComplete"));
-const PayoutSetupPage = lazy(() => import("./pages/PayoutSetupPage"));
-const Withdraw = lazy(() => import("./pages/Withdraw"));
-const Profile = lazy(() => import("./pages/Profile"));
-const EmpirePartnerApply = lazy(() => import("./pages/EmpirePartnerApply"));
-const AddCard = lazy(() => import("./pages/AddCard"));
-const EarningsDashboard = lazy(() => import("./pages/EarningsDashboard"));
-const CreatorOnboarding = lazy(() => import("./pages/CreatorOnboarding"));
-const PolicyCenter = lazy(() => import("./pages/PolicyCenter"));
-const TermsOfServiceLegal = lazy(() => import("./pages/legal/TermsOfService"));
-const RefundPolicyLegal = lazy(() => import("./pages/legal/RefundPolicy"));
-const PayoutPolicyLegal = lazy(() => import("./pages/legal/PayoutPolicy"));
-const SafetyGuidelinesLegal = lazy(() => import("./pages/legal/SafetyGuidelines"));
-const CreatorEarnings = lazy(() => import("./pages/legal/CreatorEarnings"));
-const GamblingDisclosure = lazy(() => import("./pages/legal/GamblingDisclosure"));
-const PartnerProgram = lazy(() => import("./pages/legal/PartnerProgram"));
-const Wallet = lazy(() => import("./pages/Wallet"));
-const PayoutRequest = lazy(() => import("./pages/PayoutRequest"));
-const AdminPayoutDashboard = lazy(() => import("./pages/admin/components/AdminPayoutDashboard"));
-const AdminLiveOfficersTracker = lazy(() => import("./pages/admin/AdminLiveOfficersTracker"));
-const AdminVerifiedUsers = lazy(() => import("./pages/admin/AdminVerifiedUsers"));
-const AdminVerificationReview = lazy(() => import("./pages/admin/AdminVerificationReview"));
-const AdminPoliciesDocs = lazy(() => import("./pages/admin/AdminPoliciesDocs"));
-const LeadOfficerReview = lazy(() => import("./pages/lead-officer/Review"));
-const LeadOfficerDashboard = lazy(() => import("./pages/lead-officer/LeadOfficerDashboard").then(m => ({ default: m.LeadOfficerDashboard })));
-const ShopPartnerPage = lazy(() => import("./pages/ShopPartnerPage"));
-const CommandBattleGoLive = lazy(() => import("./pages/CommandBattleGoLive"));
-const TrollBattleSetup = lazy(() => import("./pages/TrollBattleSetup"));
-const ShopView = lazy(() => import("./pages/ShopView"));
-const CourtRoom = lazy(() => import("./pages/CourtRoom"));
-const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
+import GoLive from "./pages/GoLive";
+import BroadcastPage from "./pages/BroadcastPage";
+import WatchPage from "./pages/WatchPage";
+import JoinPage from "./pages/Join";
+import LivePage from "./pages/LivePage";
+import BroadcastSummary from "./pages/BroadcastSummary";
+import KickFee from "./pages/KickFee";
+import BanFee from "./pages/BanFee";
+import TrollCourtSession from "./pages/TrollCourtSession";
+import TromodyShow from "./pages/TromodyShow";
+import TromodyShowBroadcast from "./pages/TromodyShowBroadcast";
+import OfficerLoungeStream from "./pages/OfficerLoungeStream";
+import StreamPicture from "./pages/StreamPicture";
+import Call from "./pages/Call";
+import Notifications from "./pages/Notifications";
+import Trollifications from "./pages/Trollifications";
+import OfficerScheduling from "./pages/OfficerScheduling";
+import Orientation from "./pages/officer/Orientation";
+import OrientationQuiz from "./pages/officer/OrientationQuiz";
+import OfficerOnboarding from "./pages/officer/OfficerOnboarding";
+import OfficerTrainingSimulator from "./pages/officer/OfficerTrainingSimulator";
+import OfficerTrainingProgress from "./pages/officer/OfficerTrainingProgress";
+import OfficerPayrollDashboard from "./pages/officer/OfficerPayrollDashboard";
+import OfficerDashboard from "./pages/officer/OfficerDashboard";
+import OfficerOWCDashboard from "./pages/OfficerOWCDashboard";
+import ReportDetailsPage from "./pages/ReportDetailsPage";
+import TrollFamilyCity from "./pages/TrollFamilyCity";
+import FamilyProfilePage from "./pages/FamilyProfilePage";
+import FamilyWarsPage from "./pages/FamilyWarsPage";
+import FamilyChatPage from "./pages/FamilyChatPage";
+import TransactionHistory from "./pages/TransactionHistory";
+import ReelFeed from "./pages/ReelFeed";
+import CashoutPage from "./pages/CashoutPage";
+import FamilyApplication from "./pages/FamilyApplication";
+import OfficerApplication from "./pages/OfficerApplication";
+import TrollerApplication from "./pages/TrollerApplication";
+import LeadOfficerApplication from "./pages/LeadOfficerApplication";
+import ShopEarnings from "./pages/ShopEarnings";
+import AdminPayoutMobile from "./pages/admin/AdminPayoutMobile";
+import MobileAdminDashboard from "./pages/admin/MobileAdminDashboard";
+import PaymentsDashboard from "./pages/admin/PaymentsDashboard";
+import EconomyDashboard from "./pages/admin/EconomyDashboard";
+import TaxUpload from "./pages/TaxUpload";
+import TaxReviewPanel from "./pages/admin/TaxReviewPanel";
+import PaymentCallback from "./pages/PaymentCallback";
+import CoinsComplete from "./pages/CoinsComplete";
+import PayoutSetupPage from "./pages/PayoutSetupPage";
+import Withdraw from "./pages/Withdraw";
+import Profile from "./pages/Profile";
+import EmpirePartnerApply from "./pages/EmpirePartnerApply";
+import AddCard from "./pages/AddCard";
+import EarningsDashboard from "./pages/EarningsDashboard";
+import CreatorOnboarding from "./pages/CreatorOnboarding";
+import PolicyCenter from "./pages/PolicyCenter";
+import TermsOfServiceLegal from "./pages/legal/TermsOfService";
+import RefundPolicyLegal from "./pages/legal/RefundPolicy";
+import PayoutPolicyLegal from "./pages/legal/PayoutPolicy";
+import SafetyGuidelinesLegal from "./pages/legal/SafetyGuidelines";
+import CreatorEarnings from "./pages/legal/CreatorEarnings";
+import GamblingDisclosure from "./pages/legal/GamblingDisclosure";
+import PartnerProgram from "./pages/legal/PartnerProgram";
+import Wallet from "./pages/Wallet";
+import PayoutRequest from "./pages/PayoutRequest";
+import AdminPayoutDashboard from "./pages/admin/components/AdminPayoutDashboard";
+import AdminLiveOfficersTracker from "./pages/admin/AdminLiveOfficersTracker";
+import AdminVerifiedUsers from "./pages/admin/AdminVerifiedUsers";
+import AdminVerificationReview from "./pages/admin/AdminVerificationReview";
+import AdminPoliciesDocs from "./pages/admin/AdminPoliciesDocs";
+import LeadOfficerReview from "./pages/lead-officer/Review";
+import { LeadOfficerDashboard } from "./pages/lead-officer/LeadOfficerDashboard";
+import ShopPartnerPage from "./pages/ShopPartnerPage";
+import CommandBattleGoLive from "./pages/CommandBattleGoLive";
+import TrollBattleSetup from "./pages/TrollBattleSetup";
+import ShopView from "./pages/ShopView";
+import CourtRoom from "./pages/CourtRoom";
+import InterviewRoom from "./pages/InterviewRoom";
 
 // Admin pages
-const BanManagement = lazy(() => import("./pages/admin/BanManagement"));
-const RoleManagement = lazy(() => import("./pages/admin/RoleManagement"));
-const MediaLibrary = lazy(() => import("./pages/admin/MediaLibrary"));
-const ChatModeration = lazy(() => import("./pages/admin/ChatModeration"));
-const Announcements = lazy(() => import("./pages/admin/Announcements").then(m => ({ default: m.default })));
-const ExportData = lazy(() => import("./pages/admin/ExportData"));
-const UserSearch = lazy(() => import("./pages/admin/UserSearch"));
-const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
-const StreamMonitorPage = lazy(() => import("./pages/admin/StreamMonitorPage"));
-const GrantCoins = lazy(() => import("./pages/admin/GrantCoins"));
-const PaymentLogs = lazy(() => import("./pages/admin/PaymentLogs"));
-const StorePriceEditor = lazy(() => import("./pages/admin/components/StorePriceEditor"));
-const AdminFinanceDashboard = lazy(() => import("./pages/admin/AdminFinanceDashboard"));
-const CreateSchedule = lazy(() => import("./pages/admin/CreateSchedule"));
-const OfficerShifts = lazy(() => import("./pages/admin/OfficerShifts"));
-const EmpireApplicationsPage = lazy(() => import("./pages/admin/EmpireApplicationsPage"));
-const ReferralBonuses = lazy(() => import("./pages/admin/ReferralBonuses"));
-const ControlPanel = lazy(() => import("./pages/admin/ControlPanel"));
-const TestDiagnosticsPage = lazy(() => import("./pages/admin/TestDiagnosticsPage"));
-const ResetMaintenance = lazy(() => import("./pages/admin/ResetMaintenance"));
-const AdminHR = lazy(() => import("./pages/admin/AdminHR"));
+import BanManagement from "./pages/admin/BanManagement";
+import RoleManagement from "./pages/admin/RoleManagement";
+import MediaLibrary from "./pages/admin/MediaLibrary";
+import ChatModeration from "./pages/admin/ChatModeration";
+import Announcements from "./pages/admin/Announcements";
+import ExportData from "./pages/admin/ExportData";
+import UserSearch from "./pages/admin/UserSearch";
+import ReportsQueue from "./pages/admin/ReportsQueue";
+import StreamMonitorPage from "./pages/admin/StreamMonitorPage";
+import GrantCoins from "./pages/admin/GrantCoins";
+import PaymentLogs from "./pages/admin/PaymentLogs";
+import StorePriceEditor from "./pages/admin/components/StorePriceEditor";
+import AdminFinanceDashboard from "./pages/admin/AdminFinanceDashboard";
+import CreateSchedule from "./pages/admin/CreateSchedule";
+import OfficerShifts from "./pages/admin/OfficerShifts";
+import EmpireApplicationsPage from "./pages/admin/EmpireApplicationsPage";
+import ReferralBonuses from "./pages/admin/ReferralBonuses";
+import ControlPanel from "./pages/admin/ControlPanel";
+import TestDiagnosticsPage from "./pages/admin/TestDiagnosticsPage";
+import ResetMaintenance from "./pages/admin/ResetMaintenance";
+import AdminHR from "./pages/admin/AdminHR";
 
 function AppContent() {
   console.log('🚀 App component rendering...');
@@ -246,7 +244,7 @@ function AppContent() {
     } else if (profile?.role === 'troll_family') {
       navigate('/family', { replace: true });
     }
-  }, [profile?.role, profile?.is_troll_officer, profile?.is_officer_active, location.pathname, navigate, user]);
+  }, [profile, location.pathname, navigate, user]);
 
   // 🔹 Check if user is kicked or banned and show re-entry modal
   useEffect(() => {
@@ -254,7 +252,7 @@ function AppContent() {
       // Dynamic-load the kick re-entry modal for when we need to show it.
       void import('./components/KickReentryModal');
     }
-  }, [profile?.is_kicked, profile?.is_banned]);
+  }, [profile]);
 
   // 🔹 Track user IP address and check for IP bans
   useEffect(() => {
@@ -329,7 +327,7 @@ function AppContent() {
     if (user) {
       trackIP()
     }
-  }, [user?.id])
+  }, [user, navigate])
 
   // 🔹 Real-time Profile Updates (Debounced to prevent double renders)
   useDebouncedProfileUpdate(user?.id)
@@ -482,7 +480,8 @@ function AppContent() {
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/wall" element={<TrollCityWall />} />
-                  <Route path="/reels" element={<ReelFeed />} />
+                  <Route path="/treeds" element={<ReelFeed />} />
+                  <Route path="/reels" element={<Navigate to="/treeds" replace />} />
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
@@ -495,7 +494,9 @@ function AppContent() {
 
                   {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLive />} />
-                  <Route path="/broadcast/:streamId" element={<Broadcast />} />
+                  <Route path="/live/:streamId" element={<LivePage />} />
+                  <Route path="/broadcast/:streamId" element={<Navigate to={`/live/${location.pathname.split('/').pop()}`} replace />} />
+                  <Route path="/watch/:streamId" element={<Navigate to={`/live/${location.pathname.split('/').pop()}`} replace />} />
                   <Route path="/join" element={<JoinPage />} />
                   <Route path="/broadcast" element={<Navigate to="/go-live" replace />} />
                   <Route path="/broadcast-summary" element={<BroadcastSummary />} />
@@ -504,12 +505,13 @@ function AppContent() {
                   <Route path="/troll-court/session" element={<TrollCourtSession />} />
                   <Route path="/tromody" element={<TromodyShow />} />
                   <Route path="/tromody-show/broadcast" element={<TromodyShowBroadcast />} />
-                  <Route path="/live/:streamId" element={<Stream />} />
+                  <Route path="/live/:streamId" element={<Navigate to="/live" replace />} />
                   <Route path="/interview/:sessionId" element={<InterviewRoom />} />
-                  <Route path="/stream/:id" element={<Stream />} />
-                  <Route path="/stream/:streamId" element={<LiveStreamPage />} />
-                  <Route path="/stream/:id/summary" element={<StreamSummary />} />
-                  <Route path="/stream-ended" element={<StreamEnded />} />
+                  <Route path="/stream/:id" element={<Navigate to="/live" replace />} />
+                  <Route path="/stream/:streamId" element={<Navigate to="/live" replace />} />
+                  <Route path="/stream/:id/summary" element={<Navigate to="/live" replace />} />
+                  <Route path="/stream-ended" element={<Navigate to="/live" replace />} />
+                  <Route path="/stream-picture/:streamId" element={<StreamPicture />} />
 
                   {/* ⚖️ Court */}
                   <Route path="/troll-court" element={<TrollCourt />} />

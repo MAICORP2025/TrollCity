@@ -13,15 +13,15 @@ export const useBackgroundProfileRefresh = () => {
     // Wait before fetching to allow DB replication
     await new Promise(resolve => setTimeout(resolve, delayMs))
 
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-      
-      if (!error && data) {
-        const currentProfile = useAuthStore.getState().profile
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+    
+    if (!error && data) {
+      const currentProfile = useAuthStore.getState().profile
         
         // Only update if values actually changed to prevent unnecessary UI updates
         if (currentProfile && 

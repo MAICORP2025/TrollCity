@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
 
     if (req.method === 'POST') {
       let body: any = {};
-      try { body = await req.json(); } catch (_) {}
+      try { body = await req.json(); } catch { /* ignore */ }
       const action = body?.action || '';
       const command = body?.command || '';
 
@@ -477,7 +477,7 @@ Deno.serve(async (req: Request) => {
       if (!wheelBody || Object.keys(wheelBody).length === 0) {
         try {
           wheelBody = await req.json();
-        } catch (_) {
+        } catch {
           wheelBody = {};
         }
       }
@@ -514,7 +514,7 @@ Deno.serve(async (req: Request) => {
       if (!spawnBody || Object.keys(spawnBody).length === 0) {
         try {
           spawnBody = await req.json();
-        } catch (_) {
+        } catch {
           spawnBody = {};
         }
       }
@@ -545,7 +545,7 @@ Deno.serve(async (req: Request) => {
       if (!claimBody || Object.keys(claimBody).length === 0) {
         try {
           claimBody = await req.json();
-        } catch (_) {
+        } catch {
           claimBody = {};
         }
       }

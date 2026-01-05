@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Trophy, Timer, Coins, Zap } from 'lucide-react'
+import { Trophy, Timer, Coins } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
 
 interface BattleArenaProps {
@@ -19,6 +18,7 @@ type BattleParticipant = {
   avatar_url?: string
   role?: string
   joined_at?: string
+  rgb_username_expires_at?: string
 }
 
 interface BattleStats {
@@ -36,7 +36,6 @@ export default function BattleArena({
   stream2Id,
   onBattleEnd,
 }: BattleArenaProps) {
-  const { profile } = useAuthStore()
   const [battleStats, setBattleStats] = useState<BattleStats>({
     hostTrollCoins: 0,
     challengerTrollCoins: 0,
@@ -61,13 +60,13 @@ export default function BattleArena({
     const loadBroadcasters = async () => {
       const { data: b1 } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url')
+        .select('id, username, avatar_url, rgb_username_expires_at')
         .eq('id', broadcaster1Id)
         .single()
       
       const { data: b2 } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url')
+        .select('id, username, avatar_url, rgb_username_expires_at')
         .eq('id', broadcaster2Id)
         .single()
       
@@ -96,6 +95,22 @@ export default function BattleArena({
       })
     }
   }, [battleId])
+
+  const endBattle = useCallback(async () => {
+    const { data, error } = await supabase.rpc('end_battle_and_declare_winner', {
+      p_battle_id: battleId,
+    })
+
+    if (error) {
+      console.error('Error ending battle:', error)
+      toast.error('Failed to end battle')
+      return
+    }
+
+    if (data?.success) {
+      onBattleEnd(data.winner_id)
+    }
+  }, [battleId, onBattleEnd])
 
   // Countdown before battle starts
   useEffect(() => {
@@ -140,7 +155,7 @@ export default function BattleArena({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [battleStats.status])
+  }, [battleStats.status, endBattle])
 
   // Subscribe to battle updates
   useEffect(() => {
@@ -199,22 +214,6 @@ export default function BattleArena({
     loadBattleStats()
   }, [battleId, loadBattleArenaView])
 
-  const endBattle = async () => {
-    const { data, error } = await supabase.rpc('end_battle_and_declare_winner', {
-      p_battle_id: battleId,
-    })
-
-    if (error) {
-      console.error('Error ending battle:', error)
-      toast.error('Failed to end battle')
-      return
-    }
-
-    if (data?.success) {
-      onBattleEnd(data.winner_id)
-    }
-  }
-
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -266,7 +265,7 @@ export default function BattleArena({
               {broadcaster1?.avatar_url && (
                 <img src={broadcaster1.avatar_url} alt={broadcaster1.username} className="w-8 h-8 rounded-full" />
               )}
-              <span className="font-bold text-white">@{broadcaster1?.username || 'Loading...'}</span>
+              <span className={`font-bold text-white ${broadcaster1?.rgb_username_expires_at && new Date(broadcaster1.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>@{broadcaster1?.username || 'Loading...'}</span>
               {leading === 1 && <Trophy className="w-5 h-5 text-troll-gold" />}
             </div>
           </div>
@@ -302,7 +301,7 @@ export default function BattleArena({
               {battleGuests.hostGuests.map((guest) => (
                 <span
                   key={`${guest.user_id}-host`}
-                  className="px-2 py-1 rounded-full bg-white/10 text-[10px] text-white border border-white/10"
+                  className={`px-2 py-1 rounded-full bg-white/10 text-[10px] text-white border border-white/10 ${guest.rgb_username_expires_at && new Date(guest.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}
                 >
                   {guest.username || guest.user_id}
                 </span>
@@ -326,7 +325,7 @@ export default function BattleArena({
               {broadcaster2?.avatar_url && (
                 <img src={broadcaster2.avatar_url} alt={broadcaster2.username} className="w-8 h-8 rounded-full" />
               )}
-              <span className="font-bold text-white">@{broadcaster2?.username || 'Loading...'}</span>
+              <span className={`font-bold text-white ${broadcaster2?.rgb_username_expires_at && new Date(broadcaster2.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>@{broadcaster2?.username || 'Loading...'}</span>
               {leading === 2 && <Trophy className="w-5 h-5 text-troll-gold" />}
             </div>
           </div>
@@ -362,7 +361,7 @@ export default function BattleArena({
               {battleGuests.challengerGuests.map((guest) => (
                 <span
                   key={`${guest.user_id}-challenger`}
-                  className="px-2 py-1 rounded-full bg-white/10 text-[10px] text-white border border-white/10"
+                  className={`px-2 py-1 rounded-full bg-white/10 text-[10px] text-white border border-white/10 ${guest.rgb_username_expires_at && new Date(guest.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}
                 >
                   {guest.username || guest.user_id}
                 </span>

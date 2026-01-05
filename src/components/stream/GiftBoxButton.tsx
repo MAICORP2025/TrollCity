@@ -1,5 +1,5 @@
 import { Gift } from 'lucide-react'
-import { getActiveHolidayTheme, getGiftBoxIcon } from '../../lib/holidayThemes'
+import { getActiveHolidayTheme } from '../../lib/holidayThemes'
 import { useState, useEffect } from 'react'
 
 interface GiftBoxButtonProps {
@@ -8,13 +8,13 @@ interface GiftBoxButtonProps {
 
 export default function GiftBoxButton({ onClick }: GiftBoxButtonProps) {
   const [activeHoliday, setActiveHoliday] = useState(getActiveHolidayTheme())
-  const [giftBoxIcon, setGiftBoxIcon] = useState(getGiftBoxIcon())
+  // const [giftBoxIcon, setGiftBoxIcon] = useState(getGiftBoxIcon())
 
   // Update holiday theme every minute (in case date changes)
   useEffect(() => {
     const updateTheme = () => {
       setActiveHoliday(getActiveHolidayTheme())
-      setGiftBoxIcon(getGiftBoxIcon())
+      // setGiftBoxIcon(getGiftBoxIcon())
     }
 
     updateTheme()

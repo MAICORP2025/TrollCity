@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { MoreVertical, Phone, Video } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
@@ -17,6 +17,7 @@ interface Message {
   read_at?: string | null
   sender_username?: string
   sender_avatar_url?: string
+  sender_rgb_expires_at?: string | null
 }
 
 interface ChatWindowProps {
@@ -38,9 +39,90 @@ export default function ChatWindow({
   const navigate = useNavigate()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
-  const [_theirTyping, _setTheirTyping] = useState(false)
+  const [otherUserProfile, setOtherUserProfile] = useState<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    if (otherUserId) {
+      supabase.from('user_profiles').select('*').eq('id', otherUserId).single().then(({ data }) => {
+        if (data) setOtherUserProfile(data)
+      })
+    }
+  }, [otherUserId])
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  const loadMessages = useCallback(async () => {
+    if (!otherUserId || !profile?.id) return
+
+    try {
+      setLoading(true)
+
+      const { data: messagesData, error } = await supabase
+        .from('messages')
+        .select('id, sender_id, receiver_id, content, created_at, seen, read_at, message_type')
+        .or(
+          `and(sender_id.eq.${profile.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${profile.id})`
+        )
+        .eq('message_type', 'dm')
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('Error loading messages:', error);
+        throw error;
+      }
+
+      // Mark messages as read when ChatWindow opens
+      const unreadIds = messagesData
+        ?.filter(m => m.receiver_id === profile.id && !m.read_at)
+        .map(m => m.id) || []
+
+      if (unreadIds.length > 0) {
+        try {
+          await supabase
+            .from('messages')
+            .update({ read_at: new Date().toISOString(), seen: true })
+            .in('id', unreadIds)
+        } catch (err) {
+          console.warn('Could not update read status:', err)
+        }
+      }
+
+      // Fetch sender usernames
+      const senderIds = [...new Set(messagesData?.map(m => m.sender_id).filter(Boolean) || [])]
+      const senderMap: Record<string, { username: string; avatar_url: string | null; rgb_username_expires_at?: string | null }> = {}
+
+      if (senderIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('user_profiles')
+          .select('id,username,avatar_url,rgb_username_expires_at')
+          .in('id', senderIds)
+
+        usersData?.forEach((user) => {
+          senderMap[user.id] = {
+            username: user.username,
+            avatar_url: user.avatar_url,
+            rgb_username_expires_at: user.rgb_username_expires_at
+          }
+        })
+      }
+
+      const mappedMessages = messagesData?.map((msg) => ({
+        ...msg,
+        sender_username: senderMap[msg.sender_id]?.username || 'Unknown',
+        sender_avatar_url: senderMap[msg.sender_id]?.avatar_url || null,
+        sender_rgb_expires_at: senderMap[msg.sender_id]?.rgb_username_expires_at
+      })) || []
+
+      setMessages(mappedMessages)
+    } catch (error) {
+      console.error('Error loading messages:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [otherUserId, profile?.id])
   const handleStartCall = async (callType: 'audio' | 'video') => {
     if (!otherUserId || !user?.id || !profile?.id) {
       toast.error('Unable to start call');
@@ -173,83 +255,11 @@ export default function ChatWindow({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [otherUserId, profile?.id])
+  }, [otherUserId, profile?.id, loadMessages])
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
-
-  const loadMessages = async () => {
-    if (!otherUserId || !profile?.id) return
-
-    try {
-      setLoading(true)
-
-      const { data: messagesData, error } = await supabase
-        .from('messages')
-        .select('id, sender_id, receiver_id, content, created_at, seen, read_at, message_type')
-        .or(
-          `and(sender_id.eq.${profile.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${profile.id})`
-        )
-        .eq('message_type', 'dm')
-        .order('created_at', { ascending: true })
-
-      if (error) {
-        console.error('Error loading messages:', error);
-        throw error;
-      }
-
-      // Mark messages as read when ChatWindow opens
-      const unreadIds = messagesData
-        ?.filter(m => m.receiver_id === profile.id && !m.read_at)
-        .map(m => m.id) || []
-
-      if (unreadIds.length > 0) {
-        try {
-          await supabase
-            .from('messages')
-            .update({ read_at: new Date().toISOString(), seen: true })
-            .in('id', unreadIds)
-        } catch (err) {
-          console.warn('Could not update read status:', err)
-        }
-      }
-
-      // Fetch sender usernames
-      const senderIds = [...new Set(messagesData?.map(m => m.sender_id).filter(Boolean) || [])]
-      const senderMap: Record<string, { username: string; avatar_url: string | null }> = {}
-
-      if (senderIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from('user_profiles')
-          .select('id,username,avatar_url')
-          .in('id', senderIds)
-
-        usersData?.forEach((user) => {
-          senderMap[user.id] = {
-            username: user.username,
-            avatar_url: user.avatar_url
-          }
-        })
-      }
-
-      const mappedMessages = messagesData?.map((msg) => ({
-        ...msg,
-        sender_username: senderMap[msg.sender_id]?.username || 'Unknown',
-        sender_avatar_url: senderMap[msg.sender_id]?.avatar_url || null
-      })) || []
-
-      setMessages(mappedMessages)
-    } catch (error) {
-      console.error('Error loading messages:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  }, [messages, scrollToBottom])
 
   const handleMessageSent = () => {
     // Message added via broadcast, no need to reload
@@ -354,7 +364,12 @@ export default function ChatWindow({
                         alt={msg.sender_username}
                         className="w-6 h-6 rounded-full"
                       />
-                      <span className="text-xs text-gray-400">@{msg.sender_username}</span>
+                      <ClickableUsername 
+                        userId={msg.sender_id} 
+                        username={msg.sender_username || 'Unknown'} 
+                        profile={{ rgb_username_expires_at: msg.sender_rgb_expires_at }}
+                        className="text-xs text-gray-400"
+                      />
                     </div>
                   )}
                   <div

@@ -4,7 +4,6 @@
  */
 
 import { supabase } from './supabase'
-import { toast } from 'sonner'
 
 /**
  * Reset admin coins to 0 and set unlimited trollmonds
@@ -39,7 +38,6 @@ export async function resetAdminEconomy(): Promise<{ success: boolean; error?: s
     const { error: profileUpdateError } = await supabase
       .from('user_profiles')
       .update({
-        troll_coins: 0,
         troll_coins: 0,
         updated_at: new Date().toISOString()
       })

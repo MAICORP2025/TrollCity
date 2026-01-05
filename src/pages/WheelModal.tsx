@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { X, DollarSign, Gem, Crown, Skull, Gift, Zap } from 'lucide-react'
+import { X, DollarSign, Gem, Crown, Gift, Zap } from 'lucide-react'
 
 interface WheelSegment {
   id: string
@@ -85,7 +85,7 @@ export default function WheelModal({ onClose, trollmonds = 0, setTrollmonds }: W
     const walletBalance = profile?.troll_coins ?? 0
     setBalance(walletBalance)
     if (setTrollmonds) setTrollmonds(walletBalance)
-  }, [profile?.id, profile?.troll_coins, setTrollmonds])
+  }, [profile, setTrollmonds])
 
   const spinWheel = async () => {
     if (!profile || !user || !wheelConfig?.is_active) return

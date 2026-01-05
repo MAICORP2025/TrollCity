@@ -3,7 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { toast } from 'sonner'
 import { 
   DollarSign, Users, FileText, TrendingUp, Filter, 
-  Download, ExternalLink, Calendar, X 
+  Calendar, X, Download, ExternalLink
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
@@ -49,32 +49,7 @@ export default function EarningsTaxOverview() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [sortOrder, setSortOrder] = useState<'high' | 'low'>('high')
 
-  useEffect(() => {
-    loadData()
-  }, [selectedYear])
-
-  useEffect(() => {
-    filterAndSortCreators()
-  }, [creators, showOnlyOver600, sortOrder])
-
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      // Load dashboard cards data
-      await Promise.all([
-        loadDashboardCards(),
-        loadMonthlyEarnings(),
-        loadCreatorsList()
-      ])
-    } catch (error: any) {
-      console.error('Error loading earnings data:', error)
-      toast.error('Failed to load earnings data')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadDashboardCards = async () => {
+  const loadDashboardCards = React.useCallback(async () => {
     try {
       // Total Liability - sum of net_earnings_cents converted to USD
       const { data: earnings } = await supabase
@@ -92,7 +67,7 @@ export default function EarningsTaxOverview() {
         if (creatorsOver600) {
           creatorsOverThreshold = creatorsOver600.length
         }
-      } catch (error) {
+      } catch {
         // Fallback if RPC doesn't exist - calculate manually
         const { data: allCreators } = await supabase
           .from('broadcaster_earnings')
@@ -136,12 +111,12 @@ export default function EarningsTaxOverview() {
         platformKept,
         forms1099Sent
       })
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading dashboard cards:', error)
     }
-  }
+  }, [])
 
-  const loadMonthlyEarnings = async () => {
+  const loadMonthlyEarnings = React.useCallback(async () => {
     try {
       const startDate = new Date(selectedYear, 0, 1).toISOString()
       const endDate = new Date(selectedYear, 11, 31, 23, 59, 59).toISOString()
@@ -154,11 +129,9 @@ export default function EarningsTaxOverview() {
 
       // Group by month
       const monthlyMap = new Map<string, number>()
-      const creatorSet = new Set<string>()
 
       earnings?.forEach(e => {
         const date = new Date(e.created_at)
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
         const monthName = date.toLocaleString('default', { month: 'short' })
         
         monthlyMap.set(monthName, (monthlyMap.get(monthName) || 0) + (Number(e.usd_value) || 0))
@@ -176,12 +149,12 @@ export default function EarningsTaxOverview() {
         })
 
       setMonthlyData(monthlyArray)
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading monthly earnings:', error)
     }
-  }
+  }, [selectedYear])
 
-  const loadCreatorsList = async () => {
+  const loadCreatorsList = React.useCallback(async () => {
     try {
       // Get all creators with their total earnings
       const { data: earnings } = await supabase
@@ -234,7 +207,7 @@ export default function EarningsTaxOverview() {
           const totalEarnings = data.total
           const reachedThreshold = totalEarnings >= 600
           const form1099Generated = applicationMap.get(user_id) || false
-
+          
           return {
             user_id,
             username: profile?.username || 'Unknown',
@@ -251,12 +224,33 @@ export default function EarningsTaxOverview() {
         })
 
       setCreators(creatorsList)
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading creators list:', error)
     }
-  }
+  }, [])
 
-  const filterAndSortCreators = () => {
+  const loadData = React.useCallback(async () => {
+    setLoading(true)
+    try {
+      // Load dashboard cards data
+      await Promise.all([
+        loadDashboardCards(),
+        loadMonthlyEarnings(),
+        loadCreatorsList()
+      ])
+    } catch (error) {
+      console.error('Error loading earnings data:', error)
+      toast.error('Failed to load earnings data')
+    } finally {
+      setLoading(false)
+    }
+  }, [loadDashboardCards, loadMonthlyEarnings, loadCreatorsList])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const filterAndSortCreators = React.useCallback(() => {
     let filtered = [...creators]
 
     // Filter by threshold
@@ -274,7 +268,11 @@ export default function EarningsTaxOverview() {
     })
 
     setFilteredCreators(filtered)
-  }
+  }, [creators, showOnlyOver600, sortOrder])
+
+  useEffect(() => {
+    filterAndSortCreators()
+  }, [filterAndSortCreators])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -293,7 +291,7 @@ export default function EarningsTaxOverview() {
     toast.info('1099 form download would be implemented here')
   }
 
-  const handleViewStripe = (creator: CreatorEarnings) => {
+  const handleViewStripe = (_creator: CreatorEarnings) => {
     // Open Stripe dashboard in new tab
     window.open('https://dashboard.stripe.com/customers', '_blank')
     toast.info('Opening Stripe dashboard')

@@ -3,9 +3,12 @@ import { useEffect, useState } from "react";
 interface EntranceEffectProps {
   username: string;
   role: "admin" | "lead_troll_officer" | "troll_officer";
+  profile?: {
+    rgb_username_expires_at?: string;
+  };
 }
 
-export default function EntranceEffect({ username, role }: EntranceEffectProps) {
+export default function EntranceEffect({ username, role, profile }: EntranceEffectProps) {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
@@ -38,13 +41,14 @@ export default function EntranceEffect({ username, role }: EntranceEffectProps) 
   };
 
   const config = roleConfig[role];
+  const hasRgb = profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 animate-pulse">
 
       <div className="entrance-text text-center">
         <div className={`text-8xl mb-4 glow`}>{config.emoji}</div>
-        <div className={`text-6xl font-black text-transparent bg-gradient-to-r ${config.color} bg-clip-text mb-4`}>
+        <div className={`text-6xl font-black text-transparent bg-gradient-to-r ${config.color} bg-clip-text mb-4 ${hasRgb ? 'rgb-username text-white !bg-none' : ''}`}>
           {username.toUpperCase()}
         </div>
         <div className={`text-3xl font-bold text-white tracking-widest mb-6`}>

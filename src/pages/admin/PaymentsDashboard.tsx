@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { Download, Filter, Search, DollarSign, Coins, TrendingUp, FileText } from 'lucide-react'
+import { Download, Search, DollarSign, Coins, TrendingUp, FileText, CreditCard } from 'lucide-react'
 
 interface Transaction {
   id: string
@@ -16,6 +16,7 @@ interface Transaction {
   created_at: string
   user_profiles: {
     username: string
+    square_card_id?: string
   } | null
 }
 
@@ -56,22 +57,22 @@ export default function PaymentsDashboard() {
     try {
       setLoading(true)
       const { data, error } = await supabase
-        .from('transactions')
+        .from('coin_transactions')
         .select(`
           id,
           user_id,
-          coins_purchased,
-          amount_paid,
-          payment_id,
-          receipt_url,
+          amount,
+          platform_profit,
+          external_id,
           status,
           created_at,
+          metadata,
           user_profiles:user_id (
             username,
             square_card_id
           )
         `)
-        .eq('type', 'coin_purchase')
+        .eq('type', 'purchase')
         .order('created_at', { ascending: false })
         .limit(1000)
 
@@ -79,12 +80,19 @@ export default function PaymentsDashboard() {
 
       // Transform data to match Transaction interface
       const transformed = (data || []).map((tx: any) => ({
-        ...tx,
+        id: tx.id,
+        user_id: tx.user_id,
+        coins_purchased: tx.amount,
+        amount_paid: tx.platform_profit || tx.metadata?.amount || 0,
+        payment_id: tx.external_id || tx.metadata?.payment_id || null,
+        receipt_url: tx.metadata?.receipt_url || null,
+        status: tx.status || 'completed',
+        created_at: tx.created_at,
         user_profiles: Array.isArray(tx.user_profiles) ? tx.user_profiles[0] : tx.user_profiles
       }))
 
-      setTransactions(transformed as Transaction[])
-    } catch (error: any) {
+      setTransactions(transformed as unknown as Transaction[])
+    } catch (error: unknown) {
       console.error('Failed to load transactions:', error)
       toast.error('Failed to load transactions')
     } finally {

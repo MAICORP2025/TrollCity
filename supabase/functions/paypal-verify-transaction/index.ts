@@ -115,7 +115,7 @@ export default async function handler(req: Request) {
     let meta: any = null;
     try {
       meta = JSON.parse(pu?.custom_id || "{}");
-    } catch (_) {}
+    } catch {}
 
     return new Response(
       JSON.stringify({

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Shield, Clock, Zap, Crown } from 'lucide-react'
 import { supabase, UserProfile } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -87,11 +87,7 @@ const TrollerInsurance = () => {
   const [purchasing, setPurchasing] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadInsuranceStatus()
-  }, [profile])
-
-  const loadInsuranceStatus = async () => {
+  const loadInsuranceStatus = useCallback(async () => {
     if (!profile) return
 
     try {
@@ -102,7 +98,7 @@ const TrollerInsurance = () => {
         if (expiresAt > new Date()) {
           setActiveInsurance({
             expires_at: profile.insurance_expires_at,
-type: (profile as any).insurance_type || profile.insurance_level || 'basic'
+            type: (profile as any).insurance_type || profile.insurance_level || 'basic'
           })
         }
       }
@@ -111,7 +107,11 @@ type: (profile as any).insurance_type || profile.insurance_level || 'basic'
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile])
+
+  useEffect(() => {
+    loadInsuranceStatus()
+  }, [loadInsuranceStatus])
 
   const purchaseInsurance = async (package_: InsurancePackage) => {
     if (!profile) return

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { CheckCircle2, XCircle, Clock, User, Coins, CreditCard } from 'lucide-react'
@@ -31,11 +31,7 @@ export default function EmpireApplications() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
 
-  useEffect(() => {
-    loadApplications()
-  }, [filter])
-
-  const loadApplications = async () => {
+  const loadApplications = useCallback(async () => {
     setLoading(true)
     try {
       let query = supabase
@@ -45,7 +41,7 @@ export default function EmpireApplications() {
           user:user_profiles!empire_applications_user_id_fkey (
             username,
             avatar_url,
-            troll_troll_coins
+            troll_coins
           ),
           reviewer:user_profiles!empire_applications_reviewed_by_fkey (
             username
@@ -62,7 +58,7 @@ export default function EmpireApplications() {
       if (error) throw error
 
       // Transform data
-      const transformed = (data || []).map((app: any) => ({
+      const transformed: EmpireApplication[] = (data || []).map((app: any) => ({
         ...app,
         user: Array.isArray(app.user) ? app.user[0] : app.user,
         reviewer: Array.isArray(app.reviewer) ? app.reviewer[0] : app.reviewer
@@ -75,7 +71,11 @@ export default function EmpireApplications() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    loadApplications()
+  }, [filter, loadApplications])
 
   const handleApprove = async (applicationId: string) => {
     if (!profile?.id) return

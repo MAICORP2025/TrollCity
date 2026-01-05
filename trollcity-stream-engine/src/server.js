@@ -1,7 +1,7 @@
 // src/server.ts
 import express from "express";
 import http from "http";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 import * as mediasoup from "mediasoup";
 import { v4 as uuidv4 } from "uuid";
 import OpenAI from "openai";

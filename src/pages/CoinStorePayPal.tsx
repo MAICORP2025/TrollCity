@@ -18,7 +18,10 @@ export default function CoinStore() {
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null)
   const [promoError, setPromoError] = useState('')
   const [processingPackage, setProcessingPackage] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'coins' | 'calls'>('coins')
+  const [activeTab, setActiveTab] = useState<'coins' | 'calls'>(() => {
+    const saved = typeof window !== 'undefined' ? sessionStorage.getItem(STORE_TAB_KEY) : null
+    return (saved as 'coins' | 'calls') || 'coins'
+  })
   const [paypalConfig, setPaypalConfig] = useState<any>(null)
   const [connectionTest, setConnectionTest] = useState<{ tested: boolean; success: boolean; error?: string }>({ tested: false, success: false })
   const [showPurchaseComplete, setShowPurchaseComplete] = useState(() => {
@@ -156,12 +159,7 @@ export default function CoinStore() {
     setShowPurchaseComplete(true)
   }
 
-  useEffect(() => {
-    const savedTab = sessionStorage.getItem(STORE_TAB_KEY)
-    if (savedTab && savedTab !== activeTab) {
-      setActiveTab(savedTab as 'coins' | 'calls')
-    }
-  }, [])
+  // removed mount-time tab restore effect; initialized via useState lazy initializer
 
   useEffect(() => {
     sessionStorage.setItem(STORE_TAB_KEY, activeTab)

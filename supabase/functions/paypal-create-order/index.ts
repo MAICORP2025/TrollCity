@@ -15,7 +15,7 @@ console.log(`PayPal env: mode=${PAYPAL_MODE}, clientId=${PAYPAL_CLIENT_ID?.subst
 
 // Check for required environment variables
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
-  serve(async (req: Request) => {
+  serve(async (_req: Request) => {
     return new Response(
       JSON.stringify({
         status: "error",

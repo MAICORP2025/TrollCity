@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { Calendar, FileText, User, Filter, Download, Search } from 'lucide-react'
+import { Calendar, FileText, User, Download, Search } from 'lucide-react'
 
 interface WeeklyReport {
   id: string
@@ -28,7 +27,6 @@ interface OfficerProfile {
 }
 
 export default function WeeklyReportsView() {
-  const { profile } = useAuthStore()
   const [reports, setReports] = useState<WeeklyReport[]>([])
   const [officers, setOfficers] = useState<OfficerProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,12 +34,7 @@ export default function WeeklyReportsView() {
   const [filterWeek, setFilterWeek] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
 
-  useEffect(() => {
-    loadReports()
-    loadOfficers()
-  }, [])
-
-  const loadReports = async () => {
+  const loadReports = React.useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -51,15 +44,15 @@ export default function WeeklyReportsView() {
 
       if (error) throw error
       setReports(data || [])
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading reports:', error)
       toast.error('Failed to load weekly reports')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const loadOfficers = async () => {
+  const loadOfficers = React.useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -69,10 +62,15 @@ export default function WeeklyReportsView() {
 
       if (error) throw error
       setOfficers(data || [])
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading officers:', error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadReports()
+    loadOfficers()
+  }, [loadReports, loadOfficers])
 
   const filteredReports = reports.filter(report => {
     const matchesOfficer = !filterOfficer || report.officer_id === filterOfficer

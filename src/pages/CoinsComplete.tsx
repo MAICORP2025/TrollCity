@@ -7,7 +7,7 @@ import { toast } from "sonner";
 export default function CoinsComplete() {
   const [search] = useSearchParams();
   const navigate = useNavigate();
-  const { user, refreshProfile } = useAuthStore() as any;
+  const { refreshProfile } = useAuthStore() as any;
   const [status, setStatus] = useState<"pending" | "success" | "error">(
     "pending"
   );

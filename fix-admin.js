@@ -50,7 +50,6 @@ async function fixAdmin() {
           role: 'admin',
           tier: 'Platinum',
           troll_coins: 10000,
-          troll_coins: 10000,
           total_earned_coins: 0,
           total_spent_coins: 0,
           avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',

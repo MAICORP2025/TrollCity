@@ -67,7 +67,6 @@ Deno.serve(async (req) => {
     if (!customerId) {
       // Call create-square-customer internally
       const SQUARE_ACCESS_TOKEN = Deno.env.get('SQUARE_ACCESS_TOKEN')
-      const SQUARE_LOCATION_ID = Deno.env.get('SQUARE_LOCATION_ID')
       const SQUARE_ENVIRONMENT = Deno.env.get('SQUARE_ENVIRONMENT') || 'production'
       const squareBaseUrl = SQUARE_ENVIRONMENT === 'production' 
         ? 'https://connect.squareup.com'

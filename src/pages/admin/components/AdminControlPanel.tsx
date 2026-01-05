@@ -11,14 +11,12 @@ import {
   CheckCircle, 
   X, 
   Gift,
-  AlertTriangle,
-  Search
+  AlertTriangle
 } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
 
 export default function AdminControlPanel() {
   const { user, profile, refreshProfile } = useAuthStore()
-  const [targetUser, setTargetUser] = useState('')
   const [searchUsername, setSearchUsername] = useState('')
   const [searchResults, setSearchResults] = useState<Array<{
     id: string
@@ -26,6 +24,7 @@ export default function AdminControlPanel() {
     email: string
     troll_coins?: number
     role?: string
+    rgb_username_expires_at?: string
   }>>([])
   const [selectedUser, setSelectedUser] = useState<{ 
     id: string
@@ -33,6 +32,7 @@ export default function AdminControlPanel() {
     email?: string
     troll_coins?: number
     role?: string
+    rgb_username_expires_at?: string
   } | null>(null)
   const [amount, setAmount] = useState(0)
   const [level, setLevel] = useState(1)
@@ -55,7 +55,7 @@ export default function AdminControlPanel() {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, email, troll_coins, role')
+        .select('id, username, email, troll_coins, role, rgb_username_expires_at')
         .ilike('username', `%${searchTerm}%`)
         .limit(20)
         .order('username', { ascending: true })
@@ -63,7 +63,7 @@ export default function AdminControlPanel() {
       if (error) throw error
 
       setSearchResults(data || [])
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error searching users:', error)
       toast.error('Failed to search users')
       setSearchResults([])
@@ -248,7 +248,7 @@ export default function AdminControlPanel() {
             }
           } else {
             // Use general approve_application for other types
-            const { data: approveData, error: approveError } = await supabase.rpc('approve_application', {
+            const { error: approveError } = await supabase.rpc('approve_application', {
               p_app_id: application.id,
               p_reviewer_id: user.id
             })
@@ -289,7 +289,7 @@ export default function AdminControlPanel() {
           }
 
           // Use existing reject RPC
-          const { data: rejectData, error: rejectError } = await supabase.rpc('deny_application', {
+          const { error: rejectError } = await supabase.rpc('deny_application', {
             p_app_id: rejectApp.id,
             p_reviewer_id: user.id
           })
@@ -373,9 +373,9 @@ export default function AdminControlPanel() {
         setMessage(result.error)
         toast.error(result.error)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error performing admin action:', error)
-      const errorMsg = error.message || 'Failed to perform action'
+      const errorMsg = error instanceof Error ? error.message : 'Failed to perform action'
       setMessage(errorMsg)
       toast.error(errorMsg)
     } finally {
@@ -467,7 +467,8 @@ export default function AdminControlPanel() {
                             username: u.username,
                             email: u.email,
                             troll_coins: totalCoins,
-                            role: u.role
+                            role: u.role,
+                            rgb_username_expires_at: u.rgb_username_expires_at
                           })
                           setSearchResults([])
                           setSearchUsername('')
@@ -479,7 +480,9 @@ export default function AdminControlPanel() {
                             <User className="w-4 h-4 text-gray-400" />
                             <div>
                               <div className="font-semibold flex items-center gap-2">
-                                {u.username}
+                                <span className={u.rgb_username_expires_at && new Date(u.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}>
+                                  {u.username}
+                                </span>
                                 {u.role && (
                                   <span className="text-xs px-1.5 py-0.5 bg-purple-500/30 rounded text-purple-300">
                                     {u.role}

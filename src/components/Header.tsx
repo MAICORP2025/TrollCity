@@ -10,13 +10,14 @@ import ClickableUsername from './ClickableUsername'
 
 const Header = () => {
   const { user, profile } = useAuthStore()
+  // const [notifications, setNotifications] = useState<any[]>([])
+  // const [showNotifications, setShowNotifications] = useState(false)
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = React.useState('')
 
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
-  const [notifications, setNotifications] = useState<any[]>([])
 
   useEffect(() => {
     const searchUsers = async () => {
@@ -263,7 +264,7 @@ const Header = () => {
                 <div
                   key={user.id}
                   onClick={() => {
-                    navigate(`/profile/${user.username}`)
+                    navigate(`/profile/id/${user.id}`)
                     setSearchQuery('')
                     setShowUserDropdown(false)
                   }}
@@ -277,6 +278,7 @@ const Header = () => {
                   <ClickableUsername
                     username={user.username}
                     userId={user.id}
+                    profile={user}
                     className="text-white hover:text-purple-400"
                   />
                 </div>
@@ -302,7 +304,7 @@ const Header = () => {
         <Link 
           to={profile?.username ? `/profile/${profile.username}` : '/profile/me'}
           className={`p-3 text-green-400 hover:text-green-300 transition-all duration-300 group ${!profile?.username ? 'cursor-not-allowed opacity-50' : ''}`}
-          onClick={(e) => {
+          onClick={() => {
             // allow navigation even if username not set (routes handle 'me')
           }}
         >
@@ -315,7 +317,7 @@ const Header = () => {
             className={`flex items-center space-x-4 hover:scale-105 transition-transform duration-300`}
           >
             <div className="text-right">
-              <p className="text-sm font-bold text-white">
+              <p className={`text-sm font-bold ${profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date() ? 'rgb-username' : 'text-white'}`}>
                 {profile?.username || 'Set up profile'}
               </p>
               <p className="text-xs text-troll-neon-blue/70 capitalize font-semibold">

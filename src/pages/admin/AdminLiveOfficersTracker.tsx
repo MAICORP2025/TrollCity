@@ -54,7 +54,7 @@ export default function AdminLiveOfficersTracker() {
         if (error) {
           console.error("Error loading assignments:", error);
         } else {
-          setAssignments((data as any) || []);
+          setAssignments((data as unknown as OfficerAssignment[]) || []);
         }
       } catch (err) {
         console.error("Error:", err);

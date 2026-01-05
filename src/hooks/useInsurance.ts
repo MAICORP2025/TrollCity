@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   getInsurancePlans,
   getActiveInsurance,
@@ -45,7 +45,7 @@ export function useActiveInsurance() {
   const [activeInsurance, setActiveInsurance] = useState<ActiveInsurance[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refreshInsurance = async () => {
+  const refreshInsurance = useCallback(async () => {
     if (!user?.id) {
       setActiveInsurance([]);
       setLoading(false);
@@ -62,11 +62,11 @@ export function useActiveInsurance() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     refreshInsurance();
-  }, [user?.id]);
+  }, [refreshInsurance]);
 
   return { activeInsurance, loading, refreshInsurance };
 }

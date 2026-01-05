@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
 export const getUserRoles = async (): Promise<string[]> => {
-  const { data: user, error: userError } = await supabase.auth.getUser()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError || !user) {
     console.warn('Unable to read signed-in user roles:', userError?.message)
     return []

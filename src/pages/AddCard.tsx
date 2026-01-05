@@ -14,7 +14,7 @@ declare global {
 }
 
 export default function AddCard() {
-  const { user, profile, setProfile } = useAuthStore()
+  const { user, setProfile } = useAuthStore()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [squareLoaded, setSquareLoaded] = useState(false)
@@ -28,76 +28,78 @@ export default function AddCard() {
       return
     }
 
-    loadSquareSDK()
-  }, [user])
+    const initializeSquare = async () => {
+      try {
+        if (!window.Square) {
+          console.error('Square SDK not available')
+          return
+        }
 
-  const loadSquareSDK = async () => {
-    try {
-      // Check if Square SDK is already loaded
-      if (window.Square) {
-        initializeSquare()
-        return
-      }
+        // Get Square application ID from environment
+        const appId = import.meta.env.VITE_SQUARE_APPLICATION_ID
+        if (!appId) {
+          console.error('Square Application ID not configured')
+          toast.error('Payment system not configured')
+          return
+        }
 
-      // Load Square Web Payments SDK (use sandbox or production based on env)
-      const squareEnv = import.meta.env.VITE_SQUARE_ENVIRONMENT || 'sandbox'
-      const squareSDKUrl = squareEnv === 'production' 
-        ? 'https://web.squarecdn.com/v1/square.js'
-        : 'https://sandbox.web.squarecdn.com/v1/square.js'
-      
-      const script = document.createElement('script')
-      script.src = squareSDKUrl
-      script.type = 'text/javascript'
-      script.async = true
-      script.onload = () => {
-        console.log('Square SDK loaded')
-        initializeSquare()
+        // Initialize Square Payments
+        const paymentsInstance = window.Square.payments(appId, import.meta.env.VITE_SQUARE_LOCATION_ID || '')
+        
+        // Create card element
+        const card = await paymentsInstance.card()
+        
+        // Mount card element
+        if (cardContainerRef.current) {
+          await card.attach(cardContainerRef.current)
+          setCardElement(card)
+          setPayments(paymentsInstance)
+          setSquareLoaded(true)
+          console.log('Square card element initialized')
+        }
+      } catch (error: any) {
+        console.error('Error initializing Square:', error)
+        toast.error('Failed to initialize payment form')
       }
-      script.onerror = () => {
-        console.error('Failed to load Square SDK')
+    }
+
+    const loadSquareSDK = async () => {
+      try {
+        // Check if Square SDK is already loaded
+        if (window.Square) {
+          initializeSquare()
+          return
+        }
+
+        // Load Square Web Payments SDK (use sandbox or production based on env)
+        const squareEnv = import.meta.env.VITE_SQUARE_ENVIRONMENT || 'sandbox'
+        const squareSDKUrl = squareEnv === 'production' 
+          ? 'https://web.squarecdn.com/v1/square.js'
+          : 'https://sandbox.web.squarecdn.com/v1/square.js'
+        
+        const script = document.createElement('script')
+        script.src = squareSDKUrl
+        script.type = 'text/javascript'
+        script.async = true
+        script.onload = () => {
+          console.log('Square SDK loaded')
+          initializeSquare()
+        }
+        script.onerror = () => {
+          console.error('Failed to load Square SDK')
+          toast.error('Failed to load payment system')
+        }
+        document.body.appendChild(script)
+      } catch (error) {
+        console.error('Error loading Square SDK:', error)
         toast.error('Failed to load payment system')
       }
-      document.body.appendChild(script)
-    } catch (error) {
-      console.error('Error loading Square SDK:', error)
-      toast.error('Failed to load payment system')
     }
-  }
 
-  const initializeSquare = async () => {
-    try {
-      if (!window.Square) {
-        console.error('Square SDK not available')
-        return
-      }
+    loadSquareSDK()
+  }, [user, navigate])
 
-      // Get Square application ID from environment
-      const appId = import.meta.env.VITE_SQUARE_APPLICATION_ID
-      if (!appId) {
-        console.error('Square Application ID not configured')
-        toast.error('Payment system not configured')
-        return
-      }
-
-      // Initialize Square Payments
-      const paymentsInstance = window.Square.payments(appId, import.meta.env.VITE_SQUARE_LOCATION_ID || '')
-      
-      // Create card element
-      const card = await paymentsInstance.card()
-      
-      // Mount card element
-      if (cardContainerRef.current) {
-        await card.attach(cardContainerRef.current)
-        setCardElement(card)
-        setPayments(paymentsInstance)
-        setSquareLoaded(true)
-        console.log('Square card element initialized')
-      }
-    } catch (error: any) {
-      console.error('Error initializing Square:', error)
-      toast.error('Failed to initialize payment form')
-    }
-  }
+  /* Removed loadSquareSDK and initializeSquare from outer scope to fix dependency warnings */
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -9,8 +9,6 @@ export default function TrollIdentityLab() {
   const { profile } = useAuthStore()
   const [events, setEvents] = React.useState<any[]>([])
   const [traits, setTraits] = React.useState<any[]>([])
-  const [dna, setDna] = React.useState<any>(null)
-  const [level, setLevel] = React.useState<any>(null)
 
   const load = React.useCallback(async () => {
     if (!profile) return
@@ -18,11 +16,7 @@ export default function TrollIdentityLab() {
     setEvents(ev || [])
     const { data: t } = await supabase.from('troll_dna_traits').select('*')
     setTraits(t || [])
-    const { data: d } = await supabase.from('troll_dna_profiles').select('*').eq('user_id', profile.id).maybeSingle()
-    setDna(d || { primary_dna: null, traits: [] })
-    const { data: l } = await supabase.from('user_levels').select('*').eq('user_id', profile.id).maybeSingle()
-    setLevel(l || { level: 1, xp: 0, next_level_xp: 100 })
-  }, [profile?.id])
+  }, [profile])
 
   React.useEffect(() => { load() }, [load])
 

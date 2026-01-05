@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, CheckCircle } from 'lucide-react';
+import { ArrowLeft, FileText } from 'lucide-react';
 
 export default function TaxOnboarding() {
   const { profile } = useAuthStore();

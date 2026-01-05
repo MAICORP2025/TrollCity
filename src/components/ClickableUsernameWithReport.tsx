@@ -14,6 +14,7 @@ interface ClickableUsernameWithReportProps {
     is_admin?: boolean
     is_troller?: boolean
     is_og_user?: boolean
+    rgb_username_expires_at?: string
     officer_level?: number
     troller_level?: number
     role?: string

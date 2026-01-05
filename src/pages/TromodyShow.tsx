@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Gift, Send, Trophy, ArrowLeft } from "lucide-react";
 
@@ -21,12 +21,12 @@ export default function TromodyShow() {
   const [chatMessages, setChatMessages] = useState<{ user: string; message: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [battleEnded, setBattleEnded] = useState(false);
-  const [viewer1Data, setViewer1Data] = useState<Viewer[]>([
+  const [viewer1Data] = useState<Viewer[]>([
     { id: "v1", name: "Viewer1", avatar: "👤", coins: 150 },
     { id: "v2", name: "Viewer2", avatar: "👥", coins: 280 },
     { id: "v3", name: "TrollKing", avatar: "👑", coins: 420 },
   ]);
-  const [viewer2Data, setViewer2Data] = useState<Viewer[]>([
+  const [viewer2Data] = useState<Viewer[]>([
     { id: "v4", name: "StreamFan", avatar: "⭐", coins: 200 },
     { id: "v5", name: "VlogMaster", avatar: "🎬", coins: 310 },
     { id: "v6", name: "GiftGiver", avatar: "🎁", coins: 500 },

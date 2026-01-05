@@ -47,7 +47,6 @@ export class CoinRotationOptimizer {
       useAuthStore.getState().setProfile({
         ...profile,
         troll_coins: data.troll_coins,
-        troll_coins: data.troll_coins,
         total_earned_coins: data.total_earned_coins,
         total_spent_coins: data.total_spent_coins
       })
@@ -121,7 +120,7 @@ export function useCoinRotation() {
     return () => {
       unsubscribe()
     }
-  }, [profile?.id])
+  }, [profile])
 
   return coinData
 }

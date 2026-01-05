@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase, UserProfile } from '../lib/supabase'
@@ -18,11 +18,7 @@ export default function Following() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'following' | 'followers'>('following')
 
-  useEffect(() => {
-    load()
-  }, [])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true)
       if (!profile) { setLoading(false); return }
@@ -49,7 +45,11 @@ export default function Following() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-8">
@@ -88,7 +88,7 @@ export default function Following() {
                             className="w-10 h-10 rounded-full"
                           />
                           <div>
-                            <div className="font-semibold">@{r.following?.username}</div>
+                            <div className={`font-semibold ${r.following?.rgb_username_expires_at && new Date(r.following.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>@{r.following?.username}</div>
                             <div className="text-xs text-[#E2E2E2]/60">Followed {new Date(r.created_at).toLocaleDateString()}</div>
                           </div>
                         </div>
@@ -110,7 +110,7 @@ export default function Following() {
                             className="w-10 h-10 rounded-full"
                           />
                           <div>
-                            <div className="font-semibold">@{r.following?.username}</div>
+                            <div className={`font-semibold ${r.following?.rgb_username_expires_at && new Date(r.following.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>@{r.following?.username}</div>
                             <div className="text-xs text-[#E2E2E2]/60">Followed you {new Date(r.created_at).toLocaleDateString()}</div>
                           </div>
                         </div>

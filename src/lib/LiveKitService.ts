@@ -44,6 +44,7 @@ export interface LiveKitServiceConfig {
   preflightStream?: MediaStream
   autoPublish?: boolean
   tokenOverride?: string // For testing or special cases
+  url?: string // Custom LiveKit server URL
 }
 
 export class LiveKitService {
@@ -344,11 +345,6 @@ export class LiveKitService {
         if (parts.length >= 2) {
           const payload = JSON.parse(decodeURIComponent(escape(atob(parts[1]))))
           
-          // Helper to safely stringify objects
-          const safeStringify = (obj: any) => {
-            try { return JSON.stringify(obj, null, 2) } catch { return String(obj) }
-          }
-
           this.log('🔐 LiveKit token payload', payload)
           
           // Specific grant checks
@@ -390,7 +386,8 @@ export class LiveKitService {
       });
 
       // Step 4: Connect to room
-      this.log('Connecting to LiveKit room...', { LIVEKIT_URL, roomName: this.config.roomName, identity: this.config.identity })
+      const targetUrl = this.config.url || LIVEKIT_URL;
+      this.log('Connecting to LiveKit room...', { url: targetUrl, roomName: this.config.roomName, identity: this.config.identity })
 
       // ✅ STRICT VALIDATION: Ensure token is a string before passing to room.connect()
       if (typeof token !== 'string') {
@@ -411,7 +408,7 @@ export class LiveKitService {
 
       // ✅ 2) Before room.connect:
       console.log("[useLiveKitSession] about to connect", { 
-        url: LIVEKIT_URL, 
+        url: targetUrl, 
         roomName: this.config.roomName, 
         identity: this.config.identity, 
         tokenLen: token?.length,
@@ -420,20 +417,12 @@ export class LiveKitService {
         tokenPreview: typeof token === 'string' ? token.substring(0, 20) + '...' : 'NOT A STRING'
       })
 
-      // Fallback check: LIVEKIT_URL should be a secure websocket endpoint
-      if (typeof LIVEKIT_URL === 'string' && !LIVEKIT_URL.startsWith('wss://')) {
-        console.error('LIVEKIT_URL does not start with wss:// — blocking connect', LIVEKIT_URL)
-        toast.error('LiveKit connection failed: check LIVEKIT_URL, token, or server availability')
-        this.isConnecting = false
-        return false
-      }
-
       try {
         // ✅ Final check: ensure token is still a string (defensive)
         if (typeof token !== 'string') {
           throw new Error(`Token became non-string before connect: ${typeof token}`)
         }
-        await this.room.connect(LIVEKIT_URL, token)
+        await this.room.connect(targetUrl, token)
         console.log("[useLiveKitSession] ✅ Connected successfully")
         
         // Ensure local participant exists in map as soon as we connect
@@ -471,6 +460,14 @@ export class LiveKitService {
         return true
       } catch (err: any) {
         const errorMsg = err?.message || String(err) || 'Failed to connect to LiveKit room'
+        
+        // 🔍 Detailed Error Diagnostics for Auth Failures
+        if (errorMsg.includes('Authentication failed') || errorMsg.includes('Could not fetch region settings') || errorMsg.includes('401')) {
+           console.error('🚨 LiveKit Authentication Failed! This usually means LIVEKIT_API_KEY/SECRET in server .env do not match the LIVEKIT_URL project.');
+           console.error('🚨 Make sure the backend .env has the correct API Key and Secret for:', targetUrl);
+           toast.error('Connection refused: Server credentials do not match LiveKit project URL.');
+        }
+
         this.lastConnectionError = errorMsg
         
         console.error("[LiveKitService] connect failed", err)
@@ -814,12 +811,10 @@ export class LiveKitService {
         expiresIn: session.expires_at ? `${session.expires_at - now}s` : 'unknown'
       })
 
-      // Call external token endpoint (Vercel API route)
-      const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
-      const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL; // supabase base
-      const edgeTokenUrl = edgeBase ? `${edgeBase}/livekit-token` : null;
-
-      const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
+      // Call external token endpoint (Supabase Edge Function)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
+      
       console.log("🔥 LiveKit tokenUrl selected:", tokenUrl);
 
       // ✅ CRITICAL: Ensure accessToken is a string, not an object
@@ -888,6 +883,7 @@ export class LiveKitService {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': authHeader,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
             room: this.config.roomName,

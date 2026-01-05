@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../lib/store";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ interface Payout {
 }
 
 export default function AdminPayoutDashboard() {
-  const { user, profile } = useAuthStore() as any;
+  const { user, profile } = useAuthStore()
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,18 +29,23 @@ export default function AdminPayoutDashboard() {
 
     const load = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("payout_requests")
-        .select("*, user_profiles(username)")
-        .order("created_at", { ascending: false });
-      
-      if (!error && data) {
-        setPayouts(data as any);
-      } else if (error) {
+      try {
+        const { data, error } = await supabase
+          .from("payout_requests")
+          .select("*, user_profiles(username)")
+          .order("created_at", { ascending: false });
+        
+        if (error) throw error;
+        
+        if (data) {
+          setPayouts(data as Payout[]);
+        }
+      } catch (error: unknown) {
         console.error("Error loading payouts:", error);
         toast.error("Failed to load payout requests");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     load();
@@ -62,7 +67,7 @@ export default function AdminPayoutDashboard() {
     };
   }, [user, isAdmin]);
 
-  const updateStatus = async (id: string, status: string) => {
+  const updateStatus = useCallback(async (id: string, status: string) => {
     let note = null;
     if (status === "rejected") {
       const reason = prompt("Rejection reason?");
@@ -92,7 +97,7 @@ export default function AdminPayoutDashboard() {
       prev.map((p) => (p.id === id ? { ...p, status, admin_note: note } : p))
     );
     toast.success(`Payout ${status}`);
-  };
+  }, []);
 
   if (!user || !isAdmin) {
     return (

@@ -39,6 +39,13 @@ const Auth = () => {
         
         if (error) {
           console.error('Login error:', error)
+          // Handle specific auth errors
+          if (error.message.includes('Email not confirmed')) {
+             throw new Error('Please confirm your email address before logging in.')
+          }
+          if (error.message.includes('Invalid login credentials')) {
+             throw new Error('Invalid email or password.')
+          }
           throw error
         }
         
@@ -47,12 +54,19 @@ const Auth = () => {
           setAuth(data.user, data.session)
           
           // Check if profile exists
-          const { data: profileData } = await supabase
+          let profileData = null
+          const { data: fetchedProfile, error: profileError } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('id', data.user.id)
             .maybeSingle()
           
+          if (profileError) {
+             console.error('Error fetching profile:', profileError)
+             // Don't throw here, try to recover or redirect to setup
+          }
+          profileData = fetchedProfile
+
           if (profileData) {
             // Check if admin BEFORE setting profile
             if (isAdminEmail(data.user.email) && profileData.role !== 'admin') {
@@ -106,10 +120,14 @@ const Auth = () => {
                 navigate('/profile-setup')
               }
             } else {
+              // Still no profile found - redirect to setup to let it handle creation/fetching
+              console.log('No profile found after polling, redirecting to setup')
               toast.success('Login successful! Please complete your profile.')
               navigate('/profile-setup')
             }
           }
+        } else if (data.user && !data.session) {
+           throw new Error('Please confirm your email address before logging in.')
         } else {
           throw new Error('Login failed - no user data returned')
         }
@@ -120,42 +138,34 @@ const Auth = () => {
           return
         }
         
-        // Use our API endpoint to create user without sending confirmation email
+        // Use Supabase Auth directly
         console.log('Creating new user account...')
-        console.log('Signup request payload:', {
-          email,
-          password: '***', // Don't log actual password
-          username: username.trim(),
-          referral_code: referralCode || undefined,
-          recruited_by: localStorage.getItem('recruited_by') || undefined
-        })
         
-        const signUpData = await (await import('../lib/api')).default.post('/signup', {
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          username: username.trim(),
-          referral_code: referralCode || undefined,
-          recruited_by: localStorage.getItem('recruited_by') || undefined
+          options: {
+            data: {
+              username: username.trim(),
+              referral_code: referralCode || undefined,
+              recruited_by: localStorage.getItem('recruited_by') || undefined
+            }
+          }
         })
-        
-        console.log('Signup response:', signUpData)
-        
-        if (!signUpData.success) {
-          console.error('Signup failed:', signUpData)
-          throw new Error(signUpData.error || 'Signup failed')
+
+        if (signUpError) {
+          console.error('Signup failed:', signUpError)
+          throw new Error(signUpError.message || 'Signup failed')
         }
         
-        console.log('User created, signing in...')
-
-        // Now sign in the user
-        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
-        if (signInErr) {
-          console.error('Sign in error:', signInErr)
-          throw new Error(signInErr.message || 'Login failed')
+        if (signUpData.user && !signUpData.session) {
+          toast.success('Please check your email to confirm your account.')
+          setLoading(false)
+          return
         }
 
-        // Ensure session is available - wait for it if needed
-        let session = signInData?.session
+        console.log('User created and signed in')
+        let session = signUpData.session
         if (!session) {
           // Try to get session, with retries
           for (let i = 0; i < 3; i++) {

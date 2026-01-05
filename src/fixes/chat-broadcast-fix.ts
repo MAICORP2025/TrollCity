@@ -1,3 +1,5 @@
+import React from 'react';
+
 // Fix for chat not sending/showing in broadcast
 // Add to StreamRoom.tsx
 
@@ -35,7 +37,7 @@ export const fixChatSend = async (
 // Also ensure realtime subscription is set up:
 export const setupChatRealtime = (
   streamId: string,
-  setMessages: (messages: any[]) => void,
+  setMessages: React.Dispatch<React.SetStateAction<any[]>>,
   supabase: any
 ) => {
   const channel = supabase

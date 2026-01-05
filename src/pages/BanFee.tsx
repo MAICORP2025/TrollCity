@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, Scale, Home } from "lucide-react";
-import { useState } from "react";
 
 export default function BanFee() {
   const navigate = useNavigate();

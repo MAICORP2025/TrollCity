@@ -4,9 +4,9 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
 import { 
-  Loader, Shield, AlertCircle, DollarSign, Users, 
-  FileText, Download, Filter, Search, Calendar,
-  TrendingUp, CheckCircle, XCircle, Clock
+  Loader, AlertCircle, DollarSign, Users, 
+  Download, Search,
+  TrendingUp, Clock
 } from 'lucide-react'
 import { EarningsView } from '../../types/earnings'
 
@@ -15,52 +15,13 @@ interface CreatorEarnings extends EarningsView {
   w9_status?: string
 }
 
-interface MonthlyBreakdown {
-  user_id: string
-  username: string
-  month: string
-  coins_earned_from_gifts: number
-  gift_count: number
-  unique_gifters: number
-  troll_coins_earned: number
-  free_coins_earned: number
-}
-
-interface PayoutHistory {
-  id: string
-  user_id: string
-  username: string
-  cash_amount: number
-  coins_redeemed: number
-  status: string
-  created_at: string
-  processed_at?: string
-  admin_username?: string
-  usd_equivalent: number
-}
-
-interface IRSThreshold {
-  user_id: string
-  username: string
-  year: number
-  total_paid_usd: number
-  payout_count: number
-  requires_1099: boolean
-  threshold_status: string
-  last_payout_date: string
-}
-
 const AdminEarningsDashboard: React.FC = () => {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
   const [creators, setCreators] = useState<CreatorEarnings[]>([])
-  const [monthlyData, setMonthlyData] = useState<MonthlyBreakdown[]>([])
-  const [payoutHistory, setPayoutHistory] = useState<PayoutHistory[]>([])
-  const [irsThresholds, setIrsThresholds] = useState<IRSThreshold[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'over_threshold' | 'nearing_threshold' | 'below_threshold'>('all')
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [sortBy, setSortBy] = useState<'earnings' | 'payouts' | 'threshold'>('earnings')
 
   // Strict admin-only check
@@ -80,12 +41,7 @@ const AdminEarningsDashboard: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        await Promise.all([
-          loadCreators(),
-          loadMonthlyData(),
-          loadPayoutHistory(),
-          loadIRSThresholds()
-        ])
+        await loadCreators()
       } catch (err) {
         console.error('Error fetching earnings data:', err)
         toast.error('Failed to load earnings data')
@@ -95,7 +51,7 @@ const AdminEarningsDashboard: React.FC = () => {
     }
 
     fetchData()
-  }, [profile, selectedYear])
+  }, [profile])
 
   const loadCreators = async () => {
     try {
@@ -114,7 +70,7 @@ const AdminEarningsDashboard: React.FC = () => {
         setCreators(data as CreatorEarnings[])
         return // Success, exit early
       }
-    } catch (err: any) {
+    } catch {
       // Fallback: load from user_profiles
       console.log('Using fallback: loading from user_profiles')
       const { data, error: fallbackError } = await supabase
@@ -151,79 +107,6 @@ const AdminEarningsDashboard: React.FC = () => {
           lifetime_paid_usd: 0
         })))
       }
-    }
-  }
-
-  const loadMonthlyData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('monthly_earnings_breakdown')
-        .select('*')
-        .order('month', { ascending: false })
-        .limit(500)
-
-      if (error) {
-        console.warn('monthly_earnings_breakdown not found, using empty array')
-        setMonthlyData([])
-        return
-      }
-      setMonthlyData(data || [])
-    } catch (err: any) {
-      console.warn('Error loading monthly data (non-critical):', err)
-      setMonthlyData([]) // Set empty array instead of failing
-    }
-  }
-
-  const loadPayoutHistory = async () => {
-    try {
-      // Try payout_history_view first, fallback to payout_requests
-      const { data, error } = await supabase
-        .from('payout_history_view')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200)
-
-      if (error) {
-        console.warn('payout_history_view not found, using payout_requests fallback')
-        // Fallback to payout_requests table
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('payout_requests')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(200)
-        
-        if (fallbackError) {
-          console.error('Fallback also failed:', fallbackError)
-          setPayoutHistory([])
-          return
-        }
-        setPayoutHistory(fallbackData || [])
-        return
-      }
-      setPayoutHistory(data || [])
-    } catch (err: any) {
-      console.warn('Error loading payout history (non-critical):', err)
-      setPayoutHistory([]) // Set empty array instead of failing
-    }
-  }
-
-  const loadIRSThresholds = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('irs_threshold_tracking')
-        .select('*')
-        .eq('year', selectedYear)
-        .order('total_paid_usd', { ascending: false })
-
-      if (error) {
-        console.warn('irs_threshold_tracking not found, using empty array')
-        setIrsThresholds([])
-        return
-      }
-      setIrsThresholds(data || [])
-    } catch (err: any) {
-      console.warn('Error loading IRS thresholds (non-critical):', err)
-      setIrsThresholds([]) // Set empty array instead of failing
     }
   }
 
@@ -321,46 +204,10 @@ const AdminEarningsDashboard: React.FC = () => {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
       toast.success('Earnings report downloaded')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error exporting CSV:', err)
       toast.error('Failed to export CSV')
     }
-  }
-
-  const exportPayoutHistoryCSV = () => {
-    const headers = [
-      'Date',
-      'Username',
-      'Coins Redeemed',
-      'Cash Amount (USD)',
-      'Status',
-      'Processed At',
-      'Admin'
-    ]
-
-    const rows = payoutHistory.map(p => [
-      new Date(p.created_at).toLocaleDateString(),
-      p.username,
-      p.coins_redeemed,
-      p.cash_amount.toFixed(2),
-      p.status,
-      p.processed_at ? new Date(p.processed_at).toLocaleDateString() : '',
-      p.admin_username || ''
-    ])
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `trollcity_payout_history_${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
-    toast.success('Payout history downloaded')
   }
 
   // Show access denied for non-admins
@@ -421,14 +268,6 @@ const AdminEarningsDashboard: React.FC = () => {
             >
               <Download className="w-4 h-4" />
               Export CSV for Accountant
-            </button>
-            <button
-              type="button"
-              onClick={exportPayoutHistoryCSV}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Export Payout History
             </button>
           </div>
         </div>
@@ -496,7 +335,7 @@ const AdminEarningsDashboard: React.FC = () => {
 
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'over_threshold' | 'nearing_threshold' | 'below_threshold')}
               className="px-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white"
             >
               <option value="all">All Threshold Status</option>
@@ -507,22 +346,12 @@ const AdminEarningsDashboard: React.FC = () => {
 
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => setSortBy(e.target.value as 'earnings' | 'payouts' | 'threshold')}
               className="px-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white"
             >
               <option value="earnings">Sort by Earnings</option>
               <option value="payouts">Sort by Payouts</option>
               <option value="threshold">Sort by Threshold</option>
-            </select>
-
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="px-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white"
-            >
-              {[2024, 2025, 2026].map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
             </select>
           </div>
         </div>
@@ -614,138 +443,6 @@ const AdminEarningsDashboard: React.FC = () => {
             </table>
           </div>
         </div>
-
-        {/* IRS Threshold Tracking */}
-        {irsThresholds.length > 0 && (
-          <div className="bg-zinc-900 rounded-xl p-4 border border-[#2C2C2C]">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-red-400" />
-              IRS 1099 Threshold Tracking ({selectedYear})
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700 text-gray-400">
-                    <th className="text-left py-2">Creator</th>
-                    <th className="text-right py-2">Total Paid (USD)</th>
-                    <th className="text-right py-2">Payout Count</th>
-                    <th className="text-center py-2">1099 Required</th>
-                    <th className="text-center py-2">Status</th>
-                    <th className="text-left py-2">Last Payout</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {irsThresholds.map((threshold) => (
-                    <tr key={`${threshold.user_id}-${threshold.year}`} className="border-b border-gray-800 hover:bg-gray-800/50">
-                      <td className="py-2">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/profile/${threshold.username}`)}
-                          className="text-blue-400 hover:text-blue-300 font-semibold"
-                        >
-                          {threshold.username}
-                        </button>
-                      </td>
-                      <td className="text-right py-2 font-semibold text-red-400">
-                        ${threshold.total_paid_usd.toFixed(2)}
-                      </td>
-                      <td className="text-right py-2 text-gray-300">
-                        {threshold.payout_count}
-                      </td>
-                      <td className="text-center py-2">
-                        {threshold.requires_1099 ? (
-                          <CheckCircle className="w-5 h-5 text-red-400 mx-auto" />
-                        ) : (
-                          <XCircle className="w-5 h-5 text-gray-500 mx-auto" />
-                        )}
-                      </td>
-                      <td className="text-center py-2">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          threshold.threshold_status === 'REQUIRED' ? 'bg-red-900 text-red-300' :
-                          threshold.threshold_status === 'WARNING' ? 'bg-yellow-900 text-yellow-300' :
-                          'bg-green-900 text-green-300'
-                        }`}>
-                          {threshold.threshold_status}
-                        </span>
-                      </td>
-                      <td className="py-2 text-gray-400 text-xs">
-                        {new Date(threshold.last_payout_date).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Payout History */}
-        {payoutHistory.length > 0 && (
-          <div className="bg-zinc-900 rounded-xl p-4 border border-[#2C2C2C]">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-blue-400" />
-              Recent Payout History
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700 text-gray-400">
-                    <th className="text-left py-2">Date</th>
-                    <th className="text-left py-2">Creator</th>
-                    <th className="text-right py-2">Coins</th>
-                    <th className="text-right py-2">Amount (USD)</th>
-                    <th className="text-center py-2">Status</th>
-                    <th className="text-left py-2">Processed By</th>
-                    <th className="text-left py-2">Processed At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payoutHistory.map((payout) => (
-                    <tr key={payout.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                      <td className="py-2 text-gray-300">
-                        {new Date(payout.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="py-2">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/profile/${payout.username}`)}
-                          className="text-blue-400 hover:text-blue-300"
-                        >
-                          {payout.username}
-                        </button>
-                      </td>
-                      <td className="text-right py-2 text-gray-300">
-                        {payout.coins_redeemed?.toLocaleString() || 0}
-                      </td>
-                      <td className="text-right py-2 font-semibold text-green-400">
-                        ${payout.cash_amount?.toFixed(2) || '0.00'}
-                      </td>
-                      <td className="text-center py-2">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          payout.status === 'paid' ? 'bg-green-900 text-green-300' :
-                          payout.status === 'approved' ? 'bg-blue-900 text-blue-300' :
-                          payout.status === 'pending' ? 'bg-yellow-900 text-yellow-300' :
-                          'bg-red-900 text-red-300'
-                        }`}>
-                          {payout.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="py-2 text-gray-400 text-xs">
-                        {payout.admin_username || '—'}
-                      </td>
-                      <td className="py-2 text-gray-400 text-xs">
-                        {payout.processed_at 
-                          ? new Date(payout.processed_at).toLocaleDateString()
-                          : '—'
-                        }
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://yjxpwfalenorzrqxwmtr.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqeHB3ZmFsZW5vcnpycXh3bXRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQwNTY2NTEsImV4cCI6MjA0OTYzMjY1MX0.VxJ3cW8l5Wj3cYb4q2L1Y9aWnX6h2sG9mZ8kQ1bN3cE';
 const EDGE_FUNCTIONS_URL = 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1';
-const LIVEKIT_URL = 'wss://trollcity2025-jav85l1w.livekit.cloud';
+const LIVEKIT_URL = 'wss://trollcity-o707gczb.livekit.cloud';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

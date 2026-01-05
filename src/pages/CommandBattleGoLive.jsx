@@ -362,11 +362,11 @@ const CommandBattleGoLive = () => {
 };
 
 // VideoRenderer component for displaying participant video
-const VideoRenderer = ({ participant, position }) => {
+const VideoRenderer = ({ participant, position: _position }) => {
   const videoRef = useRef(null);
 
   useEffect(() => {
-    const handleTrackSubscribed = (track, publication) => {
+    const handleTrackSubscribed = (track, _publication) => {
       if (track.kind === 'video' && videoRef.current) {
         track.attach(videoRef.current);
       }

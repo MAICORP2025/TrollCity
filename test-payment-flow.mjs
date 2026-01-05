@@ -39,12 +39,12 @@ const log = {
 }
 
 // Test card numbers for Square
-const TEST_CARDS = {
-  visa: '4111 1111 1111 1111',
-  mastercard: '5105 1051 0510 5100',
-  amex: '3782 822463 10005',
-  discover: '6011 0009 9013 9424',
-}
+// const TEST_CARDS = {
+//   visa: '4111 1111 1111 1111',
+//   mastercard: '5105 1051 0510 5100',
+//   amex: '3782 822463 10005',
+//   discover: '6011 0009 9013 9424',
+// }
 
 async function main() {
   console.log('\n' + '='.repeat(60))

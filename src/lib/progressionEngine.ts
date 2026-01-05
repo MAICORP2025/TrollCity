@@ -36,7 +36,7 @@ export async function addXp(userId: string, amount: number, reason?: string) {
         const familyXpBonus = Math.floor(amount * 0.05) // 5% of earned XP goes to family
         if (familyXpBonus > 0) {
           // Use RPC function to atomically update family stats
-          const { data: familyResult, error: familyError } = await supabase.rpc('increment_family_stats', {
+          const { data: _familyResult, error: familyError } = await supabase.rpc('increment_family_stats', {
             p_family_id: familyMember.family_id,
             p_coin_bonus: 0,
             p_xp_bonus: familyXpBonus

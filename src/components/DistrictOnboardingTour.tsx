@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { X, ChevronLeft, ChevronRight, CheckCircle, Sparkles } from 'lucide-react'
@@ -33,13 +33,7 @@ export default function DistrictOnboardingTour({
   const [loading, setLoading] = useState(true)
   const [completed, setCompleted] = useState(false)
 
-  useEffect(() => {
-    if (isOpen && districtName) {
-      loadTourSteps()
-    }
-  }, [isOpen, districtName])
-
-  const loadTourSteps = async () => {
+  const loadTourSteps = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase.rpc('get_district_onboarding_tour', {
@@ -56,7 +50,13 @@ export default function DistrictOnboardingTour({
     } finally {
       setLoading(false)
     }
-  }
+  }, [districtName])
+
+  useEffect(() => {
+    if (isOpen && districtName) {
+      loadTourSteps()
+    }
+  }, [isOpen, districtName, loadTourSteps])
 
   const nextStep = () => {
     if (currentStep < tourSteps.length - 1) {

@@ -2,14 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { ArrowLeft, Shield, AlertTriangle, Ban, EyeOff, CheckCircle, X } from 'lucide-react'
-import { useAuthStore } from '../lib/store'
+import { ArrowLeft, Shield, AlertTriangle } from 'lucide-react'
 import ReportDetailsModal from '../components/ReportDetailsModal'
 
 export default function ReportDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { profile } = useAuthStore()
   const [report, setReport] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -94,9 +92,8 @@ export default function ReportDetailsPage() {
 
           <ReportDetailsModal
             report={report}
-            isOpen={true}
             onClose={() => navigate('/officer/moderation')}
-            onActionComplete={() => {
+            onActionTaken={() => {
               toast.success('Action completed')
               navigate('/officer/moderation')
             }}

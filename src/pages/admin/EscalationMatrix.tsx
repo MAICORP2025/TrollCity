@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Edit, Plus, Trash2, Save, X, Shield, Gavel } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { AlertTriangle, Edit, Plus, Trash2, X, Shield, Gavel } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase, UserRole } from '../../lib/supabase';
 import RequireRole from '../../components/RequireRole';
 
@@ -38,11 +39,7 @@ export default function EscalationMatrix() {
   const [editingRule, setEditingRule] = useState<EscalationRule | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -65,10 +62,15 @@ export default function EscalationMatrix() {
       }
     } catch (error) {
       console.error('Error loading data:', error);
+      toast.error('Failed to load data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const saveRule = async (rule: EscalationRule) => {
     try {
@@ -113,9 +115,10 @@ export default function EscalationMatrix() {
       await loadData();
       setEditingRule(null);
       setShowAddModal(false);
+      toast.success('Rule saved successfully');
     } catch (error) {
       console.error('Error saving rule:', error);
-      alert('Error saving rule. Please try again.');
+      toast.error('Error saving rule. Please try again.');
     }
   };
 
@@ -130,9 +133,10 @@ export default function EscalationMatrix() {
 
       if (error) throw error;
       await loadData();
+      toast.success('Rule deleted successfully');
     } catch (error) {
       console.error('Error deleting rule:', error);
-      alert('Error deleting rule. Please try again.');
+      toast.error('Error deleting rule. Please try again.');
     }
   };
 

@@ -31,7 +31,6 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
   const otherUserId = propOtherUserId || paramUserId || '';
 
   const roomRef = useRef<Room | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [isCallStarted, setIsCallStarted] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(callType === 'audio');
@@ -87,6 +86,56 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
     loadMinutes();
   }, [user?.id, callType, navigate]);
 
+  // End call
+  const endCall = React.useCallback(async () => {
+    try {
+      if (isEnding) return;
+      setIsEnding(true);
+
+      if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+      if (minuteDeductionIntervalRef.current) clearInterval(minuteDeductionIntervalRef.current);
+      
+      setIsCallStarted(false);
+      setIsStartingCall(false);
+      
+      // Calculate final duration
+      const durationMinutes = callStartTimeRef.current
+        ? Math.ceil((new Date().getTime() - callStartTimeRef.current.getTime()) / 60000)
+        : 0;
+
+      // Save call history
+      if (otherUserId && user?.id) {
+        await supabase.from('call_history').insert({
+          caller_id: user.id,
+          receiver_id: otherUserId,
+          room_id: roomId,
+          type: callType,
+          duration_minutes: durationMinutes,
+          ended_at: new Date().toISOString(),
+        });
+      }
+
+      // Update DB status if needed (for active room)
+      if (roomId && user) {
+        await supabase
+          .from('call_rooms')
+          .update({ status: 'ended', ended_at: new Date().toISOString() })
+          .eq('id', roomId);
+      }
+      
+      if (roomRef.current) {
+        roomRef.current.disconnect();
+        roomRef.current = null;
+      }
+      
+      toast.success('Call ended');
+    } catch (error) {
+      console.error('Error ending call:', error);
+    } finally {
+      navigate('/messages');
+    }
+  }, [roomId, user, navigate, otherUserId, callType, isEnding]);
+
   // Initialize LiveKit connection
   useEffect(() => {
     if (!roomId || !user || !livekitUrl || !token) return;
@@ -102,10 +151,9 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
 
         newRoom.on(RoomEvent.Connected, () => {
           console.log('✅ Connected to call room');
-          setIsConnected(true);
 
           // Handle remote tracks
-          newRoom!.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          newRoom!.on(RoomEvent.TrackSubscribed, (track, _publication, _participant) => {
             if (track.kind === 'video' && remoteVideoRef.current) {
               track.attach(remoteVideoRef.current);
             } else if (track.kind === 'audio') {
@@ -141,7 +189,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         clearInterval(minuteDeductionIntervalRef.current);
       }
     };
-  }, [roomId, user, livekitUrl, token, callType, isVideoOff, navigate]);
+  }, [roomId, user, livekitUrl, token, callType, isVideoOff, navigate, endCall]);
 
   // Get LiveKit token
   useEffect(() => {
@@ -244,47 +292,6 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
       toast.error('Failed to start call');
     } finally {
       setIsStartingCall(false);
-    }
-  };
-
-  const endCall = async () => {
-    if (isEnding) return;
-    setIsEnding(true);
-
-    try {
-      // Calculate final duration
-      const durationMinutes = callStartTimeRef.current
-        ? Math.ceil((new Date().getTime() - callStartTimeRef.current.getTime()) / 60000)
-        : Math.ceil(callDuration / 60);
-
-      // Save call history
-      if (otherUserId && user?.id) {
-        await supabase.from('call_history').insert({
-          caller_id: user.id,
-          receiver_id: otherUserId,
-          room_id: roomId,
-          type: callType,
-          duration_minutes: durationMinutes,
-          ended_at: new Date().toISOString(),
-        });
-      }
-
-      // Disconnect room
-      if (roomRef.current) {
-        roomRef.current.disconnect();
-      }
-
-      // Clear intervals
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-      }
-      if (minuteDeductionIntervalRef.current) {
-        clearInterval(minuteDeductionIntervalRef.current);
-      }
-    } catch (err) {
-      console.error('Error ending call:', err);
-    } finally {
-      navigate('/messages');
     }
   };
 

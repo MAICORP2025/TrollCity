@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { X, AlertTriangle, ArrowUp } from 'lucide-react'
+import { X, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '../lib/store'
 import api from '../lib/api'
 import { REPORT_REASONS, type ReportReason } from '../types/moderation'
-import EscalateReportModal from './EscalateReportModal'
 
 interface ReportModalProps {
   isOpen: boolean
@@ -27,8 +26,6 @@ export default function ReportModal({
   const [reason, setReason] = useState<ReportReason | ''>('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showEscalateModal, setShowEscalateModal] = useState(false)
-  const [submittedReportId, setSubmittedReportId] = useState<string | null>(null)
 
   if (!isOpen) return null
 

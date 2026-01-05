@@ -1,14 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Building2, Users, Briefcase, DollarSign, FileText, Activity, Plus, Edit, Trash2, Eye, X, Search, UserPlus } from 'lucide-react';
-import { useAuthStore } from '../../lib/store';
 import { supabase, UserRole } from '../../lib/supabase';
 import RequireRole from '../../components/RequireRole';
 
-interface Tab {
+interface User {
+  id: string;
+  username: string;
+}
+
+interface Role {
   id: string;
   name: string;
-  icon: React.ReactNode;
-  component: React.ComponentType;
+}
+
+interface Department {
+  id: string;
+  name: string;
+  description?: string;
+  budget_allocation?: number;
+  manager_id?: string;
+  manager?: { user?: User };
+  staff_count?: number;
+}
+
+interface PayModel {
+  id: string;
+  name: string;
+  description?: string;
+  model_type: 'percentage' | 'fixed' | 'hybrid';
+  percentage?: number;
+  base_amount?: number;
+  bonus_structure?: string;
+}
+
+interface Staff {
+  id: string;
+  user_id: string;
+  user?: User;
+  company_role_id?: string;
+  company_role?: Role;
+  department_id?: string;
+  department?: Department;
+  pay_model_id?: string;
+  pay_model?: PayModel;
+  employment_status: 'active' | 'terminated' | 'on_leave';
+  hire_date: string;
+  base_salary: number;
+  contract_terms: string;
+}
+
+interface RevenueSource {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  estimated_monthly: number;
+}
+
+interface Invoice {
+  id: string;
+  staff_id: string;
+  staff?: Staff;
+  period_start: string;
+  period_end: string;
+  gross_amount: number;
+  deductions: number;
+  taxes: number;
+  net_amount: number;
+  status: 'pending' | 'approved' | 'paid' | 'rejected';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // Tab Components
@@ -23,20 +85,14 @@ function HireStaffModal({ isOpen, onClose, onHire }: { isOpen: boolean; onClose:
     contractTerms: '',
     startDate: new Date().toISOString().split('T')[0]
   });
-  const [users, setUsers] = useState<any[]>([]);
-  const [roles, setRoles] = useState<any[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
-  const [payModels, setPayModels] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [payModels, setPayModels] = useState<PayModel[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    if (isOpen) {
-      loadFormData();
-    }
-  }, [isOpen]);
-
-  const loadFormData = async () => {
+  const loadFormData = useCallback(async () => {
     try {
       const [usersRes, rolesRes, deptRes, payRes] = await Promise.all([
         supabase.from('user_profiles').select('id, username').limit(100),
@@ -52,7 +108,13 @@ function HireStaffModal({ isOpen, onClose, onHire }: { isOpen: boolean; onClose:
     } catch (error) {
       console.error('Error loading form data:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadFormData();
+    }
+  }, [isOpen, loadFormData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,19 +304,15 @@ function HireStaffModal({ isOpen, onClose, onHire }: { isOpen: boolean; onClose:
 }
 
 function StaffRolesTab() {
-  const [staff, setStaff] = useState<any[]>([]);
-  const [roles, setRoles] = useState<any[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHireModal, setShowHireModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -281,7 +339,11 @@ function StaffRolesTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const terminateStaff = async (staffId: string) => {
     const reason = prompt('Enter termination reason:');
@@ -433,7 +495,7 @@ function DepartmentModal({ isOpen, onClose, onSave, department }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: () => void;
-  department?: any;
+  department?: Department;
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -441,8 +503,25 @@ function DepartmentModal({ isOpen, onClose, onSave, department }: {
     budget_allocation: '',
     manager_id: ''
   });
-  const [managers, setManagers] = useState<any[]>([]);
+  const [managers, setManagers] = useState<{ id: string; user: { username: string } }[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const loadManagers = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('staff')
+        .select(`
+          id,
+          user:user_profiles(username)
+        `)
+        .eq('employment_status', 'active');
+
+      // @ts-expect-error Supabase select typed as unknown[]
+      setManagers(data || []);
+    } catch (error) {
+      console.error('Error loading managers:', error);
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -463,23 +542,7 @@ function DepartmentModal({ isOpen, onClose, onSave, department }: {
         });
       }
     }
-  }, [isOpen, department]);
-
-  const loadManagers = async () => {
-    try {
-      const { data } = await supabase
-        .from('staff')
-        .select(`
-          id,
-          user:user_profiles(username)
-        `)
-        .eq('employment_status', 'active');
-
-      setManagers(data || []);
-    } catch (error) {
-      console.error('Error loading managers:', error);
-    }
-  };
+  }, [isOpen, department, loadManagers]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -602,16 +665,12 @@ function DepartmentModal({ isOpen, onClose, onSave, department }: {
 }
 
 function TeamsDepartmentsTab() {
-  const [departments, setDepartments] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingDepartment, setEditingDepartment] = useState<any>(null);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
 
-  useEffect(() => {
-    loadDepartments();
-  }, []);
-
-  const loadDepartments = async () => {
+  const loadDepartments = useCallback(async () => {
     try {
       setLoading(true);
       // Load departments with manager info
@@ -646,9 +705,13 @@ function TeamsDepartmentsTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleEdit = (department: any) => {
+  useEffect(() => {
+    loadDepartments();
+  }, [loadDepartments]);
+
+  const handleEdit = (department: Department) => {
     setEditingDepartment(department);
     setShowModal(true);
   };
@@ -748,7 +811,7 @@ function PayModelModal({ isOpen, onClose, onSave, payModel }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: () => void;
-  payModel?: any;
+  payModel?: PayModel;
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -937,7 +1000,7 @@ function RevenueSourceModal({ isOpen, onClose, onSave, revenueSource }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: () => void;
-  revenueSource?: any;
+  revenueSource?: RevenueSource;
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -1088,19 +1151,15 @@ function RevenueSourceModal({ isOpen, onClose, onSave, revenueSource }: {
 }
 
 function RevenueShareTab() {
-  const [payModels, setPayModels] = useState<any[]>([]);
-  const [revenueSources, setRevenueSources] = useState<any[]>([]);
+  const [payModels, setPayModels] = useState<PayModel[]>([]);
+  const [revenueSources, setRevenueSources] = useState<RevenueSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPayModelModal, setShowPayModelModal] = useState(false);
   const [showRevenueModal, setShowRevenueModal] = useState(false);
-  const [editingPayModel, setEditingPayModel] = useState<any>(null);
-  const [editingRevenueSource, setEditingRevenueSource] = useState<any>(null);
+  const [editingPayModel, setEditingPayModel] = useState<PayModel | null>(null);
+  const [editingRevenueSource, setEditingRevenueSource] = useState<RevenueSource | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const { data: models } = await supabase.from('pay_models').select('*');
@@ -1113,14 +1172,18 @@ function RevenueShareTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleEditPayModel = (model: any) => {
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleEditPayModel = (model: PayModel) => {
     setEditingPayModel(model);
     setShowPayModelModal(true);
   };
 
-  const handleEditRevenueSource = (source: any) => {
+  const handleEditRevenueSource = (source: RevenueSource) => {
     setEditingRevenueSource(source);
     setShowRevenueModal(true);
   };
@@ -1161,7 +1224,7 @@ function RevenueShareTab() {
 
   const calculateEarnings = async () => {
     try {
-      const { data, error } = await supabase.rpc('calculate_staff_earnings', {
+      const { error } = await supabase.rpc('calculate_staff_earnings', {
         p_period_start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(),
         p_period_end: new Date().toISOString()
       });
@@ -1316,7 +1379,7 @@ function RevenueShareTab() {
 function InvoiceDetailsModal({ isOpen, onClose, invoice }: {
   isOpen: boolean;
   onClose: () => void;
-  invoice: any;
+  invoice: Invoice | null;
 }) {
   if (!isOpen || !invoice) return null;
 
@@ -1407,18 +1470,14 @@ function InvoiceDetailsModal({ isOpen, onClose, invoice }: {
 }
 
 function InvoicesPayoutsTab() {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    loadInvoices();
-  }, []);
-
-  const loadInvoices = async () => {
+  const loadInvoices = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await supabase
@@ -1438,7 +1497,11 @@ function InvoicesPayoutsTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
 
   const generateInvoices = async () => {
     try {
@@ -1643,8 +1706,21 @@ function InvoicesPayoutsTab() {
   );
 }
 
+interface AuditLog {
+  id: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  user_id: string;
+  user?: User;
+  details?: any;
+  description?: string;
+  ip_address?: string;
+  created_at: string;
+}
+
 function AuditLogTab() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     actionType: 'all',
@@ -1654,11 +1730,7 @@ function AuditLogTab() {
     dateTo: ''
   });
 
-  useEffect(() => {
-    loadAuditLog();
-  }, [filters]);
-
-  const loadAuditLog = async () => {
+  const loadAuditLog = useCallback(async () => {
     try {
       setLoading(true);
       let query = supabase
@@ -1694,7 +1766,11 @@ function AuditLogTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
+
+  useEffect(() => {
+    loadAuditLog();
+  }, [loadAuditLog]);
 
   const getActionTypeColor = (actionType: string) => {
     switch (actionType.toLowerCase()) {

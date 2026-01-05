@@ -3,7 +3,6 @@ import { useAuthStore } from '../lib/store'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import api from '../lib/api'
-import { recordAppEvent } from '../lib/progressionEngine'
 import { toast } from 'sonner'
 
 const AccountPaymentsSuccess = () => {
@@ -13,7 +12,7 @@ const AccountPaymentsSuccess = () => {
 
   const [saving, setSaving] = React.useState(false)
   const [provider, setProvider] = React.useState('')
-  const [status, setStatus] = React.useState<'idle' | 'saved' | 'error'>('idle')
+  const [_status, setStatus] = React.useState<'idle' | 'saved' | 'error'>('idle')
 
   React.useEffect(() => {
     const params = new URLSearchParams(location.search)

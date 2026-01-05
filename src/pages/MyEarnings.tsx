@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -35,22 +35,7 @@ export default function MyEarnings() {
   const [loading, setLoading] = useState(true)
   const [showPayoutModal, setShowPayoutModal] = useState(false)
 
-  useEffect(() => {
-    if (!user || !profile) {
-      navigate('/auth', { replace: true })
-      return
-    }
-
-    // Check W9/onboarding status
-    if (profile.w9_status !== 'submitted' && profile.w9_status !== 'verified') {
-      // Show lock screen - user needs to complete onboarding
-      return
-    }
-
-    loadEarningsData()
-  }, [user, profile, navigate])
-
-  const loadEarningsData = async () => {
+  const loadEarningsData = useCallback(async () => {
     if (!user?.id) return
 
     setLoading(true)
@@ -163,7 +148,22 @@ export default function MyEarnings() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, profile])
+
+  useEffect(() => {
+    if (!user || !profile) {
+      navigate('/auth', { replace: true })
+      return
+    }
+
+    // Check W9/onboarding status
+    if (profile.w9_status !== 'submitted' && profile.w9_status !== 'verified') {
+      // Show lock screen - user needs to complete onboarding
+      return
+    }
+
+    loadEarningsData()
+  }, [user, profile, navigate, loadEarningsData])
 
   const totalEarned = earningsData?.total_earned_coins || profile?.total_earned_coins || 0
 

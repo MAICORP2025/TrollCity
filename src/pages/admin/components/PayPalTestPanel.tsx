@@ -1,11 +1,9 @@
 import React, { useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle } from 'lucide-react'
 
 export default function PayPalTestPanel() {
-  const { user, profile } = useAuthStore()
   const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState<{
     status: 'ok' | 'error' | null
@@ -59,7 +57,8 @@ export default function PayPalTestPanel() {
         response = await fetch(testUrl, {
           method: 'OPTIONS',
           headers: {
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+            'Authorization': `Bearer ${token}`
           },
           signal: controller.signal
         })

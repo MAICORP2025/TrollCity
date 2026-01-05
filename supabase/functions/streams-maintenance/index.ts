@@ -42,8 +42,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
     switch (action) {
       case 'end_stream': {
-        const { stream_id, broadcaster_id } = body;
-        const effectiveBroadcasterId = broadcaster_id || user.id;
+        const { stream_id } = body;
 
         if (!stream_id) {
           return withCors({ error: "stream_id is required" }, 400);
@@ -85,7 +84,7 @@ export const handler = async (req: Request): Promise<Response> => {
         }
 
         // Mark participants as inactive
-        const { error: participantsError } = await supabase
+        const { error: _participantsError } = await supabase
           .from("streams_participants")
           .update({
             is_active: false,

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+// import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'fs'
 import * as dotenv from 'dotenv'
 
@@ -12,9 +12,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   process.exit(1)
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false }
-})
+// const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+//   auth: { persistSession: false, autoRefreshToken: false }
+// })
 
 function splitSqlStatements(sql) {
   const statements = []

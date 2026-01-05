@@ -8,10 +8,6 @@ export default function FamilyCityMap() {
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    loadFamilies()
-  }, [])
-
   const loadFamilies = async () => {
     setLoading(true)
     const { data, error } = await supabase.rpc('get_weekly_family_task_counts')
@@ -19,6 +15,10 @@ export default function FamilyCityMap() {
     setFamilies(data || [])
     setLoading(false)
   }
+
+  useEffect(() => {
+    loadFamilies()
+  }, [])
 
   const getBuildingClass = (tasks: number) => {
     if (tasks >= 30) return 'royal-family'

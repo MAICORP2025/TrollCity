@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { User, AlertTriangle, Shield, ShoppingBag, Clock, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { User, AlertTriangle, Shield, ShoppingBag, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface UserRecordProps {
@@ -57,13 +57,7 @@ export default function UserRecord({ userId, isVisible }: UserRecordProps) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('violations');
 
-  useEffect(() => {
-    if (isVisible && userId) {
-      loadUserRecord();
-    }
-  }, [isVisible, userId]);
-
-  const loadUserRecord = async () => {
+  const loadUserRecord = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -72,7 +66,7 @@ export default function UserRecord({ userId, isVisible }: UserRecordProps) {
         .from('user_history')
         .select(`
           *,
-          officer:user_profiles(username)
+          officer:user_profiles(username, rgb_username_expires_at)
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -111,7 +105,14 @@ export default function UserRecord({ userId, isVisible }: UserRecordProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    if (isVisible && userId) {
+      loadUserRecord();
+    }
+  }, [isVisible, userId, loadUserRecord]);
+
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {

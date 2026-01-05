@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import {
   Crown, Users, Coins, TrendingUp, Target, Calendar,
-  Trophy, Shield, Sword, Star, Zap, Award
+  Trophy, Sword, Star, Zap, Award
 } from 'lucide-react'
 
 const FamilyLounge = () => {
-  const { user, profile } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
   const [family, setFamily] = useState(null)
   const [familyStats, setFamilyStats] = useState(null)
@@ -18,13 +18,7 @@ const FamilyLounge = () => {
   const [memberRole, setMemberRole] = useState('member')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (user) {
-      loadFamilyData()
-    }
-  }, [user])
-
-  const loadFamilyData = async () => {
+  const loadFamilyData = useCallback(async () => {
     setLoading(true)
     try {
       // Get user's family membership
@@ -89,7 +83,13 @@ const FamilyLounge = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      loadFamilyData()
+    }
+  }, [user, loadFamilyData])
 
   const contributeToTask = async (taskId) => {
     try {

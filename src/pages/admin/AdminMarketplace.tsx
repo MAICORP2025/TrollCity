@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
-import { Store, Package, Users, DollarSign, Ban, CheckCircle, XCircle, Edit, Trash, Shield, AlertTriangle, MessageSquare, Gavel, Clock } from 'lucide-react'
+import { Store, Package, Users, DollarSign, CheckCircle, XCircle, Trash, Shield, AlertTriangle, MessageSquare, Gavel } from 'lucide-react'
 
 export default function AdminMarketplace() {
   const [items, setItems] = useState<any[]>([])

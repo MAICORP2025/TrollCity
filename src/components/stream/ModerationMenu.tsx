@@ -38,7 +38,7 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
       // Get officer profile
       const { data: officerProfile } = await supabase
         .from('user_profiles')
-        .select('id, role')
+        .select('id, role, is_admin, is_troll_officer')
         .eq('id', user.id)
         .single()
 
@@ -177,7 +177,7 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
 
             if (data?.success) {
               if (data.auto_banned) {
-                toast.success(`${target.username} kicked and auto-banned. They must pay $20 to restore.`)
+                toast.success(`${target.username} kicked and auto-banned. They must pay 2000 troll_coins to restore.`)
               } else {
                 toast.success(`${target.username} kicked! They can pay 250 coins to re-enter.`)
               }

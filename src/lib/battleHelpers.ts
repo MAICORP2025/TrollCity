@@ -9,7 +9,7 @@ const getFunctionUrl = () => {
 export const startTrollBattle = async (
   challengerId: string,
   hostStreamId: string,
-  challengerStreamId?: string
+  _challengerStreamId?: string
 ) => {
   try {
     const { data: session } = await supabase.auth.getSession()

@@ -71,7 +71,7 @@ export const handler = async (req: Request): Promise<Response> => {
             .from(table)
             .select("*", { count: 'exact', head: true });
 
-          const { error: deleteError } = await supabase
+          const { error: _deleteError } = await supabase
             .from(table)
             .delete()
             .neq("id", "00000000-0000-0000-0000-000000000000"); // Delete all
@@ -87,7 +87,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
         if (testUsers && testUsers.length > 0) {
           // Note: This will cascade delete related data
-          const { error: deleteUsersError } = await supabase
+          const { error: _deleteUsersError } = await supabase
             .from("user_profiles")
             .delete()
             .in("id", testUsers.map(u => u.id));

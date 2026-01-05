@@ -61,10 +61,11 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 SUPABASE_URL=https://yjxpwfalenorzrqxwmtr.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqeHB3ZmFsZW5vcnpycXh3bXRyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDAyOTExNywiZXhwIjoyMDc5NjA1MTE3fQ.Ra1AhVwUYPxODzeFnCnWyurw8QiTzO0OeCo-sXzTVHo
 
-# Agora (CRITICAL - Already Configured)
-AGORA_APP_ID=7b95b64b0e154f7ab931e2abf000e694
-VITE_AGORA_APP_ID=7b95b64b0e154f7ab931e2abf000e694
-AGORA_APP_CERTIFICATE=d59412879b724931a7d9879a687940be
+# LiveKit (CRITICAL - Required)
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+LIVEKIT_URL=wss://your-project.livekit.cloud
+VITE_LIVEKIT_URL=wss://your-project.livekit.cloud
 
 # Square Payment (PRODUCTION - Already Configured)
 SQUARE_ACCESS_TOKEN=EAAAl_gSW8Le996Vn3U4YpEBFQhekxOZjEQ5Hju7SGXOyxfHfs0FKGnUUr0_ZRHj
@@ -80,7 +81,6 @@ VITE_SQUARE_ENVIRONMENT=production
 VITE_ADMIN_EMAIL=trollcity2025@gmail.com
 
 # IMPORTANT: Update after deployment
-VITE_BACKEND_TOKEN_SERVER_URL=https://your-vercel-app.vercel.app/api/agora-token
 VITE_API_URL=https://your-vercel-app.vercel.app
 ```
 
@@ -154,10 +154,9 @@ Install Command: npm install
 ### Step 6: Update Dynamic URLs
 After deployment, go back to Environment Variables and update:
 ```env
-VITE_BACKEND_TOKEN_SERVER_URL=https://trollcity.vercel.app/api/agora-token
 VITE_API_URL=https://trollcity.vercel.app
 ```
-Then redeploy.
+160. Then redeploy.
 
 ---
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
@@ -30,35 +30,25 @@ export default function FamilyWarsPage() {
   const [challengingId, setChallengingId] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!user) return
-    init()
-  }, [user])
-
-  const init = async () => {
-    setLoading(true)
-    await Promise.all([loadMyFamily(), loadFamilies(), loadWars()])
-    setLoading(false)
-  }
-
-  const loadMyFamily = async () => {
+  const loadMyFamily = useCallback(async () => {
+    if (!user?.id) return
     const { data: member } = await supabase
       .from('troll_family_members')
       .select('family_id, family:troll_families(id, name)')
-      .eq('user_id', user!.id)
+      .eq('user_id', user.id)
       .single()
 
     if (member?.family) {
       setMyFamily(member.family as unknown as Family)
     }
-  }
+  }, [user])
 
-  const loadFamilies = async () => {
+  const loadFamilies = useCallback(async () => {
     const { data } = await supabase.from('troll_families').select('id, name')
     setFamilies((data || []) as Family[])
-  }
+  }, [])
 
-  const loadWars = async () => {
+  const loadWars = useCallback(async () => {
     const { data } = await supabase
       .from('troll_family_wars')
       .select(
@@ -72,7 +62,18 @@ export default function FamilyWarsPage() {
       .limit(20)
 
     setWars((data || []) as War[])
-  }
+  }, [])
+
+  const init = useCallback(async () => {
+    setLoading(true)
+    await Promise.all([loadMyFamily(), loadFamilies(), loadWars()])
+    setLoading(false)
+  }, [loadMyFamily, loadFamilies, loadWars])
+
+  useEffect(() => {
+    if (!user) return
+    init()
+  }, [user, init])
 
   const startChallenge = async () => {
     if (!myFamily) {

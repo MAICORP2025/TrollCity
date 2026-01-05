@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -12,13 +12,7 @@ export default function DistrictTour() {
   const [district, setDistrict] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (districtName && user?.id) {
-      loadDistrictAndStartTour()
-    }
-  }, [districtName, user?.id])
-
-  const loadDistrictAndStartTour = async () => {
+  const loadDistrictAndStartTour = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -43,29 +37,15 @@ export default function DistrictTour() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [districtName, user, navigate])
 
-  const handleTourComplete = () => {
-    // Redirect back to the district's first feature or home
-    if (district) {
-      // Navigate to first available feature in the district
-      const features = getDistrictFeatures(district.name)
-      if (features.length > 0) {
-        navigate(features[0].route_path)
-      } else {
-        navigate('/live')
-      }
-    } else {
-      navigate('/live')
+  useEffect(() => {
+    if (districtName && user?.id) {
+      loadDistrictAndStartTour()
     }
-  }
+  }, [districtName, user?.id, loadDistrictAndStartTour])
 
-  const handleTourClose = () => {
-    setShowTour(false)
-    navigate('/live')
-  }
-
-  const getDistrictFeatures = (districtName: string) => {
+  const getDistrictFeatures = useCallback((districtName: string) => {
     const features: { [key: string]: { feature_name: string, route_path: string }[] } = {
       main_plaza: [
         { feature_name: 'Live Streams', route_path: '/live' },
@@ -112,7 +92,27 @@ export default function DistrictTour() {
     }
 
     return features[districtName] || []
-  }
+  }, [])
+
+  const handleTourComplete = useCallback(() => {
+    // Redirect back to the district's first feature or home
+    if (district) {
+      // Navigate to first available feature in the district
+      const features = getDistrictFeatures(district.name)
+      if (features.length > 0) {
+        navigate(features[0].route_path)
+      } else {
+        navigate('/live')
+      }
+    } else {
+      navigate('/live')
+    }
+  }, [district, navigate, getDistrictFeatures])
+
+  const handleTourClose = useCallback(() => {
+    setShowTour(false)
+    navigate('/live')
+  }, [navigate])
 
   if (loading) {
     return (

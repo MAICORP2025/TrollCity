@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
-import { Banknote, RefreshCw, CheckCircle, XCircle, Search } from 'lucide-react'
+import { Banknote, RefreshCw, Search } from 'lucide-react'
 
 interface PayoutRequest {
   id: string
@@ -21,13 +21,13 @@ interface PayoutRequest {
 }
 
 export default function PayPalPayoutsPanel() {
-  const { profile, user } = useAuthStore()
+  const { user } = useAuthStore()
   const [payouts, setPayouts] = useState<PayoutRequest[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'paid' | 'rejected'>('all')
 
-  const loadPayouts = async () => {
+  const loadPayouts = useCallback(async () => {
     setLoading(true)
     try {
       let query = supabase
@@ -49,13 +49,13 @@ export default function PayPalPayoutsPanel() {
 
       if (error) throw error
       setPayouts(data || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading payouts:', error)
       toast.error('Failed to load payouts')
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter])
 
   useEffect(() => {
     loadPayouts()
@@ -71,7 +71,7 @@ export default function PayPalPayoutsPanel() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [statusFilter])
+  }, [statusFilter, loadPayouts])
 
   const handleApprove = async (payoutId: string) => {
     if (!user) {
@@ -92,9 +92,9 @@ export default function PayPalPayoutsPanel() {
       if (error) throw error
       toast.success('Payout approved')
       loadPayouts()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Approve error:', error)
-      toast.error(error?.message || 'Failed to approve payout')
+      toast.error((error as Error)?.message || 'Failed to approve payout')
     }
   }
 
@@ -231,7 +231,7 @@ export default function PayPalPayoutsPanel() {
         </div>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as any)}
+          onChange={(e) => setStatusFilter(e.target.value as 'all' | 'pending' | 'approved' | 'paid' | 'rejected')}
           className="px-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           <option value="all">All Status</option>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { X } from 'lucide-react'
 import ClickableUsername from './ClickableUsername'
@@ -23,13 +23,7 @@ export default function GiftersModal({ isOpen, onClose, userId, type }: GiftersM
   const [gifters, setGifters] = useState<Gifter[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (isOpen && userId) {
-      loadGifters()
-    }
-  }, [isOpen, userId, type])
-
-  const loadGifters = async () => {
+  const loadGifters = useCallback(async () => {
     try {
       setLoading(true)
       const functionName = type === 'received' ? 'get_user_gifters' : 'get_user_gift_recipients'
@@ -44,7 +38,13 @@ export default function GiftersModal({ isOpen, onClose, userId, type }: GiftersM
     } finally {
       setLoading(false)
     }
-  }
+  }, [type, userId])
+
+  useEffect(() => {
+    if (isOpen && userId) {
+      loadGifters()
+    }
+  }, [isOpen, userId, loadGifters])
 
   if (!isOpen) return null
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { useAuthStore } from '../lib/store'
 import { getUserInventory } from '../lib/giftEngine'
@@ -10,7 +10,7 @@ export default function GiftInventoryPage() {
   const [loading, setLoading] = useState(false)
   const [expandedGift, setExpandedGift] = useState(null)
 
-  const refreshInventory = async () => {
+  const refreshInventory = useCallback(async () => {
     if (!user?.id) return
     setLoading(true)
     try {
@@ -22,11 +22,11 @@ export default function GiftInventoryPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id])
 
   useEffect(() => {
     refreshInventory()
-  }, [user?.id])
+  }, [refreshInventory])
 
   const totalGifts = useMemo(
     () => inventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),

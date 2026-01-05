@@ -9,10 +9,7 @@ import {
   UserPlus,
   UserMinus,
   Edit,
-  Gift,
-  Clock,
-  Star,
-  Sparkles
+  Star
 } from 'lucide-react'
 
 interface RoyalFamilyStatus {
@@ -41,11 +38,7 @@ export default function TrollFamily() {
   const [newMemberUsername, setNewMemberUsername] = useState('')
   const [newMemberTitle, setNewMemberTitle] = useState('Honorary Family Member')
 
-  useEffect(() => {
-    loadFamilyData()
-  }, [])
-
-  const loadFamilyData = async () => {
+  const loadFamilyData = React.useCallback(async () => {
     try {
       setLoading(true)
 
@@ -80,7 +73,11 @@ export default function TrollFamily() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadFamilyData()
+  }, [loadFamilyData])
 
   const addHonoraryMember = async () => {
     if (!newMemberUsername.trim()) {

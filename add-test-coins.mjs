@@ -37,15 +37,13 @@ async function addTestCoins() {
     // Add 50,000 troll_coins for testing (enough for multiple cashout tiers)
     const testCoins = 50000
     
-    const { data: updated, error: updateError } = await supabase
+    const { error: updateError } = await supabase
       .from('user_profiles')
       .update({ 
         troll_coins: testCoins,
         updated_at: new Date().toISOString()
       })
       .eq('id', admin.id)
-      .select()
-      .single()
     
     if (updateError) throw updateError
     

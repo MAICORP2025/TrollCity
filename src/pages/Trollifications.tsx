@@ -2,11 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { Bell, Check, Trash2, Gift, Trophy, AlertCircle, MessageSquare, Heart, Shield, DollarSign, Sword, Zap } from 'lucide-react'
+import { Bell, Check, Trash2, Gift, Trophy, AlertCircle, Shield, DollarSign, Sword, Zap } from 'lucide-react'
 import { Notification, NotificationType } from '../types/notifications'
 
 export default function Trollifications() {
-  const { profile, user } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
@@ -125,7 +125,7 @@ export default function Trollifications() {
     if (!user?.id) return
     
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .rpc('mark_all_notifications_read', { p_user_id: user.id })
       
       if (error) throw error

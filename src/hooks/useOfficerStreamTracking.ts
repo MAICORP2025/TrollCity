@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 
@@ -21,6 +21,32 @@ export function useOfficerStreamTracking(streamId: string | undefined) {
       isOfficerRef.current = isOfficer || isAdmin
     }
   }, [profile, user])
+
+
+
+  const trackActivity = useCallback(async () => {
+    if (!streamId || !user || !isOfficerRef.current) return
+
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) return
+
+      const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
+        'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
+
+      await fetch(`${edgeFunctionsUrl}/officer-touch-activity`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ streamId })
+      })
+    } catch (error) {
+      console.error('Error tracking activity:', error)
+    }
+  }, [streamId, user])
 
   // Track officer join
   useEffect(() => {
@@ -75,31 +101,9 @@ export function useOfficerStreamTracking(streamId: string | undefined) {
         clearInterval(activityIntervalRef.current)
       }
     }
-  }, [streamId, user, profile])
+  }, [streamId, user, profile, trackActivity])
 
-  const trackActivity = async () => {
-    if (!streamId || !user || !isOfficerRef.current) return
 
-    try {
-      const { data: session } = await supabase.auth.getSession()
-      const token = session.session?.access_token
-      if (!token) return
-
-      const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
-        'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
-
-      await fetch(`${edgeFunctionsUrl}/officer-touch-activity`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ streamId })
-      })
-    } catch (error) {
-      console.error('Error tracking activity:', error)
-    }
-  }
 
   // Track officer leave on unmount or stream change
   useEffect(() => {
@@ -140,9 +144,9 @@ export function useOfficerStreamTracking(streamId: string | undefined) {
             const { data: session } = await supabase.auth.getSession()
             const token = session.session?.access_token
             if (token) {
-              const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
+              const _edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
                 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
-              const blob = new Blob([JSON.stringify({ streamId })], { type: 'application/json' })
+              const _blob = new Blob([JSON.stringify({ streamId })], { type: 'application/json' })
               // Note: sendBeacon doesn't support custom headers, so we'll use a fallback
               // For now, just call trackLeave which uses fetch with headers
             }

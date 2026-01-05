@@ -43,6 +43,7 @@ type HomeUser = {
   role?: string | null;
   is_banned?: boolean | null;
   banned_until?: string | null;
+  rgb_username_expires_at?: string | null;
 };
 
 const NeonParticle: React.FC<{ delay: number; color: string }> = ({ delay, color }) => {
@@ -482,33 +483,17 @@ const ChristmasOutline: React.FC<{ rowCount?: number; colCount?: number }> = ({
   );
 };
 
+import LiveAvatar from '../components/LiveAvatar';
+
 const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) => void; isLive?: boolean; navigate: (path: string) => void }> = memo(({ user, onClick, isLive, navigate }) => {
   const displayName = user.username || 'User';
   const isAdmin = user.role === 'admin';
-  const profileRoute = `/profile/id/${user.id}`;
+  const profileRoute = user.id ? `/profile/id/${user.id}` : '#';
+  const hasRgbUsername = user.rgb_username_expires_at && new Date(user.rgb_username_expires_at) > new Date();
 
   const handleProfileClick = () => {
+    if (!user.id) return;
     onClick(profileRoute);
-  };
-
-  const handleLiveClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isLive) {
-      try {
-        const streamId = await getUserLiveStreamId(user.id);
-        if (streamId) {
-          navigate(`/broadcast/${streamId}`);
-        } else {
-          // Fallback to profile if stream ID not found
-          onClick(profileRoute);
-        }
-      } catch (error) {
-        console.error('Error getting live stream ID:', error);
-        onClick(profileRoute);
-      }
-    } else {
-      onClick(profileRoute);
-    }
   };
 
   return (
@@ -520,33 +505,18 @@ const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) =>
       
       <div className="relative z-10">
         <div className="relative">
-          <img
-            src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
-            alt={displayName}
-            className={`w-20 h-20 rounded-full border-3 object-cover transition-all duration-300 ${
-              isAdmin
-                ? 'border-yellow-400/60 shadow-lg shadow-yellow-400/40 group-hover:shadow-yellow-400/60'
-                : 'border-cyan-400/60 shadow-lg shadow-cyan-400/30 group-hover:shadow-cyan-400/50'
-            } ${
-              isLive
-                ? 'live-user-neon shadow-[0_0_20px_rgba(255,0,100,0.8)] border-red-400/80 animate-pulse'
-                : ''
-            }`}
+          <LiveAvatar
+            userId={user.id}
+            username={displayName}
+            avatarUrl={user.avatar_url}
+            isLive={isLive}
+            size="lg"
+            borderColor={isAdmin ? 'border-yellow-400/60' : 'border-cyan-400/60'}
+            onProfileClick={handleProfileClick}
           />
           
-          {/* Live indicator overlay */}
-          {isLive && (
-            <div 
-              className="absolute -top-1 -right-1 bg-gradient-to-r from-red-500 to-pink-600 rounded-full p-1.5 border-2 border-white shadow-lg cursor-pointer hover:scale-110 transition-transform"
-              onClick={handleLiveClick}
-              title="Click to watch live stream"
-            >
-              <Radio className="w-3 h-3 text-white animate-pulse" />
-            </div>
-          )}
-          
           {isAdmin && (
-            <div className="absolute -top-1 -left-1 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full p-1.5 border-2 border-black">
+            <div className="absolute -top-1 -left-1 z-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full p-1.5 border-2 border-black">
               <Crown className="w-3 h-3 text-black" />
             </div>
           )}
@@ -554,7 +524,7 @@ const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) =>
       </div>
       
       <div className="relative z-10 text-center flex-1 w-full">
-        <p className="text-lg font-semibold text-white truncate">{displayName}</p>
+        <p className={`text-lg font-semibold truncate ${hasRgbUsername ? 'rgb-username' : 'text-white'}`}>{displayName}</p>
         <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all ${
             isAdmin
@@ -566,12 +536,6 @@ const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) =>
           {isAdmin && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-500/20 border border-yellow-400/50 text-yellow-300">
               Admin
-            </span>
-          )}
-          {isLive && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 border border-red-400/50 text-red-300 animate-pulse">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              LIVE
             </span>
           )}
         </div>
@@ -914,21 +878,16 @@ const HomePageContent = () => {
     const loadNewUsers = async (showLoading = true) => {
       if (showLoading) setLoadingNewUsers(true);
       try {
-        // Prefer server-side RPC (bypasses RLS safely and avoids cross-user selects from the client).
-        // Fallback to direct query if the RPC isn't deployed yet.
-        let data: HomeUser[] | null = null;
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_recent_users', { limit_count: 25 });
-        if (!rpcError && Array.isArray(rpcData)) {
-          data = rpcData as HomeUser[];
-        } else {
-          const { data: directData, error: directError } = await supabase
-            .from('user_profiles')
-            .select('id, username, avatar_url, tier, level, troll_coins, troll_coins, created_at, role, is_banned, banned_until')
-            .order('created_at', { ascending: false })
-            .limit(25);
-          if (directError) throw directError;
-          data = directData as HomeUser[];
-        }
+        // Use direct query to ensure we get all fields including rgb_username_expires_at
+        // RPC get_recent_users might be missing newer columns
+        const { data: directData, error: directError } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, tier, level, troll_coins, troll_coins, created_at, role, is_banned, banned_until, rgb_username_expires_at')
+          .order('created_at', { ascending: false })
+          .limit(25);
+
+        if (directError) throw directError;
+        const data = directData as HomeUser[];
         
         // Separate admin and regular users
         const adminUser = (data || []).find(user => user.role === 'admin');
@@ -1248,30 +1207,21 @@ const HomePageContent = () => {
                 {displayStreams.map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => navigate(`/broadcast/${s.id}`)}
+                    onClick={() => navigate(`/live/${s.id}`, { state: { streamData: { ...s, status: 'live' } } })}
                     className={`relative rounded-2xl overflow-hidden shadow-xl bg-gradient-to-br from-[#1f1535] via-[#16102a] to-[#0f0820] border transition-all duration-300 group ${
                       s.user_profiles?.date_of_birth && isBirthdayToday(s.user_profiles.date_of_birth)
                         ? 'border-yellow-400/60 shadow-[0_0_30px_rgba(255,215,0,0.7)] birthday-stream'
                         : 'border-purple-500/40 hover:border-purple-400/60 hover:shadow-[0_0_30px_rgba(168,85,247,0.5)]'
                     }`}
                   >
-                    {s.thumbnail_url ? (
-                      <div className="relative overflow-hidden h-52">
-                        <img
-                          src={s.thumbnail_url}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                          alt="Stream preview"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                      </div>
-                    ) : (
-                      <div className="w-full h-52 bg-gradient-to-br from-purple-900/40 via-purple-800/30 to-black flex items-center justify-center text-gray-400">
-                        <div className="text-center">
-                          <span className="text-3xl">🎥</span>
-                          <p className="text-xs mt-1">No preview</p>
-                        </div>
-                      </div>
-                    )}
+                    <div className="relative overflow-hidden h-52">
+                      <img
+                        src={s.user_profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.user_profiles?.username || 'troll'}`}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        alt="Stream preview"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                    </div>
 
                     <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
                       <div className="relative flex items-center gap-2 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-full border border-red-500/50">

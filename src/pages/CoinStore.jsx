@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
@@ -9,7 +9,15 @@ import { coinPackages, formatCoins, formatUSD } from '../lib/coinMath';
 import { addCoins, deductCoins } from '@/lib/coinTransactions';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { useLiveContextStore } from '../lib/liveContextStore';
-import { useStreamMomentum } from '../lib/hooks/useStreamMomentum';
+import { useStreamMomentum } from '@/lib/hooks/useStreamMomentum';
+
+const PAYPAL_OPTIONS = {
+  "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID,
+  currency: "USD",
+  intent: "capture"
+};
+
+const PAYPAL_BUTTON_STYLE = { layout: "horizontal" };
 
 const SAMPLE_EFFECTS = [
   { id: 'effect_confetti_pop', name: 'Confetti Pop', description: 'Confetti burst', coin_cost: 1000 },
@@ -22,6 +30,7 @@ const SAMPLE_EFFECTS = [
 ];
 
 const SAMPLE_PERKS = [
+  { id: 'perk_rgb_username', name: 'RGB Username', description: 'Rainbow username everywhere (24h)', cost: 5000, duration_minutes: 1440, perk_type: 'cosmetic' },
   { id: 'perk_chat_shine', name: 'Chat Shine', description: 'Chat messages glow', cost: 2000, duration_minutes: 1440, perk_type: 'visibility' },
   { id: 'perk_stream_boost_lite', name: 'Stream Boost Lite', description: 'Slight discovery boost', cost: 3500, duration_minutes: 1440, perk_type: 'boost' },
   { id: 'perk_coin_magnet', name: 'Coin Magnet', description: '+5% coin reward', cost: 4500, duration_minutes: 1440, perk_type: 'boost' },
@@ -102,7 +111,7 @@ export default function CoinStore() {
     price: 4.50,
   };
 
-  const isViewerOnly = Boolean(
+  const _isViewerOnly = Boolean(
     profile &&
       profile.role !== 'admin' &&
       profile.role !== 'troll_officer' &&
@@ -133,56 +142,7 @@ export default function CoinStore() {
     return Math.max(10, price);
   };
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth', { replace: true });
-      return;
-    }
-
-    loadWalletData(true);
-  }, [user?.id, navigate]);
-
-  useEffect(() => {
-    let isActive = true;
-
-    const loadLive = async () => {
-      if (!activeStreamId) {
-        setLiveStreamIsLive(false);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('streams')
-        .select('id,is_live')
-        .eq('id', activeStreamId)
-        .maybeSingle();
-
-      if (!isActive) return;
-      setLiveStreamIsLive(Boolean(data?.is_live));
-    };
-
-    loadLive();
-    return () => {
-      isActive = false;
-    };
-  }, [activeStreamId]);
-
-  useEffect(() => {
-    if (tab === 'live_snacks' && !showLiveSnacks) setTab('coins');
-  }, [tab, showLiveSnacks]);
-
-  useEffect(() => {
-    const savedTab = sessionStorage.getItem(STORE_TAB_KEY);
-    if (savedTab && savedTab !== tab) {
-      setTab(savedTab);
-    }
-  }, []);
-
-  useEffect(() => {
-    sessionStorage.setItem(STORE_TAB_KEY, tab);
-  }, [tab]);
-
-  const loadWalletData = async (showLoading = true) => {
+  const loadWalletData = useCallback(async (showLoading = true) => {
     console.log('?? Loading wallet data for user:', user?.id);
     try {
       if (showLoading) setLoading(true);
@@ -252,7 +212,49 @@ export default function CoinStore() {
       if (showLoading) setLoading(false);
       console.log('?? Wallet data loading complete');
     }
-  };
+  }, [user?.id, refreshCoins]);
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth', { replace: true });
+      return;
+    }
+
+    loadWalletData(true);
+  }, [user, navigate, loadWalletData]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadLive = async () => {
+      if (!activeStreamId) {
+        setLiveStreamIsLive(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('streams')
+        .select('id,is_live')
+        .eq('id', activeStreamId)
+        .maybeSingle();
+
+      if (!isActive) return;
+      setLiveStreamIsLive(Boolean(data?.is_live));
+    };
+
+    loadLive();
+    return () => {
+      isActive = false;
+    };
+  }, [activeStreamId]);
+
+  useEffect(() => {
+    if (tab === 'live_snacks' && !showLiveSnacks) setTab('coins');
+  }, [tab, showLiveSnacks]);
+
+  useEffect(() => {
+    sessionStorage.setItem(STORE_TAB_KEY, tab);
+  }, [tab]);
 
   const showPurchaseCompleteOverlay = () => {
     sessionStorage.setItem(STORE_COMPLETE_KEY, Date.now().toString());
@@ -305,32 +307,6 @@ export default function CoinStore() {
     }
   };
 
-  const buyTrollPass = async () => {
-    if (!isViewerOnly) {
-      toast.error('Troll Pass is viewer-only');
-      return;
-    }
-    if (trollPassActive) {
-      toast.error('Troll Pass is already active');
-      return;
-    }
-    if (troll_coins < 1500) {
-      toast.error('Not enough troll_coins (requires 1,500)');
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.rpc('buy_troll_pass');
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Purchase failed');
-      toast.success('Troll Pass activated (30 days)');
-      showPurchaseCompleteOverlay();
-      await loadWalletData(false);
-      if (refreshProfile) await refreshProfile();
-    } catch (e) {
-      toast.error(e?.message || 'Purchase failed');
-    }
-  };
 
   const formatDeductErrorMessage = (error) =>
     typeof error === 'string'
@@ -444,6 +420,19 @@ export default function CoinStore() {
        console.error('Perk purchase error:', insertErr)
        toast.error(insertErr.message || 'Failed to purchase perk')
        return
+     }
+
+     if (perk.id === 'perk_rgb_username') {
+       const { error: profileUpdateErr } = await supabase
+         .from('user_profiles')
+         .update({ rgb_username_expires_at: expiresAt })
+         .eq('id', user.id);
+       
+       if (profileUpdateErr) {
+         console.error('Failed to update RGB status:', profileUpdateErr);
+       } else {
+         await refreshProfile();
+       }
      }
      
       toast.success('Perk purchased')
@@ -599,7 +588,7 @@ export default function CoinStore() {
       console.log("📤 Sending payload →", payload);
 
       const res = await fetch(
-        `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/paypal-create-order`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-create-order`,
         {
           method: "POST",
           headers: {
@@ -645,59 +634,49 @@ export default function CoinStore() {
     setShowPurchaseComplete(true);
   }, [purchaseCompleteActive, showPurchaseComplete]);
 
-  if (purchaseCompleteActive) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center p-6">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-purple-400 mx-auto mb-4" />
-          <div className="text-xl font-semibold">Your Troll City purchase is complete</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <Coins className="w-8 h-8 text-purple-400" />
-              Troll City Coin Store
-            </h1>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="bg-zinc-900 rounded-xl p-6 border border-[#2C2C2C] animate-pulse">
-                <div className="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
-                <div className="h-8 bg-gray-700 rounded w-3/4"></div>
-                <div className="h-4 bg-gray-700 rounded w-1/3 mt-2"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-        <PayPalScriptProvider
-        options={{
-          "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID,
-          currency: "USD",
-          intent: "capture"
-        }}
-        onError={(err) => {
-          console.error("PayPal Script Provider Error:", err);
-          toast.error("PayPal is currently unavailable. Please try again later.");
-        }}
-        onInit={() => {
-          console.log("PayPal Script Provider initialized successfully");
-        }}
-        onApprove={() => {
-          console.log("PayPal Script Provider onApprove callback");
-        }}
-      >
+    <PayPalScriptProvider
+      options={PAYPAL_OPTIONS}
+      onError={(err) => {
+        console.error("PayPal Script Provider Error:", err);
+        console.log("Env values:", import.meta.env.VITE_PAYPAL_CLIENT_ID, import.meta.env.VITE_SUPABASE_URL);
+        toast.error("PayPal is currently unavailable. Please try again later.");
+      }}
+      onInit={() => {
+        console.log("PayPal Script Provider initialized successfully");
+      }}
+      onApprove={() => {
+        console.log("PayPal Script Provider onApprove callback");
+      }}
+    >
+      {purchaseCompleteActive ? (
+        <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center p-6">
+          <div className="text-center">
+            <Loader2 className="w-10 h-10 animate-spin text-purple-400 mx-auto mb-4" />
+            <div className="text-xl font-semibold">Your Troll City purchase is complete</div>
+          </div>
+        </div>
+      ) : loading ? (
+        <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between mb-8">
+              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                <Coins className="w-8 h-8 text-purple-400" />
+                Troll City Coin Store
+              </h1>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} className="bg-zinc-900 rounded-xl p-6 border border-[#2C2C2C] animate-pulse">
+                  <div className="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
+                  <div className="h-8 bg-gray-700 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-700 rounded w-1/3 mt-2"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
         <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Header */}
@@ -774,7 +753,7 @@ export default function CoinStore() {
                       const token = session?.access_token;
                       if (!token) throw new Error('No authentication token available');
 
-                      const res = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/paypal-create-order`, {
+                      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-create-order`, {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
@@ -802,7 +781,7 @@ export default function CoinStore() {
                       const { data: { session } } = await supabase.auth.getSession();
                       const token = session?.access_token;
 
-                      const captureRes = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/paypal-capture-order`, {
+                      const captureRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`, {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
@@ -831,7 +810,7 @@ export default function CoinStore() {
             </div>
             </div>
 
-            {false && (
+            {/* Temporarily disabled
             <div className="mt-6 bg-zinc-900 rounded-xl p-4 border border-green-500/20">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -868,7 +847,7 @@ export default function CoinStore() {
                 </div>
               )}
             </div>
-            )}
+            */}
           </div>
 
           <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl p-6 border border-purple-500/30 shadow-lg">
@@ -906,10 +885,11 @@ export default function CoinStore() {
                         {!import.meta.env.VITE_PAYPAL_CLIENT_ID && (
                           <div className="bg-red-600 text-white p-2 rounded text-center text-sm mb-2">
                             PayPal client ID not configured. Please check environment variables.
+                            <div className="text-xs mt-1">Env values: VITE_PAYPAL_CLIENT_ID={import.meta.env.VITE_PAYPAL_CLIENT_ID}, VITE_SUPABASE_URL={import.meta.env.VITE_SUPABASE_URL}</div>
                           </div>
                         )}
                         <PayPalButtons
-                          style={{ layout: "horizontal" }}
+                          style={PAYPAL_BUTTON_STYLE}
                           fundingSource="paypal"
                           createOrder={async () => {
                             try {
@@ -928,7 +908,7 @@ export default function CoinStore() {
                               const token = session?.access_token;
 
                               const captureRes = await fetch(
-                                `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/paypal-capture-order`,
+                                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`,
                                 {
                                   method: "POST",
                                   headers: {
@@ -936,7 +916,13 @@ export default function CoinStore() {
                                     Authorization: `Bearer ${token}`,
                                     apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
                                   },
-                                  body: JSON.stringify({ orderId: data.orderID }),
+                                  body: JSON.stringify({ 
+                                    orderID: data.orderID,
+                                    // Send metadata as backup/verification
+                                    packageId: pkg.id,
+                                    coins: pkg.coins,
+                                    amount: pkg.price
+                                  }),
                                 }
                               );
 
@@ -1192,6 +1178,7 @@ export default function CoinStore() {
           </div>
         </div>
       </div>
-      </PayPalScriptProvider>
+      )}
+    </PayPalScriptProvider>
   );
 }

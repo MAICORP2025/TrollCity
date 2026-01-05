@@ -13,6 +13,7 @@ interface EntranceEvent {
   username: string
   role: 'viewer' | 'troller' | 'officer' | 'vip' | 'donor'
   timestamp: number
+  profile?: any
 }
 
 type UserRole = 'viewer' | 'troller' | 'officer' | 'vip' | 'donor'

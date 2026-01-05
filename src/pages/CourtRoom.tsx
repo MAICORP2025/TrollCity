@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, memo, useRef } from "react";
+import React, { useEffect, useState, useMemo, memo, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../lib/store";
 import { supabase, UserRole } from "../lib/supabase";
@@ -11,6 +11,52 @@ import CourtAIAssistant from "../components/CourtAIAssistant";
 import MAIAuthorityPanel from "../components/mai/MAIAuthorityPanel";
 import { Scale, Gavel, FileText, Users, CheckCircle, Upload } from "lucide-react";
 import { Track } from "livekit-client";
+
+const CourtParticipantLabel = ({ trackRef }: { trackRef: any }) => {
+  const [username, setUsername] = useState<string | null>(null);
+  const [rgbExpiry, setRgbExpiry] = useState<string | null>(null);
+  const identity = trackRef?.participant?.identity || null;
+  const name = trackRef?.participant?.name || null;
+  useEffect(() => {
+    let mounted = true;
+    const fetchProfile = async () => {
+      if (!identity) {
+        setUsername(name || null);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('username,rgb_username_expires_at')
+        .eq('id', identity)
+        .maybeSingle();
+      if (!mounted) return;
+      if (error) {
+        setUsername(name || identity);
+        setRgbExpiry(null);
+        return;
+      }
+      setUsername(data?.username || name || identity);
+      setRgbExpiry(data?.rgb_username_expires_at || null);
+    };
+    fetchProfile();
+    return () => {
+      mounted = false;
+    };
+  }, [identity, name]);
+  const isRgbActive =
+    rgbExpiry !== null && new Date(rgbExpiry) > new Date();
+  return (
+    <div className="absolute bottom-2 left-2 right-2 flex justify-center pointer-events-none">
+      <span
+        className={`px-2 py-1 rounded bg-black/60 text-white text-xs ${
+          isRgbActive ? 'rgb-username font-bold' : ''
+        }`}
+      >
+        {username || identity || 'Participant'}
+      </span>
+    </div>
+  );
+};
 
 // Memoized Court Video Grid - Prevents remounting and flickering
 const CourtVideoGrid = memo(({ maxTiles }: { maxTiles: number }) => {
@@ -48,9 +94,10 @@ const CourtVideoGrid = memo(({ maxTiles }: { maxTiles: number }) => {
         return (
           <div
             key={stableKey}
-            className="tc-neon-frame"
+            className="tc-neon-frame relative"
           >
             <ParticipantTile trackRef={t} />
+            <CourtParticipantLabel trackRef={t} />
           </div>
         );
       })}
@@ -92,6 +139,11 @@ const CourtTrackCounter = memo(({ onCount }: { onCount: (count: number) => void 
 
 CourtTrackCounter.displayName = 'CourtTrackCounter';
 
+const isValidUuid = (value?: string | null) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value || ''
+  );
+
 export default function CourtRoom() {
    const { user, profile } = useAuthStore();
    const { courtId } = useParams();
@@ -106,11 +158,6 @@ export default function CourtRoom() {
    const [joinBoxLoading, setJoinBoxLoading] = useState(false);
    const [activeBoxCount, setActiveBoxCount] = useState(0);
 
-  const isValidUuid = (value?: string | null) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      value || ''
-    );
-
   // Stabilize room ID once at mount
   const roomIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -119,8 +166,7 @@ export default function CourtRoom() {
       console.log('[CourtRoom] Room ID stabilized:', courtId);
     }
   }, [courtId]);
-  const _roomId = roomIdRef.current || courtId;
-
+  
   // Court functionality state
   const [activeCase, setActiveCase] = useState(null);
   const [courtPhase, setCourtPhase] = useState('waiting'); // waiting, opening, evidence, deliberation, verdict
@@ -173,6 +219,69 @@ export default function CourtRoom() {
     reason: ''
   });
 
+
+
+  const initCourtroom = useCallback(async () => {
+    if (!user || !courtId || !isValidUuid(courtId)) return;
+
+    setLoading(true);
+    try {
+      const { data: session, error: sessionError } = await supabase
+        .from('court_sessions')
+        .select('*')
+        .eq('id', courtId)
+        .maybeSingle();
+
+      if (sessionError) throw sessionError;
+      
+      if (!session) {
+        toast.error('Court session not found');
+        navigate('/troll-court');
+        return;
+      }
+
+      setCourtSession(session);
+      setBoxCount(Math.min(6, Math.max(2, session.max_boxes || 2)));
+
+      // Get token
+      const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
+      const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
+      const edgeTokenUrl = edgeBase ? `${edgeBase}/livekit-token` : null;
+      const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
+
+      const authSession = await supabase.auth.getSession();
+      const accessToken = authSession.data.session?.access_token;
+
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken || ''}`,
+        },
+        body: JSON.stringify({
+          room: courtId,
+          identity: user.id,
+          user_id: user.id,
+          role: profile?.role,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get LiveKit token');
+      }
+
+      const data = await response.json();
+      setToken(data.token);
+      setServerUrl(data.livekitUrl || data.serverUrl || import.meta.env.VITE_LIVEKIT_URL);
+
+    } catch (err) {
+      console.error('Error initializing courtroom:', err);
+      toast.error('Failed to join court session');
+    } finally {
+      setLoading(false);
+    }
+  }, [user, courtId, navigate, profile?.role]);
+
   useEffect(() => {
     if (!user) return;
 
@@ -190,7 +299,24 @@ export default function CourtRoom() {
         try {
           const { data: currentSession, error } = await supabase.rpc('get_current_court_session');
           if (error) throw error;
-          const session = Array.isArray(currentSession) ? currentSession[0] : currentSession;
+          
+          let session = Array.isArray(currentSession) ? currentSession[0] : currentSession;
+          
+          // If RPC returned nothing, check via direct query just in case (for 'active' status support)
+          if (!session) {
+             const { data: fallbackSession } = await supabase
+              .from('court_sessions')
+              .select('*')
+              .in('status', ['live', 'active', 'waiting'])
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+             
+             if (fallbackSession) {
+               session = fallbackSession;
+             }
+          }
+
           const resolvedId = session?.id;
           if (!resolvedId || !isValidUuid(resolvedId)) {
             toast.error('No active court session found');
@@ -217,7 +343,7 @@ export default function CourtRoom() {
     }
 
     initCourtroom();
-  }, [user, courtId]);
+  }, [user, courtId, initCourtroom, navigate]);
 
   // Keep box count in sync for all viewers
   useEffect(() => {
@@ -234,7 +360,7 @@ export default function CourtRoom() {
           .maybeSingle();
 
         if (!data) return;
-        if (data.status && data.status !== 'active') {
+        if (data.status && !['active', 'live', 'waiting'].includes(data.status)) {
           toast.info('Court session ended');
           navigate('/troll-court');
           return;
@@ -262,87 +388,7 @@ export default function CourtRoom() {
     };
   }, [courtId]);
 
-  const initCourtroom = async () => {
-    try {
-      setLoading(true);
 
-      // Load court session metadata (public)
-      try {
-        const { data: sessionData } = await supabase
-          .from('court_sessions')
-          .select('*')
-          .eq('id', courtId)
-          .maybeSingle();
-
-        if (sessionData) {
-          setCourtSession(sessionData);
-          const maxBoxes = (sessionData as any)?.max_boxes ?? (sessionData as any)?.maxBoxes ?? 2;
-          setBoxCount(Math.min(6, Math.max(2, maxBoxes)));
-        }
-      } catch {
-        // non-fatal, still allow joining if token works
-      }
-
-      const canRequestPublish =
-        profile?.role === "admin" ||
-        profile?.role === "lead_troll_officer" ||
-        profile?.is_admin === true ||
-        profile?.is_lead_officer === true;
-
-      const requestedRole =
-        profile?.role === 'admin' || profile?.is_admin
-          ? 'admin'
-          : profile?.role === 'lead_troll_officer' || profile?.is_lead_officer
-          ? 'lead_troll_officer'
-          : profile?.role === 'troll_officer' || (profile as any)?.is_troll_officer
-          ? 'troll_officer'
-          : (profile as any)?.role || 'user';
-
-      // Get token from Vercel endpoint
-      const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
-      const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
-      const edgeTokenUrl = edgeBase ? `${edgeBase}/livekit-token` : null;
-      const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
-
-      const session = await supabase.auth.getSession();
-      const accessToken = session.data.session?.access_token;
-      if (!accessToken) throw new Error('No active session');
-
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          room: courtId,
-          identity: user.id,
-          user_id: user.id,
-          role: requestedRole,
-          allowPublish: canRequestPublish,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Token request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setToken(data?.token);
-      setServerUrl(data?.livekitUrl || data?.serverUrl || import.meta.env.VITE_LIVEKIT_URL);
-
-      // who can broadcast?
-      const allowed = ["admin", "lead_troll_officer", "defendant", "accuser", "witness", "attorney"];
-      _setParticipantsAllowed(allowed);
-
-    } catch (err) {
-      console.error("Courtroom token error:", err);
-      toast.error("Unable to join court session.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Check if user is a judge (admin or lead officer)
   const isJudge =
@@ -403,6 +449,7 @@ export default function CourtRoom() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           room: courtId,
@@ -437,9 +484,6 @@ export default function CourtRoom() {
 
   const startCourtSessionNow = async () => {
     if (!isJudge || !user) return;
-
-    const isValidUuid = (value) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value || '');
 
     const targetCourtId = isValidUuid(courtId) ? courtId : crypto.randomUUID();
 

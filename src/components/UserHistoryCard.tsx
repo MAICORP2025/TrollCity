@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { UserProfile } from '../lib/supabase';
 import { AlertTriangle, Clock, Gavel, Ban, MessageSquare, Eye } from 'lucide-react';
@@ -23,11 +23,7 @@ const UserHistoryCard: React.FC<UserHistoryCardProps> = ({ targetUserId, onClose
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadUserHistory();
-  }, [targetUserId]);
-
-  const loadUserHistory = async () => {
+  const loadUserHistory = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -69,7 +65,12 @@ const UserHistoryCard: React.FC<UserHistoryCardProps> = ({ targetUserId, onClose
     } finally {
       setLoading(false);
     }
-  };
+  }, [targetUserId]);
+
+  useEffect(() => {
+    loadUserHistory();
+  }, [loadUserHistory]);
+
 
   const getIncidentIcon = (type: string) => {
     switch (type) {
@@ -128,7 +129,9 @@ const UserHistoryCard: React.FC<UserHistoryCardProps> = ({ targetUserId, onClose
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="text-xl font-bold text-white">User History</h3>
-            <p className="text-gray-400 text-sm">{userProfile?.username}</p>
+            <p className={`text-gray-400 text-sm ${userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > new Date() ? 'rgb-username font-bold' : ''}`}>
+              {userProfile?.username}
+            </p>
           </div>
           <button
             onClick={onClose}

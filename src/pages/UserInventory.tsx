@@ -1,75 +1,113 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Package, Zap, Crown, Star, Palette, MessageCircle, Play, CheckCircle, XCircle } from 'lucide-react'
+import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield } from 'lucide-react'
+import { PERK_CONFIG } from '../lib/perkSystem'
+import { ENTRANCE_EFFECTS_CONFIG } from '../lib/entranceEffects'
 
 export default function UserInventory() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<any[]>([])
+  const [entranceEffects, setEntranceEffects] = useState<any[]>([])
+  const [perks, setPerks] = useState<any[]>([])
+  const [insurances, setInsurances] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeItems, setActiveItems] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth', { replace: true })
-      return
-    }
-    loadInventory()
-  }, [user, navigate])
-
-  const loadInventory = async () => {
+  const loadInventory = useCallback(async () => {
     try {
       setLoading(true)
 
-      // Load user's inventory with item details
-      const { data, error } = await supabase
-        .from('user_inventory')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('acquired_at', { ascending: false })
+      // Parallel fetch of all inventory types
+      const [
+        inventoryRes,
+        effectsRes,
+        perksRes,
+        insuranceRes,
+        activeRes
+      ] = await Promise.all([
+        supabase.from('user_inventory').select('*').eq('user_id', user!.id).order('acquired_at', { ascending: false }),
+        supabase.from('user_entrance_effects').select('*').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
+        supabase.from('user_perks').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
+        supabase.from('user_insurances').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
+        supabase.from('user_active_items').select('item_id').eq('user_id', user!.id)
+      ]);
 
-      if (error) throw error
-      const inventoryData = data || []
-
-      const itemIds = Array.from(
-        new Set(
-          inventoryData
-            .map((entry: any) => entry.item_id)
-            .filter(Boolean),
-        ),
-      )
-
+      // 1. Process Standard Inventory
+      const inventoryData = inventoryRes.data || []
+      const itemIds = Array.from(new Set(inventoryData.map((e: any) => e.item_id).filter(Boolean)))
+      
       const itemDetailsMap: Record<string, any> = {}
       if (itemIds.length) {
-        const { data: itemsData, error: itemsError } = await supabase
+        const { data: itemsData } = await supabase
           .from('marketplace_items')
           .select('id, title, description, type')
           .in('id', itemIds)
-
-        if (itemsError) throw itemsError
-
-        itemsData?.forEach((item) => {
-          itemDetailsMap[item.id] = item
-        })
+        itemsData?.forEach((item) => { itemDetailsMap[item.id] = item })
       }
-
-      const combinedInventory = inventoryData.map((entry) => ({
+      
+      setInventory(inventoryData.map((entry) => ({
         ...entry,
         marketplace_item: itemDetailsMap[entry.item_id] || null,
-      }))
+      })))
 
-      setInventory(combinedInventory)
+      // 2. Process Entrance Effects
+      const effectsData = effectsRes.data || []
+      setEntranceEffects(effectsData.map(e => ({
+        ...e,
+        config: ENTRANCE_EFFECTS_CONFIG[e.effect_id as keyof typeof ENTRANCE_EFFECTS_CONFIG]
+      })))
 
-      // Load active digital items
-      const { data: activeData } = await supabase
-        .from('user_active_items')
-        .select('item_id')
-        .eq('user_id', user!.id)
+      // 3. Process Perks
+      const perksData = perksRes.data || []
+      setPerks(perksData.map(p => ({
+        ...p,
+        config: PERK_CONFIG[p.perk_id as keyof typeof PERK_CONFIG]
+      })))
 
-      const activeSet = new Set(activeData?.map(item => item.item_id) || [])
+      // 4. Process Insurance
+      const insuranceData = insuranceRes.data || []
+      const planIds = Array.from(new Set(insuranceData.map((i: any) => i.insurance_id).filter(Boolean)))
+      let insuranceMap: Record<string, any> = {}
+      
+      if (planIds.length > 0) {
+        // Fetch plan names from insurance_plans if available, or insurance_options
+        // Trying insurance_options first as per CoinStoreModal
+        const { data: plans } = await supabase
+          .from('insurance_options') 
+          .select('id, name, description, icon')
+          .in('id', planIds)
+        
+        plans?.forEach((p) => { insuranceMap[p.id] = p })
+      }
+
+      setInsurances(insuranceData.map(i => ({
+        ...i,
+        plan: insuranceMap[i.insurance_id] || { name: 'Insurance Plan', description: 'Protection' }
+      })))
+
+      // 5. Active Items
+      const activeSet = new Set(activeRes.data?.map(item => item.item_id) || [])
+      
+      // Also check active perks (they have is_active column)
+      perksData.forEach(p => {
+        if (p.is_active) activeSet.add(p.id)
+      })
+
+      // Also check active insurance
+      insuranceData.forEach(i => {
+        if (i.is_active) activeSet.add(i.id)
+      })
+
+      // Also check active entrance effects
+      // Note: user_entrance_effects usually doesn't have is_active for toggle, but let's check
+      // If we are using user_active_items table for entrance effects, then activeSet covers it.
+      // But if user_entrance_effects has is_active column, we should check it.
+      // Based on schema, user_entrance_effects might not have is_active, but we use user_active_items for effects.
+      
       setActiveItems(activeSet)
 
     } catch (err) {
@@ -78,7 +116,15 @@ export default function UserInventory() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth', { replace: true })
+      return
+    }
+    loadInventory()
+  }, [user, navigate, loadInventory])
 
   const toggleItemActivation = async (itemId: string, itemType: string) => {
     try {
@@ -132,6 +178,8 @@ export default function UserInventory() {
       case 'badge': return <Crown className="w-5 h-5 text-purple-400" />
       case 'ticket': return <Star className="w-5 h-5 text-blue-400" />
       case 'digital': return <Palette className="w-5 h-5 text-green-400" />
+      case 'perk': return <Star className="w-5 h-5 text-pink-400" />
+      case 'insurance': return <CheckCircle className="w-5 h-5 text-orange-400" />
       default: return <Package className="w-5 h-5 text-gray-400" />
     }
   }
@@ -142,6 +190,8 @@ export default function UserInventory() {
       case 'badge': return 'Badge'
       case 'ticket': return 'Ticket'
       case 'digital': return 'Digital Item'
+      case 'perk': return 'Perk'
+      case 'insurance': return 'Insurance'
       default: return 'Item'
     }
   }
@@ -168,85 +218,259 @@ export default function UserInventory() {
               </div>
             ))}
           </div>
-        ) : inventory.length === 0 ? (
+        ) : (inventory.length === 0 && entranceEffects.length === 0 && perks.length === 0 && insurances.length === 0) ? (
           <div className="text-center py-12">
             <Package className="w-16 h-16 text-gray-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">Your Inventory is Empty</h2>
-            <p className="text-gray-400 mb-6">Purchase items from the marketplace to see them here</p>
+            <p className="text-gray-400 mb-6">Purchase items from the store to see them here</p>
             <button
               onClick={() => navigate('/marketplace')}
               className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold"
             >
-              Browse Marketplace
+              Browse Store
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {inventory.map((item) => {
-              const isActive = activeItems.has(item.item_id)
-              const isDigital = ['effect', 'badge', 'digital'].includes(item.marketplace_item?.type)
-
-              return (
-                <div key={item.id} className="bg-zinc-900 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-all">
-                  {/* Item Info */}
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      {getItemIcon(item.marketplace_item?.type)}
-                      <span className="text-sm text-gray-400">
-                        {getItemTypeLabel(item.marketplace_item?.type)}
-                      </span>
-                      {isActive && (
-                        <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">
-                          ACTIVE
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-xl font-bold text-white mb-1">
-                      {item.marketplace_item?.title}
-                    </h3>
-
-                    <p className="text-gray-400 text-sm mb-2">
-                      {item.marketplace_item?.description}
-                    </p>
-
-                    <p className="text-xs text-gray-500">
-                      Acquired: {new Date(item.acquired_at).toLocaleDateString()}
-                    </p>
-                  </div>
-
-                  {/* Action Button */}
-                  {isDigital ? (
-                    <button
-                      onClick={() => toggleItemActivation(item.item_id, item.marketplace_item?.type)}
-                      className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                        isActive
-                          ? 'bg-red-600 hover:bg-red-700 text-white'
-                          : 'bg-green-600 hover:bg-green-700 text-white'
-                      }`}
-                    >
-                      {isActive ? (
-                        <>
-                          <XCircle className="w-4 h-4" />
-                          Deactivate
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4" />
-                          Activate
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <div className="text-center py-3 text-gray-400">
-                      <Package className="w-5 h-5 mx-auto mb-1" />
-                      <p className="text-sm">Physical Item</p>
-                      <p className="text-xs">Contact seller for delivery</p>
-                    </div>
-                  )}
+          <div className="space-y-8">
+            {/* Perks Section */}
+            {perks.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <Zap className="w-6 h-6 text-pink-400" />
+                  Active Perks
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {perks.map((perk) => {
+                    const isActive = activeItems.has(perk.id)
+                    const isExpired = perk.expires_at && new Date(perk.expires_at) < new Date()
+                    
+                    return (
+                      <div key={perk.id} className="bg-zinc-900 rounded-xl p-6 border border-pink-500/20 hover:border-pink-500/40 transition-all">
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Star className="w-5 h-5 text-pink-400" />
+                            <span className="text-sm text-gray-400">Perk</span>
+                            {isActive && !isExpired && (
+                              <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">ACTIVE</span>
+                            )}
+                            {isExpired && (
+                              <span className="bg-red-600 text-white text-xs px-2 py-1 rounded-full">EXPIRED</span>
+                            )}
+                          </div>
+                          <h3 className="text-xl font-bold text-white mb-1">
+                            {perk.config?.name || 'Unknown Perk'}
+                          </h3>
+                          <p className="text-gray-400 text-sm mb-2">
+                            {perk.config?.description || 'No description'}
+                          </p>
+                          {perk.expires_at && (
+                            <p className="text-xs text-gray-500">
+                              Expires: {new Date(perk.expires_at).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => togglePerk(perk.id, isActive)}
+                          disabled={isExpired}
+                          className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                            isExpired 
+                              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                              : isActive
+                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {isExpired ? 'Expired' : isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </div>
+            )}
+
+            {/* Insurance Section */}
+            {insurances.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <Shield className="w-6 h-6 text-blue-400" />
+                  Insurance Plans
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {insurances.map((ins) => {
+                    const isActive = activeItems.has(ins.id)
+                    const isExpired = ins.expires_at && new Date(ins.expires_at) < new Date()
+                    
+                    return (
+                      <div key={ins.id} className="bg-zinc-900 rounded-xl p-6 border border-blue-500/20 hover:border-blue-500/40 transition-all">
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Shield className="w-5 h-5 text-blue-400" />
+                            <span className="text-sm text-gray-400">Insurance</span>
+                            {isActive && !isExpired && (
+                              <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">ACTIVE</span>
+                            )}
+                            {isExpired && (
+                              <span className="bg-red-600 text-white text-xs px-2 py-1 rounded-full">EXPIRED</span>
+                            )}
+                          </div>
+                          <h3 className="text-xl font-bold text-white mb-1">
+                            {ins.plan?.name || 'Insurance Plan'}
+                          </h3>
+                          <p className="text-gray-400 text-sm mb-2">
+                            {ins.plan?.description || 'Protection plan'}
+                          </p>
+                          {ins.expires_at && (
+                            <p className="text-xs text-gray-500">
+                              Expires: {new Date(ins.expires_at).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-center py-2 bg-zinc-800 rounded text-xs text-gray-400">
+                          {isActive ? 'Protection Active' : 'Protection Inactive'}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Entrance Effects Section */}
+            {entranceEffects.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <Sparkles className="w-6 h-6 text-yellow-400" />
+                  Entrance Effects
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {entranceEffects.map((effect) => {
+                    const isActive = activeItems.has(effect.effect_id)
+                    return (
+                      <div key={effect.id} className="bg-zinc-900 rounded-xl p-6 border border-yellow-500/20 hover:border-yellow-500/40 transition-all">
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Zap className="w-5 h-5 text-yellow-400" />
+                            <span className="text-sm text-gray-400">Entrance Effect</span>
+                            {isActive && (
+                              <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">
+                                ACTIVE
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-xl font-bold text-white mb-1">
+                            {effect.config?.name || effect.effect_id}
+                          </h3>
+                          <p className="text-gray-400 text-sm mb-2">
+                            {effect.config?.description || 'No description available'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Acquired: {new Date(effect.acquired_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => toggleItemActivation(effect.effect_id, 'effect')}
+                          className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                            isActive
+                              ? 'bg-red-600 hover:bg-red-700 text-white'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {isActive ? (
+                            <>
+                              <XCircle className="w-4 h-4" />
+                              Deactivate
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4" />
+                              Activate
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* General Inventory Section */}
+            {inventory.length > 0 && (
+              <div>
+                 <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <Package className="w-6 h-6 text-purple-400" />
+                  Items
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {inventory.map((item) => {
+                    const isActive = activeItems.has(item.item_id)
+                    const isDigital = ['effect', 'badge', 'digital'].includes(item.marketplace_item?.type)
+
+                    return (
+                      <div key={item.id} className="bg-zinc-900 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-all">
+                        {/* Item Info */}
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            {getItemIcon(item.marketplace_item?.type)}
+                            <span className="text-sm text-gray-400">
+                              {getItemTypeLabel(item.marketplace_item?.type)}
+                            </span>
+                            {isActive && (
+                              <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">
+                                ACTIVE
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="text-xl font-bold text-white mb-1">
+                            {item.marketplace_item?.title}
+                          </h3>
+
+                          <p className="text-gray-400 text-sm mb-2">
+                            {item.marketplace_item?.description}
+                          </p>
+
+                          <p className="text-xs text-gray-500">
+                            Acquired: {new Date(item.acquired_at).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        {/* Action Button */}
+                        {isDigital ? (
+                          <button
+                            onClick={() => toggleItemActivation(item.item_id, item.marketplace_item?.type)}
+                            className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                              isActive
+                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                : 'bg-green-600 hover:bg-green-700 text-white'
+                            }`}
+                          >
+                            {isActive ? (
+                              <>
+                                <XCircle className="w-4 h-4" />
+                                Deactivate
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-4 h-4" />
+                                Activate
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <div className="text-center py-3 text-gray-400">
+                            <Package className="w-5 h-5 mx-auto mb-1" />
+                            <p className="text-sm">Physical Item</p>
+                            <p className="text-xs">Contact seller for delivery</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

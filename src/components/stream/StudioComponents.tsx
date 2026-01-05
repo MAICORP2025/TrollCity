@@ -52,8 +52,6 @@ export function StreamStage({
   allowPublish,
   maxParticipants,
   className = '',
-  isConnected,
-  isConnecting,
   autoConnect = true,
   children,
 }: {
@@ -63,8 +61,6 @@ export function StreamStage({
   allowPublish?: boolean
   maxParticipants?: number
   className?: string
-  isConnected: boolean
-  isConnecting: boolean
   autoConnect?: boolean
   children?: React.ReactNode
 }) {
@@ -100,6 +96,7 @@ export function StreamControlBar({
   onOpenGiftDrawer,
   onOpenMenuPanel,
   isPublishing,
+  disconnectLabel,
 }: {
   micEnabled: boolean
   cameraEnabled: boolean
@@ -110,6 +107,7 @@ export function StreamControlBar({
   onOpenGiftDrawer?: () => void
   onOpenMenuPanel?: () => void
   isPublishing?: boolean
+  disconnectLabel?: string
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-purple-500/30 bg-[#01000b]/70 px-4 py-3 text-[10px] uppercase tracking-[0.3em] text-white shadow-[0_15px_40px_rgba(48,9,99,0.6)]">
@@ -161,7 +159,7 @@ export function StreamControlBar({
           className="flex items-center gap-2 rounded-full border border-red-500/70 bg-red-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-red-500/50"
         >
           <Power className="h-3 w-3" />
-          {isPublishing ? 'End Stream' : 'Disconnect'}
+          {disconnectLabel || (isPublishing ? 'End Stream' : 'Disconnect')}
         </button>
       </div>
     </div>

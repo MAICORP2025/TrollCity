@@ -3,7 +3,6 @@ import { useAuthStore } from '../lib/store'
 import { useNavigate } from 'react-router-dom'
 import { Coins, Gift, Crown, Zap, ArrowLeft } from 'lucide-react'
 import WheelModal from './WheelModal'
-import { supabase } from '../lib/supabase'
 
 export default function TrollWheelPage() {
   const { profile, user } = useAuthStore()
@@ -18,7 +17,7 @@ export default function TrollWheelPage() {
     const trollmonds = profile?.troll_coins ?? 0
     setTrollmonds(trollmonds)
     setLoadingBalance(false)
-  }, [profile?.id, profile?.troll_coins])
+  }, [profile])
 
   if (!user || !profile) {
     return (

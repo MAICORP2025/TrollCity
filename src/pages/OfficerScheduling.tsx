@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -44,35 +44,7 @@ export default function OfficerScheduling() {
     }
   }, [profile, user, navigate])
 
-  // Load shift slots and subscribe to real-time updates
-  useEffect(() => {
-    if (profile?.id) {
-      loadSlots()
-
-      // Subscribe to real-time updates
-      const channel = supabase
-        .channel('officer_shift_slots_realtime')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'officer_shift_slots',
-            filter: `officer_id=eq.${profile.id}`
-          },
-          () => {
-            loadSlots()
-          }
-        )
-        .subscribe()
-
-      return () => {
-        supabase.removeChannel(channel)
-      }
-    }
-  }, [profile?.id])
-
-  const loadSlots = async () => {
+  const loadSlots = useCallback(async () => {
     if (!profile?.id) return
     setLoading(true)
     try {
@@ -98,6 +70,7 @@ export default function OfficerScheduling() {
       // Load shift logs to get earnings and active shifts (non-critical, continue if fails)
       let logsData = null
       let activeLogsData = null
+
       try {
         // Load completed shift logs for earnings
         const { data: logs, error: logsError } = await supabase
@@ -194,7 +167,35 @@ export default function OfficerScheduling() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile?.id])
+
+  // Load shift slots and subscribe to real-time updates
+  useEffect(() => {
+    if (profile?.id) {
+      loadSlots()
+
+      // Subscribe to real-time updates
+      const channel = supabase
+        .channel('officer_shift_slots_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'officer_shift_slots',
+            filter: `officer_id=eq.${profile.id}`
+          },
+          () => {
+            loadSlots()
+          }
+        )
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [profile?.id, loadSlots])
 
   const handleAddSlot = async () => {
     if (!profile?.id || !selectedDate || !startTime || !endTime) {

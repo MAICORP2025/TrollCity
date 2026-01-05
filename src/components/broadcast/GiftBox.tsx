@@ -7,7 +7,7 @@ interface GiftBoxProps {
 }
 
 export default function GiftBox({ onSendGift, participants = [] }: GiftBoxProps) {
-  const gifts = [
+  const gifts = React.useMemo(() => [
     { id: 16, name: "Troll", emoji: "🧟", coins: 1, rarity: 'troll' },
     { id: 1, name: "Rose", emoji: "🌹", coins: 10, rarity: 'common' },
     { id: 2, name: "Heart", emoji: "💗", coins: 50, rarity: 'common' },
@@ -24,7 +24,7 @@ export default function GiftBox({ onSendGift, participants = [] }: GiftBoxProps)
     { id: 13, name: "Magic Wand", emoji: "✨", coins: 120, rarity: 'rare' },
     { id: 14, name: "Bear", emoji: "🧸", coins: 45, rarity: 'common' },
     { id: 15, name: "Ice Cream", emoji: "🍨", coins: 15, rarity: 'common' },
-  ];
+  ], []);
 
   const shuffle = (arr: any[]) => {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -34,7 +34,7 @@ export default function GiftBox({ onSendGift, participants = [] }: GiftBoxProps)
     return arr;
   };
 
-  const displayedGifts = React.useMemo(() => shuffle([...gifts]).slice(0, 12), []);
+  const displayedGifts = React.useMemo(() => shuffle([...gifts]).slice(0, 12), [gifts]);
 
   const [showModal, setShowModal] = React.useState(false);
   const [selectedGift, setSelectedGift] = React.useState<any | null>(null);

@@ -8,19 +8,29 @@ interface UsersPanelProps {
   description?: string;
 }
 
+interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  avatar_url?: string;
+  is_banned: boolean;
+  role: string;
+  created_at?: string;
+}
+
 const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", description }) => {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadUsers = async () => {
+  const loadUsers = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
       const { data, error: queryError } = await supabase
         .from("user_profiles")
-        .select("id, username, avatar_url, is_banned, role, created_at")
+        .select("id, username, email, avatar_url, is_banned, role, created_at")
         .order("created_at", { ascending: false })
         .limit(100);
       
@@ -42,7 +52,7 @@ const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", desc
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadUsers();
@@ -62,7 +72,7 @@ const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", desc
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadUsers]);
 
   if (loading) {
     return (

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, XCircle, Sparkles, ArrowRight, ArrowLeft } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { CheckCircle } from 'lucide-react'
 
 interface QuizQuestion {
   id: string
@@ -18,8 +18,14 @@ interface QuizQuestion {
   correct_answer?: string  // For text-based answers
 }
 
+interface OrientationStatus {
+  status: string
+  attempts: number
+  max_attempts: number
+}
+
 export default function OrientationQuiz() {
-  const { profile, user, setProfile } = useAuthStore()
+  const { profile, user } = useAuthStore()
   const navigate = useNavigate()
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [answers, setAnswers] = useState<Record<string, string>>({})
@@ -27,27 +33,9 @@ export default function OrientationQuiz() {
   const [submitting, setSubmitting] = useState(false)
   const [quizStarted, setQuizStarted] = useState(false)
   const [quizTimeStart, setQuizTimeStart] = useState<number | null>(null)
-  const [orientationStatus, setOrientationStatus] = useState<any>(null)
-  const [showResults, setShowResults] = useState(false)
-  const [quizResult, setQuizResult] = useState<any>(null)
+  const [orientationStatus, setOrientationStatus] = useState<OrientationStatus | null>(null)
 
-  useEffect(() => {
-    if (!profile || !user) {
-      navigate('/')
-      return
-    }
-
-    if (!profile.is_troll_officer) {
-      toast.error('You must be an approved officer to take the quiz')
-      navigate('/')
-      return
-    }
-
-    loadOrientationStatus()
-    loadQuizQuestions()
-  }, [profile, user, navigate])
-
-  const loadOrientationStatus = async () => {
+  const loadOrientationStatus = useCallback(async () => {
     if (!user?.id) return
     try {
       const { data, error } = await supabase.rpc('get_officer_orientation_status', {
@@ -56,7 +44,7 @@ export default function OrientationQuiz() {
 
       if (error) throw error
       if (data) {
-        setOrientationStatus(data)
+        setOrientationStatus(data as OrientationStatus)
         
         // Check if max attempts reached
         if (data.status === 'failed') {
@@ -71,18 +59,13 @@ export default function OrientationQuiz() {
           navigate('/officer/lounge')
           return
         }
-
-        // Start orientation if not started
-        if (data.status === 'assigned') {
-          await startOrientation()
-        }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading orientation status:', err)
     }
-  }
+  }, [user?.id, navigate])
 
-  const startOrientation = async () => {
+  const startOrientation = useCallback(async () => {
     if (!user?.id) return
     try {
       const { data, error } = await supabase.rpc('start_officer_orientation', {
@@ -95,12 +78,18 @@ export default function OrientationQuiz() {
         setQuizTimeStart(Date.now())
         await loadOrientationStatus()
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting orientation:', err)
     }
-  }
+  }, [user?.id, loadOrientationStatus])
 
-  const loadQuizQuestions = async () => {
+  useEffect(() => {
+    if (orientationStatus?.status === 'assigned') {
+      startOrientation()
+    }
+  }, [orientationStatus?.status, startOrientation])
+
+  const loadQuizQuestions = useCallback(async () => {
     setLoading(true)
     try {
       console.log('Loading quiz questions...')
@@ -118,7 +107,7 @@ export default function OrientationQuiz() {
       if (data && data.length > 0) {
         console.log('Sample question data:', data[0])
         // Map the data to match QuizQuestion interface
-        const questionsData = data.map((q: any) => ({
+        const questionsData = data.map((q: { id: string; question_text: string; correct_answer: string }) => ({
           id: q.id,
           question_text: q.question_text,
           correct_answer: q.correct_answer,
@@ -146,36 +135,33 @@ export default function OrientationQuiz() {
         console.warn('No quiz questions returned from query')
         toast.error('No quiz questions available')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading quiz questions:', err)
-      toast.error('Failed to load quiz questions: ' + (err?.message || 'Unknown error'))
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      toast.error('Failed to load quiz questions: ' + errorMsg)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  // Helper function to normalize answers for comparison
-  const normalize = (str: string) => str.trim().toLowerCase()
-  
-  // Grading function for text-based answers
-  const gradeAnswers = (questions: QuizQuestion[], answers: Record<string, string>) => {
-    let score = 0
-    
-    for (const q of questions) {
-      const userAnswer = answers[q.id] || ""
-      const correct = q.correct_answer || ""
-      
-      const clean = (s: string) => s.trim().toLowerCase()
-      
-      if (clean(userAnswer) === clean(correct)) {
-        score++
-      }
+  useEffect(() => {
+    if (!profile || !user) {
+      navigate('/')
+      return
     }
-    
-    return score
-  }
 
-  const handleSubmitQuiz = async () => {
+    if (!profile.is_troll_officer) {
+      toast.error('You must be an approved officer to take the quiz')
+      navigate('/')
+      return
+    }
+
+    loadOrientationStatus()
+    loadQuizQuestions()
+  }, [profile, user, navigate, loadOrientationStatus, loadQuizQuestions])
+
+
+  const handleSubmitQuiz = useCallback(async () => {
     if (!user?.id) return
 
     // Check if all questions are answered
@@ -245,13 +231,14 @@ export default function OrientationQuiz() {
         toast.error("Quiz failed! Redirecting to application page...")
         navigate("/admin/applications")
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error in quiz submission:', err)
-      toast.error(err.message || 'Failed to submit quiz')
+      const message = err instanceof Error ? err.message : 'Failed to submit quiz'
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }
-  }
+  }, [user?.id, questions, answers, quizTimeStart, navigate])
 
   if (loading) {
     return (
@@ -261,107 +248,6 @@ export default function OrientationQuiz() {
           <p>Loading quiz...</p>
           <p className="text-sm text-gray-400 mt-2">Questions: {questions.length}</p>
         </div>
-      </div>
-    )
-  }
-
-  // Show results
-  if (showResults && quizResult) {
-    const passed = quizResult.passed
-    const score = quizResult.score
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6 flex items-center justify-center">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="max-w-2xl w-full"
-        >
-          <div className={`border-2 rounded-xl p-12 text-center ${
-            passed 
-              ? 'bg-green-900/20 border-green-500' 
-              : 'bg-red-900/20 border-red-500'
-          }`}>
-            <AnimatePresence>
-              {passed && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  className="mb-6"
-                >
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute w-2 h-2 rounded-full bg-yellow-400"
-                      style={{
-                        left: `${Math.random() * 100}%`,
-                        top: `${Math.random() * 100}%`,
-                      }}
-                      initial={{ opacity: 0, y: 0 }}
-                      animate={{ opacity: [0, 1, 0], y: -100 }}
-                      transition={{ duration: 2, delay: Math.random() * 0.5 }}
-                    />
-                  ))}
-                  <CheckCircle className="w-24 h-24 text-green-400 mx-auto mb-4" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {!passed && (
-              <XCircle className="w-24 h-24 text-red-400 mx-auto mb-4" />
-            )}
-
-            <h1 className={`text-4xl font-bold mb-4 ${
-              passed ? 'text-green-400' : 'text-red-400'
-            }`}>
-              {passed ? '🎉 Congratulations!' : 'Quiz Failed'}
-            </h1>
-
-            <div className="mb-6">
-              <div className="text-6xl font-bold mb-2" style={{
-                background: passed 
-                  ? 'linear-gradient(to right, #10b981, #34d399)'
-                  : 'linear-gradient(to right, #ef4444, #f87171)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent'
-              }}>
-                {score}%
-              </div>
-              <p className="text-gray-300">
-                {quizResult.correct_answers} out of {quizResult.total_questions} questions correct
-              </p>
-            </div>
-
-            <p className="text-xl mb-8 text-gray-300">
-              {passed 
-                ? 'You are now an active Troll Officer! Redirecting to Officer Lounge...'
-                : `Score below passing. You may retry. Remaining attempts: ${quizResult.attempts_remaining || 0}`
-              }
-            </p>
-
-            {passed ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 1 }}
-              >
-                <div className="flex items-center justify-center gap-2 text-green-400">
-                  <Sparkles className="w-5 h-5" />
-                  <span>Welcome to the team!</span>
-                  <Sparkles className="w-5 h-5" />
-                </div>
-              </motion.div>
-            ) : (
-              <button
-                onClick={() => navigate('/officer/orientation')}
-                className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors"
-              >
-                Return to Orientation
-              </button>
-            )}
-          </div>
-        </motion.div>
       </div>
     )
   }
@@ -417,7 +303,6 @@ export default function OrientationQuiz() {
         {/* Questions */}
         <div className="space-y-6 mb-8">
           {questions.map((question, index) => {
-            const isAnswered = !!answers[question.id]
             return (
               <motion.div
                 key={question.id}
@@ -484,4 +369,5 @@ export default function OrientationQuiz() {
     </div>
   )
 }
+
 

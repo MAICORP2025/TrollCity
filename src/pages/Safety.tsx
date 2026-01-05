@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { Shield, AlertTriangle, Lock, Eye, MessageSquare, Ban, Users, FileText } from 'lucide-react'
+import { Shield, AlertTriangle, Lock, MessageSquare, Ban, Users, FileText } from 'lucide-react'
 
 export default function Safety() {
   return (

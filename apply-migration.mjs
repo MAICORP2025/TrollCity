@@ -45,7 +45,7 @@ async function applyMigration() {
       console.log(statement.substring(0, 100) + '...\n')
       
       try {
-        const { data, error } = await supabase.rpc('exec_sql', { sql: statement })
+        const { error } = await supabase.rpc('exec_sql', { sql: statement })
         
         if (error) {
           // If exec_sql doesn't exist, try direct query

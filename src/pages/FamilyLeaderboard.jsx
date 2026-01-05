@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import {
-  Trophy, Crown, Medal, Award, TrendingUp,
-  Calendar, Star, Users, Coins
+  Trophy, Medal, Award, TrendingUp,
+  Star, Users, Coins, Crown
 } from 'lucide-react'
 
 const FamilyLeaderboard = () => {
@@ -15,12 +15,7 @@ const FamilyLeaderboard = () => {
   const [loading, setLoading] = useState(true)
   const [seasonInfo, setSeasonInfo] = useState(null)
 
-  useEffect(() => {
-    loadLeaderboard()
-    loadSeasonInfo()
-  }, [activeTab])
-
-  const loadSeasonInfo = async () => {
+  const loadSeasonInfo = useCallback(async () => {
     try {
       const { data: season } = await supabase
         .from('family_seasons')
@@ -32,9 +27,9 @@ const FamilyLeaderboard = () => {
     } catch (error) {
       console.error('Error loading season info:', error)
     }
-  }
+  }, [])
 
-  const loadLeaderboard = async () => {
+  const loadLeaderboard = useCallback(async () => {
     setLoading(true)
     try {
       let orderBy = 'total_coins'
@@ -99,7 +94,12 @@ const FamilyLeaderboard = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeTab, user])
+
+  useEffect(() => {
+    loadLeaderboard()
+    loadSeasonInfo()
+  }, [loadLeaderboard, loadSeasonInfo])
 
   const getRankIcon = (rank) => {
     switch (rank) {
@@ -111,19 +111,6 @@ const FamilyLeaderboard = () => {
         return <Award className="w-6 h-6 text-amber-600" />
       default:
         return <span className="w-6 h-6 flex items-center justify-center text-lg font-bold text-gray-400">#{rank}</span>
-    }
-  }
-
-  const getRankColor = (rank) => {
-    switch (rank) {
-      case 1:
-        return 'border-yellow-500/50 bg-yellow-900/20'
-      case 2:
-        return 'border-gray-400/50 bg-gray-900/20'
-      case 3:
-        return 'border-amber-600/50 bg-amber-900/20'
-      default:
-        return 'border-zinc-700 bg-zinc-900/50'
     }
   }
 

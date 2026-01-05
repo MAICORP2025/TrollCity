@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabase"
-import { useAuthStore } from "../../lib/store"
 import { Shield, CheckCircle, XCircle } from "lucide-react"
 
 interface QuizResult {
@@ -16,7 +15,6 @@ interface QuizResult {
 }
 
 export default function LeadOfficerReview() {
-  const { profile, user } = useAuthStore()
   const [results, setResults] = useState<QuizResult[]>([])
   const [loading, setLoading] = useState(true)
 

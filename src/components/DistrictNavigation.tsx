@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -38,7 +38,7 @@ interface DistrictFeature {
 }
 
 export default function DistrictNavigation() {
-  const { profile, user } = useAuthStore()
+  const { user } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
   const [districts, setDistricts] = useState<District[]>([])
@@ -49,43 +49,6 @@ export default function DistrictNavigation() {
   // Icon mapping
   const iconMap: { [key: string]: any } = {
     Home, MapPin, FerrisWheel, Store, Scale, Shield, Users, Crown
-  }
-
-  useEffect(() => {
-    loadDistricts()
-  }, [profile?.id])
-
-  const loadDistricts = async () => {
-    if (!user?.id) return
-
-    try {
-      setLoading(true)
-      const { data, error } = await supabase.rpc('get_user_accessible_districts', {
-        p_user_id: user.id
-      })
-
-      if (error) throw error
-
-      setDistricts(data || [])
-
-      // Auto-expand current district based on route
-      const currentPath = location.pathname
-      const matchingDistrict = data?.find((d: District) =>
-        Object.values(d.features || {}).some((enabled: boolean) =>
-          enabled && getDistrictFeatures(d.name).some(f => f.route_path === currentPath)
-        )
-      )
-
-      if (matchingDistrict) {
-        setCurrentDistrict(matchingDistrict.name)
-        setExpandedDistricts(prev => new Set([...prev, matchingDistrict.name]))
-      }
-
-    } catch (error) {
-      console.error('Error loading districts:', error)
-    } finally {
-      setLoading(false)
-    }
   }
 
   const getDistrictFeatures = (districtName: string): DistrictFeature[] => {
@@ -136,6 +99,43 @@ export default function DistrictNavigation() {
 
     return features[districtName] || []
   }
+
+  const loadDistricts = useCallback(async () => {
+    if (!user?.id) return
+
+    try {
+      setLoading(true)
+      const { data, error } = await supabase.rpc('get_user_accessible_districts', {
+        p_user_id: user.id
+      })
+
+      if (error) throw error
+
+      setDistricts(data || [])
+
+      // Auto-expand current district based on route
+      const currentPath = location.pathname
+      const matchingDistrict = data?.find((d: District) =>
+        Object.values(d.features || {}).some((enabled: boolean) =>
+          enabled && getDistrictFeatures(d.name).some(f => f.route_path === currentPath)
+        )
+      )
+
+      if (matchingDistrict) {
+        setCurrentDistrict(matchingDistrict.name)
+        setExpandedDistricts(prev => new Set([...prev, matchingDistrict.name]))
+      }
+
+    } catch (error) {
+      console.error('Error loading districts:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.id, location.pathname])
+
+  useEffect(() => {
+    loadDistricts()
+  }, [loadDistricts])
 
   const toggleDistrict = (districtName: string) => {
     setExpandedDistricts(prev => {

@@ -1,5 +1,4 @@
 import { supabase } from './supabase'
-import { toast } from 'sonner'
 
 export interface PayPalConfig {
   clientId: string
@@ -92,12 +91,23 @@ export const createPayPalOrder = async (
     const config = getPayPalConfig()
     const edgeFunctionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
+    // Get current session for JWT
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+
+    if (!token) {
+      console.warn('No active session found for PayPal order creation')
+      // proceed? or throw? The user said "Always send Authorization: Bearer <SUPABASE_USER_JWT>"
+      // If no token, the edge function will likely reject it.
+    }
+
     // Create order via Supabase Edge Function
     const response = await fetch(`${edgeFunctionsUrl}/paypal-create-order`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        'Authorization': `Bearer ${token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         user_id: userId,
@@ -172,12 +182,17 @@ export const capturePayPalOrder = async (
 
     const edgeFunctionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
+    // Get current session for JWT
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+
     // Capture order via Supabase Edge Function
     const response = await fetch(`${edgeFunctionsUrl}/paypal-complete-order`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        'Authorization': `Bearer ${token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         user_id: userId,
@@ -265,11 +280,16 @@ export const requestPayPalPayout = async (
 
     const edgeFunctionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
+    // Get current session for JWT
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+
     const response = await fetch(`${edgeFunctionsUrl}/paypal-payout-request`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        'Authorization': `Bearer ${token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         user_id: userId,
@@ -433,11 +453,16 @@ export const verifyPayPalTransaction = async (
 
     const edgeFunctionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
+    // Get current session for JWT
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+
     const response = await fetch(`${edgeFunctionsUrl}/paypal-verify-transaction`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        'Authorization': `Bearer ${token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         transaction_id: transactionId
@@ -546,11 +571,16 @@ export const testPayPalConnection = async (): Promise<{
     const edgeFunctionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
     const config = getPayPalConfig()
 
+    // Get current session for JWT
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+
     const response = await fetch(`${edgeFunctionsUrl}/paypal-test-live`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        'Authorization': `Bearer ${token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         test_type: 'connectivity',

@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     }
 
     let body: any = {};
-    try { body = await req.json(); } catch (_) {}
+    try { body = await req.json(); } catch {}
     const { action, stream_id, user_id, title, category, room_name, livekit_url } = body || {};
 
     const requesterId = authData.user.id;

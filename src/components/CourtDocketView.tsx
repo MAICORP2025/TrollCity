@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Calendar, Clock, CheckCircle, XCircle, AlertTriangle, Gavel } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import ClickableUsername from './ClickableUsername';
 
 interface DocketEntry {
   id: string;
@@ -18,6 +19,7 @@ const CourtDocketView: React.FC = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [docketEntries, setDocketEntries] = useState<DocketEntry[]>([]);
+  const [officerProfiles, setOfficerProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,6 +35,19 @@ const CourtDocketView: React.FC = () => {
 
       if (error) throw error;
       setDocketEntries(data || []);
+
+      // Fetch officer profiles for RGB
+      const officerIds = (data || []).map((e: any) => e.assigned_officer).filter((id: any) => id && typeof id === 'string' && id.length > 10);
+      if (officerIds.length > 0) {
+         const { data: profileData } = await supabase
+           .from('profiles')
+           .select('id, username, role, is_admin, is_troll_officer, is_troller, is_verified, rgb_username_expires_at')
+           .in('id', officerIds);
+         
+         const profileMap: Record<string, any> = {};
+         profileData?.forEach(p => profileMap[p.id] = p);
+         setOfficerProfiles(profileMap);
+      }
     } catch (error) {
       console.error('Error loading docket:', error);
     } finally {
@@ -154,8 +169,17 @@ const CourtDocketView: React.FC = () => {
                           {date} at {time}
                         </div>
                         {entry.assigned_officer && (
-                          <div className="text-xs text-gray-400 mt-1">
-                            Assigned Officer: {entry.assigned_officer}
+                          <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                            Assigned Officer: 
+                            {officerProfiles[entry.assigned_officer] ? (
+                              <ClickableUsername 
+                                username={officerProfiles[entry.assigned_officer].username} 
+                                userId={entry.assigned_officer}
+                                profile={officerProfiles[entry.assigned_officer]}
+                              />
+                            ) : (
+                              entry.assigned_officer
+                            )}
                           </div>
                         )}
                       </div>

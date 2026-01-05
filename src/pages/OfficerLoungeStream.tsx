@@ -97,7 +97,11 @@ const OfficerLoungeStream: React.FC = () => {
     }
   }, [localMediaStream])
 
-  useEffect(() => cleanupLocalStream, [cleanupLocalStream])
+  useEffect(() => {
+    return () => {
+      cleanupLocalStream()
+    }
+  }, [cleanupLocalStream])
 
   const renderSeats = useMemo(() => {
     return seats.map((seat, index) => ({
@@ -366,20 +370,22 @@ const SeatTile: React.FC<SeatTileProps> = ({
   useEffect(() => {
     const vTrack = participant?.videoTrack?.track
     const aTrack = participant?.audioTrack?.track
+    const videoEl = videoRef.current
+    const audioEl = audioRef.current
 
-    if (vTrack && videoRef.current) {
-      vTrack.attach(videoRef.current)
+    if (vTrack && videoEl) {
+      vTrack.attach(videoEl)
     }
-    if (aTrack && audioRef.current) {
-      aTrack.attach(audioRef.current)
+    if (aTrack && audioEl) {
+      aTrack.attach(audioEl)
     }
 
     return () => {
       try {
-        if (vTrack && videoRef.current) vTrack.detach(videoRef.current)
+        if (vTrack && videoEl) vTrack.detach(videoEl)
       } catch {}
       try {
-        if (aTrack && audioRef.current) aTrack.detach(audioRef.current)
+        if (aTrack && audioEl) aTrack.detach(audioEl)
       } catch {}
     }
   }, [participant?.videoTrack?.track, participant?.audioTrack?.track])

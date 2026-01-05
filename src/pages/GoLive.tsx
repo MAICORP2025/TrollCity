@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 // import api from '../lib/api'; // Uncomment if needed
 import { supabase } from '../supabaseClient';
@@ -16,7 +16,7 @@ const GoLive: React.FC = () => {
   // const { user, profile } = useAuthStore(); // Using getState() instead for async operations
 
   const [streamTitle, setStreamTitle] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [isStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
@@ -141,6 +141,31 @@ const GoLive: React.FC = () => {
       const roomName = streamId; // Use streamId as LiveKit room name
       let thumbnailUrl: string | null = null;
 
+      // 1. Request camera and microphone access FIRST (preflight stream)
+      // This ensures we don't create a stream entry if the user denies permissions
+      let preflightStream: MediaStream | null = null;
+      try {
+        preflightStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            facingMode: 'user',
+            frameRate: { ideal: 30, max: 60 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        console.log('[GoLive] ✅ Camera & mic granted');
+      } catch (permErr: any) {
+        console.error('[GoLive] Camera/mic permission failed:', permErr);
+        toast.error('Camera/microphone access denied. Please allow permissions.');
+        cleanup();
+        return;
+      }
+
       // Optimized thumbnail upload (skip if not needed for faster stream creation)
       if (thumbnailFile) {
         console.log('[GoLive] Starting thumbnail upload...');
@@ -192,26 +217,30 @@ const GoLive: React.FC = () => {
       if (sessionError || !sessionData.session?.access_token) {
         console.error('[GoLive] Session verification failed:', sessionError);
         toast.error('Session expired. Please sign in again.');
+        // Stop media tracks if we fail here
+        preflightStream?.getTracks().forEach(t => t.stop());
         cleanup();
         return;
       }
       console.log('[GoLive] Session verified');
 
-      // Prepare stream data (status live, is_live true)
+      // Prepare stream data
+      // IMPORTANT: Set is_live to FALSE initially so it doesn't show up on homepage
+      // until we have successfully connected to LiveKit
       const streamData = {
         id: streamId,
         broadcaster_id: profile.id,
         title: streamTitle,
         category: category,
-        is_live: true,
-        status: 'live',
+        is_live: false, // Hidden initially
+        status: 'preparing', // Status preparing
         start_time: new Date().toISOString(),
         thumbnail_url: thumbnailUrl,
         current_viewers: 0,
         total_gifts_coins: 0,
         total_unique_gifters: 0,
         popularity: 0,
-        agora_channel: roomName,
+        room_name: roomName,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -241,7 +270,7 @@ const GoLive: React.FC = () => {
           throw insertResult.error;
         }
         
-        console.log('[GoLive] Stream created successfully');
+        console.log('[GoLive] Stream created successfully (preparing state)');
         
       } catch (err: any) {
         console.error('[GoLive] Stream creation failed:', err);
@@ -263,6 +292,7 @@ const GoLive: React.FC = () => {
         }
         
         toast.error(errorMessage);
+        preflightStream?.getTracks().forEach(t => t.stop());
         cleanup();
         return;
       }
@@ -273,35 +303,12 @@ const GoLive: React.FC = () => {
       if (!createdId) {
         console.error('[GoLive] Stream insert did not return an id');
         toast.error('Failed to create stream (no ID returned).');
+        preflightStream?.getTracks().forEach(t => t.stop());
         cleanup();
         return;
       }
       
       console.log('[GoLive] Stream created successfully:', createdId);
-
-      // Request camera and microphone access (preflight stream)
-      let preflightStream: MediaStream | null = null;
-      try {
-        preflightStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            facingMode: 'user',
-            frameRate: { ideal: 30, max: 60 }
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
-        });
-        console.log('[GoLive] ✅ Camera & mic granted');
-      } catch (permErr: any) {
-        console.error('[GoLive] Camera/mic permission failed:', permErr);
-        toast.error('Camera/microphone access denied. Please allow permissions.');
-        cleanup();
-        return;
-      }
 
       // Connect to LiveKit and publish both tracks before navigation
       const identity = user.id;
@@ -314,10 +321,25 @@ const GoLive: React.FC = () => {
       if (!service) {
         console.error('[GoLive] LiveKit connect failed');
         toast.error('Failed to connect to LiveKit. Please try again.');
+        preflightStream?.getTracks().forEach(t => t.stop());
+        // Clean up the stream we just created since we can't broadcast
+        await supabase.from('streams').delete().eq('id', createdId);
         cleanup();
         return;
       }
       console.log('[GoLive] ✅ Connected to LiveKit and publishing');
+      
+      // Update stream to starting status (not live yet)
+      // The LivePage will update it to 'live' once fully connected
+      await supabase
+        .from('streams')
+        .update({ 
+          is_live: false, 
+          status: 'starting' 
+        })
+        .eq('id', createdId);
+
+      console.log('[GoLive] ✅ Stream status updated to STARTING');
       
       // ✅ Pass stream data directly via navigation state to avoid database query
       // This eliminates replication delay issues
@@ -326,8 +348,8 @@ const GoLive: React.FC = () => {
         broadcaster_id: insertedStream.broadcaster_id || profile.id,
         title: insertedStream.title || streamTitle,
         category: insertedStream.category || category,
-        status: 'live',
-        is_live: true,
+        status: 'starting',
+        is_live: false,
         start_time: insertedStream.start_time || new Date().toISOString(),
         current_viewers: insertedStream.current_viewers || 0,
         total_gifts_coins: insertedStream.total_gifts_coins || 0,
@@ -339,7 +361,7 @@ const GoLive: React.FC = () => {
       };
       
       try {
-        navigate(`/broadcast/${createdId}`, { 
+        navigate(`/live/${createdId}`, { 
           state: { streamData: streamDataForNavigation, isBroadcaster: true, roomName } 
         });
         console.log('[GoLive] ✅ Navigation called successfully - already publishing');

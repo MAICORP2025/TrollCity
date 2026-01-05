@@ -13,7 +13,7 @@ interface TranslationOptions {
 export async function translateMessage(
   text: string,
   targetLang: string = 'en',
-  options: TranslationOptions = {}
+  _options: TranslationOptions = {}
 ): Promise<string> {
   // No translation needed for English or if no target language
   if (!targetLang || targetLang === 'en' || !text?.trim()) {

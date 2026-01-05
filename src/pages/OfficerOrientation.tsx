@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -38,15 +38,7 @@ export default function OfficerOrientation() {
   const [quizTimeStart, setQuizTimeStart] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (!profile || !user) {
-      navigate('/')
-      return
-    }
-    loadOrientationStatus()
-  }, [profile, user, navigate])
-
-  const loadOrientationStatus = async () => {
+  const loadOrientationStatus = useCallback(async () => {
     if (!user?.id) return
     setLoading(true)
     try {
@@ -65,7 +57,15 @@ export default function OfficerOrientation() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!profile || !user) {
+      navigate('/')
+      return
+    }
+    loadOrientationStatus()
+  }, [profile, user, navigate, loadOrientationStatus])
 
   const startOrientation = async () => {
     if (!user?.id) return

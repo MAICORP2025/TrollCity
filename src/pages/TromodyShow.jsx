@@ -11,8 +11,6 @@ import { useBattleQueue } from "../hooks/useBattleQueue";
 import { useBattleTimer } from "../hooks/useBattleTimer";
 import { useLiveKitRoom } from "../hooks/useLiveKitRoom";
 import { supabase } from "../lib/supabase";
-import { createNotification } from "../lib/notifications";
-import api from "../lib/api";
 import { toast } from "sonner";
 import { createLocalVideoTrack, createLocalAudioTrack } from 'livekit-client';
 import "../styles/tromody-stage.css";
@@ -90,7 +88,7 @@ export default function TromodyShow() {
   } = useBattleQueue(determineWinner);
 
   // Timer hook
-  const { timer, isRunning } = useBattleTimer(leftUser, rightUser, () => {
+  const { timer } = useBattleTimer(leftUser, rightUser, () => {
     determineWinner();
     rotateBattle();
   });
@@ -104,7 +102,7 @@ export default function TromodyShow() {
 
   // Unified LiveKit room for Tromody Show
   const liveKitOptions = useMemo(() => ({ allowPublish: true }), []);
-  const { room, participants, isConnecting, connect, disconnect } = useLiveKitRoom(
+  const { room, connect, disconnect } = useLiveKitRoom(
     'tromody-show',
     currentUser ? { ...currentUser, role: role, level: 1 } : null,
     liveKitOptions
@@ -167,6 +165,22 @@ export default function TromodyShow() {
 
   // Handle AudioContext resumption for browser security
   useEffect(() => {
+    // Try to add audio track after AudioContext is resumed
+    const tryAddAudio = async () => {
+      if (!room || room.state !== 'connected' || hasAudio) return;
+
+      try {
+        console.log('Attempting to add audio track...');
+        const audioTrack = await createLocalAudioTrack();
+        await room.localParticipant.publishTrack(audioTrack);
+        setHasAudio(true);
+        toast.success('Audio enabled! You can now speak in the battle.');
+        console.log('Audio track added successfully');
+      } catch (error) {
+        console.warn('Failed to add audio track:', error);
+      }
+    };
+
     const resumeAudioContext = async () => {
       if (audioContextResumed) return;
 
@@ -217,7 +231,7 @@ export default function TromodyShow() {
       document.removeEventListener('touchstart', handleUserInteraction);
       document.removeEventListener('keydown', handleUserInteraction);
     };
-  }, [audioContextResumed]);
+  }, [audioContextResumed, room, hasAudio, currentUser]);
 
   // Camera access is now handled entirely by LiveKit in the joinBattle function
   // No need for separate useMediaStream management
@@ -278,22 +292,6 @@ export default function TromodyShow() {
       }
     } catch (err) {
       console.error('Error in notifyFollowersUserJoined:', err);
-    }
-  };
-
-  // Try to add audio track after AudioContext is resumed
-  const tryAddAudio = async () => {
-    if (!room || room.state !== 'connected' || hasAudio) return;
-
-    try {
-      console.log('Attempting to add audio track...');
-      const audioTrack = await createLocalAudioTrack();
-      await room.localParticipant.publishTrack(audioTrack);
-      setHasAudio(true);
-      toast.success('Audio enabled! You can now speak in the battle.');
-      console.log('Audio track added successfully');
-    } catch (error) {
-      console.warn('Failed to add audio track:', error);
     }
   };
 
@@ -597,7 +595,7 @@ export default function TromodyShow() {
       </div>
 
       {/* Live Video Battle Boxes - Side by Side Battle Arena */}
-      <div className={`battle-stage flex-1 border-b border-gray-800 ${false ? 'vip-stage' : ''}`}>
+      <div className="battle-stage flex-1 border-b border-gray-800">
 
         {/* LEFT PLAYER STAGE */}
         <StageFrame

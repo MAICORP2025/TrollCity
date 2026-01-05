@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
@@ -19,12 +19,7 @@ export default function ShopDashboard() {
     price: ''
   })
 
-  useEffect(() => {
-    if (!user) return
-    loadData()
-  }, [user?.id])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       // Load shop
@@ -50,7 +45,12 @@ export default function ShopDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    loadData()
+  }, [user, loadData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -115,7 +115,7 @@ export default function ShopDashboard() {
       if (error) throw error
       toast.success('Product deleted')
       loadData()
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete')
     }
   }

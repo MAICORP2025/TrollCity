@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { grantAdminCoins } from '../../../lib/adminCoins'
@@ -16,17 +16,17 @@ export function AdminGrantCoins({ targetUserId, targetUsername }: AdminGrantCoin
   const [amount, setAmount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [searchUsername, setSearchUsername] = useState('')
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; username: string; email: string }>>([])
-  const [selectedUser, setSelectedUser] = useState<{ id: string; username: string } | null>(
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; username: string; email: string; rgb_username_expires_at?: string }>>([])
+  const [selectedUser, setSelectedUser] = useState<{ id: string; username: string; rgb_username_expires_at?: string } | null>(
     targetUserId && targetUsername ? { id: targetUserId, username: targetUsername } : null
   )
   const [searching, setSearching] = useState(false)
-  const [coinType, setCoinType] = useState<'troll_coins' | 'trollmonds'>('troll_coins')
+  const [coinType] = useState<'troll_coins' | 'trollmonds'>('troll_coins')
 
   // Verify admin status
   const isAdmin = profile?.role === 'admin' || profile?.is_admin || (user?.email && user.email.toLowerCase() === 'trollcity2025@gmail.com')
 
-  const searchUsers = async () => {
+  const searchUsers = useCallback(async () => {
     if (!searchUsername.trim()) {
       toast.error('Enter a username to search')
       return
@@ -36,7 +36,7 @@ export function AdminGrantCoins({ targetUserId, targetUsername }: AdminGrantCoin
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, email')
+        .select('id, username, email, rgb_username_expires_at')
         .ilike('username', `%${searchUsername}%`)
         .limit(10)
 
@@ -46,15 +46,15 @@ export function AdminGrantCoins({ targetUserId, targetUsername }: AdminGrantCoin
       if (data && data.length === 0) {
         toast.info('No users found')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error searching users:', error)
       toast.error('Failed to search users')
     } finally {
       setSearching(false)
     }
-  }
+  }, [searchUsername])
 
-  const grant = async () => {
+  const grant = useCallback(async () => {
     if (!isAdmin) {
       toast.error('Only admins can grant coins')
       return
@@ -97,13 +97,14 @@ export function AdminGrantCoins({ targetUserId, targetUsername }: AdminGrantCoin
       } else {
         toast.error(result.error || 'Failed to grant coins')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error granting coins:', error)
-      toast.error(error.message || 'Failed to grant coins')
+      const errorMsg = error instanceof Error ? error.message : 'Failed to grant coins'
+      toast.error(errorMsg)
     } finally {
       setLoading(false)
     }
-  }
+  }, [isAdmin, selectedUser, amount, user, coinType, refreshProfile])
 
   if (!isAdmin) {
     return (
@@ -128,7 +129,11 @@ export function AdminGrantCoins({ targetUserId, targetUsername }: AdminGrantCoin
             <div className="flex items-center justify-between bg-purple-500/20 border border-purple-500/30 rounded-lg p-3 mb-2">
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4" />
-                <ClickableUsername userId={selectedUser.id} username={selectedUser.username} />
+                <ClickableUsername 
+                  userId={selectedUser.id} 
+                  username={selectedUser.username} 
+                  profile={{ rgb_username_expires_at: selectedUser.rgb_username_expires_at }}
+                />
               </div>
               <button
                 onClick={() => {
@@ -170,7 +175,7 @@ export function AdminGrantCoins({ targetUserId, targetUsername }: AdminGrantCoin
                     <button
                       key={u.id}
                       onClick={() => {
-                        setSelectedUser({ id: u.id, username: u.username })
+                        setSelectedUser({ id: u.id, username: u.username, rgb_username_expires_at: u.rgb_username_expires_at })
                         setSearchResults([])
                         setSearchUsername('')
                       }}
@@ -178,7 +183,7 @@ export function AdminGrantCoins({ targetUserId, targetUsername }: AdminGrantCoin
                     >
                       <User className="w-4 h-4 text-gray-400" />
                       <div>
-                        <div className="font-semibold">{u.username}</div>
+                        <div className={`font-semibold ${u.rgb_username_expires_at && new Date(u.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>{u.username}</div>
                         <div className="text-xs text-gray-400">{u.email}</div>
                       </div>
                     </button>

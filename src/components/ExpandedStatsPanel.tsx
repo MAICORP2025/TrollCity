@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { X, Crown, Sword, Trophy, Coins, Gem, Star } from 'lucide-react'
+import { X, Crown, Sword, Trophy, Coins, Star } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { getLevelProfile, getDnaProfile } from '../lib/progressionEngine'
+import { getLevelProfile } from '../lib/progressionEngine'
 import { getFamilySeasonStats } from '../lib/familySeasons'
 
 interface ExpandedStatsPanelProps {
@@ -42,7 +42,7 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
 
         // Load level and XP data
         const levelData = await getLevelProfile(user.id)
-        const dnaData = await getDnaProfile(user.id)
+        // const dnaData = await getDnaProfile(user.id)
 
         // Use profile balances
 

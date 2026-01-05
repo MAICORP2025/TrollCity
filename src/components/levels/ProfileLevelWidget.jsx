@@ -48,18 +48,22 @@ export default function ProfileLevelWidget() {
         <LevelBadge type="stream" level={levels.stream_level} />
       </div>
 
-      <LevelUpModal
-        type="buyer"
-        oldLevel={prevBuyerLevel.current}
-        newLevel={levels.buyer_level}
-        onClose={() => setShowBuyerModal(false)}
-      />
-      <LevelUpModal
-        type="stream"
-        oldLevel={prevStreamLevel.current}
-        newLevel={levels.stream_level}
-        onClose={() => setShowStreamModal(false)}
-      />
+      {showBuyerModal && (
+        <LevelUpModal
+          type="buyer"
+          oldLevel={prevBuyerLevel.current}
+          newLevel={levels.buyer_level}
+          onClose={() => setShowBuyerModal(false)}
+        />
+      )}
+      {showStreamModal && (
+        <LevelUpModal
+          type="stream"
+          oldLevel={prevStreamLevel.current}
+          newLevel={levels.stream_level}
+          onClose={() => setShowStreamModal(false)}
+        />
+      )}
     </div>
   );
 }

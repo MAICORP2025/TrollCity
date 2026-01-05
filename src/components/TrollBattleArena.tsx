@@ -1,7 +1,6 @@
 // src/components/TrollBattleArena.tsx
 import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../lib/store";
 import { Trophy, Sword, Flame, Clock, Coins } from "lucide-react";
 
 type BattleParticipant = {
@@ -32,16 +31,14 @@ interface TrollBattleArenaProps {
   battleId: string;
   hostUsername: string;
   challengerUsername: string;
-  isHost: boolean;        // true if current user is the host in this battle
 }
 
 const TrollBattleArena: React.FC<TrollBattleArenaProps> = ({
   battleId,
   hostUsername,
   challengerUsername,
-  isHost
+  
 }) => {
-  const { user } = useAuthStore();
   const [battle, setBattle] = useState<TrollBattle | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(120);
   const [completing, setCompleting] = useState(false);

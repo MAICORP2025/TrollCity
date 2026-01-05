@@ -137,7 +137,7 @@ const AuthCallback = () => {
     return () => {
       clearTimeout(safetyTimer)
     }
-  }, [navigate, setAuth, setProfile, location.search])
+  }, [navigate, setAuth, setProfile, location.search, ADMIN_EMAIL])
 
   if (ready) {
     return <ProfileSetup />

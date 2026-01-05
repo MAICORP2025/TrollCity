@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FileText, Shield, DollarSign, AlertTriangle } from 'lucide-react'
+import { FileText, Shield, DollarSign } from 'lucide-react'
 
 interface LegalLayoutProps {
   children: React.ReactNode

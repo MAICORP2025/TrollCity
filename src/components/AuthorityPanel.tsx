@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { UserProfile } from '../lib/supabase';
 import { Crown, Shield, Users, ChevronDown, ChevronUp, Activity, X } from 'lucide-react';
@@ -28,68 +28,7 @@ const AuthorityPanel: React.FC = () => {
   const [courtSession, setCourtSession] = useState<any>(null);
   const [currentLocation, setCurrentLocation] = useState<'courtroom' | 'stream' | 'lobby'>('lobby');
 
-  useEffect(() => {
-    // Determine current location based on route
-    const path = location.pathname;
-    if (path.includes('/troll-court') || path.includes('/court-room')) {
-      setCurrentLocation('courtroom');
-    } else if (path.includes('/stream') || path.includes('/live')) {
-      setCurrentLocation('stream');
-    } else {
-      setCurrentLocation('lobby');
-    }
-
-    loadAuthorityData();
-    loadCourtSession();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadAuthorityData();
-      loadCourtSession();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [location.pathname]);
-
-  // Monitor court session changes
-  useEffect(() => {
-    const channel = supabase
-      .channel('court-sessions')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'court_sessions'
-      }, () => {
-        loadCourtSession();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // Court auto-start logic
-  useEffect(() => {
-    if (!courtSession || courtSession.status !== 'waiting') return;
-    if (currentLocation !== 'courtroom') return;
-
-    // Check if any authority is present
-    const hasAuthority = [...admins, ...leadOfficers, ...officers].length > 0;
-
-    if (hasAuthority) {
-      // Don't auto-start if session was just created (within last 5 seconds)
-      const createdAt = new Date(courtSession.created_at);
-      const timeSinceCreation = Date.now() - createdAt.getTime();
-      
-      if (timeSinceCreation > 5000) {
-        // Try to auto-start court
-        autoStartCourt();
-      }
-    }
-  }, [courtSession, currentLocation, admins, leadOfficers, officers]);
-
-  const loadCourtSession = async () => {
+  const loadCourtSession = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_current_court_session');
       if (error) throw error;
@@ -97,9 +36,9 @@ const AuthorityPanel: React.FC = () => {
     } catch {
       // Silently handle court session loading errors as they are non-critical
     }
-  };
+  }, []);
 
-  const autoStartCourt = async () => {
+  const autoStartCourt = useCallback(async () => {
     try {
       // Get the first available authority user
       const authorityUser = [...admins, ...leadOfficers, ...officers][0];
@@ -141,9 +80,9 @@ const AuthorityPanel: React.FC = () => {
     } catch (error) {
       console.error('Error auto-starting court:', error);
     }
-  };
+  }, [admins, leadOfficers, officers, loadCourtSession]);
 
-  const loadAuthorityData = async () => {
+  const loadAuthorityData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -214,7 +153,68 @@ const AuthorityPanel: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Determine current location based on route
+    const path = location.pathname;
+    if (path.includes('/troll-court') || path.includes('/court-room')) {
+      setCurrentLocation('courtroom');
+    } else if (path.includes('/stream') || path.includes('/live')) {
+      setCurrentLocation('stream');
+    } else {
+      setCurrentLocation('lobby');
+    }
+
+    loadAuthorityData();
+    loadCourtSession();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      loadAuthorityData();
+      loadCourtSession();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [location.pathname, loadAuthorityData, loadCourtSession]);
+
+  // Monitor court session changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('court-sessions')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'court_sessions'
+      }, () => {
+        loadCourtSession();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadCourtSession]);
+
+  // Court auto-start logic
+  useEffect(() => {
+    if (!courtSession || courtSession.status !== 'waiting') return;
+    if (currentLocation !== 'courtroom') return;
+
+    // Check if any authority is present
+    const hasAuthority = [...admins, ...leadOfficers, ...officers].length > 0;
+
+    if (hasAuthority) {
+      // Don't auto-start if session was just created (within last 5 seconds)
+      const createdAt = new Date(courtSession.created_at);
+      const timeSinceCreation = Date.now() - createdAt.getTime();
+      
+      if (timeSinceCreation > 5000) {
+        // Try to auto-start court
+        autoStartCourt();
+      }
+    }
+  }, [courtSession, currentLocation, admins, leadOfficers, officers, autoStartCourt]);
 
   const getStatusColor = (status?: string) => {
     switch (status) {

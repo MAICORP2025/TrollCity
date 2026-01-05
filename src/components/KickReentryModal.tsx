@@ -58,7 +58,7 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
     if (!user || !profile) return
 
     if (profile.troll_coins < 2000) {
-      toast.error('You need 2000 troll_coins ($20) to restore your account')
+      toast.error('You need 2000 troll_coins to restore your account')
       return
     }
 
@@ -110,7 +110,7 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
                 You have been kicked 3 times. Your account is now banned.
               </p>
               <p className="text-sm text-gray-300 mt-2">
-                Pay <strong className="text-yellow-400">$20 (2000 troll_coins)</strong> to restore your account.
+                Pay <strong className="text-yellow-400">2000 troll_coins</strong> to restore your account.
                 Your account will be reset to level 0 with 0 coins.
               </p>
               <div className="mt-3 p-3 bg-blue-900/20 border border-blue-500/50 rounded-lg">
@@ -125,7 +125,7 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
               disabled={loading || (profile?.troll_coins || 0) < 2000}
               className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Processing...' : 'Pay $20 to Restore Account'}
+              {loading ? 'Processing...' : 'Pay 2000 Coins to Restore Account'}
             </button>
           </div>
         ) : (

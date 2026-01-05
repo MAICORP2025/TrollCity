@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
@@ -165,7 +164,6 @@ const defaultTrollmondItems: TrollmondItem[] = [
 
 export default function TrollmondsStore() {
   const { user, profile, refreshProfile } = useAuthStore()
-  const navigate = useNavigate()
   const [items, setItems] = useState<TrollmondItem[]>([])
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState<string | null>(null)

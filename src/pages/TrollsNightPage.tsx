@@ -3,11 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { 
   Play, 
   Users, 
-  Heart, 
   Radio,
   Zap,
-  Flame,
-  Search
+  Flame
 } from 'lucide-react'
 
 // Mock Data as requested

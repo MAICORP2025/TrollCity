@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Shield, AlertTriangle, ArrowUp } from 'lucide-react'
+import { X, ArrowUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'

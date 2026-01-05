@@ -1,23 +1,11 @@
 import React, { useState } from 'react'
 import {
   Monitor,
-  Users,
   Shield,
-  AlertTriangle,
-  Play,
-  Pause,
-  Settings,
   RefreshCw,
-  Zap,
-  MessageSquare,
   FileText,
   DollarSign,
-  Camera,
-  BarChart3,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Activity
+  Camera
 } from 'lucide-react'
 import AdminApplications from './AdminApplications'
 import PayoutQueue from './PayoutQueue'

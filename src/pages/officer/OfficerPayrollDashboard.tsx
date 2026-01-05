@@ -36,13 +36,8 @@ export default function OfficerPayrollDashboard() {
   const [loading, setLoading] = useState(true)
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'all'>('week')
 
-  useEffect(() => {
-    if (user) {
-      loadPayrollData()
-    }
-  }, [user, selectedPeriod])
-
-  const loadPayrollData = async () => {
+  const loadPayrollData = React.useCallback(async () => {
+    if (!user) return
     setLoading(true)
     try {
       // Calculate date range based on selected period
@@ -125,15 +120,13 @@ export default function OfficerPayrollDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, selectedPeriod])
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(amount / 10000) // Convert coins to USD (assuming 1 coin = $0.0001)
-  }
+  useEffect(() => {
+    if (user) {
+      loadPayrollData()
+    }
+  }, [user, selectedPeriod, loadPayrollData])
 
   if (loading) {
     return (

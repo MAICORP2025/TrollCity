@@ -39,6 +39,11 @@ module.exports = async (req, res) => {
     const apiSecret = process.env.LIVEKIT_API_SECRET;
 const livekitUrl = process.env.LIVEKIT_CLOUD_URL || process.env.LIVEKIT_URL;
 
+    console.log("[livekit-token] LIVEKIT CONFIG CHECK", { 
+      livekitUrl, 
+      apiKeyPrefix: apiKey?.slice(0, 6), 
+    });
+
     if (!apiKey || !apiSecret || !livekitUrl) {
       return sendJson(res, 500, { error: 'LiveKit not configured' });
     }

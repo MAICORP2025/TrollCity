@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -7,7 +7,14 @@ import {
   Clock,
   Users,
   Radio,
-  Shield
+  Shield,
+  Server as ServerIcon,
+  RefreshCw,
+  Play,
+  FileText,
+  DollarSign,
+  Unlock,
+  Lock
 } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
 import { supabase, UserRole } from '../../lib/supabase';
@@ -63,31 +70,34 @@ export default function CityControlCenter() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadAllData();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(loadAllData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadAllData = async () => {
-    try {
-      setRefreshing(true);
-      await Promise.all([
-        loadSystemHealth(),
-        loadLiveActivity(),
-        loadEventLogs(),
-        loadSystemSettings()
-      ]);
-    } catch (error) {
-      console.error('Error loading control center data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'healthy': return <CheckCircle className="w-4 h-4 text-green-400" />;
+      case 'degraded': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
+      case 'down': return <XCircle className="w-4 h-4 text-red-400" />;
+      default: return <Clock className="w-4 h-4 text-gray-400" />;
     }
   };
 
-  const loadSystemHealth = async () => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'healthy': return 'text-green-400';
+      case 'degraded': return 'text-yellow-400';
+      case 'down': return 'text-red-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'border-l-red-500 bg-red-900/20';
+      case 'error': return 'border-l-red-400 bg-red-900/10';
+      case 'warning': return 'border-l-yellow-400 bg-yellow-900/10';
+      default: return 'border-l-blue-400 bg-blue-900/10';
+    }
+  };
+
+  const loadSystemHealth = useCallback(async () => {
     try {
       // Test services and update health status
       const services = ['paypal', 'supabase', 'livekit', 'database', 'api'];
@@ -108,29 +118,44 @@ export default function CityControlCenter() {
                 break;
               }
               case 'paypal': {
-                // Test PayPal connectivity
-                const paypalResponse = await fetch('/api/paypal/test', { method: 'GET' });
+                // Test PayPal connectivity via Edge Function
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                const paypalUrl = `${supabaseUrl}/functions/v1/paypal-create-order`;
+                const paypalResponse = await fetch(paypalUrl, { 
+                  method: 'OPTIONS',
+                  headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY }
+                });
                 if (!paypalResponse.ok) {
                   status = 'degraded';
-                  error = 'PayPal service check failed';
+                  error = `PayPal service check failed: ${paypalResponse.status} ${paypalResponse.statusText}`;
                 }
                 break;
               }
               case 'livekit': {
-                // Test LiveKit connectivity
-                const livekitResponse = await fetch('/api/livekit/test', { method: 'GET' });
+                // Test LiveKit connectivity via Edge Function
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
+                const livekitResponse = await fetch(tokenUrl, { 
+                  method: 'OPTIONS',
+                  headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY }
+                });
                 if (!livekitResponse.ok) {
                   status = 'degraded';
-                  error = 'LiveKit service check failed';
+                  error = `LiveKit service check failed: ${livekitResponse.status} ${livekitResponse.statusText}`;
                 }
                 break;
               }
               case 'api': {
-                // Test general API health
-                const apiResponse = await fetch('/api/health', { method: 'GET' });
+                // Test general Edge Function health
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                const apiUrl = `${supabaseUrl}/functions/v1/livekit-token`; 
+                const apiResponse = await fetch(apiUrl, { 
+                  method: 'OPTIONS',
+                  headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY }
+                });
                 if (!apiResponse.ok) {
                   status = 'down';
-                  error = 'API health check failed';
+                  error = `Edge Function health check failed: ${apiResponse.status} ${apiResponse.statusText}`;
                 }
                 break;
               }
@@ -178,9 +203,9 @@ export default function CityControlCenter() {
     } catch (error) {
       console.error('Error loading system health:', error);
     }
-  };
+  }, []);
 
-  const loadLiveActivity = async () => {
+  const loadLiveActivity = useCallback(async () => {
     try {
       const [
         streamsResult,
@@ -209,9 +234,9 @@ export default function CityControlCenter() {
     } catch (error) {
       console.error('Error loading live activity:', error);
     }
-  };
+  }, []);
 
-  const loadEventLogs = async () => {
+  const loadEventLogs = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('event_log')
@@ -226,9 +251,9 @@ export default function CityControlCenter() {
     } catch (error) {
       console.error('Error loading event logs:', error);
     }
-  };
+  }, []);
 
-  const loadSystemSettings = async () => {
+  const loadSystemSettings = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('system_settings')
@@ -239,7 +264,24 @@ export default function CityControlCenter() {
     } catch (error) {
       console.error('Error loading system settings:', error);
     }
-  };
+  }, []);
+
+  const loadAllData = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      await Promise.all([
+        loadSystemHealth(),
+        loadLiveActivity(),
+        loadEventLogs(),
+        loadSystemSettings()
+      ]);
+    } catch (error) {
+      console.error('Error loading control center data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [loadSystemHealth, loadLiveActivity, loadEventLogs, loadSystemSettings]);
 
   const toggleSystemSetting = async (settingKey: string, currentValue: any) => {
     try {
@@ -274,32 +316,12 @@ export default function CityControlCenter() {
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'healthy': return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'degraded': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
-      case 'down': return <XCircle className="w-4 h-4 text-red-400" />;
-      default: return <Clock className="w-4 h-4 text-gray-400" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'text-green-400';
-      case 'degraded': return 'text-yellow-400';
-      case 'down': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'critical': return 'border-l-red-500 bg-red-900/20';
-      case 'error': return 'border-l-red-400 bg-red-900/10';
-      case 'warning': return 'border-l-yellow-400 bg-yellow-900/10';
-      default: return 'border-l-blue-400 bg-blue-900/10';
-    }
-  };
+  useEffect(() => {
+    loadAllData();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(loadAllData, 30000);
+    return () => clearInterval(interval);
+  }, [loadAllData]);
 
   if (loading) {
     return (
@@ -317,7 +339,7 @@ export default function CityControlCenter() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                <Server className="w-6 h-6 text-white" />
+                <ServerIcon className="w-6 h-6 text-white" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold">City Control Center</h1>

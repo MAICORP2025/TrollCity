@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
@@ -8,11 +8,7 @@ export default function Withdraw() {
   const [balance, setBalance] = useState(0);
   const [amount, setAmount] = useState("");
 
-  useEffect(() => {
-    loadBalance();
-  }, [user]);
-
-  const loadBalance = async () => {
+  const loadBalance = useCallback(async () => {
     if (!user) return;
     
     const { data } = await supabase
@@ -23,7 +19,11 @@ export default function Withdraw() {
 
     // Use troll_coins for withdrawals (withdrawable coins)
     setBalance(data?.troll_coins || data?.total_earned_coins || 0);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    loadBalance();
+  }, [loadBalance]);
 
   const requestPayout = async () => {
     if (!user) {
@@ -40,6 +40,20 @@ export default function Withdraw() {
 
     if (coinAmount > balance) {
       toast.error("You cannot withdraw more than your balance.");
+      return;
+    }
+
+    // Check for payment holds
+    const { data: holds } = await supabase
+      .from('payment_holds')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .in('hold_type', ['all', 'cashout', 'payout', 'withdrawal'])
+      .maybeSingle();
+
+    if (holds) {
+      toast.error('Your account has an active payout hold. Please contact support.');
       return;
     }
 

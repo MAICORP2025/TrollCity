@@ -1,7 +1,7 @@
 // Entrance Effects Animation Engine
 // Real-time animations for stream entrances
 
-import { getEntranceEffectConfig, getRoleBasedEffectConfig, type EntranceEffectKey, type RoleBasedEffectKey } from './entranceEffects';
+import { getEntranceEffectConfig, getRoleBasedEffectConfig, type EntranceEffectKey } from './entranceEffects';
 
 /**
  * Main entrance animation trigger

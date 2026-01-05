@@ -1,14 +1,29 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../lib/supabase";
 import { sendNotification } from "../../../lib/sendNotification";
 import { toast } from "sonner";
 
+interface SupportTicket {
+  id: string;
+  user_id: string;
+  username: string;
+  email: string;
+  category: string;
+  subject: string;
+  message: string;
+  status: string;
+  created_at: string;
+  admin_response?: string;
+  admin_id?: string;
+  response_at?: string;
+}
+
 const AdminSupportTickets: React.FC = () => {
-  const [tickets, setTickets] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<{ id: string; message: string } | null>(null);
 
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async () => {
     const { data, error } = await supabase
       .from("support_tickets")
       .select("*")
@@ -20,7 +35,7 @@ const AdminSupportTickets: React.FC = () => {
     }
     setTickets(data || []);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     loadTickets();
@@ -37,9 +52,11 @@ const AdminSupportTickets: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadTickets]);
 
-  const sendResponse = async (ticketId: string, userId: string) => {
+  const sendResponse = useCallback(async (ticketId: string, userId: string) => {
+    if (!responding) return;
+
     try {
       await supabase
         .from("support_tickets")
@@ -62,10 +79,11 @@ const AdminSupportTickets: React.FC = () => {
       toast.success("Response sent to user");
       setResponding(null);
       loadTickets();
-    } catch {
+    } catch (err: unknown) {
+      console.error(err);
       toast.error("Failed to send response");
     }
-  };
+  }, [responding, loadTickets]);
 
   return (
     <div className="p-4 text-white max-w-5xl mx-auto">

@@ -63,7 +63,7 @@ GRANT SELECT ON public.support_tickets TO anon;
       console.log('Direct SQL execution not available, creating via inserts...\n')
       
       // Alternative: Just try to insert a test record to see if table exists
-      const { data: testInsert, error: testError } = await supabase
+      const { error: testError } = await supabase
         .from('support_tickets')
         .insert([{
           user_id: '00000000-0000-0000-0000-000000000000',
@@ -95,7 +95,7 @@ GRANT SELECT ON public.support_tickets TO anon;
     }
 
     // Try to verify table structure
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('support_tickets')
       .select('*')
       .limit(0)

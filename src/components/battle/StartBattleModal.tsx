@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { X, Search, Shuffle, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
@@ -21,19 +21,10 @@ export default function StartBattleModal({
   const { profile, user } = useAuthStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [availableBroadcasters, setAvailableBroadcasters] = useState<any[]>([])
-  const [selectedOpponent, setSelectedOpponent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
 
-  useEffect(() => {
-    if (isOpen && searchQuery.length > 0) {
-      searchBroadcasters()
-    } else {
-      setAvailableBroadcasters([])
-    }
-  }, [searchQuery, isOpen])
-
-  const searchBroadcasters = async () => {
+  const searchBroadcasters = useCallback(async () => {
     if (!user || !profile) return
     
     setSearching(true)
@@ -54,7 +45,15 @@ export default function StartBattleModal({
     } finally {
       setSearching(false)
     }
-  }
+  }, [user, profile, searchQuery])
+
+  useEffect(() => {
+    if (isOpen && searchQuery.length > 0) {
+      searchBroadcasters()
+    } else {
+      setAvailableBroadcasters([])
+    }
+  }, [searchQuery, isOpen, searchBroadcasters])
 
   const findRandomOpponent = async () => {
     if (!user || !profile) return
@@ -64,7 +63,7 @@ export default function StartBattleModal({
       // Find active broadcasters
       const { data: activeStreams, error: streamsError } = await supabase
         .from('streams')
-        .select('broadcaster_id, user_profiles!inner(id, username, avatar_url)')
+        .select('id, broadcaster_id, user_profiles!inner(id, username, avatar_url)')
         .eq('status', 'live')
         .neq('broadcaster_id', user.id)
         .limit(10)

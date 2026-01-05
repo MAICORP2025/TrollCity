@@ -62,7 +62,7 @@ const EntranceEffects = () => {
       try { localStorage.setItem('tc-effects', JSON.stringify(DEFAULT_EFFECTS)) } catch {}
     }
     loadEntranceEffectsBackground()
-  }, [])
+    }, [effects.length])
 
   const loadEntranceEffectsBackground = async () => {
     try {

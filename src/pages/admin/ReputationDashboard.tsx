@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Star, TrendingUp, TrendingDown, AlertTriangle, Shield, ShoppingBag, Search, Filter } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown, AlertTriangle, Shield, ShoppingBag, Search } from 'lucide-react';
 import { supabase, UserRole } from '../../lib/supabase';
 import RequireRole from '../../components/RequireRole';
+import ClickableUsername from '../../components/ClickableUsername';
 
 interface ReputationRecord {
   id: string;
   user_id: string;
-  user?: { username: string };
+  user?: { username: string; rgb_username_expires_at?: string };
   current_score: number;
   lifetime_score: number;
   reputation_tier: string;
@@ -18,7 +19,7 @@ interface ReputationRecord {
 interface OfficerRecord {
   id: string;
   officer_id: string;
-  officer?: { username: string };
+  officer?: { username: string; rgb_username_expires_at?: string };
   current_score: number;
   performance_rating: string;
   cases_handled: number;
@@ -29,7 +30,7 @@ interface OfficerRecord {
 interface SellerRecord {
   id: string;
   seller_id: string;
-  seller?: { username: string };
+  seller?: { username: string; rgb_username_expires_at?: string };
   current_score: number;
   reliability_tier: string;
   orders_fulfilled: number;
@@ -46,11 +47,7 @@ export default function ReputationDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [tierFilter, setTierFilter] = useState('all');
 
-  useEffect(() => {
-    loadReputationData();
-  }, [activeTab]);
-
-  const loadReputationData = async () => {
+  const loadReputationData = React.useCallback(async () => {
     try {
       setLoading(true);
 
@@ -59,7 +56,7 @@ export default function ReputationDashboard() {
           .from('user_reputation')
           .select(`
             *,
-            user:user_profiles(username)
+            user:user_profiles(username, rgb_username_expires_at)
           `)
           .order('current_score', { ascending: false });
 
@@ -69,7 +66,7 @@ export default function ReputationDashboard() {
           .from('officer_performance')
           .select(`
             *,
-            officer:user_profiles(username)
+            officer:user_profiles(username, rgb_username_expires_at)
           `)
           .order('current_score', { ascending: false });
 
@@ -79,7 +76,7 @@ export default function ReputationDashboard() {
           .from('seller_reliability')
           .select(`
             *,
-            seller:user_profiles(username)
+            seller:user_profiles(username, rgb_username_expires_at)
           `)
           .order('current_score', { ascending: false });
 
@@ -90,7 +87,11 @@ export default function ReputationDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    loadReputationData();
+  }, [loadReputationData]);
 
   const adjustReputationScore = async (userId: string, scoreChange: number, reason: string) => {
     try {
@@ -262,7 +263,13 @@ export default function ReputationDashboard() {
                 <tbody>
                   {filteredUsers.map((user) => (
                     <tr key={user.id} className="border-t border-zinc-700">
-                      <td className="px-4 py-3">{user.user?.username || 'Unknown'}</td>
+                      <td className="px-4 py-3">
+                        <ClickableUsername 
+                          username={user.user?.username || 'Unknown'} 
+                          userId={user.user_id} 
+                          profile={user.user ? { id: user.user_id, ...user.user } : undefined}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`font-bold ${getScoreColor(user.current_score)}`}>
                           {user.current_score}
@@ -321,7 +328,13 @@ export default function ReputationDashboard() {
                 <tbody>
                   {filteredOfficers.map((officer) => (
                     <tr key={officer.id} className="border-t border-zinc-700">
-                      <td className="px-4 py-3">{officer.officer?.username || 'Unknown'}</td>
+                      <td className="px-4 py-3">
+                        <ClickableUsername 
+                          username={officer.officer?.username || 'Unknown'} 
+                          userId={officer.officer_id}
+                          profile={officer.officer ? { id: officer.officer_id, ...officer.officer } : undefined}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`font-bold ${getScoreColor(officer.current_score)}`}>
                           {officer.current_score}

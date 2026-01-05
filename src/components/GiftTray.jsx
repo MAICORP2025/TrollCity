@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { X, Gift, Sparkles } from 'lucide-react'
+import { X, Sparkles } from 'lucide-react'
 
 const quickQuantities = [1, 3, 5]
 

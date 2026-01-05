@@ -1,7 +1,6 @@
 // BattleChatOverlay: Shared chat with auto-fade messages
 import React, { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useAuthStore } from '../../lib/store'
 import { UserBadge } from '../UserBadge'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -16,7 +15,7 @@ interface ChatMessage {
     is_troll_officer?: boolean
     is_og_user?: boolean
     role?: string
-  }
+  } | any[] // Allow array response from Supabase
 }
 
 interface BattleChatOverlayProps {
@@ -27,7 +26,7 @@ interface BattleChatOverlayProps {
 const MESSAGE_LIFETIME = 7000 // 7 seconds
 
 export default function BattleChatOverlay({ streamId, battleId }: BattleChatOverlayProps) {
-  const { user } = useAuthStore()
+  // const { user } = useAuthStore()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const messagesRef = useRef<ChatMessage[]>([])
 
@@ -143,7 +142,8 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
 
   if (!isVisible) return null
 
-  const username = message.user_profiles?.username || 'Anonymous'
+  const profile = Array.isArray(message.user_profiles) ? message.user_profiles[0] : message.user_profiles
+  const username = profile?.username || 'Anonymous'
 
   return (
     <motion.div
@@ -155,7 +155,7 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
     >
       <div className="flex items-center gap-2">
         <span className="font-semibold text-purple-300">{username}</span>
-        {message.user_profiles && <UserBadge profile={message.user_profiles} />}
+        {profile && <UserBadge profile={profile} />}
         <span className="text-gray-300">:</span>
         <span className="flex-1">{message.message}</span>
       </div>

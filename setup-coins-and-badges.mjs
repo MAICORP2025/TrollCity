@@ -52,7 +52,7 @@ async function setupCoinsAndBadges() {
       await supabase.rpc('exec_sql', { 
         sql: `ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS og_badge boolean DEFAULT false;` 
       })
-    } catch (e) {
+    } catch {
       // Try direct approach
       console.log('   Using alternative method...')
     }

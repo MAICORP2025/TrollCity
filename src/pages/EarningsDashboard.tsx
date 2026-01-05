@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { 
   DollarSign, TrendingUp, FileText, Calendar, 
-  AlertTriangle, CheckCircle, Clock, Download,
-  ArrowRight
+  AlertTriangle,
+  ArrowRight,
+  Clock
 } from 'lucide-react'
 
 interface EarningsTransaction {
@@ -55,32 +56,8 @@ export default function EarningsDashboard() {
   const [payoutHistory, setPayoutHistory] = useState<PayoutRequest[]>([])
   const [summary, setSummary] = useState<EarningsSummary | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!user || !profile) return
-
-    const loadEarnings = async () => {
-      setLoading(true)
-      try {
-        await Promise.all([
-          loadEarningsSummary(),
-          loadTransactions(),
-          loadMonthlyBreakdown(),
-          loadPayoutHistory()
-        ])
-      } catch (err: any) {
-        console.error('Error loading earnings:', err)
-        toast.error('Failed to load earnings')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadEarnings()
-  }, [user, profile])
-
-  const loadEarningsSummary = async () => {
+  const loadEarningsSummary = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('earnings_view')
@@ -114,9 +91,9 @@ export default function EarningsDashboard() {
         lifetime_paid_usd: 0
       })
     }
-  }
+  }, [profile?.id, profile?.total_earned_coins])
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('coin_transactions')
@@ -132,9 +109,9 @@ export default function EarningsDashboard() {
     } catch (err: any) {
       console.error('Error loading transactions:', err)
     }
-  }
+  }, [profile?.id])
 
-  const loadMonthlyBreakdown = async () => {
+  const loadMonthlyBreakdown = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('monthly_earnings_breakdown')
@@ -148,9 +125,9 @@ export default function EarningsDashboard() {
     } catch (err: any) {
       console.error('Error loading monthly breakdown:', err)
     }
-  }
+  }, [profile?.id])
 
-  const loadPayoutHistory = async () => {
+  const loadPayoutHistory = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('payout_history_view')
@@ -164,7 +141,30 @@ export default function EarningsDashboard() {
     } catch (err: any) {
       console.error('Error loading payout history:', err)
     }
-  }
+  }, [profile?.id])
+
+  useEffect(() => {
+    if (!user || !profile) return
+
+    const loadEarnings = async () => {
+      setLoading(true)
+      try {
+        await Promise.all([
+          loadEarningsSummary(),
+          loadTransactions(),
+          loadMonthlyBreakdown(),
+          loadPayoutHistory()
+        ])
+      } catch (err: any) {
+        console.error('Error loading earnings:', err)
+        toast.error('Failed to load earnings')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadEarnings()
+  }, [user, profile, loadEarningsSummary, loadTransactions, loadMonthlyBreakdown, loadPayoutHistory])
 
   if (!user || !profile) {
     return (

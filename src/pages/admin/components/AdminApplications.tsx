@@ -1,4 +1,4 @@
- import { useState, useEffect, useRef } from 'react'
+ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
@@ -58,8 +58,7 @@ interface BroadcasterApplication {
 }
 
 export default function AdminApplications() {
-  const { profile, user, refreshProfile } = useAuthStore()
-  const isAdmin = profile?.role === 'admin' || (profile as any)?.is_admin === true
+  const { user, refreshProfile } = useAuthStore()
   const [applications, setApplications] = useState<Application[]>([])
   const [broadcasterApplications, setBroadcasterApplications] = useState<BroadcasterApplication[]>([])
   const [sellerAppeals, setSellerAppeals] = useState<SellerAppeal[]>([])
@@ -70,7 +69,7 @@ export default function AdminApplications() {
 
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending')
 
-  const loadApplications = async (skipLoadingState = false) => {
+  const loadApplications = useCallback(async (skipLoadingState = false) => {
     if (loadingRef.current) return
     loadingRef.current = true
 
@@ -120,14 +119,14 @@ export default function AdminApplications() {
         .order('appeal_requested_at', { ascending: false })
 
       if (!appealsErr) setSellerAppeals(appealsData || [])
-    } catch (err) {
+    } catch (err: unknown) {
       toast.error("Failed to load applications")
       console.error(err)
     } finally {
       loadingRef.current = false
       if (!skipLoadingState) setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadApplications()
@@ -154,11 +153,11 @@ export default function AdminApplications() {
       supabase.removeChannel(channel1)
       supabase.removeChannel(channel2)
     }
-  }, [])
+  }, [loadApplications])
 
 
   // APPROVE REGULAR USER APPLICATIONS
-  const handleApprove = async (app: Application) => {
+  const handleApprove = useCallback(async (app: Application) => {
     if (!user) return toast.error("You must be logged in")
 
     try {
@@ -230,16 +229,17 @@ export default function AdminApplications() {
       if (refreshProfile) await refreshProfile()
       requestAnimationFrame(() => window.scrollTo(0, scrollY))
 
-    } catch (err: any) {
-      toast.error(err.message || "Failed to approve application")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to approve application"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, loadApplications, refreshProfile])
 
 
   // REJECT REGULAR APPLICATIONS
-  const handleReject = async (app: Application) => {
+  const handleReject = useCallback(async (app: Application) => {
     if (!user) return toast.error("You must be logged in")
 
     try {
@@ -260,16 +260,17 @@ export default function AdminApplications() {
       if (refreshProfile) await refreshProfile()
       requestAnimationFrame(() => window.scrollTo(0, scrollY))
 
-    } catch (err: any) {
-      toast.error(err.message || "Failed to deny application")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to deny application"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, loadApplications, refreshProfile])
 
 
   // ⭐ APPROVE BROADCASTER — THE CRITICAL FIX
-  const handleApproveBroadcaster = async (app: BroadcasterApplication) => {
+  const handleApproveBroadcaster = useCallback(async (app: BroadcasterApplication) => {
     if (!user) return toast.error("You must be logged in")
 
     try {
@@ -305,16 +306,17 @@ export default function AdminApplications() {
       if (refreshProfile) await refreshProfile()
       requestAnimationFrame(() => window.scrollTo(0, scrollY))
 
-    } catch (err: any) {
-      toast.error(err.message || "Failed to approve broadcaster")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to approve broadcaster"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, loadApplications, refreshProfile])
 
 
   // REJECT BROADCASTER
-  const handleRejectBroadcaster = async (app: BroadcasterApplication) => {
+  const handleRejectBroadcaster = useCallback(async (app: BroadcasterApplication) => {
     if (!user) return toast.error("You must be logged in")
 
     const reason = prompt("Enter rejection reason:") || "Insufficient information"
@@ -337,15 +339,16 @@ export default function AdminApplications() {
       if (refreshProfile) await refreshProfile()
       requestAnimationFrame(() => window.scrollTo(0, scrollY))
 
-    } catch (err: any) {
-      toast.error(err.message || "Failed to reject broadcaster")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to reject broadcaster"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, loadApplications, refreshProfile])
 
   // APPROVE SELLER APPEAL
-  const handleApproveAppeal = async (appeal: SellerAppeal) => {
+  const handleApproveAppeal = useCallback(async (appeal: SellerAppeal) => {
     if (!user) return toast.error("You must be logged in")
 
     const notes = prompt("Optional approval notes:")
@@ -372,15 +375,16 @@ export default function AdminApplications() {
       if (refreshProfile) await refreshProfile()
       requestAnimationFrame(() => window.scrollTo(0, scrollY))
 
-    } catch (err: any) {
-      toast.error(err.message || "Failed to approve appeal")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to approve appeal"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, loadApplications, refreshProfile])
 
   // REJECT SELLER APPEAL
-  const handleRejectAppeal = async (appeal: SellerAppeal) => {
+  const handleRejectAppeal = useCallback(async (appeal: SellerAppeal) => {
     if (!user) return toast.error("You must be logged in")
 
     const notes = prompt("Rejection reason (required):")
@@ -408,12 +412,13 @@ export default function AdminApplications() {
       if (refreshProfile) await refreshProfile()
       requestAnimationFrame(() => window.scrollTo(0, scrollY))
 
-    } catch (err: any) {
-      toast.error(err.message || "Failed to deny appeal")
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to deny appeal"
+      toast.error(errorMsg)
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, loadApplications, refreshProfile])
 
 
   const counts = {

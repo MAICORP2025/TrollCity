@@ -1,21 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLiveKit } from './useLiveKit'
-import { LIVEKIT_URL } from '../lib/LiveKitConfig'
-import { toast } from 'sonner'
-import { createLocalTracks } from 'livekit-client'
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLiveKit } from "./useLiveKit";
+import { toast } from "sonner";
+import { createLocalTracks } from "livekit-client";
 
 interface SessionOptions {
-  roomName: string
-  user: any
-  role?: string
-  allowPublish?: boolean
-  autoPublish?: boolean
-  maxParticipants?: number
-  audio?: boolean
-  video?: boolean
+  roomName: string;
+  user: any;
+  role?: string;
+  allowPublish?: boolean;
+  autoPublish?: boolean;
+  maxParticipants?: number;
+  audio?: boolean;
+  video?: boolean;
+
+  // New connection gating props
+  token?: string;
+  serverUrl?: string;
+  connect?: boolean;
+  identity?: string;
 }
 
-// Shared join/publish helper used by Go Live, Officer Stream, Troll Court
 export function useLiveKitSession(options: SessionOptions) {
   const {
     connect,
@@ -30,338 +34,329 @@ export function useLiveKitSession(options: SessionOptions) {
     error,
     service,
     getRoom,
-  } = useLiveKit()
+  } = useLiveKit();
 
-  const [sessionError, setSessionError] = useState<string | null>(null)
-  const joinStartedRef = useRef(false)
-  const publishInProgressRef = useRef(false)
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
-  const maxParticipants = options.maxParticipants ?? 6
+  const joinStartedRef = useRef(false);
+  const publishInProgressRef = useRef(false);
 
-  // ✅ Clear stale session errors from context on mount/update
+  const maxParticipants = options.maxParticipants ?? 6;
+
+  /**
+   * ✅ Clears "session-related" errors (expected on load before login)
+   */
   useEffect(() => {
-    if (error) {
-      const isSessionError = error.toLowerCase().includes('session') || 
-                           error.toLowerCase().includes('sign in') || 
-                           error.toLowerCase().includes('no active session') ||
-                           error.toLowerCase().includes('no valid user session')
-      if (isSessionError) {
-        // Don't treat session errors as real errors - they're expected on load
-        console.log('[useLiveKitSession] Detected session error in context (expected on load) — ignoring')
-        // Error will be cleared by LiveKitProvider when it detects no session
-      }
-    }
-  }, [error])
+    if (!error) return;
 
-  const joinAndPublish = useMemo(
-    () => async (mediaStream?: MediaStream, tokenOverride?: string) => {
+    const err = error.toLowerCase();
+    const isSessionError =
+      err.includes("session") ||
+      err.includes("sign in") ||
+      err.includes("no active session") ||
+      err.includes("no valid user session") ||
+      err.includes("please sign in again");
+
+    if (isSessionError) {
+      console.log(
+        "[useLiveKitSession] Detected session error in context (expected) — ignoring"
+      );
+    }
+  }, [error]);
+
+  /**
+   * ✅ Stable join/publish helper
+   */
+  const joinAndPublish = useCallback(
+    async (mediaStream?: MediaStream, tokenOverride?: string) => {
       if (joinStartedRef.current) {
-        console.warn('🚫 joinAndPublish ignored: already in progress')
-        return false
+        console.warn("🚫 joinAndPublish ignored: already in progress");
+        return false;
       }
-      
-      // ✅ CRITICAL: Early return if roomName is empty (prevents all connection attempts)
-      // This prevents the hook from doing anything when not on a broadcast page
-      if (!options.roomName || options.roomName.trim() === '') {
-        // Silently return - this is expected when not on broadcast page
-        return false
+
+      // ✅ Hard guard: never run without roomName
+      if (!options.roomName || options.roomName.trim() === "") {
+        return false;
       }
-      
-      // ✅ Check for stale session errors in context FIRST - don't even try if there's a session error
+
+      // ✅ Prevent attempts if context holds session error
       if (error) {
-        const errorLower = error.toLowerCase()
-        const isSessionError = errorLower.includes('session') || 
-                              errorLower.includes('sign in') || 
-                              errorLower.includes('no active session') || 
-                              errorLower.includes('no valid user session') ||
-                              errorLower.includes('please sign in again')
+        const errLower = error.toLowerCase();
+        const isSessionError =
+          errLower.includes("session") ||
+          errLower.includes("sign in") ||
+          errLower.includes("no active session") ||
+          errLower.includes("no valid user session") ||
+          errLower.includes("please sign in again");
+
         if (isSessionError) {
-          console.log("[useLiveKitSession] Session error detected in context — skipping connect (will retry after login)")
-          return false
+          console.log(
+            "[useLiveKitSession] Session error in context — skipping connect"
+          );
+          return false;
         }
       }
-      
-      // ✅ 1) Add a hard guard before LiveKit ever runs
-      // Check session FIRST - use cached user from options if available to avoid auth fetch
-      let hasValidSession = false
-      if (options.user && options.user.id) {
-        hasValidSession = true
-      } else {
-        const { supabase } = await import('../lib/supabase')
-        // Only fetch if we really don't have a user
-        const { data: sessionData } = await supabase.auth.getSession()
-        if (sessionData.session) hasValidSession = true
-      }
-      
+
+      // ✅ Verify session quickly
+      let hasValidSession = !!options.user?.id;
       if (!hasValidSession) {
-        console.log("[useLiveKitSession] No active session yet — skipping connect")
-        return false
+        const { supabase } = await import("../lib/supabase");
+        const { data: sessionData } = await supabase.auth.getSession();
+        hasValidSession = !!sessionData.session;
       }
 
-      // ✅ 2) Only trigger joinAndPublish when ALL are true
-      const roomName = options.roomName
-      const identity = options.user?.identity
-      const allowPublish = options.allowPublish !== false
-      
-      if (!roomName || !identity || !allowPublish) {
-        console.log("[useLiveKitSession] Skipping connect — missing requirements", { 
-          roomName, 
-          identity, 
-          allowPublish,
-          hasUser: !!options.user
-        })
-        return false
+      if (!hasValidSession) {
+        console.log("[useLiveKitSession] No active session — skipping connect");
+        return false;
       }
 
-      const autoPublish = options.autoPublish !== false
+      const roomName = options.roomName;
+      const identity = options.identity || options.user?.identity;
+      const token = tokenOverride || options.token;
+      const serverUrl = options.serverUrl;
+      const allowPublish = options.allowPublish !== false;
+      const autoPublish = options.autoPublish !== false;
 
-      console.log('[useLiveKitSession] joinAndPublish triggered', {
-        roomName: options.roomName,
+      if (!roomName || !identity || !token || !serverUrl) {
+        console.log("[useLiveKitSession] Missing requirements — skipping connect", {
+          roomName,
+          identity,
+          hasToken: !!token,
+          serverUrl,
+        });
+        return false;
+      }
+
+      console.log("[useLiveKitSession] joinAndPublish triggered", {
+        roomName,
+        identity,
         allowPublish,
         autoPublish,
-      })
-      joinStartedRef.current = true
-      setSessionError(null)
+        hasToken: !!token,
+        serverUrl,
+      });
+
+      joinStartedRef.current = true;
+      setSessionError(null);
 
       try {
-        // ✅ CRITICAL: Check roomName FIRST before any logging or connection attempts
-        if (!options.roomName || options.roomName.trim() === '') {
-          return false
-        }
+        // ✅ Connect
+        console.log("[useLiveKitSession] Connecting to LiveKit...");
 
-        console.log('[useLiveKitSession] Requesting LiveKit token/connect')
-        console.log('[useLiveKitSession] connecting to room', options.roomName)
-
-        // Log quick debug details before attempting connection
-        try {
-          console.log('[useLiveKitSession] LIVEKIT_URL', LIVEKIT_URL)
-          console.log('[useLiveKitSession] roomName', options.roomName)
-          console.log('[useLiveKitSession] identity', options.user?.identity)
-          if (tokenOverride) {
-            console.log('[useLiveKitSession] tokenOverride length', tokenOverride.length)
-            try {
-              const parts = tokenOverride.split('.')
-              if (parts.length >= 2) {
-                const payload = JSON.parse(decodeURIComponent(escape(atob(parts[1]))))
-                console.log('[useLiveKitSession] tokenOverride payload', payload)
-                console.log('[useLiveKitSession] tokenOverride room/canPublish', {
-                  tokenRoom: payload?.video?.room ?? payload?.room ?? payload?.r ?? null,
-                  canPublish: payload?.video?.canPublish ?? payload?.allowPublish ?? payload?.canPublish ?? null,
-                  videoGrant: payload?.video
-                })
-              }
-            } catch (e) {
-              console.warn('[useLiveKitSession] Failed to decode tokenOverride', e)
-            }
-          } else {
-            console.log('[useLiveKitSession] no tokenOverride provided; token details will be logged by service')
-          }
-        } catch (e) {
-          console.warn('[useLiveKitSession] debug logging failed', e)
-        }
-
-        // Fix A/C: Connect with autoPublish: false to allow granular publishing control
-        // We cast to any because the interface update might not be reflected in this file's type inference yet
-        const connectedService = await connect(options.roomName, options.user, {
+        const connectedService = (await connect(roomName, options.user, {
           allowPublish,
           preflightStream: mediaStream,
-          autoPublish: false, // FORCE FALSE
-          tokenOverride,
-        }) as any
+          autoPublish: false,
+          tokenOverride: token,
+          serverUrl, // ✅ CRITICAL: Use correct LiveKit server
+        } as any)) as any;
 
         if (!connectedService) {
-          // ✅ CRITICAL: Check for session errors FIRST before any other processing
-          // If connection skipped (null return), we might not have a service error.
-          const serviceError = connectedService?.getLastConnectionError?.() || service?.getLastConnectionError?.() || null
-          const rawError = serviceError || error || ''
-          const errorToCheck = String(rawError).toLowerCase().trim()
-          
-          // Comprehensive check for session-related errors (expected on load/refresh)
-          const isSessionError = !errorToCheck || // Empty error is fine (skipped)
-                                errorToCheck.includes('session') || 
-                                errorToCheck.includes('sign in') || 
-                                errorToCheck.includes('no active session') || 
-                                errorToCheck.includes('no valid user session') ||
-                                errorToCheck.includes('please sign in again') ||
-                                errorToCheck.includes('session expired') ||
-                                errorToCheck.includes('session validation') ||
-                                errorToCheck.includes('no valid user session found') ||
-                                errorToCheck.includes('active session')
-          
+          // attempt to collect error details
+          const serviceError =
+            connectedService?.getLastConnectionError?.() ||
+            service?.getLastConnectionError?.() ||
+            error ||
+            "";
+
+          const errLower = String(serviceError).toLowerCase();
+
+          // session-related? skip toast
+          const isSessionError =
+            !errLower ||
+            errLower.includes("session") ||
+            errLower.includes("sign in") ||
+            errLower.includes("no active session") ||
+            errLower.includes("no valid user session");
+
           if (isSessionError) {
-            console.log('[useLiveKitSession] No session yet or skipped — will retry after login')
-            joinStartedRef.current = false
-            return false
+            console.log("[useLiveKitSession] connect skipped (session not ready)");
+            joinStartedRef.current = false;
+            return false;
           }
-          
-          // If we get here, it's a REAL error
-          const room = (typeof getRoom === 'function' && getRoom()) || connectedService?.getRoom?.() || service?.getRoom?.()
-          
-          console.error('[useLiveKitSession] ❌ connect returned false/null. Full failure details:', {
-            error: rawError,
-            serviceError,
-            roomState: room?.state,
-            roomName: options.roomName,
-            identity: options.user?.identity,
-          })
-          
-          let userMessage = 'LiveKit connection failed'
-          if (errorToCheck.includes('token')) userMessage = 'Failed to get LiveKit token.'
-          else if (errorToCheck.includes('network')) userMessage = 'Network error connecting to LiveKit.'
-          else if (errorToCheck.includes('timeout')) userMessage = 'Connection timeout.'
-          else userMessage = `Connection failed: ${errorToCheck}`
-          
-          toast.error(userMessage, { duration: 6000 })
-          joinStartedRef.current = false
-          setSessionError(rawError)
-          return false
+
+          console.error("[useLiveKitSession] ❌ connect failed", serviceError);
+          toast.error(`LiveKit connection failed: ${serviceError}`, {
+            duration: 6000,
+          });
+
+          setSessionError(String(serviceError));
+          joinStartedRef.current = false;
+          return false;
         }
 
-        console.log('[useLiveKitSession] LiveKit connected')
-        const activeService = connectedService || service
-        const room = activeService?.getRoom?.() || (typeof getRoom === 'function' && getRoom())
-        
-        if (!room) throw new Error('LiveKit room missing after connect')
+        console.log("[useLiveKitSession] ✅ LiveKit connected");
 
-        // Limit room size
+        // ✅ Ensure room exists
+        const activeRoom =
+          connectedService?.getRoom?.() ||
+          (typeof getRoom === "function" ? getRoom() : null);
+
+        if (!activeRoom) throw new Error("LiveKit room missing after connect");
+
+        // ✅ Enforce max participants
         if (participants.size > maxParticipants) {
-          disconnect()
-          throw new Error('Room is full')
+          disconnect();
+          throw new Error("Room is full");
         }
 
+        /**
+         * ✅ Publishing (host only)
+         */
         if (allowPublish && autoPublish) {
-          if (publishInProgressRef.current) return true
-          publishInProgressRef.current = true
-          if (activeService) activeService.publishingInProgress = true
+          if (publishInProgressRef.current) return true;
+
+          publishInProgressRef.current = true;
+          if (connectedService) connectedService.publishingInProgress = true;
 
           try {
-              // Fix D: Temporarily disable audio to prove it's the issue
-              const ENABLE_AUDIO_PUBLISH = true;
+            console.log("[useLiveKitSession] Publishing local tracks...");
 
-              console.log('[useLiveKitSession] Publishing local tracks via LiveKit createLocalTracks', {
-                hasPreflightStream: !!mediaStream,
-                preflightStreamActive: mediaStream?.active,
-                ENABLE_AUDIO_PUBLISH
-              })
-              
-              // Fix C: Use createLocalTracks instead of preflight stream
-              // We intentionally ignore the passed mediaStream for publishing to let LiveKit manage track creation
-              // This avoids "converting it weirdly" and ensures cleaner state
-              
-              const tracks = await createLocalTracks({
-                audio: ENABLE_AUDIO_PUBLISH ? (options.audio ?? true) : false,
-                video: options.video ?? true,
-              });
-              
-              const videoTrack = tracks.find(t => t.kind === 'video');
-              const audioTrack = tracks.find(t => t.kind === 'audio');
-              
-              if (videoTrack && activeService?.publishVideoTrack) {
-                 // Pass underlying MediaStreamTrack to service
-                 await activeService.publishVideoTrack(videoTrack.mediaStreamTrack);
-              }
+            const tracks = await createLocalTracks({
+              audio: options.audio ?? true,
+              video: options.video ?? true,
+            });
 
-              // Fix A: Tiny delay between video and audio
-              await new Promise(r => setTimeout(r, 150));
+            const videoTrack = tracks.find((t) => t.kind === "video");
+            const audioTrack = tracks.find((t) => t.kind === "audio");
 
-              if (audioTrack && activeService?.publishAudioTrack) {
-                 // Pass underlying MediaStreamTrack to service
-                 await activeService.publishAudioTrack(audioTrack.mediaStreamTrack);
-              }
+            if (videoTrack && connectedService?.publishVideoTrack) {
+              await connectedService.publishVideoTrack(videoTrack.mediaStreamTrack);
+            }
 
-              console.log('[useLiveKitSession] Local tracks published successfully')
+            // small delay makes some browsers happier
+            await new Promise((r) => setTimeout(r, 150));
+
+            if (audioTrack && connectedService?.publishAudioTrack) {
+              await connectedService.publishAudioTrack(audioTrack.mediaStreamTrack);
+            }
+
+            console.log("[useLiveKitSession] ✅ Tracks published");
           } catch (spErr: any) {
-            console.error('[useLiveKitSession] Publishing failed', spErr)
-            throw new Error(`Failed to publish tracks: ${spErr?.message || 'Unknown error'}`)
+            console.error("[useLiveKitSession] Publishing failed", spErr);
+            throw new Error(
+              `Failed to publish tracks: ${spErr?.message || "Unknown error"}`
+            );
           } finally {
-             publishInProgressRef.current = false
-             if (activeService) activeService.publishingInProgress = false
+            publishInProgressRef.current = false;
+            if (connectedService) connectedService.publishingInProgress = false;
           }
         } else if (allowPublish && !autoPublish) {
-          console.log('[useLiveKitSession] Publishing allowed but autoPublish disabled – skipping local track enable')
+          console.log(
+            "[useLiveKitSession] Publishing allowed but autoPublish disabled"
+          );
         } else {
-          console.log('[useLiveKitSession] Joined LiveKit without publishing (viewer mode)')
+          console.log("[useLiveKitSession] Viewer joined without publishing");
         }
 
-        return true
+        return true;
       } catch (err: any) {
-        console.error('[useLiveKitSession] connect failed', err)
-        const errorMsg = err?.message || 'Failed to join stream'
-        setSessionError(errorMsg)
-        joinStartedRef.current = false
-        // Preserve existing behavior for non-connect errors by re-throwing
-        throw err
+        console.error("[useLiveKitSession] joinAndPublish failed", err);
+        setSessionError(err?.message || "Failed to join stream");
+        joinStartedRef.current = false;
+        throw err;
       }
     },
     [
       connect,
       disconnect,
-      startPublishing,
       options.roomName,
       options.user,
+      options.token,
+      options.serverUrl,
       options.allowPublish,
       options.autoPublish,
+      options.audio,
+      options.video,
+      options.identity,
       maxParticipants,
       participants.size,
+      error,
       service,
+      getRoom,
     ]
-  )
+  );
 
-  const joinOnly = useMemo(
-    () => async () => {
-      if (joinStartedRef.current) {
-        console.warn('🚫 joinOnly ignored: already in progress')
-        return false
-      }
-      if (!options.roomName || !options.user?.identity) {
-        const msg = 'Missing room or user for LiveKit'
-        setSessionError(msg)
-        throw new Error(msg)
-      }
+  /**
+   * ✅ Connect automatically when `options.connect === true`
+   * Only runs when requirements are met.
+   */
+  useEffect(() => {
+    if (!options.connect) return;
 
-      console.log('[useLiveKitSession] joinOnly triggered', { roomName: options.roomName })
-      joinStartedRef.current = true
-      setSessionError(null)
+    if (isConnected || isConnecting || joinStartedRef.current) return;
 
-      try {
-        console.log('[useLiveKitSession] connecting (viewer only)')
-        const connected = await connect(options.roomName, options.user, {
-          allowPublish: false,
-          preflightStream: undefined,
-          autoPublish: false,
-        })
-        if (!connected) throw new Error('LiveKit connection failed')
+    if (!options.roomName?.trim()) return;
+    if (!options.token || !options.serverUrl) return;
 
-        console.log('[useLiveKitSession] joinOnly connected')
-        return true
-      } catch (err: any) {
-        console.error('[useLiveKitSession] connect failed', err)
-        setSessionError(err?.message || 'Failed to join stream')
-        joinStartedRef.current = false
-        return false
-      }
-    },
-    [connect, options.roomName, options.user]
-  )
+    console.log("[useLiveKitSession] connect prop true, triggering joinAndPublish");
+    joinAndPublish(undefined, options.token);
+  }, [
+    options.connect,
+    options.roomName,
+    options.token,
+    options.serverUrl,
+    isConnected,
+    isConnecting,
+    joinAndPublish,
+  ]);
+
+  /**
+   * ✅ Viewer-only join helper
+   */
+  const joinOnly = useCallback(async () => {
+    if (joinStartedRef.current) {
+      console.warn("🚫 joinOnly ignored: already in progress");
+      return false;
+    }
+
+    if (!options.roomName || !options.user?.identity) {
+      const msg = "Missing room or user for LiveKit";
+      setSessionError(msg);
+      throw new Error(msg);
+    }
+
+    joinStartedRef.current = true;
+    setSessionError(null);
+
+    try {
+      const connected = await connect(options.roomName, options.user, {
+        allowPublish: false,
+        preflightStream: undefined,
+        autoPublish: false,
+        serverUrl: options.serverUrl,
+        tokenOverride: options.token,
+      } as any);
+
+      if (!connected) throw new Error("LiveKit connection failed");
+
+      console.log("[useLiveKitSession] ✅ joinOnly connected");
+      return true;
+    } catch (err: any) {
+      console.error("[useLiveKitSession] joinOnly failed", err);
+      setSessionError(err?.message || "Failed to join stream");
+      joinStartedRef.current = false;
+      return false;
+    }
+  }, [connect, options.roomName, options.user, options.token, options.serverUrl]);
 
   const resetJoinGuard = () => {
-    joinStartedRef.current = false
-  }
+    joinStartedRef.current = false;
+  };
 
-  // Guarded disconnect to prevent cutting off mid-publish
   const guardedDisconnect = () => {
     if (publishInProgressRef.current) {
-      console.warn("🚫 Prevented disconnect during publish (hook guard)")
-      return
+      console.warn("🚫 Prevented disconnect during publish (guardedDisconnect)");
+      return;
     }
-    disconnect()
-  }
+    disconnect();
+  };
 
   useEffect(() => {
     return () => {
-      joinStartedRef.current = false
-    }
-  }, [])
+      joinStartedRef.current = false;
+    };
+  }, []);
 
   return {
     joinAndPublish,
@@ -376,5 +371,5 @@ export function useLiveKitSession(options: SessionOptions) {
     toggleMicrophone,
     startPublishing,
     disconnect: guardedDisconnect,
-  }
+  };
 }

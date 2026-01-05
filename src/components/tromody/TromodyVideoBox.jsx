@@ -1,7 +1,6 @@
 // src/components/tromody/TromodyVideoBox.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'livekit-client';
-import { supabase } from "../../lib/supabase";
 import api from "../../lib/api";
 
 export default function TromodyVideoBox({ 
@@ -11,20 +10,18 @@ export default function TromodyVideoBox({
   onUserJoined,
   onUserLeft 
 }) {
-  const [livekitUrl, setLivekitUrl] = useState(null);
-  const [token, setToken] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
   const videoRef = useRef(null);
   const roomRef = useRef(null);
 
   // Generate room name based on side and user
-  const getRoomName = () => {
+  const getRoomName = useCallback(() => {
     return `tromody-${side}-${user?.id || 'empty'}`;
-  };
+  }, [side, user?.id]);
 
   // Get LiveKit token for the user
-  const getLiveKitToken = async () => {
+  const getLiveKitToken = useCallback(async () => {
     try {
       const roomName = getRoomName();
       const identity = user?.username || `user-${Date.now()}`;
@@ -49,18 +46,15 @@ export default function TromodyVideoBox({
       console.error('Error getting LiveKit token:', err);
       throw err;
     }
-  };
+  }, [getRoomName, user?.username]);
 
   // Connect to LiveKit room
-  const connectToRoom = async () => {
+  const connectToRoom = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       setError(null);
       const { token: liveKitToken, livekitUrl: serverUrl } = await getLiveKitToken();
-      
-      setToken(liveKitToken);
-      setLivekitUrl(serverUrl);
 
       // Create and connect room
       const room = new Room({
@@ -136,7 +130,7 @@ export default function TromodyVideoBox({
       console.error(`Failed to connect ${side} room:`, err);
       setError(err.message || 'Failed to connect to stream');
     }
-  };
+  }, [user, isCurrentUser, onUserJoined, onUserLeft, getLiveKitToken, side]);
 
   // Disconnect from room
   const disconnectFromRoom = () => {
@@ -158,7 +152,7 @@ export default function TromodyVideoBox({
     return () => {
       disconnectFromRoom();
     };
-  }, [user?.id]);
+  }, [user?.id, connectToRoom]);
 
   // Cleanup on unmount
   useEffect(() => {

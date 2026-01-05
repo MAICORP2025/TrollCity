@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { startCourtSession } from '../lib/courtSessions'
-import { Scale, Gavel, Users, Clock, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { Scale, Gavel, Users, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
+
+const isValidUuid = (id: any) =>
+  typeof id === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
 
 export default function TrollCourt() {
   const { user, profile } = useAuthStore()
@@ -19,7 +23,7 @@ export default function TrollCourt() {
     (profile as any)?.is_admin === true ||
     (profile as any)?.is_lead_officer === true
 
-  const loadCourtState = async () => {
+  const loadCourtState = useCallback(async () => {
     try {
       const { data: currentSession, error: sessionError } = await supabase.rpc('get_current_court_session')
       if (sessionError) {
@@ -27,14 +31,35 @@ export default function TrollCourt() {
         throw new Error('RPC not available')
       }
 
-      const session = Array.isArray(currentSession) ? currentSession[0] : currentSession
-      setCourtSession(session || null)
+      let session = Array.isArray(currentSession) ? currentSession[0] : currentSession
+
+      // If RPC returned nothing, check via direct query just in case (for 'active' status support)
+      if (!session || !session.id) {
+        const { data: fallbackSession } = await supabase
+          .from('court_sessions')
+          .select('*')
+          .in('status', ['live', 'active', 'waiting'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        
+        if (fallbackSession) {
+          session = fallbackSession
+        }
+      }
+
+      // Ensure session has a valid ID before setting it
+      if (session && session.id) {
+        setCourtSession(session)
+      } else {
+        setCourtSession(null)
+      }
     } catch {
       try {
         const { data: session } = await supabase
           .from('court_sessions')
           .select('*')
-          .eq('status', 'live')
+          .in('status', ['live', 'active', 'waiting'])
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
@@ -57,14 +82,14 @@ export default function TrollCourt() {
         setPendingSummons([])
       }
     }
-  }
+  }, [user?.id])
 
   // Load current court session (global) on mount
   useEffect(() => {
     loadCourtState()
     const id = window.setInterval(loadCourtState, 5000)
     return () => window.clearInterval(id)
-  }, [user?.id])
+  }, [user?.id, loadCourtState])
 
   const handleStartCourtSession = async () => {
     if (!canStartCourt) return
@@ -98,15 +123,16 @@ export default function TrollCourt() {
     if (!courtSession?.id) return
     try {
       console.log('Ending court session RPC, sessionId=', String(courtSession.id))
-      const res = await supabase.rpc('end_court_session', { p_session_id: String(courtSession.id) })
-      console.log('end_court_session RPC response:', res)
-      const error = (res as any).error
+      const { error } = await supabase.rpc('end_court_session', { p_session_id: String(courtSession.id) })
+      
       if (error) {
-        console.error('end_court_session RPC error object:', error)
+        console.error('end_court_session RPC error:', error)
         throw error
       }
+      
       setCourtSession(null)
       toast.success('Court session ended')
+      loadCourtState() // Force refresh to confirm
     } catch (err: any) {
       console.error('Failed to end court session:', err)
       toast.error(`Failed to end court session: ${err?.message || err}`)

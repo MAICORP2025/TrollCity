@@ -1,20 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { 
-  Crown, 
-  TrendingUp, 
-  Users, 
-  DollarSign, 
-  Calendar,
-  BarChart3,
-  Star,
-  Zap,
-  Gift,
-  Eye,
-  Award,
-  Target,
-  Clock
+  Crown
 } from 'lucide-react';
 
 import {
@@ -84,13 +72,42 @@ export default function CreatorDashboard() {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d');
 
-  useEffect(() => {
-    if (user) {
-      loadDashboardData();
-    }
-  }, [user, timeRange]);
+  const loadEarningsOverview = useCallback(async () => {
+    const { data, error } = await supabase.rpc('get_earnings_overview');
+    if (error) throw error;
+    setOverview(data?.[0] || null);
+  }, []);
 
-  const loadDashboardData = async () => {
+  const loadDailyEarningsSeries = useCallback(async () => {
+    const daysBack = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+    const { data, error } = await supabase.rpc('get_daily_earnings_series', {
+      days_back: daysBack
+    });
+    if (error) throw error;
+    setDailySeries(data || []);
+  }, [timeRange]);
+
+  const loadHourlyActivity = useCallback(async () => {
+    const { data, error } = await supabase.rpc('get_hourly_activity');
+    if (error) throw error;
+    setHourly(data || []);
+  }, []);
+
+  const loadTopGifters = useCallback(async () => {
+    const { data, error } = await supabase.rpc('get_top_gifters', {
+      limit_count: 10
+    });
+    if (error) throw error;
+    setTopGifters(data || []);
+  }, []);
+
+  const loadBattleEventEarnings = useCallback(async () => {
+    const { data, error } = await supabase.rpc('get_battle_and_event_earnings');
+    if (error) throw error;
+    setBattleEvent(data || []);
+  }, []);
+
+  const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
       await Promise.all([
@@ -105,42 +122,13 @@ export default function CreatorDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadEarningsOverview, loadDailyEarningsSeries, loadHourlyActivity, loadTopGifters, loadBattleEventEarnings]);
 
-  const loadEarningsOverview = async () => {
-    const { data, error } = await supabase.rpc('get_earnings_overview');
-    if (error) throw error;
-    setOverview(data?.[0] || null);
-  };
-
-  const loadDailyEarningsSeries = async () => {
-    const daysBack = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
-    const { data, error } = await supabase.rpc('get_daily_earnings_series', {
-      days_back: daysBack
-    });
-    if (error) throw error;
-    setDailySeries(data || []);
-  };
-
-  const loadHourlyActivity = async () => {
-    const { data, error } = await supabase.rpc('get_hourly_activity');
-    if (error) throw error;
-    setHourly(data || []);
-  };
-
-  const loadTopGifters = async () => {
-    const { data, error } = await supabase.rpc('get_top_gifters', {
-      limit_count: 10
-    });
-    if (error) throw error;
-    setTopGifters(data || []);
-  };
-
-  const loadBattleEventEarnings = async () => {
-    const { data, error } = await supabase.rpc('get_battle_and_event_earnings');
-    if (error) throw error;
-    setBattleEvent(data || []);
-  };
+  useEffect(() => {
+    if (user) {
+      loadDashboardData();
+    }
+  }, [user, timeRange, loadDashboardData]);
 
   if (!user) {
     return (
@@ -323,7 +311,7 @@ export default function CreatorDashboard() {
               <ResponsiveContainer>
                 <PieChart>
                   <Pie
-                    data={battleEvent || []}
+                    data={(battleEvent || []) as any[]}
                     dataKey="coins"
                     nameKey="source"
                     cx="50%"

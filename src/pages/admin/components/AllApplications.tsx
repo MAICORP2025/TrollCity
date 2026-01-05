@@ -31,7 +31,7 @@ interface BroadcasterApplication {
 }
 
 export default function AllApplications() {
-  const { profile, user, refreshProfile } = useAuthStore()
+  const { user, refreshProfile } = useAuthStore()
   const [applications, setApplications] = useState<Application[]>([])
   const [broadcasterApplications, setBroadcasterApplications] = useState<BroadcasterApplication[]>([])
   const [loading, setLoading] = useState(false)
@@ -324,7 +324,7 @@ export default function AllApplications() {
         <div className="flex items-center gap-2">
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value as any)}
+            onChange={(e) => setFilter(e.target.value as 'all' | 'pending' | 'approved' | 'rejected')}
             className="bg-[#1A1A1A] border border-[#2C2C2C] rounded-lg px-3 py-1 text-sm text-white"
           >
             <option value="all">All Status</option>

@@ -1,5 +1,5 @@
 // src/pages/EarningsPayout.tsx
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import api from '../lib/api'
@@ -45,22 +45,7 @@ export default function EarningsPayout() {
     }
   }, [eligibleTiers, selectedTierId])
 
-  useEffect(() => {
-    loadRecent()
-  }, [profile?.id])
-
-  useEffect(() => {
-    if (!profile?.id) return
-    const channel = supabase
-      .channel(`cashout_requests_${profile.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashout_requests', filter: `user_id=eq.${profile.id}` }, () => {
-        loadRecent()
-      })
-    channel.subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [profile?.id])
-
-  const loadRecent = async () => {
+  const loadRecent = useCallback(async () => {
     if (!profile) return
     const { data, error } = await supabase
       .from('cashout_requests')
@@ -73,9 +58,24 @@ export default function EarningsPayout() {
       return
     }
     setRecentRequests(data || [])
-  }
+  }, [profile])
 
-  const cancelRequest = async (id: string) => {
+  useEffect(() => {
+    loadRecent()
+  }, [profile?.id, loadRecent])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    const channel = supabase
+      .channel(`cashout_requests_${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashout_requests', filter: `user_id=eq.${profile.id}` }, () => {
+        loadRecent()
+      })
+    channel.subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [profile?.id, loadRecent])
+
+  const cancelRequest = useCallback(async (id: string) => {
     if (!profile) return
     try {
       const j = await api.delete(`/payouts/cashouts/${id}`)
@@ -87,11 +87,11 @@ export default function EarningsPayout() {
       console.error('Cancel request error', e)
       toast.error('Cancel failed')
     }
-  }
+  }, [profile, loadRecent])
 
   const placeholderForMethod = (_m: PayoutMethod) => 'PayPal email (e.g. troll@example.com)'
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!profile) {
       toast.error('You must be logged in to request a payout.')
       return
@@ -154,7 +154,7 @@ export default function EarningsPayout() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile, eligibleTiers.length, selectedTierId, troll_coins, payoutDetails, user?.email, payoutMethod, fullName, loadRecent])
 
   return (
     <div className="min-h-screen bg-[#05030B] text-white p-6">

@@ -5,8 +5,8 @@ const primaryUrl = import.meta.env.VITE_LIVEKIT_URL
 const fallbackUrl = import.meta.env.VITE_LIVEKIT_CLOUD_URL
 
 // Debug logging at app load
-console.log("✅ VITE_LIVEKIT_URL:", primaryUrl)
-console.log("✅ VITE_LIVEKIT_CLOUD_URL:", fallbackUrl)
+if (primaryUrl) console.log("✅ VITE_LIVEKIT_URL:", primaryUrl)
+if (fallbackUrl) console.log("✅ VITE_LIVEKIT_CLOUD_URL:", fallbackUrl)
 
 // Determine the final LiveKit URL with fallback and validation
 let LIVEKIT_URL: string

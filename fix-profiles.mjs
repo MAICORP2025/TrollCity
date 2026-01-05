@@ -47,7 +47,7 @@ async function fixProfiles() {
                       user.email.split('@')[0]
 
       // Create profile
-      const { data: newProfile, error: createError} = await supabase
+      const { error: createError} = await supabase
         .from('user_profiles')
         .insert([{
           id: user.id,

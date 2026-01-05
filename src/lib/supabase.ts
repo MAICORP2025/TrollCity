@@ -41,6 +41,7 @@ export interface UserProfile {
   total_spent_coins: number
   insurance_level: string | null
   insurance_expires_at: string | null
+  rgb_username_expires_at?: string | null
   no_kick_until: string | null
   no_ban_until: string | null
   ban_expires_at?: string | null
@@ -67,6 +68,9 @@ export interface UserProfile {
   officer_level?: number // 1=Junior, 2=Senior, 3=Commander, 4=Elite Commander, 5=HQ Master
   officer_tier_badge?: string // 'blue', 'orange', 'red', 'purple', 'gold'
   
+  // Unified Role
+  troll_role?: string | null
+  
   // Officer Work Credit (OWC) fields
   owc_balance?: number // Current OWC balance
   total_owc_earned?: number // Lifetime OWC earned
@@ -87,6 +91,19 @@ export interface UserProfile {
   // Language preference
   preferred_language?: string // 'en', 'es', 'ar', 'fr', 'fil', etc.
 
+  // Onboarding / W9 fields
+  legal_full_name?: string
+  date_of_birth?: string
+  country?: string
+  address_line1?: string
+  address_line2?: string
+  city?: string
+  state_region?: string
+  postal_code?: string
+  tax_id_last4?: string
+  tax_classification?: 'individual' | 'business'
+  w9_status?: 'pending' | 'submitted' | 'verified' | 'rejected'
+
   // Kick/Ban fields
   kick_count?: number
   is_kicked?: boolean
@@ -100,7 +117,6 @@ export interface UserProfile {
   square_card_id?: string | null
 
   // Empire Partner
-  is_empire_partner?: boolean // Deprecated - use empire_role instead
   empire_role?: string | null // 'partner' when approved as Empire Partner
   empire_partner?: boolean // New field for partner status
   partner_status?: string | null // 'approved', 'pending', 'rejected'
@@ -116,7 +132,7 @@ export interface UserProfile {
   verification_payment_method?: string | null
   is_trolls_night_approved?: boolean
   trolls_night_rejection_count?: number
-  date_of_birth?: string | null
+  // date_of_birth removed (duplicate)
 
   // Officer reputation
   officer_reputation_score?: number
@@ -137,7 +153,10 @@ export interface UserProfile {
   court_recording_consent?: boolean
   application_required?: boolean
   application_submitted?: boolean
-  w9_status?: string
+  
+  tax_status?: string
+  tax_last_updated?: string
+  tax_form_url?: string
 }
 
 
@@ -295,6 +314,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.MANAGE_REPORTS,
     Permission.ISSUE_WARNINGS
   ],
+  [UserRole.LEAD_TROLL_OFFICER]: [
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE,
+    Permission.MODERATE_CHAT,
+    Permission.MODERATE_STREAMS,
+    Permission.MANAGE_REPORTS,
+    Permission.ISSUE_WARNINGS,
+    Permission.MANAGE_USERS
+  ],
   [UserRole.TROLL_FAMILY]: [
     Permission.BROADCAST,
     Permission.CREATE_CONTENT,
@@ -373,6 +402,18 @@ export const hasRole = (
     if (
       (profile.role === UserRole.TROLL_OFFICER ||
         profile.role === UserRole.LEAD_TROLL_OFFICER) &&
+      requireActive
+    ) {
+      return Boolean(profile.is_officer_active)
+    }
+    return true
+  }
+
+  // Unified troll_role match
+  if (profile.troll_role && roles.includes(profile.troll_role as UserRole)) {
+    if (
+      (profile.troll_role === UserRole.TROLL_OFFICER ||
+        profile.troll_role === UserRole.LEAD_TROLL_OFFICER) &&
       requireActive
     ) {
       return Boolean(profile.is_officer_active)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Scale, Gavel, Clock, AlertTriangle, CheckCircle, XCircle, Eye } from 'lucide-react';
 
 interface CourtRuling {
@@ -15,11 +15,7 @@ const CourtRulingArchive: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'recent' | 'severe'>('recent');
 
-  useEffect(() => {
-    loadRulings();
-  }, [filter]);
-
-  const loadRulings = async () => {
+  const loadRulings = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -80,7 +76,11 @@ const CourtRulingArchive: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    loadRulings();
+  }, [loadRulings]);
 
   const getCaseTypeLabel = (type: string) => {
     const labels = {

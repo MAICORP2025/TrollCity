@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { Camera, Mic, MicOff, Video, VideoOff } from 'lucide-react'
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { endStream } from '../../lib/endStream'
 import { toast } from 'sonner'
@@ -26,8 +31,8 @@ export default function ControlBar({
   onToggleMicrophone,
   streamId,
   isHost,
-  layoutMode = 'grid',
-  onLayoutChange,
+  // layoutMode = 'grid',
+  // onLayoutChange,
 }: ControlBarProps) {
   const navigate = useNavigate()
   const [isEnding, setIsEnding] = useState(false)

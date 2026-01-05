@@ -18,7 +18,7 @@ export default function AIVerificationPage() {
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
   const [result, setResult] = useState<{ status: string; matchScore: number; behaviorScore: number } | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'coins' | null>(null)
+  const [_paymentMethod, setPaymentMethod] = useState<'paypal' | 'coins' | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
@@ -280,16 +280,16 @@ export default function AIVerificationPage() {
 
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8">
-          <div className={`flex items-center gap-2 ${step === 'upload_id' ? 'text-purple-400' : step !== 'upload_id' ? 'text-green-400' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'upload_id' ? 'bg-purple-600' : step !== 'upload_id' ? 'bg-green-600' : 'bg-gray-700'}`}>
+          <div className={`flex items-center gap-2 ${step === 'upload_id' ? 'text-purple-400' : 'text-green-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'upload_id' ? 'bg-purple-600' : 'bg-green-600'}`}>
               {step !== 'upload_id' ? <CheckCircle className="w-5 h-5" /> : '1'}
             </div>
             <span className="text-sm font-semibold">Upload ID</span>
           </div>
           <div className="flex-1 h-1 bg-gray-700 mx-2"></div>
-          <div className={`flex items-center gap-2 ${step === 'selfie' ? 'text-purple-400' : step === 'processing' || step === 'result' ? 'text-green-400' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'selfie' ? 'bg-purple-600' : step === 'processing' || step === 'result' ? 'bg-green-600' : 'bg-gray-700'}`}>
-              {step === 'processing' || step === 'result' ? <CheckCircle className="w-5 h-5" /> : '2'}
+          <div className={`flex items-center gap-2 ${step === 'selfie' ? 'text-purple-400' : (step === 'processing' || step === 'result') ? 'text-green-400' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'selfie' ? 'bg-purple-600' : (step === 'processing' || step === 'result') ? 'bg-green-600' : 'bg-gray-700'}`}>
+              {(step === 'processing' || step === 'result') ? <CheckCircle className="w-5 h-5" /> : '2'}
             </div>
             <span className="text-sm font-semibold">Selfie Match</span>
           </div>

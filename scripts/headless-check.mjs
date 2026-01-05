@@ -14,7 +14,7 @@ const url = `${base}${path.startsWith('/') ? path : '/' + path}`;
     try {
       logs.push({ type: msg.type(), text: msg.text() });
       console.log(`[PAGE:${msg.type()}] ${msg.text()}`);
-    } catch (e) {
+    } catch {
       console.log('[PAGE:console] (error reading message)');
     }
   });

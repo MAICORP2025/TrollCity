@@ -42,7 +42,6 @@ const CashoutPage: React.FC = () => {
     void loadExisting();
   }, [user?.id]);
 
-  const eligibleTiers = CASHOUT_TIERS.filter(t => balance >= t.coins);
 
   const handleRequest = async (tierCoins: number, tierUsd: number) => {
     if (!user || !profile) {
@@ -55,6 +54,20 @@ const CashoutPage: React.FC = () => {
     }
     if (existingRequest) {
       toast.error('You already have a pending cashout request');
+      return;
+    }
+
+    // Check for payment holds
+    const { data: holds } = await supabase
+      .from('payment_holds')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .in('hold_type', ['all', 'cashout', 'payout', 'withdrawal'])
+      .maybeSingle();
+
+    if (holds) {
+      toast.error('Your account has an active payout hold. Please contact support.');
       return;
     }
 

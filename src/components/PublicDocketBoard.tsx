@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Scale, Calendar, Clock, Users } from 'lucide-react';
+import { Scale, Calendar, Users } from 'lucide-react';
 
 interface PublicDocketEntry {
   case_type: string;

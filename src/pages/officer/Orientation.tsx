@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
@@ -10,6 +10,25 @@ export default function Orientation() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [orientationStatus, setOrientationStatus] = useState<any>(null)
+
+  const loadOrientationStatus = useCallback(async () => {
+    if (!user?.id) return
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('get_officer_orientation_status', {
+        p_user_id: user.id
+      })
+
+      if (error) throw error
+      if (data) {
+        setOrientationStatus(data)
+      }
+    } catch (err: any) {
+      console.error('Error loading orientation status:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.id])
 
   useEffect(() => {
     if (!profile || !user) {
@@ -41,26 +60,7 @@ export default function Orientation() {
       // Already active, redirect to lounge
       navigate('/officer/lounge')
     }
-  }, [profile, user, navigate])
-
-  const loadOrientationStatus = async () => {
-    if (!user?.id) return
-    setLoading(true)
-    try {
-      const { data, error } = await supabase.rpc('get_officer_orientation_status', {
-        p_user_id: user.id
-      })
-
-      if (error) throw error
-      if (data) {
-        setOrientationStatus(data)
-      }
-    } catch (err: any) {
-      console.error('Error loading orientation status:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [profile, user, navigate, loadOrientationStatus])
 
   const handleStartQuiz = () => {
     navigate('/officer/orientation/quiz')

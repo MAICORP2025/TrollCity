@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { FileText, Send, AlertTriangle } from 'lucide-react'
+import { FileText, Send } from 'lucide-react'
 import api from '../lib/api'
 
 export default function Support() {

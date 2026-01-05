@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import {
   DollarSign,
   TrendingUp,
-  TrendingDown,
   Coins,
   CreditCard,
   PiggyBank,

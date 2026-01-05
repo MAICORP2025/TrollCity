@@ -1,15 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar,
-  Users,
   MessageSquare,
   AlertTriangle,
-  Clock,
   MapPin,
   CheckCircle,
-  XCircle,
   Send,
-  UserCheck,
   Shield,
   Radio
 } from 'lucide-react';
@@ -73,6 +69,80 @@ export default function OfficerOperations() {
   const [newMessage, setNewMessage] = useState('');
   const [selectedOfficer, setSelectedOfficer] = useState('');
 
+  const loadShifts = React.useCallback(async () => {
+    const { data } = await supabase
+      .from('officer_shifts')
+      .select(`
+        *,
+        officer:user_profiles(username)
+      `)
+      .order('shift_start', { ascending: false })
+      .limit(50);
+    setShifts(data || []);
+  }, []);
+
+  const loadPatrols = React.useCallback(async () => {
+    const { data } = await supabase
+      .from('officer_patrols')
+      .select(`
+        *,
+        officer:user_profiles(username)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setPatrols(data || []);
+  }, []);
+
+  const loadChatMessages = React.useCallback(async () => {
+    const { data } = await supabase
+      .from('officer_chat_messages')
+      .select(`
+        *,
+        sender:user_profiles(username)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    setChatMessages(data || []);
+  }, []);
+
+  const loadPanicAlerts = React.useCallback(async () => {
+    const { data } = await supabase
+      .from('creator_panic_alerts')
+      .select(`
+        *,
+        creator:user_profiles(username),
+        assigned_officer:user_profiles!creator_panic_alerts_assigned_officer_id_fkey(username)
+      `)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+    setPanicAlerts(data || []);
+  }, []);
+
+  const loadOfficers = React.useCallback(async () => {
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('id, username')
+      .or('role.eq.troll_officer,is_troll_officer.eq.true');
+    setOfficers(data || []);
+  }, []);
+
+  const loadData = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      await Promise.all([
+        loadShifts(),
+        loadPatrols(),
+        loadChatMessages(),
+        loadPanicAlerts(),
+        loadOfficers()
+      ]);
+    } catch (error) {
+      console.error('Error loading officer operations data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadShifts, loadPatrols, loadChatMessages, loadPanicAlerts, loadOfficers]);
+
   useEffect(() => {
     loadData();
     // Set up real-time subscriptions
@@ -94,83 +164,9 @@ export default function OfficerOperations() {
       supabase.removeChannel(chatChannel);
       supabase.removeChannel(panicChannel);
     };
-  }, [activeTab]);
+  }, [activeTab, loadData, loadChatMessages, loadPanicAlerts]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      await Promise.all([
-        loadShifts(),
-        loadPatrols(),
-        loadChatMessages(),
-        loadPanicAlerts(),
-        loadOfficers()
-      ]);
-    } catch (error) {
-      console.error('Error loading officer operations data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadShifts = async () => {
-    const { data } = await supabase
-      .from('officer_shifts')
-      .select(`
-        *,
-        officer:user_profiles(username)
-      `)
-      .order('shift_start', { ascending: false })
-      .limit(50);
-    setShifts(data || []);
-  };
-
-  const loadPatrols = async () => {
-    const { data } = await supabase
-      .from('officer_patrols')
-      .select(`
-        *,
-        officer:user_profiles(username)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    setPatrols(data || []);
-  };
-
-  const loadChatMessages = async () => {
-    const { data } = await supabase
-      .from('officer_chat_messages')
-      .select(`
-        *,
-        sender:user_profiles(username)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    setChatMessages(data || []);
-  };
-
-  const loadPanicAlerts = async () => {
-    const { data } = await supabase
-      .from('creator_panic_alerts')
-      .select(`
-        *,
-        creator:user_profiles(username),
-        assigned_officer:user_profiles!creator_panic_alerts_assigned_officer_id_fkey(username)
-      `)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
-    setPanicAlerts(data || []);
-  };
-
-  const loadOfficers = async () => {
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, username')
-      .or('role.eq.troll_officer,is_troll_officer.eq.true');
-    setOfficers(data || []);
-  };
-
-  const createShift = async (officerId: string, startTime: string, endTime: string, patrolArea: string) => {
+  const _createShift = async (officerId: string, startTime: string, endTime: string, patrolArea: string) => {
     try {
       await supabase.rpc('create_officer_shift', {
         p_officer_id: officerId,
@@ -184,7 +180,7 @@ export default function OfficerOperations() {
     }
   };
 
-  const assignPatrol = async (officerId: string, patrolType: string, instructions: string) => {
+  const _assignPatrol = async (officerId: string, patrolType: string, instructions: string) => {
     try {
       await supabase.rpc('assign_officer_patrol', {
         p_officer_id: officerId,

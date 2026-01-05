@@ -60,48 +60,16 @@ async function authorizeUser(req: Request): Promise<AuthorizedProfile> {
     global: { headers: { Authorization: authHeader } },
   });
 
-  console.log("[authorizeUser] Validating user session...");
-  
-  // First check if we have a valid session
-  const { data: { session }, error: sessionError } = await supabaseAuth.auth.getSession();
-  
-  if (sessionError) {
-    console.error("[authorizeUser] Session error:", sessionError.message);
-    throw new Error("Session validation failed");
-  }
-  
-  if (!session) {
-    console.error("[authorizeUser] No active session found");
+  console.log("[authorizeUser] Validating JWT...");
+
+  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+
+  if (userError || !user) {
+    console.error("[authorizeUser] User validation error:", userError?.message);
     throw new Error("No active session. Please sign in again.");
   }
-  
-  // Check if session is expired
-  const now = Math.floor(Date.now() / 1000);
-  if (session.expires_at && session.expires_at < now) {
-    console.error("[authorizeUser] Session expired:", {
-      expiresAt: session.expires_at,
-      now: now,
-      timeDiff: session.expires_at - now
-    });
-    throw new Error("Session expired. Please sign in again.");
-  }
 
-  // Now get the user
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError) {
-    console.error("[authorizeUser] User validation error:", userError.message);
-    if (userError.message.includes('Invalid JWT') || userError.message.includes('expired')) {
-      throw new Error("Session expired. Please sign in again.");
-    }
-    throw new Error("Unable to verify user session");
-  }
-  
-  if (!user) {
-    console.error("[authorizeUser] No user found in session");
-    throw new Error("Invalid session. Please sign in again.");
-  }
-  
-  console.log("[authorizeUser] Session validated for user:", user.id);
+  console.log("[authorizeUser] JWT validated for user:", user.id);
 
   // Use service role to read profile without RLS headaches
   const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);

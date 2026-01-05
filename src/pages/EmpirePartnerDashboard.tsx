@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { Users, Coins, CheckCircle2, Copy, Clock } from 'lucide-react'
@@ -43,60 +43,10 @@ export default function EmpirePartnerDashboard() {
   const [referralLink, setReferralLink] = useState('')
 
   // Real-time subscription channels
-  let referralsChannel: any = null
-  let rewardsChannel: any = null
-  let walletsChannel: any = null
+  // Moved inside useEffect
 
-  useEffect(() => {
-    if (user?.id && profile) {
-      // Check if user is an approved Empire Partner
-      if (profile.empire_role !== 'partner') {
-        // Don't redirect, just show apply button
-        return
-      }
-
-      loadData()
-      // Generate referral link
-      const baseUrl = window.location.origin
-      setReferralLink(`${baseUrl}/auth?ref=${user.id}`)
-
-      // Set up real-time subscriptions for referral progress updates
-      setupRealtimeSubscriptions()
-    }
-
-    // Cleanup function
-    return () => {
-      if (referralsChannel) {
-        supabase.removeChannel(referralsChannel)
-      }
-      if (rewardsChannel) {
-        supabase.removeChannel(rewardsChannel)
-      }
-      if (walletsChannel) {
-        supabase.removeChannel(walletsChannel)
-      }
-    }
-  }, [user?.id, profile])
-  
-  // Show apply button if not approved
-  if (profile?.empire_role !== 'partner') {
-    return (
-      <div className="min-h-screen bg-[#0A0814] text-white p-6">
-        <div className="max-w-4xl mx-auto text-center py-20">
-          <h1 className="text-4xl font-bold mb-4">Empire Partner Program</h1>
-          <p className="text-gray-400 mb-8">You must be an approved Empire Partner to access the referral dashboard.</p>
-          <a
-            href="/empire-partner/apply"
-            className="inline-block px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-semibold"
-          >
-            Apply Now
-          </a>
-        </div>
-      </div>
-    )
-  }
-
-  const loadData = async () => {
+  // Defined here to be used in useEffect
+  const loadData = useCallback(async () => {
     if (!user?.id) return
 
     setLoading(true)
@@ -114,7 +64,7 @@ export default function EmpirePartnerDashboard() {
           referred_user:user_profiles!referrals_referred_user_id_fkey (
             username,
             avatar_url,
-            troll_troll_coins
+            troll_coins
           )
         `)
         .eq('referrer_id', user.id)
@@ -167,68 +117,120 @@ export default function EmpirePartnerDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id])
 
-  const setupRealtimeSubscriptions = () => {
-    if (!user?.id) return
+  useEffect(() => {
+    let referralsChannel: any = null
+    let rewardsChannel: any = null
 
-    // Subscribe to referrals table changes
-    referralsChannel = supabase
-      .channel('referrals_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'referrals',
-          filter: `referrer_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Referrals change detected:', payload)
-          loadData() // Reload all data when referrals change
-        }
-      )
-      .subscribe()
+    if (user?.id && profile) {
+      // Check if user is an approved Empire Partner
+      if (profile.empire_role !== 'partner') {
+        // Don't redirect, just show apply button
+        return
+      }
 
-    // Subscribe to rewards table changes
-    rewardsChannel = supabase
-      .channel('rewards_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'empire_partner_rewards',
-          filter: `referrer_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Rewards change detected:', payload)
-          loadData() // Reload all data when rewards change
-        }
-      )
-      .subscribe()
+      loadData()
+      // Generate referral link
+      const baseUrl = window.location.origin
+      setReferralLink(`${baseUrl}/auth?ref=${user.id}`)
 
-    // Subscribe to wallets table changes for referred users
-    const referredUserIds = referrals.map(r => r.referred_user_id)
-    if (referredUserIds.length > 0) {
-      walletsChannel = supabase
-        .channel('wallets_changes')
+      // Subscribe to referrals table changes
+      referralsChannel = supabase
+        .channel('referrals_changes')
         .on(
           'postgres_changes',
           {
-            event: 'UPDATE',
+            event: '*',
             schema: 'public',
-            table: 'wallets',
-            filter: `user_id=in.(${referredUserIds.join(',')})`
+            table: 'referrals',
+            filter: `referrer_id=eq.${user.id}`
           },
           (payload) => {
-            console.log('Wallet change detected for referred user:', payload)
-            loadData() // Reload data when referred users' wallets change
+            console.log('Referrals change detected:', payload)
+            loadData() // Reload all data when referrals change
+          }
+        )
+        .subscribe()
+
+      // Subscribe to rewards table changes
+      rewardsChannel = supabase
+        .channel('rewards_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'empire_partner_rewards',
+            filter: `referrer_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Rewards change detected:', payload)
+            loadData() // Reload all data when rewards change
           }
         )
         .subscribe()
     }
+
+    // Cleanup function
+    return () => {
+      if (referralsChannel) {
+        supabase.removeChannel(referralsChannel)
+      }
+      if (rewardsChannel) {
+        supabase.removeChannel(rewardsChannel)
+      }
+    }
+  }, [user?.id, profile, loadData])
+
+  useEffect(() => {
+    // Subscribe to wallets table changes for referred users
+    // Only subscribe if we have referrals
+    const referredUserIds = referrals.map(r => r.referred_user_id)
+    
+    if (referredUserIds.length === 0) return
+
+    const walletsChannel = supabase
+      .channel('wallets_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'wallets',
+          filter: `user_id=in.(${referredUserIds.join(',')})`
+        },
+        (payload) => {
+          console.log('Wallet change detected for referred user:', payload)
+          loadData() // Reload data when referred users' wallets change
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(walletsChannel)
+    }
+  }, [referrals, loadData])
+  
+  // Show apply button if not approved
+  if (profile?.empire_role !== 'partner') {
+    return (
+      <div className="min-h-screen bg-[#0A0814] text-white p-6">
+        <div className="max-w-4xl mx-auto text-center py-20">
+          <h1 className="text-4xl font-bold mb-4">Empire Partner Program</h1>
+          <p className="text-gray-400 mb-8">You must be an approved Empire Partner to access the referral dashboard.</p>
+          <a
+            href="/empire-partner/apply"
+            className="inline-block px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-semibold"
+          >
+            Apply Now
+          </a>
+        </div>
+      </div>
+    )
   }
+
+
 
   const copyReferralLink = () => {
     navigator.clipboard.writeText(referralLink)

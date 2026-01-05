@@ -1,5 +1,4 @@
 import { supabase, UserProfile } from './supabase'
-import { toast } from 'sonner'
 
 export interface CoinTransaction {
   user_id: string

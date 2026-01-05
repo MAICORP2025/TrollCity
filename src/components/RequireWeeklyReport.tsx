@@ -1,5 +1,5 @@
-import { ReactNode, useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { ReactNode, useEffect, useState, useCallback } from 'react'
+// import { Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { FileText, AlertTriangle } from 'lucide-react'
@@ -12,13 +12,9 @@ export function RequireWeeklyReport({ children }: Props) {
   const { profile } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [blocked, setBlocked] = useState(false)
-  const [lastReportDate, setLastReportDate] = useState<string | null>(null)
+  const [_lastReportDate, setLastReportDate] = useState<string | null>(null)
 
-  useEffect(() => {
-    checkReportStatus()
-  }, [profile?.id])
-
-  const checkReportStatus = async () => {
+  const checkReportStatus = useCallback(async () => {
     if (!profile?.id) {
       setLoading(false)
       return
@@ -64,6 +60,14 @@ export function RequireWeeklyReport({ children }: Props) {
     } finally {
       setLoading(false)
     }
+  }, [profile?.id, profile?.created_at])
+
+  useEffect(() => {
+    checkReportStatus()
+  }, [checkReportStatus])
+
+  if (loading) {
+    return null // or a loading spinner
   }
 
   if (loading) {

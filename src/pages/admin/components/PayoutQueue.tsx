@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
 import { 
-  DollarSign, Check, X, CreditCard, Filter, 
-  RefreshCw, Eye, AlertCircle, ExternalLink 
+  DollarSign, Check, X, CreditCard, 
+  RefreshCw 
 } from 'lucide-react'
 
 interface PayoutRequest {
@@ -37,15 +37,11 @@ export default function PayoutQueue() {
   const [payouts, setPayouts] = useState<PayoutRequest[]>([])
   const [selectedPayout, setSelectedPayout] = useState<PayoutRequest | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'paid' | 'rejected'>('pending')
-  const [rejectionReason, setRejectionReason] = useState('')
   const [paymentReference, setPaymentReference] = useState('')
   const [adminNotes, setAdminNotes] = useState('')
+  const [_rejectionReason, setRejectionReason] = useState('')
 
-  useEffect(() => {
-    loadPayouts()
-  }, [statusFilter])
-
-  const loadPayouts = async () => {
+  const loadPayouts = useCallback(async () => {
     setLoading(true)
     try {
       // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
@@ -125,7 +121,11 @@ export default function PayoutQueue() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter])
+
+  useEffect(() => {
+    loadPayouts()
+  }, [loadPayouts])
 
   const approve = async (e: React.MouseEvent, id: string) => {
     e.preventDefault()
@@ -289,15 +289,6 @@ export default function PayoutQueue() {
       rejected: 'bg-red-500/20 text-red-400 border-red-500/30'
     }
     return styles[status as keyof typeof styles] || styles.pending
-  }
-
-  const maskDestination = (method: string | null, reference: string | null) => {
-    if (!method || !reference) return '—'
-    // Mask sensitive payment info
-    if (reference.length > 4) {
-      return `${method}: ****${reference.slice(-4)}`
-    }
-    return `${method}: ${reference}`
   }
 
   const filteredPayouts = payouts

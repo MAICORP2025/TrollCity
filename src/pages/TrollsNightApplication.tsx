@@ -13,7 +13,7 @@ export default function TrollsNightApplication() {
   const [isMature, setIsMature] = useState(false)
 
   // Redirect if already approved (simple check, could be more robust)
-  if (profile?.trolls_night_approved) {
+  if (profile?.is_trolls_night_approved) {
     return (
       <div className="min-h-screen bg-[#050012] flex items-center justify-center text-white p-6">
         <div className="bg-[#0F0F1A] p-8 rounded-2xl border border-green-500/30 text-center max-w-md space-y-6">

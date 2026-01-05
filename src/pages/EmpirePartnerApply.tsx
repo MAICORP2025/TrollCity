@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -11,25 +11,8 @@ export default function EmpirePartnerApply() {
   const [loading, setLoading] = useState(false)
   const [hasApplication, setHasApplication] = useState(false)
   const [applicationStatus, setApplicationStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState<'coins' | 'card' | null>(null)
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth')
-      return
-    }
-
-    // Check if user already has an application
-    checkApplicationStatus()
-
-    // If already approved, redirect to dashboard
-    if (profile?.empire_role === 'partner') {
-      navigate('/empire-partner')
-      return
-    }
-  }, [user, profile?.empire_role, navigate])
-
-  const checkApplicationStatus = async () => {
+  const checkApplicationStatus = useCallback(async () => {
     if (!user?.id) return
 
     try {
@@ -48,9 +31,25 @@ export default function EmpirePartnerApply() {
     } catch (error) {
       console.error('Error checking application status:', error)
     }
-  }
+  }, [user?.id])
 
-  const handleSubmitApplication = async () => {
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth')
+      return
+    }
+
+    // Check if user already has an application
+    checkApplicationStatus()
+
+    // If already approved, redirect to dashboard
+    if (profile?.empire_role === 'partner') {
+      navigate('/empire-partner')
+      return
+    }
+  }, [user, profile?.empire_role, navigate, checkApplicationStatus])
+
+  const handleSubmitApplication = useCallback(async () => {
     if (!user?.id) return
 
     setLoading(true)
@@ -82,7 +81,7 @@ export default function EmpirePartnerApply() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id])
 
   if (!user) {
     return null

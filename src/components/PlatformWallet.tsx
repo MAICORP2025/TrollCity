@@ -46,7 +46,7 @@ interface WalletData {
 const PlatformWallet = () => {
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [_lastUpdate, setLastUpdate] = useState<Date>(new Date())
 
   const fetchWallet = async () => {
     try {

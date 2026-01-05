@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, Filter, Gift, Loader2, Coins, Sparkles } from 'lucide-react'
+import { Search, Filter, Gift, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '../lib/store'
 import { purchaseGift } from '../lib/giftEngine'
@@ -82,7 +82,6 @@ export default function GiftStorePage() {
   }
 
   const totalMatches = filteredGifts.length
-  const trollTrollcoins = profile?.troll_coins ?? profile?.troll_coins ?? 0
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#03030a] via-[#05050f] to-[#0c0a14] text-white px-6 py-8">

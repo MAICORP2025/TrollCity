@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
 import { 
-  BookOpen, Shield, CheckCircle, ArrowRight, FileText, 
-  AlertTriangle, Lock, Users, MessageSquare, Clock
+  Shield, CheckCircle, ArrowRight, FileText, 
+  AlertTriangle, MessageSquare
 } from 'lucide-react'
 
 interface OnboardingStep {

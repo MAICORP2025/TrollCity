@@ -108,7 +108,7 @@ const GlobalEventsBanner: React.FC = () => {
 
     setIsVisible(true);
     sessionStorage.setItem(shownKey, 'true');
-  }, [user?.id, currentEvent?.id]);
+  }, [user?.id, currentEvent]);
 
   const getEventIcon = (type: string) => {
     switch (type) {

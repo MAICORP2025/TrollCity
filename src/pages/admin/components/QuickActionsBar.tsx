@@ -1,32 +1,17 @@
 import React from 'react'
 import {
   RefreshCw,
-  AlertTriangle,
-  Users,
-  DollarSign,
   Shield,
-  Play,
-  Pause,
   Zap,
-  Settings,
   Bell,
   Download,
-  Upload,
-  Eye,
-  EyeOff,
   Lock,
   Unlock,
-  Star,
-  Target,
-  Award,
-  MessageSquare,
-  Camera,
-  Monitor,
-  Database,
+  BarChart3,
   Server,
   Wifi,
   Activity,
-  BarChart3
+  Settings
 } from 'lucide-react'
 
 interface QuickActionsBarProps {
@@ -39,6 +24,17 @@ interface QuickActionsBarProps {
   maintenanceMode: boolean
 }
 
+interface QuickAction {
+  icon: React.ReactNode
+  label: string
+  description: string
+  action: () => void
+  color: string
+  bgColor: string
+  borderColor: string
+  disabled?: boolean
+}
+
 export default function QuickActionsBar({
   onEmergencyStop,
   onBroadcastMessage,
@@ -48,7 +44,7 @@ export default function QuickActionsBar({
   onToggleMaintenanceMode,
   maintenanceMode,
 }: QuickActionsBarProps) {
-  const quickActions = [
+  const quickActions: QuickAction[] = [
     {
       icon: <Bell className="w-4 h-4" />,
       label: 'Broadcast',

@@ -12,11 +12,7 @@ interface TrollEvent {
   active: boolean;
 }
 
-interface TrollEventProps {
-  streamId?: string; // Optional - for future per-stream logic
-}
-
-const TrollEvent: React.FC<TrollEventProps> = ({ streamId }) => {
+const TrollEvent: React.FC = () => {
   const { profile } = useAuthStore();
   const [globalTroll, setGlobalTroll] = useState<TrollEvent | null>(null);
   const [hasClaimed, setHasClaimed] = useState(false);

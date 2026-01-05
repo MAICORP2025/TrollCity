@@ -40,7 +40,7 @@ export default function TaxUploadPage() {
     try {
       // Upload to Supabase Storage
       const filePath = `w9/${user.id}_${Date.now()}.pdf`
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('tax_forms')
         .upload(filePath, file, { 
           upsert: false,
@@ -53,7 +53,7 @@ export default function TaxUploadPage() {
       }
 
       // Get public URL (or signed URL for private bucket)
-      const { data: urlData } = supabase.storage
+      supabase.storage
         .from('tax_forms')
         .getPublicUrl(filePath)
 

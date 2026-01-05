@@ -5,6 +5,7 @@
  * Run with: node fix-courtroom.js
  */
 
+ 
 const fs = require('fs');
 const path = require('path');
 
@@ -14,7 +15,7 @@ console.log('🔧 Applying Troll Court UUID Flicker Fixes...\n');
 
 try {
   let content = fs.readFileSync(filePath, 'utf8');
-  const originalContent = content;
+  // const originalContent = content;
 
   // Fix 1: Update imports to add memo and useRef
   console.log('✓ Fix 1: Updating imports...');
@@ -120,7 +121,7 @@ CourtTrackCounter.displayName = 'CourtTrackCounter';
   // Fix 3: Remove old component definitions (between lines ~317-376)
   console.log('✓ Fix 3: Removing duplicate component definitions...');
   content = content.replace(
-    /\n  const CourtVideoGrid = \(\{ maxTiles \}\) => \{[\s\S]*?\n  \};\n\n  const CourtTrackCounter = \(\{ onCount \}\) => \{[\s\S]*?\n  \};/m,
+    /\n {2}const CourtVideoGrid = \(\{ maxTiles \}\) => \{[\s\S]*?\n {2}\};\n\n {2}const CourtTrackCounter = \(\{ onCount \}\) => \{[\s\S]*?\n {2}\};/m,
     ''
   );
 
@@ -159,7 +160,7 @@ CourtTrackCounter.displayName = 'CourtTrackCounter';
 
   // Add lastBoxCount initialization
   content = content.replace(
-    /if \(!courtId\) return;\n    const id = window\.setInterval/,
+    /if \(!courtId\) return;\n {4}const id = window\.setInterval/,
     `if (!courtId) return;
     let lastBoxCount = boxCount;
     

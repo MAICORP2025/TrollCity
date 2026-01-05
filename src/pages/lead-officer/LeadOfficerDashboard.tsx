@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { X, CheckCircle, XCircle, Award, User, Clock, FileText, AlertTriangle, Calendar, Crown } from 'lucide-react'
+import { X, CheckCircle, XCircle, Award, User, Clock, FileText, Calendar, Crown } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
 import WeeklyReportForm from '../../components/WeeklyReportForm'
 import WeeklyReportsList from '../../components/WeeklyReportsList'
@@ -45,27 +45,12 @@ type OrientationResult = {
   completed_at: string
 }
 
-type LiveStream = {
-  id: string
-  title: string
-  category?: string
-  broadcaster_id: string
-  current_viewers?: number
-  status: string
-  user_profiles?: {
-    username: string
-    avatar_url: string
-  }
-}
-
 export function LeadOfficerDashboard() {
-  const { user, profile } = useAuthStore()
+  const { profile } = useAuthStore()
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [officers, setOfficers] = useState<Officer[]>([])
   const [logs, setLogs] = useState<ActionLog[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [liveStreams, setLiveStreams] = useState<LiveStream[]>([])
-  const [streamsLoading, setStreamsLoading] = useState(false)
   const [empireApplications, setEmpireApplications] = useState<any[]>([])
 
   const [viewingUser, setViewingUser] = useState<Applicant | Officer | null>(null)
@@ -75,80 +60,42 @@ export function LeadOfficerDashboard() {
   const [banReason, setBanReason] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Weekly Report State
-  const [weekStart, setWeekStart] = useState<string>('')
-  const [weekEnd, setWeekEnd] = useState<string>('')
-  const [reportTitle, setReportTitle] = useState('')
-  const [reportBody, setReportBody] = useState('')
-  const [selectedIncidents, setSelectedIncidents] = useState<string[]>([])
-  const [submittingReport, setSubmittingReport] = useState(false)
-  const [lastReportDate, setLastReportDate] = useState<string | null>(null)
   const [weeklyReports, setWeeklyReports] = useState<any[]>([])
   const [showReportForm, setShowReportForm] = useState(false)
+  const [submittingReport, setSubmittingReport] = useState(false)
+
+  // Load weekly reports when user ID is available
+  const loadWeeklyReports = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('weekly_officer_reports')
+        .select('*')
+        .eq('lead_officer_id', currentUserId)
+        .order('week_start', { ascending: false })
+        .limit(10)
+
+      if (error) throw error
+      setWeeklyReports(data || [])
+    } catch (error: any) {
+      console.error('Error loading weekly reports:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (currentUserId) {
+      loadWeeklyReports()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId])
 
   useEffect(() => {
     const init = async () => {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setCurrentUserId(authUser?.id ?? null)
-      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadLiveStreams(), loadWeeklyReports(), loadEmpireApplications()])
+      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadEmpireApplications()])
     }
     init()
-
-    // Subscribe to stream updates
-    const channel = supabase
-      .channel('lead-officer-streams')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, () => {
-        loadLiveStreams()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
   }, [])
-
-  const loadLiveStreams = async () => {
-    setStreamsLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('streams')
-        .select(`
-          id,
-          title,
-          category,
-          broadcaster_id,
-          current_viewers,
-          status,
-          is_live,
-          user_profiles!broadcaster_id (
-            username,
-            avatar_url
-          )
-        `)
-        .eq('is_live', true)
-        .order('start_time', { ascending: false })
-
-      if (error) throw error
-      // Transform data to match LiveStream type
-      const transformedStreams: LiveStream[] = (data || []).map((s: any) => ({
-        id: s.id,
-        title: s.title,
-        category: s.category,
-        broadcaster_id: s.broadcaster_id,
-        current_viewers: s.current_viewers,
-        status: s.status,
-        user_profiles: Array.isArray(s.user_profiles) && s.user_profiles.length > 0 
-          ? s.user_profiles[0] 
-          : { username: 'Unknown', avatar_url: '' }
-      }))
-      setLiveStreams(transformedStreams)
-    } catch (err) {
-      console.error('Error loading live streams:', err)
-      toast.error('Failed to load live streams')
-    } finally {
-      setStreamsLoading(false)
-    }
-  }
 
   const loadApplicants = async () => {
     try {
@@ -199,33 +146,7 @@ export function LeadOfficerDashboard() {
     }
   }
 
-  const loadPendingApplications = async () => {
-    try {
-      // Load applications that need Lead Officer approval
-      const { data, error } = await supabase
-        .from('applications')
-        .select(`
-          *,
-          user_profiles!user_id (
-            username,
-            email
-          )
-        `)
-        .is('lead_officer_approved', null)
-        .eq('training_passed', true) // Only show applications that have completed training
-        .neq('user_profiles.role', 'admin') // Exclude admin users from application list
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      
-      // For now, we'll handle officer applications in the existing applicants section
-      // and show other applications in a separate section below
-      return data || []
-    } catch (error: any) {
-      console.error('Error loading pending applications:', error)
-      return []
-    }
-  }
+// loadPendingApplications removed
 
   const loadOfficers = async () => {
     try {
@@ -535,7 +456,7 @@ export function LeadOfficerDashboard() {
   }
 
   // New functions for Lead Officer application approval
-  const approveApplication = async (applicationId: string, userId: string) => {
+  const approveApplication = async (applicationId: string) => {
     if (!currentUserId) {
       toast.error('Not authenticated')
       return
@@ -570,7 +491,7 @@ export function LeadOfficerDashboard() {
       return
     }
 
-    const rejectReason = prompt('Enter rejection reason:') || 'No reason provided'
+    // const _rejectReason = prompt('Enter rejection reason:') || 'No reason provided'
     
     setLoading(true)
     try {
@@ -597,21 +518,8 @@ export function LeadOfficerDashboard() {
   }
 
   // Weekly Report Functions
-  const loadWeeklyReports = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('weekly_officer_reports')
-        .select('*')
-        .eq('lead_officer_id', currentUserId)
-        .order('week_start', { ascending: false })
-        .limit(10)
+  // loadWeeklyReports is defined above
 
-      if (error) throw error
-      setWeeklyReports(data || [])
-    } catch (error: any) {
-      console.error('Error loading weekly reports:', error)
-    }
-  }
 
   const submitWeeklyReport = async (reportData: any) => {
     if (!currentUserId) {
@@ -634,7 +542,7 @@ export function LeadOfficerDashboard() {
           actions_taken: reportData.actionsTaken,
           recommendations: reportData.recommendations
         }),
-        p_incidents: selectedIncidents
+        p_incidents: []
       })
 
       if (result.error) throw result.error
@@ -642,11 +550,6 @@ export function LeadOfficerDashboard() {
       if (result.data?.success) {
         toast.success('Weekly report submitted successfully!')
         setShowReportForm(false)
-        setReportTitle('')
-        setReportBody('')
-        setWeekStart('')
-        setWeekEnd('')
-        setSelectedIncidents([])
         await loadWeeklyReports()
       } else {
         throw new Error(result.data?.error || 'Failed to submit report')

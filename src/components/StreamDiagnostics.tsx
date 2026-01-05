@@ -34,9 +34,16 @@ export default function StreamDiagnostics({ streamId, isHost }: StreamDiagnostic
         results.checks.streamError = streamError?.message || null
 
         // Check 2: LiveKit connection
-        const tokenResponse = await fetch('/api/livekit-token', {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+        const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`
+        
+        const tokenResponse = await fetch(tokenUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+          },
           body: JSON.stringify({
             room: streamId,
             identity: 'diagnostic-user',
@@ -100,9 +107,12 @@ export default function StreamDiagnostics({ streamId, isHost }: StreamDiagnostic
         // Check 5: Network connectivity
         try {
           const startTime = Date.now()
-          await fetch('/api/livekit-token', { method: 'HEAD' })
+          await fetch(tokenUrl, { 
+            method: 'OPTIONS',
+            headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY }
+          })
           results.checks.apiResponseTime = Date.now() - startTime
-        } catch (error) {
+        } catch {
           results.checks.apiConnectivity = false
         }
 

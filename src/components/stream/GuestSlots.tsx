@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Room } from 'livekit-client'
 import GuestSlot from './GuestSlot'
-import EntranceChatPanel from './EntranceChatPanel'
 import { toast } from 'sonner'
 
 interface GuestSlotsProps {
   room: Room | null
   isHost: boolean
-  streamId?: string
 }
 
-export default function GuestSlots({ room, isHost, streamId }: GuestSlotsProps) {
+export default function GuestSlots({ room, isHost }: GuestSlotsProps) {
   const [participants, setParticipants] = useState<Array<{ participant: any; id: string }>>([])
 
   useEffect(() => {

@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
         })
 
         if (testResponse.ok) {
-          const responseData = await testResponse.json().catch(() => null)
+          await testResponse.json().catch(() => null)
           console.log(`[PaymentsStatus ${requestId}] ✅ Square API connection successful`)
           apiOk = true
           details = 'Square API connection successful'

@@ -29,7 +29,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose }: UserSea
         
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('id, username, avatar_url')
+          .select('id, username, avatar_url, rgb_username_expires_at')
           .ilike('username', `${searchQuery}%`)
           .limit(20)
           .order('created_at', { ascending: false })
@@ -52,7 +52,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose }: UserSea
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url')
+        .select('id, username, avatar_url, rgb_username_expires_at')
         .limit(50)
         .order('created_at', { ascending: false })
 
@@ -97,6 +97,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose }: UserSea
           <ClickableUsername
             username={user.username}
             userId={user.id}
+            profile={user}
             className="text-white hover:text-purple-400"
           />
         </div>

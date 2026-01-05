@@ -64,6 +64,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const apiSecret = process.env.LIVEKIT_API_SECRET;
     const livekitUrl = process.env.LIVEKIT_URL;
 
+    console.log("[livekit-token] using LiveKit URL:", livekitUrl);
+
+    console.log("[livekit-token] LIVEKIT CONFIG CHECK", { 
+      livekitUrl, 
+      apiKeyPrefix: apiKey?.slice(0, 6), 
+    });
+
     console.log('[livekit-token] 🔧 Environment check:', {
       hasApiKey: !!apiKey,
       hasApiSecret: !!apiSecret,

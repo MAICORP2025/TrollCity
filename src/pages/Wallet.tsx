@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useAuthStore } from "../lib/store";
-import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { Wallet as WalletIcon, Coins, DollarSign, RefreshCw, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
-import { getTransactionHistory, refreshUserBalance, logCoinAction } from "../lib/coinUtils";
+import { getTransactionHistory, logCoinAction } from "../lib/coinUtils";
 import { toast } from "sonner";
 
 interface CoinTx {
@@ -90,7 +89,7 @@ export default function Wallet() {
         loadWalletData()
       ]);
       toast.success('Wallet refreshed');
-    } catch (error: any) {
+    } catch {
       toast.error('Failed to refresh wallet');
     } finally {
       setRefreshing(false);

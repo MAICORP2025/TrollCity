@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { toast } from 'sonner'
-import { Calendar, Clock, User, Plus, Trash2, CheckCircle } from 'lucide-react'
+import { Calendar, Clock, Plus, Trash2, CheckCircle } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
 import { useAuthStore } from '../../../lib/store'
 
@@ -10,6 +10,8 @@ interface Officer {
   username: string
   email?: string
   is_troll_officer: boolean
+  role?: string
+  is_admin?: boolean
 }
 
 interface ScheduleSlot {
@@ -33,7 +35,7 @@ export default function CreateSchedulePanel() {
   const [loading, setLoading] = useState(false)
   const [loadingSchedules, setLoadingSchedules] = useState(true)
 
-  const canViewEmails = profile?.role === 'admin' || (profile as any)?.is_admin === true
+  const canViewEmails = profile?.role === 'admin' || profile?.is_admin === true
 
   // Auto-generate state
   const [autoStartDate, setAutoStartDate] = useState('')
@@ -42,7 +44,7 @@ export default function CreateSchedulePanel() {
   const [autoEndTime, setAutoEndTime] = useState('17:00')
 
   // Load all troll officers (exclude admins - they don't need shifts)
-  const loadOfficers = async () => {
+  const loadOfficers = React.useCallback(async () => {
     try {
       const selectFields = canViewEmails
         ? 'id, username, email, is_troll_officer, is_lead_officer, role, is_admin'
@@ -60,19 +62,19 @@ export default function CreateSchedulePanel() {
       if (error) throw error
 
       // Filter out any admins that might have slipped through
-      const filteredOfficers = (data as any)?.filter((o: any) => 
+      const filteredOfficers = (data as unknown as Officer[])?.filter((o) => 
         o.role !== 'admin' && !o.is_admin
       ) || []
 
       setOfficers(filteredOfficers)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading officers:', err)
       toast.error('Failed to load officers')
     }
-  }
+  }, [canViewEmails])
 
   // Load all schedules
-  const loadSchedules = async () => {
+  const loadSchedules = React.useCallback(async () => {
     setLoadingSchedules(true)
     try {
       const { data, error } = await supabase
@@ -98,7 +100,7 @@ export default function CreateSchedulePanel() {
     } finally {
       setLoadingSchedules(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadOfficers()
@@ -123,7 +125,7 @@ export default function CreateSchedulePanel() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [loadOfficers, loadSchedules])
 
   // Default autoStartDate to today once
   useEffect(() => {

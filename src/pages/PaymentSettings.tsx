@@ -1,10 +1,10 @@
 // src/pages/PaymentSettings.tsx
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import api, { API_ENDPOINTS } from '../lib/api'
+import api from '../lib/api'
 
 type Method = {
   id: string
@@ -26,7 +26,7 @@ export default function PaymentSettings() {
   const cardRef = useRef<any>(null)
   const attachedRef = useRef(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!profile) return
     setLoading(true)
     const { data, error } = await supabase
@@ -38,7 +38,7 @@ export default function PaymentSettings() {
     if (error) toast.error(error.message)
     setMethods(data || [])
     setLoading(false)
-  }
+  }, [profile])
 
   useEffect(() => { 
     load()
@@ -61,7 +61,7 @@ export default function PaymentSettings() {
         void supabase.removeChannel(channel)
       }
     }
-  }, [profile?.id])
+  }, [profile?.id, load])
 
   // Attach ONLY ONE Square card input
   useEffect(() => {
@@ -216,7 +216,7 @@ export default function PaymentSettings() {
       toast.success('Payment method removed')
       // refresh from server to be safe
       await load()
-    } catch (e) {
+    } catch {
       setMethods(backup)
       toast.error('Remove failed')
     }

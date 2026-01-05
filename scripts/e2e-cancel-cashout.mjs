@@ -24,7 +24,7 @@ async function run() {
     console.log('Creating test user:', testEmail)
 
     // Create user via admin
-    const { data: adminUsers, error: listErr } = await adminClient.auth.admin.listUsers()
+    const { error: listErr } = await adminClient.auth.admin.listUsers()
     if (listErr) throw listErr
 
     // Create user

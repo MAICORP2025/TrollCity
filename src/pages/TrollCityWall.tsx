@@ -12,7 +12,7 @@ import CreatePostModal from '../components/trollWall/CreatePostModal'
 import ClickableUsername from '../components/ClickableUsername'
 
 export default function TrollCityWall() {
-  const { user, profile } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
   const [posts, setPosts] = useState<WallPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -276,11 +276,17 @@ export default function TrollCityWall() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <ClickableUsername
-                        username={post.username || 'Unknown'}
-                        userId={post.user_id}
-                        className="font-semibold text-white hover:text-purple-400"
-                      />
+                      {post.username ? (
+                        <ClickableUsername
+                          username={post.username}
+                          userId={post.user_id}
+                          className="font-semibold text-white hover:text-purple-400"
+                        />
+                      ) : (
+                        <span className="font-semibold text-gray-500">
+                          Deleted User
+                        </span>
+                      )}
                       {post.is_admin && (
                         <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded">
                           ADMIN

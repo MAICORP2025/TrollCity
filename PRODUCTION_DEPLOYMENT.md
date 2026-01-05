@@ -72,8 +72,9 @@ Login to Supabase Dashboard (trollcity2025@gmail.com):
    SQUARE_ENVIRONMENT=production
    SQUARE_APPLICATION_ID=sq0idp-CrLUQ0nBsGw514BdmRCKcw
    SQUARE_LOCATION_ID=LC50JZXVG8F0M
-   AGORA_APP_ID=7b95b64b0e154f7ab931e2abf000e694
-   AGORA_APP_CERTIFICATE=[from .env]
+   LIVEKIT_API_KEY=your_api_key
+   LIVEKIT_API_SECRET=your_api_secret
+   LIVEKIT_URL=wss://your-project.livekit.cloud
    ```
 
 4. **Deploy**
@@ -128,6 +129,10 @@ vercel --prod
    - Test wheel spin
    - Test coin purchase
    - Verify insurance packages
+
+4. **LiveKit Tokens**
+   - Start test stream
+   - Verify RTC token generated
 
 ### Step 4: Enable Production Access
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { Bell, X, Dot, AlertTriangle, CheckCircle, Video, Gift, User, MessageCircle } from 'lucide-react'
@@ -20,9 +20,31 @@ export default function Notifications() {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
 
+  const loadNotifications = useCallback(async () => {
+    if (!profile) return
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        setNotifications([])
+      } else {
+        setNotifications((data || []) as Notification[])
+      }
+    } catch {
+      setNotifications([])
+    } finally {
+      setLoading(false)
+    }
+  }, [profile])
+
   useEffect(() => {
     loadNotifications()
-  }, [profile?.id])
+  }, [loadNotifications])
 
   useEffect(() => {
     if (!profile) return
@@ -50,29 +72,7 @@ export default function Notifications() {
       )
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
-  }, [profile?.id])
-
-  const loadNotifications = async () => {
-    if (!profile) return
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', profile.id)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        setNotifications([])
-      } else {
-        setNotifications((data || []) as Notification[])
-      }
-    } catch {
-      setNotifications([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [profile])
 
   const markAllAsRead = async () => {
     try {

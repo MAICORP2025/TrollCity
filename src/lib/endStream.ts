@@ -114,7 +114,7 @@ export async function endStream(streamId: string, room: Room | null) {
       if (error && !error.message.includes('does not exist')) {
         console.warn('Error removing live viewers:', error)
       }
-    } catch (viewerError) {
+    } catch {
       // Table might not exist, that's okay
       console.log('live_viewers table may not exist, skipping cleanup')
     }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
-import { DollarSign, CreditCard, Clock, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { DollarSign, CreditCard, Clock, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 
 interface PayoutStats {
   total_earned: number;
@@ -17,7 +17,7 @@ interface PayoutRequestProps {
 }
 
 const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
-  const { user, profile } = useAuthStore();
+  const { user } = useAuthStore();
   const [stats, setStats] = useState<PayoutStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
@@ -25,14 +25,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   const [requestAmount, setRequestAmount] = useState<number>(0);
   const [showRequestForm, setShowRequestForm] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      loadPayoutStats();
-      loadPaypalEmail();
-    }
-  }, [user]);
-
-  const loadPayoutStats = async () => {
+  const loadPayoutStats = React.useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_available_payout_balance', {
         p_user_id: user!.id
@@ -48,9 +41,9 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  const loadPaypalEmail = async () => {
+  const loadPaypalEmail = React.useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -63,7 +56,14 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     } catch (error) {
       console.error('Error loading PayPal email:', error);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadPayoutStats();
+      loadPaypalEmail();
+    }
+  }, [user, loadPayoutStats, loadPaypalEmail]);
 
   const savePaypalEmail = async () => {
     if (!paypalEmail || !paypalEmail.includes('@')) {

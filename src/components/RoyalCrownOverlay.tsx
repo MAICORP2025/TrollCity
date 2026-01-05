@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { Crown, Sparkles } from 'lucide-react'
 import RoyalCoronationAnimation from './RoyalCoronationAnimation'
 
 interface RoyalCrownOverlayProps {
-  streamId: string
   isAdminStream: boolean
   participants: any[]
 }
@@ -17,7 +16,6 @@ interface RoyalFamilyMember {
 }
 
 export default function RoyalCrownOverlay({
-  streamId,
   isAdminStream,
   participants
 }: RoyalCrownOverlayProps) {
@@ -31,16 +29,7 @@ export default function RoyalCrownOverlay({
   } | null>(null)
   const [previousMemberId, setPreviousMemberId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!isAdminStream) return
-
-    loadRoyalFamilyStatus()
-    // Check for updates every 30 seconds
-    const interval = setInterval(loadRoyalFamilyStatus, 30000)
-    return () => clearInterval(interval)
-  }, [isAdminStream])
-
-  const loadRoyalFamilyStatus = async () => {
+  const loadRoyalFamilyStatus = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_royal_family_status')
 
@@ -104,7 +93,14 @@ export default function RoyalCrownOverlay({
     } catch (error) {
       console.error('Error loading royal family status:', error)
     }
-  }
+  }, [previousMemberId])
+
+  useEffect(() => {
+    if (!isAdminStream) return
+    loadRoyalFamilyStatus()
+    const interval = setInterval(loadRoyalFamilyStatus, 30000)
+    return () => clearInterval(interval)
+  }, [isAdminStream, loadRoyalFamilyStatus])
 
   // Handle coronation animation completion
   const handleCoronationComplete = () => {

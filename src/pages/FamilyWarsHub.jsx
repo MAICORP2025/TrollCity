@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import {
-  Sword, Shield, Trophy, Clock, Users,
-  Target, Zap, Crown, AlertTriangle
+  Sword, Clock, Target
 } from 'lucide-react'
 
 const FamilyWarsHub = () => {
-  const { user, profile } = useAuthStore()
+  const { user } = useAuthStore()
   const [family, setFamily] = useState(null)
   const [memberRole, setMemberRole] = useState('member')
   const [currentWar, setCurrentWar] = useState(null)
@@ -18,13 +17,7 @@ const FamilyWarsHub = () => {
   const [loading, setLoading] = useState(true)
   const [creatingWar, setCreatingWar] = useState(false)
 
-  useEffect(() => {
-    if (user) {
-      loadWarData()
-    }
-  }, [user])
-
-  const loadWarData = async () => {
+  const loadWarData = useCallback(async () => {
     setLoading(true)
     try {
       // Get user's family
@@ -111,7 +104,13 @@ const FamilyWarsHub = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      loadWarData()
+    }
+  }, [user, loadWarData])
 
   const createWar = async (opponentFamilyId, durationHours = 2) => {
     if (!family || memberRole === 'member') {

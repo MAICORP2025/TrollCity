@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { Shield, CheckCircle, XCircle, Award } from 'lucide-react'
@@ -23,11 +23,8 @@ export default function OfficerTrainingProgress() {
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ total: 0, correct: 0, points: 0, accuracy: 0 })
 
-  useEffect(() => {
-    if (user) loadSessions()
-  }, [user])
-
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
+    if (!user) return
     setLoading(true)
     try {
       const { data, error } = await supabase
@@ -56,7 +53,11 @@ export default function OfficerTrainingProgress() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) loadSessions()
+  }, [user, loadSessions])
 
   if (loading) {
     return <div className="p-6 text-white text-center">Loading...</div>

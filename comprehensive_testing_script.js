@@ -6,7 +6,7 @@
 // ===================================================
 
 import { createClient } from '@supabase/supabase-js'
-import { toast } from 'sonner'
+// import { toast } from 'sonner'
 
 // Configuration
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'your_supabase_url'
@@ -47,16 +47,16 @@ function logInfo(message) {
   console.log(`ℹ️  ${message}`)
 }
 
-function logError(message) {
-  console.error(`🚨 ${message}`)
-}
+// function logError(message) {
+//   console.error(`🚨 ${message}`)
+// }
 
 // Test functions
 async function testDatabaseConnection() {
   logInfo('Testing database connection...')
   
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('user_profiles')
       .select('count')
       .limit(1)
@@ -134,7 +134,7 @@ async function testRiskTables() {
   
   try {
     // Test user_risk_profile table
-    const { data: riskProfiles, error: riskError } = await supabase
+    const { error: riskError } = await supabase
       .from('user_risk_profile')
       .select('*')
       .limit(1)
@@ -142,7 +142,7 @@ async function testRiskTables() {
     if (riskError) throw riskError
     
     // Test risk_events table
-    const { data: riskEvents, error: eventsError } = await supabase
+    const { error: eventsError } = await supabase
       .from('risk_events')
       .select('*')
       .limit(1)
@@ -163,7 +163,7 @@ async function testBroadcasterEarnings() {
   logInfo('Testing broadcaster earnings table...')
   
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('broadcaster_earnings')
       .select('*')
       .limit(1)
@@ -222,7 +222,7 @@ async function testCoinEconomy() {
     if (transError) throw transError
     
     // Test wheel spins table
-    const { data: spins, error: spinsError } = await supabase
+    const { error: spinsError } = await supabase
       .from('wheel_spins')
       .select('*')
       .limit(1)
@@ -282,7 +282,7 @@ async function testOfficerSystem() {
   
   try {
     // Check if officer tables exist
-    const { data: actions, error: actionsError } = await supabase
+    const { error: actionsError } = await supabase
       .from('officer_actions')
       .select('*')
       .limit(1)
@@ -291,7 +291,7 @@ async function testOfficerSystem() {
       throw actionsError
     }
     
-    const { data: earnings, error: earningsError } = await supabase
+    const { error: earningsError } = await supabase
       .from('officer_earnings')
       .select('*')
       .limit(1)

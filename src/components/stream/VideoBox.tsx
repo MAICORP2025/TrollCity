@@ -1,156 +1,106 @@
-import { useEffect, useRef, useState } from 'react'
-import {
-  Participant,
-  TrackPublication,
-  Track,
-  RemoteTrack,
-} from 'livekit-client'
-import { Mic, MicOff, Crown, Gift } from 'lucide-react'
-import { UserProfile } from '../../lib/supabase'
-import { UserBadge } from '../UserBadge'
+import React, { useEffect, useRef } from 'react'
+import { Participant, Track } from 'livekit-client'
+import { Gift } from 'lucide-react'
 
 export interface StreamParticipant {
-  participant: Participant | null
-  userProfile: UserProfile | null
   userId: string
-  role?: 'host' | 'opponent' | 'guest'
+  role: 'host' | 'opponent' | 'guest'
+  userProfile?: {
+    username: string
+    avatar_url?: string
+    rgb_username_expires_at?: string
+  }
+  identity?: string
+  // Optional LiveKit participant reference if available
+  lkParticipant?: Participant
 }
 
 interface VideoBoxProps {
-  participant: StreamParticipant | null
-  size: 'full' | 'medium' | 'small'
+  participant: StreamParticipant | Participant | null
+  size?: 'full' | 'small' | 'medium'
   label?: string
   isHost?: boolean
   onGiftSend?: (targetId: string) => void
-  showBadges?: boolean
 }
 
-export default function VideoBox({
-  participant,
-  size,
-  label,
-  isHost = false,
-  onGiftSend,
-  showBadges = true,
+export default function VideoBox({ 
+  participant, 
+  size: _size = 'medium', 
+  label, 
+  isHost, 
+  onGiftSend 
 }: VideoBoxProps) {
-  const videoRef = useRef<HTMLDivElement>(null)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [audioEnabled, setAudioEnabled] = useState(true)
-
-  const livekitParticipant = participant?.participant
-  const userProfile = participant?.userProfile
-  const userId = participant?.userId || ''
-  const displayLabel = label || userProfile?.username || 'Unknown'
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    if (!livekitParticipant || !videoRef.current) {
-      // Clear container if no participant
-      if (videoRef.current) {
-        videoRef.current.innerHTML = ''
+    const videoElement = videoRef.current
+    if (!participant || !videoElement) return
+
+    let track: Track | undefined
+
+    // Check if it's a LiveKit Participant
+    if ('getTrackPublication' in participant) {
+      const p = participant as Participant
+      const pub = p.getTrackPublication(Track.Source.Camera)
+      if (pub?.track) {
+        track = pub.track
       }
-      return
+    } 
+    // Check if it's our custom StreamParticipant with a linked LiveKit participant
+    else if ('lkParticipant' in participant && participant.lkParticipant) {
+      const p = participant.lkParticipant
+      const pub = p.getTrackPublication(Track.Source.Camera)
+      if (pub?.track) {
+        track = pub.track
+      }
     }
 
-    const container = videoRef.current
-    container.innerHTML = ''
-
-    const publications = Array.from(
-      livekitParticipant.trackPublications.values()
-    ) as TrackPublication[]
-
-    const videoPub = publications.find(
-      (pub) => pub.track && pub.track.kind === 'video'
-    )
-
-    const videoTrack = videoPub?.track || null
-
-    if (videoTrack) {
-      const videoElement = videoTrack.attach()
-      if (videoElement instanceof HTMLVideoElement) {
-        videoElement.className = 'w-full h-full object-cover'
-        videoElement.autoplay = true
-        videoElement.playsInline = true
-        if (livekitParticipant.isLocal) videoElement.muted = true
-      }
-      container.appendChild(videoElement)
-    }
-
-    // Check if audio is enabled
-    const audioPub = publications.find(
-      (pub) => pub.kind === 'audio'
-    )
-    setAudioEnabled(audioPub?.isEnabled ?? false)
-
-    // Monitor audio level for speaking indicator
-    let checkInterval: NodeJS.Timeout | null = null
-    if (audioPub?.track) {
-      checkInterval = setInterval(() => {
-        setIsSpeaking(audioPub.isEnabled && audioPub.isSubscribed)
-      }, 100)
+    if (track) {
+      track.attach(videoElement)
     }
 
     return () => {
-      if (checkInterval) clearInterval(checkInterval)
-      videoTrack?.detach()
+      if (track) {
+        track.detach(videoElement)
+      }
     }
-  }, [livekitParticipant])
+  }, [participant])
 
-  const sizeClass =
-    size === 'full'
-      ? 'w-full h-full'
-      : size === 'medium'
-      ? 'w-full h-full'
-      : 'w-[150px] h-[100px]'
+  // Determine display label
+  const displayLabel = label || 
+    (participant && 'userProfile' in participant ? participant.userProfile?.username : 
+     participant && 'identity' in participant ? (participant as Participant).identity : 'Unknown')
 
-  if (!participant) {
-    return (
-      <div
-        className={`relative ${sizeClass} rounded-xl overflow-hidden border border-gray-700 bg-black/50 flex items-center justify-center`}
-      >
-        <div className="text-gray-500 text-sm">No participant</div>
-      </div>
-    )
-  }
+  // Determine RGB status
+  const hasRgbUsername = participant && 'userProfile' in participant && 
+    participant.userProfile?.rgb_username_expires_at && 
+    new Date(participant.userProfile.rgb_username_expires_at) > new Date();
 
   return (
-    <div
-      ref={videoRef}
-      className={`relative ${sizeClass} rounded-xl overflow-hidden border 
-      ${isSpeaking ? 'border-green-400 shadow-[0_0_25px_rgba(0,255,0,0.5)]' : 'border-purple-500'} 
-      bg-black`}
-    >
-      {/* Username with Badge */}
-      <div className="absolute bottom-2 left-2 text-xs bg-black/70 px-2 py-1 rounded-full flex items-center gap-1">
-        <span>{displayLabel}</span>
-        {showBadges && userProfile && <UserBadge profile={userProfile} />}
+    <div className="relative w-full h-full bg-gray-900 overflow-hidden rounded-xl">
+      <video 
+        ref={videoRef} 
+        className="w-full h-full object-cover" 
+        playsInline 
+        autoPlay 
+        muted={isHost} // Mute if it's the local host to avoid echo
+      />
+      
+      {/* Label Overlay */}
+      <div className={`absolute bottom-2 left-2 bg-black/60 text-white px-2 py-1 rounded text-sm backdrop-blur-sm ${hasRgbUsername ? 'rgb-username font-bold' : ''}`}>
+        {displayLabel}
       </div>
 
-      {/* Mic Status */}
-      {livekitParticipant && (
-        <div className="absolute top-2 left-2 p-1 bg-black/50 rounded-full">
-          {audioEnabled ? (
-            <Mic size={14} className="text-green-400" />
-          ) : (
-            <MicOff size={14} className="text-red-400" />
-          )}
-        </div>
-      )}
-
-      {/* Host/Opponent Crown */}
-      {(isHost || participant.role === 'host') && (
-        <div className="absolute top-2 right-2 p-1 bg-yellow-500 rounded-full shadow-lg">
-          <Crown size={14} className="text-white" />
-        </div>
-      )}
-
       {/* Gift Button */}
-      {onGiftSend && userId && (
+      {onGiftSend && participant && (
         <button
-          onClick={() => onGiftSend(userId)}
-          className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 p-2 rounded-full transition-colors"
-          title={`Send gift to ${displayLabel}`}
+          onClick={() => {
+            const id = 'userId' in participant ? participant.userId : (participant as Participant).identity
+            if (id) onGiftSend(id)
+          }}
+          className="absolute bottom-2 right-2 p-2 bg-pink-500 hover:bg-pink-600 rounded-full text-white transition-colors"
         >
-          <Gift size={16} className="text-white" />
+          <Gift className="w-4 h-4" />
         </button>
       )}
     </div>

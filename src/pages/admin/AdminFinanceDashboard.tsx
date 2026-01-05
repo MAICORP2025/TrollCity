@@ -16,25 +16,25 @@ export default function AdminFinanceDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadSummary = async () => {
+  const loadSummary = React.useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const { data, error } = await supabase.from('economy_summary').select('*').single()
       if (error) throw error
       setSummary(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load finance summary:', err)
-      setError(err?.message || 'Unable to load finance data')
+      setError(err instanceof Error ? err.message : 'Unable to load finance data')
       setSummary(null)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadSummary()
-  }, [])
+  }, [loadSummary])
 
   const summaryItems = [
     {
@@ -51,13 +51,13 @@ export default function AdminFinanceDashboard() {
     },
     {
       label: 'Processed Payouts',
-      value: summary ? `$${summary.total_payouts_processed_usd.toLocaleString()}` : '$0',
+      value: summary ? `$${(summary.total_payouts_processed_usd || 0).toLocaleString()}` : '$0',
       color: 'text-green-400',
       bg: 'bg-green-500/10'
     },
     {
       label: 'Pending Payouts',
-      value: summary ? `$${summary.total_pending_payouts_usd.toLocaleString()}` : '$0',
+      value: summary ? `$${(summary.total_pending_payouts_usd || 0).toLocaleString()}` : '$0',
       color: 'text-orange-400',
       bg: 'bg-orange-500/10'
     },

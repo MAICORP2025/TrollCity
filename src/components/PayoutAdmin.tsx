@@ -11,7 +11,6 @@ import {
   Search,
   Filter,
   RefreshCw,
-  Eye,
   Check,
   X,
   Loader2

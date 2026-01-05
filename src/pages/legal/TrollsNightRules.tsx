@@ -1,6 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, FileText, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Shield, AlertTriangle } from 'lucide-react'
 
 export default function TrollsNightRules() {
   const navigate = useNavigate()

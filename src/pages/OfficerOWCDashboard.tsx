@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
@@ -30,12 +30,7 @@ export default function OfficerOWCDashboard() {
   const isAdmin = profile?.is_admin || profile?.role === 'admin' || (user?.email && isAdminEmail(user.email))
   const isOfficer = profile?.is_troll_officer || profile?.role === 'troll_officer'
   
-  useEffect(() => {
-    if (!user || (!isOfficer && !isAdmin)) return
-    loadOWCData()
-  }, [user, profile, isOfficer, isAdmin])
-
-  const loadOWCData = async () => {
+  const loadOWCData = useCallback(async () => {
     if (!user) return
     
     setLoading(true)
@@ -68,7 +63,12 @@ export default function OfficerOWCDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user || (!isOfficer && !isAdmin)) return
+    loadOWCData()
+  }, [user, isOfficer, isAdmin, loadOWCData])
 
   const handleConvert = async () => {
     if (!user || !convertAmount) return

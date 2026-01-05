@@ -59,17 +59,20 @@ const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participant }) => {
     const videoTrack = participant.videoTrack?.track
     const audioTrack = participant.audioTrack?.track
 
-    if (videoTrack && videoRef.current) {
+    const videoEl = videoRef.current
+    const audioEl = audioRef.current
+
+    if (videoTrack && videoEl) {
       try {
-        videoTrack.attach(videoRef.current)
+        videoTrack.attach(videoEl)
       } catch (e) {
         console.warn('Video attach failed:', e)
       }
     }
 
-    if (audioTrack && audioRef.current) {
+    if (audioTrack && audioEl) {
       try {
-        audioTrack.attach(audioRef.current)
+        audioTrack.attach(audioEl)
       } catch (e) {
         console.warn('Audio attach failed:', e)
       }
@@ -77,16 +80,16 @@ const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participant }) => {
 
     return () => {
       try {
-        if (videoTrack && videoRef.current) {
-          videoTrack.detach(videoRef.current)
+        if (videoTrack && videoEl) {
+          videoTrack.detach(videoEl)
         }
       } catch (e) {
         console.warn('Video detach failed:', e)
       }
 
       try {
-        if (audioTrack && audioRef.current) {
-          audioTrack.detach(audioRef.current)
+        if (audioTrack && audioEl) {
+          audioTrack.detach(audioEl)
         }
       } catch (e) {
         console.warn('Audio detach failed:', e)
@@ -240,7 +243,7 @@ export function LiveKitRoomWrapper({
       // allow retry
       didConnectRef.current = false as any
     })
-  }, [autoConnect, roomName, identity, role, allowPublish, connect])
+  }, [autoConnect, roomName, identity, role, effectiveAllowPublish, connect])
 
   /* =======================
       AUTO-PUBLISH
@@ -255,7 +258,7 @@ export function LiveKitRoomWrapper({
      startPublishing().catch((err) => {
        console.error('Auto publish failed:', err)
      })
-   }, [isConnected, effectiveAllowPublish, canAttemptPublish, isAlreadyPublishing])
+   }, [isConnected, effectiveAllowPublish, canAttemptPublish, isAlreadyPublishing, isPublishing, startPublishing])
 
   /* =======================
      STATES

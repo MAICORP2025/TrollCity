@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
@@ -26,13 +26,7 @@ const ReelComments: React.FC<ReelCommentsProps> = ({ postId, isVisible, onClose 
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (isVisible && postId) {
-      loadComments();
-    }
-  }, [isVisible, postId]);
-
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("troll_post_comments")
@@ -48,13 +42,19 @@ const ReelComments: React.FC<ReelCommentsProps> = ({ postId, isVisible, onClose 
         .eq("post_id", postId)
         .order("created_at", { ascending: false })
         .limit(50);
-
+      
       if (error) throw error;
       setComments(data || []);
     } catch (err) {
       console.error("Error loading comments:", err);
     }
-  };
+  }, [postId]);
+
+  useEffect(() => {
+    if (isVisible && postId) {
+      loadComments();
+    }
+  }, [isVisible, postId, loadComments]);
 
   const addComment = async () => {
     if (!user || !profile || !newComment.trim()) return;

@@ -9,14 +9,12 @@ declare namespace Deno {
 // Supabase types
 declare module 'jsr:@supabase/supabase-js@2' {
   export function createClient(url: string, key: string, options?: any): any
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  export interface SupabaseClient {}
+  export type SupabaseClient = object
 }
 
 declare module '@supabase/supabase-js' {
   export function createClient(url: string, key: string, options?: any): any
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  export interface SupabaseClient {}
+  export type SupabaseClient = object
 }
 
 declare module 'livekit-server-sdk' {

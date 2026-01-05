@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../lib/store';
+;
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -8,7 +8,6 @@ import { Loader2, CheckCircle, XCircle, Clock, ArrowLeft, RefreshCw } from 'luci
 import { supabase } from '../supabaseClient';
 
 export function CreatorApplicationStatus() {
-  const { user } = useAuthStore();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);

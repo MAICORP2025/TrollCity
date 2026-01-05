@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Minus, TrendingUp, TrendingDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
@@ -22,12 +22,7 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
   const [loading, setLoading] = useState(false)
   const [targetProfile, setTargetProfile] = useState<any>(null)
 
-  useEffect(() => {
-    setIsAdminUser(isAdmin(user, profile))
-    loadTargetProfile()
-  }, [userId])
-
-  const loadTargetProfile = async () => {
+  const loadTargetProfile = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('user_profiles')
@@ -38,7 +33,12 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
     } catch (err) {
       console.error('Error loading target profile:', err)
     }
-  }
+  }, [userId])
+
+  useEffect(() => {
+    setIsAdminUser(isAdmin(user, profile))
+    loadTargetProfile()
+  }, [userId, user, profile, loadTargetProfile])
 
   const handleGrant = async (type: 'coins' | 'levels') => {
     if (!isAdminUser) {

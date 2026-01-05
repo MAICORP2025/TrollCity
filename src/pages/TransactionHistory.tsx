@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { 
@@ -76,12 +76,7 @@ export default function TransactionHistory() {
     totalFree: 0
   })
 
-  useEffect(() => {
-    if (!user?.id) return
-    loadTransactions()
-  }, [user?.id, filter])
-
-  async function loadTransactions() {
+  const loadTransactions = useCallback(async () => {
     if (!user?.id) return
     
     try {
@@ -124,13 +119,18 @@ export default function TransactionHistory() {
         )
         setStats(calculatedStats)
       }
-    } catch (error: any) {
-      console.error('Failed to load transactions:', error)
+    } catch (err) {
+      console.error('Error loading transactions:', err)
       toast.error('Failed to load transaction history')
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, filter])
+
+  useEffect(() => {
+    if (!user?.id) return
+    loadTransactions()
+  }, [loadTransactions, user?.id])
 
   function formatDate(dateStr: string) {
     const date = new Date(dateStr)

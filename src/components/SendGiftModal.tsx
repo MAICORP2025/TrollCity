@@ -6,7 +6,14 @@ import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { getActiveHolidayTheme } from '../lib/holidayThemes'
 
-import { StreamParticipant } from './stream/VideoBox'
+export interface StreamParticipant {
+  userId: string
+  role: string
+  userProfile?: {
+    username: string
+    avatar_url?: string | null
+  }
+}
 
 interface GiftModalProps {
   isOpen: boolean
@@ -242,7 +249,6 @@ export default function SendGiftModal({
           
           // Determine which coin type to use (prefer paid, fallback to free)
           const usePaid = paidBalance >= gift.coinCost
-          const useFree = !usePaid && freeBalance >= gift.coinCost
           const giftWithType = { ...gift, type: usePaid ? 'paid' : 'free' }
           
           const category = gift.category || 'Common'

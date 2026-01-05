@@ -9,7 +9,6 @@ export default function PayoutSetupPage() {
   const { profile, user } = useAuthStore()
   const navigate = useNavigate()
   const [paypalEmail, setPaypalEmail] = useState('')
-  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {

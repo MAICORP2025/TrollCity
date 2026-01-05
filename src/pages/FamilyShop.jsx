@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import {
-  Award, Crown, Coins, Shield, Star, Zap,
-  Sparkles, Gem, Lock, CheckCircle
+  Coins, Shield, Star, Zap,
+  Sparkles, Gem, CheckCircle, Award
 } from 'lucide-react'
 
 const FamilyShop = () => {
-  const { user, profile } = useAuthStore()
+  const { user } = useAuthStore()
   const [shopItems, setShopItems] = useState([])
   const [familyPurchases, setFamilyPurchases] = useState([])
   const [familyStats, setFamilyStats] = useState(null)
@@ -16,13 +16,7 @@ const FamilyShop = () => {
   const [memberRole, setMemberRole] = useState('member')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (user) {
-      loadShopData()
-    }
-  }, [user])
-
-  const loadShopData = async () => {
+  const loadShopData = useCallback(async () => {
     setLoading(true)
     try {
       // Get user's family membership
@@ -77,7 +71,13 @@ const FamilyShop = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      loadShopData()
+    }
+  }, [user, loadShopData])
 
   const purchaseItem = async (item) => {
     if (!family || !familyStats) return

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
 import { 
-  Eye, Check, X, FileText, User, Building2, 
-  CreditCard, Calendar, MapPin, Filter, RefreshCw 
+  Eye, X, FileText, User, Building2, 
+  Filter, RefreshCw, CreditCard, Check
 } from 'lucide-react'
 
 interface BroadcasterApplication {
@@ -37,19 +37,19 @@ interface BroadcasterApplication {
 }
 
 export default function BroadcasterApplications() {
-  const { profile, user } = useAuthStore()
+  const { user } = useAuthStore()
   const [applications, setApplications] = useState<BroadcasterApplication[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedApp, setSelectedApp] = useState<BroadcasterApplication | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [adminNotes, setAdminNotes] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
-  const [officers, setOfficers] = useState<any[]>([])
-  
-  // Check if user can manage officers (admin or lead officer)
-  const canManageOfficers = profile?.is_admin || profile?.role === 'admin' || profile?.is_lead_officer
 
-  const loadApplications = async () => {
+  const maskSSN = (ssn: string | null) => ssn ? `***-**-${ssn.slice(-4)}` : 'N/A'
+  const maskBankAccount = (acc: string | null) => acc ? `****${acc.slice(-4)}` : 'N/A'
+  const maskRoutingNumber = (num: string | null) => num ? `*****${num.slice(-4)}` : 'N/A'
+
+  const loadApplications = useCallback(async () => {
     setLoading(true)
     try {
       const { data, error } = await supabase
@@ -59,36 +59,16 @@ export default function BroadcasterApplications() {
 
       if (error) throw error
       setApplications(data || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading applications:', error)
       toast.error('Failed to load applications')
     } finally {
       setLoading(false)
     }
-  }
-
-  const fetchApplications = loadApplications
-
-  const loadOfficers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, username, email, is_troll_officer, is_officer_active, role, created_at')
-        .or('is_troll_officer.eq.true,role.eq.troll_officer')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setOfficers(data || [])
-    } catch (error: any) {
-      console.error('Error loading officers:', error)
-    }
-  }
+  }, [])
 
   useEffect(() => {
     loadApplications()
-    if (canManageOfficers) {
-      loadOfficers()
-    }
 
     // Real-time subscription
     const channel = supabase
@@ -101,23 +81,12 @@ export default function BroadcasterApplications() {
       )
       .subscribe()
 
-    const officersChannel = supabase
-      .channel('officers_changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'user_profiles' },
-        () => {
-          if (canManageOfficers) loadOfficers()
-        }
-      )
-      .subscribe()
-
     return () => {
       supabase.removeChannel(channel)
-      supabase.removeChannel(officersChannel)
     }
-  }, [canManageOfficers])
+  }, [loadApplications])
 
-  const handleApprove = async (app: BroadcasterApplication) => {
+  const handleApprove = useCallback(async (app: BroadcasterApplication) => {
     try {
       if (!user) {
         toast.error('You must be logged in')
@@ -153,7 +122,7 @@ export default function BroadcasterApplications() {
       const isOfficerApplication = officerApp?.type === 'troll_officer' || officerApp?.type === 'officer'
 
       // Grant broadcaster status
-      const profileUpdate: any = {
+      const profileUpdate: Record<string, any> = {
         is_broadcaster: true,
         updated_at: new Date().toISOString()
       }
@@ -257,51 +226,14 @@ export default function BroadcasterApplications() {
       setSelectedApp(null)
       setAdminNotes('')
       loadApplications()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Approve error:', error)
-      const errorMsg = error?.message || error?.error || 'Failed to approve application'
+      const errorMsg = error instanceof Error ? error.message : 'Failed to approve application'
       toast.error(errorMsg)
     }
-  }
+  }, [user, loadApplications])
 
-  const handleFireOfficer = async (officerId: string, officerUsername: string) => {
-    if (!user || !canManageOfficers) {
-      toast.error('You do not have permission to fire officers')
-      return
-    }
-
-    const reason = prompt(`Enter reason for firing ${officerUsername}:`)
-    if (!reason || !reason.trim()) {
-      toast.error('Reason is required')
-      return
-    }
-
-    if (!confirm(`Are you sure you want to fire ${officerUsername}? This will downgrade them to a regular user.`)) {
-      return
-    }
-
-    try {
-      const { data, error } = await supabase.rpc('fire_officer', {
-        p_officer_id: officerId,
-        p_fired_by: user.id,
-        p_reason: reason.trim()
-      })
-
-      if (error) throw error
-
-      if (data?.success) {
-        toast.success(`Officer ${officerUsername} has been fired`)
-        loadOfficers()
-      } else {
-        toast.error(data?.error || 'Failed to fire officer')
-      }
-    } catch (error: any) {
-      console.error('Fire officer error:', error)
-      toast.error(error?.message || 'Failed to fire officer')
-    }
-  }
-
-  const handleReject = async (app: BroadcasterApplication) => {
+  const handleReject = useCallback(async (app: BroadcasterApplication) => {
     if (!rejectionReason.trim()) {
       toast.error('Please provide a rejection reason')
       return
@@ -371,12 +303,12 @@ export default function BroadcasterApplications() {
       setRejectionReason('')
       setAdminNotes('')
       loadApplications()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Reject error:', error)
-      const errorMsg = error?.message || error?.error || 'Failed to reject application'
+      const errorMsg = error instanceof Error ? error.message : 'Failed to reject application'
       toast.error(errorMsg)
     }
-  }
+  }, [user, loadApplications, rejectionReason, adminNotes])
 
   const filteredApplications = applications.filter(app => {
     if (statusFilter === 'all') return true
@@ -389,15 +321,8 @@ export default function BroadcasterApplications() {
     rejected: applications.filter(a => a.application_status === 'rejected').length,
   }
 
-  const maskSSN = (ssn: string | null) => {
-    if (!ssn) return 'N/A'
-    return `***-**-${ssn}`
-  }
 
-  const maskBankAccount = (account: string | null) => {
-    if (!account) return 'N/A'
-    return `****${account}`
-  }
+
 
   return (
     <div className="space-y-4">
@@ -438,7 +363,7 @@ export default function BroadcasterApplications() {
         <Filter className="w-4 h-4 text-gray-400" />
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as any)}
+          onChange={(e) => setStatusFilter(e.target.value as 'all' | 'pending' | 'approved' | 'rejected')}
           className="bg-[#0D0D0D] border border-gray-700 rounded-lg px-3 py-1 text-white text-sm"
         >
           <option value="all">All Applications</option>
@@ -659,6 +584,10 @@ export default function BroadcasterApplications() {
                     <p className="text-xs text-gray-500 mt-1">
                       Admins cannot view full bank account numbers.
                     </p>
+                  </div>
+                  <div>
+                    <div className="text-gray-400">Routing Number</div>
+                    <div className="text-white">{maskRoutingNumber(selectedApp.bank_routing_number)}</div>
                   </div>
                 </div>
               </div>

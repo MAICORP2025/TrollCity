@@ -24,7 +24,7 @@ interface ProfitData {
 const ProfitSummary = () => {
   const [summary, setSummary] = useState<ProfitData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [_lastUpdate, setLastUpdate] = useState<Date>(new Date())
 
   const fetchProfitSummary = async () => {
     try {

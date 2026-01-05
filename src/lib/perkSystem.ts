@@ -35,10 +35,10 @@ export const PERK_CONFIG = {
     type: 'cosmetic'
   },
   'perk_rgb_username': {
-    name: 'RGB Username (Permanent)',
+    name: 'RGB Username (24h)',
     duration_minutes: 1440,
-    cost: 420,
-    description: 'Lock in an RGB glow so your name shines everywhere',
+    cost: 5000,
+    description: 'Rainbow username everywhere (24h)',
     type: 'cosmetic'
   },
   'perk_slowmo_chat': {
@@ -215,6 +215,21 @@ export async function purchasePerk(userId: string, perkKey: PerkKey, customOptio
         p_coin_type: 'paid'
       });
       return { success: false, error: 'Failed to activate perk' };
+    }
+
+    // Special handling for RGB Username perk - update user profile directly for efficient querying
+    if (perkKey === 'perk_rgb_username') {
+      const { error: profileUpdateError } = await supabase
+        .from('user_profiles')
+        .update({ rgb_username_expires_at: expiresAt.toISOString() })
+        .eq('id', userId);
+        
+      if (profileUpdateError) {
+        console.error('Failed to update RGB username expiration in profile:', profileUpdateError);
+        // We don't fail the whole transaction here as the perk is technically purchased and active in user_perks
+        // but we should probably log it or try to recover. 
+        // For now, just logging error. Ideally this should be a transaction.
+      }
     }
 
     return {

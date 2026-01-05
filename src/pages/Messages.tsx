@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { MessageSquarePlus } from 'lucide-react'
 import InboxSidebar from './messages/components/InboxSidebar'
 import ChatWindow from './messages/components/ChatWindow'
 import NewMessageModal from './messages/components/NewMessageModal'

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Loader2, CheckCircle, XCircle, Clock, Eye, User, Calendar, FileText } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Clock, Eye, User, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 export function CreatorApplicationsPanel() {

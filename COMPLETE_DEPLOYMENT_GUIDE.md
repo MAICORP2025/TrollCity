@@ -195,8 +195,10 @@ PAYPAL_ENVIRONMENT=sandbox  # or production
 SQUARE_ACCESS_TOKEN=your_square_token
 SQUARE_APPLICATION_ID=your_square_app_id
 SQUARE_LOCATION_ID=your_square_location_id
-AGORA_APP_ID=your_agora_app_id
-AGORA_APP_CERTIFICATE=your_agora_certificate
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+LIVEKIT_URL=wss://your-project.livekit.cloud
+VITE_LIVEKIT_URL=wss://your-project.livekit.cloud
 ```
 
 ---

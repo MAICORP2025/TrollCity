@@ -2,18 +2,9 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
+import { TrollEvent } from '../../types/trollEvents'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import api from '../../lib/api'
-
-interface TrollEvent {
-  id: string
-  stream_id: string
-  event_type: 'red' | 'green'
-  coin_reward: number
-  started_at: string
-  expires_at: string
-}
 
 interface TrollEventOverlayProps {
   streamId: string

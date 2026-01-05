@@ -24,7 +24,7 @@ export function useBattleQueue(onTimerEnd) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isActive, timer, onTimerEnd]);
+  }, [isActive, timer, onTimerEnd, rotateBattle]);
 
   const rotateBattle = useCallback(() => {
     // Stop current streams

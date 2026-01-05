@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { Shield, Users, Skull, Crown, Store, CheckCircle, XCircle } from 'lucide-react'
@@ -8,9 +7,8 @@ import { Shield, Users, Skull, Crown, Store, CheckCircle, XCircle } from 'lucide
 type ApplicationType = 'troll_officer' | 'troll_family' | 'troller' | 'lead_officer' | 'seller' | null
 
 export default function Application() {
-  const { user, profile, refreshProfile } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const navigate = useNavigate()
-  const [selectedType, setSelectedType] = useState<ApplicationType>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {

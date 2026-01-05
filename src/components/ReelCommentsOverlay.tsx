@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
@@ -33,7 +33,7 @@ const ReelCommentsOverlay: React.FC<ReelCommentsOverlayProps> = ({
   const [message, setMessage] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -62,7 +62,7 @@ const ReelCommentsOverlay: React.FC<ReelCommentsOverlayProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [postId]);
 
   useEffect(() => {
     loadComments();
@@ -114,7 +114,7 @@ const ReelCommentsOverlay: React.FC<ReelCommentsOverlayProps> = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [postId]);
+  }, [postId, loadComments]);
 
   const sendComment = async () => {
     if (!user || !profile) {

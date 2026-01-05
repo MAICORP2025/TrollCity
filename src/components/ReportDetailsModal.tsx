@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { ModerationReport, TakeActionPayload } from '../types/moderation'
 import api from '../lib/api'
-import { useAuthStore } from '../lib/store'
 
 interface ReportDetailsModalProps {
   report: ModerationReport
@@ -17,7 +16,6 @@ export default function ReportDetailsModal({
   onClose,
   onActionTaken
 }: ReportDetailsModalProps) {
-  const { profile } = useAuthStore()
   const navigate = useNavigate()
   const [actionType, setActionType] = useState<'warn' | 'suspend_stream' | 'ban_user' | 'reject' | ''>('')
   const [actionReason, setActionReason] = useState('')
@@ -25,7 +23,7 @@ export default function ReportDetailsModal({
   const [banDurationHours, setBanDurationHours] = useState<number | null>(null)
   const [isPermanentBan, setIsPermanentBan] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [showEscalateModal, setShowEscalateModal] = useState(false)
+  // const [showEscalateModal, setShowEscalateModal] = useState(false)
 
   const handleTakeAction = async () => {
     if (!actionType || !actionReason.trim()) {

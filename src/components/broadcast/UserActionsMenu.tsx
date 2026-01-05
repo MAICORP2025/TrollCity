@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Eye, EyeOff, Gift, Shield, Ban, AlertCircle, UserPlus, Gavel } from "lucide-react";
+import { X, Eye, EyeOff, Gift, Ban, AlertCircle, UserPlus, Gavel } from "lucide-react";
 
 interface UserActionMenuProps {
   user: {

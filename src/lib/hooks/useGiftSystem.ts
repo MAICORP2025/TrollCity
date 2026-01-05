@@ -3,7 +3,6 @@ import { supabase } from '../../lib/supabase'
 // Removed progressionEngine import - using direct RPC calls instead
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
-import { applyGiftToBattle } from '../../lib/battleHelpers'
 
 export interface GiftItem {
   id: string

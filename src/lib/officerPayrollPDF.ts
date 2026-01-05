@@ -6,19 +6,16 @@
 // npm install --save-dev @types/jspdf
 
 interface PayrollReport {
-  username: string
-  email: string
-  month: string
-  total_hours: number
-  total_coins: number
-  untroll_coins: number
-  auto_clockouts: number
-  total_shifts: number
+  officerName: string
+  rank: string
+  totalEarned: number
+  payPeriod: string
+  logs: any[]
 }
 
 /**
  * Downloads a PDF payroll report for an officer
- * @param report - The payroll report data from officer_monthly_payroll view
+ * @param report - The payroll report data
  */
 export async function downloadPayrollPDF(report: PayrollReport) {
   try {
@@ -26,8 +23,8 @@ export async function downloadPayrollPDF(report: PayrollReport) {
     const jsPDFModule = await import('jspdf')
     const autoTableModule = await import('jspdf-autotable')
     
-    const jsPDF = jsPDFModule.default || jsPDFModule
-    const autoTable = autoTableModule.default || autoTableModule
+    const jsPDF = (jsPDFModule as any).default || jsPDFModule
+    const autoTable = (autoTableModule as any).default || autoTableModule
     
     const doc = new jsPDF()
 
@@ -37,27 +34,17 @@ export async function downloadPayrollPDF(report: PayrollReport) {
 
     // Officer Information
     doc.setFontSize(12)
-    doc.text(`Officer: ${report.username}`, 14, 35)
-    doc.text(`Email: ${report.email}`, 14, 42)
-    
-    // Format month
-    const monthDate = new Date(report.month)
-    const monthFormatted = monthDate.toLocaleDateString('en-US', { 
-      month: 'long', 
-      year: 'numeric' 
-    })
-    doc.text(`Month: ${monthFormatted}`, 14, 49)
+    doc.text(`Officer: ${report.officerName}`, 14, 35)
+    doc.text(`Rank: ${report.rank}`, 14, 42)
+    doc.text(`Period: ${report.payPeriod}`, 14, 49)
 
     // Payroll Summary Table
     autoTable(doc, {
       startY: 60,
       head: [['Metric', 'Value']],
       body: [
-        ['Total Hours', Number(report.total_hours || 0).toFixed(2)],
-        ['Coins Earned', Number(report.total_coins || 0).toLocaleString()],
-        ['Untroll_coins', Number(report.untroll_coins || 0).toLocaleString()],
-        ['Auto Clock-Outs', report.auto_clockouts?.toString() || '0'],
-        ['Total Shifts', report.total_shifts?.toString() || '0'],
+        ['Total Earned (Coins)', Number(report.totalEarned || 0).toLocaleString()],
+        ['Log Count', report.logs.length.toString()],
       ],
       theme: 'striped',
       headStyles: { fillColor: [66, 139, 202] },
@@ -69,18 +56,10 @@ export async function downloadPayrollPDF(report: PayrollReport) {
     doc.setFontSize(10)
     doc.text('Coin Conversion: 100 coins = $1 USD', 14, finalY + 15)
     
-    const estimatedPayout = (Number(report.total_coins || 0) * 0.01).toFixed(2)
+    const estimatedPayout = (Number(report.totalEarned || 0) * 0.01).toFixed(2)
     doc.setFontSize(12)
     doc.text(`Estimated Payout: $${estimatedPayout}`, 14, finalY + 25)
     
-    if (Number(report.untroll_coins || 0) > 0) {
-      const unpaidPayout = (Number(report.untroll_coins || 0) * 0.01).toFixed(2)
-      doc.setFontSize(10)
-      doc.setTextColor(200, 0, 0)
-      doc.text(`Unpaid Amount: $${unpaidPayout}`, 14, finalY + 35)
-      doc.setTextColor(0, 0, 0) // Reset color
-    }
-
     // Footer
     doc.setFontSize(8)
     doc.setTextColor(128, 128, 128)
@@ -95,7 +74,7 @@ export async function downloadPayrollPDF(report: PayrollReport) {
     )
 
     // Save PDF
-    const filename = `TrollCity_Payroll_${report.username}_${monthDate.getFullYear()}_${String(monthDate.getMonth() + 1).padStart(2, '0')}.pdf`
+    const filename = `TrollCity_Payroll_${report.officerName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
     doc.save(filename)
   } catch (error: any) {
     console.error('[OfficerPayrollPDF] Error generating PDF:', error)

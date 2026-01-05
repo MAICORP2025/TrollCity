@@ -13,4 +13,4 @@ export const EmpireBadge: React.FC<EmpireBadgeProps> = ({ empireRole }) => {
     </span>
   );
 };
-
+// Re-saved to trigger HMR

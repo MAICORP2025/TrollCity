@@ -18,7 +18,7 @@ export default function PayoutHistoryCard() {
         .limit(5)
       if (!error) setRows(data || [])
     })()
-  }, [profile?.id])
+  }, [profile])
 
   return (
     <div className="bg-[#1A1A1F] border border-purple-700/40 rounded-lg p-4 mt-4">

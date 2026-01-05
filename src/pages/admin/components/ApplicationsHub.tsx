@@ -6,17 +6,13 @@ import {
   Shield,
   CheckCircle,
   XCircle,
-  Clock,
   Star,
-  Award,
-  UserCheck,
   RefreshCw
 } from 'lucide-react'
 
 interface ApplicationsHubProps {
   onLoadApplications?: () => void
   applicationsLoading?: boolean
-  applications?: any[]
   onApproveApplication?: (appId: string, userId: string, newRole: string) => void
   onRejectApplication?: (id: string) => void
 }
@@ -24,7 +20,6 @@ interface ApplicationsHubProps {
 export default function ApplicationsHub({
   onLoadApplications,
   applicationsLoading = false,
-  applications = [],
   onApproveApplication,
   onRejectApplication
 }: ApplicationsHubProps) {

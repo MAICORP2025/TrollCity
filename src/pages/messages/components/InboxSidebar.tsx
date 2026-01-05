@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Search, MessageCircle } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
-import ClickableUsername from '../../../components/ClickableUsername'
 
 interface Conversation {
   other_user_id: string
@@ -12,6 +11,7 @@ interface Conversation {
   last_timestamp: string
   unread_count: number
   is_online?: boolean
+  rgb_username_expires_at?: string | null
 }
 
 interface InboxSidebarProps {
@@ -44,7 +44,7 @@ export default function InboxSidebar({
   ]
 
   // Load unread counts
-  const loadUnread = async () => {
+  const loadUnread = useCallback(async () => {
     if (!profile?.id) return
 
     try {
@@ -66,49 +66,9 @@ export default function InboxSidebar({
     } catch (error) {
       console.error('Error loading unread counts:', error)
     }
-  }
+  }, [profile?.id])
 
-  useEffect(() => {
-    if (!profile?.id) return
-    loadConversations()
-    loadUnread()
-
-    // Real-time subscription
-    const channel = supabase
-      .channel('inbox_updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages'
-        },
-        () => {
-          loadConversations()
-          loadUnread()
-        }
-      )
-      .subscribe()
-
-    // New messages channel for unread counts
-    const newMessagesChannel = supabase
-      .channel(`new-messages:${profile.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', table: 'messages', schema: 'public' },
-        () => {
-          loadUnread()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-      supabase.removeChannel(newMessagesChannel)
-    }
-  }, [profile?.id, activeTab])
-
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     if (!profile?.id) return
 
     try {
@@ -179,7 +139,47 @@ export default function InboxSidebar({
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile?.id, activeTab])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    loadConversations()
+    loadUnread()
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('inbox_updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages'
+        },
+        () => {
+          loadConversations()
+          loadUnread()
+        }
+      )
+      .subscribe()
+
+    // New messages channel for unread counts
+    const newMessagesChannel = supabase
+      .channel(`new-messages:${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', table: 'messages', schema: 'public' },
+        () => {
+          loadUnread()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      supabase.removeChannel(newMessagesChannel)
+    }
+  }, [profile?.id, activeTab, loadConversations, loadUnread])
 
   const formatTimeAgo = (timestamp: string) => {
     const now = new Date()
@@ -274,7 +274,7 @@ export default function InboxSidebar({
                 {/* Content */}
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-white text-sm truncate">
+                    <span className={`font-semibold text-sm truncate ${conv.rgb_username_expires_at && new Date(conv.rgb_username_expires_at) > new Date() ? 'rgb-username' : 'text-white'}`}>
                       @{conv.other_username}
                     </span>
                     <span className="text-xs text-[#74f7ff] ml-2 flex-shrink-0">
@@ -300,4 +300,3 @@ export default function InboxSidebar({
     </div>
   )
 }
-

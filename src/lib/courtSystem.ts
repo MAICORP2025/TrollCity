@@ -79,7 +79,7 @@ export const courtSystem = {
     return session;
   },
 
-  joinCourt(sessionId: string, userId: string, username: string) {
+  joinCourt(sessionId: string, userId: string, _username: string) {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
@@ -156,14 +156,14 @@ export const courtSystem = {
     return this.trackKickCount(userId) >= 3;
   },
 
-  appealWarrant(userId: string, username: string, reason: string): boolean {
+  appealWarrant(userId: string, _username: string, _reason: string): boolean {
     const warrant = this.warrants.get(userId);
     if (!warrant || !warrant.allowedToAppeal) return false;
 
     return true;
   },
 
-  approveAppeal(userId: string, username: string) {
+  approveAppeal(userId: string, _username: string) {
     const warrant = this.warrants.get(userId);
     if (warrant) {
       warrant.ipBanned = false;

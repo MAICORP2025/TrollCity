@@ -1,6 +1,8 @@
 // Fix for profile view flash of old settings
 // Add to Profile.tsx component
 
+import React from 'react';
+
 export const useProfileData = (userId: string | undefined, supabase: any) => {
   const [profileData, setProfileData] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);

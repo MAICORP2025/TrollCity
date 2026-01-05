@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export const useSupabaseQuery = <T>(
@@ -10,7 +10,10 @@ export const useSupabaseQuery = <T>(
 ): T[] => {
   const [data, setData] = useState<T[]>([]);
 
-  const loadData = async () => {
+  const filtersKey = JSON.stringify(filters);
+  const orderByKey = JSON.stringify(orderBy);
+
+  const loadData = useCallback(async () => {
     let query = supabase.from(table).select(select);
 
     if (filters) {
@@ -43,7 +46,8 @@ export const useSupabaseQuery = <T>(
 
     const { data: result } = await query;
     setData((result as T[]) || []);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, select, filtersKey, orderByKey, limit]);
 
   useEffect(() => {
     loadData();
@@ -56,7 +60,7 @@ export const useSupabaseQuery = <T>(
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [table, select, JSON.stringify(filters), JSON.stringify(orderBy), limit]);
+  }, [loadData, table]);
 
   return data;
 };

@@ -9,7 +9,7 @@ interface ChatInputProps {
 
 export default function ChatInput({ streamId }: ChatInputProps) {
   const [message, setMessage] = useState('')
-  const { user, profile } = useAuthStore()
+  const { user } = useAuthStore()
 
   async function sendMessage() {
     if (!message.trim() || !streamId || !user) return

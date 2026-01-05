@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { isPerkActive, getActivePerks, purchasePerk, canAffordPerk, type PerkKey } from '../lib/perkSystem';
 import { useAuthStore } from '../lib/store';
 
@@ -48,7 +48,7 @@ export function useActivePerks() {
   const [activePerks, setActivePerks] = useState<Array<{perk_id: PerkKey, expires_at: string}>>([]);
   const [loading, setLoading] = useState(true);
 
-  const refreshPerks = async () => {
+  const refreshPerks = useCallback(async () => {
     if (!user?.id) {
       setActivePerks([]);
       setLoading(false);
@@ -65,7 +65,7 @@ export function useActivePerks() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     refreshPerks();
@@ -73,7 +73,7 @@ export function useActivePerks() {
     // Refresh every minute to check for expirations
     const interval = setInterval(refreshPerks, 60000);
     return () => clearInterval(interval);
-  }, [user?.id]);
+  }, [refreshPerks]);
 
   return { activePerks, loading, refreshPerks };
 }

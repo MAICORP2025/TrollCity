@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   userOwnsEntranceEffect,
   getUserOwnedEffects,
@@ -52,7 +52,7 @@ export function useOwnedEntranceEffects() {
   const [ownedEffects, setOwnedEffects] = useState<EntranceEffectKey[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refreshOwnedEffects = async () => {
+  const refreshOwnedEffects = useCallback(async () => {
     if (!user?.id) {
       setOwnedEffects([]);
       setLoading(false);
@@ -69,11 +69,11 @@ export function useOwnedEntranceEffects() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     refreshOwnedEffects();
-  }, [user?.id]);
+  }, [refreshOwnedEffects]);
 
   return { ownedEffects, loading, refreshOwnedEffects };
 }
@@ -86,7 +86,7 @@ export function useActiveEntranceEffect() {
   const [activeEffect, setActiveEffect] = useState<EntranceEffectKey | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshActiveEffect = async () => {
+  const refreshActiveEffect = useCallback(async () => {
     if (!user?.id) {
       setActiveEffect(null);
       setLoading(false);
@@ -103,11 +103,11 @@ export function useActiveEntranceEffect() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     refreshActiveEffect();
-  }, [user?.id]);
+  }, [refreshActiveEffect]);
 
   return { activeEffect, loading, refreshActiveEffect };
 }

@@ -23,7 +23,6 @@ const PaymentCallback = () => {
 
       const params = new URLSearchParams(location.search)
       const orderId = params.get('token') || params.get('orderId') || params.get('paymentId')
-      const payerId = params.get('PayerID')
       const userId = params.get('userId')
       
       // Verify user matches if userId is provided

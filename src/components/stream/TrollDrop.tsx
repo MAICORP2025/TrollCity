@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrollDrop as TrollDropType, TrollColor } from '../../types/trollDrop';
+import { TrollDrop as TrollDropType } from '../../types/trollDrop';
 import { addCoins, deductCoins } from '../../lib/coinTransactions';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -16,13 +16,11 @@ export default function TrollDrop({ drop, onExpire, onClaimSuccess }: TrollDropP
   const [isAnimating, setIsAnimating] = useState(true);
   const [claimed, setClaimed] = useState(drop.claimed);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(drop.expiresAt - Date.now());
 
   useEffect(() => {
     const interval = setInterval(() => {
       const remaining = drop.expiresAt - Date.now();
-      setTimeLeft(Math.max(0, remaining));
-      
+
       if (remaining <= 0) {
         clearInterval(interval);
         setIsAnimating(false);

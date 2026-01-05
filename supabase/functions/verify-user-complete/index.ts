@@ -84,7 +84,7 @@ serve(async (req) => {
     }
 
     // Verify user via RPC
-    const { data: result, error: verifyError } = await supabase.rpc("verify_user", {
+    const { data: _result, error: verifyError } = await supabase.rpc("verify_user", {
       p_user_id: userId,
       p_payment_method: "paypal",
       p_amount: 5.00,

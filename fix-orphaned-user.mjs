@@ -14,11 +14,11 @@ async function fixOrphanedUser() {
   console.log('\n=== FIXING ORPHANED USER ===\n')
 
   const userId = '8d8b6a4f-d990-495f-8a2b-3de5ee7739c9'
-  const email = 'udryve2025@gmail.com'
+  // const email = 'udryve2025@gmail.com'
   const username = 'udryve2025'
 
   // Create profile for the orphaned auth user
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('user_profiles')
     .insert([{
       id: userId,
@@ -27,7 +27,6 @@ async function fixOrphanedUser() {
       bio: '',
       role: 'user',
       tier: 'Bronze',
-      troll_coins: 0,
       troll_coins: 0,
       total_earned_coins: 0,
       total_spent_coins: 0,

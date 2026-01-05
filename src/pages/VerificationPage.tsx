@@ -59,13 +59,13 @@ export default function VerificationPage() {
         return
       }
 
-      const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
-        'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
+      const edgeFunctionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
       const response = await fetch(`${edgeFunctionsUrl}/verify-user-paypal`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           'Content-Type': 'application/json'
         }
       })

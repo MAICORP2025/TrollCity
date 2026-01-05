@@ -3,7 +3,6 @@ import { useAuthStore } from '../lib/store'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import api from '../lib/api'
-import { recordAppEvent } from '../lib/progressionEngine'
 import { toast } from 'sonner'
 
 const AccountPaymentLinkedSuccess = () => {
@@ -30,8 +29,7 @@ const AccountPaymentLinkedSuccess = () => {
     const run = async () => {
       try {
         // 🔹 Save regular card
-        const { data: sessionData } = await supabase.auth.getSession()
-        const authToken = sessionData?.session?.access_token || ''
+        const { data: _sessionData } = await supabase.auth.getSession()
         if (p === 'card') {
           const saved = await api.post('/payments', { userId: user.id, nonce: token })
           if (!saved.success) throw new Error(saved?.error || 'Failed to save card')

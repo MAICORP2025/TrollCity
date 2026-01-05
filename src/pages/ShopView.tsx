@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
@@ -17,17 +17,7 @@ export default function ShopView() {
   const [showReceipt, setShowReceipt] = useState(false)
   const [purchaseReceipt, setPurchaseReceipt] = useState<any>(null)
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth', { replace: true })
-      return
-    }
-    if (id) {
-      loadShop()
-    }
-  }, [user, id, navigate])
-
-  const loadShop = async () => {
+  const loadShop = useCallback(async () => {
     if (!id) return
 
     setLoading(true)
@@ -66,7 +56,17 @@ export default function ShopView() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id, navigate])
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth', { replace: true })
+      return
+    }
+    if (id) {
+      loadShop()
+    }
+  }, [user, id, navigate, loadShop])
 
   const purchaseItem = async (item: any) => {
     if (!user) return

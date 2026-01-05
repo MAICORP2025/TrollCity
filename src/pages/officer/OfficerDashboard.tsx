@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
@@ -32,13 +32,8 @@ export default function OfficerDashboard() {
   const [loading, setLoading] = useState(true)
   const [togglingGhost, setTogglingGhost] = useState(false)
 
-  useEffect(() => {
-    if (user) {
-      loadData()
-    }
-  }, [user])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (!user) return
     setLoading(true)
     try {
       // Load active assignment
@@ -76,7 +71,13 @@ export default function OfficerDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      loadData()
+    }
+  }, [user, loadData])
 
   const toggleGhostMode = async () => {
     if (!user || !profile) return

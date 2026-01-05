@@ -1,10 +1,8 @@
 import React from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { recordAppEvent, recordEvent } from '../lib/progressionEngine'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import IdVerifyClient from '../components/IdVerifyClient'
 
 const ProfileSetup = () => {
   const navigate = useNavigate()

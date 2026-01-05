@@ -1,5 +1,6 @@
-import { X } from "lucide-react";
+import { X, Coins } from "lucide-react";
 import { useState } from "react";
+import { useAuthStore } from "../../lib/store";
 
 const gifts = [
   { id: 0, name: "Troll", emoji: "🧟", coins: 1, rarity: 'troll' },
@@ -11,7 +12,7 @@ const gifts = [
   { id: 6, name: "Rocket", emoji: "🚀", coins: 5000, rarity: 'legendary' },
 ];
 
-export default function GiftModal({ onClose, onSendGift }) {
+export default function GiftModal({ onClose, onSendGift, recipientName }) {
   const [selectedGift, setSelectedGift] = useState(null);
   const [quantity, setQuantity] = useState(1);
 
@@ -27,7 +28,16 @@ export default function GiftModal({ onClose, onSendGift }) {
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full purple-neon max-h-96 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">SELECT GIFT</h2>
+          <div>
+            <h2 className="text-xl font-bold">SELECT GIFT</h2>
+            {recipientName && <p className="text-xs text-purple-400">for {recipientName}</p>}
+          </div>
+          <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-full border border-yellow-500/30">
+            <Coins className="w-4 h-4 text-yellow-400" />
+            <span className="text-yellow-400 font-bold text-sm">
+              {profile?.troll_coins?.toLocaleString() || 0}
+            </span>
+          </div>
           <button
             onClick={onClose}
             className="p-1 hover:bg-gray-800 rounded transition-colors"

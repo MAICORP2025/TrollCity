@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../../../lib/supabase'
+import { toast } from 'sonner'
 import {
   FileText,
   Users,
@@ -7,14 +9,13 @@ import {
   Shield,
   Download,
   Search,
-  Filter,
   Eye,
   CheckCircle,
-  AlertTriangle,
   Globe,
   UserCheck,
   RefreshCw,
   BarChart3,
+  AlertTriangle,
   XCircle
 } from 'lucide-react'
 
@@ -31,59 +32,68 @@ interface AgreementRecord {
 }
 
 interface AgreementsManagementProps {
-  onLoadAgreements?: () => void
+  onLoadAgreements: (agreements: AgreementRecord[]) => void
   agreementsLoading?: boolean
-  agreements?: AgreementRecord[]
 }
 
 export default function AgreementsManagement({
   onLoadAgreements,
-  agreementsLoading = false,
-  agreements = []
+  agreementsLoading = false
 }: AgreementsManagementProps) {
+  const [agreements, setAgreements] = useState<AgreementRecord[]>([])
   const [activeTab, setActiveTab] = useState<string>('overview')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [selectedAgreement, setSelectedAgreement] = useState<AgreementRecord | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  // Mock data for demonstration
-  const mockAgreements: AgreementRecord[] = [
-    {
-      id: '1',
-      user_id: 'user-1',
-      username: 'TrollMaster2025',
-      email: 'trollmaster@example.com',
-      accepted_at: new Date(Date.now() - 86400000).toISOString(),
-      ip_address: '192.168.1.100',
-      user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      agreement_version: '1.0',
-      terms_accepted: true
-    },
-    {
-      id: '2',
-      user_id: 'user-2',
-      username: 'CityGuardian',
-      email: 'guardian@example.com',
-      accepted_at: new Date(Date.now() - 172800000).toISOString(),
-      ip_address: '10.0.0.50',
-      user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      agreement_version: '1.0',
-      terms_accepted: true
-    },
-    {
-      id: '3',
-      user_id: 'user-3',
-      username: 'StreamQueen',
-      email: 'queen@example.com',
-      accepted_at: new Date(Date.now() - 259200000).toISOString(),
-      ip_address: '172.16.0.25',
-      user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15',
-      agreement_version: '1.0',
-      terms_accepted: true
+  const trollCityAgreement = `TROLL CITY USER AGREEMENT & COMMUNITY CODE
+
+1. ACCEPTANCE OF TERMS
+By accessing or using Troll City, you agree to be bound by these Terms of Service and our Community Code of Conduct.
+
+2. USER CONDUCT
+Users must conduct themselves in a manner consistent with the satirical and humorous nature of Troll City. While trolling is part of the experience, harassment, hate speech, and illegal activities are strictly prohibited.
+
+3. VIRTUAL CURRENCY (TROLL COINS)
+Troll Coins are a virtual currency with no real-world value outside the Troll City platform. They cannot be exchanged for fiat currency except through authorized payout channels for approved creators.
+
+4. CONTENT OWNERSHIP
+You retain ownership of content you create, but grant Troll City a license to display and distribute it.
+
+5. TERMINATION
+We reserve the right to suspend or terminate accounts that violate these terms.
+
+Last Updated: January 1, 2026`
+
+  const fetchAgreements = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('user_agreements')
+        .select('*')
+        .order('accepted_at', { ascending: false })
+
+      if (error) throw error
+
+      if (data) {
+        const formattedAgreements = data as AgreementRecord[]
+        setAgreements(formattedAgreements)
+        onLoadAgreements(formattedAgreements)
+      }
+    } catch (error) {
+      console.error('Error fetching agreements:', error)
+      toast.error('Failed to load agreements')
+    } finally {
+      setIsLoading(false)
     }
-  ]
+  }, [onLoadAgreements])
 
-  const filteredAgreements = mockAgreements.filter(agreement => {
+  useEffect(() => {
+    fetchAgreements()
+  }, [fetchAgreements])
+
+  const filteredAgreements = agreements.filter(agreement => {
     const matchesSearch = agreement.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          agreement.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          agreement.user_id.toLowerCase().includes(searchTerm.toLowerCase())
@@ -95,369 +105,27 @@ export default function AgreementsManagement({
     return matchesSearch && matchesFilter
   })
 
+  // Calculate stats from real data
+  const total = agreements.length
+  const acceptedToday = agreements.filter(a => {
+    const today = new Date()
+    const acceptedDate = new Date(a.accepted_at)
+    return acceptedDate.toDateString() === today.toDateString()
+  }).length
+  const acceptedThisWeek = agreements.filter(a => {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    return new Date(a.accepted_at) > weekAgo
+  }).length
+  
+  const acceptedCount = agreements.filter(a => a.terms_accepted).length
+  const complianceRateVal = total > 0 ? ((acceptedCount / total) * 100).toFixed(1) + '%' : '0%'
+
   const stats = {
-    totalAgreements: mockAgreements.length,
-    acceptedToday: mockAgreements.filter(a => {
-      const today = new Date()
-      const acceptedDate = new Date(a.accepted_at)
-      return acceptedDate.toDateString() === today.toDateString()
-    }).length,
-    acceptedThisWeek: mockAgreements.filter(a => {
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      return new Date(a.accepted_at) > weekAgo
-    }).length,
-    complianceRate: '98.5%'
+    totalAgreements: total,
+    acceptedToday,
+    acceptedThisWeek,
+    complianceRate: complianceRateVal
   }
-
-  const trollCityAgreement = `
-TROLL CITY USER AGREEMENT & COMMUNITY CODE (Legally Binding)
-
-Effective Date: Upon user acceptance
-Applies to: All users, broadcasters, officers, lead officers, and admins
-
-1. ACCEPTANCE OF TERMS
-
-By creating an account or using Troll City, you agree to follow all rules, penalties, streaming policies, financial terms, and legal procedures described in this Agreement.
-Violation of this Agreement may result in penalties including warnings, fines, suspensions, bans, or permanent account/IP removal.
-
-Failure to accept this Agreement will prevent use of Troll City services.
-
-A copy of your acceptance will be stored in:
-
-Admin Dashboard → Agreements
-
-Lead Troll Officer HQ → Agreements
-
-2. USER ROLES & RESPONSIBILITIES
-2.1 Regular Users / Viewers
-
-You may:
-
-Watch streams
-
-Chat (unless muted)
-
-Send free or troll_coins
-
-Join events
-
-File complaints or disputes
-
-Apply for Broadcaster or Officer roles
-
-You may NOT:
-
-Issue warnings, citations, or moderation actions
-
-Harass, scam, impersonate, or violate Troll City rules
-
-2.2 Broadcasters
-
-You may:
-
-Go live
-
-Earn coins and gifts
-
-Host paid rooms if Level ≥ 20
-
-Participate in battles and the Tromody Show
-
-You agree to:
-
-Follow all streaming rules
-
-Avoid scamming or blocking users who gift you
-
-Uphold Troll City's code of conduct
-
-Attend court if summoned for complaints
-
-2.3 Troll Officers
-
-You may:
-
-Issue warnings and citations
-
-Remove or mute users
-
-Summon users to court
-
-Monitor livestreams
-
-Enforce community standards
-
-You agree to:
-
-Use power responsibly
-
-Follow Officer training and code of ethics
-
-Attend court hearings you issue
-
-Never act out of bias or revenge
-
-Misconduct may result in removal or banning.
-
-2.4 Lead Troll Officers
-
-You may:
-
-Approve new officers
-
-Assign court dates
-
-Review citations
-
-Manage escalated cases
-
-Lock/unlock livestream boxes
-
-Manage officer performance
-
-You must:
-
-Maintain neutrality
-
-Follow reporting guidelines
-
-Ensure fairness
-
-2.5 Admins
-
-Admins may:
-
-Ban accounts or IPs
-
-Override any officer decision
-
-Remove users from streams
-
-Reassign or reschedule court
-
-Control system-wide moderation
-
-Access Court MP4 recordings
-
-Admins uphold system integrity and final authority.
-
-3. PROHIBITED CONDUCT
-
-The following is strictly forbidden:
-
-Harassment, bullying, or abusive behavior
-
-Hate speech of any kind
-
-Gifting scams or coin manipulation
-
-Blocking users after receiving paid gifts
-
-Attempts to defraud broadcasters or viewers
-
-Streaming harmful, explicit, or illegal content
-
-Underage interactions or minor endangerment
-
-Ban evasion or identity fraud
-
-Disrupting court or livestream sessions
-
-Encouraging violence or self-harm
-
-Violations may result in immediate bans or legal enforcement.
-
-4. TROLL CITY COURT SYSTEM
-4.1 Court Attendance
-
-If summoned to Troll City Court, you agree to:
-
-Appear at the scheduled time
-
-Swear to follow Troll City Code
-
-Accept the ruling determined by Officer or Admin Judges
-
-Failure to appear results in:
-
-Automatic 3-day ban
-
-Active warrant
-
-Account hold until rescheduled
-
-Repeated failure may result in permanent ban.
-
-4.2 Citations
-
-Citations may be issued for:
-
-Harassment
-
-Spam
-
-Disruptive behavior
-
-Gifting scams
-
-Blocking gift senders
-
-Hate speech
-
-Ban evasion
-
-Court contempt
-
-Citations may include:
-
-Warnings
-
-Temporary mutes
-
-Paid coin fines
-
-Free coin penalties
-
-Suspensions
-
-Permanent bans
-
-5. FINANCIAL TERMS
-5.1 Coin Purchases
-
-Purchasing Troll Coins is non-refundable except as required by law.
-Coin packages include:
-
-1,000 – $4.49
-
-5,000 – $20.99
-
-12,000 – $49.99
-
-25,000 – $99.99
-
-60,000 – $239.99
-
-120,000 – $459.99
-
-You agree that all coin transactions are final.
-
-5.2 Coin Cashouts
-
-Cashout tiers:
-
-12,000 → $25
-
-30,000 → $70
-
-60,000 → $150
-
-120,000 → $325
-
-250,000 → $700
-
-Cashouts may be delayed for security or verification.
-
-5.3 Court Fines
-
-Court fines may include:
-
-Paid Coin fines → Go to Troll City App Revenue
-
-Free Coin deductions → Removed from user wallet
-
-Users must pay fines within the assigned time frame.
-
-5.4 Marketplace Purchases
-
-Purchasing items with Troll Coins is binding.
-Creators receive earnings minus platform fee.
-
-6. STREAMING & CONTENT RULES
-
-All content must be:
-
-Legal
-
-Non-violent
-
-Non-harassing
-
-Non-sexual with minors
-
-In compliance with Troll City standards
-
-Admins and Officers may remove you at any time.
-
-7. CHAT RULES
-
-You agree not to:
-
-Spam
-
-Harass
-
-Threaten
-
-Impersonate
-
-Promote violence
-
-Use hate speech
-
-Violations result in mutes, citations, or bans.
-
-8. ACCOUNT ENFORCEMENT
-
-You acknowledge:
-
-Admins have final authority
-
-Lead Officers and Officers may take immediate action
-
-All enforcement actions are logged
-
-Severe violations may result in permanent IP ban
-
-9. USER RIGHTS
-
-You maintain the right to:
-
-Appeal citations
-
-Request court hearings
-
-File disputes
-
-Report officers for misconduct
-
-Access your own data
-
-10. AGREEMENT STORAGE
-
-Upon accepting this Agreement:
-
-✔ A digital signature entry is logged in your user profile
-✔ A copy is stored in the Admin Dashboard → Agreements
-✔ A copy is stored in Lead Troll Officer HQ → Agreements
-✔ Timestamp, IP, and user ID are recorded
-
-11. FINAL ACKNOWLEDGEMENT
-
-By selecting "I Agree" you confirm:
-
-You have read this Agreement
-
-You understand the rules and penalties
-
-You consent to Troll City Court jurisdiction
-
-You accept all financial and platform terms
-
-You agree to follow Troll City Code at all times
-
-Failure to comply may result in account action, fines, or removal.
-`
 
   const tabs = [
     {
@@ -533,13 +201,13 @@ Failure to comply may result in account action, fines, or removal.
 
       {/* Recent Agreements */}
       <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-lg p-4">
-        <h4 className="font-medium text-white mb-4 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-cyan-400" />
-          Recent Agreement Acceptances
-        </h4>
-        <div className="space-y-3">
-          {mockAgreements.slice(0, 5).map((agreement) => (
-            <div key={agreement.id} className="flex items-center justify-between p-3 bg-[#141414] rounded-lg">
+            <h4 className="font-medium text-white mb-4 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-cyan-400" />
+              Recent Agreement Acceptances
+            </h4>
+            <div className="space-y-3">
+              {agreements.slice(0, 5).map((agreement) => (
+                <div key={agreement.id} className="flex items-center justify-between p-3 bg-[#141414] rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center">
                   <UserCheck className="w-4 h-4 text-green-400" />
@@ -592,11 +260,11 @@ Failure to comply may result in account action, fines, or removal.
         </select>
 
         <button
-          onClick={onLoadAgreements}
-          disabled={agreementsLoading}
+          onClick={fetchAgreements}
+          disabled={agreementsLoading || isLoading}
           className="flex items-center gap-2 px-4 py-2 bg-[#2C2C2C] hover:bg-[#3C3C3C] rounded-lg transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${agreementsLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${agreementsLoading || isLoading ? 'animate-spin' : ''}`} />
           <span className="text-sm">Refresh</span>
         </button>
 

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import { toast } from 'sonner'
-import { CheckCircle2, XCircle, AlertTriangle, RefreshCw, FileText, Database, Zap, Key } from 'lucide-react'
+import { CheckCircle2, XCircle, AlertTriangle, RefreshCw, FileText } from 'lucide-react'
 
 interface TestResult {
   name: string
@@ -27,7 +26,7 @@ export default function TestDiagnostics() {
 
     // Test 1: Supabase Connection
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('user_profiles')
         .select('id')
         .limit(1)
@@ -196,7 +195,7 @@ export default function TestDiagnostics() {
     ]
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('user_profiles')
         .select(requiredColumns.join(','))
         .limit(1)

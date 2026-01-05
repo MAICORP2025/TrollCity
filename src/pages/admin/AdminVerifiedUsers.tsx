@@ -53,8 +53,8 @@ export default function AdminVerifiedUsers() {
         .order('verification_date', { ascending: false })
 
       if (error) throw error
-      setUsers((data as any) || [])
-    } catch (error: any) {
+      setUsers((data as unknown as VerifiedUser[]) || [])
+    } catch (error: unknown) {
       console.error('Error loading users:', error)
       toast.error('Failed to load verified users')
     } finally {

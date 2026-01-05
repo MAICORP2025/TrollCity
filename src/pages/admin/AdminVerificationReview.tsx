@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
@@ -33,25 +33,7 @@ export default function AdminVerificationReview() {
 
   const isAdmin = profile?.role === 'admin' || profile?.is_admin
 
-  useEffect(() => {
-    if (!isAdmin) return
-
-    loadRequests()
-
-    const channel = supabase
-      .channel('verification_requests_changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'verification_requests' },
-        () => loadRequests()
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [isAdmin, filter])
-
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     setLoading(true)
     try {
       let query = supabase
@@ -69,14 +51,32 @@ export default function AdminVerificationReview() {
       const { data, error } = await query
 
       if (error) throw error
-      setRequests((data as any) || [])
-    } catch (error: any) {
+      setRequests((data as unknown as VerificationRequest[]) || [])
+    } catch (error: unknown) {
       console.error('Error loading requests:', error)
       toast.error('Failed to load verification requests')
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    if (!isAdmin) return
+
+    loadRequests()
+
+    const channel = supabase
+      .channel('verification_requests_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'verification_requests' },
+        () => loadRequests()
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [isAdmin, filter, loadRequests])
 
   const handleApprove = async (requestId: string, userId: string, grantInfluencer: boolean = false) => {
     setProcessing(requestId)
@@ -128,7 +128,7 @@ export default function AdminVerificationReview() {
       toast.success('Verification denied')
       setSelectedRequest(null)
       loadRequests()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error denying:', error)
       toast.error('Failed to deny verification')
     } finally {

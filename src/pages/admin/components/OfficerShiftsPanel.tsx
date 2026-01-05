@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { toast } from 'sonner'
-import { Clock, User, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
 
 interface ShiftLog {
@@ -27,7 +27,7 @@ export default function OfficerShiftsPanel() {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all')
   const [now, setNow] = useState(Date.now())
 
-  const loadShifts = async () => {
+  const loadShifts = useCallback(async () => {
     setLoading(true)
     try {
       let query = supabase
@@ -77,7 +77,7 @@ export default function OfficerShiftsPanel() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
 
   useEffect(() => {
     loadShifts()
@@ -101,7 +101,7 @@ export default function OfficerShiftsPanel() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [filter])
+  }, [filter, loadShifts])
 
   // Real-time ticking for active shifts
   useEffect(() => {

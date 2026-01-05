@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { X, MessageSquare, Video, Sword, Users, Trophy } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { X, MessageSquare, Video, Sword, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
@@ -26,7 +26,7 @@ export default function CreatePostModal({
   const [availableStreams, setAvailableStreams] = useState<any[]>([])
 
   // Load user's streams for stream_announce type
-  const loadStreams = async () => {
+  const loadStreams = useCallback(async () => {
     if (!user?.id || postType !== 'stream_announce') return
 
     try {
@@ -46,14 +46,14 @@ export default function CreatePostModal({
     } catch (err) {
       console.error('Error loading streams:', err)
     }
-  }
+  }, [user?.id, postType])
 
   // Load streams when post type changes to stream_announce
   useEffect(() => {
     if (postType === 'stream_announce' && user?.id) {
       loadStreams()
     }
-  }, [postType, user?.id])
+  }, [postType, user?.id, loadStreams])
 
   if (!isOpen) return null
 

@@ -39,6 +39,7 @@ export function useUnifiedLiveKit(config: UnifiedLiveKitConfig) {
     disconnect,
     config.roomName,
     config.user?.id,
+    config.user,
     config.allowPublish,
   ])
 

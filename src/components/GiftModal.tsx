@@ -23,7 +23,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
   recipientId,
   recipientUsername
 }) => {
-  const { user, profile } = useAuthStore();
+  const { user } = useAuthStore();
   const [amount, setAmount] = useState<number>(100);
   const [loading, setLoading] = useState(false);
   const [luckyResult, setLuckyResult] = useState<LuckyResult | null>(null);
@@ -33,28 +33,28 @@ const GiftModal: React.FC<GiftModalProps> = ({
   const presetAmounts = [50, 100, 200, 500, 1000, 2500, 5000];
 
   useEffect(() => {
+    const loadBalance = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('troll_coins, trollmonds')
+          .eq('id', user!.id)
+          .single();
+  
+        if (error) throw error;
+        setBalance({
+          troll_coins: data.troll_coins || 0,
+          trollmonds: data.trollmonds || 0
+        });
+      } catch (error) {
+        console.error('Error loading balance:', error);
+      }
+    };
+
     if (isOpen && user) {
       loadBalance();
     }
   }, [isOpen, user]);
-
-  const loadBalance = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('troll_coins, trollmonds')
-        .eq('id', user!.id)
-        .single();
-
-      if (error) throw error;
-      setBalance({
-        troll_coins: data.troll_coins || 0,
-        trollmonds: data.trollmonds || 0
-      });
-    } catch (error) {
-      console.error('Error loading balance:', error);
-    }
-  };
 
   const sendGift = async () => {
     if (!user || amount <= 0 || amount > balance.troll_coins) {
@@ -121,16 +121,16 @@ const GiftModal: React.FC<GiftModalProps> = ({
     setAmount(100);
   };
 
-  const getMultiplierColor = (mult: number) => {
-    switch (mult) {
-      case 100: return 'text-yellow-400';
-      case 200: return 'text-orange-400';
-      case 500: return 'text-pink-400';
-      case 1000: return 'text-cyan-400';
-      case 10000: return 'text-red-400';
-      default: return 'text-yellow-400';
-    }
-  };
+  // const getMultiplierColor = (mult: number) => {
+  //   switch (mult) {
+  //     case 100: return 'text-yellow-400';
+  //     case 200: return 'text-orange-400';
+  //     case 500: return 'text-pink-400';
+  //     case 1000: return 'text-cyan-400';
+  //     case 10000: return 'text-red-400';
+  //     default: return 'text-yellow-400';
+  //   }
+  // };
 
   if (!isOpen) return null;
 

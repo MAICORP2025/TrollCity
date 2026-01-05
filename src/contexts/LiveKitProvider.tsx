@@ -135,6 +135,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
           allowPublish,
           autoPublish: allowPublish ? options.autoPublish : false,
           preflightStream: allowPublish ? options.preflightStream : undefined,
+          url: options.url,
 
           onConnected: () => {
             setIsConnected(true);
@@ -342,7 +343,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
         setError(null);
       }
     }
-  }, []); // Only run on mount
+  }, [error]); // Check error state on mount/change
 
   useEffect(() => {
     return () => {

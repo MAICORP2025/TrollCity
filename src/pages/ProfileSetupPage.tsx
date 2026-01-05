@@ -7,7 +7,7 @@ import ProfileSetupModal from '../components/ProfileSetupModal';
 
 const ProfileSetupPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, profile, setProfile } = useAuthStore();
+  const { user, setProfile } = useAuthStore();
   const [loading, setLoading] = useState(false);
 
   const handleProfileSubmit = async (username: string, bio?: string, gender?: string) => {

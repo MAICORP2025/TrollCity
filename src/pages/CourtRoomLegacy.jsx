@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
 import { LiveKitRoomWrapper } from '../components/LiveKitVideoGrid';
 import { useLiveKitSession } from '../hooks/useLiveKitSession';
 import { toast } from "sonner";
-import { Scale, Gavel, Users, Mic, MicOff, UserX, FileText, MessageSquare, Crown, AlertTriangle, CheckCircle, XCircle, Shield, Eye } from 'lucide-react';
+import { Scale, FileText, AlertTriangle, Gavel, MicOff, UserX, CheckCircle, XCircle, Users } from 'lucide-react';
 import AuthorityPanel from '../components/AuthorityPanel';
 import RequireRole from "../components/RequireRole";
 
@@ -150,10 +150,7 @@ export default function CourtRoom() {
   const {
     joinAndPublish,
     isConnected,
-    isConnecting,
-    toggleMicrophone,
     localParticipant,
-    error,
     participants,
   } = useLiveKitSession({
     roomName: routeSessionId || 'troll-court',
@@ -166,7 +163,6 @@ export default function CourtRoom() {
   const [courtSession, setCourtSession] = useState(null);
   const [userDocket, setUserDocket] = useState(null);
   const [roomName, setRoomName] = useState(null);
-  const isAudience = userRole === 'audience';
   const canParticipate = isOfficial;
 
   // Join LiveKit once room is known
@@ -182,9 +178,9 @@ export default function CourtRoom() {
       return;
     }
     initCourtroom();
-  }, [user, routeSessionId]);
+  }, [user, routeSessionId, initCourtroom]);
 
-  const initCourtroom = async () => {
+  const initCourtroom = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -248,7 +244,7 @@ export default function CourtRoom() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, routeSessionId, navigate]);
 
   // Auto-start court when authority enters
   useEffect(() => {
@@ -269,8 +265,8 @@ export default function CourtRoom() {
           setCourtSession(updatedSession?.[0] || courtSession);
           toast.success("Court session started");
         }
-      } catch (error) {
-        console.error('Error auto-starting court:', error);
+      } catch (err) {
+        console.error('Error auto-starting court:', err);
       }
     };
 

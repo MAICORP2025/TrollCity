@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import { Gift, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 
 interface GiftPopupProps {
   sender: string
