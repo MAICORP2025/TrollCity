@@ -15,7 +15,7 @@ interface CoinPackage {
 }
 
 const coinPackages: CoinPackage[] = [
-  { id: 1, coins: 100, price: "$0.99", emoji: "🪙" },
+  { id: 1, coins: 100, price: "$0.75", emoji: "🪙" },
   { id: 2, coins: 500, price: "$4.99", emoji: "💰", popular: true },
   { id: 3, coins: 1000, price: "$9.99", emoji: "💎" },
   { id: 4, coins: 2500, price: "$19.99", emoji: "👑" },

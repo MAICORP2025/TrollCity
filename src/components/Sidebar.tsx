@@ -267,13 +267,6 @@ export default function Sidebar() {
           active={isActive('/wall')}
           collapsed={isSidebarCollapsed}
         />
-        <MenuLink
-          to="/treeds"
-          icon={<Video className="w-5 h-5 text-purple-400" />}
-          label="Treeds"
-          active={isActive('/treeds')}
-          collapsed={isSidebarCollapsed}
-        />
 
         <button
           onClick={() => navigate('/troll-court')}

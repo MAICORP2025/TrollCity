@@ -177,11 +177,29 @@ export default function TrollCityWall() {
     }
 
     try {
-      const { error } = await supabase
+      // Check if user is staff (admin, troll_officer, lead_officer)
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('role, is_admin, is_troll_officer, is_lead_officer')
+        .eq('id', user.id)
+        .single()
+
+      const isStaff = userProfile?.is_admin || 
+                     userProfile?.is_troll_officer || 
+                     userProfile?.is_lead_officer || 
+                     userProfile?.role === 'admin'
+
+      let query = supabase
         .from('troll_wall_posts')
         .delete()
         .eq('id', postId)
-        .eq('user_id', user.id) // Ensure user can only delete their own posts
+
+      // If not staff, enforce ownership check
+      if (!isStaff) {
+        query = query.eq('user_id', user.id)
+      }
+
+      const { error } = await query
 
       if (error) throw error
 
@@ -195,6 +213,8 @@ export default function TrollCityWall() {
 
   const getPostIcon = (type: WallPostType) => {
     switch (type) {
+      case 'video':
+        return <Video className="w-4 h-4 text-pink-400" />
       case 'stream_announce':
         return <Video className="w-4 h-4 text-red-400" />
       case 'battle_result':
@@ -311,7 +331,7 @@ export default function TrollCityWall() {
                       {new Date(post.created_at).toLocaleString()}
                     </p>
                   </div>
-                  {user && post.user_id === user.id && (
+                  {user && (post.user_id === user.id || post.is_admin || post.is_troll_officer) && (
                     <button
                       type="button"
                       onClick={() => handleDelete(post.id)}
@@ -361,6 +381,14 @@ export default function TrollCityWall() {
                   >
                     <Heart className={`w-5 h-5 ${post.user_liked ? 'fill-current' : ''}`} />
                     <span>{post.likes || 0}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleShare(post)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-blue-400 transition-colors"
+                  >
+                    <Share2 className="w-5 h-5" />
+                    <span>Share</span>
                   </button>
                 </div>
               </div>

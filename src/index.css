@@ -397,6 +397,25 @@ body::before {
   box-shadow: 0 0 20px rgba(255, 0, 128, 0.3);
 }
 
+@keyframes driveCar {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(200vw); }
+}
+
+.animate-driveCar {
+  animation: driveCar 3s linear forwards;
+}
+
+@keyframes diamondRain {
+  0% { transform: translateY(-100px); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+.animate-diamondRain {
+  animation: diamondRain 2s linear infinite;
+}
+
 .shadow-troll-glow {
   box-shadow: 0 0 30px rgba(0, 255, 136, 0.2), 0 0 60px rgba(255, 0, 128, 0.1);
 }

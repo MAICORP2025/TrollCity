@@ -113,7 +113,6 @@ import FamilyProfilePage from "./pages/FamilyProfilePage";
 import FamilyWarsPage from "./pages/FamilyWarsPage";
 import FamilyChatPage from "./pages/FamilyChatPage";
 import TransactionHistory from "./pages/TransactionHistory";
-import ReelFeed from "./pages/ReelFeed";
 import CashoutPage from "./pages/CashoutPage";
 import FamilyApplication from "./pages/FamilyApplication";
 import OfficerApplication from "./pages/OfficerApplication";
@@ -480,8 +479,6 @@ function AppContent() {
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/wall" element={<TrollCityWall />} />
-                  <Route path="/treeds" element={<ReelFeed />} />
-                  <Route path="/reels" element={<Navigate to="/treeds" replace />} />
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />

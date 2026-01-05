@@ -2,6 +2,7 @@
 
 export type WallPostType =
   | 'text'
+  | 'video'
   | 'stream_announce'
   | 'battle_result'
   | 'family_announce'

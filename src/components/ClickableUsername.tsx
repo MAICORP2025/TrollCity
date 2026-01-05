@@ -1,51 +1,62 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import VerifiedBadge from './VerifiedBadge'
 import OfficerTierBadge from './OfficerTierBadge'
 import { EmpireBadge } from './EmpireBadge'
 import { useNavigate } from 'react-router-dom'
-import { Shield, Crown, Skull, Star } from 'lucide-react'
+import { Shield, Crown, Skull, Star, MoreVertical, UserX, Ban, MicOff, User } from 'lucide-react'
 import { applyGlowingUsername } from '../lib/perkEffects'
+import { useAuthStore } from '../lib/store'
+import { toast } from 'sonner'
+import { supabase } from '../lib/supabase'
 
 interface ClickableUsernameProps {
-   username: string
-   className?: string
-   prefix?: string // like '@'
-   onClick?: () => void
-   profile?: {
-     id?: string
-     is_troll_officer?: boolean
-     is_admin?: boolean
-     is_troller?: boolean
-     is_og_user?: boolean
-     is_verified?: boolean
-     officer_level?: number
-     troller_level?: number
-     role?: string
-     empire_role?: string | null
-     rgb_username_expires_at?: string
-   }
-   royalTitle?: {
-     title_type: string
-     is_active: boolean
-   } | null
-   userId?: string // Optional: if provided, will fetch profile
- }
+  username: string
+  className?: string
+  prefix?: string // like '@'
+  onClick?: () => void
+  profile?: {
+    id?: string
+    is_troll_officer?: boolean
+    is_admin?: boolean
+    is_troller?: boolean
+    is_og_user?: boolean
+    is_verified?: boolean
+    officer_level?: number
+    troller_level?: number
+    role?: string
+    empire_role?: string | null
+    rgb_username_expires_at?: string
+  }
+  royalTitle?: {
+    title_type: string
+    is_active: boolean
+  } | null
+  userId?: string // Optional: if provided, will fetch profile
+}
 
 const ClickableUsername: React.FC<ClickableUsernameProps> = ({
-   username,
-   className = '',
-   prefix = '@',
-   onClick,
-   profile,
-   royalTitle,
-   userId
- }) => {
+  username,
+  className = '',
+  prefix = '@',
+  onClick,
+  profile,
+  royalTitle,
+  userId
+}) => {
   const navigate = useNavigate()
   const usernameRef = useRef<HTMLSpanElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const { user: currentUser, profile: currentUserProfile } = useAuthStore()
+  
   const targetUserId = userId || profile?.id
-
-  // Use profile prop directly (parent component should fetch and pass it)
   const userProfile = profile
+
+  // Check if current user is staff
+  const isStaff = currentUserProfile?.is_admin || 
+                 currentUserProfile?.is_troll_officer || 
+                 currentUserProfile?.role === 'admin' || 
+                 currentUserProfile?.role === 'troll_officer'
 
   useEffect(() => {
     if (!targetUserId || !usernameRef.current) {
@@ -62,6 +73,18 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
       applyGlowingUsername(el, targetUserId)
     }
   }, [targetUserId, username, userProfile])
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) && !usernameRef.current?.contains(event.target as Node)) {
+        setShowMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
   
   // Determine admin, officer, and troller status from profile
   const isAdmin = userProfile?.is_admin || userProfile?.role === 'admin'
@@ -89,6 +112,107 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     3: 'Supreme Troll',
   }
 
+  const handleAction = async (action: string) => {
+    setShowMenu(false)
+    
+    if (!targetUserId) {
+        toast.error('Cannot perform action: User ID not found')
+        return
+    }
+
+    switch (action) {
+        case 'view_profile':
+            if (userId) {
+                navigate(`/profile/id/${userId}`)
+            } else {
+                navigate(`/profile/${encodeURIComponent(username)}`)
+            }
+            break
+            
+        case 'ban': {
+            const reason = window.prompt('Reason for ban (optional):', 'Violation of rules')
+            if (reason === null) return // Cancelled
+            
+            const durationStr = window.prompt('Ban duration in minutes (0 for permanent):', '1440') // Default 24h
+            if (durationStr === null) return
+            
+            const minutes = parseInt(durationStr)
+            if (isNaN(minutes)) {
+                toast.error('Invalid duration')
+                return
+            }
+
+            try {
+                const { error } = await supabase.rpc('ban_user', {
+                    target: targetUserId,
+                    minutes: minutes,
+                    reason: reason || 'No reason provided'
+                })
+
+                if (error) throw error
+                toast.success(`User ${username} has been banned`)
+            } catch (err: any) {
+                console.error('Error banning user:', err)
+                toast.error(err.message || 'Failed to ban user')
+            }
+            break
+        }
+
+        case 'mute': {
+            const reason = window.prompt('Reason for mute (optional):', 'Spamming')
+            if (reason === null) return // Cancelled
+            
+            const durationStr = window.prompt('Mute duration in minutes:', '60') // Default 1h
+            if (durationStr === null) return
+            
+            const minutes = parseInt(durationStr)
+            if (isNaN(minutes)) {
+                toast.error('Invalid duration')
+                return
+            }
+
+            try {
+                const { error } = await supabase.rpc('mute_user', {
+                    target: targetUserId,
+                    minutes: minutes,
+                    reason: reason || 'No reason provided'
+                })
+
+                if (error) throw error
+                toast.success(`User ${username} has been muted`)
+            } catch (err: any) {
+                console.error('Error muting user:', err)
+                // Fallback if RPC doesn't exist yet or fails
+                toast.error(err.message || 'Failed to mute user')
+            }
+            break
+        }
+
+        case 'delete': {
+            if (confirm(`Are you sure you want to PERMANENTLY delete user ${username}? This action cannot be undone.`)) {
+                try {
+                    // Try to use admin API first if available (usually not on client)
+                    // Or call a hypothetical delete RPC
+                    // For now, we'll try a direct delete if RLS allows, or show error
+                    
+                    const { error } = await supabase.from('user_profiles').delete().eq('id', targetUserId)
+                    
+                    if (error) {
+                        // If direct delete fails (likely RLS), try ban as fallback or inform user
+                        throw error
+                    }
+                    
+                    toast.success(`User ${username} deleted`)
+                } catch (err: any) {
+                    console.error('Error deleting user:', err)
+                    toast.error('Failed to delete user. You may not have permission or need to use the Admin Dashboard.')
+                }
+            }
+            break
+        }
+    }
+  }
+
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -96,6 +220,12 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     if (!username || username.trim() === '') {
       console.error('ClickableUsername: username is empty or undefined')
       return
+    }
+
+    // If staff and not clicking themselves, toggle menu
+    if (isStaff && currentUser?.id !== targetUserId) {
+        setShowMenu(!showMenu)
+        return
     }
     
     try {
@@ -115,70 +245,111 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   }
 
   return (
-    <span
-      onClick={handleClick}
-      ref={usernameRef}
-      className={`cursor-pointer hover:text-troll-gold transition-colors username ${isAdmin ? 'admin-user' : isOfficer ? 'officer-user' : isTroller ? 'troller-user' : ''} ${className}`}
-      title={`View ${username}'s profile`}
-    >
-      {prefix}{username}
-      
-      {/* Admin Badge First Priority */}
-      {isAdmin && (
-        <span className="badge-icon admin-badge" title="Admin">
-          <Crown size={18} />
-          <span className="badge-title">Admin</span>
-        </span>
-      )}
-
-      {/* Officer Badge (if not admin) */}
-      {!isAdmin && isOfficer && (
-        <>
-          <span className="badge-icon officer-badge" title={officerRankTitles[officerLevel] || 'Officer'}>
-            <Shield size={16} />
-            <span className="badge-title">
-              {officerLevel === 3 ? 'Commander' : officerLevel === 2 ? 'Senior Officer' : 'Officer'}
+    <span className="relative inline-block">
+        <span
+        onClick={handleClick}
+        ref={usernameRef}
+        className={`cursor-pointer hover:text-troll-gold transition-colors username ${isAdmin ? 'admin-user' : isOfficer ? 'officer-user' : isTroller ? 'troller-user' : ''} ${className}`}
+        title={`View ${username}'s profile`}
+        >
+        {prefix}{username}
+        
+        {/* Admin Badge First Priority */}
+        {isAdmin && (
+            <span className="badge-icon admin-badge" title="Admin">
+            <Crown size={18} />
+            <span className="badge-title">Admin</span>
             </span>
-          </span>
-          <OfficerTierBadge level={officerLevel} size="sm" />
-        </>
-      )}
+        )}
 
-      {/* Troller Badge (if not admin or officer) */}
-      {!isAdmin && !isOfficer && isTroller && (
-        <span className="badge-icon troller-badge" title={trollerTitles[trollerLevel] || 'Troller'}>
-          <Skull size={16} />
-          <span className="badge-title">
-            {trollerTitles[trollerLevel] || 'Troller'}
-          </span>
+        {/* Officer Badge (if not admin) */}
+        {!isAdmin && isOfficer && (
+            <>
+            <span className="badge-icon officer-badge" title={officerRankTitles[officerLevel] || 'Officer'}>
+                <Shield size={16} />
+                <span className="badge-title">
+                {officerLevel === 3 ? 'Commander' : officerLevel === 2 ? 'Senior Officer' : 'Officer'}
+                </span>
+            </span>
+            <OfficerTierBadge level={officerLevel} size="sm" />
+            </>
+        )}
+
+        {/* Troller Badge (if not admin or officer) */}
+        {!isAdmin && !isOfficer && isTroller && (
+            <span className="badge-icon troller-badge" title={trollerTitles[trollerLevel] || 'Troller'}>
+            <Skull size={16} />
+            <span className="badge-title">
+                {trollerTitles[trollerLevel] || 'Troller'}
+            </span>
+            </span>
+        )}
+
+        {/* OG Badge (shows for all OG users, regardless of other badges) */}
+        {userProfile?.is_og_user && (
+            <span className="badge-icon og-badge" title="OG User - All users until Jan 1, 2026">
+            <Star size={14} />
+            <span className="badge-title">OG</span>
+            </span>
+        )}
+
+        {/* Empire Partner Badge (shows for all partners, regardless of other badges) */}
+        <EmpireBadge empireRole={userProfile?.empire_role} />
+
+        {/* Royal Family Badge (highest priority, shows for active royal titles) */}
+        {royalTitle && royalTitle.is_active && (
+            <span className="badge-icon royal-badge" title="Status title earned through gifting. In-app role only.">
+            <Crown size={16} className="text-yellow-400" />
+            <span className="badge-title">
+                {royalTitle.title_type === 'wife' ? 'Wife' : royalTitle.title_type === 'husband' ? 'Husband' : royalTitle.title_type.replace('_', ' ')}
+            </span>
+            </span>
+        )}
+
+        {/* Verified Badge (shows for all verified users) */}
+        {userProfile?.is_verified && (
+            <VerifiedBadge size="sm" title="Verified User" />
+        )}
         </span>
-      )}
 
-      {/* OG Badge (shows for all OG users, regardless of other badges) */}
-      {userProfile?.is_og_user && (
-        <span className="badge-icon og-badge" title="OG User - All users until Jan 1, 2026">
-          <Star size={14} />
-          <span className="badge-title">OG</span>
-        </span>
-      )}
-
-      {/* Empire Partner Badge (shows for all partners, regardless of other badges) */}
-      <EmpireBadge empireRole={userProfile?.empire_role} />
-
-      {/* Royal Family Badge (highest priority, shows for active royal titles) */}
-      {royalTitle && royalTitle.is_active && (
-        <span className="badge-icon royal-badge" title="Status title earned through gifting. In-app role only.">
-          <Crown size={16} className="text-yellow-400" />
-          <span className="badge-title">
-            {royalTitle.title_type === 'wife' ? 'Wife' : royalTitle.title_type === 'husband' ? 'Husband' : royalTitle.title_type.replace('_', ' ')}
-          </span>
-        </span>
-      )}
-
-      {/* Verified Badge (shows for all verified users) */}
-      {userProfile?.is_verified && (
-        <VerifiedBadge size="sm" title="Verified User" />
-      )}
+        {/* Staff Action Menu */}
+        {showMenu && (
+            <div 
+                ref={menuRef}
+                className="absolute z-50 top-full left-0 mt-1 w-48 bg-zinc-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden"
+            >
+                <div className="p-1">
+                    <button
+                        onClick={() => handleAction('view_profile')}
+                        className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"
+                    >
+                        <User size={14} />
+                        View Profile
+                    </button>
+                    <button
+                        onClick={() => handleAction('mute')}
+                        className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-zinc-800 hover:text-yellow-300 rounded flex items-center gap-2"
+                    >
+                        <MicOff size={14} />
+                        Mute User
+                    </button>
+                    <button
+                        onClick={() => handleAction('ban')}
+                        className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 rounded flex items-center gap-2"
+                    >
+                        <Ban size={14} />
+                        Ban User
+                    </button>
+                    <button
+                        onClick={() => handleAction('delete')}
+                        className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-zinc-800 hover:text-red-500 rounded flex items-center gap-2 border-t border-gray-800 mt-1 pt-2"
+                    >
+                        <UserX size={14} />
+                        Delete User
+                    </button>
+                </div>
+            </div>
+        )}
     </span>
   )
 }

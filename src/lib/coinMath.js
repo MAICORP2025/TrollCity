@@ -5,6 +5,7 @@
 
 // Coin Packages (6 total)
 export const coinPackages = [
+  { id: "pack0", name: "Micro Pack", coins: 100, price: 0.75 },
   { id: "pack1", name: "Baby Pack", coins: 1000, price: 4.49 },
   { id: "pack2", name: "Troller Pack", coins: 5000, price: 20.99 },
   { id: "pack3", name: "Mischief Pack", coins: 12000, price: 49.99 },

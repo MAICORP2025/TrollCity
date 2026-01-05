@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 interface EntranceEffectProps {
   username: string;
-  role: "admin" | "lead_troll_officer" | "troll_officer";
+  role: string;
   profile?: {
     rgb_username_expires_at?: string;
   };
@@ -22,7 +22,7 @@ export default function EntranceEffect({ username, role, profile }: EntranceEffe
 
   if (!isVisible) return null;
 
-  const roleConfig = {
+  const roleConfig: Record<string, { color: string; emoji: string; title: string }> = {
     admin: {
       color: "from-red-600 to-red-800",
       emoji: "🔴",
@@ -38,14 +38,28 @@ export default function EntranceEffect({ username, role, profile }: EntranceEffe
       emoji: "⚔️",
       title: "TROLL OFFICER",
     },
+    troller: {
+        color: "from-green-500 to-green-700",
+        emoji: "🧟",
+        title: "TROLLER"
+    },
+    og_user: {
+        color: "from-yellow-500 to-yellow-700",
+        emoji: "⭐",
+        title: "OG USER"
+    },
+    default: {
+        color: "from-gray-400 to-gray-600",
+        emoji: "👋",
+        title: "USER"
+    }
   };
 
-  const config = roleConfig[role];
+  const config = roleConfig[role] || roleConfig.default;
   const hasRgb = profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 animate-pulse">
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 animate-pulse pointer-events-none">
       <div className="entrance-text text-center">
         <div className={`text-8xl mb-4 glow`}>{config.emoji}</div>
         <div className={`text-6xl font-black text-transparent bg-gradient-to-r ${config.color} bg-clip-text mb-4 ${hasRgb ? 'rgb-username text-white !bg-none' : ''}`}>

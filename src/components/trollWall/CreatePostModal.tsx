@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { X, MessageSquare, Video, Sword, Users } from 'lucide-react'
+import { X, MessageSquare, Video, Sword, Users, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
@@ -24,6 +24,7 @@ export default function CreatePostModal({
   const [loading, setLoading] = useState(false)
   const [selectedStreamId, setSelectedStreamId] = useState<string>('')
   const [availableStreams, setAvailableStreams] = useState<any[]>([])
+  const [videoFile, setVideoFile] = useState<File | null>(null)
 
   // Load user's streams for stream_announce type
   const loadStreams = useCallback(async () => {
@@ -57,6 +58,17 @@ export default function CreatePostModal({
 
   if (!isOpen) return null
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      if (file.size > 50 * 1024 * 1024) { // 50MB limit
+        toast.error('File size must be less than 50MB')
+        return
+      }
+      setVideoFile(file)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -75,6 +87,11 @@ export default function CreatePostModal({
       return
     }
 
+    if (postType === 'video' && !videoFile) {
+        toast.error('Please select a video file')
+        return
+    }
+
     setLoading(true)
     try {
       const metadata: any = {}
@@ -86,6 +103,29 @@ export default function CreatePostModal({
         if (selectedStream) {
           metadata.stream_title = selectedStream.title
         }
+      }
+
+      // Upload video if present
+      if (postType === 'video' && videoFile) {
+        const fileExt = videoFile.name.split('.').pop()
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`
+        
+        // Try uploading to 'post-media' bucket
+        const { error: uploadError } = await supabase.storage
+            .from('post-media')
+            .upload(fileName, videoFile)
+        
+        if (uploadError) {
+             // If bucket doesn't exist or other error, try 'public' or fail
+             console.error('Upload failed to post-media, checking public...', uploadError)
+             throw new Error('Failed to upload video. Please try again later.')
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('post-media')
+            .getPublicUrl(fileName)
+        
+        metadata.video_url = publicUrl
       }
 
       const { error } = await supabase
@@ -103,6 +143,7 @@ export default function CreatePostModal({
       setContent('')
       setPostType('text')
       setSelectedStreamId('')
+      setVideoFile(null)
       onSuccess()
     } catch (err: any) {
       console.error('Error creating post:', err)
@@ -113,7 +154,8 @@ export default function CreatePostModal({
   }
 
   const postTypeOptions: { value: WallPostType; label: string; icon: React.ReactNode; description: string }[] = [
-    { value: 'text', label: 'Text Update', icon: <MessageSquare className="w-4 h-4" />, description: 'Share a text update (max 240 chars)' },
+    { value: 'text', label: 'Text Update', icon: <MessageSquare className="w-4 h-4" />, description: 'Share a text update' },
+    { value: 'video', label: 'Video Upload', icon: <Video className="w-4 h-4" />, description: 'Upload a video clip' },
     { value: 'stream_announce', label: 'Stream Promo', icon: <Video className="w-4 h-4" />, description: 'Promote your live stream' },
     { value: 'battle_result', label: 'Battle Achievement', icon: <Sword className="w-4 h-4" />, description: 'Share a battle result' },
     { value: 'family_announce', label: 'Family Announcement', icon: <Users className="w-4 h-4" />, description: 'Announce to your family' },
@@ -169,6 +211,25 @@ export default function CreatePostModal({
             </div>
           </div>
 
+          {/* Video Upload */}
+          {postType === 'video' && (
+              <div className="p-4 border-2 border-dashed border-gray-700 rounded-lg hover:border-purple-500 transition-colors">
+                  <label className="flex flex-col items-center cursor-pointer">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-300">
+                          {videoFile ? videoFile.name : 'Click to upload video'}
+                      </span>
+                      <span className="text-xs text-gray-500 mt-1">Max 50MB</span>
+                      <input 
+                        type="file" 
+                        accept="video/*"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
+                  </label>
+              </div>
+          )}
+
           {/* Stream Selection (for stream_announce) */}
           {postType === 'stream_announce' && (
             <div>
@@ -214,7 +275,7 @@ export default function CreatePostModal({
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="What's on your mind?"
+              placeholder={postType === 'video' ? "Describe your video..." : "What's on your mind?"}
               rows={4}
               maxLength={240}
               className="w-full px-4 py-3 bg-zinc-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
@@ -247,4 +308,3 @@ export default function CreatePostModal({
     </div>
   )
 }
-

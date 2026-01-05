@@ -44,6 +44,16 @@ export default function CoinStore() {
           // Fallback to default packages if database fails
           setPackages([
             {
+              id: 'micro_troll',
+              name: 'Micro Troll',
+              coin_amount: 100,
+              price: 0.75,
+              currency: 'USD',
+              description: 'Quick boost',
+              is_active: true,
+              created_at: new Date().toISOString()
+            },
+            {
               id: 'baby_troll',
               name: 'Baby Troll',
               coin_amount: 500,

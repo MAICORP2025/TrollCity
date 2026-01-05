@@ -54,6 +54,17 @@ export default function VideoFeed({ room, isHost = false }: VideoFeedProps) {
     // 2. Listen for future track publishing
     if (isHost) {
       room.on(RoomEvent.LocalTrackPublished, handleLocalTrackPublished)
+      
+      // Force check again after a short delay to catch race conditions
+      setTimeout(() => {
+        if (room.localParticipant) {
+           const videoTrackPub = Array.from(room.localParticipant.videoTrackPublications.values())[0];
+           if (videoTrackPub && videoTrackPub.track && localVideoRef.current) {
+              videoTrackPub.track.attach(localVideoRef.current);
+              localVideoRef.current.play().catch(() => {});
+           }
+        }
+      }, 1000);
     }
 
     /* ===============================

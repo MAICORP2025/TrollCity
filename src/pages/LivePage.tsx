@@ -408,9 +408,20 @@ export default function LivePage() {
     const interval = setInterval(async () => {
       const { data } = await supabase.from("streams").select("status,is_live,current_viewers,total_gifts_coins,total_likes").eq("id", streamId).maybeSingle();
       if (data) {
-        setStream(prev => prev ? { ...prev, ...data } : prev);
+        setStream(prev => {
+          if (!prev) return prev;
+          // Force update if values changed
+          if (
+            prev.current_viewers !== data.current_viewers ||
+            prev.total_likes !== data.total_likes ||
+            prev.total_gifts_coins !== data.total_gifts_coins
+          ) {
+            return { ...prev, ...data };
+          }
+          return prev;
+        });
       }
-    }, STREAM_POLL_INTERVAL);
+    }, 2000); // Polling every 2 seconds
     return () => clearInterval(interval);
   }, [streamId]);
 
