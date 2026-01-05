@@ -14,6 +14,7 @@ interface ImportMetaEnv {
     readonly VITE_LIVEKIT_API_SECRET: string
     readonly VITE_LIVEKIT_TOKEN_URL: string
     readonly VITE_EDGE_FUNCTIONS_URL: string
+    readonly VITE_SUPABASE_FUNCTIONS_URL: string
     // Add more env variables as needed
 }
 
