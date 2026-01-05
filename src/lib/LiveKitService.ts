@@ -5,6 +5,7 @@ import {
   LocalAudioTrack,
   createLocalVideoTrack,
   createLocalAudioTrack,
+  Track,
 } from 'livekit-client'
 import { LIVEKIT_URL, defaultLiveKitOptions } from './LiveKitConfig'
 import { toast } from 'sonner'
@@ -116,11 +117,11 @@ export class LiveKitService {
      this.log('📹 Publishing video track directly', { label: mediaStreamTrack.label });
      
      // Modern Publishing: Let LiveKit manage the track
-     await this.room.localParticipant.publishTrack(mediaStreamTrack, { name: 'camera' });
-     await this.room.localParticipant.setCameraEnabled(true);
+     await this.room.localParticipant.publishTrack(mediaStreamTrack, { name: 'camera', source: Track.Source.Camera });
+     // await this.room.localParticipant.setCameraEnabled(true); // Redundant and causes LocalTrackUnpublished
      this.updateLocalParticipantState();
      this.log('✅ Video track published');
-  }
+   }
 
   async publishAudioTrack(mediaStreamTrack: MediaStreamTrack) {
       if (!this.room?.localParticipant) throw new Error('Room not connected');
@@ -135,8 +136,8 @@ export class LiveKitService {
       this.log('🎤 Publishing audio track directly', { label: mediaStreamTrack.label });
       
       // Modern Publishing: Let LiveKit manage the track
-      await this.room.localParticipant.publishTrack(mediaStreamTrack, { name: 'microphone' });
-      await this.room.localParticipant.setMicrophoneEnabled(true);
+      await this.room.localParticipant.publishTrack(mediaStreamTrack, { name: 'microphone', source: Track.Source.Microphone });
+      // await this.room.localParticipant.setMicrophoneEnabled(true); // Redundant and causes LocalTrackUnpublished
       this.updateLocalParticipantState();
       this.log('✅ Audio track published');
    }
@@ -551,8 +552,8 @@ export class LiveKitService {
         label: videoTrack.label
       })
       // Modern Publishing: Let LiveKit manage the track
-      await this.room.localParticipant.publishTrack(videoTrack, { name: 'camera' });
-      await this.room.localParticipant.setCameraEnabled(true) // ✅ Ensure camera is marked enabled
+      await this.room.localParticipant.publishTrack(videoTrack, { name: 'camera', source: Track.Source.Camera });
+      // await this.room.localParticipant.setCameraEnabled(true) // ✅ Ensure camera is marked enabled
       this.log('✅ Video track published')
     } else {
       this.log('⚠️ No video track in preflight stream')
@@ -568,8 +569,8 @@ export class LiveKitService {
             settings: audioTrack.getSettings()
          })
          // Modern Publishing: Let LiveKit manage the track
-         await this.room.localParticipant.publishTrack(audioTrack, { name: 'microphone' });
-         await this.room.localParticipant.setMicrophoneEnabled(true) // ✅ Ensure mic is marked enabled
+         await this.room.localParticipant.publishTrack(audioTrack, { name: 'microphone', source: Track.Source.Microphone });
+         // await this.room.localParticipant.setMicrophoneEnabled(true) // ✅ Ensure mic is marked enabled
          this.log('✅ Audio track published')
       } else {
          this.log('🚫 Audio publishing disabled by ENABLE_AUDIO_PUBLISH flag')
