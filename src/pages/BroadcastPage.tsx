@@ -435,8 +435,8 @@ export default function BroadcastPage() {
       </div>
 
       {/* Modals */}
-      {isGiftModalOpen && <GiftModal onClose={() => setIsGiftModalOpen(false)} onSendGift={handleGiftSent} />}
-      {selectedProfile && <ProfileModal profile={selectedProfile} onClose={() => setSelectedProfile(null)} onSendCoins={(_amt: number) => {}} onGift={handleGiftFromProfile} />}
+      {isGiftModalOpen && <GiftModal onClose={() => { setIsGiftModalOpen(false); setGiftRecipient(null); }} onSendGift={handleGiftSent} recipientName={giftRecipient?.username || 'Broadcaster'} />}
+      {selectedProfile && <ProfileModal profile={selectedProfile} onClose={() => setSelectedProfile(null)} onSendCoins={(_amt: number) => {}} onGift={handleGiftFromProfile} currentUser={user} />}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
     </div>
   );

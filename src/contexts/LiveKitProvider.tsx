@@ -112,8 +112,13 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
            const isSameRoom = serviceRef.current.roomName === roomName; 
            const isSameUser = serviceRef.current.identity === identity;
            
-           if (isSameRoom && isSameUser && serviceRef.current.isConnected()) {
-               console.log("[LiveKitProvider] Re-using existing service (same room/user)");
+           // Check if permissions have changed (e.g. viewer -> broadcaster)
+           const currentAllowPublish = (serviceRef.current as any).config.allowPublish;
+           const newAllowPublish = allowPublish;
+           const isSameMode = currentAllowPublish === newAllowPublish;
+           
+           if (isSameRoom && isSameUser && isSameMode && serviceRef.current.isConnected()) {
+               console.log("[LiveKitProvider] Re-using existing service (same room/user/mode)");
                return serviceRef.current;
            }
 

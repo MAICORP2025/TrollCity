@@ -93,6 +93,11 @@ export class LiveKitService {
     )
   }
 
+  private isVideoPublishing(): boolean {
+    if (!this.room?.localParticipant) return false
+    return this.room.localParticipant.videoTrackPublications.size > 0
+  }
+
   private hasLocalTracks(): boolean {
     return !!this.localVideoTrack || !!this.localAudioTrack
   }
@@ -1024,7 +1029,8 @@ export class LiveKitService {
     try {
       const enabled = !this.room.localParticipant.isCameraEnabled
 
-      if (enabled && !this.isPublishing()) {
+      // Use isVideoPublishing() instead of isPublishing() to handle audio-only cases correctly
+      if (enabled && !this.isVideoPublishing()) {
         const video = await this.captureVideoTrack()
         if (video) {
           this.localVideoTrack = video
