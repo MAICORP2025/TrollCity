@@ -295,8 +295,23 @@ export default function WatchPage() {
       </div>
 
       {/* Modals */}
-      {isGiftModalOpen && <GiftModal onClose={() => setIsGiftModalOpen(false)} onSendGift={handleGiftSent} />}
-      {selectedProfile && <ProfileModal profile={selectedProfile} onClose={() => setSelectedProfile(null)} onSendCoins={handleSendCoins} />}
+      {isGiftModalOpen && (
+        <GiftModal 
+          onClose={() => setIsGiftModalOpen(false)} 
+          onSendGift={handleGiftSent} 
+          recipientName={giftRecipient?.username || giftRecipient?.name || 'Broadcaster'}
+          profile={profile}
+        />
+      )}
+      {selectedProfile && (
+        <ProfileModal 
+          profile={selectedProfile} 
+          onClose={() => setSelectedProfile(null)} 
+          onSendCoins={handleSendCoins} 
+          currentUser={user}
+          onGift={handleGiftFromProfile}
+        />
+      )}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
     </div>
   );

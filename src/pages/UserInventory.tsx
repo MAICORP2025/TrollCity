@@ -172,6 +172,38 @@ export default function UserInventory() {
     }
   }
 
+  const togglePerk = async (perkId: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('user_active_items')
+        .delete()
+        .eq('user_id', user!.id)
+        .eq('item_id', perkId);
+
+      if (!isActive) {
+        await supabase.from('user_active_items').insert({
+          user_id: user!.id,
+          item_id: perkId,
+          item_type: 'perk'
+        });
+      }
+
+      if (error && isActive) throw error;
+      
+      setActiveItems(prev => {
+        const newSet = new Set(prev);
+        if (isActive) newSet.delete(perkId);
+        else newSet.add(perkId);
+        return newSet;
+      });
+      
+      toast.success(isActive ? 'Perk deactivated' : 'Perk activated');
+    } catch (err) {
+      console.error('Error toggling perk:', err);
+      toast.error('Failed to toggle perk');
+    }
+  };
+
   const getItemIcon = (type: string) => {
     switch (type) {
       case 'effect': return <Zap className="w-5 h-5 text-yellow-400" />

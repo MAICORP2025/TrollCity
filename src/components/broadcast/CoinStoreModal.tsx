@@ -68,7 +68,7 @@ export default function CoinStoreModal({
     setSelectedPackage(null);
   };
 
-  const handleItemPurchase = async (item: any, type: 'perk' | 'insurance') => {
+  const handleItemPurchase = async (item: any, type: 'perk' | 'insurance' | 'effect') => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -180,6 +180,14 @@ export default function CoinStoreModal({
             }`}
           >
             <Shield size={18} /> Insurance
+          </button>
+          <button
+            onClick={() => setActiveTab('effects')}
+            className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${
+              activeTab === 'effects' ? 'bg-pink-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Sparkles size={18} /> Effects
           </button>
         </div>
 

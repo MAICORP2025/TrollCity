@@ -104,18 +104,17 @@ const VideoTile = ({ participant, isBroadcaster, className, onLeave, isLocal }: 
       e.stopPropagation();
       if (participant instanceof LocalParticipant) {
           const enabled = await participant.setMicrophoneEnabled(!isAudioEnabled);
-          setIsAudioEnabled(enabled);
+          // setMicrophoneEnabled returns Promise<void> in recent versions, or Promise<boolean> in others.
+          // We can check isAudioEnabled state or check track publication
+          const pub = participant.getTrackPublication(Track.Source.Microphone);
+          setIsAudioEnabled(pub ? !pub.isMuted : false);
       }
   };
 
   const switchCamera = async (e: React.MouseEvent) => {
       e.stopPropagation();
       // @ts-ignore - internal method but widely used
-      if (participant instanceof LocalParticipant && participant.videoTrackPublications) {
-         // Simple toggle for mobile devices usually handled by asking for facing mode
-         // But livekit-client doesn't have a simple 'flip' without enumerating devices.
-         // For now, we rely on the browser's ability or advanced implementation.
-         // Let's try to find another video input.
+      if (participant instanceof LocalParticipant) {
          try {
              const devices = await navigator.mediaDevices.enumerateDevices();
              const videoDevices = devices.filter(d => d.kind === 'videoinput');
@@ -124,7 +123,18 @@ const VideoTile = ({ participant, isBroadcaster, className, onLeave, isLocal }: 
                  const currentDeviceId = currentTrack?.mediaStreamTrack.getSettings().deviceId;
                  const nextDevice = videoDevices.find(d => d.deviceId !== currentDeviceId);
                  if (nextDevice) {
-                     await participant.switchCamera(nextDevice.deviceId);
+                     // Check if switchCamera exists on videoTrack (it might not on LocalTrack)
+                     // or create new track and publish
+                     // For now, simpler approach if supported:
+                     // @ts-ignore
+                     if (participant.switchCamera) {
+                        // @ts-ignore
+                        await participant.switchCamera(nextDevice.deviceId);
+                     } else {
+                        // Restart track with new device
+                        await participant.setCameraEnabled(false);
+                        await participant.setCameraEnabled(true, { deviceId: nextDevice.deviceId });
+                     }
                  }
              }
          } catch (err) {

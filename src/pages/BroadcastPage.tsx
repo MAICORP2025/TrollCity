@@ -30,7 +30,7 @@ import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
-import VideoFeed from '../components/stream/VideoFeed';
+import BroadcastLayout from '../components/broadcast/BroadcastLayout';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -222,6 +222,24 @@ export default function BroadcastPage() {
   const [giftRecipient, setGiftRecipient] = useState<any>(null);
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false);
+  const [joinPrice, setJoinPrice] = useState(0);
+
+  const handleSetPrice = async (price: number) => {
+    setJoinPrice(price);
+    if (streamId) {
+      await supabase.from('messages').insert({
+        stream_id: streamId,
+        user_id: user?.id,
+        message_type: 'system',
+        content: `PRICE_UPDATE:${price}`
+      });
+      toast.success(`Join price set to ${price} coins`);
+    }
+  };
+
+  const handleJoinRequest = () => {
+    toast.info("Broadcaster is already in the stream");
+  };
   
   const [entranceEffect, setEntranceEffect] = useState<{ username: string; role: any; profile?: any } | null>(null);
 
@@ -461,8 +479,17 @@ export default function BroadcastPage() {
             <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 gap-6">
                {/* Main Video Area */}
                <div className="lg:col-span-3 relative rounded-2xl overflow-hidden bg-black border border-white/10 shadow-inner">
-                  <VideoFeed room={liveKit.getRoom()} isHost={isBroadcaster} />
-                  {lastGift && <GiftEventOverlay gift={lastGift} onProfileClick={setSelectedProfile} />}
+                  <BroadcastLayout
+                    room={liveKit.getRoom()}
+                    broadcasterId={stream?.broadcaster_id || ''}
+                    isHost={isBroadcaster}
+                    totalCoins={stream?.total_gifts_coins || 0}
+                    joinPrice={joinPrice}
+                    onSetPrice={handleSetPrice}
+                    onJoinRequest={handleJoinRequest}
+                  >
+                    {lastGift && <GiftEventOverlay gift={lastGift} onProfileClick={setSelectedProfile} />}
+                  </BroadcastLayout>
                </div>
 
                {/* Right Panel */}
@@ -479,7 +506,7 @@ export default function BroadcastPage() {
       </div>
 
       {/* Modals */}
-      {isGiftModalOpen && <GiftModal onClose={() => { setIsGiftModalOpen(false); setGiftRecipient(null); }} onSendGift={handleGiftSent} recipientName={giftRecipient?.username || 'Broadcaster'} />}
+      {isGiftModalOpen && <GiftModal onClose={() => { setIsGiftModalOpen(false); setGiftRecipient(null); }} onSendGift={handleGiftSent} recipientName={giftRecipient?.username || 'Broadcaster'} profile={profile} />}
       {selectedProfile && <ProfileModal profile={selectedProfile} onClose={() => setSelectedProfile(null)} onSendCoins={(_amt: number) => {}} onGift={handleGiftFromProfile} currentUser={user} />}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
     </div>

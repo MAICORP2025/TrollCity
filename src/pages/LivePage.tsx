@@ -79,6 +79,9 @@ export default function LivePage() {
 
   const { user, profile } = useAuthStore();
 
+  const [joinPrice, setJoinPrice] = useState(0);
+  const [canPublish, setCanPublish] = useState(false);
+
   const stableIdentity = useMemo(() => {
     const id = user?.id || profile?.id;
     if (!id) console.warn('[LivePage] No stable identity found');
@@ -186,8 +189,24 @@ export default function LivePage() {
   });
 
   // Join Request Logic
-  const [joinPrice, setJoinPrice] = useState(0);
-  const [canPublish, setCanPublish] = useState(false);
+  // const [joinPrice, setJoinPrice] = useState(0); // Moved up
+  // const [canPublish, setCanPublish] = useState(false); // Moved up
+
+  const handleLeaveSession = useCallback(async () => {
+    setCanPublish(false);
+    
+    // Disable media
+    if (cameraOn) {
+       await liveKit.toggleCamera();
+       setCameraOn(false);
+    }
+    if (micOn) {
+       await liveKit.toggleMicrophone();
+       setMicOn(false);
+    }
+    
+    toast.info("You have left the guest box");
+  }, [liveKit, cameraOn, micOn]);
 
   const handleSetPrice = async (price: number) => {
     setJoinPrice(price);
@@ -693,6 +712,7 @@ export default function LivePage() {
           onClose={() => { setIsGiftModalOpen(false); setGiftReceiver(null); }} 
           onSendGift={handleGiftSent} 
           recipientName={giftReceiver?.username || giftReceiver?.name} 
+          profile={profile}
         />
       )}
       {selectedProfile && (

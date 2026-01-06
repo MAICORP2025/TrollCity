@@ -1,6 +1,5 @@
 import { X, Coins } from "lucide-react";
 import { useState } from "react";
-import { useAuthStore } from "../../lib/store";
 
 const gifts = [
   { id: 0, name: "Troll", emoji: "🧟", coins: 1, rarity: 'troll' },
@@ -12,7 +11,7 @@ const gifts = [
   { id: 6, name: "Rocket", emoji: "🚀", coins: 5000, rarity: 'legendary' },
 ];
 
-export default function GiftModal({ onClose, onSendGift, recipientName }) {
+export default function GiftModal({ onClose, onSendGift, recipientName, profile }) {
   const [selectedGift, setSelectedGift] = useState(null);
   const [quantity, setQuantity] = useState(1);
 
