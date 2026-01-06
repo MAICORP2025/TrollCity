@@ -33,7 +33,6 @@ import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
-import VideoFeed from '../components/stream/VideoFeed';
 import BroadcastLayout from '../components/broadcast/BroadcastLayout';
 
 // Constants
