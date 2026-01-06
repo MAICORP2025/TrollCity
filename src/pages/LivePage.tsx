@@ -83,6 +83,8 @@ export default function LivePage() {
 
   const [joinPrice, setJoinPrice] = useState(0);
   const [canPublish, setCanPublish] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
 
   const stableIdentity = useMemo(() => {
     const id = user?.id || profile?.id;
@@ -105,6 +107,15 @@ export default function LivePage() {
   }, [stream]);
   
   const isBroadcaster = useIsBroadcaster(profile, stream);
+
+  // Sync UI state with broadcaster role (auto-publish)
+  useEffect(() => {
+    if (isBroadcaster) {
+      setCameraOn(true);
+      setMicOn(true);
+    }
+  }, [isBroadcaster]);
+
 
   const liveKit = useLiveKit();
   
@@ -288,8 +299,6 @@ export default function LivePage() {
   }, [isConnected, liveKit]);
 
   // Controls
-  const [cameraOn, setCameraOn] = useState(true);
-  const [micOn, setMicOn] = useState(true);
 
   const toggleCamera = useCallback(async () => {
     const ok = await liveKit.toggleCamera();
