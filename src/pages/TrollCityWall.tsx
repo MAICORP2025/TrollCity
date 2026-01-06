@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { 
   MessageSquare, Heart, Plus, Video, Sword, Users, Trophy, 
-  Zap, ExternalLink, Trash2
+  Zap, ExternalLink, Trash2, Share2
 } from 'lucide-react'
 import { WallPost, WallPostType } from '../types/trollWall'
 import CreatePostModal from '../components/trollWall/CreatePostModal'
@@ -221,6 +221,12 @@ export default function TrollCityWall() {
       console.error('Error deleting post:', err)
       toast.error('Failed to delete post')
     }
+  }
+
+  const handleShare = (post: WallPost) => {
+    const name = post.username || 'Deleted User'
+    navigator.clipboard.writeText(`${name}: ${post.content}`)
+    toast.success('Copied to clipboard!')
   }
 
   const getPostIcon = (type: WallPostType) => {
