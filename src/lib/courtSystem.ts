@@ -89,6 +89,15 @@ export const courtSystem = {
     }
   },
 
+  endCourtSession(sessionId: string) {
+    console.log(`[CourtSystem] Ending session: ${sessionId}`);
+    const session = this.activeSessions.get(sessionId);
+    if (session) {
+      session.status = "ended";
+      this.activeSessions.delete(sessionId);
+    }
+  },
+
   checkMissingParticipants(sessionId: string) {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;

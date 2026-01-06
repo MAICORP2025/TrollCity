@@ -7,6 +7,7 @@ interface ChatBoxProps {
   streamId: string;
   onProfileClick?: (profile: any) => void;
   onCoinSend?: (user: string, amount: number) => void;
+  room?: any; // LiveKit Room
 }
 
 interface Message {
@@ -23,7 +24,7 @@ interface Message {
   };
 }
 
-export default function ChatBox({ streamId, onProfileClick, onCoinSend }: ChatBoxProps) {
+export default function ChatBox({ streamId, onProfileClick, onCoinSend, room }: ChatBoxProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -35,6 +36,41 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend }: ChatBo
   
   const [showCoinInput, setShowCoinInput] = useState<string | null>(null);
   const [coinAmount, setCoinAmount] = useState(10);
+
+  // Handle User Joined Events
+  useEffect(() => {
+    if (!room) return;
+    
+    const onParticipantConnected = (participant: any) => {
+       const newMsg: Message = {
+           id: `join-${Date.now()}-${participant.identity}`,
+           user_id: 'system',
+           content: 'joined the stream',
+           message_type: 'system-join',
+           created_at: new Date().toISOString(),
+           sender_profile: { username: participant.name || participant.identity || 'User', perks: [] }
+       };
+       setMessages(prev => [...prev, newMsg]);
+    };
+    
+    room.on('participantConnected', onParticipantConnected);
+    return () => {
+        room.off('participantConnected', onParticipantConnected);
+    };
+  }, [room]);
+
+  // Auto-vanish messages after 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+        const now = new Date();
+        setMessages(prev => prev.filter(msg => {
+            const msgTime = new Date(msg.created_at);
+            const ageSeconds = (now.getTime() - msgTime.getTime()) / 1000;
+            return ageSeconds < 30;
+        }));
+    }, 1000); // Check every second
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchUserProfile = async (userId: string) => {
     if (userCache[userId]) return userCache[userId];
@@ -232,6 +268,14 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend }: ChatBo
             );
           }
           
+          if (msg.message_type === 'system-join') {
+             return (
+               <div key={msg.id} className="text-xs text-center text-gray-400 my-1 animate-fadeIn">
+                 <span className="font-bold text-gray-300">{msg.sender_profile?.username}</span> joined!
+               </div>
+             );
+          }
+
           if (msg.message_type === 'system' && msg.content === 'ACTION:LIKE') {
              return (
                <div key={msg.id} className="text-xs text-center text-pink-400 italic animate-pulse">

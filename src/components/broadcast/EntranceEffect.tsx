@@ -12,13 +12,28 @@ export default function EntranceEffect({ username, role, profile }: EntranceEffe
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
+    // Play sound based on role or default
+    const soundMap: Record<string, string> = {
+        admin: 'royal_fanfare.mp3',
+        lead_troll_officer: 'police_siren.mp3',
+        troll_officer: 'police.mp3',
+        troller: 'magical.mp3',
+        og_user: 'fanfare.mp3',
+        default: 'coins.mp3'
+    };
+    
+    const soundFile = soundMap[role] || soundMap.default;
+    const audio = new Audio(`/sounds/entrance/${soundFile}`);
+    audio.volume = 0.5;
+    audio.play().catch(e => console.error("Failed to play entrance sound", e));
+
     // ✅ Show entrance effect for 5 seconds as requested
     const timer = setTimeout(() => {
       setIsVisible(false);
     }, 5000);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [role]);
 
   if (!isVisible) return null;
 

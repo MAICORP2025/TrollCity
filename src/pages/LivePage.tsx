@@ -177,13 +177,81 @@ export default function LivePage() {
       ? { ...user, identity: tokenIdentity || livekitIdentity, role: isBroadcaster ? 'broadcaster' : 'viewer' }
       : null,
     role: isBroadcaster ? 'broadcaster' : 'viewer',
-    allowPublish: isBroadcaster && sessionReady,
-    autoPublish: isBroadcaster, // Broadcaster auto-publishes (handled safely in hook)
+    allowPublish: (isBroadcaster || canPublish) && sessionReady,
+    autoPublish: isBroadcaster, // Only broadcaster auto-publishes. Viewers must request.
     token: token || undefined,
     serverUrl: serverUrl || undefined,
     connect: canConnect,
     identity: tokenIdentity || livekitIdentity
   });
+
+  // Join Request Logic
+  const [joinPrice, setJoinPrice] = useState(0);
+  const [canPublish, setCanPublish] = useState(false);
+
+  const handleSetPrice = async (price: number) => {
+    setJoinPrice(price);
+    // Broadcast price to viewers via system message
+    await supabase.from('messages').insert({
+      stream_id: streamId,
+      user_id: user?.id,
+      message_type: 'system',
+      content: `PRICE_UPDATE:${price}`
+    });
+    toast.success(`Join price set to ${price} coins`);
+  };
+
+  const handleJoinRequest = async () => {
+    if (canPublish) {
+        toast.info("You are already enabled to join!");
+        return;
+    }
+    
+    if (joinPrice > 0) {
+      const confirmed = confirm(`Join the stream for ${joinPrice} coins?`);
+      if (!confirmed) return;
+      
+      try {
+          // 1. Check balance
+          const { data: p } = await supabase.from('user_profiles').select('coins').eq('id', user?.id).single();
+          if ((p?.coins || 0) < joinPrice) {
+              toast.error("Not enough coins!");
+              return;
+          }
+          
+          // 2. Send coins logic (using gifts table to trigger balance updates)
+          const { error } = await supabase.from('gifts').insert({
+              stream_id: streamId,
+              sender_id: user?.id,
+              receiver_id: stream?.broadcaster_id,
+              coins_spent: joinPrice,
+              gift_type: 'paid',
+              message: 'Join Fee',
+              quantity: 1
+          });
+
+          if (error) throw error;
+          
+          toast.success("Paid join fee!");
+      } catch (e) {
+          console.error(e);
+          toast.error("Transaction failed");
+          return;
+      }
+    }
+    
+    setCanPublish(true);
+    // Allow React state to update before triggering publish
+    setTimeout(() => {
+        liveKit.toggleCamera().then((ok) => {
+             if (ok) setCameraOn(true);
+        });
+        liveKit.toggleMicrophone().then((ok) => {
+             if (ok) setMicOn(true);
+        });
+    }, 500);
+  };
+
 
   // Officer tracking for broadcasters
   useOfficerBroadcastTracking({
@@ -306,6 +374,9 @@ export default function LivePage() {
             } catch (e) {
               console.error('Failed to parse entrance effect', e);
             }
+          } else if (msg.message_type === 'system' && msg.content?.startsWith('PRICE_UPDATE:')) {
+             const price = parseInt(msg.content.split(':')[1]);
+             if (!isNaN(price)) setJoinPrice(price);
           }
         }
       )
@@ -522,7 +593,11 @@ export default function LivePage() {
   return (
     <div className="h-full w-full flex flex-col bg-[#05010a] text-white overflow-hidden">
       {/* Entrance effect for all users */}
-      {entranceEffect && <EntranceEffect username={entranceEffect.username} role={entranceEffect.role} profile={entranceEffect.profile} />}
+      {entranceEffect && (
+        <div className="fixed inset-0 z-[100] pointer-events-none">
+          <EntranceEffect username={entranceEffect.username} role={entranceEffect.role} profile={entranceEffect.profile} />
+        </div>
+      )}
       
       {/* Header Area */}
       <div className="shrink-0 p-4 pb-2 flex justify-between items-center z-10">
@@ -568,8 +643,12 @@ export default function LivePage() {
               broadcasterId={stream.broadcaster_id}
               isHost={isBroadcaster}
               totalCoins={stream.total_gifts_coins || 0}
+              joinPrice={joinPrice}
+              onSetPrice={handleSetPrice}
+              onJoinRequest={handleJoinRequest}
+              onLeaveSession={handleLeaveSession}
             >
-               {lastGift && <div className="absolute bottom-4 left-4 z-50 pointer-events-none"><GiftEventOverlay gift={lastGift} /></div>}
+               <GiftEventOverlay streamId={streamId || ''} />
             </BroadcastLayout>
          </div>
 
@@ -599,10 +678,11 @@ export default function LivePage() {
             {/* ChatBox - Hidden on mobile if gifts tab active */}
             <div className={`${activeMobileTab === 'chat' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-h-0`}>
                <ChatBox 
-                 streamId={streamId || ''}
-                 onProfileClick={setSelectedProfile}
-                 onCoinSend={handleSendCoinsToUser}
-               />
+              streamId={streamId || ''} 
+              onProfileClick={setSelectedProfile}
+              onCoinSend={handleSendCoinsToUser}
+              room={liveKit.getRoom()}
+            />
             </div>
          </div>
       </div>

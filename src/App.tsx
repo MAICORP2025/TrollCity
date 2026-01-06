@@ -32,7 +32,7 @@ import AuthCallback from "./pages/AuthCallback";
 import TermsAgreement from "./pages/TermsAgreement";
 
 // Sidebar pages (instant load)
-import Messages from "./pages/Messages";
+const Messages = lazy(() => import("./pages/Messages"));
 
 // Lazy-loaded pages
 const Following = lazy(() => import("./pages/Following"));
@@ -71,7 +71,6 @@ const ReferralBonusPanel = lazy(() => import("./pages/admin/ReferralBonusPanel")
 import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 const TrollsNightPage = lazy(() => import("./pages/TrollsNightPage"));
 
-// Static imports (previously lazy)
 const TrollsNightRules = lazy(() => import("./pages/legal/TrollsNightRules"));
 const TrollsNightApplication = lazy(() => import("./pages/TrollsNightApplication"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));

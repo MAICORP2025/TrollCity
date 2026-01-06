@@ -107,9 +107,9 @@ export default function GiftBox({ onSendGift, participants = [] }: GiftBoxProps)
       </div>
 
       {showModal && selectedGift && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowModal(false)} />
-          <div className="relative z-60 bg-[#0B0A10] rounded-lg p-6 border border-purple-700/40 max-w-md w-full">
+          <div className="relative z-[101] bg-[#0B0A10] rounded-lg p-6 border border-purple-700/40 max-w-md w-full">
             <h4 className="text-lg font-bold mb-3">Send {selectedGift.name}</h4>
             <div className="mb-3">
               <label className="flex items-center gap-2">

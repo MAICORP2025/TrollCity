@@ -103,6 +103,9 @@ export default function TrollCourtSession() {
         roomManager.disconnectRoom(courtRoomRefRef.current.id);
         courtRoomRefRef.current = null;
       }
+      if (activeSession) {
+        courtSystem.endCourtSession(activeSession.id);
+      }
       setActiveSession(null);
       navigate("/");
     }, 3000);
@@ -230,6 +233,9 @@ export default function TrollCourtSession() {
                   onClick={() => {
                     console.log("🛑 [TrollCourt] Force ending session...");
                     if (courtRoomRefRef.current) {
+                    if (activeSession) {
+                      courtSystem.endCourtSession(activeSession.id);
+                    }
                       roomManager.disconnectRoom(courtRoomRefRef.current.id);
                       courtRoomRefRef.current = null;
                     }
