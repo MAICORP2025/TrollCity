@@ -2,11 +2,16 @@ import { X, Send, UserPlus, MessageSquare, Gift } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
+import { useNavigate } from "react-router-dom";
+import { canMessageAdmin } from "../../lib/perkEffects";
 
 export default function ProfileModal({ profile, onClose, onSendCoins, onGift, currentUser }) {
+  const navigate = useNavigate();
   const [coinAmount, setCoinAmount] = useState(100);
   const [sent, setSent] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowedByProfile, setIsFollowedByProfile] = useState(false);
+  const [hasMessagePerk, setHasMessagePerk] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(currentUser?.id || null);
 
   useEffect(() => {
@@ -19,6 +24,38 @@ export default function ProfileModal({ profile, onClose, onSendCoins, onGift, cu
     }
   }, [currentUser]);
 
+  // Check permissions and follow status
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (!currentUserId || !profile?.id) return;
+
+      // Check if I follow them (for button state)
+      // Note: This is a simplified check, ideally we fetch from DB if not passed in
+      const { data: followData } = await supabase
+        .from('user_follows')
+        .select('*')
+        .eq('follower_id', currentUserId)
+        .eq('following_id', profile.id)
+        .single();
+      setIsFollowing(!!followData);
+
+      // Check if THEY follow ME (for messaging permission)
+      const { data: followedByData } = await supabase
+        .from('user_follows')
+        .select('*')
+        .eq('follower_id', profile.id)
+        .eq('following_id', currentUserId)
+        .single();
+      setIsFollowedByProfile(!!followedByData);
+
+      // Check for Message Admin perk
+      const hasPerk = await canMessageAdmin(currentUserId);
+      setHasMessagePerk(hasPerk);
+    };
+
+    checkStatus();
+  }, [currentUserId, profile?.id]);
+
   const handleSendCoins = () => {
     onSendCoins(coinAmount);
     setSent(true);
@@ -27,13 +64,33 @@ export default function ProfileModal({ profile, onClose, onSendCoins, onGift, cu
     }, 1500);
   };
 
-  const handleFollow = () => {
-    setIsFollowing(!isFollowing);
-    toast.success(isFollowing ? `Unfollowed ${profile.username || profile.name}` : `Followed ${profile.username || profile.name}`);
+  const handleFollow = async () => {
+    if (!currentUserId) return;
+    
+    if (isFollowing) {
+      await supabase.from('user_follows').delete().match({ follower_id: currentUserId, following_id: profile.id });
+      setIsFollowing(false);
+      toast.success(`Unfollowed ${profile.username || profile.name}`);
+    } else {
+      await supabase.from('user_follows').insert({ follower_id: currentUserId, following_id: profile.id });
+      setIsFollowing(true);
+      toast.success(`Followed ${profile.username || profile.name}`);
+    }
   };
 
   const handleMessage = () => {
-      toast.info(`Messaging ${profile.username || profile.name} coming soon!`);
+      // If profile is admin, check for perk or follow
+      const isAdmin = profile.role === 'admin' || profile.is_admin;
+      
+      if (isAdmin) {
+          if (!isFollowedByProfile && !hasMessagePerk) {
+              toast.error("You need the 'Message Admin' perk or be followed by the Admin to message them!");
+              return;
+          }
+      }
+      
+      onClose();
+      navigate(`/messages?user=${profile.id}`);
   };
 
   const handleGift = () => {
@@ -48,7 +105,10 @@ export default function ProfileModal({ profile, onClose, onSendCoins, onGift, cu
   const displayName = profile.username || profile.name || "Unknown";
   const displayHandle = displayName.toLowerCase().replace(/\s+/g, '');
 
-  return (
+    const isAdmin = profile?.role === 'admin' || profile?.is_admin;
+    const showMessageButton = !isAdmin || isFollowedByProfile || hasMessagePerk;
+
+    return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 animate-fadeIn">
       <div className="bg-gray-900 rounded-lg p-8 max-w-sm w-full purple-neon text-center relative border border-purple-500/30">
         <div className="absolute top-4 right-4">
@@ -83,6 +143,7 @@ export default function ProfileModal({ profile, onClose, onSendCoins, onGift, cu
                 <span className="text-xs font-bold">{isFollowing ? 'Following' : 'Follow'}</span>
             </button>
             
+            {showMessageButton && (
             <button 
                 onClick={handleMessage}
                 className="flex flex-col items-center gap-1 min-w-[64px] text-gray-300 hover:text-white"
@@ -92,6 +153,7 @@ export default function ProfileModal({ profile, onClose, onSendCoins, onGift, cu
                 </div>
                 <span className="text-xs font-bold">Message</span>
             </button>
+            )}
 
             <button 
                 onClick={handleGift}
