@@ -22,18 +22,21 @@ import {
   CameraOff,
   Square
 } from 'lucide-react';
-import ChatBox from '../components/broadcast/ChatBox';
-import GiftBox from '../components/broadcast/GiftBox';
-import TrollLikeButton from '../components/broadcast/TrollLikeButton';
-import GiftModal from '../components/broadcast/GiftModal';
-import ProfileModal from '../components/broadcast/ProfileModal';
-import CoinStoreModal from '../components/broadcast/CoinStoreModal';
-import GiftEventOverlay from './GiftEventOverlay';
+
+// Lazy load components to avoid circular dependencies
+const ChatBox = React.lazy(() => import('../components/broadcast/ChatBox'));
+const GiftBox = React.lazy(() => import('../components/broadcast/GiftBox'));
+const TrollLikeButton = React.lazy(() => import('../components/broadcast/TrollLikeButton'));
+const GiftModal = React.lazy(() => import('../components/broadcast/GiftModal'));
+const ProfileModal = React.lazy(() => import('../components/broadcast/ProfileModal'));
+const CoinStoreModal = React.lazy(() => import('../components/broadcast/CoinStoreModal'));
+const GiftEventOverlay = React.lazy(() => import('./GiftEventOverlay'));
+const EntranceEffect = React.lazy(() => import('../components/broadcast/EntranceEffect'));
+const BroadcastLayout = React.lazy(() => import('../components/broadcast/BroadcastLayout'));
+
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
-import EntranceEffect from '../components/broadcast/EntranceEffect';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
-import BroadcastLayout from '../components/broadcast/BroadcastLayout';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -609,6 +612,7 @@ export default function LivePage() {
   }
 
   return (
+    <React.Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-[#05010a] text-white">Loading interface...</div>}>
     <div className="h-full w-full flex flex-col bg-[#05010a] text-white overflow-hidden">
       {/* Entrance effect for all users */}
       {entranceEffect && (
@@ -666,7 +670,7 @@ export default function LivePage() {
               onJoinRequest={handleJoinRequest}
               onLeaveSession={handleLeaveSession}
             >
-               <GiftEventOverlay streamId={streamId || ''} />
+               <GiftEventOverlay gift={lastGift} onProfileClick={(p) => setSelectedProfile(p)} />
             </BroadcastLayout>
          </div>
 
@@ -729,5 +733,6 @@ export default function LivePage() {
       )}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
     </div>
+    </React.Suspense>
   );
 }

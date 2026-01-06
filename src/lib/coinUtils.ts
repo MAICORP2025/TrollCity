@@ -66,7 +66,7 @@ export const checkBalance = async (
   try {
     const { data: profile, error } = await supabase
       .from('user_profiles')
-      .select('troll_coins, troll_coins, total_earned_coins')
+      .select('troll_coins, trollmonds, total_earned_coins')
       .eq('id', userId)
       .single()
 
