@@ -8,6 +8,11 @@ export type NotificationType =
   | 'battle_result'
   | 'officer_update'
   | 'system_announcement'
+  | 'application_submitted'
+  | 'report_filed'
+  | 'payout_request'
+  | 'support_ticket'
+  | 'system_update'
 
 export interface Notification {
   id: string

@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
 import { toast } from 'sonner'
+import { reportError } from '../lib/supabase'
 
 interface Props {
   children: ReactNode
@@ -21,6 +22,12 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info)
+    void reportError({
+      message: error?.message || 'ErrorBoundary caught error',
+      stack: error?.stack,
+      component: 'ErrorBoundary',
+      context: { info }
+    })
     
     // Enhanced error detection and handling
     const errorMessage = error.message || ''

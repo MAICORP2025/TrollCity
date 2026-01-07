@@ -12,6 +12,7 @@ import { useLiveKitToken } from '../hooks/useLiveKitToken';
 import { useStreamEndListener } from '../hooks/useStreamEndListener';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { addCoins } from '../lib/coinTransactions';
 import { toast } from 'sonner';
 import {
   Users,
@@ -33,6 +34,7 @@ const CoinStoreModal = React.lazy(() => import('../components/broadcast/CoinStor
 const GiftEventOverlay = React.lazy(() => import('./GiftEventOverlay'));
 const EntranceEffect = React.lazy(() => import('../components/broadcast/EntranceEffect'));
 const BroadcastLayout = React.lazy(() => import('../components/broadcast/BroadcastLayout'));
+const GlobalGiftBanner = React.lazy(() => import('../components/GlobalGiftBanner'));
 
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
@@ -54,6 +56,7 @@ interface StreamRow {
   title?: string;
   room_name?: string;
   agora_channel?: string;
+  category?: string;
 }
 
 const useIsBroadcaster = (profile: any, stream: StreamRow | null) => {
@@ -62,23 +65,304 @@ const useIsBroadcaster = (profile: any, stream: StreamRow | null) => {
   }, [profile?.id, stream?.broadcaster_id]);
 };
 
+function BroadcasterTimer({ startTime }: { startTime: string }) {
+  const [elapsed, setElapsed] = useState('00:00:00');
+
+  useEffect(() => {
+    if (!startTime) return;
+    const start = new Date(startTime).getTime();
+    
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diff = now - start;
+      if (diff < 0) {
+        setElapsed('00:00:00');
+        return;
+      }
+      
+      const hours = Math.floor(diff / 3600000);
+      const minutes = Math.floor((diff % 3600000) / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      
+      setElapsed(
+        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      );
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  return (
+    <div className="bg-red-600/90 text-white px-3 py-1 rounded-full text-xs font-bold font-mono animate-pulse flex items-center gap-2 shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400/30">
+      <div className="w-2 h-2 rounded-full bg-white animate-ping" />
+      LIVE {elapsed}
+    </div>
+  );
+}
+
+function BroadcasterControlPanel({ streamId, onAlertOfficers }: { streamId: string; onAlertOfficers: (targetUserId?: string) => Promise<void> }) {
+  const [open, setOpen] = useState(true);
+  const [participants, setParticipants] = useState<Array<{ user_id: string; username: string; avatar_url?: string; is_moderator?: boolean; can_chat?: boolean; chat_mute_until?: string; is_active?: boolean }>>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [muting, setMuting] = useState<string | null>(null);
+  const [kicking, setKicking] = useState<string | null>(null);
+  const [updatingMod, setUpdatingMod] = useState<string | null>(null);
+
+  const loadParticipants = useCallback(async () => {
+    if (!streamId) return;
+    setLoading(true);
+    try {
+      const { data: sp } = await supabase
+        .from('streams_participants')
+        .select('user_id,is_active,is_moderator,can_chat,chat_mute_until')
+        .eq('stream_id', streamId);
+
+      const rows = sp || [];
+      const ids = rows.map(r => r.user_id);
+      const profiles: Record<string, { username: string; avatar_url?: string }> = {};
+      if (ids.length > 0) {
+        const { data: ups } = await supabase
+          .from('user_profiles')
+          .select('id,username,avatar_url')
+          .in('id', ids);
+        (ups || []).forEach((p: any) => { profiles[p.id] = { username: p.username, avatar_url: p.avatar_url }; });
+      }
+      setParticipants(rows.map(r => ({
+        user_id: r.user_id,
+        username: profiles[r.user_id]?.username || 'Unknown',
+        avatar_url: profiles[r.user_id]?.avatar_url,
+        is_moderator: r.is_moderator,
+        can_chat: r.can_chat,
+        chat_mute_until: r.chat_mute_until,
+        is_active: r.is_active
+      })));
+    } catch (err) {
+      console.error('Failed to load participants', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [streamId]);
+
+  useEffect(() => { loadParticipants(); }, [loadParticipants]);
+
+  const assignModerator = async (userId: string) => {
+    setUpdatingMod(userId);
+    try {
+      await supabase
+        .from('streams_participants')
+        .update({ is_moderator: true })
+        .eq('stream_id', streamId)
+        .eq('user_id', userId);
+      toast.success('Moderator assigned');
+      loadParticipants();
+    } catch (err) {
+      console.error('Failed to assign moderator', err);
+      toast.error('Failed to assign moderator');
+    } finally {
+      setUpdatingMod(null);
+    }
+  };
+
+  const removeModerator = async (userId: string) => {
+    setUpdatingMod(userId);
+    try {
+      await supabase
+        .from('streams_participants')
+        .update({ is_moderator: false })
+        .eq('stream_id', streamId)
+        .eq('user_id', userId);
+      toast.success('Moderator removed');
+      loadParticipants();
+    } catch (err) {
+      console.error('Failed to remove moderator', err);
+      toast.error('Failed to remove moderator');
+    } finally {
+      setUpdatingMod(null);
+    }
+  };
+
+  const kickUser = async (userId: string) => {
+    setKicking(userId);
+    try {
+      await supabase
+        .from('streams_participants')
+        .update({ is_active: false, left_at: new Date().toISOString() })
+        .eq('stream_id', streamId)
+        .eq('user_id', userId);
+      toast.success('User kicked from stream');
+      loadParticipants();
+    } catch (err) {
+      console.error('Failed to kick user', err);
+      toast.error('Failed to kick user');
+    } finally {
+      setKicking(null);
+    }
+  };
+
+  const muteUser = async (userId: string, minutes: number) => {
+    setMuting(userId);
+    try {
+      const until = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+      await supabase
+        .from('streams_participants')
+        .update({ can_chat: false, chat_mute_until: until })
+        .eq('stream_id', streamId)
+        .eq('user_id', userId);
+      toast.success(`Muted for ${minutes} minutes`);
+      loadParticipants();
+    } catch (err) {
+      console.error('Failed to mute user', err);
+      toast.error('Failed to mute user');
+    } finally {
+      setMuting(null);
+    }
+  };
+
+  const reportUser = async (userId: string) => {
+    const reason = window.prompt('Reason for report:', 'Violation of rules');
+    if (reason === null) return;
+    try {
+      await supabase
+        .from('moderation_reports')
+        .insert({
+          reporter_id: (await supabase.auth.getUser()).data.user?.id,
+          target_user_id: userId,
+          stream_id: streamId,
+          reason,
+          description: ''
+        });
+      toast.success('Report submitted');
+    } catch (err) {
+      console.error('Failed to submit report', err);
+      toast.error('Failed to submit report');
+    }
+  };
+
+  const filtered = participants.filter(p => p.username.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="bg-white/5 rounded-lg border border-white/10 p-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold">Broadcaster Control Panel</h3>
+        <button onClick={() => setOpen(v => !v)} className="text-xs text-white/60 hover:text-white">
+          {open ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-[0.3em] text-white/60">Moderators</span>
+              <button
+                onClick={() => onAlertOfficers()}
+                className="text-xs px-2 py-1 rounded bg-red-600 hover:bg-red-500 font-bold"
+              >
+                Alert Troll Officers
+              </button>
+            </div>
+            <div className="mt-2">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search participants..."
+                className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs"
+              />
+            </div>
+            <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+              {loading ? (
+                <div className="text-xs text-white/60">Loading participants...</div>
+              ) : filtered.length === 0 ? (
+                <div className="text-xs text-white/60">No participants</div>
+              ) : (
+                filtered.map((p) => (
+                  <div key={p.user_id} className="flex items-center justify-between bg-black/30 rounded px-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-white/10" />
+                      <div>
+                        <div className="text-xs font-semibold">{p.username}</div>
+                        <div className="text-[10px] text-white/50">
+                          {p.is_active ? 'active' : 'inactive'} • {p.is_moderator ? 'moderator' : 'viewer'}
+                          {p.can_chat === false ? ' • muted' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {p.is_moderator ? (
+                        <button
+                          disabled={updatingMod === p.user_id}
+                          onClick={() => removeModerator(p.user_id)}
+                          className="text-[10px] px-2 py-1 rounded bg-yellow-600/30 border border-yellow-500/40 hover:bg-yellow-600/50"
+                        >
+                          Remove Mod
+                        </button>
+                      ) : (
+                        <button
+                          disabled={updatingMod === p.user_id}
+                          onClick={() => assignModerator(p.user_id)}
+                          className="text-[10px] px-2 py-1 rounded bg-green-600/30 border border-green-500/40 hover:bg-green-600/50"
+                        >
+                          Make Mod
+                        </button>
+                      )}
+                      <button
+                        disabled={kicking === p.user_id}
+                        onClick={() => kickUser(p.user_id)}
+                        className="text-[10px] px-2 py-1 rounded bg-red-600/40 border border-red-500/50 hover:bg-red-600/60"
+                      >
+                        Kick
+                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          disabled={muting === p.user_id}
+                          onClick={() => muteUser(p.user_id, 5)}
+                          className="text-[10px] px-2 py-1 rounded bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50"
+                        >
+                          Mute 5m
+                        </button>
+                        <button
+                          disabled={muting === p.user_id}
+                          onClick={() => muteUser(p.user_id, 10)}
+                          className="text-[10px] px-2 py-1 rounded bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50"
+                        >
+                          10m
+                        </button>
+                        <button
+                          disabled={muting === p.user_id}
+                          onClick={() => muteUser(p.user_id, 30)}
+                          className="text-[10px] px-2 py-1 rounded bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50"
+                        >
+                          30m
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => reportUser(p.user_id)}
+                        className="text-[10px] px-2 py-1 rounded bg-blue-600/30 border border-blue-500/40 hover:bg-blue-600/50"
+                      >
+                        Report
+                      </button>
+                      <button
+                        onClick={() => onAlertOfficers(p.user_id)}
+                        className="text-[10px] px-2 py-1 rounded bg-red-700/40 border border-red-600/50 hover:bg-red-700/60"
+                      >
+                        Alert
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 export default function LivePage() {
   const { streamId } = useParams<{ streamId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   
-  const [hasSession, setHasSession] = useState(false);
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      setHasSession(!!data.session?.access_token);
-    };
-    checkSession();
-  }, []);
-  
-  const shouldAutoStart = query.get("start") === "1" && hasSession;
-
   const { user, profile } = useAuthStore();
 
   const [joinPrice, setJoinPrice] = useState(0);
@@ -184,9 +468,6 @@ export default function LivePage() {
 
   const {
     isConnected,
-    isConnecting,
-    error: liveKitError,
-    joinAndPublish
   } = useLiveKitSession({
     roomName: tokenRoomName || (sessionReady ? roomName : ''),
     user: sessionReady && user
@@ -245,8 +526,8 @@ export default function LivePage() {
       
       try {
           // 1. Check balance
-          const { data: p } = await supabase.from('user_profiles').select('coins').eq('id', user?.id).single();
-          if ((p?.coins || 0) < joinPrice) {
+          const { data: p } = await supabase.from('user_profiles').select('troll_coins').eq('id', user?.id).maybeSingle();
+          if ((p?.troll_coins || 0) < joinPrice) {
               toast.error("Not enough coins!");
               return;
           }
@@ -358,7 +639,7 @@ export default function LivePage() {
         .select('*, entrance_effects(*)')
         .eq('user_id', user.id)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (effects?.entrance_effects) {
         // Send entrance message
@@ -471,11 +752,29 @@ export default function LivePage() {
     } finally {
         setIsLoadingStream(false);
     }
-  }, [streamId, location.state]);
+  }, [streamId, location]);
 
   useEffect(() => {
     loadStreamData();
   }, [loadStreamData]);
+
+  // Access Control for Officer Streams
+  useEffect(() => {
+    if (!stream) return;
+    
+    if (stream.category === 'Officer Stream') {
+      const isOfficer = profile && (
+        ['admin', 'troll_officer', 'lead_troll_officer'].includes(profile.role || '') || 
+        (profile as any).is_lead_officer || 
+        (profile as any).is_admin
+      );
+      
+      if (!isOfficer) {
+        toast.error("This stream is restricted to officers only.");
+        navigate('/');
+      }
+    }
+  }, [stream, profile, navigate]);
 
   // Update stream status to LIVE once Broadcaster is fully connected
   const hasSetLiveRef = useRef(false);
@@ -532,13 +831,13 @@ export default function LivePage() {
           return prev;
         });
       }
-    }, 2000); // Polling every 2 seconds
+    }, STREAM_POLL_INTERVAL); // Polling every 2 seconds
     return () => clearInterval(interval);
   }, [streamId]);
 
   useStreamEndListener({
     streamId: streamId || '',
-    enabled: !!streamId && !isBroadcaster, // Only redirect viewers
+    enabled: !!streamId, // Redirect all users including broadcaster if they are on this page
     redirectToSummary: true,
   });
 
@@ -556,7 +855,7 @@ export default function LivePage() {
          } : prev);
       }
     }
-  }, [lastGift]);
+  }, [lastGift, stream]);
 
   const handleGiftSent = useCallback(async (amountOrGift: any) => {
     let totalCoins = 0;
@@ -590,6 +889,36 @@ export default function LivePage() {
         gift_id: giftId,
         quantity: quantity,
       });
+
+      // Lucky Gift Logic (5% chance)
+      if (Math.random() < 0.05 && user?.id) {
+          const multiplier = Math.floor(Math.random() * 1000) + 1; // 1x to 1000x
+          const winAmount = totalCoins * multiplier;
+          
+          if (winAmount > 0) {
+              try {
+                  await addCoins({
+                      userId: user.id,
+                      amount: winAmount,
+                      type: 'lucky_gift_win',
+                      description: `LUCKY GIFT WIN! (${multiplier}x Multiplier)`,
+                      supabaseClient: supabase
+                  });
+                  toast.success(`🎰 LUCKY GIFT! You won ${winAmount} coins! (${multiplier}x)`);
+                  
+                  // Announce in chat
+                  await supabase.from('messages').insert({
+                      stream_id: stream?.id,
+                      user_id: user.id, 
+                      message_type: 'system',
+                      content: `🎰 LUCKY GIFT! I just won ${winAmount} coins back from a lucky gift! (${multiplier}x)`
+                  });
+              } catch (err) {
+                  console.error("Failed to process lucky gift", err);
+              }
+          }
+      }
+
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }
@@ -623,6 +952,7 @@ export default function LivePage() {
   return (
     <React.Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-[#05010a] text-white">Loading interface...</div>}>
     <div className="h-full w-full flex flex-col bg-[#05010a] text-white overflow-hidden">
+      <GlobalGiftBanner />
       {/* Entrance effect for all users */}
       {entranceEffect && (
         <div className="fixed inset-0 z-[100] pointer-events-none">
@@ -641,13 +971,23 @@ export default function LivePage() {
               streamId={streamId || ''} 
               currentLikes={stream?.total_likes || 0}
             />
+            <div className="px-3 py-2 bg-white/5 rounded-lg border border-yellow-500/30 flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-yellow-500 flex items-center justify-center text-black font-bold text-[10px]">C</div>
+              <span className="font-bold text-yellow-400">{(stream.total_gifts_coins || 0).toLocaleString()}</span>
+            </div>
             <div className="hidden lg:flex px-4 py-2 bg-white/5 rounded-lg border border-white/10 items-center gap-2">
               <Heart size={16} className="text-purple-400" /> <span className="font-bold">{stream?.total_likes || 0}</span>
             </div>
             <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
               <Users size={16} className="text-green-400" /> <span className="font-bold">{(stream.current_viewers || 0).toLocaleString()}</span>
             </div>
-            {stream.is_live && <div className="px-3 py-1 bg-red-600 rounded-full text-xs font-bold animate-pulse">LIVE</div>}
+            {stream.is_live && (
+              isBroadcaster && stream.start_time ? (
+                <BroadcasterTimer startTime={stream.start_time} />
+              ) : (
+                <div className="px-3 py-1 bg-red-600 rounded-full text-xs font-bold animate-pulse">LIVE</div>
+              )
+            )}
             
             {isBroadcaster && (
               <>
@@ -673,7 +1013,6 @@ export default function LivePage() {
               room={liveKit.getRoom()} 
               broadcasterId={stream.broadcaster_id}
               isHost={isBroadcaster}
-              totalCoins={stream.total_gifts_coins || 0}
               joinPrice={joinPrice}
               onSetPrice={handleSetPrice}
               onJoinRequest={handleJoinRequest}
@@ -701,6 +1040,35 @@ export default function LivePage() {
 
          {/* Right Panel (Chat/Gifts) */}
          <div className="lg:w-1/4 flex-1 lg:h-full min-h-0 flex flex-col gap-4 overflow-hidden relative z-0">
+            {isBroadcaster && (
+              <BroadcasterControlPanel
+                streamId={streamId || ''}
+                onAlertOfficers={async (targetUserId?: string) => {
+                  try {
+                    const { data: officers } = await supabase
+                      .from('user_profiles')
+                      .select('id, username, role, is_officer')
+                      .in('role', ['troll_officer','lead_troll_officer','admin']);
+                    const list = (officers || []).map((o) => ({
+                      user_id: o.id,
+                      type: 'officer_update',
+                      title: '🚨 Stream Moderation Alert',
+                      message: `Alert in stream ${streamId}${targetUserId ? ` involving user ${targetUserId}` : ''}`,
+                      metadata: { stream_id: streamId, target_user_id: targetUserId }
+                    }));
+                    if (list.length > 0) {
+                      await supabase.from('notifications').insert(list);
+                      toast.success('Alert sent to troll officers');
+                    } else {
+                      toast.info('No officers found to notify');
+                    }
+                  } catch (err) {
+                    console.error('Failed to alert officers', err);
+                    toast.error('Failed to alert officers');
+                  }
+                }}
+              />
+            )}
             {/* GiftBox - Hidden on mobile if chat tab active */}
             <div className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col shrink-0 lg:shrink`}>
                <GiftBox onSendGift={handleGiftSent} />
@@ -709,11 +1077,12 @@ export default function LivePage() {
             {/* ChatBox - Hidden on mobile if gifts tab active */}
             <div className={`${activeMobileTab === 'chat' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-h-0`}>
                <ChatBox 
-              streamId={streamId || ''} 
-              onProfileClick={setSelectedProfile}
-              onCoinSend={handleSendCoinsToUser}
-              room={liveKit.getRoom()}
-            />
+                  streamId={streamId || ''} 
+                  onProfileClick={setSelectedProfile}
+                  onCoinSend={handleSendCoinsToUser}
+                  room={liveKit.getRoom()}
+                  isBroadcaster={isBroadcaster}
+               />
             </div>
          </div>
       </div>

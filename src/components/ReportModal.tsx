@@ -54,6 +54,14 @@ export default function ReportModal({
       })
 
       if (response.success) {
+        // Notify admins
+        await notifyAdmins(
+          'New Report Filed',
+          `Report filed against ${targetType === 'user' ? 'User' : 'Stream'} for ${reason}`,
+          'report_filed',
+          { reporterId: user.id, targetId: targetUserId || streamId, type: targetType, reason }
+        )
+
         toast.success('Report submitted. Our Troll Officers will review soon.')
         setReason('')
         setDescription('')

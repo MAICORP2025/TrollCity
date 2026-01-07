@@ -19,8 +19,7 @@ export const cashoutTiers = [
   { id: "basic", name: "Basic", coins: 12000, payout: 25 },
   { id: "pro", name: "Pro", coins: 30000, payout: 70 },
   { id: "elite", name: "Elite", coins: 60000, payout: 150 },
-  { id: "diamond", name: "Diamond", coins: 120000, payout: 325 },
-  { id: "royal", name: "Royal", coins: 250000, payout: 700 }
+  { id: "diamond", name: "Diamond", coins: 120000, payout: 325 }
 ];
 
 /**

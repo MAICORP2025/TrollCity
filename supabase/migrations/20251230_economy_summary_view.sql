@@ -17,22 +17,36 @@ WITH
     FROM gifts
   ),
   
-  -- Total payouts processed (USD)
+  -- Total payouts processed (USD) - Aggregates from both payout_requests and cashout_requests
   payouts_processed AS (
     SELECT 
-      COALESCE(SUM(cash_amount), 0) AS total_usd
-    FROM payout_requests
-    WHERE status = 'paid' OR status = 'approved'
+      COALESCE(SUM(total_usd), 0) AS total_usd
+    FROM (
+      SELECT cash_amount AS total_usd FROM payout_requests WHERE status = 'paid' OR status = 'approved'
+      UNION ALL
+      SELECT usd_value AS total_usd FROM cashout_requests WHERE status = 'fulfilled' OR status = 'paid'
+    ) AS combined_paid
   ),
   
-  -- Total pending payout requests (USD)
+  -- Total pending payout requests (USD) - Aggregates from both tables
   pending_payouts AS (
     SELECT 
-      COALESCE(SUM(cash_amount), 0) AS total_usd
-    FROM payout_requests
-    WHERE status = 'pending'
+      COALESCE(SUM(total_usd), 0) AS total_usd
+    FROM (
+      SELECT cash_amount AS total_usd FROM payout_requests WHERE status = 'pending'
+      UNION ALL
+      SELECT usd_value AS total_usd FROM cashout_requests WHERE status = 'pending'
+    ) AS combined_pending
   ),
   
+  -- Total revenue from coin purchases (USD)
+  revenue_summary AS (
+    SELECT 
+      COALESCE(SUM(platform_profit), 0) AS total_revenue
+    FROM coin_transactions
+    WHERE type = 'purchase'
+  ),
+
   -- Total creator earned coins (from gift receipts)
   creator_earned AS (
     SELECT 
@@ -67,4 +81,3 @@ SELECT
 
 -- Grant access to authenticated users (admins will filter in app)
 GRANT SELECT ON economy_summary TO authenticated;
-

@@ -19,7 +19,10 @@ export default function PayoutRequest() {
     );
   }
 
-  const balance = profile?.troll_coins ?? 0;
+  const raw = profile?.troll_coins ?? 0;
+  const reserved = profile?.reserved_troll_coins ?? 0;
+  const balance = Math.max(0, raw - reserved);
+  
   const parsed = Number(coins || "0");
   const usdEstimate =
     parsed && parsed > 0 ? (parsed / COINS_PER_DOLLAR).toFixed(2) : "0.00";
@@ -45,7 +48,7 @@ export default function PayoutRequest() {
       }
       
       if (!profile?.payout_paypal_email) {
-        toast.error("You must set a PayPal payout email first.");
+        toast.error("You must set a Gift Card payout email first.");
         return;
       }
 
@@ -107,7 +110,10 @@ export default function PayoutRequest() {
         <div>
           <p className="text-sm opacity-70 mb-1">Payout Method</p>
           {profile?.payout_paypal_email ? (
-            <p className="font-mono text-sm">{profile.payout_paypal_email}</p>
+            <div>
+              <p className="font-mono text-sm">{profile.payout_paypal_email}</p>
+              <p className="text-xs text-green-400 mt-1">Gift Card Email</p>
+            </div>
           ) : (
             <div>
               <span className="text-red-400 text-sm">Not set</span>

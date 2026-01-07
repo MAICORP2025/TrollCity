@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 // Removed progressionEngine import - using direct RPC calls instead
+import { processGiftXp } from '../xp'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
 
@@ -10,6 +11,7 @@ export interface GiftItem {
   icon?: string
   coinCost: number
   type: 'paid' | 'free'
+  category?: string
 }
 
 export function useGiftSystem(
@@ -96,6 +98,51 @@ export function useGiftSystem(
       
       toast.success(`Gift sent: ${gift.name}`)
       
+      try {
+        if (gift.category === 'Family') {
+          const { data: streamerMember } = await supabase
+            .from('family_members')
+            .select('family_id')
+            .eq('user_id', streamerId)
+            .maybeSingle()
+
+          const familyId = streamerMember?.family_id || null
+          if (familyId) {
+            const { data: activeWar } = await supabase
+              .from('family_wars')
+              .select('*')
+              .or(`family_a_id.eq.${familyId},family_b_id.eq.${familyId}`)
+              .in('status', ['pending', 'active'])
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+
+            if (activeWar?.id) {
+              const points = Math.max(1, Math.round(gift.coinCost / 100))
+              await supabase
+                .from('family_war_scores')
+                .upsert({
+                  war_id: activeWar.id,
+                  family_id: familyId,
+                  score: points,
+                  updated_at: new Date().toISOString()
+                }, { onConflict: 'war_id,family_id' })
+              
+              // XP = war_points / 5
+              const familyXp = Math.max(1, Math.round(points / 5))
+              
+              await supabase.rpc('increment_family_stats', {
+                p_family_id: familyId,
+                p_coin_bonus: Math.round(gift.coinCost * 0.05),
+                p_xp_bonus: familyXp
+              })
+            }
+          }
+        }
+      } catch (warErr) {
+        console.warn('Family war gift handling failed', warErr)
+      }
+      
       // Check for gift bonus milestones
       let bonusInfo = null
       try {
@@ -132,12 +179,14 @@ export function useGiftSystem(
             streamer_id: streamerId
           }
         })
-        // Add XP for sending gift (1 XP per 50 coins, minimum 1)
-        await supabase.rpc('add_xp', {
-          p_user_id: user.id,
-          p_amount: Math.max(1, Math.floor(gift.coinCost / 50)),
-          p_reason: 'gift_sent'
-        })
+        
+        // Process XP for Gifter and Streamer (New Logic)
+        const { senderResult } = await processGiftXp(user.id, targetReceiverId, gift.coinCost)
+        
+        if (senderResult?.leveledUp) {
+          toast.success(`🎉 Level Up! You reached Level ${senderResult.newLevel}!`)
+          // Trigger badge toast if needed handled in processGiftXp via db, but UI toast here is good
+        }
       } catch (err) {
         console.error('Error recording gift event:', err)
       }

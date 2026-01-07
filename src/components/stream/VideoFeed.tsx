@@ -1,8 +1,6 @@
 import {
   Room,
   RoomEvent,
-  createLocalVideoTrack,
-  createLocalAudioTrack,
   Track,
   TrackPublication,
   Participant,
@@ -26,7 +24,7 @@ export default function VideoFeed({ room, isHost = false }: VideoFeedProps) {
     =============================== */
     const handleLocalTrackPublished = (
       publication: TrackPublication,
-      participant: Participant
+      _participant: Participant
     ) => {
       if (!isHost || !localVideoRef.current) return
       

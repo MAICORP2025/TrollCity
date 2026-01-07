@@ -21,7 +21,7 @@ function loadEnv() {
         }
       })
     }
-  } catch (e) {
+  } catch {
     console.warn('Could not load .env.local')
   }
 }
@@ -116,7 +116,7 @@ async function reconcileOrder(orderId) {
         const json = JSON.parse(customId)
         userId = json.userId || json.user_id
         coins = Number(json.coins)
-      } catch (e) {
+      } catch {
         console.log('❌ Failed to parse custom_id')
         return
       }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Share2, MoreVertical, Mic, MicOff, Camera, CameraOff, MessageCircle, Gift, Heart, Smile } from 'lucide-react';
+import { Share2, MoreVertical, Mic, MicOff, Camera, CameraOff, MessageCircle, Gift, Heart } from 'lucide-react';
 
 interface BroadcastOverlaysProps {
   title?: string;
@@ -14,6 +14,8 @@ interface BroadcastOverlaysProps {
   onOpenGifts?: () => void;
   onOpenSettings?: () => void;
   className?: string;
+  totalCoins?: number;
+  startTime?: string | null;
 }
 
 export default function BroadcastOverlays({
@@ -28,8 +30,30 @@ export default function BroadcastOverlays({
   onOpenChat,
   onOpenGifts,
   onOpenSettings,
-  className = ''
+  className = '',
+  totalCoins = 0,
+  startTime
 }: BroadcastOverlaysProps) {
+  const [elapsed, setElapsed] = React.useState('00:00:00');
+
+  React.useEffect(() => {
+    if (!startTime || !isLive) return;
+    
+    const interval = setInterval(() => {
+      const start = new Date(startTime).getTime();
+      const now = new Date().getTime();
+      const diff = Math.max(0, Math.floor((now - start) / 1000));
+      
+      const hours = Math.floor(diff / 3600).toString().padStart(2, '0');
+      const minutes = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+      const seconds = (diff % 60).toString().padStart(2, '0');
+      
+      setElapsed(`${hours}:${minutes}:${seconds}`);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [startTime, isLive]);
+
   return (
     <div className={`absolute inset-0 pointer-events-none z-20 flex flex-col justify-between safe-area-inset ${className}`}>
       {/* Top Overlay */}
@@ -43,6 +67,7 @@ export default function BroadcastOverlays({
               <span className="text-xs font-bold text-white max-w-[120px] truncate">{title}</span>
               <div className="flex items-center gap-2">
                 {isLive && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                {isLive && startTime && <span className="text-[10px] text-red-400 font-mono">{elapsed}</span>}
                 <span className="text-[10px] text-white/70">{viewerCount.toLocaleString()} viewers</span>
               </div>
             </div>
@@ -114,10 +139,16 @@ export default function BroadcastOverlays({
             >
               <Gift size={20} />
             </button>
-            
+
             <button className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white hover:bg-white/20 transition-colors">
               <Heart size={20} />
             </button>
+
+            {/* Coin Counter */}
+            <div className="bg-black/60 backdrop-blur-md px-4 py-2.5 rounded-full border border-yellow-500/30 flex items-center gap-2 shadow-lg">
+               <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center text-black font-bold text-[10px]">C</div>
+               <span className="text-yellow-400 font-bold text-sm">{totalCoins.toLocaleString()}</span>
+            </div>
           </div>
         </div>
       </div>

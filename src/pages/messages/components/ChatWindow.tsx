@@ -39,16 +39,7 @@ export default function ChatWindow({
   const navigate = useNavigate()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
-  const [otherUserProfile, setOtherUserProfile] = useState<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (otherUserId) {
-      supabase.from('user_profiles').select('*').eq('id', otherUserId).single().then(({ data }) => {
-        if (data) setOtherUserProfile(data)
-      })
-    }
-  }, [otherUserId])
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

@@ -9,6 +9,7 @@ type FinanceSummary = {
   total_pending_payouts_usd: number
   total_creator_earned_coins: number
   top_earning_broadcaster: string | null
+  total_revenue_usd: number
 }
 
 export default function AdminFinanceDashboard() {
@@ -34,9 +35,32 @@ export default function AdminFinanceDashboard() {
 
   useEffect(() => {
     loadSummary()
+
+    const channel = supabase
+      .channel('finance_dashboard_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'coin_transactions' }, () => {
+        loadSummary()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashout_requests' }, () => {
+        loadSummary()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payout_requests' }, () => {
+        loadSummary()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [loadSummary])
 
   const summaryItems = [
+    {
+      label: 'Total Revenue',
+      value: summary ? `$${(summary.total_revenue_usd || 0).toLocaleString()}` : '$0',
+      color: 'text-green-400',
+      bg: 'bg-green-500/10'
+    },
     {
       label: 'Coins in Circulation',
       value: summary ? summary.total_coins_in_circulation : 0,

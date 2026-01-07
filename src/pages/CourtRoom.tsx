@@ -550,7 +550,16 @@ export default function CourtRoom() {
   };
 
   const endCourtSessionNow = async () => {
-    if (!isJudge || !courtId) return;
+    if (!isJudge) {
+      toast.error('Only the judge can end the session');
+      return;
+    }
+    
+    if (!courtId) {
+      toast.error('Invalid court session ID');
+      console.error('Cannot end court session: courtId is missing');
+      return;
+    }
 
     try {
       console.log('Calling end_court_session RPC for courtId=', courtId)
@@ -558,16 +567,21 @@ export default function CourtRoom() {
         p_session_id: courtId
       });
       console.log('end_court_session RPC response:', res)
+      
       if ((res as any)?.error) {
         console.error('end_court_session RPC returned error object:', (res as any).error)
         throw (res as any).error
       }
 
       toast.success('Court session ended');
+      
+      // Also update local state to reflect ended status immediately
+      setCourtSession(prev => prev ? { ...prev, status: 'ended' } : null);
+      
       navigate('/troll-court');
     } catch (err) {
       console.error('Error ending court session:', err);
-      toast.error('Failed to end court session');
+      toast.error(`Failed to end court session: ${(err as any)?.message || 'Unknown error'}`);
     }
   };
 
@@ -1159,12 +1173,20 @@ export default function CourtRoom() {
                     <Gavel className="w-5 h-5 text-purple-400" />
                     Judge Controls
                   </h3>
-                  <button
-                    onClick={() => setShowJudgeControls(!showJudgeControls)}
-                    className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded"
-                  >
-                    {showJudgeControls ? 'Hide' : 'Show'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={endCourtSessionNow}
+                      className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 rounded font-bold transition-colors"
+                    >
+                      End Session
+                    </button>
+                    <button
+                      onClick={() => setShowJudgeControls(!showJudgeControls)}
+                      className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded"
+                    >
+                      {showJudgeControls ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
                 </div>
 
                 {showJudgeControls && (
@@ -1176,12 +1198,6 @@ export default function CourtRoom() {
                           className="w-full py-2 bg-green-600 hover:bg-green-700 rounded text-sm"
                         >
                           Start New Case
-                        </button>
-                        <button
-                          onClick={endCourtSessionNow}
-                          className="w-full py-2 bg-red-600 hover:bg-red-700 rounded text-sm"
-                        >
-                          End Court Session
                         </button>
                       </>
                     ) : (

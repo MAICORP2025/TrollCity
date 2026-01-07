@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, getSystemSettings } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
 import { DollarSign, Award, Coins, AlertCircle, ArrowRight, Loader2, CheckCircle, Clock } from 'lucide-react';
@@ -24,7 +24,7 @@ export default function EarningsPage() {
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select(
-          'troll_coins, total_earned_coins, role, username'
+          'troll_coins, reserved_troll_coins, total_earned_coins, role, username'
         )
         .eq('id', user.id)
         .maybeSingle();
@@ -33,6 +33,7 @@ export default function EarningsPage() {
 
       const fallbackProfile = {
         troll_coins: profile?.troll_coins ?? 0,
+        reserved_troll_coins: profile?.reserved_troll_coins ?? 0,
         total_earned_coins: profile?.total_earned_coins || 0,
         role: profile?.role || 'broadcaster',
         username: profile?.username || 'Streamer',
@@ -40,7 +41,9 @@ export default function EarningsPage() {
 
       const earningsProfile = profileData || fallbackProfile;
 
-      const paidBalance = earningsProfile.troll_coins ?? 0;
+      const rawBalance = earningsProfile.troll_coins ?? 0;
+      const reserved = earningsProfile.reserved_troll_coins ?? 0;
+      const paidBalance = Math.max(0, rawBalance - reserved);
 
       const totalCoins = calculateTotalCoins(paidBalance, 0);
 
@@ -93,6 +96,12 @@ export default function EarningsPage() {
 
     try {
       setProcessing(true);
+      
+      const settings = await getSystemSettings();
+      if (settings?.payout_lock_enabled) {
+        toast.error('Payouts are locked during Launch Trial Mode.');
+        return;
+      }
 
       // Validate that user has enough coins
     const totalCoins = calculateTotalCoins(profile.troll_coins || 0, 0);

@@ -5,11 +5,11 @@
 CREATE OR REPLACE VIEW admin_coin_revenue AS
 SELECT
   DATE_TRUNC('month', created_at) AS month,
-  SUM(amount_paid) AS total_usd,
-  SUM(coins_purchased) AS total_coins,
+  SUM(platform_profit) AS total_usd,
+  SUM(amount) AS total_coins,
   COUNT(*) AS purchase_count
-FROM transactions
-WHERE type = 'coin_purchase' AND status = 'completed'
+FROM coin_transactions
+WHERE type = 'purchase'
 GROUP BY DATE_TRUNC('month', created_at)
 ORDER BY DATE_TRUNC('month', created_at) DESC;
 
@@ -18,12 +18,12 @@ CREATE OR REPLACE VIEW admin_top_buyers AS
 SELECT
   t.user_id,
   p.username,
-  SUM(t.amount_paid) AS total_spent_usd,
-  SUM(t.coins_purchased) AS total_coins_bought,
+  SUM(t.platform_profit) AS total_spent_usd,
+  SUM(t.amount) AS total_coins_bought,
   COUNT(*) AS transaction_count
-FROM transactions t
+FROM coin_transactions t
 JOIN user_profiles p ON p.id = t.user_id
-WHERE t.type = 'coin_purchase' AND t.status = 'completed'
+WHERE t.type = 'purchase'
 GROUP BY t.user_id, p.username
 ORDER BY total_spent_usd DESC;
 

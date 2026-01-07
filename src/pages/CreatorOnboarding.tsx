@@ -62,18 +62,44 @@ export default function CreatorOnboarding() {
       return
     }
 
+    // Age Verification (18+)
+    const birthDate = new Date(formData.date_of_birth)
+    const today = new Date()
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const m = today.getMonth() - birthDate.getMonth()
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+    
+    if (age < 18) {
+      toast.error('You must be at least 18 years old to be a creator.')
+      return
+    }
+
     setLoading(true)
     try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({
+      // 1. Save sensitive tax info to secure table
+      const { error: taxError } = await supabase
+        .from('user_tax_info')
+        .upsert({
+          user_id: user.id,
           ...formData,
           w9_status: 'submitted',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' })
+
+      if (taxError) throw taxError
+
+      // 2. Update profile status flags only (no PII)
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({
+          w9_status: 'submitted', // Keep status in sync for easy checking
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id)
 
-      if (error) throw error
+      if (profileError) throw profileError
 
       toast.success('Onboarding information submitted!')
       

@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
+import { OFFICER_BASE_HOURLY_COINS } from '../../lib/officerPay'
 import { toast } from 'sonner'
 import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
+import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 
 interface WorkSession {
   id: string
@@ -194,6 +196,11 @@ export default function OfficerDashboard() {
         </div>
       )}
 
+      {/* Live Streams Grid */}
+      <div className="mb-6">
+        <OfficerStreamGrid />
+      </div>
+
       {/* Stats */}
       <div className="grid md:grid-cols-4 gap-4 mb-6">
         <div className="bg-black/60 border border-purple-600 rounded-lg p-4">
@@ -224,7 +231,7 @@ export default function OfficerDashboard() {
             <DollarSign className="w-5 h-5 text-yellow-400" />
             <div className="text-sm opacity-70">Hourly Rate</div>
           </div>
-          <div className="text-2xl font-bold text-yellow-400">2,500</div>
+          <div className="text-2xl font-bold text-yellow-400">{OFFICER_BASE_HOURLY_COINS.toLocaleString()}</div>
           <div className="text-xs opacity-70">coins/hour</div>
         </div>
       </div>

@@ -3,8 +3,16 @@ import { motion } from 'framer-motion'
 import { Crown, Sparkles, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from './button' // Assuming standard shadcn button exists
+import { useAuthStore } from '../../lib/store'
 
 export default function TrollPassBanner() {
+  const { profile } = useAuthStore()
+  
+  // Check if user has active Troll Pass
+  const isTrollPassActive = profile && (profile as any).troll_pass_expires_at && new Date((profile as any).troll_pass_expires_at) > new Date()
+  
+  if (isTrollPassActive) return null
+
   return (
     <div className="relative w-full overflow-hidden rounded-xl border border-troll-neon-gold/30 group">
       {/* Animated Background */}

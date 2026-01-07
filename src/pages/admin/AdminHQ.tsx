@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Building2, Users, Briefcase, DollarSign, FileText, Activity, Plus, Edit, Trash2, Eye, X, Search, UserPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Building2, Users, Briefcase, DollarSign, FileText, Activity, Plus, Edit, Trash2, Eye, X, Search, UserPlus, Gift } from 'lucide-react';
 import { supabase, UserRole } from '../../lib/supabase';
 import RequireRole from '../../components/RequireRole';
 
@@ -1537,10 +1538,10 @@ function InvoicesPayoutsTab() {
     }
   };
 
-  const processPayPalPayout = async (invoiceId: string) => {
+  const processPayout = async (invoiceId: string) => {
     try {
-      // This would integrate with PayPal API
-      alert('PayPal payout integration would be implemented here');
+      // This would integrate with Gift Card API
+      alert('Gift Card payout integration would be implemented here');
       await updateInvoiceStatus(invoiceId, 'paid');
     } catch (error) {
       console.error('Error processing payout:', error);
@@ -1683,10 +1684,10 @@ function InvoicesPayoutsTab() {
                     )}
                     {invoice.status === 'approved' && (
                       <button
-                        onClick={() => processPayPalPayout(invoice.id)}
+                        onClick={() => processPayout(invoice.id)}
                         className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
                       >
-                        Pay via PayPal
+                        Process Payout
                       </button>
                     )}
                   </div>
@@ -1953,14 +1954,22 @@ export default function AdminHQ() {
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6 pt-16 lg:pt-6">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-4 mb-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
+            <div className="flex items-center gap-4">
               <Building2 className="w-8 h-8 text-purple-400" />
               <div>
                 <h1 className="text-3xl font-bold">Admin HQ</h1>
                 <p className="text-gray-400">Company Operations & Staff Management</p>
               </div>
             </div>
+            
+            <Link 
+              to="/admin/cashout-manager"
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-4 py-2 rounded-lg font-semibold transition-colors shadow-lg shadow-purple-900/20"
+            >
+              <Gift className="w-5 h-5" />
+              Manage User Cashouts
+            </Link>
           </div>
 
           {/* Tabs */}

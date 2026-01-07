@@ -12,7 +12,6 @@ import CityControlsHealth from './components/CityControlsHealth'
 import FinanceEconomyCenter from './components/FinanceEconomyCenter'
 import OperationsControlDeck from './components/OperationsControlDeck'
 import AdditionalTasksGrid from './components/AdditionalTasksGrid'
-import TrollsNightReviewPanel from '../../components/TrollsNightReviewPanel'
 import QuickActionsBar from './components/QuickActionsBar'
 import MAIAuthorityPanel from '../../components/mai/MAIAuthorityPanel'
 
@@ -188,6 +187,11 @@ export default function AdminDashboard() {
 
   // New dashboard state
   const [maintenanceMode, setMaintenanceMode] = useState(false)
+  const [taskCounts, setTaskCounts] = useState({
+    taxReviews: 0,
+    supportTickets: 0,
+    alerts: 0
+  })
 
   // Admin Guard: Check admin status on mount
   useEffect(() => {
@@ -261,6 +265,9 @@ export default function AdminDashboard() {
         coinTxRes,
         giftTxRes,
         payoutAggRes,
+        taxReviewsRes,
+        supportRes,
+        alertsRes,
       ] = await Promise.all([
         supabase.from('user_profiles').select('id'),
         supabase.from('user_profiles').select('id').eq('role', 'admin'),
@@ -274,6 +281,9 @@ export default function AdminDashboard() {
         supabase.from('coin_transactions').select('metadata').eq('type', 'purchase'),
         supabase.from('coin_transactions').select('amount, type').eq('type', 'gift'),
         supabase.from('payout_requests').select('cash_amount, processing_fee'),
+        supabase.from('user_tax_info').select('id').eq('status', 'pending'),
+        supabase.from('support_tickets').select('id').eq('status', 'open'),
+        supabase.from('system_alerts').select('id').eq('status', 'unread'),
       ])
 
       const users = usersRes.data || []
@@ -282,6 +292,9 @@ export default function AdminDashboard() {
       const pendingPayouts = pendingPayoutsRes.data || []
       const officers = officersRes.data || []
       const flags = flagsRes.data || []
+      const taxReviews = taxReviewsRes.data || []
+      const supportTickets = supportRes.data || []
+      const alerts = alertsRes.data || []
 
       const balances = balancesRes.data || []
       let purchasedCoins = 0
@@ -350,6 +363,12 @@ export default function AdminDashboard() {
         total_platform_profit_usd: platformProfit,
         kick_ban_revenue: 0,
       }))
+
+      setTaskCounts({
+        taxReviews: taxReviews.length,
+        supportTickets: supportTickets.length,
+        alerts: alerts.length
+      })
 
     } catch (error) {
       console.error('Error loading dashboard data:', error)
@@ -853,7 +872,7 @@ export default function AdminDashboard() {
     toast.success(maintenanceMode ? 'Maintenance mode disabled' : 'Maintenance mode enabled')
   }
 
-  const handleSelectTab = (tabId: TabId) => {
+  const _handleSelectTab = (tabId: string) => {
     setActiveTab(tabId)
   }
 
@@ -1137,22 +1156,19 @@ export default function AdminDashboard() {
           stats={stats}
         />
 
-        <TrollsNightReviewPanel title="Trolls @ Night verification desk" />
+
 
         {/* Additional Tasks Grid */}
-        <AdditionalTasksGrid
-          onSelectTab={handleSelectTab}
-          onNavigateToEconomy={() => navigate('/admin/economy')}
-          onNavigateToTaxReviews={() => navigate('/admin/tax-reviews')}
-          onOpenTestDiagnostics={() => navigate('/admin/test-diagnostics')}
-          onOpenControlPanel={() => navigate('/admin/control-panel')}
-          onOpenGrantCoins={() => navigate('/admin/grant-coins')}
-          onOpenFinanceDashboard={() => navigate('/admin/finance')}
-          onOpenCreateSchedule={() => navigate('/admin/create-schedule')}
-          onOpenOfficerShifts={() => navigate('/admin/officer-shifts')}
-          onOpenResetPanel={() => navigate('/admin/reset-maintenance')}
-          onOpenEmpireApplications={() => navigate('/admin/empire-applications')}
-          onOpenReferralBonuses={() => navigate('/admin/referral-bonuses')}
+        <AdditionalTasksGrid 
+          onSelectTab={setActiveTab} 
+          counts={{
+            empire_apps: stats.pendingApps,
+            cashouts: stats.pendingPayouts,
+            reports: stats.aiFlags,
+            alerts: taskCounts.alerts,
+            tax_reviews: taskCounts.taxReviews,
+            support: taskCounts.supportTickets
+          }}
         />
       </div>
     </div>

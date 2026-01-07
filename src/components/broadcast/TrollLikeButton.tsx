@@ -9,7 +9,7 @@ interface TrollLikeButtonProps {
   onLike?: () => void;
 }
 
-export default function TrollLikeButton({ streamId, currentLikes, onLike }: TrollLikeButtonProps) {
+export default function TrollLikeButton({ streamId, onLike }: TrollLikeButtonProps) {
   const [isAnimating, setIsAnimating] = useState(false);
 
   const handleLike = async () => {

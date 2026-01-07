@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Participant, Track, LocalParticipant } from 'livekit-client'
-import { User, Mic, MicOff, Camera, CameraOff, X, RefreshCw, Maximize2, Minimize2 } from 'lucide-react'
+import { User, Mic, MicOff, Camera, CameraOff, X, RefreshCw, Maximize2, Minimize2, Crown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 interface VideoTileProps {
@@ -40,7 +40,7 @@ export default function VideoTile({
   useEffect(() => {
     const fetchProfile = async () => {
         if (!participant.identity) return;
-        const { data } = await supabase.from('user_profiles').select('avatar_url').eq('id', participant.identity).single();
+        const { data } = await supabase.from('user_profiles').select('avatar_url').eq('id', participant.identity).maybeSingle();
         if (data?.avatar_url) setAvatarUrl(data.avatar_url);
     };
     fetchProfile();
@@ -107,7 +107,7 @@ export default function VideoTile({
   const toggleMic = async (e: React.MouseEvent) => {
       e.stopPropagation();
       if (participant instanceof LocalParticipant) {
-          const enabled = await participant.setMicrophoneEnabled(!isAudioEnabled);
+          await participant.setMicrophoneEnabled(!isAudioEnabled);
           const pub = participant.getTrackPublication(Track.Source.Microphone);
           setIsAudioEnabled(pub ? !pub.isMuted : false);
       }
@@ -139,9 +139,22 @@ export default function VideoTile({
     setObjectFit(prev => prev === 'cover' ? 'contain' : 'cover');
   };
 
+  // Extract metadata
+  const metadata = React.useMemo(() => {
+    try {
+      return JSON.parse(participant.metadata || '{}');
+    } catch {
+      return {};
+    }
+  }, [participant.metadata]);
+
+  const level = metadata.level || 1;
+  const role = metadata.role || 'Guest';
+  const roleColor = role === 'Admin' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' : 'text-purple-400 border-purple-500/30 bg-purple-500/10';
+
   return (
     <div 
-        className={`relative bg-zinc-900 rounded-2xl overflow-hidden transition-all duration-300 group shadow-lg ${className} ${speaking ? 'ring-2 ring-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'ring-1 ring-white/10'}`}
+        className={`relative bg-zinc-900 rounded-2xl overflow-hidden transition-all duration-300 group shadow-lg ${className} ${speaking ? 'ring-2 ring-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-2 border-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.1)]'}`}
         style={style}
         onClick={() => isLocal && setShowLocalControls(!showLocalControls)}
     >
@@ -173,12 +186,35 @@ export default function VideoTile({
           </div>
       )}
 
-      {/* Name Label */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-2 max-w-[80%] z-10">
-        <div className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/5">
-            {isBroadcaster && <span className="text-yellow-400 text-xs">👑</span>}
-            <span className="text-xs font-bold text-white truncate max-w-[100px]">{participant.name || participant.identity || 'Guest'}</span>
-            {!isAudioEnabled && <MicOff size={10} className="text-red-400" />}
+      {/* Broadcaster Crown */}
+      {isBroadcaster && (
+         <div className="absolute top-4 left-4 z-10 drop-shadow-lg filter">
+             <div className="relative">
+                <Crown size={24} className="text-yellow-400 fill-yellow-400 animate-pulse" />
+                <div className="absolute inset-0 bg-yellow-400/50 blur-lg rounded-full" />
+             </div>
+         </div>
+      )}
+
+      {/* User Info Badge (Bottom Left) */}
+      <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 max-w-[85%]">
+        {/* Name Badge */}
+        <div className="flex items-center gap-2 bg-[#1a0b2e]/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-purple-500/30 shadow-lg w-fit">
+            <div className={`w-2 h-2 rounded-full ${participant.isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+            <span className="text-sm font-bold text-white truncate max-w-[120px]">
+                {participant.name || participant.identity || 'Guest'}
+            </span>
+            {!isAudioEnabled && <MicOff size={12} className="text-red-400" />}
+        </div>
+        
+        {/* Role/Level Badge */}
+        <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded border border-white/10">
+                <span className="text-[10px] font-bold text-yellow-500">LV {level}</span>
+            </div>
+            <div className={`flex items-center gap-1 px-2 py-0.5 rounded border ${roleColor}`}>
+                <span className="text-[10px] font-medium uppercase tracking-wider">{role}</span>
+            </div>
         </div>
       </div>
 

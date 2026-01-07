@@ -238,3 +238,46 @@ export async function notifySystemAnnouncement(
   }
 }
 
+/**
+ * Create notification for all admins
+ */
+export async function notifyAdmins(
+  title: string,
+  message: string,
+  type: NotificationType,
+  metadata?: NotificationMetadata
+) {
+  try {
+    // Get all admin IDs
+    const { data: admins, error } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('role', 'admin')
+
+    if (error) throw error
+
+    if (!admins || admins.length === 0) {
+      return { success: true, count: 0 }
+    }
+
+    // Create notifications for all admins
+    const notifications = admins.map(admin => ({
+      user_id: admin.id,
+      type,
+      title,
+      message,
+      metadata: metadata || {}
+    }))
+
+    const { error: insertError } = await supabase
+      .from('notifications')
+      .insert(notifications)
+
+    if (insertError) throw insertError
+
+    return { success: true, count: admins.length }
+  } catch (err: any) {
+    console.error('Error notifying admins:', err)
+    return { success: false, error: err?.message || 'Unknown error', count: 0 }
+  }
+}

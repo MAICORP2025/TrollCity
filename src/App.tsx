@@ -4,23 +4,25 @@ import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react
 import { useAuthStore } from "./lib/store";
 
 import { useEligibilityStore } from "./lib/eligibilityStore";
-import { supabase, UserRole } from "./lib/supabase";
+import { supabase, UserRole, reportError } from "./lib/supabase";
 import { Toaster, toast } from "sonner";
 import GlobalLoadingOverlay from "./components/GlobalLoadingOverlay";
 import GlobalErrorBanner from "./components/GlobalErrorBanner";
+import GlobalGiftBanner from "./components/GlobalGiftBanner";
+import GlobalPayoutBanner from "./components/GlobalPayoutBanner";
 import { useGlobalApp } from "./contexts/GlobalAppContext";
 import { updateRoute } from "./utils/sessionStorage";
 import { useDebouncedProfileUpdate } from "./hooks/useDebouncedProfileUpdate";
 import { APP_DATA_REFETCH_EVENT_NAME } from "./lib/appEvents";
+import { autoUnlockPayouts } from "./lib/supabase";
 
 // Layout
-import Sidebar from "./components/Sidebar";
-import Header from "./components/Header";
+import OfficerAlertBanner from "./components/OfficerAlertBanner";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
+import AdminErrors from "./pages/admin/AdminErrors";
 import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
 import { RequireLeadOrOwner } from "./components/auth/RequireLeadOrOwner";
-import TrollsNightGuard from "./components/auth/TrollsNightGuard";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 import AppLayout from "./components/layout/AppLayout";
@@ -68,11 +70,9 @@ const StoreDebug = lazy(() => import("./pages/admin/StoreDebug"));
 const Changelog = lazy(() => import("./pages/Changelog"));
 const AccessDenied = lazy(() => import("./pages/AccessDenied"));
 const ReferralBonusPanel = lazy(() => import("./pages/admin/ReferralBonusPanel"));
+const SecretaryConsole = lazy(() => import("./pages/secretary/SecretaryConsole"));
 import { systemManagementRoutes } from "./pages/admin/adminRoutes";
-const TrollsNightPage = lazy(() => import("./pages/TrollsNightPage"));
 
-const TrollsNightRules = lazy(() => import("./pages/legal/TrollsNightRules"));
-const TrollsNightApplication = lazy(() => import("./pages/TrollsNightApplication"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -85,10 +85,11 @@ const EarningsPage = lazy(() => import("./pages/EarningsPage"));
 const VerificationPage = lazy(() => import("./pages/VerificationPage"));
 const VerificationComplete = lazy(() => import("./pages/VerificationComplete"));
 const AIVerificationPage = lazy(() => import("./pages/AIVerificationPage"));
+const PayoutStatus = lazy(() => import("./pages/PayoutStatus"));
+const FoundingOfficerTrial = lazy(() => import("./pages/FoundingOfficerTrial"));
+const AdminLaunchTrial = lazy(() => import("./pages/admin/LaunchTrial"));
 
 const GoLive = lazy(() => import("./pages/GoLive"));
-const BroadcastPage = lazy(() => import("./pages/BroadcastPage"));
-const WatchPage = lazy(() => import("./pages/WatchPage"));
 const JoinPage = lazy(() => import("./pages/Join"));
 const LivePage = lazy(() => import("./pages/LivePage"));
 const BroadcastSummary = lazy(() => import("./pages/BroadcastSummary"));
@@ -134,10 +135,12 @@ const CoinsComplete = lazy(() => import("./pages/CoinsComplete"));
 const PayoutSetupPage = lazy(() => import("./pages/PayoutSetupPage"));
 const Withdraw = lazy(() => import("./pages/Withdraw"));
 const Profile = lazy(() => import("./pages/Profile"));
+const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const EmpirePartnerApply = lazy(() => import("./pages/EmpirePartnerApply"));
 const AddCard = lazy(() => import("./pages/AddCard"));
 const EarningsDashboard = lazy(() => import("./pages/EarningsDashboard"));
 const CreatorOnboarding = lazy(() => import("./pages/CreatorOnboarding"));
+const CreatorSwitchProgram = lazy(() => import("./pages/CreatorSwitchProgram"));
 const PolicyCenter = lazy(() => import("./pages/PolicyCenter"));
 const TermsOfServiceLegal = lazy(() => import("./pages/legal/TermsOfService"));
 const RefundPolicyLegal = lazy(() => import("./pages/legal/RefundPolicy"));
@@ -153,6 +156,13 @@ const AdminLiveOfficersTracker = lazy(() => import("./pages/admin/AdminLiveOffic
 const AdminVerifiedUsers = lazy(() => import("./pages/admin/AdminVerifiedUsers"));
 const AdminVerificationReview = lazy(() => import("./pages/admin/AdminVerificationReview"));
 const AdminPoliciesDocs = lazy(() => import("./pages/admin/AdminPoliciesDocs"));
+const ExecutiveSecretaries = lazy(() => import("./pages/admin/ExecutiveSecretaries"));
+const GiftCardsManager = lazy(() => import("./pages/admin/GiftCardsManager"));
+const ExecutiveIntake = lazy(() => import("./pages/admin/ExecutiveIntake"));
+const ExecutiveReports = lazy(() => import("./pages/admin/ExecutiveReports"));
+const CashoutManager = lazy(() => import("./pages/admin/CashoutManager"));
+const CriticalAlertsManager = lazy(() => import("./pages/admin/CriticalAlertsManager"));
+const OfficerManager = lazy(() => import("./pages/admin/OfficerManager"));
 const LeadOfficerReview = lazy(() => import("./pages/lead-officer/Review"));
 const LeadOfficerDashboard = lazy(() => import("./pages/lead-officer/LeadOfficerDashboard").then(module => ({ default: module.LeadOfficerDashboard })));
 const ShopPartnerPage = lazy(() => import("./pages/ShopPartnerPage"));
@@ -184,6 +194,42 @@ const ControlPanel = lazy(() => import("./pages/admin/ControlPanel"));
 const TestDiagnosticsPage = lazy(() => import("./pages/admin/TestDiagnosticsPage"));
 const ResetMaintenance = lazy(() => import("./pages/admin/ResetMaintenance"));
 const AdminHR = lazy(() => import("./pages/admin/AdminHR"));
+const UserFormsTab = lazy(() => import("./pages/admin/components/UserFormsTab"));
+
+const LoadingScreen = () => (
+    <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
+      <div className="animate-pulse px-6 py-3 rounded bg-[#121212] border border-[#2C2C2C]">
+        Loading…
+      </div>
+    </div>
+  );
+
+  // 🔐 Route Guard
+  const RequireAuth = () => {
+    const user = useAuthStore((s) => s.user);
+    const profile = useAuthStore((s) => s.profile);
+    const isLoading = useAuthStore((s) => s.isLoading);
+    const location = useLocation();
+
+    if (isLoading) return <LoadingScreen />;
+    if (!user) return <Navigate to="/auth" replace />;
+    if (
+      profile &&
+      profile.role !== "admin" &&
+      (!profile.terms_accepted || !profile.court_recording_consent) &&
+      location.pathname !== "/terms"
+    ) {
+      return <Navigate to="/terms" replace />;
+    }
+    if (
+      profile?.application_required &&
+      !profile?.application_submitted &&
+      location.pathname !== "/application"
+    ) {
+      return <Navigate to="/application" replace />;
+    }
+    return <Outlet />;
+  };
 
 function AppContent() {
   console.log('🚀 App component rendering...');
@@ -214,6 +260,7 @@ function AppContent() {
   // Track route changes for session persistence
   useEffect(() => {
     updateRoute(location.pathname);
+    void autoUnlockPayouts();
   }, [location.pathname]);
 
   // 🔹 Auto-routing after approval (only on home page, not on every route change)
@@ -335,6 +382,49 @@ function AppContent() {
   // 🔹 Real-time Profile Updates (Debounced to prevent double renders)
   useDebouncedProfileUpdate(user?.id)
 
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => {
+      void reportError({
+        message: event.message || 'window.onerror',
+        stack: event.error?.stack,
+        userId: user?.id || null,
+        url: window.location.pathname,
+        component: 'global'
+      })
+    }
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason
+      void reportError({
+        message: (reason?.message || String(reason) || 'unhandledrejection'),
+        stack: reason?.stack,
+        userId: user?.id || null,
+        url: window.location.pathname,
+        component: 'global'
+      })
+    }
+    const originalConsoleError = console.error
+    console.error = (...args: any[]) => {
+      try {
+        const msg = typeof args[0] === 'string' ? args[0] : (args[0]?.message || JSON.stringify(args[0]))
+        void reportError({
+          message: msg || 'console.error',
+          userId: user?.id || null,
+          url: window.location.pathname,
+          component: 'console',
+          context: { args }
+        })
+      } catch {}
+      originalConsoleError(...args)
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+      console.error = originalConsoleError
+    }
+  }, [user?.id])
+
   // 🔹 Tab Visibility Change Handler
   useEffect(() => {
     if (!user?.id) return
@@ -364,44 +454,21 @@ function AppContent() {
     })
   }, [location.pathname])
 
-  // 🔹 Loading state
-  const LoadingScreen = () => (
-    <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
-      <div className="animate-pulse px-6 py-3 rounded bg-[#121212] border border-[#2C2C2C]">
-        Loading…
-      </div>
-    </div>
-  );
-
-  // 🔐 Route Guard
-  const RequireAuth = () => {
-    if (isLoading) return <LoadingScreen />;
-    if (!user) return <Navigate to="/auth" replace />;
-    if (
-      profile &&
-      profile.role !== "admin" &&
-      (!profile.terms_accepted || !profile.court_recording_consent) &&
-      location.pathname !== "/terms"
-    ) {
-      return <Navigate to="/terms" replace />;
-    }
-    if (
-      profile?.application_required &&
-      !profile?.application_submitted &&
-      location.pathname !== "/application"
-    ) {
-      return <Navigate to="/application" replace />;
-    }
-    return <Outlet />;
-  };
-
   console.log('🎨 App returning JSX...');
   return (
     <>
       {/* Global Error Banner */}
-      <GlobalErrorBanner />
+              <GlobalErrorBanner />
+              
+              <GlobalPayoutBanner />
+              
+              {/* Officer Alert Banner */}
+              <OfficerAlertBanner />
+              
+              {/* Global Gift Banner */}
+              <GlobalGiftBanner />
 
-      {/* Global Loading Overlay */}
+              {/* Global Loading Overlay */}
       <GlobalLoadingOverlay
         isVisible={globalLoading}
         message={loadingMessage}
@@ -445,7 +512,9 @@ function AppContent() {
                 <Route path="/verification" element={<VerificationPage />} />
                 <Route path="/verification/complete" element={<VerificationComplete />} />
                 <Route path="/ai-verification" element={<AIVerificationPage />} />
-                <Route path="/account/earnings" element={<EarningsDashboard />} />
+                <Route path="/founding-officer-trial" element={<FoundingOfficerTrial />} />
+                  <Route path="/account/earnings" element={<EarningsDashboard />} />
+                  <Route path="/payout-status" element={<PayoutStatus />} />
                  
                 {/* Legal/Policy Pages */}
                 <Route path="/legal" element={<PolicyCenter />} />
@@ -457,7 +526,6 @@ function AppContent() {
                 <Route path="/legal/creator-earnings" element={<CreatorEarnings />} />
                 <Route path="/legal/gambling-disclosure" element={<GamblingDisclosure />} />
                 <Route path="/legal/partner-program" element={<PartnerProgram />} />
-                <Route path="/legal/trolls-night-rules" element={<TrollsNightRules />} />
                  
                 {/* Safety Page (standalone) */}
                 <Route path="/safety" element={<Safety />} />
@@ -477,16 +545,11 @@ function AppContent() {
                   <Route path="/support" element={<Support />} />
                   <Route path="/wall" element={<TrollCityWall />} />
                   <Route path="/wall/:postId" element={<WallPostPage />} />
+                  <Route path="/profile/setup" element={<ProfileSetup />} />
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
                   
-                  {/* 🌙 Trolls@Night Restricted Section */}
-                  <Route path="/trolls-night/apply" element={<TrollsNightApplication />} />
-                  <Route element={<TrollsNightGuard />}>
-                    <Route path="/trolls-night" element={<TrollsNightPage />} />
-                  </Route>
-
                   {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLive />} />
                   <Route path="/live/:streamId" element={<LivePage />} />
@@ -495,6 +558,7 @@ function AppContent() {
                   <Route path="/join" element={<JoinPage />} />
                   <Route path="/broadcast" element={<Navigate to="/go-live" replace />} />
                   <Route path="/broadcast-summary" element={<BroadcastSummary />} />
+                  <Route path="/stream-summary/:streamId" element={<BroadcastSummary />} />
                   <Route path="/kick-fee" element={<KickFee />} />
                   <Route path="/ban-fee" element={<BanFee />} />
                   <Route path="/troll-court/session" element={<TrollCourtSession />} />
@@ -526,6 +590,7 @@ function AppContent() {
                    
                   {/* 📝 Creator Onboarding */}
                   <Route path="/onboarding/creator" element={<CreatorOnboarding />} />
+                  <Route path="/creator-switch" element={<CreatorSwitchProgram />} />
 
                   {/* 💰 Earnings & Coins */}
                   <Route path="/store" element={<CoinStore />} />
@@ -842,6 +907,90 @@ function AppContent() {
                         </RequireRole>
                       }
                     />
+
+                    <Route
+                      path="/admin/user-forms"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <UserFormsTab />
+                        </RequireRole>
+                      }
+                    />
+                    
+                    <Route
+                      path="/secretary"
+                      element={
+                        <RequireRole roles={[UserRole.HR_ADMIN, UserRole.ADMIN]}>
+                          <SecretaryConsole />
+                        </RequireRole>
+                      }
+                    />
+                    
+                    {/* Executive Office Routes */}
+                    <Route
+                      path="/admin/executive-secretaries"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <ExecutiveSecretaries />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/gift-cards"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <GiftCardsManager />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/executive-intake"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <ExecutiveIntake />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/executive-reports"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <ExecutiveReports />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/cashout-manager"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <CashoutManager />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/critical-alerts"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <CriticalAlertsManager />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/officer-management"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <OfficerManager />
+                        </RequireRole>
+                      }
+                    />
+                    
+                    {/* Secretary Console - Protected by internal logic */}
+                    <Route
+                      path="/secretary"
+                      element={
+                        <SecretaryConsole />
+                      }
+                    />
                     <Route
                       path="/admin/role-management"
                       element={
@@ -923,10 +1072,26 @@ function AppContent() {
                       }
                     />
                     <Route
+                      path="/admin/launch-trial"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <AdminLaunchTrial />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
                       path="/admin/store-pricing"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <StorePriceEditor />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/errors"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <AdminErrors />
                         </RequireRole>
                       }
                     />

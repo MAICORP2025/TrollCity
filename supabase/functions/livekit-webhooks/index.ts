@@ -33,44 +33,38 @@ Deno.serve(async (req: Request) => {
 
     console.log('LiveKit webhook received:', { event, room });
 
-    if (event === 'room.started') {
+    if (event === 'room_started') {
       // Mark stream as live
       const { error } = await supabase
-        .from('troll_streams')
+        .from('streams')
         .update({
+          status: 'live', // Changed from is_live to status='live' to match GoLive/StreamMonitor
           is_live: true,
           start_time: new Date().toISOString()
         })
-        .eq('livekit_room', room.name);
+        .eq('id', room.name); // room.name is the stream ID
 
       if (error) {
         console.error('Error updating stream to live:', error);
-        return new Response(JSON.stringify({ error: 'Failed to update stream' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      } else {
+        console.log('Stream marked as live:', room.name);
       }
-
-      console.log('Stream marked as live:', room.name);
-    } else if (event === 'room.ended') {
+    } else if (event === 'room_finished') {
       // Mark stream as ended
       const { error } = await supabase
-        .from('troll_streams')
+        .from('streams')
         .update({
+          status: 'ended',
           is_live: false,
-          end_time: new Date().toISOString()
+          ended_at: new Date().toISOString() // Changed from end_time to ended_at to match schema usage
         })
-        .eq('livekit_room', room.name);
+        .eq('id', room.name);
 
       if (error) {
         console.error('Error updating stream to ended:', error);
-        return new Response(JSON.stringify({ error: 'Failed to update stream' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      } else {
+        console.log('Stream marked as ended:', room.name);
       }
-
-      console.log('Stream marked as ended:', room.name);
     }
 
     return new Response(JSON.stringify({ success: true }), {

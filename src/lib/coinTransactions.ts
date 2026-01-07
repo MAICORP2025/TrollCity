@@ -61,6 +61,7 @@ export type CoinTransactionType =
   | 'perk_purchase'     // Buying a perk
   | 'refund'            // Refunding a purchase
   | 'reward'            // System reward (daily login, achievement, etc.)
+  | 'lucky_gift_win'    // Winning coins from a lucky gift
 
 export type CoinType = 'trollmonds' | 'troll_coins'
 

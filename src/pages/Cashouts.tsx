@@ -4,6 +4,7 @@ import { DollarSign, Coins, Clock } from 'lucide-react'
 import { supabase, CashoutTier, UserProfile } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
+import { notifyAdmins } from '../lib/notifications'
 
 interface PayoutRequest {
   id: string
@@ -42,7 +43,7 @@ const Cashouts = () => {
           .order('created_at', { ascending: false }),
 
         profile
-          ? supabase.from('user_profiles').select('*').eq('id', profile.id).single()
+          ? supabase.from('user_profiles').select('*').eq('id', profile.id).maybeSingle()
           : Promise.resolve({ data: null }),
       ])
 
@@ -50,14 +51,10 @@ const Cashouts = () => {
       setRequests((reqData as PayoutRequest[]) || [])
 
       if (prof) {
-        const { data: used } = await supabase
-          .from('payout_requests')
-          .select('coins_used')
-          .in('status', ['pending', 'approved', 'paid'])
-          .eq('user_id', profile?.id || '')
-
-        const reserved = (used || []).reduce((s: number, r: any) => s + (r.coins_used || 0), 0)
-        const avail = Math.max(0, ((prof as UserProfile).total_earned_coins || 0) - reserved)
+        // Use: available = troll_coins - reserved_troll_coins
+        const reserved = (prof as any).reserved_troll_coins || 0
+        const total = (prof as UserProfile).troll_coins || 0
+        const avail = Math.max(0, total - reserved)
         setAvailableEarnedCoins(avail)
       }
     } catch {
@@ -101,6 +98,14 @@ const Cashouts = () => {
         ])
 
       if (insertError) throw insertError
+
+      // Notify admins
+      await notifyAdmins(
+        'New Payout Request',
+        `${profile.username || 'User'} requested a cashout of $${tier.cash_amount}`,
+        'payout_request',
+        { userId: profile.id, amount: tier.cash_amount, coins: tier.coin_amount }
+      )
 
       toast.success('Cashout request submitted')
       await loadData()

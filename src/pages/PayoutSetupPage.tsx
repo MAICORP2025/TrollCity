@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -8,8 +8,9 @@ import { CreditCard, Save, Mail, Coins } from 'lucide-react'
 export default function PayoutSetupPage() {
   const { profile, user } = useAuthStore()
   const navigate = useNavigate()
-  const [paypalEmail, setPaypalEmail] = useState('')
+  const [paypalEmail, setPaypalEmail] = useState(profile?.payout_paypal_email || '')
   const [saving, setSaving] = useState(false)
+  const initialized = useRef(!!profile?.payout_paypal_email)
 
   useEffect(() => {
     if (!user) {
@@ -17,9 +18,10 @@ export default function PayoutSetupPage() {
       return
     }
 
-    // Load current PayPal email
-    if (profile?.payout_paypal_email) {
+    // Load current Gift Card email only if not already initialized
+    if (profile?.payout_paypal_email && !initialized.current) {
       setPaypalEmail(profile.payout_paypal_email)
+      initialized.current = true
     }
   }, [user, profile, navigate])
 
@@ -34,7 +36,7 @@ export default function PayoutSetupPage() {
     }
 
     if (!paypalEmail.trim()) {
-      toast.error('Please enter your PayPal email')
+      toast.error('Please enter your Gift Card email')
       return
     }
 
@@ -55,7 +57,7 @@ export default function PayoutSetupPage() {
 
       if (error) throw error
 
-      toast.success('PayPal email saved successfully!')
+      toast.success('Gift Card email saved successfully!')
       
       // Update local profile
       useAuthStore.getState().setProfile({
@@ -68,8 +70,8 @@ export default function PayoutSetupPage() {
         navigate('/earnings')
       }, 1500)
     } catch (error: any) {
-      console.error('Error saving PayPal email:', error)
-      toast.error(error?.message || 'Failed to save PayPal email')
+      console.error('Error saving email:', error)
+      toast.error(error?.message || 'Failed to save email')
     } finally {
       setSaving(false)
     }
@@ -92,7 +94,7 @@ export default function PayoutSetupPage() {
           </div>
 
           <p className="text-gray-400 mb-6">
-            Connect your PayPal account to receive payouts. Your PayPal email will be used to send payments when you request a withdrawal.
+            Connect your email to receive Gift Card payouts. Your email will be used to send your Gift Card code when you request a withdrawal.
           </p>
 
           {/* Balance Display */}
@@ -117,10 +119,10 @@ export default function PayoutSetupPage() {
             </div>
           </div>
 
-          {/* PayPal Email Input */}
+          {/* Gift Card Email Input */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-300 mb-2">
-              PayPal Email Address *
+              Gift Card Email Address *
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -133,7 +135,7 @@ export default function PayoutSetupPage() {
               />
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              This email must match your PayPal account email address
+              This email will be used to send your Gift Card.
             </p>
           </div>
 
@@ -144,7 +146,7 @@ export default function PayoutSetupPage() {
               <li>• Minimum payout: 7,000 coins ($21)</li>
               <li>• Conversion rate: 100 coins = $1 USD</li>
               <li>• Payouts are processed manually by admin</li>
-              <li>• You'll receive payment via PayPal</li>
+              <li>• You'll receive a Gift Card code via email</li>
             </ul>
           </div>
 
@@ -155,7 +157,7 @@ export default function PayoutSetupPage() {
             className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Save className="w-5 h-5" />
-            {saving ? 'Saving...' : 'Save PayPal Email'}
+            {saving ? 'Saving...' : 'Save Email'}
           </button>
 
           {/* Back Button */}

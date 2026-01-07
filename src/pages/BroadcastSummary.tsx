@@ -1,11 +1,68 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import { Gift, Heart, Users, AlertCircle, TrendingUp } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Gift, Heart, Users, AlertCircle, TrendingUp, Download } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "../lib/supabase";
 
 
 export default function BroadcastSummary() {
   const navigate = useNavigate();
   const location = useLocation();
-  const data = (location.state as any) || {
+  const { streamId } = useParams();
+  const [loading, setLoading] = useState(false);
+  const [streamData, setStreamData] = useState<any>(location.state || null);
+
+  useEffect(() => {
+    if (!streamData && streamId) {
+      const fetchStreamSummary = async () => {
+        setLoading(true);
+        try {
+          const { data, error } = await supabase
+            .from('streams')
+            .select('*')
+            .eq('id', streamId)
+            .single();
+
+          if (error) throw error;
+
+          if (data) {
+             // Transform DB data to summary format if needed
+             // For now, we map what we can. 
+             // Note: real earnings/gifts stats might need a separate query if not in 'streams' table.
+             // But for now, we'll use what's in the stream record or defaults.
+             
+             // Calculate duration
+             const start = new Date(data.start_time);
+             const end = data.end_time ? new Date(data.end_time) : new Date();
+             const duration = (end.getTime() - start.getTime()) / 1000; // seconds
+
+             setStreamData({
+               title: data.title || "Stream Summary",
+               category: data.category || "General",
+               duration: duration,
+               totalGifts: data.total_gifts_coins || 0, // Assuming this field stores gifts count or value
+               totalCoins: data.total_gifts_coins || 0, // Simplify for now
+               coinsPerDollar: 100, // Hardcoded for now
+               viewerCount: data.peak_viewers || data.current_viewers || 0,
+               newFollowers: [], // Would need separate query
+               reports: [], // Would need separate query
+               violations: 0,
+               level: 1, // Default
+               recording_url: data.recording_url
+             });
+          }
+        } catch (error) {
+          console.error('Error fetching stream summary:', error);
+          toast.error('Failed to load stream summary');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchStreamSummary();
+    }
+  }, [streamId, streamData]);
+
+  const data = streamData || {
     title: "My Stream",
     category: "Just Chatting",
     duration: 3600,
@@ -19,10 +76,29 @@ export default function BroadcastSummary() {
     level: 5,
   };
 
+  const handleDownload = () => {
+    if (data.recording_url) {
+      window.open(data.recording_url, '_blank');
+    } else {
+      toast.error("Recording not available yet. Please check back later.");
+    }
+  };
+
   const estimatedEarnings = (data.totalCoins / data.coinsPerDollar).toFixed(2);
   const durationMinutes = Math.floor(data.duration / 60);
   const durationHours = Math.floor(durationMinutes / 60);
   const remainingMinutes = durationMinutes % 60;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+          <p>Loading summary...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950 text-white p-4">
@@ -160,6 +236,13 @@ export default function BroadcastSummary() {
             className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-bold transition purple-neon"
           >
             Go Live Again
+          </button>
+          <button
+            onClick={handleDownload}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition flex items-center gap-2"
+          >
+            <Download size={20} />
+            Download
           </button>
           <button
             onClick={() => navigate("/")}

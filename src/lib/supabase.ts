@@ -36,6 +36,7 @@ export interface UserProfile {
   xp: number // Total XP points
   level: number // Calculated from XP
   troll_coins: number
+  reserved_troll_coins?: number
   trollmonds?: number
   total_earned_coins: number
   total_spent_coins: number
@@ -244,6 +245,19 @@ export interface InsurancePackage {
   is_active: boolean
 }
 
+export interface SystemError {
+  id: string
+  user_id?: string | null
+  message: string
+  stack?: string | null
+  component?: string | null
+  url?: string | null
+  status: 'open' | 'resolved' | 'investigating'
+  admin_response?: string | null
+  created_at: string
+  responded_at?: string | null
+}
+
 export const ADMIN_EMAIL = (import.meta as any).env?.VITE_ADMIN_EMAIL || 'trollcity2025@gmail.com'
 
 // Production-ready admin email validation with additional security checks
@@ -267,7 +281,8 @@ export enum UserRole {
   TROLL_OFFICER = 'troll_officer',
   TROLL_FAMILY = 'troll_family',
   TROLLER = 'troller',
-  EMPIRE_PARTNER = 'empire_partner'
+  EMPIRE_PARTNER = 'empire_partner',
+  SECRETARY = 'secretary'
 }
 
 export enum Permission {
@@ -334,6 +349,14 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.CREATE_CONTENT
   ],
   [UserRole.EMPIRE_PARTNER]: [
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE
+  ],
+  [UserRole.SECRETARY]: [
+    Permission.MANAGE_FINANCES,
+    Permission.MANAGE_REPORTS,
+    Permission.MANAGE_SYSTEM,
     Permission.BROADCAST,
     Permission.CREATE_CONTENT,
     Permission.MONETIZE
@@ -527,4 +550,167 @@ export async function getActiveSession(): Promise<any> {
     console.error('[getActiveSession] Error getting session:', err?.message)
     return null
   }
+}
+
+export async function reportError(params: {
+  message: string
+  stack?: string
+  userId?: string | null
+  url?: string
+  component?: string
+  context?: any
+}) {
+  try {
+    const payload = {
+      message: params.message?.slice(0, 1000),
+      stack: params.stack?.slice(0, 4000),
+      user_id: params.userId || null,
+      url: params.url || (typeof window !== 'undefined' ? window.location.pathname : null),
+      component: params.component || null,
+      context: params.context ? JSON.stringify(params.context).slice(0, 8000) : {},
+      status: 'open'
+    }
+    const { error } = await supabase.from('system_errors').insert(payload)
+    if (error) {
+      console.warn('Error reporting failed', error)
+    }
+  } catch (e: any) {
+    console.warn('Error reporting threw', e?.message || e)
+  }
+}
+
+export async function searchUsers(params: {
+  query: string
+  limit?: number
+  select?: string
+}): Promise<Array<{
+  id: string
+  username: string
+  avatar_url?: string | null
+  rgb_username_expires_at?: string | null
+}>> {
+  const limit = params.limit ?? 20
+  const select = params.select ?? 'id, username, avatar_url, rgb_username_expires_at'
+  const q = (params.query || '').trim().replace('@', '')
+
+  if (!q) {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select(select)
+      .order('created_at', { ascending: false })
+      .limit(Math.max(limit, 1))
+    if (error) {
+      console.warn('searchUsers empty query failed', error)
+      return []
+    }
+    return (data as any[]) || []
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('search_users', {
+      p_query: q,
+      p_limit: Math.max(limit, 1)
+    })
+    if (!error && Array.isArray(data)) {
+      return data as any[]
+    }
+  } catch {
+    // ignore and fallback
+  }
+
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select(select)
+    .ilike('username', `%${q}%`)
+    .order('username', { ascending: true })
+    .limit(Math.max(limit, 1))
+
+  if (error) {
+    console.warn('searchUsers fallback failed', error)
+    return []
+  }
+  return (data as any[]) || []
+}
+
+export interface SystemSettings {
+  id: string
+  payout_lock_enabled: boolean
+  payout_lock_reason?: string | null
+  payout_unlock_at?: string | null
+  trial_started_at?: string | null
+  trial_started_by?: string | null
+  updated_at: string
+}
+
+export async function getSystemSettings(): Promise<SystemSettings | null> {
+  const { data, error } = await supabase.rpc('get_system_settings')
+  if (error) {
+    console.warn('getSystemSettings error', error)
+    return null
+  }
+  return (data as any) || null
+}
+
+export function getCountdown(target?: string | null): { totalMs: number; days: number; hours: number; minutes: number; seconds: number } {
+  if (!target) return { totalMs: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
+  const t = new Date(target).getTime() - Date.now()
+  const totalMs = Math.max(t, 0)
+  const days = Math.floor(totalMs / (1000 * 60 * 60 * 24))
+  const hours = Math.floor((totalMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+  const minutes = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60))
+  const seconds = Math.floor((totalMs % (1000 * 60)) / 1000)
+  return { totalMs, days, hours, minutes, seconds }
+}
+
+export async function startLaunchTrial(adminUserId: string): Promise<SystemSettings | null> {
+  const { data, error } = await supabase.rpc('start_launch_trial', { p_admin_id: adminUserId })
+  if (error) {
+    console.warn('startLaunchTrial error', error)
+    return null
+  }
+  await supabase.rpc('notify_all_users', {
+    p_title: 'Launch Trial started',
+    p_message: 'Launch Trial started. Payouts unlock in 14 days.',
+    p_type: 'system_update'
+  })
+  return (data as any) || null
+}
+
+export async function endTrialEarly(): Promise<SystemSettings | null> {
+  const { data, error } = await supabase.rpc('end_trial_early')
+  if (error) {
+    console.warn('endTrialEarly error', error)
+    return null
+  }
+  await supabase.rpc('notify_all_users', {
+    p_title: 'Payouts are now open',
+    p_message: 'Payouts are now open!',
+    p_type: 'system_update'
+  })
+  return (data as any) || null
+}
+
+export async function relockPayouts(reason?: string): Promise<SystemSettings | null> {
+  const { data, error } = await supabase.rpc('relock_payouts', { p_reason: reason || 'Emergency payout lock' })
+  if (error) {
+    console.warn('relockPayouts error', error)
+    return null
+  }
+  return (data as any) || null
+}
+
+export async function autoUnlockPayouts(): Promise<SystemSettings | null> {
+  const { data, error } = await supabase.rpc('auto_unlock_payouts')
+  if (error) {
+    console.warn('autoUnlockPayouts error', error)
+    return null
+  }
+  if (data && (data as any)?.payout_lock_enabled === false) {
+    await supabase.rpc('notify_all_users', {
+      p_title: 'Payouts are now open',
+      p_message: 'Payouts are now open!',
+      p_type: 'system_update'
+    })
+  }
+  return (data as any) || null
 }

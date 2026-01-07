@@ -55,7 +55,7 @@ export default function WatchPage() {
   }, [user?.id, profile?.id]);
   
   const [stream, setStream] = useState<StreamRow | null>(null);
-  const [isLoadingStream, setIsLoadingStream] = useState(true);
+  const [, setIsLoadingStream] = useState(true);
 
   const liveKit = useLiveKit();
   const roomName = useMemo(() => String(streamId || ''), [streamId]);
@@ -113,8 +113,6 @@ export default function WatchPage() {
   const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false);
   const [entranceEffect] = useState<any>(null);
 
-  const trollLikeCount = stream?.total_likes || 0;
-  
   // Load Stream Data
   const loadStreamData = useCallback(async () => {
     if (!streamId) {
@@ -181,6 +179,40 @@ export default function WatchPage() {
   // Gift subscription
   const lastGift = useGiftEvents(streamId);
 
+  // Join Stream (Participant Tracking)
+  useEffect(() => {
+    if (!streamId || !user?.id) return;
+
+    const joinStream = async () => {
+      // Check existing participant record
+      const { data: existing } = await supabase
+        .from('streams_participants')
+        .select('is_active, can_chat')
+        .eq('stream_id', streamId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existing) {
+        if (!existing.is_active) {
+          toast.error("You have been kicked from this stream.");
+          navigate('/'); 
+          return;
+        }
+      } else {
+        // Create new record
+        await supabase.from('streams_participants').insert({
+          stream_id: streamId,
+          user_id: user.id,
+          is_active: true,
+          can_chat: true,
+          role: 'viewer'
+        });
+      }
+    };
+    
+    joinStream();
+  }, [streamId, user?.id, navigate]);
+
   const handleGiftFromProfile = useCallback((profile: any) => {
       setGiftRecipient(profile);
       setIsGiftModalOpen(true);
@@ -224,7 +256,7 @@ export default function WatchPage() {
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }
-  }, [stream?.id, user?.id, giftRecipient]);
+  }, [stream?.id, user?.id]);
 
   const handleCoinsPurchased = useCallback(() => {
     setIsCoinStoreOpen(false);

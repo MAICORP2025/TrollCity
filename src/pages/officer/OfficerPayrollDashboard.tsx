@@ -59,15 +59,31 @@ export default function OfficerPayrollDashboard() {
       // Load work sessions
       const { data: sessions } = await supabase
         .from('officer_work_sessions')
-        .select(`
-          *,
-          streams(title)
-        `)
+        .select('*')
         .eq('officer_id', user.id)
         .gte('clock_in', startDate.toISOString())
         .order('clock_in', { ascending: false })
 
       const sessionsData = (sessions as any) || []
+
+      // Hydrate stream titles manually to avoid FK relationship issues
+      const streamIds = Array.from(new Set(sessionsData.map((s: any) => s.stream_id).filter(Boolean)))
+      
+      if (streamIds.length > 0) {
+        const { data: streams } = await supabase
+          .from('streams')
+          .select('id, title')
+          .in('id', streamIds)
+          
+        const streamMap = new Map(streams?.map(s => [s.id, s.title]) || [])
+        
+        sessionsData.forEach((s: any) => {
+          if (s.stream_id && streamMap.has(s.stream_id)) {
+            s.streams = { title: streamMap.get(s.stream_id) }
+          }
+        })
+      }
+
       setWorkSessions(sessionsData)
 
       // Calculate earnings breakdown
@@ -324,7 +340,7 @@ export default function OfficerPayrollDashboard() {
         <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-700">
           <h3 className="text-lg font-semibold mb-3 text-yellow-400">💰 Officer Compensation Structure</h3>
           <div className="space-y-2 text-zinc-300 text-sm">
-            <p>• <strong>Base Pay:</strong> 2,500 coins per hour clocked in</p>
+            <p>• <strong>Base Pay:</strong> 500 coins per hour clocked in</p>
             <p>• <strong>Live Earnings:</strong> Additional coins from live streaming activities</p>
             <p>• <strong>Court Bonuses:</strong> Rewards for court moderation and rulings</p>
             <p>• <strong>Other Bonuses:</strong> Special rewards for outstanding service</p>

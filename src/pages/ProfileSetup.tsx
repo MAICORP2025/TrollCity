@@ -18,6 +18,7 @@ const ProfileSetup = () => {
   }, [user?.id, profile?.username])
 
   const [username, setUsername] = React.useState(profile?.username || suggestedUsername)
+  const [fullName, setFullName] = React.useState(profile?.full_name || '')
   const [bio, setBio] = React.useState(profile?.bio || '')
   const [loading, setLoading] = React.useState(false)
   const [uploadingAvatar, setUploadingAvatar] = React.useState(false)
@@ -75,7 +76,12 @@ const ProfileSetup = () => {
       const now = new Date().toISOString()
       const { error } = await supabase
         .from('user_profiles')
-        .update({ username: uname, bio: bio || null, updated_at: now })
+        .update({ 
+          username: uname, 
+          full_name: fullName.trim(),
+          bio: bio || null, 
+          updated_at: now 
+        })
         .eq('id', user.id)
       if (error) throw error
 
@@ -204,6 +210,19 @@ const ProfileSetup = () => {
 
           <div className="px-6 pb-6">
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="fullName" className="block text-sm mb-2">Full Name (Required)</label>
+                <input
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-2 rounded bg-[#23232b] text-white border border-gray-600 focus:outline-none"
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
               <div>
                 <label htmlFor="username" className="block text-sm mb-2">Username (letters and numbers only)</label>
                 <input
@@ -341,7 +360,7 @@ const ProfileSetup = () => {
                       try {
                         setLoading(true)
                         const fileName = `id-${user.id}-${Date.now()}${file.name.substring(file.name.lastIndexOf('.'))}`
-                        const filePath = `verification_docs/${fileName}`
+                        const filePath = `verification/${user.id}/${fileName}`
 
                         // Upload to Supabase storage
                         const { error: uploadError } = await supabase.storage

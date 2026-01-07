@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, UserProfile } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import LiveAvatar from '../components/LiveAvatar';
-import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins } from 'lucide-react';
+import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
-import { ENTRANCE_EFFECTS_CONFIG } from '@/lib/entranceEffects';
+import { canMessageAdmin } from '@/lib/perkEffects';
 
 export default function Profile() {
   const { username, userId } = useParams();
@@ -17,10 +17,8 @@ export default function Profile() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isProfileLive, setIsProfileLive] = useState(false);
-  const [stats, setStats] = useState({ followers: 0, following: 0, posts: 0 });
   const [activeTab, setActiveTab] = useState('posts');
   const [inventory, setInventory] = useState<{perks: any[], effects: any[], insurance: any[], callMinutes: any}>({perks: [], effects: [], insurance: [], callMinutes: null});
-  const [inventoryLoading, setInventoryLoading] = useState(false);
   const [earnings, setEarnings] = useState<any[]>([]);
   const [earningsLoading, setEarningsLoading] = useState(false);
   const viewerRole = useAuthStore.getState().profile?.troll_role || useAuthStore.getState().profile?.role || 'user';
@@ -32,7 +30,7 @@ export default function Profile() {
   const [creatingPost, setCreatingPost] = useState(false);
 
   const fetchInventory = async (uid: string) => {
-    setInventoryLoading(true);
+    // setInventoryLoading(true);
     try {
       const [perksRes, effectsRes, insuranceUserRes, callRes] = await Promise.all([
         supabase.from('user_perks').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
@@ -76,7 +74,7 @@ export default function Profile() {
     } catch (e) {
       console.error('Error fetching inventory', e);
     } finally {
-      setInventoryLoading(false);
+      // setInventoryLoading(false);
     }
   };
 
@@ -181,13 +179,6 @@ export default function Profile() {
     fetchInventory(currentUser.id);
   };
 
-  const toggleEffect = async (effectId: string, currentStatus: boolean) => {
-     // For now, effects are always "owned", maybe we add is_active column later
-     // Assuming toggle means just "Equip" concept if we had one. 
-     // For this task, "turn off" likely refers to Perks.
-     toast.info('Effect toggling coming soon');
-  };
-
   const togglePerk = async (perkId: string, isActive: boolean) => {
       if (!currentUser || currentUser.id !== profile.id) return;
       const { error } = await supabase.from('user_perks').update({ is_active: !isActive }).eq('id', perkId);
@@ -226,7 +217,7 @@ export default function Profile() {
          return;
       }
 
-      const { data, error } = await query.single();
+      const { data, error } = await query.maybeSingle();
       
       if (error || !data) {
         console.error('Profile not found', error);
@@ -276,12 +267,77 @@ export default function Profile() {
     };
   }, [profile?.id]);
 
+  // Check follow status
+  useEffect(() => {
+    const checkFollowStatus = async () => {
+      if (!currentUser || !profile?.id) return;
+
+      const { data } = await supabase
+        .from('user_follows')
+        .select('*')
+        .eq('follower_id', currentUser.id)
+        .eq('following_id', profile.id)
+        .maybeSingle();
+      
+      setIsFollowing(!!data);
+    };
+
+    checkFollowStatus();
+  }, [currentUser, profile?.id]);
+
+  const handleFollow = async () => {
+    if (!currentUser) {
+      toast.error('Please login to follow users');
+      return;
+    }
+    
+    if (isFollowing) {
+      await supabase.from('user_follows').delete().match({ follower_id: currentUser.id, following_id: profile.id });
+      setIsFollowing(false);
+      toast.success(`Unfollowed ${profile.username}`);
+    } else {
+      await supabase.from('user_follows').insert({ follower_id: currentUser.id, following_id: profile.id });
+      setIsFollowing(true);
+      toast.success(`Followed ${profile.username}`);
+    }
+  };
+
+  const handleMessage = async () => {
+    if (!currentUser) {
+      toast.error('Please login to message users');
+      return;
+    }
+
+    // If profile is admin, check for perk or follow
+    const isAdmin = profile.role === 'admin' || profile.is_admin;
+    
+    if (isAdmin) {
+        // Check if THEY follow ME
+        const { data: followedByData } = await supabase
+          .from('user_follows')
+          .select('*')
+          .eq('follower_id', profile.id)
+          .eq('following_id', currentUser.id)
+          .maybeSingle();
+        
+        const isFollowedByProfile = !!followedByData;
+        const hasPerk = await canMessageAdmin(currentUser.id);
+
+        if (!isFollowedByProfile && !hasPerk) {
+            toast.error("You need the 'Message Admin' perk or be followed by the Admin to message them!");
+            return;
+        }
+    }
+    
+    navigate(`/messages?user=${profile.id}`);
+  };
+
   // Defer early returns to after hooks to satisfy lint rules
 
   const isOwnProfile = currentUser?.id === profile?.id;
-  const canSeeFullProfile = viewerRole === 'admin' || viewerRole === 'lead_troll_officer' || isOwnProfile;
+  const canSeeFullProfile = viewerRole === 'admin' || viewerRole === 'lead_troll_officer' || viewerRole === 'secretary' || isOwnProfile;
 
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     if (!profile?.id) return;
     setPostsLoading(true);
     try {
@@ -295,11 +351,11 @@ export default function Profile() {
     } finally {
       setPostsLoading(false);
     }
-  };
+  }, [profile?.id]);
 
   useEffect(() => {
     fetchPosts();
-  }, [profile?.id]);
+  }, [fetchPosts]);
   useEffect(() => {
     if (!profile?.id) return;
     const channel = supabase
@@ -504,11 +560,17 @@ export default function Profile() {
                 </button>
               ) : (
                 <>
-                  <button className="px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition flex items-center gap-2 font-medium">
+                  <button 
+                    onClick={handleFollow}
+                    className={`px-4 py-2 rounded-lg transition flex items-center gap-2 font-medium ${isFollowing ? 'bg-gray-700 hover:bg-gray-600' : 'bg-purple-600 hover:bg-purple-700'}`}
+                  >
                     <UserPlus size={18} />
-                    <span>Follow</span>
+                    <span>{isFollowing ? 'Following' : 'Follow'}</span>
                   </button>
-                  <button className="px-4 py-2 bg-[#1A1A24] border border-gray-700 rounded-lg hover:bg-[#2A2A35] transition flex items-center gap-2">
+                  <button 
+                    onClick={handleMessage}
+                    className="px-4 py-2 bg-[#1A1A24] border border-gray-700 rounded-lg hover:bg-[#2A2A35] transition flex items-center gap-2"
+                  >
                     <MessageCircle size={18} />
                     <span>Message</span>
                   </button>
@@ -544,6 +606,12 @@ export default function Profile() {
               <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
                 {profile.website}
               </a>
+            </div>
+          )}
+          {canSeeFullProfile && profile.email && (
+            <div className="flex items-center gap-1 text-yellow-400/80">
+              <Mail size={14} />
+              <span>{profile.email}</span>
             </div>
           )}
           <div className="flex items-center gap-1">

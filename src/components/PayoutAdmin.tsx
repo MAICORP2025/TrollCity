@@ -115,6 +115,13 @@ const PayoutAdmin: React.FC = () => {
 
       if (error) throw error;
 
+      // Log the action
+      await supabase.rpc('log_admin_action', {
+        p_action_type: 'approve_payout_request',
+        p_target_id: requestId,
+        p_details: { status: 'approved' }
+      });
+
       toast.success('Payout request approved');
       loadPayoutData();
     } catch (error) {
@@ -151,6 +158,13 @@ const PayoutAdmin: React.FC = () => {
 
       if (error) throw error;
 
+      // Log the action
+      await supabase.rpc('log_admin_action', {
+        p_action_type: 'reject_payout_request',
+        p_target_id: requestId,
+        p_details: { status: 'rejected', reason: reason }
+      });
+
       toast.success('Payout request rejected');
       loadPayoutData();
     } catch (error) {
@@ -169,7 +183,14 @@ const PayoutAdmin: React.FC = () => {
       if (error) throw error;
 
       if (data.success) {
-        toast.success('Payout sent to PayPal for processing');
+        // Log the action
+        await supabase.rpc('log_admin_action', {
+          p_action_type: 'process_payout',
+          p_target_id: requestId,
+          p_details: { status: 'processing', paypal_batch_id: data.paypal_batch_id }
+        });
+
+        toast.success('Payout marked as processed');
         loadPayoutData();
       } else {
         toast.error(data.error || 'Failed to process payout');
@@ -208,9 +229,10 @@ const PayoutAdmin: React.FC = () => {
 
   const filteredRequests = requests.filter(request => {
     const matchesFilter = filter === 'all' || request.status === filter;
+    const searchLower = search.toLowerCase();
     const matchesSearch = search === '' ||
-      request.username.toLowerCase().includes(search.toLowerCase()) ||
-      request.paypal_email.toLowerCase().includes(search.toLowerCase());
+      (request.username || '').toLowerCase().includes(searchLower) ||
+      (request.paypal_email || '').toLowerCase().includes(searchLower);
     return matchesFilter && matchesSearch;
   });
 
@@ -307,7 +329,7 @@ const PayoutAdmin: React.FC = () => {
           <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by username or PayPal email..."
+            placeholder="Search by username or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -369,7 +391,7 @@ const PayoutAdmin: React.FC = () => {
                 </div>
 
                 <div>
-                  <div className="text-xs text-gray-400">PayPal Fee</div>
+                  <div className="text-xs text-gray-400">Fee</div>
                   <div className="text-lg font-bold text-red-400">${request.paypal_fee?.toFixed(2)}</div>
                 </div>
 

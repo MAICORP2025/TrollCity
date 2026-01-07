@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { Crown, Video, PartyPopper, X, Radio } from 'lucide-react';
+import { Crown, PartyPopper, X, Shield } from 'lucide-react';
 import { APP_DATA_REFETCH_EVENT_NAME as REFRESH_EVENT } from '../lib/appEvents';
 import { isBirthdayToday } from '../lib/birthdayUtils';
 import { useAuthStore } from '../lib/store';
-import { areUsersLive, getUserLiveStreamId } from '../lib/liveUtils';
+import { areUsersLive } from '../lib/liveUtils';
 import BanPage from '../components/BanPage';
 import KickPage from '../components/KickPage';
 import EmptyStateLiveNow from '../components/ui/EmptyStateLiveNow';
@@ -487,7 +487,7 @@ const ChristmasOutline: React.FC<{ rowCount?: number; colCount?: number }> = ({
 
 import LiveAvatar from '../components/LiveAvatar';
 
-const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) => void; isLive?: boolean; navigate: (path: string) => void }> = memo(({ user, onClick, isLive, navigate }) => {
+const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) => void; isLive?: boolean }> = memo(({ user, onClick, isLive }) => {
   const displayName = user.username || 'User';
   const isAdmin = user.role === 'admin';
   const profileRoute = user.id ? `/profile/id/${user.id}` : '#';
@@ -1147,15 +1147,6 @@ const HomePageContent = () => {
                 <span className="text-xs font-semibold text-cyan-400 tracking-wide">Auto-updating</span>
               </div>
             </div>
-            <button
-              onClick={() => navigate('/go-live')}
-              className="relative group bg-gradient-to-r from-pink-500 via-purple-500 to-pink-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-pink-500/30 hover:shadow-xl hover:shadow-pink-500/50 transition-all duration-300 flex items-center gap-2 transform hover:scale-105 active:scale-95 overflow-hidden"
-              aria-label="Go Live - open broadcaster setup"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 transform translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
-              <Video size={18} />
-              Go Live
-            </button>
           </div>
 
           {showCategoryRow && (
@@ -1207,12 +1198,24 @@ const HomePageContent = () => {
                     }`}
                   >
                     <div className="relative overflow-hidden h-52">
-                      <img
-                        src={s.user_profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.user_profiles?.username || 'troll'}`}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                        alt="Stream preview"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                      {s.category === 'Officer Stream' ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 border-b border-purple-500/30 p-4">
+                           <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-3 animate-pulse">
+                              <Shield className="w-8 h-8 text-blue-400" />
+                           </div>
+                           <h3 className="text-lg font-bold text-white text-center">Officer Stream</h3>
+                           <p className="text-xs text-blue-300 text-center mt-1">Authorized Personnel Only</p>
+                        </div>
+                      ) : (
+                        <>
+                          <img
+                            src={s.user_profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.user_profiles?.username || 'troll'}`}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            alt="Stream preview"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                        </>
+                      )}
                     </div>
 
                     <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
@@ -1310,7 +1313,6 @@ const HomePageContent = () => {
                       user={user} 
                       onClick={navigate} 
                       isLive={liveUsers.get(user.id) || false}
-                      navigate={navigate}
                     />
                   ))}
                 </div>

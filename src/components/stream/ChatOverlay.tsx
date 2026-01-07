@@ -144,6 +144,8 @@ export default function ChatOverlay({ streamId }: ChatOverlayProps) {
                 username={username} 
                 prefix=""
                 profile={msg.user_profiles}
+                isBroadcaster={isBroadcaster}
+                streamId={streamId}
               />
               <UserBadge profile={msg.user_profiles} />
             </strong>

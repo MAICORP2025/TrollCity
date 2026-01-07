@@ -28,6 +28,8 @@ export default function IncomingCallPopup({
   // const { profile } = useAuthStore();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -37,7 +39,24 @@ export default function IncomingCallPopup({
     // Play ringtone
     if (audioEl) {
       audioEl.loop = true;
-      audioEl.play().catch(console.error);
+      audioEl.play().catch(() => {
+        // Fallback: generate troll ringtone with WebAudio if asset missing
+        try {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          audioCtxRef.current = ctx;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.value = 550;
+          gain.gain.value = 0.05;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          oscillatorRef.current = osc;
+        } catch {
+          // ignore
+        }
+      });
     }
 
     // Auto-decline after 20 seconds
@@ -49,6 +68,19 @@ export default function IncomingCallPopup({
       if (audioEl) {
         audioEl.pause();
         audioEl.currentTime = 0;
+      }
+      if (oscillatorRef.current) {
+        try {
+          oscillatorRef.current.stop();
+          oscillatorRef.current.disconnect();
+        } catch {}
+        oscillatorRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        try {
+          audioCtxRef.current.close();
+        } catch {}
+        audioCtxRef.current = null;
       }
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -63,6 +95,19 @@ export default function IncomingCallPopup({
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
+    if (oscillatorRef.current) {
+      try {
+        oscillatorRef.current.stop();
+        oscillatorRef.current.disconnect();
+      } catch {}
+      oscillatorRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      try {
+        audioCtxRef.current.close();
+      } catch {}
+      audioCtxRef.current = null;
+    }
     navigate(`/call/${roomId}/${callType}/${callerId}`);
     onAccept();
   };
@@ -73,6 +118,19 @@ export default function IncomingCallPopup({
     }
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
+    }
+    if (oscillatorRef.current) {
+      try {
+        oscillatorRef.current.stop();
+        oscillatorRef.current.disconnect();
+      } catch {}
+      oscillatorRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      try {
+        audioCtxRef.current.close();
+      } catch {}
+      audioCtxRef.current = null;
     }
     onDecline();
   };

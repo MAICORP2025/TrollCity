@@ -21,6 +21,7 @@ const CacheClear: React.FC = () => {
       if (!response.ok) throw new Error('Failed');
       setStatus(prev => ({ ...prev, server: 'success' }));
     } catch (error) {
+      console.error(error);
       setStatus(prev => ({ ...prev, server: 'error' }));
     } finally {
       setClearing(null);
@@ -38,6 +39,7 @@ const CacheClear: React.FC = () => {
       // For now, clearing everything is what "Clear Cache" implies.
       setStatus(prev => ({ ...prev, local: 'success' }));
     } catch (error) {
+      console.error(error);
       setStatus(prev => ({ ...prev, local: 'error' }));
     } finally {
       setClearing(null);

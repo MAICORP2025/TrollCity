@@ -2,7 +2,6 @@ import React, { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Radio } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { toast } from 'sonner';
 
 interface LiveAvatarProps {
   userId?: string;
@@ -46,7 +45,7 @@ const LiveAvatar: React.FC<LiveAvatarProps> = memo(({
     if (isLive && userId) {
       try {
         // Fetch active stream for this user
-        const { data: stream, error } = await supabase
+        const { data: stream } = await supabase
           .from('streams')
           .select('id')
           .eq('broadcaster_id', userId)

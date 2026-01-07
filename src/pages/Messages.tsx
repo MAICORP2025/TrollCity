@@ -136,7 +136,19 @@ export default function Messages() {
       .eq('user_id', user.id)
       .eq('type', 'call')
       .contains('metadata', { room_id: incomingCall.roomId })
-    
+    // Log declined call with zero duration
+    try {
+      await supabase.from('call_history').insert({
+        caller_id: incomingCall.callerId,
+        receiver_id: user.id,
+        room_id: incomingCall.roomId,
+        type: incomingCall.callType,
+        duration_minutes: 0,
+        ended_at: new Date().toISOString()
+      })
+    } catch {
+      // ignore logging errors
+    }
     setIncomingCall(null)
   }
 

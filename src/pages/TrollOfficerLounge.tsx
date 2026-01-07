@@ -4,18 +4,18 @@ import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { downloadPayrollPDF } from '../lib/officerPayrollPDF'
 import ChatWindow from '../components/stream/ChatWindow'
+import OfficerStreamGrid from '../components/officer/OfficerStreamGrid'
 import {
   Eye,
   Ban,
   VolumeX,
   Users,
   Shield,
-  Camera,
   DoorOpen,
   TrendingUp,
-  RefreshCw,
   Download,
-  MessageSquare
+  MessageSquare,
+  Phone
 } from 'lucide-react'
 
 type Stream = {
@@ -49,13 +49,11 @@ export default function TrollOfficerLounge() {
   const { profile, user } = useAuthStore()
   // const navigate = useNavigate()
 
-  const [liveStreams, setLiveStreams] = useState<Stream[]>([])
-  const [loading, setLoading] = useState(false)
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [officerChat, setOfficerChat] = useState<OfficerChatMessage[]>([])
   const [newOfficerMessage, setNewOfficerMessage] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'moderation' | 'families'>('moderation')
+  const [activeTab, setActiveTab] = useState<'moderation' | 'families' | 'calls'>('moderation')
   const [familiesList, setFamiliesList] = useState<any[]>([])
   const [payrollReports, setPayrollReports] = useState<any[]>([])
 
@@ -67,6 +65,24 @@ export default function TrollOfficerLounge() {
     reputation: 0,
     rank: 'Bronze I'
   })
+
+  const [callsList, setCallsList] = useState<any[]>([])
+
+  useEffect(() => {
+    const fetchCalls = async () => {
+      const { data, error } = await supabase
+        .from('call_history')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (!error && data) {
+        setCallsList(data)
+      }
+    }
+    if (activeTab === 'calls') {
+      fetchCalls()
+    }
+  }, [activeTab])
 
   // --- Helpers for rank & reputation ---
   const getRankFromReputation = (rep: number) => {
@@ -319,6 +335,15 @@ export default function TrollOfficerLounge() {
               <Users size={18} />
               <span className="font-semibold text-sm">Families & Gangs</span>
             </button>
+            <button
+              onClick={() => setActiveTab('calls')}
+              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition ${
+                activeTab === 'calls' ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-500/30' : 'hover:bg-white/5 text-gray-400'
+              }`}
+            >
+              <Phone size={18} />
+              <span className="font-semibold text-sm">Calls</span>
+            </button>
           </div>
 
           <div className="mt-auto p-4 border-t border-white/10">
@@ -356,49 +381,7 @@ export default function TrollOfficerLounge() {
             <div className="space-y-6">
               {/* LIVE STREAMS GRID */}
               <div>
-                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Camera size={20} className="text-red-500" />
-                  Active Streams ({liveStreams.length})
-                </h2>
-                {loading ? (
-                  <div className="flex items-center gap-2 text-gray-500 animate-pulse">
-                    <RefreshCw size={16} className="animate-spin" /> Loading streams...
-                  </div>
-                ) : liveStreams.length === 0 ? (
-                  <div className="p-8 border border-dashed border-white/10 rounded-xl text-center text-gray-500">
-                    No active streams found. The streets are quiet... for now.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {liveStreams.map((stream) => (
-                      <div
-                        key={stream.id}
-                        onClick={() => setSelectedStream(stream)}
-                        className={`cursor-pointer rounded-xl border p-4 transition relative group ${
-                          selectedStream?.id === stream.id
-                            ? 'bg-blue-900/10 border-blue-500'
-                            : 'bg-[#111] border-white/5 hover:border-white/20'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                            <span className="font-bold text-sm truncate max-w-[150px]">{stream.title}</span>
-                          </div>
-                          <span className="text-xs bg-white/10 px-2 py-1 rounded text-gray-300 flex items-center gap-1">
-                            <Eye size={10} /> {stream.current_viewers}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-2">Host: {stream.broadcaster_id}</p>
-                        <div className="flex gap-2 mt-2 opacity-0 group-hover:opacity-100 transition">
-                          <button className="px-3 py-1 bg-blue-600/20 text-blue-400 text-xs rounded hover:bg-blue-600/40">
-                            Monitor
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <OfficerStreamGrid />
               </div>
 
               {/* SELECTED STREAM MONITOR */}
@@ -519,6 +502,45 @@ export default function TrollOfficerLounge() {
                       <tr>
                         <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                           No families established yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {activeTab === 'calls' && (
+            <div>
+              <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <Phone size={20} className="text-yellow-500" />
+                Recent Calls
+              </h2>
+              <div className="bg-[#111] rounded-xl border border-white/10 overflow-hidden">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-white/5 text-gray-400 uppercase text-xs">
+                    <tr>
+                      <th className="px-6 py-3">Started</th>
+                      <th className="px-6 py-3">Caller</th>
+                      <th className="px-6 py-3">Receiver</th>
+                      <th className="px-6 py-3">Type</th>
+                      <th className="px-6 py-3">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {callsList.map((c) => (
+                      <tr key={c.id} className="hover:bg-white/5 transition">
+                        <td className="px-6 py-4 text-gray-300">{new Date(c.created_at).toLocaleString()}</td>
+                        <td className="px-6 py-4">{c.caller_id}</td>
+                        <td className="px-6 py-4">{c.receiver_id}</td>
+                        <td className="px-6 py-4">{c.type}</td>
+                        <td className="px-6 py-4">{c.duration_minutes} min</td>
+                      </tr>
+                    ))}
+                    {callsList.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                          No calls found.
                         </td>
                       </tr>
                     )}

@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, User, Bell } from 'lucide-react'
+import { Search, Bell, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
-import { supabase } from '../lib/supabase'
+import { supabase, searchUsers } from '../lib/supabase'
 import { toast } from 'sonner'
-import { getTierFromXP } from '../lib/tierSystem'
 import ClickableUsername from './ClickableUsername'
 import ProfileDropdown from './ui/ProfileDropdown'
 
@@ -21,32 +20,23 @@ const Header = () => {
   const [unreadNotifications, setUnreadNotifications] = useState(0)
 
   useEffect(() => {
-    const searchUsers = async () => {
+    const runSearch = async () => {
       if (!searchQuery.trim()) {
-        // Show all users if query is empty
-        const { data } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url')
-          .limit(50)
-          .order('created_at', { ascending: false })
+        const data = await searchUsers({ query: '', limit: 50 })
         setSearchResults(data || [])
         setShowUserDropdown(true)
         return
       }
 
       const query = searchQuery.trim().replace('@', '')
-      const searchQuery4 = query.substring(0, 4).toLowerCase()
 
       try {
-        // Search by first 4 characters
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url')
-          .ilike('username', `${searchQuery4}%`)
-          .limit(20)
-          .order('created_at', { ascending: false })
-
-        if (error) throw error
+        if (query.length < 3) {
+          setSearchResults([])
+          setShowUserDropdown(false)
+          return
+        }
+        const data = await searchUsers({ query, limit: 20 })
         setSearchResults(data || [])
         setShowUserDropdown(true)
       } catch (err) {
@@ -55,7 +45,7 @@ const Header = () => {
       }
     }
 
-    const timeoutId = setTimeout(searchUsers, 300)
+    const timeoutId = setTimeout(runSearch, 300)
     return () => clearTimeout(timeoutId)
   }, [searchQuery])
 
@@ -163,17 +153,10 @@ const Header = () => {
   const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
       const query = searchQuery.trim().replace('@', '')
-      const searchQuery4 = query.substring(0, 4).toLowerCase()
 
       try {
-        // Search by first 4 characters
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('id, username')
-          .ilike('username', `${searchQuery4}%`)
-          .limit(1)
-
-        if (error || !data || data.length === 0) {
+        const data = await searchUsers({ query, limit: 1, select: 'id, username' })
+        if (!data || data.length === 0) {
           toast.error('User not found')
           return
         }
@@ -230,14 +213,13 @@ const Header = () => {
     }
   }
 
-  const profileLink = useMemo(() => {
+  const _handleProfileClick = () => {
     if (profile?.username) {
-      return `/profile/${profile.username}`
+      navigate(`/profile/${profile.username}`)
+    } else {
+      navigate('/profile/setup')
     }
-    return '/profile/setup'
-  }, [profile?.username])
-
-  
+  }
 
   return (
     <header className="h-20 bg-troll-dark-bg/80 border-b border-troll-neon-pink/20 flex items-center justify-between px-8 backdrop-blur-lg relative overflow-hidden">
@@ -255,7 +237,7 @@ const Header = () => {
             onFocus={() => setShowUserDropdown(true)}
             onBlur={() => setTimeout(() => setShowUserDropdown(false), 200)}
             onKeyDown={handleSearch}
-            placeholder="Search users (first 4 chars)..."
+            placeholder="Search users..."
             autoComplete="off"
             className="w-full pl-12 pr-6 py-3 bg-troll-dark-card/50 border border-troll-neon-pink/30 rounded-xl text-white placeholder-troll-neon-blue/50 focus:outline-none focus:ring-2 focus:ring-troll-neon-pink focus:border-troll-neon-pink transition-all duration-300 shadow-lg focus:shadow-troll-neon-pink/30"
           />
@@ -303,6 +285,14 @@ const Header = () => {
         </Link>
         
         <ProfileDropdown onLogout={handleLogout} />
+
+        <button
+          onClick={handleLogout}
+          className="p-3 text-red-400 hover:text-red-300 transition-all duration-300 hover:bg-red-500/10 rounded-xl hidden md:block"
+          title="Logout"
+        >
+          <LogOut className="w-6 h-6" />
+        </button>
       </div>
     </header>
   )

@@ -6,7 +6,7 @@ import api from '../lib/api'
 import { toast } from 'sonner'
 import { DollarSign, Banknote, Send, History } from 'lucide-react'
 
-type PayoutMethod = 'PayPal'
+type PayoutMethod = 'Gift Card'
 
 interface CashoutTier {
   id: string
@@ -24,14 +24,17 @@ const CASHOUT_TIERS: CashoutTier[] = [
 
 export default function EarningsPayout() {
   const { profile, user } = useAuthStore()
-  const [payoutMethod] = useState<PayoutMethod>('PayPal')
+  const [payoutMethod] = useState<PayoutMethod>('Gift Card')
   const [payoutDetails, setPayoutDetails] = useState('')
   const [fullName, setFullName] = useState('')
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [recentRequests, setRecentRequests] = useState<any[]>([])
 
-  const troll_coins = profile?.troll_coins || 0
+  const raw_troll_coins = profile?.troll_coins || 0
+  const reserved_coins = profile?.reserved_troll_coins || 0
+  const troll_coins = Math.max(0, raw_troll_coins - reserved_coins)
+  
   const freeCoins = profile?.troll_coins || 0
 
   const eligibleTiers = useMemo(
@@ -89,7 +92,7 @@ export default function EarningsPayout() {
     }
   }, [profile, loadRecent])
 
-  const placeholderForMethod = (_m: PayoutMethod) => 'PayPal email (e.g. troll@example.com)'
+  const placeholderForMethod = (_m: PayoutMethod) => 'Email for Gift Card'
 
   const handleSubmit = useCallback(async () => {
     if (!profile) {
@@ -215,7 +218,7 @@ export default function EarningsPayout() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm mb-1">Payout Method</label>
-              <div className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-3 py-2 text-sm">PayPal (only)</div>
+              <div className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-3 py-2 text-sm">Gift Card</div>
             </div>
             <div>
               <label className="block text-sm mb-1">Full Name</label>

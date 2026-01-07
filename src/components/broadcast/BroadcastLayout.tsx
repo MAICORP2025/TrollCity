@@ -1,14 +1,12 @@
-import React, { useMemo, useState, Suspense } from 'react'
+import React from 'react'
 import { useRoomParticipants } from '../../hooks/useRoomParticipants'
 import { Room } from 'livekit-client'
-import { User, Minus, Plus } from 'lucide-react'
 import ResponsiveVideoGrid from '../stream/ResponsiveVideoGrid'
 
 interface BroadcastLayoutProps {
   room: Room
   broadcasterId: string
   isHost: boolean
-  totalCoins?: number
   joinPrice?: number
   onSetPrice?: (price: number) => void
   onJoinRequest?: () => void
@@ -20,10 +18,8 @@ export default function BroadcastLayout({
   room, 
   broadcasterId, 
   isHost, 
-  totalCoins = 0, 
   joinPrice = 0, 
   onSetPrice, 
-  onJoinRequest, 
   onLeaveSession, 
   children 
 }: BroadcastLayoutProps) {
@@ -42,12 +38,6 @@ export default function BroadcastLayout({
       {/* Overlays / Children (Gifts, etc) */}
       <div className="absolute inset-0 pointer-events-none z-20">
         {children}
-      </div>
-
-      {/* Coin Counter Overlay (Preserved) */}
-      <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-yellow-500/30 px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg z-30 pointer-events-auto safe-area-inset-top">
-          <div className="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center text-black font-bold text-xs">C</div>
-          <span className="text-yellow-400 font-bold text-lg">{totalCoins.toLocaleString()}</span>
       </div>
 
       {/* Broadcaster Price Control (Preserved) */}

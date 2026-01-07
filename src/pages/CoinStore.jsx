@@ -7,9 +7,10 @@ import { toast } from 'sonner';
 import { Coins, DollarSign, ShoppingCart, CreditCard, CheckCircle, Loader2 } from 'lucide-react';
 import { coinPackages, formatCoins, formatUSD } from '../lib/coinMath';
 import { addCoins, deductCoins } from '@/lib/coinTransactions';
-import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { useLiveContextStore } from '../lib/liveContextStore';
 import { useStreamMomentum } from '@/lib/hooks/useStreamMomentum';
+import { useCheckOfficerOnboarding } from '@/hooks/useCheckOfficerOnboarding';
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 const PAYPAL_OPTIONS = {
   "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID,
@@ -62,11 +63,13 @@ export default function CoinStore() {
   const { user, profile, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
   const { troll_coins, refreshCoins } = useCoins();
+  const { checkOnboarding } = useCheckOfficerOnboarding();
   const STORE_TAB_KEY = 'tc-store-active-tab';
   const STORE_COMPLETE_KEY = 'tc-store-show-complete';
   const [loading, setLoading] = useState(true);
   const [loadingPackage, setLoadingPackage] = useState(null);
   const [tab, setTab] = useState('coins');
+  const [durationMultiplier, setDurationMultiplier] = useState(1);
   const [effects, setEffects] = useState([]);
   const [perks, setPerks] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -314,6 +317,10 @@ export default function CoinStore() {
       : error?.message || 'Failed to deduct coins'
 
   const buyEffect = async (effect) => {
+   // Check officer onboarding first
+   const canProceed = await checkOnboarding();
+   if (!canProceed) return;
+
    try {
      const price = effect.price_troll_coins || effect.coin_cost || 0
      if (price <= 0) {
@@ -369,9 +376,15 @@ export default function CoinStore() {
  }
 
   const buyPerk = async (perk) => {
+   // Check officer onboarding first
+   const canProceed = await checkOnboarding();
+   if (!canProceed) return;
+
    try {
-     const price = getPerkPrice(perk)
-     const durationMinutes = Number(perk.duration_minutes || 0)
+     const basePrice = getPerkPrice(perk)
+     const price = basePrice * durationMultiplier
+     const baseDuration = Number(perk.duration_minutes || 0)
+     const durationMinutes = baseDuration * durationMultiplier
      
      if (price <= 0) {
        toast.error('Invalid perk price')
@@ -389,8 +402,8 @@ export default function CoinStore() {
       userId: user.id,
       amount: price,
       type: 'perk_purchase',
-      description: `Purchased perk: ${perk.name}`,
-      metadata: { perk_id: perk.id },
+      description: `Purchased perk: ${perk.name} (${durationMultiplier}x duration)`,
+      metadata: { perk_id: perk.id, multiplier: durationMultiplier },
       supabaseClient: supabase,
     })
     
@@ -445,52 +458,59 @@ export default function CoinStore() {
  }
 
   const buyInsurance = async (plan) => {
-   try {
-     const price = Number(plan.cost || 0)
-     const durationHours = Number(plan.duration_hours || 0)
-     
-     if (price <= 0) {
-       toast.error('Invalid insurance price')
-       return
-     }
-     
-     if (troll_coins < price) {
-       toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`)
-       return
-     }
-     
-    const { error: deductErr } = await deductCoins({
-      userId: user.id,
-      amount: price,
-      type: 'insurance_purchase',
-      description: `Purchased insurance: ${plan.name}`,
-      metadata: { insurance_id: plan.id },
-      supabaseClient: supabase,
-    })
-     
+    // Check officer onboarding first
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+
+    try {
+      const basePrice = Number(plan.cost || 0);
+      const price = basePrice * durationMultiplier;
+      const baseDuration = Number(plan.duration_hours || 0);
+      const durationHours = baseDuration * durationMultiplier;
+      
+      if (price <= 0) {
+        toast.error('Invalid insurance price')
+        return
+      }
+      
+      if (troll_coins < price) {
+        toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`)
+        return
+      }
+      
+      const { error: deductErr } = await deductCoins({
+        userId: user.id,
+        amount: price,
+        type: 'insurance_purchase',
+        description: `Purchased insurance: ${plan.name} (${durationMultiplier}x duration)`,
+        metadata: { insurance_id: plan.id, multiplier: durationMultiplier },
+        supabaseClient: supabase,
+      })
+      
       if (deductErr) {
         console.error('Coin deduction error:', deductErr)
         toast.error(formatDeductErrorMessage(deductErr))
         return
       }
-     
+      
       await refreshCoins()
-
-     const expiresAt = new Date(Date.now() + Math.max(1, durationHours) * 60 * 60 * 1000).toISOString()
-     
-     const { error: insertErr } = await supabase.from('user_insurances').insert([{
-       user_id: user.id,
-       insurance_id: plan.id,
-       expires_at: expiresAt,
-       is_active: true,
-       protection_type: plan.protection_type,
-       metadata: {
-         insurance_name: plan.name,
-         cost: price,
-         duration_hours: durationHours,
-         protection_type: plan.protection_type,
-       }
-     }])
+ 
+      const expiresAt = new Date(Date.now() + Math.max(1, durationHours) * 60 * 60 * 1000).toISOString()
+      
+      const { error: insertErr } = await supabase.from('user_insurances').insert([{
+        user_id: user.id,
+        insurance_id: plan.id,
+        expires_at: expiresAt,
+        is_active: true,
+        protection_type: plan.protection_type,
+        metadata: {
+          insurance_name: plan.name,
+          cost: price,
+          duration_hours: durationHours,
+          protection_type: plan.protection_type,
+          multiplier: durationMultiplier,
+        }
+      }])
      
      if (insertErr) {
        console.error('Insurance purchase error:', insertErr)
@@ -508,6 +528,10 @@ export default function CoinStore() {
  }
 
   const buyCallMinutes = async (pkg) => {
+    // Check officer onboarding first
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+
     if (!user?.id) {
       toast.error('Please log in to purchase minutes');
       return;
@@ -570,6 +594,10 @@ export default function CoinStore() {
   };
 
   const handleBuy = async (pkg) => {
+    // Check officer onboarding first
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+
     console.log('🛒 Starting PayPal checkout for package:', pkg.id);
     setLoadingPackage(pkg.id);
 
@@ -749,6 +777,10 @@ export default function CoinStore() {
                     style={{ layout: "horizontal" }}
                     fundingSource="paypal"
                     createOrder={async () => {
+                      // Check officer onboarding first
+                      const canProceed = await checkOnboarding();
+                      if (!canProceed) throw new Error("Onboarding required");
+
                       const { data: { session } } = await supabase.auth.getSession();
                       const token = session?.access_token;
                       if (!token) throw new Error('No authentication token available');
@@ -983,13 +1015,40 @@ export default function CoinStore() {
                 {perksNote && (
                   <div className="text-xs text-yellow-300 mb-3">{perksNote}</div>
                 )}
+                
+                <div className="flex items-center gap-2 mb-4 bg-zinc-900/50 p-3 rounded-lg border border-purple-500/20 overflow-x-auto">
+                  <span className="text-sm text-gray-400 whitespace-nowrap">Duration Multiplier:</span>
+                  <div className="flex gap-2">
+                    {[1, 2, 4, 6, 8].map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setDurationMultiplier(m)}
+                        className={`px-3 py-1 rounded text-sm font-bold transition-all ${
+                          durationMultiplier === m 
+                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50 scale-105' 
+                            : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {m}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {perks.map((p) => (
                     <div key={p.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
                       <div className="font-semibold mb-2">{p.name}</div>
                       <div className="text-sm text-gray-400 mb-3">{p.description}</div>
                       <div className="flex items-center justify-between">
-                        <div className="text-yellow-400 font-bold">{getPerkPrice(p).toLocaleString()} Troll Coins</div>
+                        <div>
+                          <div className="text-yellow-400 font-bold">{(getPerkPrice(p) * durationMultiplier).toLocaleString()} Troll Coins</div>
+                          {durationMultiplier > 1 && (
+                            <div className="text-xs text-purple-300">
+                              {durationMultiplier}x duration ({(p.duration_minutes * durationMultiplier).toLocaleString()} mins)
+                            </div>
+                          )}
+                        </div>
                         <button type="button" onClick={() => buyPerk(p)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
                       </div>
                     </div>
@@ -1062,15 +1121,40 @@ export default function CoinStore() {
                 {insuranceNote && (
                   <div className="text-xs text-yellow-300 mb-3">{insuranceNote}</div>
                 )}
+                
+                <div className="flex items-center gap-2 mb-4 bg-zinc-900/50 p-3 rounded-lg border border-purple-500/20 overflow-x-auto">
+                  <span className="text-sm text-gray-400 whitespace-nowrap">Duration Multiplier:</span>
+                  <div className="flex gap-2">
+                    {[1, 2, 4, 6, 8].map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setDurationMultiplier(m)}
+                        className={`px-3 py-1 rounded text-sm font-bold transition-all ${
+                          durationMultiplier === m 
+                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50 scale-105' 
+                            : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {m}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {plans.map((p) => (
                     <div key={p.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
                       <div className="font-semibold mb-2">{p.name}</div>
                       <div className="text-sm text-gray-400 mb-2">{p.protection_type} protection</div>
                       <div className="text-xs text-gray-500 mb-3">{p.description}</div>
-                      <div className="text-xs text-gray-500 mb-3">Duration: {p.duration_hours} hours</div>
+                      <div className="text-xs text-gray-500 mb-3">
+                        Base Duration: {p.duration_hours} hours
+                        {durationMultiplier > 1 && <span className="text-purple-400 ml-2">({p.duration_hours * durationMultiplier} hours total)</span>}
+                      </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-yellow-400 font-bold">{(p.cost || 0).toLocaleString()} Troll Coins</div>
+                        <div>
+                          <div className="text-yellow-400 font-bold">{((p.cost || 0) * durationMultiplier).toLocaleString()} Troll Coins</div>
+                        </div>
                         <button type="button" onClick={() => buyInsurance(p)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
                       </div>
                     </div>

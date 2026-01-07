@@ -1,9 +1,13 @@
-import { Database, Shield, RefreshCw, Settings } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 import DatabaseBackup from './DatabaseBackup'
 import CityControlCenter from './CityControlCenter'
 import CacheClear from './CacheClear'
 import SystemConfig from './SystemConfig'
+import LiveKitUsageTab from './components/LiveKitUsageTab'
+import UserFormsTab from './components/UserFormsTab'
+import AdminErrors from './AdminErrors'
+import AdminCallsTab from './components/AdminCallsTab'
 
 export interface AdminRoute {
   id: string
@@ -32,6 +36,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileColor: 'text-cyan-200',
     tileBgColor: 'bg-cyan-500/10',
     tileBorderColor: 'border-cyan-500/30',
+    category: 'system'
+  },
+  {
+    id: 'system-errors',
+    title: 'System Errors',
+    path: '/admin/errors',
+    component: AdminErrors,
+    roles: [UserRole.ADMIN],
+    description: 'View and respond to errors',
+    icon: <AlertTriangle className="w-5 h-5 text-yellow-200" />,
+    tileColor: 'text-yellow-200',
+    tileBgColor: 'bg-yellow-500/10',
+    tileBorderColor: 'border-yellow-500/30',
     category: 'system'
   },
   {
@@ -73,4 +90,43 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBorderColor: 'border-purple-500/30',
     category: 'system'
   },
+  {
+    id: 'livekit-usage',
+    title: 'LiveKit Usage',
+    path: '/admin/system/livekit',
+    component: LiveKitUsageTab,
+    roles: [UserRole.ADMIN],
+    description: 'Monitor broadcast minutes & quotas',
+    icon: <Video className="w-5 h-5 text-pink-200" />,
+    tileColor: 'text-pink-200',
+    tileBgColor: 'bg-pink-500/10',
+    tileBorderColor: 'border-pink-500/30',
+    category: 'system'
+  },
+  {
+    id: 'user-forms',
+    title: 'User Forms',
+    path: '/admin/users/forms',
+    component: UserFormsTab,
+    roles: [UserRole.ADMIN],
+    description: 'Track and prompt user forms',
+    icon: <FileText className="w-5 h-5 text-blue-200" />,
+    tileColor: 'text-blue-200',
+    tileBgColor: 'bg-blue-500/10',
+    tileBorderColor: 'border-blue-500/30',
+    category: 'users'
+  },
+  {
+    id: 'calls',
+    title: 'Calls',
+    path: '/admin/calls',
+    component: AdminCallsTab,
+    roles: [UserRole.ADMIN],
+    description: 'View and audit user calls',
+    icon: <Phone className="w-5 h-5 text-yellow-200" />,
+    tileColor: 'text-yellow-200',
+    tileBgColor: 'bg-yellow-500/10',
+    tileBorderColor: 'border-yellow-500/30',
+    category: 'system'
+  }
 ]

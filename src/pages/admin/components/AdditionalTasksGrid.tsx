@@ -23,7 +23,8 @@ import {
   Clock,
   Activity,
   Award,
-  Zap
+  Zap,
+  Gift
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { systemManagementRoutes } from '../adminRoutes'
@@ -41,6 +42,17 @@ interface AdditionalTasksGridProps {
   onOpenEmpireApplications?: () => void
   onOpenReferralBonuses?: () => void
   onSelectTab?: (tabId: string) => void
+  counts?: {
+    intake?: number
+    cashouts?: number
+    alerts?: number
+    reports?: number
+    user_forms?: number
+    tax_reviews?: number
+    empire_apps?: number
+    referrals?: number
+    [key: string]: number | undefined
+  }
 }
 
 export default function AdditionalTasksGrid({
@@ -55,7 +67,8 @@ export default function AdditionalTasksGrid({
   onOpenResetPanel,
   onOpenEmpireApplications,
   onOpenReferralBonuses,
-  onSelectTab
+  onSelectTab,
+  counts = {}
 }: AdditionalTasksGridProps) {
   const pickTab = (tabId: string) => () => {
     if (!onSelectTab) return
@@ -80,7 +93,76 @@ export default function AdditionalTasksGrid({
     }))
   }
 
+  const executiveOfficeGroup = {
+    title: 'Executive Office',
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/20',
+    borderColor: 'border-amber-500/30',
+    tasks: [
+      {
+        icon: <Shield className="w-5 h-5" />,
+        label: 'Exec Secretaries',
+        description: 'Manage assignments',
+        action: () => navigate('/admin/executive-secretaries'),
+        color: 'text-purple-400',
+        bgColor: 'bg-purple-500/20'
+      },
+      {
+        icon: <Clock className="w-5 h-5" />,
+        label: 'Intake Inbox',
+        description: 'Executive intake',
+        action: () => navigate('/admin/executive-intake'),
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/20',
+        count: counts.intake
+      },
+      {
+        icon: <DollarSign className="w-5 h-5" />,
+        label: 'Cashout Mgr',
+        description: 'Requests & Gifts',
+        action: () => navigate('/admin/cashout-manager'),
+        color: 'text-green-400',
+        bgColor: 'bg-green-500/20',
+        count: counts.cashouts
+      },
+      {
+        icon: <Gift className="w-5 h-5" />,
+        label: 'Gift Cards',
+        description: 'Manage fulfillments',
+        action: () => navigate('/admin/gift-cards'),
+        color: 'text-pink-400',
+        bgColor: 'bg-pink-500/20'
+      },
+      {
+        icon: <Bell className="w-5 h-5" />,
+        label: 'Critical Alerts',
+        description: 'System alerts',
+        action: () => navigate('/admin/critical-alerts'),
+        color: 'text-red-400',
+        bgColor: 'bg-red-500/20',
+        count: counts.alerts
+      },
+      {
+        icon: <Activity className="w-5 h-5" />,
+        label: 'Exec Reports',
+        description: 'Review reports',
+        action: () => navigate('/admin/executive-reports'),
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/20'
+      },
+      {
+        icon: <UserCheck className="w-5 h-5" />,
+        label: 'Officer Mgmt',
+        description: 'Roles & Status',
+        action: () => navigate('/admin/officer-management'),
+        color: 'text-indigo-400',
+        bgColor: 'bg-indigo-500/20'
+      }
+    ]
+  }
+
   const taskGroups = [
+    executiveOfficeGroup,
     systemManagementGroup,
     {
       title: 'User Management',
@@ -110,7 +192,8 @@ export default function AdditionalTasksGrid({
           description: 'Handle user reports',
           action: pickTab('reports_queue'),
           color: 'text-yellow-400',
-          bgColor: 'bg-yellow-500/20'
+          bgColor: 'bg-yellow-500/20',
+          count: counts.reports
         },
         {
           icon: <UserCheck className="w-5 h-5" />,
@@ -119,6 +202,15 @@ export default function AdditionalTasksGrid({
           action: pickTab('role_management'),
           color: 'text-green-400',
           bgColor: 'bg-green-500/20'
+        },
+        {
+          icon: <Activity className="w-5 h-5" />,
+          label: 'User Forms',
+          description: 'Manage user forms',
+          action: () => navigate('/admin/user-forms'),
+          color: 'text-purple-400',
+          bgColor: 'bg-purple-500/20',
+          count: counts.user_forms
         }
       ]
     },
@@ -246,7 +338,8 @@ export default function AdditionalTasksGrid({
           description: 'Review empire partnerships',
           action: onOpenEmpireApplications,
           color: 'text-purple-400',
-          bgColor: 'bg-purple-500/20'
+          bgColor: 'bg-purple-500/20',
+          count: counts.empire_apps
         },
         {
           icon: <Award className="w-5 h-5" />,
@@ -254,7 +347,8 @@ export default function AdditionalTasksGrid({
           description: 'Manage referral system',
           action: onOpenReferralBonuses,
           color: 'text-pink-400',
-          bgColor: 'bg-pink-500/20'
+          bgColor: 'bg-pink-500/20',
+          count: counts.referrals
         }
       ]
     },
@@ -328,14 +422,22 @@ export default function AdditionalTasksGrid({
                   className={`group relative ${task.bgColor} border border-[#2C2C2C] hover:border-[#3C3C3C] rounded-lg p-4 transition-all duration-200 hover:scale-105 hover:shadow-lg`}
                 >
                   <div className="flex flex-col items-center text-center space-y-2">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${task.bgColor} group-hover:scale-110 transition-transform`}>
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${task.bgColor} group-hover:scale-110 transition-transform relative`}>
                       <div className={task.color}>
                         {task.icon}
                       </div>
+                      {(task as any).count > 0 && (
+                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
+                      )}
                     </div>
                     <div>
-                      <div className="font-medium text-white text-sm group-hover:text-cyan-300 transition-colors">
+                      <div className="font-medium text-white text-sm group-hover:text-cyan-300 transition-colors flex items-center justify-center gap-1">
                         {task.label}
+                        {(task as any).count > 0 && (
+                           <span className="bg-red-500/20 text-red-400 text-[10px] px-1.5 py-0.5 rounded-full border border-red-500/30">
+                             {(task as any).count}
+                           </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">
                         {task.description}

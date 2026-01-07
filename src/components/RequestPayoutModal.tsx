@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, getSystemSettings } from '../lib/supabase'
 import { toast } from 'sonner'
 import { X, DollarSign, AlertCircle } from 'lucide-react'
 import { RequestPayoutResponse } from '../types/earnings'
@@ -39,6 +39,12 @@ export default function RequestPayoutModal({
 
     setLoading(true)
     try {
+      const s = await getSystemSettings()
+      if (s?.payout_lock_enabled) {
+        toast.error('Payouts are locked during Launch Trial Mode.')
+        setLoading(false)
+        return
+      }
       // Call RPC function
       const { data, error } = await supabase
         .rpc('request_payout', {

@@ -7,13 +7,16 @@ import { Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveKit } from '../hooks/useLiveKit';
 import type { LiveKitServiceConfig } from '../lib/LiveKitService';
+import { useCheckOfficerOnboarding } from '../hooks/useCheckOfficerOnboarding';
+import { deductCoins } from '../lib/coinTransactions';
 
 const GoLive: React.FC = () => {
   const navigate = useNavigate();
   const liveKit = useLiveKit();
+  const { checkOnboarding } = useCheckOfficerOnboarding();
   // Note: videoRef removed - no camera preview in setup
 
-  // const { user, profile } = useAuthStore(); // Using getState() instead for async operations
+  const { profile } = useAuthStore(); // Using getState() instead for async operations
 
   const [streamTitle, setStreamTitle] = useState('');
   const [isStreaming] = useState(false);
@@ -25,7 +28,6 @@ const GoLive: React.FC = () => {
   const [broadcasterName, setBroadcasterName] = useState<string>('');
   const [category, setCategory] = useState<string>('Chat');
   const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
-  const [enablePaidGuestBoxes, setEnablePaidGuestBoxes] = useState<boolean>(false);
 
   // Note: Camera/mic permissions will be requested when joining seats in broadcast
   // No camera preview needed in setup
@@ -92,6 +94,10 @@ const GoLive: React.FC = () => {
   // START STREAM
   // -------------------------------
   const handleStartStream = async () => {
+    // Check officer onboarding first
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+
     const { profile, user } = useAuthStore.getState();
 
     if (!user || !profile) {
@@ -109,6 +115,41 @@ const GoLive: React.FC = () => {
     if (!streamTitle.trim()) {
       toast.error('Enter a stream title.');
       return;
+    }
+
+    // Check for Private Stream cost
+    if (isPrivateStream) {
+      const userLevel = profile.level || 0;
+      if (userLevel < 40) {
+        // Need to pay 1000 coins
+        const currentCoins = profile.troll_coins || 0;
+        const COST = 1000;
+        
+        if (currentCoins < COST) {
+           toast.error(`Private streams cost ${COST} troll_coins. You only have ${currentCoins}.`);
+           return;
+        }
+
+        // Deduct coins
+        try {
+          const deduction = await deductCoins({
+            userId: user.id,
+            amount: COST,
+            type: 'perk_purchase', 
+            description: 'Private Stream Setup Fee',
+            supabaseClient: supabase
+          });
+
+          if (!deduction.success) {
+            toast.error('Failed to deduct coins for private stream: ' + (deduction.error || 'Unknown error'));
+            return;
+          }
+        } catch (err: any) {
+          console.error('Error deducting coins:', err);
+          toast.error('Failed to process private stream fee.');
+          return;
+        }
+      }
     }
 
     setIsConnecting(true);
@@ -458,6 +499,7 @@ const GoLive: React.FC = () => {
                 <option>Gaming</option>
                 <option>Music</option>
                 <option>IRL</option>
+                <option>Officer</option>
               </select>
             </div>
 
@@ -465,11 +507,15 @@ const GoLive: React.FC = () => {
               <label className="text-gray-300">Options</label>
               <div className="flex items-center gap-3">
                 <input id="private" type="checkbox" checked={isPrivateStream} onChange={() => setIsPrivateStream((v) => !v)} />
-                <label htmlFor="private" className="text-sm text-gray-300">Private Stream <span className="text-xs text-purple-300">(1000 troll coins)</span></label>
-              </div>
-              <div className="flex items-center gap-3">
-                <input id="paidGuests" type="checkbox" checked={enablePaidGuestBoxes} onChange={() => setEnablePaidGuestBoxes((v) => !v)} />
-                <label htmlFor="paidGuests" className="text-sm text-gray-300">Enable Paid Guest Boxes</label>
+                <label htmlFor="private" className="text-sm text-gray-300">
+                  Private Stream 
+                  {/* Level 40+ bypass logic would be checked here for display, but logic is in start stream */}
+                  {(profile?.level || 0) >= 40 ? (
+                    <span className="text-xs text-green-400 ml-2">(Free for Lvl 40+)</span>
+                  ) : (
+                    <span className="text-xs text-purple-300 ml-2">(1000 troll coins)</span>
+                  )}
+                </label>
               </div>
             </div>
           </div>

@@ -17,13 +17,37 @@ interface PayoutRequestProps {
 }
 
 const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const [stats, setStats] = useState<PayoutStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
   const [paypalEmail, setPaypalEmail] = useState('');
   const [requestAmount, setRequestAmount] = useState<number>(0);
   const [showRequestForm, setShowRequestForm] = useState(false);
+  const [hasReducedFees, setHasReducedFees] = useState(false);
+
+  const checkReducedFees = React.useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('creator_migration_claims')
+        .select('verification_status, verified_at')
+        .eq('user_id', user!.id)
+        .maybeSingle();
+      
+      if (data && data.verification_status === 'approved' && data.verified_at) {
+        // Check if within 30 days
+        const verifiedAt = new Date(data.verified_at);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - verifiedAt.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        if (diffDays <= 30) {
+          setHasReducedFees(true);
+        }
+      }
+    } catch (err) {
+      console.error('Error checking reduced fees:', err);
+    }
+  }, [user]);
 
   const loadPayoutStats = React.useCallback(async () => {
     try {
@@ -33,7 +57,14 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
 
       if (error) throw error;
       if (data && data.length > 0) {
-        setStats(data[0]);
+        const s = data[0];
+        // Override available_for_payout with client-side logic
+        if (profile) {
+          const raw = profile.troll_coins || 0;
+          const reserved = profile.reserved_troll_coins || 0;
+          s.available_for_payout = Math.max(0, raw - reserved);
+        }
+        setStats(s);
       }
     } catch (error) {
       console.error('Error loading payout stats:', error);
@@ -41,7 +72,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, profile]);
 
   const loadPaypalEmail = React.useCallback(async () => {
     try {
@@ -62,8 +93,9 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     if (user) {
       loadPayoutStats();
       loadPaypalEmail();
+      checkReducedFees();
     }
-  }, [user, loadPayoutStats, loadPaypalEmail]);
+  }, [user, loadPayoutStats, loadPaypalEmail, checkReducedFees]);
 
   const savePaypalEmail = async () => {
     if (!paypalEmail || !paypalEmail.includes('@')) {
@@ -102,7 +134,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     }
 
     if (!paypalEmail) {
-      toast.error('PayPal email is required');
+      toast.error('Gift Card email is required');
       return;
     }
 
@@ -149,7 +181,12 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
 
   const calculateFees = (coins: number) => {
     const usd = coins * 0.01;
-    const paypalFee = (usd * 0.029) + 0.30; // 2.9% + $0.30
+    let paypalFee = (usd * 0.029) + 0.30; // 2.9% + $0.30
+
+    if (hasReducedFees) {
+      paypalFee = 1.00; // Flat $1 fee for approved creators
+    }
+
     const netAmount = usd - paypalFee;
     return {
       gross: usd,

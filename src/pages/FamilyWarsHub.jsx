@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { declareWar, completeWar } from '../lib/familyWars'
 import { toast } from 'sonner'
 import {
   Sword, Clock, Target
@@ -20,83 +21,91 @@ const FamilyWarsHub = () => {
   const loadWarData = useCallback(async () => {
     setLoading(true)
     try {
-      // Get user's family
-      const { data: membership } = await supabase
+      // Step 1: Get membership first (without join to avoid relationship issues)
+      const { data: membership, error: memberError } = await supabase
         .from('family_members')
-        .select(`
-          role,
-          troll_families (
-            id,
-            name,
-            emblem_url
-          )
-        `)
+        .select('family_id, role')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
-      if (membership?.troll_families) {
-        setFamily(membership.troll_families)
-        setMemberRole(membership.role)
+      if (memberError) throw memberError
 
-        const familyId = membership.troll_families.id
-
-        // Load current active war
-        const { data: war } = await supabase
-          .from('family_wars')
-          .select(`
-            *,
-            family_a:troll_families!family_wars_family_a_id_fkey (
-              id, name, emblem_url
-            ),
-            family_b:troll_families!family_wars_family_b_id_fkey (
-              id, name, emblem_url
-            )
-          `)
-          .or(`family_a_id.eq.${familyId},family_b_id.eq.${familyId}`)
-          .in('status', ['pending', 'active'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (war) {
-          setCurrentWar(war)
-
-          // Load war scores
-          const { data: scores } = await supabase
-            .from('family_war_scores')
-            .select('*')
-            .eq('war_id', war.id)
-
-          setWarScores(scores || [])
-        }
-
-        // Load available families for war creation
-        const { data: families } = await supabase
+      if (membership?.family_id) {
+        // Step 2: Get family details
+        const { data: familyData, error: familyError } = await supabase
           .from('troll_families')
           .select('id, name, emblem_url')
-          .neq('id', familyId)
-          .limit(20)
+          .eq('id', membership.family_id)
+          .maybeSingle()
 
-        setAvailableFamilies(families || [])
+        if (familyError) throw familyError
 
-        // Load war history
-        const { data: history } = await supabase
-          .from('family_wars')
-          .select(`
-            *,
-            family_a:troll_families!family_wars_family_a_id_fkey (
-              id, name, emblem_url
-            ),
-            family_b:troll_families!family_wars_family_b_id_fkey (
-              id, name, emblem_url
-            )
-          `)
-          .or(`family_a_id.eq.${familyId},family_b_id.eq.${familyId}`)
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
-          .limit(10)
+        if (familyData) {
+          setFamily(familyData)
+          setMemberRole(membership.role)
 
-        setWarHistory(history || [])
+          const familyId = familyData.id
+
+          // Load current active war
+          const { data: war } = await supabase
+            .from('family_wars')
+            .select(`
+              *,
+              family_a:troll_families!family_wars_family_a_id_fkey (
+                id, name, emblem_url
+              ),
+              family_b:troll_families!family_wars_family_b_id_fkey (
+                id, name, emblem_url
+              )
+            `)
+            .or(`family_a_id.eq.${familyId},family_b_id.eq.${familyId}`)
+            .in('status', ['pending', 'active'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (war) {
+            setCurrentWar(war)
+
+            // Load war scores
+            const { data: scores } = await supabase
+              .from('family_war_scores')
+              .select('*')
+              .eq('war_id', war.id)
+
+            setWarScores(scores || [])
+          }
+
+          // Load available families for war creation
+          const { data: families } = await supabase
+            .from('troll_families')
+            .select('id, name, emblem_url')
+            .neq('id', familyId)
+            .limit(20)
+
+          setAvailableFamilies(families || [])
+
+          // Load war history
+          const { data: history } = await supabase
+            .from('family_wars')
+            .select(`
+              *,
+              family_a:troll_families!family_wars_family_a_id_fkey (
+                id, name, emblem_url
+              ),
+              family_b:troll_families!family_wars_family_b_id_fkey (
+                id, name, emblem_url
+              )
+            `)
+            .or(`family_a_id.eq.${familyId},family_b_id.eq.${familyId}`)
+            .eq('status', 'completed')
+            .order('created_at', { ascending: false })
+            .limit(10)
+
+          setWarHistory(history || [])
+        }
+      } else {
+        setFamily(null)
       }
     } catch (error) {
       console.error('Error loading war data:', error)
@@ -120,34 +129,9 @@ const FamilyWarsHub = () => {
 
     setCreatingWar(true)
     try {
-      const startTime = new Date()
-      const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000)
-
-      // Create war
-      const { data: war, error: warError } = await supabase
-        .from('family_wars')
-        .insert({
-          family_a_id: family.id,
-          family_b_id: opponentFamilyId,
-          status: 'pending',
-          created_by: user.id,
-          starts_at: startTime.toISOString(),
-          ends_at: endTime.toISOString()
-        })
-        .select()
-        .single()
-
-      if (warError) throw warError
-
-      // Create initial scores
-      const { error: scoresError } = await supabase
-        .from('family_war_scores')
-        .insert([
-          { war_id: war.id, family_id: family.id, score: 0 },
-          { war_id: war.id, family_id: opponentFamilyId, score: 0 }
-        ])
-
-      if (scoresError) throw scoresError
+      const { success, error } = await declareWar(family.id, opponentFamilyId, user.id, durationHours)
+      
+      if (!success) throw error
 
       toast.success(`War declared against ${availableFamilies.find(f => f.id === opponentFamilyId)?.name}!`)
       loadWarData() // Refresh data
@@ -163,72 +147,9 @@ const FamilyWarsHub = () => {
     if (!currentWar || memberRole === 'member') return
 
     try {
-      // Determine winner
-      const familyAScore = warScores.find(s => s.family_id === currentWar.family_a_id)?.score || 0
-      const familyBScore = warScores.find(s => s.family_id === currentWar.family_b_id)?.score || 0
+      const { success, error } = await completeWar(currentWar.id)
 
-      let winnerId = null
-      if (familyAScore > familyBScore) {
-        winnerId = currentWar.family_a_id
-      } else if (familyBScore > familyAScore) {
-        winnerId = currentWar.family_b_id
-      }
-
-      // Update war
-      const { error: warError } = await supabase
-        .from('family_wars')
-        .update({
-          status: 'completed',
-          winner_family_id: winnerId
-        })
-        .eq('id', currentWar.id)
-
-      if (warError) throw warError
-
-      // Award bonuses
-      const winnerBonus = 10000 // 10k coins + 100 XP
-      const loserBonus = 2500   // 2.5k coins + 25 XP
-
-      if (winnerId) {
-        await supabase.rpc('increment_family_stats', {
-          p_family_id: winnerId,
-          p_coin_bonus: winnerBonus,
-          p_xp_bonus: 100
-        })
-      }
-
-      // Give participation bonus to both families
-      await supabase.rpc('increment_family_stats', {
-        p_family_id: currentWar.family_a_id,
-        p_coin_bonus: winnerId === currentWar.family_a_id ? 0 : loserBonus,
-        p_xp_bonus: winnerId === currentWar.family_a_id ? 0 : 25
-      })
-
-      await supabase.rpc('increment_family_stats', {
-        p_family_id: currentWar.family_b_id,
-        p_coin_bonus: winnerId === currentWar.family_b_id ? 0 : loserBonus,
-        p_xp_bonus: winnerId === currentWar.family_b_id ? 0 : 25
-      })
-
-      // Log results
-      const winnerName = winnerId
-        ? (winnerId === currentWar.family_a_id ? currentWar.family_a.name : currentWar.family_b.name)
-        : 'Draw'
-
-      await supabase
-        .from('family_activity_log')
-        .insert([
-          {
-            family_id: currentWar.family_a_id,
-            event_type: winnerId === currentWar.family_a_id ? 'war_win' : 'war_loss',
-            event_message: `War vs ${currentWar.family_b.name}: ${winnerName} wins! (+${winnerId === currentWar.family_a_id ? winnerBonus : loserBonus} coins)`
-          },
-          {
-            family_id: currentWar.family_b_id,
-            event_type: winnerId === currentWar.family_b_id ? 'war_win' : 'war_loss',
-            event_message: `War vs ${currentWar.family_a.name}: ${winnerName} wins! (+${winnerId === currentWar.family_b_id ? winnerBonus : loserBonus} coins)`
-          }
-        ])
+      if (!success) throw error
 
       toast.success('War completed!')
       setCurrentWar(null)
@@ -378,29 +299,36 @@ const FamilyWarsHub = () => {
               Declare War
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableFamilies.slice(0, 6).map((opponentFamily) => (
-                <div key={opponentFamily.id} className="bg-zinc-800 rounded-lg p-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    {opponentFamily.emblem_url && (
-                      <img
-                        src={opponentFamily.emblem_url}
-                        alt={`${opponentFamily.name} emblem`}
-                        className="w-6 h-6 rounded-full"
-                      />
-                    )}
-                    <span className="font-semibold">{opponentFamily.name}</span>
+            {availableFamilies.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {availableFamilies.slice(0, 6).map((opponentFamily) => (
+                  <div key={opponentFamily.id} className="bg-zinc-800 rounded-lg p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      {opponentFamily.emblem_url && (
+                        <img
+                          src={opponentFamily.emblem_url}
+                          alt={`${opponentFamily.name} emblem`}
+                          className="w-6 h-6 rounded-full"
+                        />
+                      )}
+                      <span className="font-semibold">{opponentFamily.name}</span>
+                    </div>
+                    <button
+                      onClick={() => createWar(opponentFamily.id)}
+                      disabled={creatingWar}
+                      className="w-full py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-semibold transition-colors text-sm"
+                    >
+                      {creatingWar ? 'Declaring...' : '⚔️ Declare War'}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => createWar(opponentFamily.id)}
-                    disabled={creatingWar}
-                    className="w-full py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-semibold transition-colors text-sm"
-                  >
-                    {creatingWar ? 'Declaring...' : '⚔️ Declare War'}
-                  </button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400 bg-zinc-800/50 rounded-lg border border-zinc-700 border-dashed">
+                <p>No other families found to challenge.</p>
+                <p className="text-sm mt-2">Wait for more families to join Troll City!</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -459,8 +387,8 @@ const FamilyWarsHub = () => {
           <div className="space-y-2 text-zinc-300 text-sm">
             <p>• <strong>Duration:</strong> Wars last 30 minutes to 2 hours</p>
             <p>• <strong>Scoring:</strong> Points earned from member activity during war</p>
-            <p>• <strong>Winner Rewards:</strong> 10,000 family coins + 100 XP</p>
-            <p>• <strong>Participation Bonus:</strong> 2,500 coins + 25 XP for both families</p>
+            <p>• <strong>Winner Rewards:</strong> 1,000 family coins + 100 XP</p>
+            <p>• <strong>Participation Bonus:</strong> 500 coins + 25 XP for both families</p>
             <p>• <strong>Leadership:</strong> Only family leaders and officers can declare wars</p>
             <p>• <strong>Cooldown:</strong> Families can only be in one war at a time</p>
           </div>

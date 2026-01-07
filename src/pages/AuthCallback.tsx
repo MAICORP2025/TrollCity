@@ -58,7 +58,7 @@ const AuthCallback = () => {
                 try {
                   const now = new Date().toISOString()
                   await supabase.from('user_profiles').update({ role: 'admin', updated_at: now }).eq('id', u.id)
-                  const { data: refreshed } = await supabase.from('user_profiles').select('*').eq('id', u.id).single()
+                  const { data: refreshed } = await supabase.from('user_profiles').select('*').eq('id', u.id).maybeSingle()
                   if (refreshed) setProfile(refreshed as any)
                 } catch {}
               } else {
@@ -97,7 +97,7 @@ const AuthCallback = () => {
                   updated_at: new Date().toISOString()
                 })
                 .select()
-                .single()
+                .maybeSingle()
                 
               if (inserted) {
                 console.log('Profile created successfully')

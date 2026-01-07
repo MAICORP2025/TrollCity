@@ -5,10 +5,10 @@ import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield } from 'lucide-react'
 import { PERK_CONFIG } from '../lib/perkSystem'
-import { ENTRANCE_EFFECTS_CONFIG } from '../lib/entranceEffects'
+import { ENTRANCE_EFFECTS_MAP, ROLE_BASED_ENTRANCE_EFFECTS, USER_SPECIFIC_ENTRANCE_EFFECTS } from '../lib/entranceEffects'
 
 export default function UserInventory() {
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<any[]>([])
   const [entranceEffects, setEntranceEffects] = useState<any[]>([])
@@ -16,6 +16,24 @@ export default function UserInventory() {
   const [insurances, setInsurances] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeItems, setActiveItems] = useState<Set<string>>(new Set())
+
+  const roleEffect = (() => {
+    if (!profile) return null;
+
+    // Check for user-specific effect first
+    const userConfig = Object.entries(USER_SPECIFIC_ENTRANCE_EFFECTS).find(
+      ([key]) => key.toLowerCase() === (profile.username || '').toLowerCase()
+    )?.[1];
+    
+    if (userConfig) return { ...userConfig, type: 'User Exclusive' };
+
+    const role = profile.role === 'admin' || profile.troll_role === 'admin' ? 'admin' :
+                 profile.role === 'secretary' || profile.troll_role === 'secretary' ? 'secretary' :
+                 profile.role === 'lead_troll_officer' || profile.troll_role === 'lead_troll_officer' || profile.is_lead_officer ? 'lead_troll_officer' :
+                 profile.role === 'troll_officer' || profile.troll_role === 'troll_officer' ? 'troll_officer' : null;
+    
+    return role ? ROLE_BASED_ENTRANCE_EFFECTS[role] : null;
+  })();
 
   const loadInventory = useCallback(async () => {
     try {
@@ -58,7 +76,7 @@ export default function UserInventory() {
       const effectsData = effectsRes.data || []
       setEntranceEffects(effectsData.map(e => ({
         ...e,
-        config: ENTRANCE_EFFECTS_CONFIG[e.effect_id as keyof typeof ENTRANCE_EFFECTS_CONFIG]
+        config: ENTRANCE_EFFECTS_MAP[e.effect_id]
       })))
 
       // 3. Process Perks
@@ -71,7 +89,7 @@ export default function UserInventory() {
       // 4. Process Insurance
       const insuranceData = insuranceRes.data || []
       const planIds = Array.from(new Set(insuranceData.map((i: any) => i.insurance_id).filter(Boolean)))
-      let insuranceMap: Record<string, any> = {}
+      const insuranceMap: Record<string, any> = {}
       
       if (planIds.length > 0) {
         // Fetch plan names from insurance_plans if available, or insurance_options
@@ -364,6 +382,35 @@ export default function UserInventory() {
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Role Bonus Section */}
+            {roleEffect && (
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <Crown className="w-6 h-6 text-yellow-400" />
+                  Role Bonus
+                </h2>
+                <div className="bg-gradient-to-r from-yellow-900/40 to-black rounded-xl p-6 border border-yellow-500/40">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-yellow-500/20 rounded-lg">
+                      <Sparkles className="w-8 h-8 text-yellow-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-xl font-bold text-white">{roleEffect.name}</h3>
+                        <span className="bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full uppercase">
+                          Permanent
+                        </span>
+                      </div>
+                      <p className="text-gray-300 mb-2">{roleEffect.description}</p>
+                      <p className="text-sm text-yellow-500/80 italic">
+                        * Automatically applied when you enter a stream (Overrides purchased effects)
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

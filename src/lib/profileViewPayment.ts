@@ -2,6 +2,7 @@
 import { supabase } from './supabase'
 import { toast } from 'sonner'
 import { NavigateFunction } from 'react-router-dom'
+import { canMessageAdmin } from './perkEffects'
 
 /**
  * Check if user has enough coins to view a profile
@@ -38,10 +39,12 @@ export async function checkProfileViewPayment(
   }
 
   // Admins, officers, and trollers view for free
+  const hasMessagePerk = await canMessageAdmin(viewerId)
   if (
     viewerProfile.role === 'admin' ||
     viewerProfile.is_troll_officer ||
-    viewerProfile.is_troller
+    viewerProfile.is_troller ||
+    hasMessagePerk
   ) {
     return { canView: true }
   }

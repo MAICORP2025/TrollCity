@@ -41,6 +41,9 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
   const [token, setToken] = useState<string | null>(null);
   const [isEnding, setIsEnding] = useState(false);
   const [isStartingCall, setIsStartingCall] = useState(false);
+  const dialCtxRef = useRef<AudioContext | null>(null);
+  const dialOscRef = useRef<OscillatorNode | null>(null);
+  const dialGainRef = useRef<GainNode | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -149,6 +152,22 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
           dynacast: true,
         });
 
+        // Start outgoing dial tone until remote audio or video is received
+        try {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = 440;
+          gain.gain.value = 0.03;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          dialCtxRef.current = ctx;
+          dialOscRef.current = osc;
+          dialGainRef.current = gain;
+        } catch {}
+
         newRoom.on(RoomEvent.Connected, () => {
           console.log('✅ Connected to call room');
 
@@ -158,6 +177,20 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
               track.attach(remoteVideoRef.current);
             } else if (track.kind === 'audio') {
               track.attach();
+            }
+            // Stop dial tone when any remote track arrives
+            if (dialOscRef.current) {
+              try {
+                dialOscRef.current.stop();
+                dialOscRef.current.disconnect();
+              } catch {}
+              dialOscRef.current = null;
+            }
+            if (dialCtxRef.current) {
+              try {
+                dialCtxRef.current.close();
+              } catch {}
+              dialCtxRef.current = null;
             }
           });
         });
@@ -187,6 +220,19 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
       }
       if (minuteDeductionIntervalRef.current) {
         clearInterval(minuteDeductionIntervalRef.current);
+      }
+      if (dialOscRef.current) {
+        try {
+          dialOscRef.current.stop();
+          dialOscRef.current.disconnect();
+        } catch {}
+        dialOscRef.current = null;
+      }
+      if (dialCtxRef.current) {
+        try {
+          dialCtxRef.current.close();
+        } catch {}
+        dialCtxRef.current = null;
       }
     };
   }, [roomId, user, livekitUrl, token, callType, isVideoOff, navigate, endCall]);

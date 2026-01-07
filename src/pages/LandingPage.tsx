@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Crown, Video, Gift, Users, Zap, Volume2, VolumeX, ArrowRight, Play } from 'lucide-react';
+import { Crown, Video, Gift, Users, Zap, Volume2, VolumeX, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '../lib/store';
 import { motion, AnimatePresence } from 'framer-motion';
 

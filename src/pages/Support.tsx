@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import { notifyAdmins } from '../lib/notifications'
 import { toast } from 'sonner'
 import { FileText, Send } from 'lucide-react'
 import api from '../lib/api'
@@ -54,9 +55,13 @@ export default function Support() {
         const { error } = await supabase.from('support_tickets').insert([payload])
         if (!error) ok = true
         if (!ok) {
-          await supabase.from('notifications').insert([
-            { type: 'support_ticket', content: `${profile.username}: ${subject}`, metadata: payload, created_at: new Date().toISOString() }
-          ])
+          // Notify admins
+          await notifyAdmins(
+            'New Support Ticket',
+            `${profile.username}: ${subject}`,
+            'support_ticket',
+            { ticketId: payload.id, userId: profile.id, category: payload.category }
+          )
         }
         toast.success('Support ticket submitted')
         setSubject('')

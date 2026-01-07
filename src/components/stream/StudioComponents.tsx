@@ -28,7 +28,6 @@ export function StreamHeader({
           {avatarUrl ? <img src={avatarUrl} alt={hostName} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs uppercase tracking-[0.3em] text-white/70">T</div>}
         </div>
         <div>
-          <div className="text-sm uppercase tracking-[0.4em] text-white/50">Trolls @ Night</div>
           <h1 className="text-2xl font-extrabold text-white">{title || 'Live Broadcast'}</h1>
           <p className="text-xs uppercase tracking-[0.3em] text-white/70">{hostName || 'Host'}</p>
         </div>

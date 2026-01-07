@@ -3,7 +3,6 @@ import { Download, Share, PlusSquare, X } from 'lucide-react';
 
 export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isIOS, setIsIOS] = useState(false);
   const [showIOSPrompt, setShowIOSPrompt] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
@@ -25,7 +24,6 @@ export default function PWAInstallPrompt() {
     // iOS Detection
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
-    setIsIOS(isIosDevice);
 
     // Show iOS prompt if on iOS and not standalone (and not dismissed recently?)
     if (isIosDevice && !isStandalone) {

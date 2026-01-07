@@ -3,6 +3,45 @@
 
 import { supabase } from './supabase';
 
+export interface EntranceEffect {
+  id: string
+  name: string
+  icon: string
+  description: string
+  coin_cost: number
+  rarity: string
+  animation_type: string
+  image_url: string
+}
+
+export const ENTRANCE_EFFECTS_DATA: EntranceEffect[] = [
+  { id: 'e1', name: 'Troll Entrance (Classic)', icon: '🧌', description: 'Classic troll entrance', coin_cost: 10, rarity: 'EXCLUSIVE', animation_type: 'troll_classic', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=classic%20troll%20entrance%20neon%20aura&image_size=square' },
+  { id: 'e2', name: 'Royal Sparkle Crown', icon: '👑', description: 'Royal crown sparkles', coin_cost: 5000, rarity: 'EPIC', animation_type: 'sparkle_crown', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=royal%20sparkle%20crown%20neon%20gold&image_size=square' },
+  { id: 'e3', name: 'Neon Meteor Shower', icon: '☄️', description: 'Neon meteor shower', coin_cost: 10000, rarity: 'MYTHIC', animation_type: 'meteor_shower', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=neon%20meteor%20shower%20cosmic&image_size=square' },
+  { id: 'e4', name: 'Lightning Strike Arrival', icon: '⚡', description: 'Lightning strike arrival', coin_cost: 7500, rarity: 'EPIC', animation_type: 'lightning_arrival', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=lightning%20strike%20arrival%20neon&image_size=square' },
+  { id: 'e5', name: 'Chaos Portal Arrival', icon: '🌀', description: 'Chaos portal arrival', coin_cost: 15000, rarity: 'LEGENDARY', animation_type: 'chaos_portal', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=chaos%20portal%20arrival%20neon%20warp&image_size=square' },
+  { id: 'e6', name: 'Galactic Warp Beam', icon: '🛸', description: 'Galactic warp beam', coin_cost: 25000, rarity: 'ULTRA', animation_type: 'warp_beam', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=galactic%20warp%20beam%20neon&image_size=square' },
+  { id: 'e7', name: 'Troll City VIP Flames', icon: '🔥', description: 'VIP flames', coin_cost: 35000, rarity: 'LEGENDARY+', animation_type: 'vip_flames', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=vip%20flames%20neon%20crown&image_size=square' },
+  { id: 'e8', name: 'Flaming Gold Crown Drop', icon: '👑', description: 'Flaming gold crown drop', coin_cost: 50000, rarity: 'EXOTIC', animation_type: 'gold_crown_drop', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=flaming%20gold%20crown%20drop&image_size=square' },
+  { id: 'e9', name: 'Aurora Storm Entrance', icon: '🌌', description: 'Aurora storm entrance', coin_cost: 75000, rarity: 'MYTHIC', animation_type: 'aurora_storm', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=aurora%20storm%20entrance&image_size=square' },
+  { id: 'e10', name: 'Black Hole Vortex', icon: '🕳️', description: 'Black hole vortex', coin_cost: 100000, rarity: 'ULTRA', animation_type: 'black_hole', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=black%20hole%20vortex%20neon&image_size=square' },
+  { id: 'e11', name: 'Money Shower Madness', icon: '💸', description: 'Money shower madness', coin_cost: 125000, rarity: 'RARE+', animation_type: 'money_shower', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=money%20shower%20madness%20neon&image_size=square' },
+  { id: 'e12', name: 'Floating Royal Throne', icon: '👑', description: 'Floating royal throne', coin_cost: 150000, rarity: 'MYTHIC', animation_type: 'royal_throne', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=floating%20royal%20throne%20neon&image_size=square' },
+  { id: 'e13', name: 'Platinum Fire Tornado', icon: '🔥', description: 'Platinum fire tornado', coin_cost: 200000, rarity: 'LEGENDARY++', animation_type: 'fire_tornado', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=platinum%20fire%20tornado%20neon&image_size=square' },
+  { id: 'e14', name: 'Cosmic Crown Meteor Fall', icon: '☄️', description: 'Cosmic crown meteor fall', coin_cost: 250000, rarity: 'ULTRA', animation_type: 'crown_meteor', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=cosmic%20crown%20meteor%20fall&image_size=square' },
+  { id: 'e15', name: 'Royal Diamond Explosion', icon: '💎', description: 'Royal diamond explosion', coin_cost: 300000, rarity: 'EXOTIC', animation_type: 'diamond_explosion', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=royal%20diamond%20explosion%20neon&image_size=square' },
+  { id: 'e16', name: 'Neon Chaos Warp', icon: '🌀', description: 'Neon chaos warp', coin_cost: 400000, rarity: 'MYTHIC', animation_type: 'chaos_warp', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=neon%20chaos%20warp&image_size=square' },
+  { id: 'e17', name: 'Supreme Emerald Storm', icon: '💚', description: 'Supreme emerald storm', coin_cost: 500000, rarity: 'LEGENDARY++', animation_type: 'emerald_storm', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=supreme%20emerald%20storm%20neon&image_size=square' },
+  { id: 'e18', name: 'Millionaire Troller Arrival', icon: '🤑', description: 'Millionaire troller arrival', coin_cost: 1000000, rarity: 'EXOTIC GOLD', animation_type: 'millionaire_arrival', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=millionaire%20troller%20arrival%20neon&image_size=square' },
+  { id: 'e19', name: 'Troll God Ascension', icon: '🧌', description: 'Troll god ascension', coin_cost: 2500000, rarity: 'DIVINE', animation_type: 'god_ascension', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=troll%20god%20ascension%20neon&image_size=square' },
+  { id: 'e20', name: 'Troll City World Domination', icon: '🌍', description: 'World domination', coin_cost: 5000000, rarity: 'UNOBTAINABLE', animation_type: 'world_domination', image_url: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=world%20domination%20neon&image_size=square' },
+];
+
+export const ENTRANCE_EFFECTS_MAP = ENTRANCE_EFFECTS_DATA.reduce((acc, effect) => {
+  acc[effect.id] = effect;
+  return acc;
+}, {} as Record<string, EntranceEffect>);
+
 // Entrance Effects Configuration - Static data for all available effects
 export const ENTRANCE_EFFECTS_CONFIG = {
   'effect_flame_burst': {
@@ -110,28 +149,58 @@ export interface EffectConfig {
  */
 export const ROLE_BASED_ENTRANCE_EFFECTS: Record<string, EffectConfig> = {
   'admin': {
-    name: 'Divine Arrival',
-    description: 'God-tier entrance with overwhelming power',
-    animationType: 'admin_divine',
-    soundEffect: 'divine_bass',
-    durationSeconds: 6,
+    name: 'The G.O.A.T Arrival',
+    description: 'The ultimate entrance for the supreme leader',
+    animationType: 'admin_best',
+    soundEffect: 'royal_fanfare',
+    durationSeconds: 8,
     priority: 100 // Highest priority
   },
+  'secretary': {
+    name: 'Cash Flow Entrance',
+    description: 'Make it rain!',
+    animationType: 'secretary_money',
+    soundEffect: 'coins',
+    durationSeconds: 5,
+    priority: 85
+  },
   'lead_troll_officer': {
-    name: 'Elite Command',
-    description: 'Prestigious entrance for lead officers',
-    animationType: 'lead_officer_elite',
+    name: 'Presidential Salute',
+    description: 'Hail to the Chief',
+    animationType: 'lead_officer_presidential',
     soundEffect: 'elite_command',
-    durationSeconds: 4,
+    durationSeconds: 6,
     priority: 90
   },
   'troll_officer': {
-    name: 'Authority Enforcement',
-    description: 'Police-style entrance for officers',
-    animationType: 'officer_authority',
+    name: 'Police Raid',
+    description: 'Freeze! Troll Police!',
+    animationType: 'officer_police',
     soundEffect: 'police_siren',
-    durationSeconds: 3,
+    durationSeconds: 4,
     priority: 80
+  }
+};
+
+/**
+ * User-specific entrance effects - overrides everything else
+ */
+export const USER_SPECIFIC_ENTRANCE_EFFECTS: Record<string, EffectConfig> = {
+  'JustK': {
+    name: 'The Matrix Architect',
+    description: 'Welcome to the real world.',
+    animationType: 'matrix_theme',
+    soundEffect: 'divine_bass',
+    durationSeconds: 8,
+    priority: 200
+  },
+  'Mitzie': {
+    name: 'Feline Queen Arrival',
+    description: 'Purr-fect entrance!',
+    animationType: 'cat_theme',
+    soundEffect: 'magical',
+    durationSeconds: 6,
+    priority: 200
   }
 };
 

@@ -4,6 +4,7 @@ import Sidebar from '../Sidebar'
 import Header from '../Header'
 import { useLocation } from 'react-router-dom'
 import PWAInstallPrompt from '../PWAInstallPrompt'
+import UserCompliancePrompt from '../UserCompliancePrompt'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -48,6 +49,9 @@ export default function AppLayout({
             <Header />
           </div>
         )}
+
+        {/* User Compliance Prompt */}
+        {!isAuthPage && <UserCompliancePrompt />}
 
         {/* Main Content Area */}
         <main className="flex-1 w-full h-full relative overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-purple-900/50 scrollbar-track-transparent">

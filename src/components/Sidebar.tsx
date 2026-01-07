@@ -8,13 +8,12 @@ import {
   MessageSquare,
   Radio,
   Coins,
-  Users,
   Shield,
   LayoutDashboard,
   Banknote,
+  Clock,
   FileText,
   UserCheck,
-  ListChecks,
   Sword,
   UserPlus,
   Bug,
@@ -27,7 +26,8 @@ import {
   Scale,
   ChevronLeft,
   ChevronRight,
-  LifeBuoy
+  LifeBuoy,
+  Shuffle
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -69,8 +69,8 @@ export default function Sidebar() {
         return 
       }
       
-      const isAdmin = profile.role === 'admin'
-      const isOfficer = profile.role === 'troll_officer' || profile.role === 'lead_troll_officer' || profile.is_lead_officer
+      const isAdmin = profile.role === 'admin' || profile.troll_role === 'admin';
+      const isOfficer = profile.role === 'troll_officer' || profile.role === 'lead_troll_officer' || profile.is_lead_officer || profile.troll_role === 'troll_officer' || profile.troll_role === 'lead_troll_officer';
       
       // Troll Officer Lounge: Only admin and troll_officer role
       setCanSeeOfficer(isAdmin || isOfficer)
@@ -109,7 +109,10 @@ export default function Sidebar() {
     >
       {/* Profile Block with Real-time Wallet */}
       <div className="p-5 text-center border-b border-[#2C2C2C]">
-        <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-4 border-purple-500 shadow-lg">
+        <div 
+          onClick={() => profile?.username && navigate(`/profile/${profile.username}`)}
+          className="w-20 h-20 mx-auto rounded-full overflow-hidden border-4 border-purple-500 shadow-lg cursor-pointer hover:scale-105 transition-transform duration-200"
+        >
           <img
             src={
               profile?.avatar_url ||
@@ -138,26 +141,16 @@ export default function Sidebar() {
 
         {/* Go Live Button - Under username */}
         {canGoLive && (
-          <button
-            onClick={() => navigate("/go-live")}
-            className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold shadow-lg border border-red-500"
-          >
-            <Radio className="w-4 h-4" />
-            {!isSidebarCollapsed && "Go Live"}
-          </button>
-        )}
-
-        {/* Real-time Wallet Section */}
-        <div className="mt-4 space-y-2">
-          {/* TROLL COINS */}
-          <div
-            onClick={() => navigate("/earnings")}
-            className="flex items-center gap-2 bg-[#1C1C24] px-3 py-2 rounded-lg border border-green-500/40 text-green-300 cursor-pointer hover:bg-[#252530] transition-colors justify-center"
-          >
-            <Coins className="w-4 h-4" />
-            {!isSidebarCollapsed && <span className="text-sm font-semibold">Troll Coins</span>}
+          <div className="mt-6 mx-1 p-[3px] rounded-xl bg-gradient-to-r from-red-600 via-green-500 to-blue-600 shadow-[0_0_20px_rgba(255,0,0,0.6)] animate-pulse">
+            <button
+              onClick={() => navigate("/go-live")}
+              className="w-full flex items-center justify-center gap-2 px-4 py-4 rounded-[10px] bg-red-700 hover:bg-red-600 text-white font-bold text-lg uppercase tracking-wider"
+            >
+              <Radio className="w-6 h-6" />
+              {!isSidebarCollapsed && "Go Live"}
+            </button>
           </div>
-        </div>
+        )}
       </div>
       
       <div className="flex justify-end px-3 mt-1">
@@ -176,7 +169,7 @@ export default function Sidebar() {
       </div>
 
       {/* Scrollable Nav Area */}
-      <nav className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+      <nav className="flex-1 overflow-y-auto">
         
         {/* MAIN GROUP */}
         <SidebarGroup title="Main" defaultExpanded={true} isCollapsed={isSidebarCollapsed}>
@@ -201,24 +194,20 @@ export default function Sidebar() {
             active={isActive('/following')}
             collapsed={isSidebarCollapsed}
           />
-          <Link
-            to="/trolls-night"
-            className={`flex w-full items-center gap-3 rounded-lg border px-4 py-2 transition ${
-              isActive('/trolls-night')
-                ? 'border-yellow-400/80 bg-gradient-to-r from-red-600/30 to-black text-white shadow-[0_0_20px_rgba(255,0,48,0.65)]'
-                : 'border-yellow-300/40 bg-gradient-to-r from-red-500/20 to-black text-white/80 hover:border-yellow-300/60'
-            } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
-          >
-            <Shield className="w-5 h-5 text-yellow-300" />
-            {!isSidebarCollapsed && (
-              <span
-                style={{ textShadow: '0 0 8px #ff3048, 0 0 16px #ffd65c' }}
-                className="flex-1 text-left text-xs font-black uppercase tracking-[0.5em] text-[#ff3159]"
-              >
-                TROLLS@NIGHT
-              </span>
-            )}
-          </Link>
+          <MenuLink
+            to="/earnings"
+            icon={<Banknote className="w-5 h-5 text-green-400" />}
+            label="My Earnings"
+            active={isActive('/earnings')}
+            collapsed={isSidebarCollapsed}
+          />
+          <MenuLink
+            to="/payout-status"
+            icon={<Clock className="w-5 h-5 text-yellow-400" />}
+            label="Payouts"
+            active={isActive('/payout-status')}
+            collapsed={isSidebarCollapsed}
+          />
         </SidebarGroup>
 
         {/* STORE GROUP */}
@@ -286,6 +275,13 @@ export default function Sidebar() {
             {!isSidebarCollapsed && <span className="flex-1 text-left">Troll Wheel</span>}
           </button>
           <MenuLink
+            to="/creator-switch"
+            icon={<Shuffle className="w-5 h-5 text-pink-400" />}
+            label="Creator Switch"
+            active={isActive('/creator-switch')}
+            collapsed={isSidebarCollapsed}
+          />
+          <MenuLink
             to="/apply"
             icon={<FileText className="w-5 h-5 text-slate-400" />}
             label="Applications"
@@ -297,13 +293,6 @@ export default function Sidebar() {
         {/* FAMILY GROUP */}
         {canSeeFamilyLounge && (
           <SidebarGroup title="Family" isCollapsed={isSidebarCollapsed}>
-            <MenuLink
-              to="/family"
-              icon={<Users className="w-5 h-5 text-cyan-400" />}
-              label="Troll Family Lounge"
-              active={isActive('/family')}
-              collapsed={isSidebarCollapsed}
-            />
             <MenuLink
               to="/family/lounge"
               icon={<Crown className="w-5 h-5 text-purple-400" />}
@@ -359,6 +348,15 @@ export default function Sidebar() {
               active={isActive('/officer/moderation')}
               collapsed={isSidebarCollapsed}
             />
+            {(profile?.role === 'admin' || profile?.role === 'lead_troll_officer' || profile?.is_lead_officer || profile?.troll_role === 'lead_troll_officer' || profile?.troll_role === 'admin') && (
+              <MenuLink
+                to="/lead-officer"
+                icon={<LayoutDashboard className="w-5 h-5 text-purple-500" />}
+                label="Lead HQ"
+                active={isActive('/lead-officer')}
+                collapsed={isSidebarCollapsed}
+              />
+            )}
             {profile?.role === 'admin' && (
               <MenuLink
                 to="/admin/applications"

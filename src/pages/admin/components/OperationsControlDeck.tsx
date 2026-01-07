@@ -5,8 +5,11 @@ import {
   RefreshCw,
   FileText,
   DollarSign,
-  Camera
+  Camera,
+  Gavel
 } from 'lucide-react'
+import { supabase } from '../../../lib/supabase'
+import { toast } from 'sonner'
 import AdminApplications from './AdminApplications'
 import PayoutQueue from './PayoutQueue'
 import ReportsPanel from './ReportsPanel'
@@ -35,6 +38,50 @@ export default function OperationsControlDeck({
   stats
 }: OperationsControlDeckProps) {
   const [activeModule, setActiveModule] = useState<string>('streams')
+  const [endingCourt, setEndingCourt] = useState(false)
+
+  const handleEndCourtSession = async () => {
+    if (!confirm('Are you sure you want to FORCE END the current Troll Court session? This cannot be undone.')) return
+
+    setEndingCourt(true)
+    try {
+      // Get ALL active session IDs
+      const { data: sessions } = await supabase
+        .from('court_sessions')
+        .select('id')
+        .in('status', ['live', 'active', 'waiting'])
+        .order('created_at', { ascending: false })
+
+      if (!sessions || sessions.length === 0) {
+        toast.info('No active court session found')
+        return
+      }
+
+      console.log(`Found ${sessions.length} active sessions to end.`)
+      
+      let successCount = 0;
+      for (const session of sessions) {
+        try {
+          const { error } = await supabase.rpc('end_court_session', { p_session_id: session.id })
+          if (error) throw error
+          successCount++;
+        } catch (innerErr) {
+           console.error(`Failed to end session ${session.id}:`, innerErr)
+        }
+      }
+      
+      if (successCount > 0) {
+        toast.success(`Successfully ended ${successCount} court session(s)`)
+      } else {
+        toast.error('Failed to end any court sessions')
+      }
+    } catch (err: any) {
+      console.error('Failed to end court session:', err)
+      toast.error(`Failed to end court session: ${err?.message || err}`)
+    } finally {
+      setEndingCourt(false)
+    }
+  }
 
   const modules = [
     {
@@ -207,14 +254,24 @@ export default function OperationsControlDeck({
 
   return (
     <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-6 mb-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-cyan-500/20 border border-cyan-500/30 rounded-lg flex items-center justify-center">
-          <Monitor className="w-5 h-5 text-cyan-400" />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-cyan-500/20 border border-cyan-500/30 rounded-lg flex items-center justify-center">
+            <Monitor className="w-5 h-5 text-cyan-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-white">Operations & Control Deck</h3>
+            <p className="text-sm text-gray-400">Real-time monitoring and command center</p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-lg font-semibold text-white">Operations & Control Deck</h3>
-          <p className="text-sm text-gray-400">Real-time monitoring and command center</p>
-        </div>
+        <button
+          onClick={handleEndCourtSession}
+          disabled={endingCourt}
+          className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Gavel className="w-4 h-4" />
+          {endingCourt ? 'Ending Session...' : 'End Troll Court'}
+        </button>
       </div>
 
       {/* Module Selector */}

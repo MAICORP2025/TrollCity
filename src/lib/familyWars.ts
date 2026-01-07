@@ -82,7 +82,7 @@ export async function completeWar(warId: string) {
       .from('family_wars')
       .select('*')
       .eq('id', warId)
-      .single()
+      .maybeSingle()
 
     if (!war || war.status !== 'active') return
 
@@ -150,12 +150,24 @@ export async function completeWar(warId: string) {
 
     // Award bonus coins to winner
     if (winnerId) {
-      const bonusCoins = 1000 // Configurable war win bonus
+      const winnerCoinBonus = 1000 // Winner gets 1000 coins
+      const winnerXpBonus = 100    // Winner gets 100 XP
 
       await supabase.rpc('increment_family_stats', {
         p_family_id: winnerId,
-        p_coin_bonus: bonusCoins,
-        p_xp_bonus: 0
+        p_coin_bonus: winnerCoinBonus,
+        p_xp_bonus: winnerXpBonus
+      })
+
+      // Award participation/consolation to loser
+      const loserId = winnerId === war.family_a_id ? war.family_b_id : war.family_a_id
+      const loserCoinBonus = 100   // Loser gets 100 coins
+      const loserXpBonus = 25      // Loser gets 25 XP
+
+      await supabase.rpc('increment_family_stats', {
+        p_family_id: loserId,
+        p_coin_bonus: loserCoinBonus,
+        p_xp_bonus: loserXpBonus
       })
 
       // Track war win for tasks
@@ -193,7 +205,7 @@ export async function trackWarActivity(userId: string, activityType: 'coin_earne
       .from('family_members')
       .select('family_id')
       .eq('user_id', userId)
-      .single()
+      .maybeSingle()
 
     if (!familyMember?.family_id) return
 
@@ -228,5 +240,84 @@ export async function trackWarActivity(userId: string, activityType: 'coin_earne
     }
   } catch (error) {
     console.error('trackWarActivity error:', error)
+  }
+}
+
+/**
+ * Declare a war between two families
+ */
+export async function declareWar(
+  attackerFamilyId: string,
+  defenderFamilyId: string,
+  declarerUserId: string,
+  durationHours: number = 2
+) {
+  try {
+    const startTime = new Date()
+    const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000)
+
+    // Create war
+    const { data: war, error: warError } = await supabase
+      .from('family_wars')
+      .insert({
+        family_a_id: attackerFamilyId,
+        family_b_id: defenderFamilyId,
+        status: 'pending', // Pending until start time? Or active immediately? Hub uses pending/active.
+        created_by: declarerUserId,
+        starts_at: startTime.toISOString(),
+        ends_at: endTime.toISOString()
+      })
+      .select()
+      .single()
+
+    if (warError) throw warError
+
+    // Create initial scores
+    const { error: scoresError } = await supabase
+      .from('family_war_scores')
+      .insert([
+        { war_id: war.id, family_id: attackerFamilyId, score: 0 },
+        { war_id: war.id, family_id: defenderFamilyId, score: 0 }
+      ])
+
+    if (scoresError) throw scoresError
+    
+    // Log war declaration
+    // Get family names for log
+    const { data: families } = await supabase
+      .from('troll_families')
+      .select('id, name')
+      .in('id', [attackerFamilyId, defenderFamilyId])
+      
+    const attackerName = families?.find(f => f.id === attackerFamilyId)?.name || 'Unknown'
+    const defenderName = families?.find(f => f.id === defenderFamilyId)?.name || 'Unknown'
+
+    await supabase
+      .from('family_activity_log')
+      .insert([
+        {
+          family_id: attackerFamilyId,
+          event_type: 'war_declared',
+          event_message: `War declared against ${defenderName}!`
+        },
+        {
+          family_id: defenderFamilyId,
+          event_type: 'war_declared',
+          event_message: `War declared by ${attackerName}!`
+        }
+      ])
+      
+    // Track task progress for war declaration
+    try {
+      const { trackWarDeclared } = await import('./familyTasks')
+      await trackWarDeclared(attackerFamilyId, declarerUserId)
+    } catch (taskErr) {
+      console.warn('Failed to track war declaration task:', taskErr)
+    }
+
+    return { success: true, war }
+  } catch (error) {
+    console.error('declareWar error:', error)
+    return { success: false, error }
   }
 }

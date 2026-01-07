@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, getSystemSettings } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { 
@@ -56,6 +56,7 @@ export default function EarningsDashboard() {
   const [payoutHistory, setPayoutHistory] = useState<PayoutRequest[]>([])
   const [summary, setSummary] = useState<EarningsSummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [lockEnabled, setLockEnabled] = useState(false)
 
   const loadEarningsSummary = useCallback(async () => {
     try {
@@ -166,6 +167,14 @@ export default function EarningsDashboard() {
     loadEarnings()
   }, [user, profile, loadEarningsSummary, loadTransactions, loadMonthlyBreakdown, loadPayoutHistory])
 
+  useEffect(() => {
+    const loadLock = async () => {
+      const s = await getSystemSettings()
+      setLockEnabled(Boolean(s?.payout_lock_enabled))
+    }
+    void loadLock()
+  }, [])
+
   if (!user || !profile) {
     return (
       <div className="min-h-screen bg-[#0A0814] text-white p-6">
@@ -192,7 +201,7 @@ export default function EarningsDashboard() {
           </h1>
           <button
             type="button"
-            onClick={() => navigate('/withdraw')}
+            onClick={() => navigate(lockEnabled ? '/payout-status' : '/withdraw')}
             className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold flex items-center gap-2"
           >
             Request Payout

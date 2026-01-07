@@ -1,15 +1,14 @@
 import React, { 
-  useCallback, 
   useEffect, 
-  useMemo, 
   useState 
 } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useLiveKit } from '../hooks/useLiveKit';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import ChatBox from '../components/broadcast/ChatBox';
+import GiftBox from '../components/broadcast/GiftBox';
 import GiftModal from '../components/broadcast/GiftModal';
 import ProfileModal from '../components/broadcast/ProfileModal';
 import CoinStoreModal from '../components/broadcast/CoinStoreModal';
@@ -31,11 +30,11 @@ interface StreamData {
   total_likes: number;
   current_viewers: number;
   total_gifts_coins: number;
+  created_at: string;
 }
 
 export default function BroadcastPage() {
   const { streamId } = useParams();
-  const navigate = useNavigate();
   const { user, profile } = useAuthStore();
   
   // States
@@ -49,10 +48,7 @@ export default function BroadcastPage() {
   const [showMobileChat, setShowMobileChat] = useState(false);
   
   // LiveKit
-  const liveKit = useLiveKit({
-    url: import.meta.env.VITE_LIVEKIT_URL,
-    token: '', // Token handled by hook via API
-  });
+  const liveKit = useLiveKit();
 
   // Derived
   const isBroadcaster = user?.id === stream?.broadcaster_id;
@@ -92,10 +88,13 @@ export default function BroadcastPage() {
     
     const initSession = async () => {
       try {
-        await liveKit.connect(streamId, user.id, isBroadcaster);
+        await liveKit.connect(streamId, user, { 
+          allowPublish: isBroadcaster,
+          role: isBroadcaster ? 'host' : 'audience'
+        });
         if (isBroadcaster) {
-           await liveKit.toggleMicrophone(micOn);
-           await liveKit.toggleCamera(cameraOn);
+           await liveKit.toggleMicrophone();
+           await liveKit.toggleCamera();
         }
       } catch (err) {
         console.error('Failed to connect to LiveKit:', err);
@@ -108,30 +107,19 @@ export default function BroadcastPage() {
     return () => {
       liveKit.disconnect();
     };
-  }, [streamId, user, isBroadcaster]);
+  }, [streamId, user, isBroadcaster, liveKit, profile]);
 
   // Handlers
   const toggleMic = async () => {
     const newState = !micOn;
     setMicOn(newState);
-    await liveKit.toggleMicrophone(newState);
+    await liveKit.toggleMicrophone();
   };
 
   const toggleCamera = async () => {
     const newState = !cameraOn;
     setCameraOn(newState);
-    await liveKit.toggleCamera(newState);
-  };
-
-  const endStream = async () => {
-    if (!window.confirm('Are you sure you want to end the stream?')) return;
-    
-    try {
-      await supabase.from('streams').update({ is_live: false, status: 'ended', end_time: new Date().toISOString() }).eq('id', streamId);
-      navigate('/');
-    } catch (err) {
-      console.error('Failed to end stream:', err);
-    }
+    await liveKit.toggleCamera();
   };
 
   // Gift Events
@@ -144,7 +132,7 @@ export default function BroadcastPage() {
   };
 
   // Entrance Effect (Mock for now, or use real data)
-  const [entranceEffect, setEntranceEffect] = useState<any>(null);
+  const [entranceEffect] = useState<any>(null);
 
   if (!stream) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading Broadcast...</div>;
 
@@ -158,7 +146,6 @@ export default function BroadcastPage() {
           room={liveKit.getRoom()}
           broadcasterId={stream.broadcaster_id}
           isHost={isBroadcaster}
-          totalCoins={stream.total_gifts_coins}
           onSetPrice={() => {}} // Placeholder
           onJoinRequest={() => {}} // Placeholder
         >
@@ -175,6 +162,8 @@ export default function BroadcastPage() {
              onOpenChat={() => setShowMobileChat(!showMobileChat)}
              onOpenGifts={() => setIsGiftModalOpen(true)}
              onOpenSettings={() => {}} // Placeholder
+             totalCoins={stream.total_gifts_coins}
+             startTime={stream.created_at}
           />
           
           {/* Gift Event Animation */}
@@ -184,6 +173,9 @@ export default function BroadcastPage() {
 
       {/* Right Panel (Desktop Chat) */}
       <div className="hidden md:flex w-80 border-l border-white/10 flex-col bg-[#0b091f]">
+        <div className="shrink-0">
+           <GiftBox onSendGift={handleGiftSent} />
+        </div>
         <div className="flex-1 min-h-0">
           <ChatBox 
             streamId={streamId || ''}

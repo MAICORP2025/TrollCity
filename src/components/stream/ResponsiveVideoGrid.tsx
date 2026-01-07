@@ -45,11 +45,14 @@ export default function ResponsiveVideoGrid({
     });
   }, [participants, broadcasterId]);
 
-  const { layoutMode, tileStyles } = useBroadcastLayout(
+  const TOTAL_SLOTS = 6;
+  
+  const { tileStyles } = useBroadcastLayout(
     sortedParticipants,
     dimensions.width,
     dimensions.height,
-    isLandscape
+    isLandscape,
+    TOTAL_SLOTS
   );
 
   return (
@@ -57,27 +60,51 @@ export default function ResponsiveVideoGrid({
       ref={containerRef} 
       className="relative w-full h-full overflow-hidden bg-black/50"
     >
-      {sortedParticipants.map((p, i) => {
+      {/* Render Slots */}
+      {Array.from({ length: TOTAL_SLOTS }).map((_, i) => {
         const style = tileStyles[i];
         if (!style) return null;
 
-        const isLocal = localParticipant && p.identity === localParticipant.identity;
-        const isBroadcaster = p.identity === broadcasterId;
+        const p = sortedParticipants[i];
 
-        return (
-          <VideoTile
-            key={p.identity}
-            participant={p}
-            isBroadcaster={isBroadcaster}
-            isLocal={isLocal}
-            onLeave={isLocal ? onLeaveSession : undefined}
-            style={{
-              ...style,
-              position: 'absolute',
-              transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
-            } as React.CSSProperties}
-          />
-        );
+        if (p) {
+          const isLocal = localParticipant && p.identity === localParticipant.identity;
+          const isBroadcaster = p.identity === broadcasterId;
+
+          return (
+            <VideoTile
+              key={p.identity}
+              participant={p}
+              isBroadcaster={isBroadcaster}
+              isLocal={isLocal}
+              onLeave={isLocal ? onLeaveSession : undefined}
+              style={{
+                ...style,
+                position: 'absolute',
+                transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+              } as React.CSSProperties}
+            />
+          );
+        } else {
+          // Empty Slot Placeholder
+          return (
+            <div
+              key={`empty-${i}`}
+              className="absolute bg-zinc-900/50 rounded-2xl border border-white/5 flex items-center justify-center backdrop-blur-sm"
+              style={{
+                ...style,
+                transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+              } as React.CSSProperties}
+            >
+              <div className="text-white/20 font-bold uppercase tracking-widest text-xs flex flex-col items-center gap-2">
+                 <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                    <span className="text-lg">+</span>
+                 </div>
+                 {i === 0 ? 'Broadcaster' : `Seat ${i + 1}`}
+              </div>
+            </div>
+          );
+        }
       })}
     </div>
   );

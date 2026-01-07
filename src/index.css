@@ -292,6 +292,34 @@ button:active, a:active, [role="button"]:active {
   transition-duration: 75ms;
 }
 
+@keyframes rgbScrollbarPulse {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+html, body, .app-shell-content {
+  scrollbar-width: thin;
+  scrollbar-color: #ff0080 transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-image: linear-gradient(180deg, #ff0080, #ffd700, #00ffff, #ff4d4d, #9d4edd);
+  background-size: 200% 200%;
+  animation: rgbScrollbarPulse 3s linear infinite;
+  box-shadow: 0 0 12px rgba(255, 0, 128, 0.4), 0 0 12px rgba(0, 255, 255, 0.2) inset;
+}
+
 /* Neon streak background effects from image */
 body::before {
   content: '';

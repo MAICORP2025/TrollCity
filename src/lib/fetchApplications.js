@@ -1,5 +1,6 @@
 // src/lib/fetchApplications.js
 import { supabase } from '@/lib/supabaseClient';
+import { notifyAdmins } from './notifications';
 
 // ---------------------------------------------
 // Fix unrouted/broken applications
@@ -95,5 +96,23 @@ export async function submitApplication(payload) {
     console.error('Application submission failed:', error);
     throw error;
   }
+
+  // Notify admins about the new application
+  try {
+    await notifyAdmins(
+      'New Application Submitted',
+      `New ${payload.type} application from ${payload.user_name || 'User'}`,
+      'application_submitted',
+      { 
+        applicationId: data.id, 
+        userId: payload.user_id, 
+        type: payload.type 
+      }
+    );
+  } catch (notifyError) {
+    console.error('Failed to notify admins:', notifyError);
+    // Don't block the application submission if notification fails
+  }
+
   return data;
 }

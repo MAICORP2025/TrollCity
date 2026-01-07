@@ -39,55 +39,6 @@ export default function BottomNavigation() {
 
   const centerBtn = getCenterButton()
 
-  const navItems = [
-    {
-      icon: Home,
-      label: 'Home',
-      path: '/',
-      active: isActive('/')
-    },
-    {
-      icon: MessageSquare,
-      label: 'Inbox',
-      path: '/messages',
-      active: isActive('/messages')
-    },
-    {
-      isCenter: true,
-      ...centerBtn
-    },
-    {
-      icon: Store, // Or maybe Heart/Support for Viewer? keeping Store/Inbox mapping from user req
-      label: 'Create', // User said "Create / Broadcast" for universal category but specific logic for center. 
-      // User said "Universal Nav Categories: Home, Live, Create / Broadcast, Inbox, Profile"
-      // But then "Role-Based Bottom Nav: Different roles see different center button."
-      // Let's stick to the 5 slots: Home, Live (or similar), CENTER, Inbox, Profile.
-      // Wait, user said "Home, Live, Create / Broadcast, Inbox, Profile". That's 5.
-      // And then "Different roles see different center button."
-      // This implies the 3rd one IS the role based one.
-      // So: 1. Home, 2. Live, 3. CENTER (Role), 4. Inbox, 5. Profile.
-      // Let's adjust.
-      // Actually user listed 5 universal categories then said different roles see different center button.
-      // Example: Viewer center = "Explore Live".
-      // So the mapping is:
-      // 1. Home
-      // 2. Live (or Search/Browse)
-      // 3. CENTER (Role Action)
-      // 4. Inbox
-      // 5. Profile
-      icon: Video, // Placeholder, logic below handles render
-      label: 'Live',
-      path: '/live', // or browse
-      active: isActive('/live')
-    },
-    {
-      icon: User,
-      label: 'Profile',
-      path: `/profile/${profile?.username || profile?.id}`,
-      active: isActive('/profile')
-    }
-  ]
-
   // Re-ordering to match: Home, Live, CENTER, Inbox, Profile
   const orderedItems = [
     { icon: Home, label: 'Home', path: '/', active: isActive('/') && location.pathname !== '/live' },

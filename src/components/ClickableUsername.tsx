@@ -3,11 +3,12 @@ import VerifiedBadge from './VerifiedBadge'
 import OfficerTierBadge from './OfficerTierBadge'
 import { EmpireBadge } from './EmpireBadge'
 import { useNavigate } from 'react-router-dom'
-import { Shield, Crown, Skull, Star, MoreVertical, UserX, Ban, MicOff, User } from 'lucide-react'
+import { Shield, Crown, Skull, Star, UserX, Ban, MicOff, User, LogOut } from 'lucide-react'
 import { applyGlowingUsername } from '../lib/perkEffects'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
+import { useCheckOfficerOnboarding } from '../hooks/useCheckOfficerOnboarding'
 
 interface ClickableUsernameProps {
   username: string
@@ -32,6 +33,8 @@ interface ClickableUsernameProps {
     is_active: boolean
   } | null
   userId?: string // Optional: if provided, will fetch profile
+  isBroadcaster?: boolean
+  streamId?: string
 }
 
 const ClickableUsername: React.FC<ClickableUsernameProps> = ({
@@ -41,13 +44,16 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   onClick,
   profile,
   royalTitle,
-  userId
+  userId,
+  isBroadcaster,
+  streamId
 }) => {
   const navigate = useNavigate()
   const usernameRef = useRef<HTMLSpanElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [showMenu, setShowMenu] = useState(false)
   const { user: currentUser, profile: currentUserProfile } = useAuthStore()
+  const { checkOnboarding } = useCheckOfficerOnboarding()
   
   const targetUserId = userId || profile?.id
   const userProfile = profile
@@ -57,6 +63,8 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                  currentUserProfile?.is_troll_officer || 
                  currentUserProfile?.role === 'admin' || 
                  currentUserProfile?.role === 'troll_officer'
+
+  const canModerate = (isStaff || (isBroadcaster && streamId)) && currentUser?.id !== targetUserId
 
   useEffect(() => {
     if (!targetUserId || !usernameRef.current) {
@@ -158,6 +166,42 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             break
         }
 
+        case 'stream_mute': {
+            if (!streamId) return;
+            try {
+                const { error } = await supabase
+                   .from('streams_participants')
+                   .update({ can_chat: false })
+                   .eq('stream_id', streamId)
+                   .eq('user_id', targetUserId);
+
+                if (error) throw error
+                toast.success(`User ${username} muted in stream`)
+            } catch (err: any) {
+                console.error('Error muting user in stream:', err)
+                toast.error('Failed to mute user')
+            }
+            break;
+       }
+
+       case 'stream_kick': {
+            if (!streamId) return;
+            try {
+                const { error } = await supabase
+                   .from('streams_participants')
+                   .update({ is_active: false })
+                   .eq('stream_id', streamId)
+                   .eq('user_id', targetUserId);
+
+                if (error) throw error
+                toast.success(`User ${username} kicked from stream`)
+            } catch (err: any) {
+                console.error('Error kicking user from stream:', err)
+                toast.error('Failed to kick user')
+            }
+            break;
+       }
+
         case 'mute': {
             const reason = window.prompt('Reason for mute (optional):', 'Spamming')
             if (reason === null) return // Cancelled
@@ -213,7 +257,7 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     }
   }
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     
@@ -222,8 +266,11 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
       return
     }
 
-    // If staff and not clicking themselves, toggle menu
-    if (isStaff && currentUser?.id !== targetUserId) {
+    // If staff/broadcaster and not clicking themselves, toggle menu
+    if (canModerate) {
+        const canProceed = await checkOnboarding()
+        if (!canProceed) return
+
         setShowMenu(!showMenu)
         return
     }
@@ -326,27 +373,54 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                         <User size={14} />
                         View Profile
                     </button>
-                    <button
-                        onClick={() => handleAction('mute')}
-                        className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-zinc-800 hover:text-yellow-300 rounded flex items-center gap-2"
-                    >
-                        <MicOff size={14} />
-                        Mute User
-                    </button>
-                    <button
-                        onClick={() => handleAction('ban')}
-                        className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 rounded flex items-center gap-2"
-                    >
-                        <Ban size={14} />
-                        Ban User
-                    </button>
-                    <button
-                        onClick={() => handleAction('delete')}
-                        className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-zinc-800 hover:text-red-500 rounded flex items-center gap-2 border-t border-gray-800 mt-1 pt-2"
-                    >
-                        <UserX size={14} />
-                        Delete User
-                    </button>
+
+                    {/* Stream Specific Actions */}
+                    {isBroadcaster && streamId && (
+                        <>
+                            <button
+                                onClick={() => handleAction('stream_mute')}
+                                className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-zinc-800 hover:text-yellow-300 rounded flex items-center gap-2"
+                            >
+                                <MicOff size={14} />
+                                Mute in Stream
+                            </button>
+                            <button
+                                onClick={() => handleAction('stream_kick')}
+                                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 rounded flex items-center gap-2"
+                            >
+                                <LogOut size={14} />
+                                Kick from Stream
+                            </button>
+                            <div className="border-t border-gray-800 my-1"></div>
+                        </>
+                    )}
+
+                    {/* Global Staff Actions */}
+                    {isStaff && (
+                        <>
+                            <button
+                                onClick={() => handleAction('mute')}
+                                className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-zinc-800 hover:text-yellow-300 rounded flex items-center gap-2"
+                            >
+                                <MicOff size={14} />
+                                Global Mute
+                            </button>
+                            <button
+                                onClick={() => handleAction('ban')}
+                                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 rounded flex items-center gap-2"
+                            >
+                                <Ban size={14} />
+                                Global Ban
+                            </button>
+                            <button
+                                onClick={() => handleAction('delete')}
+                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-zinc-800 hover:text-red-500 rounded flex items-center gap-2 border-t border-gray-800 mt-1 pt-2"
+                            >
+                                <UserX size={14} />
+                                Delete User
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         )}

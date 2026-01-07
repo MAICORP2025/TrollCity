@@ -23,7 +23,7 @@ export default function PayoutPolicy() {
           <li>Hold at least <strong>7,000 troll_coins</strong> in your account</li>
           <li>Complete identity verification (KYC/ID check)</li>
           <li>Submit required tax forms (W-9 for US users, or equivalent for international)</li>
-          <li>Have a verified PayPal email address on file</li>
+          <li>Have a verified email address on file</li>
           <li>Have no active bans, suspensions, or fraud flags</li>
           <li>Have no pending chargebacks or payment disputes</li>
         </ul>
@@ -98,14 +98,14 @@ export default function PayoutPolicy() {
 
         <h2>7. Processing Fees</h2>
         <p>
-          Troll City does not charge processing fees for payouts. However, PayPal
-          may charge fees on the receiving end. These fees are your responsibility.
+          Troll City does not charge processing fees for payouts. However, the Gift Card provider
+          may charge fees or have expiration dates. These are your responsibility.
         </p>
 
         <h2>8. Payment Method</h2>
         <p>
-          Currently, all payouts are processed via PayPal only. You must provide a
-          valid PayPal email address that matches your verified identity. We do not
+          Currently, all payouts are processed via Gift Card only. You must provide a
+          valid email address that matches your verified identity. We do not
           support bank transfers, checks, or other payment methods at this time.
         </p>
 

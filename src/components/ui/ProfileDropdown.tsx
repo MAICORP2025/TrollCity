@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   User, 
   Settings, 
   LogOut, 
-  Shield, 
   ChevronDown, 
   LayoutDashboard 
 } from 'lucide-react'
@@ -21,7 +20,6 @@ export default function ProfileDropdown({ onLogout, className }: ProfileDropdown
   const { profile } = useAuthStore()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const navigate = useNavigate()
 
   const toggleDropdown = () => setIsOpen(!isOpen)
 
@@ -42,38 +40,32 @@ export default function ProfileDropdown({ onLogout, className }: ProfileDropdown
   const isOfficerOrAdmin = ['admin', 'troll_officer', 'lead_troll_officer'].includes(profile.role || '') || profile.is_lead_officer
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={`relative flex items-center gap-1 ${className}`} ref={dropdownRef}>
+      <Link
+        to={`/profile/${profile.username}`}
+        className="relative group outline-none"
+      >
+        <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-troll-neon-gold to-troll-neon-orange rounded-full flex items-center justify-center shadow-lg shadow-troll-neon-gold/20 border-2 border-troll-neon-gold/50 overflow-hidden group-hover:scale-105 transition-transform duration-300">
+          {profile.avatar_url ? (
+            <img 
+              src={profile.avatar_url} 
+              alt={profile.username} 
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-troll-dark-bg font-bold text-lg">
+              {profile.username?.[0]?.toUpperCase()}
+            </span>
+          )}
+        </div>
+      </Link>
+
       <button
         onClick={toggleDropdown}
-        className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-all duration-300 group outline-none"
+        className="p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+        aria-label="Open menu"
       >
-        <div className="text-right hidden md:block">
-          <p className={`text-sm font-bold ${profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date() ? 'rgb-username' : 'text-white'}`}>
-            {profile.username}
-          </p>
-          <p className="text-xs text-troll-neon-blue/70 capitalize font-semibold">
-            {tier}
-          </p>
-        </div>
-        
-        <div className="relative">
-          <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-troll-neon-gold to-troll-neon-orange rounded-full flex items-center justify-center shadow-lg shadow-troll-neon-gold/20 border-2 border-troll-neon-gold/50 overflow-hidden group-hover:scale-105 transition-transform duration-300">
-            {profile.avatar_url ? (
-              <img 
-                src={profile.avatar_url} 
-                alt={profile.username} 
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-troll-dark-bg font-bold text-lg">
-                {profile.username?.[0]?.toUpperCase()}
-              </span>
-            )}
-          </div>
-          <div className="absolute -bottom-1 -right-1 bg-[#1A1A1A] rounded-full p-0.5 md:hidden">
-            <ChevronDown className="w-3 h-3 text-gray-400" />
-          </div>
-        </div>
+        <ChevronDown className="w-5 h-5" />
       </button>
 
       <AnimatePresence>

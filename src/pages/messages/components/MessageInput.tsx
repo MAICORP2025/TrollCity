@@ -2,6 +2,7 @@ import { useState, KeyboardEvent, useRef } from 'react'
 import { Send, Smile } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
+import { canMessageAdmin } from '../../../lib/perkEffects'
 import { toast } from 'sonner'
 
 interface MessageInputProps {
@@ -37,7 +38,8 @@ export default function MessageInput({ otherUserId, onMessageSent }: MessageInpu
       const senderIsOfficer = profile.is_troll_officer || profile.is_officer
       const senderIsTroller = profile.is_troller
       const senderIsAdmin = senderRole === 'admin' || profile.is_admin
-      const canMessageFree = senderIsAdmin || senderIsOfficer || senderIsTroller
+      const hasMessagePerk = await canMessageAdmin(profile.id)
+      const canMessageFree = senderIsAdmin || senderIsOfficer || senderIsTroller || hasMessagePerk
 
       if (!canMessageFree && toUser.profile_view_price && toUser.profile_view_price > 0) {
         const { data: paymentResult, error: paymentError } = await supabase.rpc('pay_for_profile_view', {

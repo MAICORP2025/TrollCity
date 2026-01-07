@@ -5,6 +5,7 @@ export interface StartCourtSessionParams {
   maxBoxes: number
   roomName: string
   userId: string
+  defendantId?: string
 }
 
 export interface CourtSessionData {
@@ -15,11 +16,12 @@ export interface CourtSessionData {
   status: 'active'
   created_at: string
   startedAt: string
+  defendantId?: string
 }
 
 export async function startCourtSession(params: StartCourtSessionParams): Promise<{ data: CourtSessionData | null, error: any }> {
   try {
-    const { sessionId, maxBoxes, roomName, userId } = params
+    const { sessionId, maxBoxes, roomName, userId, defendantId } = params
 
     // First, check if there's already an active session
     const { data: existingSession } = await supabase
@@ -45,6 +47,7 @@ export async function startCourtSession(params: StartCourtSessionParams): Promis
         room_name: roomName,
         status: 'active',
         started_by: userId,
+        defendant_id: defendantId,
         created_at: new Date().toISOString(),
         started_at: new Date().toISOString()
       })
@@ -64,7 +67,8 @@ export async function startCourtSession(params: StartCourtSessionParams): Promis
         roomName: data.room_name,
         status: 'active',
         created_at: data.created_at,
-        startedAt: data.started_at
+        startedAt: data.started_at,
+        defendantId: data.defendant_id
       },
       error: null
     }

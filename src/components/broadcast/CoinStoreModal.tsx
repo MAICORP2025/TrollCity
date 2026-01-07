@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 import { useAuthStore } from "../../lib/store";
-import { ENTRANCE_EFFECTS_CONFIG, EntranceEffectKey } from "../../lib/entranceEffects";
+import { ENTRANCE_EFFECTS_CONFIG } from "../../lib/entranceEffects";
 
 interface CoinPackage {
   id: number;

@@ -6,8 +6,8 @@ import { X, CheckCircle, XCircle, Award, User, Clock, FileText, Calendar, Crown 
 import ClickableUsername from '../../components/ClickableUsername'
 import WeeklyReportForm from '../../components/WeeklyReportForm'
 import WeeklyReportsList from '../../components/WeeklyReportsList'
+import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 import '../../styles/LeadOfficerDashboard.css'
-import TrollsNightReviewPanel from '../../components/TrollsNightReviewPanel'
 
 type Applicant = {
   id: string
@@ -573,6 +573,10 @@ export function LeadOfficerDashboard() {
         </p>
       </div>
 
+      <section>
+        <OfficerStreamGrid />
+      </section>
+
       {/* Applicants */}
       <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -958,7 +962,7 @@ export function LeadOfficerDashboard() {
         </div>
       )}
 
-      <TrollsNightReviewPanel title="Trolls @ Night review desk" />
+
 
       {/* Weekly Reports Section */}
       <section className="rounded-2xl border border-green-800 bg-black/40 p-6 mt-6">

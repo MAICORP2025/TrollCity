@@ -60,7 +60,7 @@ export default function TrollCourtSession() {
     } finally {
       setIsInitializing(false);
     }
-  }, [isInitializing, currentUser.id, currentUser.name, currentUser.role]);
+  }, [isInitializing, currentUser.id, currentUser.name, currentUser.role, activeSession]);
 
   useEffect(() => {
     if (isJudge) {

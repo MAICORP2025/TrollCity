@@ -36,7 +36,7 @@ export default function ProfileModal({ profile, onClose, onSendCoins, onGift, cu
         .select('*')
         .eq('follower_id', currentUserId)
         .eq('following_id', profile.id)
-        .single();
+        .maybeSingle();
       setIsFollowing(!!followData);
 
       // Check if THEY follow ME (for messaging permission)
@@ -45,7 +45,7 @@ export default function ProfileModal({ profile, onClose, onSendCoins, onGift, cu
         .select('*')
         .eq('follower_id', profile.id)
         .eq('following_id', currentUserId)
-        .single();
+        .maybeSingle();
       setIsFollowedByProfile(!!followedByData);
 
       // Check for Message Admin perk

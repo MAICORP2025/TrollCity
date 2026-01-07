@@ -1,6 +1,5 @@
 import React from 'react'
-import { motion } from 'framer-motion'
-import { Radio, Compass, Users } from 'lucide-react'
+import { Radio, Compass } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from './button'
 
@@ -25,45 +24,12 @@ export default function EmptyStateLiveNow() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
-          <Link to="/go-live">
-            <Button className="rounded-full px-6 py-2 bg-troll-neon-pink hover:bg-troll-neon-pink/80 text-white font-bold shadow-[0_0_15px_rgba(255,49,89,0.4)] hover:shadow-[0_0_25px_rgba(255,49,89,0.6)] hover:scale-105 transition-all duration-300 flex items-center gap-2">
-              <Radio className="w-4 h-4" />
-              Go Live
-            </Button>
-          </Link>
-          
           <Link to="/following">
             <Button variant="outline" className="rounded-full px-6 py-2 border-troll-neon-blue/30 text-troll-neon-blue hover:bg-troll-neon-blue/10 hover:text-white hover:border-troll-neon-blue/60 font-bold transition-all duration-300 flex items-center gap-2">
               <Compass className="w-4 h-4" />
               Explore Creators
             </Button>
           </Link>
-        </div>
-      </div>
-
-      {/* Placeholder for Featured Creators (Static representation for now as per empty state requirement) */}
-      <div className="mt-10 pt-8 border-t border-white/5 w-full">
-        <div className="flex items-center gap-2 mb-4 justify-center md:justify-start">
-          <Users className="w-4 h-4 text-troll-neon-green" />
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Recommended Streamers</span>
-        </div>
-        
-        <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide justify-center md:justify-start">
-          {/* Mock Recommended Users */}
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex flex-col items-center gap-2 min-w-[80px] group/user cursor-pointer">
-              <div className="w-14 h-14 rounded-full bg-gray-800 border-2 border-transparent group-hover/user:border-troll-neon-green transition-all overflow-hidden relative">
-                <img 
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=creator${i}`} 
-                  alt="Creator" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-400 group-hover/user:text-white truncate w-full text-center">
-                Creator {i}
-              </span>
-            </div>
-          ))}
         </div>
       </div>
     </div>

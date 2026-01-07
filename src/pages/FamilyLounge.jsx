@@ -18,68 +18,234 @@ const FamilyLounge = () => {
   const [memberRole, setMemberRole] = useState('member')
   const [loading, setLoading] = useState(true)
 
+  // Create Family State
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newFamilyName, setNewFamilyName] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  const handleCreateFamily = async (e) => {
+    e.preventDefault()
+    if (!newFamilyName.trim()) return toast.error('Family name required')
+    
+    setCreating(true)
+    try {
+      // 1. Create Family
+      const { data: familyData, error: familyError } = await supabase
+        .from('troll_families')
+        .insert({
+          name: newFamilyName,
+          family_name: newFamilyName,
+          leader_id: user.id,
+          description: `The ${newFamilyName} family`,
+          xp: 0,
+          level: 1
+        })
+        .select()
+        .single()
+
+      if (familyError) throw familyError
+
+      // 2. Add creator as leader
+      const { error: memberError } = await supabase
+        .from('family_members')
+        .insert({
+          family_id: familyData.id,
+          user_id: user.id,
+          role: 'leader',
+          rank_name: 'Royal Troll',
+          is_royal_troll: true
+        })
+
+      if (memberError) throw memberError
+
+      toast.success('Family Created Successfully!')
+      setShowCreateModal(false)
+      
+      // Optimistic update to immediately show the family interface
+      setFamily(familyData)
+      setMemberRole('leader')
+      setFamilyStats({
+        family_id: familyData.id,
+        total_coins: 0,
+        weekly_coins: 0,
+        season_coins: 0,
+        level: 1,
+        xp: 0
+      })
+      setFamilyTasks([])
+      setActivityLog([])
+      
+      // Background refresh to ensure everything is synced
+      loadFamilyData()
+    } catch (error) {
+      console.error('Error creating family:', error)
+      if (error.code === '23505' || error.message?.includes('duplicate key')) {
+        toast.error('A family with this name already exists. Please choose another name.')
+      } else {
+        toast.error(error.message || 'Failed to create family')
+      }
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const generateTasks = async () => {
+    if (!family || !family.id) return
+    setLoading(true)
+    try {
+      const tasks = [
+        {
+          family_id: family.id,
+          task_title: 'Recruit New Trolls',
+          task_description: 'Grow your family by recruiting 3 new members this week.',
+          reward_family_coins: 500,
+          reward_family_xp: 100,
+          goal_value: 3,
+          current_value: 0,
+          metric: 'family_members_recruited',
+          status: 'active',
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          family_id: family.id,
+          task_title: 'Host a Clan Stream',
+          task_description: 'Start a live stream representing your family.',
+          reward_family_coins: 200,
+          reward_family_xp: 50,
+          goal_value: 1,
+          current_value: 0,
+          metric: 'streams_started',
+          status: 'active',
+          expires_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          family_id: family.id,
+          task_title: 'Gift Raid',
+          task_description: 'Send 5 gifts to support other trolls.',
+          reward_family_coins: 300,
+          reward_family_xp: 75,
+          goal_value: 5,
+          current_value: 0,
+          metric: 'gifts_sent',
+          status: 'active',
+          expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString()
+        }
+      ]
+
+      const { error } = await supabase.from('family_tasks').insert(tasks)
+      
+      if (error) {
+        // Check for column errors (Postgres code 42703 is undefined_column)
+        if (error.code === '42703') {
+           console.warn('New schema failed, attempting legacy schema fallback...')
+           
+           const legacyTasks = tasks.map(t => ({
+             family_id: t.family_id,
+             title: t.task_title,
+             description: t.task_description,
+             category: 'General',
+             task_type: 'Influence', // Required in some legacy schemas
+             reward_coins: t.reward_family_coins,
+             reward_xp: t.reward_family_xp,
+             status: 'active',
+             expires_at: t.expires_at
+           }))
+
+           const { error: legacyError } = await supabase.from('family_tasks').insert(legacyTasks)
+           if (legacyError) throw legacyError
+        } else {
+           throw error
+        }
+      }
+      
+      toast.success('Weekly tasks generated!')
+      loadFamilyData()
+    } catch (error) {
+      console.error('Error generating tasks:', error)
+      toast.error(`Failed to generate tasks: ${error.message || 'Unknown error'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const loadFamilyData = useCallback(async () => {
     setLoading(true)
     try {
-      // Get user's family membership
-      const { data: membership } = await supabase
+      // Step 1: Get membership first (without join to avoid relationship issues)
+      const { data: membership, error: memberError } = await supabase
         .from('family_members')
-        .select(`
-          role,
-          troll_families (
-            id,
-            name,
-            emblem_url,
-            banner_url,
-            description,
-            leader_id
-          )
-        `)
+        .select('family_id, role')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
-      if (membership?.troll_families) {
-        setFamily(membership.troll_families)
-        setMemberRole(membership.role)
+      if (memberError) throw memberError
 
-        const familyId = membership.troll_families.id
-
-        // Load family stats
-        const { data: stats } = await supabase
-          .from('family_stats')
+      if (membership?.family_id) {
+        // Step 2: Get family details
+        const { data: familyData, error: familyError } = await supabase
+          .from('troll_families')
           .select('*')
-          .eq('family_id', familyId)
+          .eq('id', membership.family_id)
           .single()
 
-        setFamilyStats(stats)
+        if (familyError) throw familyError
 
-        // Load active tasks
-        const { data: tasks } = await supabase
-          .from('family_tasks')
-          .select('*')
-          .eq('family_id', familyId)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(5)
+        if (familyData) {
+          setFamily(familyData)
+          setMemberRole(membership.role)
 
-        setFamilyTasks(tasks || [])
+          const familyId = familyData.id
 
-        // Load recent activity
-        const { data: activities } = await supabase
-          .from('family_activity_log')
-          .select(`
-            *,
-            profiles:user_id (username)
-          `)
-          .eq('family_id', familyId)
-          .order('created_at', { ascending: false })
-          .limit(10)
+          // Load family stats
+          const { data: stats } = await supabase
+            .from('family_stats')
+            .select('*')
+            .eq('family_id', familyId)
+            .maybeSingle()
 
-        setActivityLog(activities || [])
+          // If no stats exist, use defaults
+          setFamilyStats(stats || {
+            family_id: familyId,
+            total_coins: 0,
+            weekly_coins: 0,
+            season_coins: 0,
+            level: 1,
+            xp: 0
+          })
+
+          // Load active tasks
+          const { data: tasks } = await supabase
+            .from('family_tasks')
+            .select('*')
+            .eq('family_id', familyId)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(5)
+
+          setFamilyTasks(tasks || [])
+
+          // Load recent activity
+          const { data: activities } = await supabase
+            .from('family_activity_log')
+            .select(`
+              *,
+              profiles:user_profiles!family_activity_log_user_id_fkey (username)
+            `)
+            .eq('family_id', familyId)
+            .order('created_at', { ascending: false })
+            .limit(10)
+
+          setActivityLog(activities || [])
+        }
+      } else {
+        setFamily(null)
       }
     } catch (error) {
       console.error('Error loading family data:', error)
-      toast.error('Failed to load family data')
+      // Only show error if it's not "PGRST116" (no result) which is expected if not in family
+      if (error.code !== 'PGRST116') {
+         toast.error(`Failed to load family: ${error.message}`)
+      }
     } finally {
       setLoading(false)
     }
@@ -149,19 +315,85 @@ const FamilyLounge = () => {
   if (!family) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
-        <div className="max-w-4xl mx-auto text-center">
+        <div className="max-w-4xl mx-auto text-center mt-20">
           <Crown className="w-16 h-16 mx-auto mb-6 text-purple-400" />
           <h1 className="text-3xl font-bold mb-4">Not in a Family</h1>
-          <p className="text-gray-300 mb-6">
-            Join or create a Troll Family to access the family lounge and participate in epic family battles!
+          <p className="text-gray-300 mb-8 max-w-lg mx-auto">
+            Join an existing family or create your own legacy. Lead your family to glory in the Troll City wars!
           </p>
-          <button
-            onClick={() => navigate('/apply/family')}
-            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors"
-          >
-            Browse Families
-          </button>
+          
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={() => navigate('/apply/family')}
+              className="px-8 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg font-semibold transition-colors border border-zinc-700"
+            >
+              Browse Families
+            </button>
+            
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-8 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors flex items-center gap-2 justify-center"
+            >
+              <Crown className="w-5 h-5" />
+              Create New Family
+            </button>
+          </div>
         </div>
+
+        {/* Create Family Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-zinc-900 border border-purple-500/30 rounded-2xl p-6 max-w-md w-full relative">
+              <button 
+                onClick={() => setShowCreateModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+              
+              <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                <Crown className="text-purple-400" />
+                Create Troll Family
+              </h2>
+              <p className="text-gray-400 text-sm mb-6">
+                Establish your own family. You will become the leader and Royal Troll.
+              </p>
+
+              <form onSubmit={handleCreateFamily} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Family Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newFamilyName}
+                    onChange={(e) => setNewFamilyName(e.target.value)}
+                    placeholder="e.g. The Bridge Keepers"
+                    className="w-full bg-black/50 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:border-purple-500 focus:outline-none"
+                    maxLength={30}
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={creating || !newFamilyName.trim()}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {creating ? (
+                      <>Creating...</>
+                    ) : (
+                      <>
+                        <Crown className="w-5 h-5" />
+                        Establish Family
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -290,7 +522,18 @@ const FamilyLounge = () => {
           </h2>
           <div className="space-y-4">
             {familyTasks.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">No active tasks</p>
+              <div className="text-center py-6">
+                <p className="text-gray-400 mb-4">No active tasks</p>
+                {['leader', 'officer'].includes(memberRole) && (
+                  <button
+                    onClick={generateTasks}
+                    className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-semibold text-white transition-all flex items-center gap-2 mx-auto"
+                  >
+                    <Target className="w-4 h-4" />
+                    Generate Weekly Tasks
+                  </button>
+                )}
+              </div>
             ) : (
               familyTasks.map((task) => {
                 const progress = (task.current_value / task.goal_value) * 100

@@ -22,7 +22,10 @@ export default function AdminPayoutDashboard() {
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = profile?.role === "admin" || profile?.is_admin;
+  const isAdmin = 
+    (profile?.role && ['admin', 'secretary'].includes(profile.role)) ||
+    (profile?.troll_role && ['admin', 'secretary'].includes(profile.troll_role)) ||
+    profile?.is_admin;
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -164,7 +167,7 @@ export default function AdminPayoutDashboard() {
                   {Number(p.usd_estimate).toFixed(2)}
                 </div>
                 <div className="text-xs opacity-70 mb-1">
-                  PayPal: <span className="font-mono">{p.payout_address}</span>
+                  Gift Card Email: <span className="font-mono">{p.payout_address}</span>
                 </div>
                 <div className="text-xs opacity-70">
                   Requested: {new Date(p.created_at).toLocaleString()}

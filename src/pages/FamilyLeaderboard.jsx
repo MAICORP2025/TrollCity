@@ -50,7 +50,7 @@ const FamilyLeaderboard = () => {
           .from('family_members')
           .select('family_id')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
 
         if (membership) {
           setUserFamily(membership.family_id)
