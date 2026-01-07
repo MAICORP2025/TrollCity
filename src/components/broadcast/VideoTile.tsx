@@ -162,7 +162,10 @@ export default function VideoTile({
       <video 
         ref={videoRef} 
         className="w-full h-full transition-all duration-300"
-        style={{ objectFit }}
+        style={{ 
+          objectFit,
+          transform: isLocal ? 'scaleX(-1)' : 'none' 
+        }}
       />
       
       {/* Fallback Profile Picture */}

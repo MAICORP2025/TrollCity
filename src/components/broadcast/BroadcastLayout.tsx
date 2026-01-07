@@ -25,6 +25,8 @@ export default function BroadcastLayout({
 }: BroadcastLayoutProps) {
   const participants = useRoomParticipants(room);
   
+  if (!room) return null;
+
   return (
     <div className="relative w-full h-full bg-black overflow-hidden">
       {/* Responsive Grid System */}
