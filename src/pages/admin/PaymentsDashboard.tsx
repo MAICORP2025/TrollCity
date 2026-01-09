@@ -51,6 +51,19 @@ export default function PaymentsDashboard() {
   // Load transactions
   useEffect(() => {
     loadTransactions()
+
+    // Subscribe to new coin_transactions
+    const channel = supabase
+      .channel('payments-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coin_transactions', filter: "type=eq.purchase" }, () => {
+        console.log('📊 New purchase detected, refreshing...')
+        loadTransactions()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const loadTransactions = async () => {

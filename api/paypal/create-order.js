@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     const request = new paypal.orders.OrdersCreateRequest();
     request.prefer("return=representation");
     request.requestBody({
-      intent: "CAPTURE",
+      intent: "AUTHORIZE",
       purchase_units: [
         {
           amount: {

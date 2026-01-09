@@ -26,6 +26,7 @@ interface PayPalTokenResponse {
 
 interface PayPalOrderResponse {
   status: string;
+  intent?: string;
   payer?: {
     email_address?: string;
   };
@@ -46,6 +47,10 @@ interface PayPalOrderResponse {
             value: string;
           };
         };
+      }>;
+      authorizations?: Array<{
+        id: string;
+        status: string;
       }>;
     };
   }>;
@@ -103,7 +108,7 @@ serve(async (req: Request) => {
     console.log("📦 Received body:", JSON.stringify(body));
     
     // Support multiple orderId key variations
-    const orderId = (body.orderId || body.orderID || body.order_id || body.paypal_order_id) as string;
+    const orderId = (body.orderId || body.orderID) as string;
     console.log("🔍 Resolved orderId:", orderId);
     
     if (!orderId) {
@@ -130,42 +135,170 @@ serve(async (req: Request) => {
 
     let orderData: PayPalOrderResponse = await orderRes.json() as PayPalOrderResponse;
 
-    // 2. Capture if not completed
-    if (orderData.status !== "COMPLETED") {
-      const captureRes = await fetch(
-        `${PAYPAL_BASE}/v2/checkout/orders/${orderId}/capture`,
+    // Check order status before capturing
+    if (orderData.status !== "APPROVED" && orderData.status !== "COMPLETED") {
+      console.error("Order not approved for capture:", orderData.status);
+      return new Response(
+        JSON.stringify({ error: "Order not approved", currentStatus: orderData.status }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check order intent to determine capture flow
+    const orderIntent = orderData.intent || "CAPTURE";
+    console.log(`Order intent: ${orderIntent}`);
+
+    let capture: { id: string; status: string; amount?: { value: string }; seller_receivable_breakdown?: { net_amount?: { value: string } } } | null = null;
+
+    if (orderIntent === "AUTHORIZE") {
+      // Step 1: AUTHORIZE the order
+      const authorizeRes = await fetch(
+        `${PAYPAL_BASE}/v2/checkout/orders/${orderId}/authorize`,
         {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          }
+            "Content-Type": "application/json",
+          },
         }
       );
 
-      if (!captureRes.ok) {
-        const errorText = await captureRes.text();
-        console.error("PayPal capture error:", errorText);
-        const debugId = captureRes.headers.get('paypal-debug-id') || 'unknown';
-        return new Response(JSON.stringify({
-          error: "Failed to capture payment",
-          paypalDebugId: debugId,
-          details: errorText
-        }), {
-          status: 500,
-          headers: cors
-        });
+      if (!authorizeRes.ok) {
+        const errTxt = await authorizeRes.text();
+        console.error("PayPal authorize error", errTxt);
+        return new Response(
+          JSON.stringify({ error: "Failed to authorize payment", details: errTxt }),
+          { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
+        );
       }
 
-      orderData = await captureRes.json() as PayPalOrderResponse;
+      const authorizeData: PayPalOrderResponse = await authorizeRes.json() as PayPalOrderResponse;
+
+      // Step 2: Extract authorization ID
+      const authorization = authorizeData.purchase_units?.[0]?.payments?.authorizations?.[0];
+
+      if (!authorization?.id) {
+        return new Response(
+          JSON.stringify({ error: "Missing authorization id", authorizeData }),
+          { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Step 3: Capture the authorization
+      const authId = authorization.id;
+      const authIdempotencyKey = `${orderId}-${authId}-capture`;
+
+      // Check idempotency for this authorization capture
+      const { data: existingAuthTx } = await supabase
+        .from("ledger_transactions")
+        .select("id")
+        .eq("unique_reference", authIdempotencyKey)
+        .maybeSingle();
+
+      if (existingAuthTx) {
+        console.log("Authorization capture already processed:", existingAuthTx.id);
+        // Find existing capture in order data
+        const existingCaptureInOrder = orderData.purchase_units?.[0]?.payments?.captures?.[0];
+        if (existingCaptureInOrder) {
+          capture = existingCaptureInOrder;
+        }
+      } else {
+        const captureAuthRes = await fetch(
+          `${PAYPAL_BASE}/v2/payments/authorizations/${authId}/capture`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!captureAuthRes.ok) {
+          const errTxt = await captureAuthRes.text();
+          console.error("PayPal auth capture error", errTxt);
+          return new Response(
+            JSON.stringify({ error: "Failed to capture authorization", details: errTxt }),
+            { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
+          );
+        }
+
+        const capturedAuthData: PayPalOrderResponse = await captureAuthRes.json() as PayPalOrderResponse;
+
+        // Update order data with capture info
+        if (capturedAuthData.status !== "COMPLETED") {
+          return new Response(
+            JSON.stringify({ error: "Authorization capture not completed", capturedAuthData }),
+            { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Store authorization capture for idempotency
+        const { error: idempotErr } = await supabase
+          .from("ledger_transactions")
+          .insert({
+            user_id: "system",
+            unique_reference: authIdempotencyKey,
+            amount_usd: 0,
+            coins_granted: 0,
+            metadata: { type: "auth_capture_idempotency", auth_id: authId }
+          });
+        if (idempotErr) {
+          console.error("Failed to store auth capture idempotency key:", idempotErr);
+        }
+
+        capture = capturedAuthData.purchase_units?.[0]?.payments?.captures?.[0] || null;
+        console.log("Authorization captured successfully:", capture);
+      }
+    } else {
+      // Original CAPTURE flow for CAPTURE intent
+      // 2. Capture if no existing capture
+      const purchaseUnit = orderData.purchase_units?.[0];
+      const existingCapture = purchaseUnit?.payments?.captures?.[0];
+
+      if (!existingCapture) {
+        const captureRes = await fetch(
+          `${PAYPAL_BASE}/v2/checkout/orders/${orderId}/capture`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json"
+            }
+          }
+        );
+
+        if (!captureRes.ok) {
+          const errTxt = await captureRes.text();
+          console.error("PayPal capture error RAW:", errTxt);
+
+          let parsed: any = null;
+          try { parsed = JSON.parse(errTxt); } catch {}
+
+          const issue = parsed?.details?.[0]?.issue ?? null;
+
+          return new Response(
+            JSON.stringify({
+              error: "PayPal capture failed",
+              issue,
+              paypalDebugId: parsed?.debug_id ?? null,
+              details: parsed
+            }),
+            { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
+          );
+        } else {
+          orderData = await captureRes.json() as PayPalOrderResponse;
+        }
+      }
+
+      capture = orderData.purchase_units?.[0]?.payments?.captures?.[0] || null;
     }
 
     const purchaseUnit = orderData.purchase_units?.[0];
+
     if (!purchaseUnit) {
       return new Response(JSON.stringify({ error: "No purchase units in PayPal order" }), { status: 400, headers: cors });
     }
-    const payments = purchaseUnit.payments;
-    const capture = payments?.captures?.[0];
 
     if (!capture || capture.status !== "COMPLETED") {
       console.error("Capture not completed", capture);
@@ -261,29 +394,21 @@ serve(async (req: Request) => {
       // Continue with coin addition even if ledger fails
     }
 
-    // 6. Insert Transaction into coin_transactions (existing logic)
+    // 6. Insert Transaction into coin_transactions
     const { error: txErr } = await supabase.from("coin_transactions").insert({
       user_id: metaUserId,
-      amount: metaCoins,
-      type: "purchase",
-      description: `PayPal Purchase ${orderId}`,
-      source: "paypal_web",
-      external_id: capture.id,
       paypal_order_id: orderId,
-      platform_profit: usdAmount,
-      coin_type: "paid",
-      status: "completed",
-      metadata: {
-        ...orderData,
-        payer_email: payerEmail,
-        payment_status: capture.status,
-        payment_method: "paypal_web"
-      }
+      paypal_capture_id: capture.id,
+      paypal_status: capture.status,
+      amount_usd: usdAmount,
+      coins_granted: metaCoins,
     });
 
     if (txErr) {
       console.error("Insert transaction error", txErr);
-      return new Response(JSON.stringify({ error: "Failed to log transaction", details: txErr }), { status: 500, headers: cors });
+      // Continue anyway - don't block the purchase for transaction log errors
+    } else {
+      console.log("✅ Transaction logged to coin_transactions");
     }
 
     // 7. Add Coins and verify final balance

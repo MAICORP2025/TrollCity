@@ -10,6 +10,7 @@ import { Loader2, AlertCircle, CheckCircle, Coins } from 'lucide-react'
 declare global {
   interface Window {
     paypal: any
+    testPayPalCapture: (orderId: string) => Promise<void>
   }
 }
 
@@ -52,6 +53,12 @@ const PayPalButtonsWrapper: React.FC<PayPalButtonsProps> = ({ selectedPackage, o
   useEffect(() => {
     if (!window.paypal || !selectedPackage || !user) return
 
+    // Cleanup previous buttons
+    const container = document.getElementById('paypal-button-container')
+    if (container) {
+      container.innerHTML = ''
+    }
+
     window.paypal
       .Buttons({
         createOrder: async () => {
@@ -88,20 +95,53 @@ const PayPalButtonsWrapper: React.FC<PayPalButtonsProps> = ({ selectedPackage, o
             setIsProcessing(false)
           }
         },
-        onApprove: async (data: any) => {
+        onApprove: async (data: any, actions: any) => {
           try {
             setIsProcessing(true)
+            console.log("🔍 onApprove data:", data)
+            console.log("🔍 data.orderID:", data.orderID)
+            
+            if (!data.orderID) {
+              console.error("❌ Missing PayPal orderID in onApprove data:", data)
+              throw new Error('Missing order ID from PayPal')
+            }
+            
+            // Capture the order on PayPal's side first
+            const captureResult = await actions.order.capture()
+            console.log("✅ PayPal capture success:", captureResult)
+            
+            // Then call our backend to complete the purchase
             await onApprove(data)
-          } catch (error) {
+          } catch (error: any) {
             console.error('Approval error:', error)
+            
+            // PayPal recommends restarting checkout for INSTRUMENT_DECLINED
+            // This lets user reselect payment method without rebuilding UI
+            if (error?.details?.[0]?.issue === 'INSTRUMENT_DECLINED') {
+              console.log('💳 Payment instrument declined, restarting checkout...')
+              toast.info('Payment method declined. Please try a different payment method.')
+              return actions.restart()
+            }
+            
             toast.error(error instanceof Error ? error.message : 'Payment approval failed')
           } finally {
             setIsProcessing(false)
           }
         },
+        onCancel: (data: any) => {
+          console.log('PayPal checkout cancelled:', data)
+          toast.info('Payment cancelled')
+        },
         onError: (error: any) => {
           console.error('PayPal error:', error)
-          toast.error('PayPal payment failed')
+          
+          // Handle INSTRUMENT_DECLINED in onError as well
+          if (error?.details?.[0]?.issue === 'INSTRUMENT_DECLINED') {
+            console.log('💳 Payment instrument declined in onError')
+            toast.info('Payment method declined. Please try a different payment method.')
+          } else {
+            toast.error('PayPal payment failed. Please refresh and try again.')
+          }
         },
       })
       .render('#paypal-button-container')
@@ -131,7 +171,7 @@ export default function CoinStoreProd() {
   // Inject PayPal script
   useEffect(() => {
     const script = document.createElement('script')
-    script.src = `https://www.paypal.com/sdk/js?client-id=${import.meta.env.VITE_PAYPAL_CLIENT_ID}&currency=USD`
+    script.src = `https://www.paypal.com/sdk/js?client-id=${import.meta.env.VITE_PAYPAL_CLIENT_ID}&currency=USD&intent=authorize`
     script.async = true
     script.onload = () => {
       console.log('✅ PayPal SDK loaded')
@@ -171,6 +211,23 @@ export default function CoinStoreProd() {
   }, [])
 
   const handlePayPalApprove = async (orderDetails: any) => {
+    console.log("✅ PayPal Approved - full details:", JSON.stringify(orderDetails, null, 2))
+    
+    // Debug: log all keys in orderDetails
+    console.log("🔍 orderDetails keys:", Object.keys(orderDetails || {}))
+    
+    // Try multiple possible key names
+    const orderId = orderDetails?.orderID || orderDetails?.orderId || orderDetails?.order_id || orderDetails?.id
+    console.log("🔍 Extracted orderId:", orderId)
+    console.log("🔍 orderDetails.orderID:", orderDetails?.orderID)
+    console.log("🔍 orderDetails.orderId:", orderDetails?.orderId)
+    
+    if (!orderId) {
+      console.error("❌ Missing orderId in handlePayPalApprove:", orderDetails)
+      toast.error('Order ID missing - PayPal integration incomplete')
+      return
+    }
+    
     if (!selectedPackage || !user) {
       toast.error('Invalid transaction state')
       return
@@ -188,6 +245,10 @@ export default function CoinStoreProd() {
         throw new Error('Not authenticated')
       }
 
+      // Debug: log what we're about to send
+      const requestBody = { orderId: orderId }
+      console.log("📤 Sending request body:", JSON.stringify(requestBody))
+
       // Call capture edge function
       const captureResponse = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`,
@@ -197,20 +258,31 @@ export default function CoinStoreProd() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            orderId: orderDetails.orderID,
-          }),
+          body: JSON.stringify(requestBody),
         }
       )
 
-      const captureData = (await captureResponse.json()) as CaptureResponse
+      // Safely parse response - read text first, then attempt JSON parse
+      const responseText = await captureResponse.text()
+      let captureData: CaptureResponse
+      
+      try {
+        captureData = JSON.parse(responseText) as CaptureResponse
+      } catch {
+        // Non-JSON response - wrap raw text
+        console.error("❌ Non-JSON response from edge function:", responseText)
+        if (!captureResponse.ok) {
+          throw new Error('Payment processing failed. Please try again.')
+        }
+        throw new Error('Invalid response from server')
+      }
 
       if (!captureResponse.ok) {
         throw new Error(captureData.error || 'Failed to capture payment')
       }
 
       if (!captureData.success) {
-        throw new Error('Payment capture failed')
+        throw new Error(captureData.error || 'Payment capture failed')
       }
 
       // Update local profile state
@@ -257,6 +329,45 @@ export default function CoinStoreProd() {
       toast.error(errorMessage)
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  // Test function for debugging - call from browser console:
+  // window.testPayPalCapture('YOUR_ORDER_ID')
+  window.testPayPalCapture = async (orderId: string) => {
+    console.log("🧪 Testing PayPal capture with orderId:", orderId)
+    try {
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) {
+        console.error("❌ Not authenticated")
+        return
+      }
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ orderId }),
+        }
+      )
+      
+      const text = await response.text()
+      console.log("📥 Response status:", response.status)
+      console.log("📥 Response body:", text)
+      
+      try {
+        const json = JSON.parse(text)
+        console.log("📥 Parsed response:", json)
+      } catch {
+        console.log("📥 Could not parse response as JSON")
+      }
+    } catch (error) {
+      console.error("❌ Test error:", error)
     }
   }
 

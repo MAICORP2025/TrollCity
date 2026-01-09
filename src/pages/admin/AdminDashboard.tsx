@@ -566,12 +566,22 @@ export default function AdminDashboard() {
       })
       .subscribe()
 
+    const transactionsChannel = supabase
+      .channel('admin-global-transactions')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coin_transactions' }, () => {
+        console.log('📊 New coin transaction detected, refreshing dashboard...')
+        loadDashboardData()
+        loadEconomySummary()
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(streamsChannel)
       supabase.removeChannel(appsChannel)
       supabase.removeChannel(payoutsChannel)
+      supabase.removeChannel(transactionsChannel)
     }
-  }, [loadLiveStreams, loadDashboardData])
+  }, [loadLiveStreams, loadDashboardData, loadEconomySummary])
 
   const createTrollDrop = async () => {
     try {
