@@ -178,6 +178,7 @@ const RoleManagement = lazy(() => import("./pages/admin/RoleManagement"));
 const MediaLibrary = lazy(() => import("./pages/admin/MediaLibrary"));
 const ChatModeration = lazy(() => import("./pages/admin/ChatModeration"));
 const Announcements = lazy(() => import("./pages/admin/Announcements"));
+const SendNotifications = lazy(() => import("./pages/admin/SendNotifications"));
 const ExportData = lazy(() => import("./pages/admin/ExportData"));
 const UserSearch = lazy(() => import("./pages/admin/UserSearch"));
 const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
@@ -1036,6 +1037,14 @@ function AppContent() {
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <Announcements />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/send-notifications"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <SendNotifications />
                         </RequireRole>
                       }
                     />

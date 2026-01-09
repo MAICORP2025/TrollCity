@@ -1,0 +1,136 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Content-Type": "application/json"
+};
+
+interface NotificationRequest {
+  type: string;
+  title: string;
+  message: string;
+  metadata?: Record<string, any>;
+  targetUserIds?: string[]; // If empty, send to all users
+}
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: cors });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: cors });
+  }
+
+  try {
+    // Verify admin authorization
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace("Bearer ", "").trim();
+    
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401, headers: cors });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    
+    // Verify user is admin
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData.user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: cors });
+    }
+
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role, is_admin")
+      .eq("id", userData.user.id)
+      .single();
+
+    const isAdmin = profile?.role === "admin" || profile?.is_admin === true;
+    if (!isAdmin) {
+      return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: cors });
+    }
+
+    const body: NotificationRequest = await req.json();
+    const { type, title, message, metadata = {}, targetUserIds } = body;
+
+    if (!type || !title || !message) {
+      return new Response(JSON.stringify({ error: "Missing required fields: type, title, message" }), { status: 400, headers: cors });
+    }
+
+    // Get user IDs - either specific users or all users
+    let userIds: string[];
+    
+    if (targetUserIds && targetUserIds.length > 0) {
+      userIds = targetUserIds;
+    } else {
+      // Get all user IDs
+      const { data: users, error: usersErr } = await supabase
+        .from("user_profiles")
+        .select("id");
+
+      if (usersErr) {
+        console.error("Error fetching users:", usersErr);
+        return new Response(JSON.stringify({ error: "Failed to fetch users" }), { status: 500, headers: cors });
+      }
+
+      userIds = users?.map(u => u.id) ?? [];
+    }
+
+    if (userIds.length === 0) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: "No users to notify",
+        notificationCount: 0 
+      }), { status: 200, headers: cors });
+    }
+
+    // Create notification records
+    const notifications = userIds.map(userId => ({
+      user_id: userId,
+      type,
+      title,
+      message,
+      metadata,
+      read: false,
+      created_at: new Date().toISOString(),
+    }));
+
+    // Insert in batches to avoid limits
+    const BATCH_SIZE = 1000;
+    let insertedCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < notifications.length; i += BATCH_SIZE) {
+      const batch = notifications.slice(i, i + BATCH_SIZE);
+      const { error: insertErr } = await supabase
+        .from("notifications")
+        .insert(batch);
+
+      if (insertErr) {
+        console.error("Error inserting notifications batch:", insertErr);
+        errorCount += batch.length;
+      } else {
+        insertedCount += batch.length;
+      }
+    }
+
+    console.log(`✅ Bulk notifications: ${insertedCount} inserted, ${errorCount} failed`);
+
+    return new Response(JSON.stringify({
+      success: true,
+      message: `Notifications sent to ${insertedCount} users`,
+      notificationCount: insertedCount,
+      failedCount: errorCount
+    }), { status: 200, headers: cors });
+
+  } catch (e: any) {
+    console.error("Server error:", e);
+    return new Response(JSON.stringify({ error: "Internal server error", details: e.message }), { status: 500, headers: cors });
+  }
+});

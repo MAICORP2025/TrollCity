@@ -11,12 +11,14 @@ import {
   Server,
   Wifi,
   Activity,
-  Settings
+  Settings,
+  Send
 } from 'lucide-react'
 
 interface QuickActionsBarProps {
   onEmergencyStop: () => void
   onBroadcastMessage: () => void
+  onSendNotifications: () => void
   onSystemMaintenance: () => void
   onViewAnalytics: () => void
   onExportData: () => void
@@ -38,6 +40,7 @@ interface QuickAction {
 export default function QuickActionsBar({
   onEmergencyStop,
   onBroadcastMessage,
+  onSendNotifications,
   onSystemMaintenance,
   onViewAnalytics,
   onExportData,
@@ -45,6 +48,15 @@ export default function QuickActionsBar({
   maintenanceMode,
 }: QuickActionsBarProps) {
   const quickActions: QuickAction[] = [
+    {
+      icon: <Send className="w-4 h-4" />,
+      label: 'Send Notifications',
+      description: 'Bulk notifications',
+      action: onSendNotifications,
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/20',
+      borderColor: 'border-purple-500/30'
+    },
     {
       icon: <Bell className="w-4 h-4" />,
       label: 'Broadcast',

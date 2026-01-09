@@ -113,6 +113,7 @@ type TabId =
   | 'support'
   | 'agreements'
   | 'reports'
+  | 'send_notifications'
 
 interface CoinTransaction {
   amount: number | null;
@@ -863,8 +864,8 @@ export default function AdminDashboard() {
     // Implement emergency stop logic
   }
 
-  const handleBroadcastMessage = () => {
-    navigate('/admin/announcements')
+  const handleSendNotifications = () => {
+    navigate('/admin/send-notifications')
   }
 
   const handleSystemMaintenance = () => {
@@ -922,6 +923,7 @@ export default function AdminDashboard() {
         test_diagnostics: '/admin/test-diagnostics',
         reset_maintenance: '/admin/reset-maintenance',
         export_data: '/admin/export-data',
+        send_notifications: '/admin/send-notifications',
       } as Record<TabId, string>),
     []
   )
@@ -1044,6 +1046,7 @@ export default function AdminDashboard() {
       <QuickActionsBar
         onEmergencyStop={handleEmergencyStop}
         onBroadcastMessage={handleBroadcastMessage}
+        onSendNotifications={handleSendNotifications}
         onSystemMaintenance={handleSystemMaintenance}
         onViewAnalytics={handleViewAnalytics}
         onExportData={handleExportData}
