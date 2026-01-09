@@ -418,7 +418,6 @@ const ProfileSetup = () => {
 
                         setProfile(updated as any)
                         toast.success('ID uploaded successfully! Your account will be verified by an admin within 24 hours.')
-                        }
                       } catch (err: any) {
                         console.error('ID upload error:', err)
                         toast.error(err?.message || 'Failed to upload ID. Please try again.')
