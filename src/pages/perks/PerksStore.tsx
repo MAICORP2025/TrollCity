@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
-import { Zap, Lock, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { Zap, Lock, Clock } from 'lucide-react'
 
 interface Perk {
   id: string

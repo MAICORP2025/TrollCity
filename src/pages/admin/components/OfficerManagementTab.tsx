@@ -195,7 +195,12 @@ export default function OfficerManagementTab() {
                   <img src={result.avatar_url || 'https://via.placeholder.com/40'} className="w-8 h-8 rounded-full" />
                   <span className="text-white">{result.username}</span>
                 </div>
-                <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300">{result.role}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300">{result.role}</span>
+                  {result.is_lead_officer && (
+                    <span className="text-xs bg-amber-900/40 border border-amber-700 px-2 py-1 rounded text-amber-300">LEAD</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -227,6 +232,11 @@ export default function OfficerManagementTab() {
                     }`}>
                       {selectedUser.is_officer_active ? 'ACTIVE' : 'SUSPENDED'}
                     </span>
+                    {selectedUser.is_lead_officer && (
+                      <span className="px-2 py-0.5 bg-amber-900/20 text-amber-300 rounded text-xs border border-amber-500/50">
+                        LEAD
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

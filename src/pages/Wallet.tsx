@@ -168,7 +168,7 @@ export default function Wallet() {
             <div className="text-sm opacity-70">Free Coins</div>
           </div>
           <div className="text-2xl font-bold text-green-300">
-            {profile?.troll_coins?.toLocaleString() ?? 0}
+            {Number(profile?.troll_coins || 0).toLocaleString()}
           </div>
           <div className="text-xs text-gray-400 mt-1">
             Entertainment & bonuses
@@ -228,19 +228,19 @@ export default function Wallet() {
             <div className="flex justify-between">
               <span className="text-gray-400">Total Earned:</span>
               <span className="text-green-400 font-semibold">
-                {balanceStats.totalEarned.toLocaleString()} coins
+                {Number(balanceStats.totalEarned || 0).toLocaleString()} coins
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Total Spent:</span>
               <span className="text-red-400 font-semibold">
-                {balanceStats.totalSpent.toLocaleString()} coins
+                {Number(balanceStats.totalSpent || 0).toLocaleString()} coins
               </span>
             </div>
             <div className="flex justify-between border-t border-gray-600 pt-2">
               <span className="text-gray-400">Current Net:</span>
               <span className={`font-bold ${balanceStats.netChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {balanceStats.netChange >= 0 ? '+' : ''}{balanceStats.netChange.toLocaleString()} coins
+                {balanceStats.netChange >= 0 ? '+' : ''}{Number(balanceStats.netChange || 0).toLocaleString()} coins
               </span>
             </div>
           </div>
@@ -295,6 +295,31 @@ export default function Wallet() {
         </div>
       </div>
 
+      <div className="grid md:grid-cols-2 gap-4 mb-6">
+        <div className="rounded-xl bg-black/40 border border-gray-600 p-4">
+          <h3 className="text-lg font-semibold mb-3">Cashout Tiers</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
+              <div className="text-sm text-gray-300">{Number(12000).toLocaleString()} coins</div>
+              <div className="text-sm font-bold text-green-300">$25</div>
+            </div>
+            <div className="text-xs text-yellow-300 mt-1">Minimum cashout threshold</div>
+            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded mt-2">
+              <div className="text-sm text-gray-300">{Number(30000).toLocaleString()} coins</div>
+              <div className="text-sm font-bold text-green-300">$70</div>
+            </div>
+            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
+              <div className="text-sm text-gray-300">{Number(60000).toLocaleString()} coins</div>
+              <div className="text-sm font-bold text-green-300">$150</div>
+            </div>
+            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
+              <div className="text-sm text-gray-300">{Number(120000).toLocaleString()} coins</div>
+              <div className="text-sm font-bold text-green-300">$325</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
@@ -327,7 +352,7 @@ export default function Wallet() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`font-semibold ${tx.coins > 0 ? 'text-green-300' : 'text-red-300'}`}>
-                      {tx.coins > 0 ? '+' : ''}{tx.coins.toLocaleString()} coins
+                      {Number(tx.coins) > 0 ? '+' : ''}{Number(tx.coins || 0).toLocaleString()} coins
                     </div>
                     <div className="text-xs px-2 py-1 rounded-full bg-black/40 border border-gray-600">
                       {tx.type || 'transaction'}

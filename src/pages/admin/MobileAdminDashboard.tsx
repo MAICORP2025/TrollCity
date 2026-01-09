@@ -2,25 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
-import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DollarSign,
   Users,
   FileText,
-  AlertTriangle,
   TrendingUp,
   LogOut,
   Menu,
   X,
-  Briefcase,
   Settings,
   Shield,
-  Gift,
-  Search,
-  MessageSquare,
-  Database,
-  Calendar,
   ChevronRight,
   ChevronLeft
 } from 'lucide-react'

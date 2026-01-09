@@ -34,6 +34,14 @@ export default function MyEarnings() {
   const [monthlyEarnings, setMonthlyEarnings] = useState<MonthlyEarnings[]>([])
   const [loading, setLoading] = useState(true)
   const [showPayoutModal, setShowPayoutModal] = useState(false)
+  const [payoutHistory, setPayoutHistory] = useState<Array<{
+    id: string
+    coins_redeemed?: number
+    cash_amount?: number
+    status?: string
+    created_at: string
+    processed_at?: string | null
+  }>>([])
 
   const loadEarningsData = useCallback(async () => {
     if (!user?.id) return
@@ -134,11 +142,41 @@ export default function MyEarnings() {
         } else if (monthly) {
           setMonthlyEarnings(monthly)
         } else {
-          setMonthlyEarnings([])
+        setMonthlyEarnings([])
+      }
+    } catch (err) {
+      console.warn('Error loading monthly earnings (non-critical):', err)
+      setMonthlyEarnings([])
+    }
+      try {
+        const { data, error } = await supabase
+          .from('payout_history_view')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        if (error) {
+          const { data: prData } = await supabase
+            .from('payout_requests')
+            .select('id, coins_redeemed, requested_coins, cash_amount, amount_usd, status, created_at, processed_at')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(20)
+          const mapped = (prData || []).map((p: any) => ({
+            id: p.id,
+            coins_redeemed: p.coins_redeemed ?? p.requested_coins ?? 0,
+            cash_amount: p.cash_amount ?? p.amount_usd ?? 0,
+            status: p.status,
+            created_at: p.created_at,
+            processed_at: p.processed_at ?? null
+          }))
+          setPayoutHistory(mapped)
+        } else {
+          setPayoutHistory((data as any) || [])
         }
       } catch (err) {
-        console.warn('Error loading monthly earnings (non-critical):', err)
-        setMonthlyEarnings([])
+        console.warn('Error loading payout history (non-critical):', err)
+        setPayoutHistory([])
       }
     } catch (err: any) {
       console.error('Error loading earnings:', err)
@@ -494,6 +532,58 @@ export default function MyEarnings() {
                       Your payout request{earningsData.pending_requests_count > 1 ? 's are' : ' is'} being reviewed.
                     </p>
                   </div>
+                </div>
+              </div>
+            )}
+            {payoutHistory.length > 0 && (
+              <div className="bg-zinc-900 rounded-xl p-6 border border-[#2C2C2C]">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-400" />
+                  Payout History
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-700 text-gray-400">
+                        <th className="text-left py-2">Date</th>
+                        <th className="text-right py-2">Coins</th>
+                        <th className="text-right py-2">Amount</th>
+                        <th className="text-center py-2">Status</th>
+                        <th className="text-left py-2">Processed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payoutHistory.map((p) => (
+                        <tr key={p.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                          <td className="py-2 text-gray-300">
+                            {new Date(p.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="text-right py-2 text-gray-300">
+                            {(p.coins_redeemed || 0).toLocaleString()}
+                          </td>
+                          <td className="text-right py-2 font-semibold text-green-400">
+                            ${((p.cash_amount || 0) as number).toFixed(2)}
+                          </td>
+                          <td className="text-center py-2">
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              p.status === 'paid'
+                                ? 'bg-green-900 text-green-300'
+                                : p.status === 'approved'
+                                ? 'bg-blue-900 text-blue-300'
+                                : p.status === 'rejected'
+                                ? 'bg-red-900 text-red-300'
+                                : 'bg-yellow-900 text-yellow-300'
+                            }`}>
+                              {p.status || 'pending'}
+                            </span>
+                          </td>
+                          <td className="py-2 text-gray-300">
+                            {p.processed_at ? new Date(p.processed_at).toLocaleDateString() : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

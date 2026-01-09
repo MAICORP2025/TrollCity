@@ -72,7 +72,7 @@ serve(async (req: Request) => {
   try {
     // Parse request body
     const body = await req.json();
-    const { amount, user_id, coins } = body;
+    const { amount, user_id, coins, package_id } = body;
 
     // Basic validation
     if (!amount || !user_id || !coins) {
@@ -99,7 +99,9 @@ serve(async (req: Request) => {
           },
           custom_id: JSON.stringify({
             userId: user_id,
-            coins: coins
+            coins: coins,
+            packageId: package_id || null,
+            type: package_id === 'troll_pass_bundle' ? 'troll_pass' : 'coins'
           })
         }
       ]

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { processGiftXp } from '../xp'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
+import { addCoins } from '../coinTransactions'
 
 export interface GiftItem {
   id: string
@@ -84,7 +85,7 @@ export function useGiftSystem(
           console.warn('Could not update gift with stream context:', giftUpdateError)
         }
       }
-      
+
       // Refresh sender's profile from database to get accurate balance
       const { data: updatedProfile } = await supabase
         .from('user_profiles')
@@ -94,6 +95,42 @@ export function useGiftSystem(
 
       if (updatedProfile) {
         useAuthStore.getState().setProfile(updatedProfile as any)
+      }
+      
+      // Troll Pass 5% gift bonus (cashback to sender in troll_coins)
+      try {
+        const tpExpire = (updatedProfile || profile)?.troll_pass_expires_at
+        const isTrollPassActive = tpExpire && new Date(tpExpire) > new Date()
+        if (isTrollPassActive) {
+          const bonusAmount = Math.floor(gift.coinCost * 0.05)
+          if (bonusAmount > 0) {
+            const { success } = await addCoins({
+              userId: user.id,
+              amount: bonusAmount,
+              type: 'reward',
+              coinType: 'troll_coins',
+              description: 'Troll Pass 5% gift bonus',
+              metadata: {
+                gift_id: (spendResult as any)?.gift_id || null,
+                bonus_pct: 5,
+                source: 'troll_pass'
+              }
+            })
+            if (success) {
+              const { data: refreshedProfile } = await supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single()
+              if (refreshedProfile) {
+                useAuthStore.getState().setProfile(refreshedProfile as any)
+              }
+              toast.success(`🎟️ Troll Pass bonus: +${bonusAmount} coins`)
+            }
+          }
+        }
+      } catch (bonusErr) {
+        console.warn('Troll Pass bonus failed', bonusErr)
       }
       
       toast.success(`Gift sent: ${gift.name}`)

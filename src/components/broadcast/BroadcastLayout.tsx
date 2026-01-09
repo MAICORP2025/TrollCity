@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRoomParticipants } from '../../hooks/useRoomParticipants'
 import { Room } from 'livekit-client'
 import ResponsiveVideoGrid from '../stream/ResponsiveVideoGrid'
@@ -24,6 +24,11 @@ export default function BroadcastLayout({
   children 
 }: BroadcastLayoutProps) {
   const participants = useRoomParticipants(room);
+  const [draftPrice, setDraftPrice] = useState<string>('');
+
+  useEffect(() => {
+    setDraftPrice(joinPrice > 0 ? String(joinPrice) : '');
+  }, [joinPrice]);
   
   if (!room) return null;
 
@@ -34,6 +39,7 @@ export default function BroadcastLayout({
         participants={participants}
         localParticipant={room.localParticipant}
         broadcasterId={broadcasterId}
+        joinPrice={joinPrice}
         onLeaveSession={onLeaveSession}
       />
 
@@ -48,9 +54,17 @@ export default function BroadcastLayout({
           <span className="text-xs text-gray-300">Join Price:</span>
           <input 
             type="number" 
-            value={joinPrice} 
-            onChange={(e) => onSetPrice(Math.max(0, parseInt(e.target.value) || 0))}
-            className="w-16 bg-white/10 border border-white/20 rounded px-1 text-sm text-white"
+            value={draftPrice}
+            placeholder="Set price"
+            inputMode="numeric"
+            onChange={(e) => setDraftPrice(e.target.value.replace(/[^\d]/g, ''))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const parsed = parseInt(draftPrice || '0') || 0;
+                onSetPrice(Math.max(0, parsed));
+              }
+            }}
+            className="w-20 bg-white/10 border border-white/20 rounded px-2 text-sm text-white"
           />
         </div>
       )}

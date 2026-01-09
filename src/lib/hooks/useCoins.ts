@@ -35,6 +35,8 @@ export function useCoins() {
     total_earned_coins: profile?.total_earned_coins || 0,
     total_spent_coins: profile?.total_spent_coins || 0,
   })
+  const [optimisticUntil, setOptimisticUntil] = useState<number | null>(null)
+  const [optimisticTroll, setOptimisticTroll] = useState<number | null>(null)
 
   /**
    * Refresh coin balances from database
@@ -64,6 +66,10 @@ export function useCoins() {
         profileData?.troll_coins ??
         currentProfile?.troll_coins ??
         0
+      const mergedPaid =
+        optimisticUntil && Date.now() < optimisticUntil && (optimisticTroll ?? 0) > paidBalance
+          ? (optimisticTroll as number)
+          : paidBalance
       const nextTotals = {
         total_earned_coins:
           profileData?.total_earned_coins ??
@@ -76,7 +82,7 @@ export function useCoins() {
       }
 
       const nextBalances = {
-        troll_coins: paidBalance,
+        troll_coins: mergedPaid,
         total_earned_coins: nextTotals.total_earned_coins,
         total_spent_coins: nextTotals.total_spent_coins,
       }
@@ -92,18 +98,22 @@ export function useCoins() {
 
       if (currentProfile) {
         const profileNeedsUpdate =
-          currentProfile.troll_coins !== paidBalance ||
+          currentProfile.troll_coins !== mergedPaid ||
           currentProfile.total_earned_coins !== nextTotals.total_earned_coins ||
           currentProfile.total_spent_coins !== nextTotals.total_spent_coins
 
-        if (profileNeedsUpdate) {
-          useAuthStore.getState().setProfile({
-            ...currentProfile,
-            troll_coins: paidBalance,
-            total_earned_coins: nextTotals.total_earned_coins,
-            total_spent_coins: nextTotals.total_spent_coins,
-          } as UserProfile)
-        }
+          if (profileNeedsUpdate) {
+            useAuthStore.getState().setProfile({
+              ...currentProfile,
+              troll_coins: mergedPaid,
+              total_earned_coins: nextTotals.total_earned_coins,
+              total_spent_coins: nextTotals.total_spent_coins,
+            } as UserProfile)
+          }
+      }
+      if (optimisticUntil && Date.now() < optimisticUntil && (mergedPaid as number) >= (optimisticTroll ?? 0)) {
+        setOptimisticUntil(null)
+        setOptimisticTroll(null)
       }
     } catch (err: any) {
       console.error('Unexpected error refreshing coins:', err)
@@ -111,7 +121,7 @@ export function useCoins() {
     } finally {
       setLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, optimisticUntil, optimisticTroll])
 
   /**
    * Spend coins via secure RPC
@@ -228,13 +238,43 @@ export function useCoins() {
           const updatedProfile = payload.new as any
           const currentProfile = useAuthStore.getState().profile
           if (currentProfile) {
+            const candidate =
+              typeof updatedProfile.troll_coins === 'number'
+                ? updatedProfile.troll_coins
+                : currentProfile.troll_coins
+            const shouldKeepOptimistic =
+              optimisticUntil &&
+              Date.now() < optimisticUntil &&
+              (optimisticTroll ?? balances.troll_coins) > candidate
             useAuthStore.getState().setProfile({
               ...currentProfile,
+              troll_coins: shouldKeepOptimistic
+                ? (optimisticTroll ?? balances.troll_coins)
+                : candidate,
               total_earned_coins:
                 updatedProfile.total_earned_coins || currentProfile.total_earned_coins,
               total_spent_coins:
                 updatedProfile.total_spent_coins || currentProfile.total_spent_coins,
             } as UserProfile)
+            setBalances((prev) => ({
+              troll_coins: shouldKeepOptimistic
+                ? (optimisticTroll ?? prev.troll_coins)
+                : (typeof updatedProfile.troll_coins === 'number'
+                    ? updatedProfile.troll_coins
+                    : prev.troll_coins),
+              total_earned_coins:
+                typeof updatedProfile.total_earned_coins === 'number'
+                  ? updatedProfile.total_earned_coins
+                  : prev.total_earned_coins,
+              total_spent_coins:
+                typeof updatedProfile.total_spent_coins === 'number'
+                  ? updatedProfile.total_spent_coins
+                  : prev.total_spent_coins,
+            }))
+            if (!shouldKeepOptimistic && optimisticUntil) {
+              setOptimisticUntil(null)
+              setOptimisticTroll(null)
+            }
           }
         }
       )
@@ -244,7 +284,24 @@ export function useCoins() {
       supabase.removeChannel(coinChannel)
       supabase.removeChannel(profileChannel)
     }
-  }, [user?.id, refreshCoins])
+  }, [user?.id, refreshCoins, optimisticUntil, optimisticTroll, balances.troll_coins])
+
+  const optimisticCredit = useCallback((delta: number) => {
+    if (!user?.id) return
+    if (!Number.isFinite(delta) || delta <= 0) return
+    const currentProfile = useAuthStore.getState().profile
+    const base = currentProfile?.troll_coins ?? balances.troll_coins
+    const next = base + delta
+    setBalances((prev) => ({ ...prev, troll_coins: next }))
+    if (currentProfile) {
+      useAuthStore.getState().setProfile({
+        ...currentProfile,
+        troll_coins: next,
+      } as UserProfile)
+    }
+    setOptimisticTroll(next)
+    setOptimisticUntil(Date.now() + 8000)
+  }, [user?.id, balances.troll_coins])
 
   return {
     balances,
@@ -252,6 +309,7 @@ export function useCoins() {
     error,
     refreshCoins,
     spendCoins,
+    optimisticCredit,
     // Convenience getters
     troll_coins: balances.troll_coins,
     totalEarned: balances.total_earned_coins,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useLocation, Link } from 'react-router-dom'
 import CourtEntryModal from './CourtEntryModal'
 import ExpandedStatsPanel from './ExpandedStatsPanel'
 import SidebarGroup from './ui/SidebarGroup'
@@ -11,43 +11,28 @@ import {
   Shield,
   LayoutDashboard,
   Banknote,
-  Clock,
   FileText,
-  UserCheck,
-  Sword,
-  UserPlus,
-  Bug,
   Store,
   Crown,
   Trophy,
-  FerrisWheel,
-  MessageCircle,
   Package,
   Scale,
   ChevronLeft,
   ChevronRight,
   LifeBuoy,
   Shuffle,
-  Star,
-  Zap
+  Star
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
-import { toast } from 'sonner'
 
 export default function Sidebar() {
-  const { profile, user } = useAuthStore()
+  const { profile } = useAuthStore()
   const location = useLocation()
-  const navigate = useNavigate()
   const isActive = (path: string) => location.pathname === path
 
-  const badge =
-    profile?.role === 'admin'
-      ? 'Admin'
-      : profile?.tier && ['gold', 'platinum', 'diamond'].includes(profile.tier)
-      ? profile.tier.charAt(0).toUpperCase() + profile.tier.slice(1)
-      : null
+  // badge placeholder not currently used
 
   const [canSeeOfficer, setCanSeeOfficer] = useState(false)
   const [canSeeFamilyLounge, setCanSeeFamilyLounge] = useState(false)
@@ -102,7 +87,7 @@ export default function Sidebar() {
       }
     }
     checkAccess()
-  }, [profile])
+  }, [profile, isOfficer])
 
   if (!profile) return null
 
@@ -113,18 +98,7 @@ export default function Sidebar() {
   // Ideally, profile should have 'current_xp' and 'xp_for_next_level' or we calculate it.
   // Since we only have 'current_xp' and 'level', let's estimate progress or just show the values.
   
-  // Simple calculation for display purposes matching the DB seed roughly
-  const getXpForNextLevel = (lvl: number) => {
-    // This should match the DB seed logic ideally, or we fetch it.
-    // DB: 
-    // 1->2: 500
-    // 2->3: 1250 (+750)
-    // 3->4: 2250 (+1000)
-    // ...
-    // Let's just use a visual percentage or simple max if we don't have the exact number.
-    // Or we can just show "Level X | XP: Y"
-    return (lvl * 500) + (lvl > 1 ? (lvl - 1) * 250 : 0) + 500; // Rough approximation
-  }
+  // XP next-level calculation not used in UI
 
   // Use the profile fields if available, otherwise defaults
   const currentLevel = profile.level || 1

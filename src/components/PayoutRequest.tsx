@@ -24,7 +24,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   const [paypalEmail, setPaypalEmail] = useState('');
   const [requestAmount, setRequestAmount] = useState<number>(0);
   const [showRequestForm, setShowRequestForm] = useState(false);
-  const [hasReducedFees, setHasReducedFees] = useState(false);
+  const [_hasReducedFees, setHasReducedFees] = useState(false);
 
   const checkReducedFees = React.useCallback(async () => {
     try {
@@ -64,6 +64,8 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
           const reserved = profile.reserved_troll_coins || 0;
           s.available_for_payout = Math.max(0, raw - reserved);
         }
+        // Enforce 12,000 coin minimum threshold client-side
+        s.payout_threshold = 12000;
         setStats(s);
       }
     } catch (error) {
@@ -175,23 +177,30 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   };
 
   const formatUSD = (coins: number) => {
-    const usd = coins * 0.01; // $0.01 per coin
+    // Approximate using minimum tier rate for dashboard boxes
+    const usd = coins * (25 / 12000);
     return `$${usd.toFixed(2)}`;
   };
 
+  const tierRate = (coins: number) => {
+    if (coins >= 120000) return 325 / 120000;
+    if (coins >= 60000) return 150 / 60000;
+    if (coins >= 30000) return 70 / 30000;
+    if (coins >= 12000) return 25 / 12000;
+    return 0;
+  };
+
+  const FIXED_FEE_USD = 3;
+
   const calculateFees = (coins: number) => {
-    const usd = coins * 0.01;
-    let paypalFee = (usd * 0.029) + 0.30; // 2.9% + $0.30
-
-    if (hasReducedFees) {
-      paypalFee = 1.00; // Flat $1 fee for approved creators
-    }
-
-    const netAmount = usd - paypalFee;
+    const rate = tierRate(coins);
+    const gross = coins * rate;
+    const fee = FIXED_FEE_USD;
+    const netAmount = Math.max(gross - fee, 0);
     return {
-      gross: usd,
-      fee: paypalFee,
-      net: Math.max(netAmount, 0)
+      gross,
+      fee,
+      net: netAmount
     };
   };
 
@@ -323,21 +332,21 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
           <h4 className="text-sm font-medium text-white mb-4">Request Payout</h4>
 
           <div className="mb-4">
-            <label className="block text-sm text-gray-300 mb-2">
-              Amount to Cash Out (Coins)
-            </label>
-            <input
-              type="number"
-              value={requestAmount}
-              onChange={(e) => setRequestAmount(Math.max(0, parseInt(e.target.value) || 0))}
-              min={stats.payout_threshold}
+              <label className="block text-sm text-gray-300 mb-2">
+              Amount to Cash Out (Coins) — Minimum 12,000
+              </label>
+              <input
+                type="number"
+                value={requestAmount}
+                onChange={(e) => setRequestAmount(Math.max(0, parseInt(e.target.value) || 0))}
+              min={12000}
               max={stats.available_for_payout}
               className="w-full bg-gray-600 border border-gray-500 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Min: {stats.payout_threshold.toLocaleString()} | Max: {stats.available_for_payout.toLocaleString()}
-            </p>
-          </div>
+              />
+              <p className="text-xs text-gray-400 mt-1">
+              Min: {(12000).toLocaleString()} | Max: {stats.available_for_payout.toLocaleString()}
+              </p>
+            </div>
 
           {/* Fee Breakdown */}
           {requestAmount > 0 && (
@@ -349,7 +358,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
                   <span className="text-white">${fees.gross.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">PayPal Fees:</span>
+                  <span className="text-gray-300">Processing Fee:</span>
                   <span className="text-red-400">-${fees.fee.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t border-gray-500 pt-1">
@@ -369,9 +378,9 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             </button>
             <button
               onClick={submitPayoutRequest}
-              disabled={requesting || requestAmount < stats.payout_threshold || requestAmount > stats.available_for_payout}
+              disabled={requesting || requestAmount < 12000 || requestAmount > stats.available_for_payout}
               className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded transition-colors flex items-center justify-center gap-2"
-            >
+              >
               {requesting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />

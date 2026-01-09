@@ -16,7 +16,7 @@ AS $$
 BEGIN
   UPDATE user_profiles
   SET 
-    Troll_coins = COALESCE(Troll_coins, 0) + coins_to_add,
+    troll_coins = COALESCE(troll_coins, 0) + coins_to_add,
     total_earned_coins = COALESCE(total_earned_coins, 0) + coins_to_add,
     updated_at = NOW()
   WHERE id = user_id_input;
@@ -325,12 +325,11 @@ BEGIN
       -p_amount,
       NOW()
     );
-  EXCEPTION WHEN undefined_table THEN
-    -- coin_transactions table might not exist in older deployments
-    NULL;
-  EXCEPTION WHEN others THEN
-    -- Handle other exceptions (e.g., null constraint violations)
-    NULL;
+  EXCEPTION
+    WHEN undefined_table THEN
+      NULL;
+    WHEN others THEN
+      NULL;
   END;
 
   RETURN jsonb_build_object(

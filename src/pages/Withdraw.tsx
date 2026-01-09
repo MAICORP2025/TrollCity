@@ -33,8 +33,8 @@ export default function Withdraw() {
 
     const coinAmount = parseInt(amount, 10);
 
-    if (coinAmount < 10000) {
-      toast.error("Minimum withdrawal is 10,000 coins ($100)");
+    if (![12000, 30000, 60000, 120000].includes(coinAmount)) {
+      toast.error("Select a valid Visa tier: 12k, 30k, 60k, 120k");
       return;
     }
 
@@ -57,14 +57,21 @@ export default function Withdraw() {
       return;
     }
 
-    // Calculate USD amount (assuming 100 coins = $1, so $0.01 per coin)
-    const usdAmount = coinAmount * 0.01; // $0.01 per coin = $100 for 10,000 coins
-    
-    const { error } = await supabase.from("payout_requests").insert({
-      user_id: user.id,
-      coins_redeemed: coinAmount,
-      cash_amount: usdAmount,
-      status: "pending",
+    const tiers = [
+      { coins: 12000, usd: 25 },
+      { coins: 30000, usd: 70 },
+      { coins: 60000, usd: 150 },
+      { coins: 120000, usd: 325 },
+    ] as const;
+    const tier = tiers.find(t => t.coins === coinAmount);
+    if (!tier) {
+      toast.error("Select a valid Visa tier: 12k, 30k, 60k, 120k");
+      return;
+    }
+    const { data, error } = await supabase.rpc('request_visa_redemption', {
+      p_user_id: user.id,
+      p_coins: tier.coins,
+      p_usd: tier.usd
     });
 
     if (error) {
@@ -72,7 +79,7 @@ export default function Withdraw() {
       return toast.error("Error submitting request");
     }
     
-    toast.success("Withdrawal request submitted!");
+    toast.success(`Visa redemption created: ID ${String(data?.redemption_id || '')}`);
     setAmount("");
     loadBalance();
   };
@@ -84,13 +91,14 @@ export default function Withdraw() {
 
         <p className="mb-2">
           <strong>Your Balance:</strong> {balance.toLocaleString()} coins  
-          (${(balance * 0.01).toFixed(2)})
+          {/* Approximate using minimum tier rate */}
+          (${(balance * (25 / 12000)).toFixed(2)})
         </p>
 
         <input
           type="number"
           className="w-full p-2 rounded bg-zinc-800 text-white placeholder-gray-400 mb-3 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-          placeholder="Enter coin amount"
+          placeholder="Enter tier: 12000, 30000, 60000, 120000"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
@@ -98,7 +106,7 @@ export default function Withdraw() {
         <button
           onClick={requestPayout}
           className="bg-green-500 hover:bg-green-600 w-full mt-3 py-2 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={!amount || parseInt(amount) < 10000 || parseInt(amount) > balance}
+          disabled={!amount || ![12000,30000,60000,120000].includes(parseInt(amount)) || parseInt(amount) > balance}
         >
           Request Withdrawal
         </button>

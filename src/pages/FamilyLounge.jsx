@@ -132,7 +132,14 @@ const FamilyLounge = () => {
         }
       ]
 
-      const { error } = await supabase.from('family_tasks').insert(tasks)
+      // Prefer RPC to handle RLS and schema variations server-side
+      const { error: rpcError } = await supabase.rpc('create_family_tasks', { p_family_id: family.id })
+      let error = rpcError
+      if (rpcError && rpcError.code === '404') {
+        // Fallback to direct insert if RPC missing
+        const { error: insertErr } = await supabase.from('family_tasks').insert(tasks)
+        error = insertErr || null
+      }
       
       if (error) {
         // Check for column errors (Postgres code 42703 is undefined_column)

@@ -8,13 +8,15 @@ interface ResponsiveVideoGridProps {
   localParticipant?: LocalParticipant;
   broadcasterId?: string;
   onLeaveSession?: () => void;
+  joinPrice?: number;
 }
 
 export default function ResponsiveVideoGrid({ 
   participants, 
   localParticipant,
   broadcasterId,
-  onLeaveSession
+  onLeaveSession,
+  joinPrice = 0
 }: ResponsiveVideoGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -78,6 +80,7 @@ export default function ResponsiveVideoGrid({
               isBroadcaster={isBroadcaster}
               isLocal={isLocal}
               onLeave={isLocal ? onLeaveSession : undefined}
+              price={joinPrice}
               style={{
                 ...style,
                 position: 'absolute',

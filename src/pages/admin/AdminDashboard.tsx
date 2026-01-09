@@ -139,7 +139,6 @@ interface LiveStream {
 
 export default function AdminDashboard() {
   const { profile, user, setProfile, isLoading } = useAuthStore()
-  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'trollcity2025@gmail.com'
   const navigate = useNavigate()
   const [adminCheckLoading, setAdminCheckLoading] = useState(true)
   const [isAuthorized, setIsAuthorized] = useState(false)

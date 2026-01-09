@@ -112,9 +112,7 @@ export const useLevelStore = create<LevelState>((set, get) => ({
     let newNextLevelXp = state.nextLevelXp
 
     // Level Up Logic
-    let leveledUp = false
     while (newCurrentXp >= newNextLevelXp) {
-      leveledUp = true
       newCurrentXp -= newNextLevelXp
       newLevel++
       newNextLevelXp = calculateNextLevelXp(newLevel)
@@ -160,16 +158,8 @@ export const useLevelStore = create<LevelState>((set, get) => ({
     }
   },
 
-  checkDailyLogin: async (userId) => {
+  checkDailyLogin: async (_userId) => {
     // This should be called on app mount
-    const state = get()
-    const today = new Date().toISOString().split('T')[0]
-    
-    // We need to fetch the last_daily_login from DB if not in state
-    // But assuming fetchLevelData was called...
-    
-    // Implementation simplified: just add XP if we haven't already today
-    // We'd need a last_login field in the store state or DB check
-    // For now, let's assume fetchLevelData handles the initial load and we do logic there or separately
+    // Implementation note: handled via initial fetch
   }
 }))

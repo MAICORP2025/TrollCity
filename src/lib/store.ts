@@ -125,21 +125,34 @@ export const useAuthStore = create<AuthState>()(
         const u = get().user
         if (!u) return
 
-        await ensureSupabaseSession(supabase)
+        try {
+          await ensureSupabaseSession(supabase)
 
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', u.id)
-          .maybeSingle()
+          // Add timeout to prevent infinite waiting
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Profile load timeout')), 5000)
+          )
 
-        if (error) {
-          console.error('refreshProfile error:', error)
-          return
-        }
+          const dataPromise = supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', u.id)
+            .maybeSingle()
 
-        if (data) {
-          get().setProfile(data as UserProfile)
+          const { data, error } = await Promise.race([dataPromise, timeoutPromise]) as any
+
+          if (error) {
+            console.error('refreshProfile error:', error)
+            return
+          }
+
+          if (data) {
+            get().setProfile(data as UserProfile)
+          }
+        } catch (err) {
+          console.error('refreshProfile failed:', err)
+          // Still clear loading state even if profile fails
+          get().setLoading(false)
         }
       },
 

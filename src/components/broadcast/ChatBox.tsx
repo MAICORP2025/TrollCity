@@ -3,6 +3,7 @@ import { Send, Coins, Shield } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 import ClickableUsername from "../ClickableUsername";
+import { UserBadge } from "../UserBadge";
 
 interface ChatBoxProps {
   streamId: string;

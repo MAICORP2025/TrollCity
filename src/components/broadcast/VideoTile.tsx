@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Participant, Track, LocalParticipant } from 'livekit-client'
-import { User, Mic, MicOff, Camera, CameraOff, X, RefreshCw, Maximize2, Minimize2, Crown } from 'lucide-react'
+import { User, Mic, MicOff, Camera, CameraOff, X, RefreshCw, Maximize2, Minimize2, Crown, Coins } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 interface VideoTileProps {
@@ -12,6 +12,7 @@ interface VideoTileProps {
   isLocal?: boolean
   showControls?: boolean
   fit?: 'cover' | 'contain'
+  price?: number
 }
 
 export default function VideoTile({ 
@@ -21,7 +22,8 @@ export default function VideoTile({
   style,
   onLeave, 
   isLocal,
-  fit = 'cover'
+  fit = 'cover',
+  price
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [speaking, setSpeaking] = useState(false);
@@ -153,11 +155,11 @@ export default function VideoTile({
   const roleColor = role === 'Admin' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' : 'text-purple-400 border-purple-500/30 bg-purple-500/10';
 
   return (
-    <div 
-        className={`relative bg-zinc-900 rounded-2xl overflow-hidden transition-all duration-300 group shadow-lg ${className} ${speaking ? 'ring-2 ring-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-2 border-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.1)]'}`}
-        style={style}
+    <div className={`rgb-border ${speaking ? 'speaking' : ''} occupied`} style={style}>
+      <div 
+        className={`tile-inner relative bg-zinc-900 rounded-2xl overflow-hidden transition-all duration-300 group shadow-lg ${className}`}
         onClick={() => isLocal && setShowLocalControls(!showLocalControls)}
-    >
+      >
       {/* Video Element */}
       <video 
         ref={videoRef} 
@@ -222,6 +224,14 @@ export default function VideoTile({
         </div>
       </div>
 
+      {/* Price Badge (Bottom Right) */}
+      {typeof price === 'number' && price > 0 && (
+        <div className="absolute bottom-4 right-4 z-10 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-yellow-500/30 text-yellow-300 text-sm flex items-center gap-1">
+          <Coins className="w-4 h-4" />
+          <span>{price.toLocaleString()} coins</span>
+        </div>
+      )}
+
       {/* View Fit Toggle (Hover only) */}
       <button 
         onClick={toggleFit}
@@ -256,6 +266,7 @@ export default function VideoTile({
               <p className="text-white/30 text-xs mt-4">Tap anywhere to close</p>
           </div>
       )}
+      </div>
     </div>
   );
 }

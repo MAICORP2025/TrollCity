@@ -444,7 +444,6 @@ export default function Profile() {
         const { error: insertErr } = await supabase.from('troll_posts').insert({
           user_id: currentUser.id,
           content: postContent.trim(),
-          media_type: 'video',
           video_url: vUrl.publicUrl
         });
         if (insertErr) throw insertErr;
@@ -462,7 +461,6 @@ export default function Profile() {
           const { error: insertErr } = await supabase.from('troll_posts').insert({
             user_id: currentUser.id,
             content: postContent.trim(),
-            media_type: 'image',
             image_url: iUrl.publicUrl
           });
           if (insertErr) throw insertErr;
@@ -471,8 +469,7 @@ export default function Profile() {
       if (!videoFile && !imageFiles) {
         const { error: tErr } = await supabase.from('troll_posts').insert({
           user_id: currentUser.id,
-          content: postContent.trim(),
-          media_type: 'text'
+          content: postContent.trim()
         });
         if (tErr) throw tErr;
       }
@@ -733,17 +730,17 @@ export default function Profile() {
                            >
                              Delete
                            </button>
-                         )}
-                       </div>
-                       {post.media_type === 'video' && post.video_url ? (
-                         <video src={post.video_url} controls className="w-full rounded-lg mb-3" />
-                       ) : null}
-                       {post.media_type === 'image' && post.image_url ? (
-                         <img src={post.image_url} alt="" className="w-full rounded-lg mb-3" />
-                       ) : null}
-                       {post.content && (
-                         <p className="text-white whitespace-pre-wrap break-words">{post.content}</p>
                        )}
+                      </div>
+                      {post.video_url ? (
+                        <video src={post.video_url} controls className="w-full rounded-lg mb-3" />
+                      ) : null}
+                      {post.image_url ? (
+                        <img src={post.image_url} alt="" className="w-full rounded-lg mb-3" />
+                      ) : null}
+                      {post.content && (
+                        <p className="text-white whitespace-pre-wrap break-words">{post.content}</p>
+                      )}
                      </div>
                    ))}
                  </div>

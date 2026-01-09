@@ -16,8 +16,8 @@ interface CourtChatProps {
   className?: string;
 }
 
-export default function CourtChat({ courtId, isLocked, className = '' }: CourtChatProps) {
-  const { user, profile } = useAuthStore();
+export default function CourtChat({ courtId: _courtId, isLocked, className = '' }: CourtChatProps) {
+  const { user: _user, profile } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',

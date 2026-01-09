@@ -14,6 +14,7 @@ interface UserProfile {
   free_coin_balance: number
   level: number
   is_troll_officer: boolean
+  is_lead_officer?: boolean
   is_admin: boolean
   is_troller: boolean
   created_at: string
@@ -45,8 +46,8 @@ export default function UserManagementPanel({
     setLoading(true)
     try {
       const selectFields = canViewEmails
-        ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_admin, is_troller, created_at'
-        : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_admin, is_troller, created_at'
+        ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at'
+        : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at'
 
       const { data, error } = await supabase
         .from('user_profiles')
@@ -240,7 +241,9 @@ export default function UserManagementPanel({
                   )}
                   <td className="py-3">
                     <span className={`px-2 py-1 rounded text-xs ${
-                      user.role === 'admin'
+                      (user.is_lead_officer || user.role === 'lead_troll_officer')
+                        ? 'bg-amber-900 text-amber-300'
+                        : user.role === 'admin'
                         ? 'bg-red-900 text-red-300'
                         : user.role === 'troll_officer'
                         ? 'bg-purple-900 text-purple-300'
@@ -248,7 +251,7 @@ export default function UserManagementPanel({
                         ? 'bg-blue-900 text-blue-300'
                         : 'bg-gray-700 text-gray-300'
                     }`}>
-                      {user.role || 'user'}
+                      {(user.is_lead_officer || user.role === 'lead_troll_officer') ? 'lead_troll_officer' : (user.role || 'user')}
                     </span>
                   </td>
                   <td className="py-3 text-white">{user.level || 1}</td>

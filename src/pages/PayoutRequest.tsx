@@ -4,7 +4,21 @@ import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { DollarSign, ArrowRight } from "lucide-react";
 
-const COINS_PER_DOLLAR = 100; // keep in sync with backend
+const TIERS = [
+  { coins: 12000, usd: 25 },
+  { coins: 30000, usd: 70 },
+  { coins: 60000, usd: 150 },
+  { coins: 120000, usd: 325 },
+] as const;
+const FIXED_FEE_USD = 3;
+
+function getRateForCoins(coins: number) {
+  if (coins >= 120000) return 325 / 120000;
+  if (coins >= 60000) return 150 / 60000;
+  if (coins >= 30000) return 70 / 30000;
+  if (coins >= 12000) return 25 / 12000;
+  return 0;
+}
 
 export default function PayoutRequest() {
   const { user, profile, refreshProfile } = useAuthStore() as any;
@@ -24,8 +38,9 @@ export default function PayoutRequest() {
   const balance = Math.max(0, raw - reserved);
   
   const parsed = Number(coins || "0");
-  const usdEstimate =
-    parsed && parsed > 0 ? (parsed / COINS_PER_DOLLAR).toFixed(2) : "0.00";
+  const rate = getRateForCoins(parsed);
+  const grossUsd = parsed > 0 ? parsed * rate : 0;
+  const netUsd = Math.max(grossUsd - FIXED_FEE_USD, 0);
 
   const submit = async () => {
     try {
@@ -37,8 +52,8 @@ export default function PayoutRequest() {
         return;
       }
       
-      if (num < 10000) {
-        toast.error("Minimum payout is 10,000 coins ($100).");
+      if (![12000, 30000, 60000, 120000].includes(num)) {
+        toast.error("Select a valid Visa tier: 12k, 30k, 60k, 120k.");
         return;
       }
       
@@ -46,43 +61,23 @@ export default function PayoutRequest() {
         toast.error("You don't have that many troll_coins.");
         return;
       }
-      
-      if (!profile?.payout_paypal_email) {
-        toast.error("You must set a Gift Card payout email first.");
+      const tier = TIERS.find(t => t.coins === num);
+      if (!tier) {
+        toast.error("Select a valid Visa tier: 12k, 30k, 60k, 120k.");
         return;
       }
-
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error("No auth token");
-
-      const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
-        'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1';
-
-      const res = await fetch(
-        `${edgeFunctionsUrl}/paypal-payout-request`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ coinsRequested: num })
-        }
-      );
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Payout request failed:", errorText);
-        throw new Error("Failed to create payout request");
+      const { data, error } = await supabase.rpc('request_visa_redemption', {
+        p_user_id: user.id,
+        p_coins: tier.coins,
+        p_usd: tier.usd
+      });
+      if (error) {
+        throw new Error(error.message || "Failed to request redemption");
       }
-
-      const json = await res.json();
-      console.log(json);
       
       if (refreshProfile) await refreshProfile();
       
-      toast.success("Payout request created. Admin will review it.");
+      toast.success(`Visa redemption created: ID ${String(data?.redemption_id || '')}`);
       setCoins("");
     } catch (e: any) {
       console.error(e);
@@ -108,45 +103,37 @@ export default function PayoutRequest() {
         </div>
 
         <div>
-          <p className="text-sm opacity-70 mb-1">Payout Method</p>
-          {profile?.payout_paypal_email ? (
-            <div>
-              <p className="font-mono text-sm">{profile.payout_paypal_email}</p>
-              <p className="text-xs text-green-400 mt-1">Gift Card Email</p>
-            </div>
-          ) : (
-            <div>
-              <span className="text-red-400 text-sm">Not set</span>
-              <button
-                onClick={() => window.location.href = "/payouts/setup"}
-                className="ml-2 text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded"
-              >
-                Set Up
-              </button>
-            </div>
-          )}
+          <p className="text-sm opacity-70 mb-1">Redemption Method</p>
+          <div>
+            <p className="text-xs text-green-400 mt-1">Visa eGift Card</p>
+          </div>
         </div>
 
         <div>
           <label className="block text-sm font-semibold mb-2">
-            Coins to cash out (Minimum: 10,000 coins = $100)
+            Select a Visa tier (12k, 30k, 60k, 120k)
           </label>
           <input
             className="w-full mb-2 px-4 py-3 rounded-lg bg-zinc-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             type="number"
-            min="10000"
+            min="12000"
             value={coins}
             onChange={(e) => setCoins(e.target.value.replace(/[^\d]/g, ""))}
-            placeholder="e.g. 10000"
+            placeholder="e.g. 12000"
           />
           <p className="text-sm opacity-80">
-            Estimated payout: <span className="font-bold text-green-400">${usdEstimate} USD</span>
+            Estimated payout: <span className="font-bold text-green-400">${grossUsd.toFixed(2)} USD</span>
           </p>
+          {[12000,30000,60000,120000].includes(parsed) && (
+            <div className="text-xs text-gray-400 mt-1">
+              Fee: <span className="text-red-400">${FIXED_FEE_USD.toFixed(2)}</span> • Net: <span className="text-green-400">${netUsd.toFixed(2)}</span>
+            </div>
+          )}
         </div>
 
         <button
           onClick={submit}
-          disabled={loading || !coins || Number(coins) < 10000 || Number(coins) > balance}
+          disabled={loading || !coins || ![12000,30000,60000,120000].includes(Number(coins)) || Number(coins) > balance}
           className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? "Submitting..." : "Submit Payout Request"}

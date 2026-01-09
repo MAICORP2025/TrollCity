@@ -39,7 +39,6 @@ const Messages = lazy(() => import("./pages/Messages"));
 // Lazy-loaded pages
 const Following = lazy(() => import("./pages/Following"));
 const CoinStore = lazy(() => import("./pages/CoinStore"));
-const PerksStore = lazy(() => import("./pages/perks/PerksStore"));
 const Marketplace = lazy(() => import("./pages/Marketplace"));
 const UserInventory = lazy(() => import("./pages/UserInventory"));
 const SellOnTrollCity = lazy(() => import("./pages/SellOnTrollCity"));
@@ -196,6 +195,7 @@ const TestDiagnosticsPage = lazy(() => import("./pages/admin/TestDiagnosticsPage
 const ResetMaintenance = lazy(() => import("./pages/admin/ResetMaintenance"));
 const AdminHR = lazy(() => import("./pages/admin/AdminHR"));
 const UserFormsTab = lazy(() => import("./pages/admin/components/UserFormsTab"));
+const BucketsDashboard = lazy(() => import("./pages/admin/BucketsDashboard"));
 
 const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
@@ -1116,6 +1116,14 @@ function AppContent() {
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <AdminFinanceDashboard />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/buckets"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <BucketsDashboard />
                         </RequireRole>
                       }
                     />

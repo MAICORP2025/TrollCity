@@ -18,9 +18,9 @@ export default function TrollCourt() {
   const [recentCases, setRecentCases] = useState<any[]>([])
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [userList, setUserList] = useState<any[]>([])
+  const [_userList, setUserList] = useState<any[]>([])
   const [selectedUser, setSelectedUser] = useState<any>(null)
-  const [isSearchingUsers, setIsSearchingUsers] = useState(false)
+  const [_isSearchingUsers, setIsSearchingUsers] = useState(false)
 
   const [selectedCaseType, setSelectedCaseType] = useState<string>('')
   

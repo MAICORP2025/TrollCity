@@ -6,6 +6,7 @@ import { LiveKitProvider } from './contexts/LiveKitProvider'
 import { AuthProvider } from './contexts/AuthProvider'
 import { GlobalAppProvider } from './contexts/GlobalAppContext'
 // GlobalAppProvider intentionally removed per required root layout
+import { supabase } from './lib/supabase'
 
 // App version for cache busting
 const APP_VERSION =
@@ -52,6 +53,78 @@ if (typeof window !== 'undefined') {
       onOfflineReady() {
         console.log('App ready to work offline')
       },
+    })
+
+    const urlBase64ToUint8Array = (base64String: string) => {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+      const rawData = window.atob(base64)
+      const outputArray = new Uint8Array(rawData.length)
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i)
+      }
+      return outputArray
+    }
+
+    const initPushNotifications = async () => {
+      try {
+        if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+          return
+        }
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') {
+          return
+        }
+
+        const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
+        if (!publicKey) {
+          console.warn('Missing VITE_VAPID_PUBLIC_KEY; push subscription skipped')
+          return
+        }
+
+        const registration = await navigator.serviceWorker.ready
+        const existing = await registration.pushManager.getSubscription()
+        const subscription =
+          existing ||
+          (await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          }))
+
+        const { data: sessionData } = await supabase.auth.getSession()
+        const userId = sessionData?.session?.user?.id
+        if (!userId) {
+          return
+        }
+
+        const subJson = subscription.toJSON() as any
+        const expiration =
+          (subscription as any).expirationTime
+            ? new Date((subscription as any).expirationTime).toISOString()
+            : null
+
+        await supabase
+          .from('web_push_subscriptions')
+          .upsert(
+            {
+              user_id: userId,
+              endpoint: subJson.endpoint,
+              keys: { p256dh: subJson.keys?.p256dh, auth: subJson.keys?.auth },
+              expiration_time: expiration,
+              created_at: new Date().toISOString(),
+            },
+            { onConflict: 'endpoint' }
+          )
+      } catch (err) {
+        console.warn('Push notification setup failed', err)
+      }
+    }
+
+    initPushNotifications()
+    supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        void initPushNotifications()
+      }
     })
   })
 }

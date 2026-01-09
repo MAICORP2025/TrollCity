@@ -1,19 +1,16 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../../lib/store'
-import { getTierFromXP } from '../../lib/tierSystem'
+ 
 
 interface ProfileDropdownProps {
-  onLogout: () => void
   className?: string
 }
 
-export default function ProfileDropdown({ onLogout, className }: ProfileDropdownProps) {
+export default function ProfileDropdown({ className }: ProfileDropdownProps) {
   const { profile } = useAuthStore()
 
   if (!profile) return null
-
-  const tier = profile.tier || getTierFromXP(profile.xp || 0).title
 
   return (
     <div className={`relative flex items-center gap-1 ${className}`}>

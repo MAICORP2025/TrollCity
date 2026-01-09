@@ -206,6 +206,7 @@ export async function sendGiftFromInventory({
   await upsertInventory(senderId, giftSlug, -quantity);
 
   const sentValue = gift.coinCost * quantity;
+  let trollPassBonus = 0;
   
   // Calculate broadcaster share
   let broadcasterEarnings = Math.floor(sentValue * BROADCASTER_SHARE);
@@ -297,6 +298,38 @@ export async function sendGiftFromInventory({
       console.warn('Failed to credit broadcaster', err);
     }
   }
+ 
+  try {
+    const { data: senderProfile } = await supabase
+      .from('user_profiles')
+      .select('troll_pass_expires_at')
+      .eq('id', senderId)
+      .single();
+    const tpExpire = senderProfile?.troll_pass_expires_at;
+    const isTrollPassActive = tpExpire && new Date(tpExpire) > new Date();
+    if (isTrollPassActive) {
+      const bonusAmount = Math.floor(sentValue * 0.05);
+      if (bonusAmount > 0) {
+        const { success } = await addCoins({
+          userId: senderId,
+          amount: bonusAmount,
+          type: 'reward',
+          coinType: 'troll_coins',
+          description: 'Troll Pass 5% gift bonus',
+          metadata: {
+            giftSlug,
+            quantity,
+            streamId,
+            bonus_pct: 5,
+            source: 'troll_pass'
+          }
+        });
+        if (success) {
+          trollPassBonus = bonusAmount;
+        }
+      }
+    }
+  } catch {}
 
   return {
     success: true,
@@ -304,7 +337,8 @@ export async function sendGiftFromInventory({
     quantity,
     broadcasterEarnings,
     totalValue: sentValue,
-    trollTractBonus: trollTractResult.bonusAmount
+    trollTractBonus: trollTractResult.bonusAmount,
+    trollPassBonus
   };
 }
 

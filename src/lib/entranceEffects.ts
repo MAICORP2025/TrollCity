@@ -378,6 +378,22 @@ export async function setActiveEntranceEffect(userId: string, effectKey: Entranc
   }
 }
 
+export async function toggleEntranceEffectByUuid(userId: string, itemUuid: string, active: boolean): Promise<{success: boolean, error?: string}> {
+  try {
+    const { error } = await supabase.rpc('toggle_entrance_effect', {
+      p_user_id: userId,
+      p_item_id: itemUuid,
+      p_active: active
+    })
+    if (error) {
+      return { success: false, error: error.message }
+    }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to toggle effect' }
+  }
+}
+
 /**
  * Get entrance effect configuration
  */

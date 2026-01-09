@@ -62,7 +62,7 @@ const isMissingTableError = (error) =>
 export default function CoinStore() {
   const { user, profile, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
-  const { troll_coins, refreshCoins } = useCoins();
+  const { troll_coins, refreshCoins, optimisticCredit } = useCoins();
   const { checkOnboarding } = useCheckOfficerOnboarding();
   const STORE_TAB_KEY = 'tc-store-active-tab';
   const STORE_COMPLETE_KEY = 'tc-store-show-complete';
@@ -948,18 +948,18 @@ export default function CoinStore() {
                           </div>
                         )}
                         <PayPalButtons
-                          style={PAYPAL_BUTTON_STYLE}
-                          fundingSource="paypal"
-                          createOrder={async () => {
-                            try {
-                              return await handleBuy(pkg); // MUST return orderID
-                            } catch (err) {
-                              console.error("❌ PayPal createOrder error:", err);
-                              toast.error("Unable to start PayPal checkout. Please try again.");
-                              throw err;
-                            }
-                          }}
-                          onApprove={async (data) => {
+                            style={PAYPAL_BUTTON_STYLE}
+                            fundingSource="paypal"
+                            createOrder={async () => {
+                              try {
+                                return await handleBuy(pkg);
+                              } catch (err) {
+                                console.error("❌ PayPal createOrder error:", err);
+                                toast.error("Unable to start PayPal checkout. Please try again.");
+                                throw err;
+                              }
+                            }}
+                            onApprove={async (data) => {
                             try {
                               console.log("✅ PayPal approved:", data);
 
@@ -977,33 +977,31 @@ export default function CoinStore() {
                                   },
                                   body: JSON.stringify({ 
                                     orderID: data.orderID,
-                                    // Send metadata as backup/verification
                                     packageId: pkg.id,
                                     coins: pkg.coins,
                                     amount: pkg.price
                                   }),
                                 }
                               );
-
-                              const captureJson = await captureRes.json();
+                              const captureJson = await captureRes.json().catch(() => ({}));
                               console.log("💰 Capture result:", captureJson);
-
                               if (captureRes.ok) {
+                                optimisticCredit(pkg.coins || 0);
                                 toast.success(`+${pkg.coins.toLocaleString()} Troll Coins added!`);
                                 loadWalletData(false);
                               } else {
                                 toast.error("Payment completed, but coin update failed.");
                               }
-                            } catch (err) {
-                              console.error("❌ PayPal onApprove error:", err);
-                              toast.error("Payment processing failed. Please contact support.");
-                            }
-                          }}
-                          onError={(err) => {
-                            console.error("❌ PayPal error:", err);
-                            toast.error("PayPal checkout error. Please try again later.");
-                          }}
-                        />
+                              } catch (err) {
+                                console.error("❌ PayPal onApprove error:", err);
+                                toast.error("Payment processing failed. Please contact support.");
+                              }
+                            }}
+                            onError={(err) => {
+                              console.error("❌ PayPal error:", err);
+                              toast.error("PayPal checkout error. Please try again later.");
+                            }}
+                          />
                         <div className="mt-2 text-xs text-gray-400 text-center">
                           Secure PayPal checkout
                         </div>

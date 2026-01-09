@@ -54,12 +54,6 @@ serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "").trim();
     
-    // Allow unauthenticated calls if they have the secret header (for webhooks) 
-    // but here we expect user token. 
-    // For safety, we should verify the user, but if the token is missing/invalid 
-    // we might still want to process if we trust the paypal order content? 
-    // No, strictly require auth for now to link to user account safely or use metadata.
-    
     let currentUserId: string | null = null;
 
     if (token) {
@@ -135,12 +129,11 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: "Payment not completed", status: capture?.status }), { status: 400, headers: cors });
     }
 
-    // 3. Idempotency Check
-    // Check if this capture ID has already been processed
+    // 3. Idempotency Check - Check if this capture ID has already been processed
     const { data: existingTx } = await supabase
-      .from("coin_transactions")
-      .select("id, status")
-      .eq("external_id", capture.id)
+      .from("ledger_transactions")
+      .select("id")
+      .eq("unique_reference", capture.id)
       .maybeSingle();
 
     if (existingTx) {
@@ -149,7 +142,7 @@ serve(async (req: Request) => {
         JSON.stringify({
           success: true,
           message: "Transaction already processed",
-          coinsAdded: 0, // 0 because already added
+          coinsAdded: 0,
           orderId: orderId,
           captureId: capture.id
         }),
@@ -158,8 +151,6 @@ serve(async (req: Request) => {
     }
 
     // 4. Parse Metadata
-    // The create-order function sets custom_id as `${user_id}|${coins}`
-    // It DOES NOT use JSON.
     const customId = purchaseUnit.custom_id;
     if (!customId) {
       return new Response(JSON.stringify({ error: "Missing custom_id in PayPal order" }), { status: 400, headers: cors });
@@ -167,20 +158,19 @@ serve(async (req: Request) => {
 
     let metaUserId: string;
     let metaCoins: number;
+    let metaType: string | null = null;
 
-    // Try pipe split first (legacy/current format)
     if (customId.includes("|")) {
       const [uid, coinsStr] = customId.split("|");
       metaUserId = uid;
       metaCoins = parseInt(coinsStr, 10);
     } else {
-      // Try JSON parse fallback just in case we change it later
       try {
         const jsonMeta = JSON.parse(customId);
         metaUserId = jsonMeta.userId || jsonMeta.user_id;
         metaCoins = Number(jsonMeta.coins);
+        metaType = jsonMeta.type || null;
       } catch {
-        // Fallback failed
         console.error("Failed to parse custom_id", customId);
         return new Response(JSON.stringify({ error: "Invalid custom_id format" }), { status: 400, headers: cors });
       }
@@ -188,13 +178,6 @@ serve(async (req: Request) => {
 
     if (!metaUserId || isNaN(metaCoins)) {
       return new Response(JSON.stringify({ error: "Invalid metadata extracted" }), { status: 400, headers: cors });
-    }
-
-    // Optional: Verify user if authenticated
-    if (currentUserId && currentUserId !== metaUserId) {
-      console.warn(`User mismatch: Auth(${currentUserId}) vs Order(${metaUserId})`);
-      // We'll trust the Order metadata as it was signed/created by us previously, 
-      // but logging this is good.
     }
 
     const usdAmount = Number(
@@ -205,10 +188,37 @@ serve(async (req: Request) => {
       orderData.payer?.email_address ??
       null;
 
-    // 5. Atomic Update (using RPC or sequential safe ops)
-    // We will use sequential ops but we already did idempotency check.
-    
-    // Insert Transaction
+    console.log(`Processing purchase: user=${metaUserId}, coins=${metaCoins}, usd=${usdAmount}`);
+
+    // 5. Call RPC to process PayPal capture allocation (splits $1 to admin_spendable, remainder to broadcaster_liability)
+    try {
+      const { data: ledgerData, error: ledgerError } = await supabase
+        .rpc('process_paypal_capture_allocation', {
+          p_usd_amount: usdAmount,
+          p_coin_amount: metaCoins,
+          p_capture_id: capture.id,
+          p_paypal_order_id: orderId,
+          p_user_id: metaUserId,
+          p_metadata: {
+            payer_email: payerEmail,
+            payment_status: capture.status,
+            payment_method: "paypal_web",
+            order_status: orderData.status
+          }
+        });
+
+      if (ledgerError) {
+        console.error("Ledger allocation error:", ledgerError);
+        // Continue with coin addition even if ledger fails - don't block the purchase
+      } else {
+        console.log("Ledger allocation successful:", ledgerData);
+      }
+    } catch (ledgerErr) {
+      console.error("Ledger allocation exception:", ledgerErr);
+      // Continue with coin addition even if ledger fails
+    }
+
+    // 6. Insert Transaction into coin_transactions (existing logic)
     const { error: txErr } = await supabase.from("coin_transactions").insert({
       user_id: metaUserId,
       amount: metaCoins,
@@ -233,36 +243,83 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: "Failed to log transaction", details: txErr }), { status: 500, headers: cors });
     }
 
-    // Add Coins RPC (safer than get+update)
-    // Using user_id_input/coins_to_add based on 20260211 migration
-    const { error: rpcErr } = await supabase.rpc("add_troll_coins", {
-      user_id_input: metaUserId,
-      coins_to_add: metaCoins
-    });
+    // 7. Add Coins and verify final balance
+    let rpcErr: any = null;
+    try {
+      const { error } = await supabase.rpc("add_troll_coins", {
+        user_id_input: metaUserId,
+        coins_to_add: metaCoins
+      });
+      rpcErr = error || null;
+    } catch (e) {
+      rpcErr = e;
+    }
 
-    if (rpcErr) {
+    // Always verify the new balance; fix if RPC wrote to wrong column
+    const { data: profileAfter } = await supabase
+      .from("user_profiles")
+      .select("troll_coins")
+      .eq("id", metaUserId)
+      .single();
+
+    const currentPaid = profileAfter?.troll_coins || 0;
+    if (currentPaid < metaCoins && rpcErr) {
       console.error("RPC add_troll_coins error", rpcErr);
-      // Fallback to manual update if RPC missing or fails
-      const { data: profile } = await supabase.from("user_profiles").select("troll_coins").eq("id", metaUserId).single();
-      const currentBalance = profile?.troll_coins || 0;
-      
+    }
+
+    if (currentPaid < metaCoins) {
+      // Adjust balance to ensure coins are actually credited
+      const { data: profileBefore } = await supabase
+        .from("user_profiles")
+        .select("troll_coins")
+        .eq("id", metaUserId)
+        .single();
+      const beforePaid = profileBefore?.troll_coins || 0;
+
       const { error: balErr } = await supabase
         .from("user_profiles")
-        .update({ troll_coins: currentBalance + metaCoins })
+        .update({ troll_coins: beforePaid + metaCoins })
         .eq("id", metaUserId);
-        
+
       if (balErr) {
-         console.error("Manual balance update error", balErr);
-         return new Response(JSON.stringify({ error: "Failed to update balance" }), { status: 500, headers: cors });
+        console.error("Manual balance update error", balErr);
+        return new Response(
+          JSON.stringify({ error: "Failed to update balance" }),
+          { status: 500, headers: cors }
+        );
       }
     }
+
+    // 8. Troll Pass activation if applicable
+    if (metaType === "troll_pass") {
+      const now = new Date();
+      const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const nowIso = now.toISOString();
+      const { error: passErr } = await supabase
+        .from("user_profiles")
+        .update({
+          troll_pass_expires_at: expires,
+          troll_pass_last_purchased_at: nowIso
+        })
+        .eq("id", metaUserId);
+      if (passErr) {
+        console.error("Failed to activate Troll Pass", passErr);
+      }
+    }
+
+    // 9. Record admin spendable allocation for tracking
+    const adminAllocation = 1.00;
+    console.log(`✅ PayPal transaction complete: $${usdAmount} → $${adminAllocation} admin_spendable, $${usdAmount - adminAllocation} broadcaster_liability`);
 
     return new Response(
       JSON.stringify({
         success: true,
         coinsAdded: metaCoins,
         orderId: orderId,
-        captureId: capture.id
+        captureId: capture.id,
+        usdAmount: usdAmount,
+        adminAllocation: adminAllocation,
+        broadcasterLiability: usdAmount - adminAllocation
       }),
       { status: 200, headers: cors }
     );

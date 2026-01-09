@@ -106,7 +106,7 @@ export default function VerificationPage() {
     setProcessing('coins')
     try {
       // Check if deduct_troll_coins RPC exists, otherwise use direct update
-      const { error: deductError } = await supabase.rpc('deduct_troll_coins', {
+      const { error: deductError } = await supabase.rpc('rpc_deduct_troll_coins', {
         p_user_id: user.id,
         p_amount: 500
       })

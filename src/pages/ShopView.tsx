@@ -109,7 +109,32 @@ export default function ShopView() {
         return
       }
 
-      // Create purchase record
+      // Ensure a marketplace item exists to reference with a UUID
+      const { data: createdMarketplaceItem, error: marketplaceItemError } = await supabase
+        .from('marketplace_items')
+        .insert([{
+          seller_id: shop.owner_id,
+          title: item.name,
+          description: item.description,
+          price_coins: item.price,
+          stock: item.stock_quantity ?? null,
+          thumbnail_url: item.thumbnail_url ?? null,
+          type: item.category,
+          status: 'active'
+        }])
+        .select()
+        .single()
+
+      if (marketplaceItemError) {
+        throw marketplaceItemError
+      }
+
+      const marketplaceItemId = createdMarketplaceItem?.id
+      if (!marketplaceItemId) {
+        throw new Error('Failed to create marketplace item reference')
+      }
+
+      // Create purchase record (uses marketplace item UUID)
       const platformFee = Math.floor(item.price * 0.1) // 10% platform fee
       const sellerEarnings = item.price - platformFee
 
@@ -118,7 +143,7 @@ export default function ShopView() {
         .insert([{
           buyer_id: user.id,
           seller_id: shop.owner_id,
-          item_id: item.id,
+          item_id: marketplaceItemId,
           price_paid: item.price,
           platform_fee: platformFee,
           seller_earnings: sellerEarnings,
@@ -149,14 +174,13 @@ export default function ShopView() {
         ))
       }
 
-      // Add to user inventory
+      // Add to user inventory (references marketplace item UUID)
       const { error: inventoryError } = await supabase
         .from('user_inventory')
         .insert([{
           user_id: user.id,
-          item_id: item.id,
-          acquired_at: new Date().toISOString(),
-          purchase_id: purchaseData.id
+          item_id: marketplaceItemId,
+          acquired_at: new Date().toISOString()
         }])
 
       if (inventoryError) throw inventoryError

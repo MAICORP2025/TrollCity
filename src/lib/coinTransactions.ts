@@ -256,7 +256,7 @@ export async function deductCoins(params: {
     }
 
     const amountParam = normalizedAmount.toString()
-    const { data: rpcBalance, error: deductError } = await sb.rpc('deduct_user_troll_coins', {
+    const { data: rpcBalance, error: deductError } = await sb.rpc('rpc_deduct_troll_coins', {
       p_user_id: userId,
       p_amount: amountParam
     })

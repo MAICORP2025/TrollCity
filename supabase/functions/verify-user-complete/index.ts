@@ -31,25 +31,37 @@ async function getAccessToken() {
 
 serve(async (req) => {
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { 
+      status: 405,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "");
     if (!token) {
-      return new Response("Unauthorized", { status: 401 });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     const { data: authUser, error: authError } = await supabase.auth.getUser(token);
     if (authError || !authUser?.user) {
-      return new Response("Unauthorized", { status: 401 });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     const userId = authUser.user.id;
     const { orderId } = await req.json();
 
     if (!orderId) {
-      return new Response("Missing orderId", { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing orderId" }), { 
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     const accessToken = await getAccessToken();
@@ -67,14 +79,20 @@ serve(async (req) => {
     );
 
     if (!captureRes.ok) {
-      return new Response("Failed to capture payment", { status: 500 });
+      return new Response(JSON.stringify({ error: "Failed to capture payment" }), { 
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     const orderData = await captureRes.json();
     const capture = orderData.purchase_units?.[0]?.payments?.captures?.[0];
 
     if (!capture || capture.status !== "COMPLETED") {
-      return new Response("Payment not completed", { status: 400 });
+      return new Response(JSON.stringify({ error: "Payment not completed" }), { 
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     // Parse custom_id to get userId

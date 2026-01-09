@@ -1,4 +1,4 @@
-import { Trophy, Star, Shield, Zap, Gift, Crown, Radio, MessageCircle, Music, Palette } from 'lucide-react'
+import { Star, Shield, Zap, Gift, Crown, Radio, MessageCircle, Music, Palette } from 'lucide-react'
 
 // --- XP Rates ---
 export const XP_RATES = {

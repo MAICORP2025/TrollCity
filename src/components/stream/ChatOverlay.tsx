@@ -28,6 +28,7 @@ interface ChatMessage {
     officer_level?: number
     troller_level?: number
     role?: string
+    troll_pass_expires_at?: string
   }
 }
 
@@ -46,7 +47,7 @@ export default function ChatOverlay({ streamId, isBroadcaster }: ChatOverlayProp
         .from('stream_messages')
         .select(`
           *,
-          user_profiles:user_id ( username, avatar_url, is_troll_officer, is_admin, is_troller, is_og_user, officer_level, troller_level, role )
+          user_profiles:user_id ( username, avatar_url, is_troll_officer, is_admin, is_troller, is_og_user, officer_level, troller_level, role, troll_pass_expires_at )
         `)
         .eq('stream_id', streamId)
         .eq('message_type', 'chat')
@@ -77,7 +78,7 @@ export default function ChatOverlay({ streamId, isBroadcaster }: ChatOverlayProp
             .from('stream_messages')
             .select(`
               *,
-              user_profiles:user_id ( username, avatar_url, is_troll_officer, is_admin, is_troller, is_og_user, officer_level, troller_level, role )
+              user_profiles:user_id ( username, avatar_url, is_troll_officer, is_admin, is_troller, is_og_user, officer_level, troller_level, role, troll_pass_expires_at )
             `)
             .eq('id', payload.new.id)
             .single()
@@ -143,7 +144,7 @@ export default function ChatOverlay({ streamId, isBroadcaster }: ChatOverlayProp
             <strong>
               <ClickableUsername 
                 username={username} 
-                prefix=""
+                prefix={msg.user_profiles?.troll_pass_expires_at && new Date(msg.user_profiles.troll_pass_expires_at) > new Date() ? '👑' : ''}
                 profile={msg.user_profiles}
                 isBroadcaster={isBroadcaster}
                 streamId={streamId}

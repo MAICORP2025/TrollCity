@@ -1,5 +1,5 @@
 import React, { FC, useMemo } from 'react';
-import { Sparkles, AlertCircle, Scale, FileText, User } from 'lucide-react';
+import { Sparkles, AlertCircle, Scale, FileText } from 'lucide-react';
 import type { CourtSessionData } from '../lib/courtSessions';
 
 type CourtPhase = 'waiting' | 'opening' | 'evidence' | 'deliberation' | 'verdict';
@@ -19,8 +19,8 @@ const CourtAIAssistant: FC<CourtAIAssistantProps> = ({
   activeCase,
   courtPhase,
   evidence,
-  defendant,
-  judge,
+  defendant: _defendant,
+  judge: _judge,
   verdict
 }) => {
   const analysis = useMemo(() => {

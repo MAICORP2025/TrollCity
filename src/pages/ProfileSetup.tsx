@@ -8,6 +8,14 @@ const ProfileSetup = () => {
   const navigate = useNavigate()
   const { user, profile, setProfile } = useAuthStore()
 
+  // Ensure loading is false when component mounts
+  React.useEffect(() => {
+    const authState = useAuthStore.getState()
+    if (authState.isLoading) {
+      authState.setLoading(false)
+    }
+  }, [])
+
   const suggestedUsername = React.useMemo(() => {
     if (profile?.username) return profile.username
     if (user?.id) {
@@ -25,12 +33,12 @@ const ProfileSetup = () => {
   const [usernameError, setUsernameError] = React.useState('')
 
   const handleUsernameChange = (value: string) => {
-    // Only allow letters and numbers
-    const alphanumeric = value.replace(/[^a-zA-Z0-9]/g, '')
-    setUsername(alphanumeric)
+    // Allow letters, numbers, and underscores
+    const valid = value.replace(/[^a-zA-Z0-9_]/g, '')
+    setUsername(valid)
     
-    if (value !== alphanumeric) {
-      setUsernameError('Username can only contain letters and numbers')
+    if (value !== valid) {
+      setUsernameError('Username can only contain letters, numbers, and underscores')
     } else {
       setUsernameError('')
     }
@@ -102,9 +110,13 @@ const ProfileSetup = () => {
       toast.success('Profile saved')
       navigate('/')
     } catch (err: any) {
+      console.error('Profile save error:', err)
       toast.error(err?.message || 'Failed to save profile')
     } finally {
       setLoading(false)
+      // Ensure store loading state is also reset
+      const authState = useAuthStore.getState()
+      authState.setLoading(false)
     }
   }
 
@@ -172,6 +184,7 @@ const ProfileSetup = () => {
       if (updated) setProfile(updated as any)
       toast.success('Avatar uploaded')
     } catch (err: any) {
+      console.error('Avatar upload error:', err)
       toast.error(err?.message || 'Failed to upload avatar')
     } finally {
       setUploadingAvatar(false)
@@ -224,7 +237,7 @@ const ProfileSetup = () => {
               </div>
 
               <div>
-                <label htmlFor="username" className="block text-sm mb-2">Username (letters and numbers only)</label>
+                <label htmlFor="username" className="block text-sm mb-2">Username (letters, numbers, and underscores)</label>
                 <input
                   id="username"
                   name="username"
@@ -443,6 +456,20 @@ const ProfileSetup = () => {
             </div>
           </details>
         
+        {/* Fallback button for users who get stuck */}
+        <div className="mt-8 flex gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              // Ensure loading is reset
+              useAuthStore.getState().setLoading(false)
+              navigate('/')
+            }}
+            className="flex-1 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded hover:from-green-700 hover:to-green-600 transition-all"
+          >
+            Continue to Home →
+          </button>
+        </div>
       </div>
     </div>
   )
