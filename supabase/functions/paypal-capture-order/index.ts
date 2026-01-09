@@ -20,6 +20,37 @@ const PAYPAL_BASE =
     ? "https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com";
 
+interface PayPalTokenResponse {
+  access_token: string;
+}
+
+interface PayPalOrderResponse {
+  status: string;
+  payer?: {
+    email_address?: string;
+  };
+  purchase_units?: Array<{
+    custom_id?: string;
+    amount?: {
+      value: string;
+    };
+    payments?: {
+      captures?: Array<{
+        id: string;
+        status: string;
+        amount?: {
+          value: string;
+        };
+        seller_receivable_breakdown?: {
+          net_amount?: {
+            value: string;
+          };
+        };
+      }>;
+    };
+  }>;
+}
+
 async function getAccessToken() {
   const creds = btoa(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`);
   const res = await fetch(`${PAYPAL_BASE}/v1/oauth2/token`, {
@@ -35,8 +66,8 @@ async function getAccessToken() {
     console.error("PayPal token error", txt);
     throw new Error(`Failed to get PayPal token: ${txt}`);
   }
-  const data = await res.json();
-  return data.access_token as string;
+  const data: PayPalTokenResponse = await res.json() as PayPalTokenResponse;
+  return data.access_token;
 }
 
 serve(async (req: Request) => {
@@ -63,12 +94,21 @@ serve(async (req: Request) => {
       }
     }
 
-    const body = await req.json();
-    // Accept orderId or orderID
-    const orderId = (body.orderID || body.orderId) as string;
+    let body: Record<string, unknown> = {};
+    try {
+      body = await req.json() as Record<string, unknown>;
+    } catch (e) {
+      console.error("❌ Failed to parse request body:", e);
+    }
+    console.log("📦 Received body:", JSON.stringify(body));
+    
+    // Support multiple orderId key variations
+    const orderId = (body.orderId || body.orderID || body.order_id || body.paypal_order_id) as string;
+    console.log("🔍 Resolved orderId:", orderId);
     
     if (!orderId) {
-      return new Response(JSON.stringify({ error: "Missing orderID" }), { status: 400, headers: cors });
+      console.error("❌ Missing orderId - received keys:", Object.keys(body));
+      return new Response(JSON.stringify({ error: "Missing orderId" }), { status: 400, headers: cors });
     }
 
     console.log(`PayPal capture: orderID=${orderId}, env=${PAYPAL_MODE}, user=${currentUserId}`);
@@ -88,7 +128,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: "Failed to fetch order", details: txt }), { status: 500, headers: cors });
     }
 
-    let orderData = await orderRes.json();
+    let orderData: PayPalOrderResponse = await orderRes.json() as PayPalOrderResponse;
 
     // 2. Capture if not completed
     if (orderData.status !== "COMPLETED") {
@@ -117,11 +157,14 @@ serve(async (req: Request) => {
         });
       }
 
-      orderData = await captureRes.json();
+      orderData = await captureRes.json() as PayPalOrderResponse;
     }
 
     const purchaseUnit = orderData.purchase_units?.[0];
-    const payments = purchaseUnit?.payments;
+    if (!purchaseUnit) {
+      return new Response(JSON.stringify({ error: "No purchase units in PayPal order" }), { status: 400, headers: cors });
+    }
+    const payments = purchaseUnit.payments;
     const capture = payments?.captures?.[0];
 
     if (!capture || capture.status !== "COMPLETED") {
@@ -181,7 +224,7 @@ serve(async (req: Request) => {
     }
 
     const usdAmount = Number(
-      capture.amount?.value ? capture.amount.value : purchaseUnit.amount.value
+      capture.amount?.value ? capture.amount.value : purchaseUnit.amount?.value
     );
     const payerEmail =
       capture.seller_receivable_breakdown?.net_amount?.value ??
@@ -260,7 +303,7 @@ serve(async (req: Request) => {
       .from("user_profiles")
       .select("troll_coins")
       .eq("id", metaUserId)
-      .single();
+      .maybeSingle();
 
     const currentPaid = profileAfter?.troll_coins || 0;
     if (currentPaid < metaCoins && rpcErr) {
@@ -273,7 +316,7 @@ serve(async (req: Request) => {
         .from("user_profiles")
         .select("troll_coins")
         .eq("id", metaUserId)
-        .single();
+        .maybeSingle();
       const beforePaid = profileBefore?.troll_coins || 0;
 
       const { error: balErr } = await supabase
