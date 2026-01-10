@@ -201,7 +201,7 @@ otp_expiry = 3600
 # content_path = "./supabase/templates/invite.html"
 
 # Uncomment to customize notification email template
-# [auth.email.notification.password_changed]
+# [auth.email.template.password_changed]
 # enabled = true
 # subject = "Your password has been changed"
 # content_path = "./templates/password_changed_notification.html"
@@ -242,7 +242,7 @@ max_frequency = "5s"
 enabled = false
 account_sid = ""
 message_service_sid = ""
-# DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 
 # Multi-factor-authentication is available to Supabase Pro plan.
@@ -464,3 +464,8 @@ entrypoint = "./functions/paypal-capture-order/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/paypal-webhook/index.ts"
+
+[functions.send-announcement]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/send-announcement/index.ts"
