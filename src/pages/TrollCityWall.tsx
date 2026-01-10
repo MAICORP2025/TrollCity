@@ -5,11 +5,38 @@ import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { 
   MessageSquare, Heart, Plus, Video, Sword, Users, Trophy, 
-  Zap, ExternalLink, Trash2, Share2
+  Zap, ExternalLink, Trash2, Share2, Reply, Gift, Smile
 } from 'lucide-react'
 import { WallPost, WallPostType } from '../types/trollWall'
 import CreatePostModal from '../components/trollWall/CreatePostModal'
 import ClickableUsername from '../components/ClickableUsername'
+
+// Available reactions
+const REACTIONS = [
+  { type: 'love', emoji: '❤️', label: 'Love' },
+  { type: 'haha', emoji: '😂', label: 'Haha' },
+  { type: 'wow', emoji: '😮', label: 'Wow' },
+  { type: 'sad', emoji: '😢', label: 'Sad' },
+  { type: 'angry', emoji: '😡', label: 'Angry' },
+  { type: 'fire', emoji: '🔥', label: 'Fire' },
+  { type: 'lol', emoji: '🤣', label: 'LOL' },
+  { type: 'clap', emoji: '👏', label: 'Clap' },
+  { type: 'mindblown', emoji: '🤯', label: 'Mindblown' },
+]
+
+// Available gifts
+const GIFTS = [
+  { type: 'rose', emoji: '🌹', name: 'Rose', cost: 10 },
+  { type: 'heart', emoji: '💖', name: 'Heart', cost: 25 },
+  { type: 'star', emoji: '⭐', name: 'Star', cost: 50 },
+  { type: 'crown', emoji: '👑', name: 'Crown', cost: 100 },
+  { type: 'diamond', emoji: '💎', name: 'Diamond', cost: 200 },
+  { type: 'trophy', emoji: '🏆', name: 'Trophy', cost: 500 },
+  { type: 'coffee', emoji: '☕', name: 'Coffee', cost: 15 },
+  { type: 'pizza', emoji: '🍕', name: 'Pizza', cost: 30 },
+  { type: 'rocket', emoji: '🚀', name: 'Rocket', cost: 1000 },
+  { type: 'dragon', emoji: '🐉', name: 'Dragon', cost: 5000 },
+]
 
 export default function TrollCityWall() {
   const { user } = useAuthStore()
@@ -18,6 +45,12 @@ export default function TrollCityWall() {
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [likingPosts, setLikingPosts] = useState<Set<string>>(new Set())
+  const [reactingPosts, setReactingPosts] = useState<Set<string>>(new Set())
+  const [sendingGifts, setSendingGifts] = useState<Set<string>>(new Set())
+  const [showReactions, setShowReactions] = useState<string | null>(null)
+  const [showGifts, setShowGifts] = useState<string | null>(null)
+  const [showReplyModal, setShowReplyModal] = useState<string | null>(null)
+  const [replyContent, setReplyContent] = useState('')
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -31,11 +64,14 @@ export default function TrollCityWall() {
       if (error) throw error
 
       if (data) {
-        // Check which posts the user has liked
         const postIds = data.map(p => p.id)
         let likedPostIds = new Set<string>()
+        let userReactionTypes: Record<string, string> = {}
+        let reactionsSummary: Record<string, Record<string, number>> = {}
+        let giftsSummary: Record<string, Record<string, { count: number, coins: number }>> = {}
 
         if (user?.id) {
+          // Check user likes
           const { data: userLikes } = await supabase
             .from('troll_wall_likes')
             .select('post_id')
@@ -43,7 +79,47 @@ export default function TrollCityWall() {
             .in('post_id', postIds)
           
           likedPostIds = new Set(userLikes?.map(l => l.post_id) || [])
+
+          // Check user reactions
+          const { data: userReactions } = await supabase
+            .from('troll_wall_reactions')
+            .select('post_id, reaction_type')
+            .eq('user_id', user.id)
+            .in('post_id', postIds)
+          
+          userReactions?.forEach(r => {
+            userReactionTypes[r.post_id] = r.reaction_type
+          })
         }
+
+        // Get reactions summary
+        const { data: allReactions } = await supabase
+          .from('troll_wall_reactions_summary')
+          .select('post_id, reaction_type, reaction_count')
+          .in('post_id', postIds)
+        
+        allReactions?.forEach(r => {
+          if (!reactionsSummary[r.post_id]) {
+            reactionsSummary[r.post_id] = {}
+          }
+          reactionsSummary[r.post_id][r.reaction_type] = r.reaction_count
+        })
+
+        // Get gifts summary
+        const { data: allGifts } = await supabase
+          .from('troll_wall_gifts_summary')
+          .select('post_id, gift_type, total_quantity, total_coins')
+          .in('post_id', postIds)
+        
+        allGifts?.forEach(g => {
+          if (!giftsSummary[g.post_id]) {
+            giftsSummary[g.post_id] = {}
+          }
+          giftsSummary[g.post_id][g.gift_type] = { 
+            count: g.total_quantity, 
+            coins: g.total_coins 
+          }
+        })
 
         // Merge posts with user profile data and like status
         const postsWithLikes = data.map((post: any) => {
@@ -55,7 +131,10 @@ export default function TrollCityWall() {
             is_admin: profile.is_admin,
             is_troll_officer: profile.is_troll_officer,
             is_og_user: profile.is_og_user,
-            user_liked: likedPostIds.has(post.id)
+            user_liked: likedPostIds.has(post.id),
+            user_reaction: userReactionTypes[post.id],
+            reactions: reactionsSummary[post.id] || {},
+            gifts: giftsSummary[post.id] || {},
           }
         })
 
@@ -74,19 +153,13 @@ export default function TrollCityWall() {
   useEffect(() => {
     loadPosts()
 
-    // Real-time subscription for new posts
     const channel = supabase
       .channel('troll_wall_posts')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'troll_wall_posts'
-        },
+        { event: 'INSERT', schema: 'public', table: 'troll_wall_posts' },
         (payload) => {
           const newPost = payload.new as any
-          // Fetch user info for the new post
           supabase
             .from('user_profiles')
             .select('username, avatar_url, is_admin, is_troll_officer, is_og_user')
@@ -96,18 +169,17 @@ export default function TrollCityWall() {
               setPosts(prev => [{
                 ...newPost,
                 ...userData,
-                user_liked: false
+                user_liked: false,
+                user_reaction: null,
+                reactions: {},
+                gifts: {},
               } as WallPost, ...prev])
             })
         }
       )
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'troll_wall_posts'
-        },
+        { event: 'UPDATE', schema: 'public', table: 'troll_wall_posts' },
         (payload) => {
           const updatedPost = payload.new as any
           setPosts(prev =>
@@ -117,11 +189,7 @@ export default function TrollCityWall() {
       )
       .on(
         'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'troll_wall_posts'
-        },
+        { event: 'DELETE', schema: 'public', table: 'troll_wall_posts' },
         (payload) => {
           const deletedId = (payload.old as any).id
           setPosts(prev => prev.filter(p => p.id !== deletedId))
@@ -140,7 +208,7 @@ export default function TrollCityWall() {
       return
     }
 
-    if (likingPosts.has(postId)) return // Prevent double-click
+    if (likingPosts.has(postId)) return
 
     setLikingPosts(prev => new Set(prev).add(postId))
 
@@ -154,15 +222,10 @@ export default function TrollCityWall() {
       if (error) throw error
 
       if (data) {
-        // Update local state optimistically
         setPosts(prev =>
           prev.map(p =>
             p.id === postId
-              ? {
-                  ...p,
-                  likes: data.likes_count,
-                  user_liked: data.liked
-                }
+              ? { ...p, likes: data.likes_count, user_liked: data.liked }
               : p
           )
         )
@@ -179,17 +242,148 @@ export default function TrollCityWall() {
     }
   }
 
-  const handleDelete = async (postId: string) => {
+  const handleReaction = async (postId: string, reactionType: string) => {
     if (!user?.id) {
+      toast.error('Please log in to react')
       return
     }
+
+    setReactingPosts(prev => new Set(prev).add(postId))
+
+    try {
+      const { data, error } = await supabase
+        .rpc('toggle_wall_post_reaction', {
+          p_post_id: postId,
+          p_user_id: user.id,
+          p_reaction_type: reactionType
+        })
+
+      if (error) throw error
+
+      if (data) {
+        setPosts(prev =>
+          prev.map(p => {
+            if (p.id === postId) {
+              const newReactions = { ...p.reactions }
+              newReactions[reactionType] = data.reaction_count
+              return {
+                ...p,
+                reactions: newReactions,
+                user_reaction: data.removed ? null : reactionType
+              }
+            }
+            return p
+          })
+        )
+      }
+      setShowReactions(null)
+    } catch (err: any) {
+      console.error('Error toggling reaction:', err)
+      toast.error('Failed to react')
+    } finally {
+      setReactingPosts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(postId)
+        return newSet
+      })
+    }
+  }
+
+  const handleGift = async (postId: string, giftType: string) => {
+    if (!user?.id) {
+      toast.error('Please log in to send gifts')
+      return
+    }
+
+    setSendingGifts(prev => new Set(prev).add(postId))
+
+    try {
+      const { data, error } = await supabase
+        .rpc('send_wall_post_gift', {
+          p_post_id: postId,
+          p_sender_id: user.id,
+          p_gift_type: giftType,
+          p_quantity: 1
+        })
+
+      if (error) throw error
+
+      if (data && data.success) {
+        setPosts(prev =>
+          prev.map(p => {
+            if (p.id === postId) {
+              const newGifts = { ...p.gifts }
+              const gift = GIFTS.find(g => g.type === giftType)
+              if (gift) {
+                if (!newGifts[giftType]) {
+                  newGifts[giftType] = { count: 0, coins: 0 }
+                }
+                newGifts[giftType] = {
+                  count: newGifts[giftType].count + 1,
+                  coins: newGifts[giftType].coins + gift.cost
+                }
+              }
+              return { ...p, gifts: newGifts }
+            }
+            return p
+          })
+        )
+        toast.success(`Sent ${giftType}!`)
+      } else {
+        toast.error(data?.error || 'Failed to send gift')
+      }
+      setShowGifts(null)
+    } catch (err: any) {
+      console.error('Error sending gift:', err)
+      toast.error('Failed to send gift')
+    } finally {
+      setSendingGifts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(postId)
+        return newSet
+      })
+    }
+  }
+
+  const handleReply = async (postId: string) => {
+    if (!user?.id) {
+      toast.error('Please log in to reply')
+      return
+    }
+
+    if (!replyContent.trim()) {
+      toast.error('Please enter a reply')
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .rpc('create_wall_post_reply', {
+          p_original_post_id: postId,
+          p_user_id: user.id,
+          p_content: replyContent
+        })
+
+      if (error) throw error
+
+      toast.success('Reply posted!')
+      setShowReplyModal(null)
+      setReplyContent('')
+      loadPosts()
+    } catch (err: any) {
+      console.error('Error creating reply:', err)
+      toast.error('Failed to post reply')
+    }
+  }
+
+  const handleDelete = async (postId: string) => {
+    if (!user?.id) return
 
     if (!confirm('Are you sure you want to delete this post?')) {
       return
     }
 
     try {
-      // Check if user is staff (admin, troll_officer, lead_officer)
       const { data: userProfile } = await supabase
         .from('user_profiles')
         .select('role, is_admin, is_troll_officer, is_lead_officer')
@@ -201,12 +395,8 @@ export default function TrollCityWall() {
                      userProfile?.is_lead_officer || 
                      userProfile?.role === 'admin'
 
-      let query = supabase
-        .from('troll_wall_posts')
-        .delete()
-        .eq('id', postId)
+      let query = supabase.from('troll_wall_posts').delete().eq('id', postId)
 
-      // If not staff, enforce ownership check
       if (!isStaff) {
         query = query.eq('user_id', user.id)
       }
@@ -231,30 +421,13 @@ export default function TrollCityWall() {
 
   const getPostIcon = (type: WallPostType) => {
     switch (type) {
-      case 'video':
-        return <Video className="w-4 h-4 text-pink-400" />
-      case 'stream_announce':
-        return <Video className="w-4 h-4 text-red-400" />
-      case 'battle_result':
-        return <Sword className="w-4 h-4 text-purple-400" />
-      case 'family_announce':
-        return <Users className="w-4 h-4 text-blue-400" />
-      case 'badge_earned':
-        return <Trophy className="w-4 h-4 text-yellow-400" />
-      case 'system':
-        return <Zap className="w-4 h-4 text-cyan-400" />
-      default:
-        return <MessageSquare className="w-4 h-4 text-gray-400" />
-    }
-  }
-
-  const handlePostClick = (post: WallPost) => {
-    if (post.metadata?.stream_id) {
-      navigate(`/stream/${post.metadata.stream_id}`)
-    } else if (post.metadata?.battle_id) {
-      navigate('/battles')
-    } else if (post.metadata?.family_id) {
-      navigate('/family')
+      case 'video': return <Video className="w-4 h-4 text-pink-400" />
+      case 'stream_announce': return <Video className="w-4 h-4 text-red-400" />
+      case 'battle_result': return <Sword className="w-4 h-4 text-purple-400" />
+      case 'family_announce': return <Users className="w-4 h-4 text-blue-400" />
+      case 'badge_earned': return <Trophy className="w-4 h-4 text-yellow-400" />
+      case 'system': return <Zap className="w-4 h-4 text-cyan-400" />
+      default: return <MessageSquare className="w-4 h-4 text-gray-400" />
     }
   }
 
@@ -301,45 +474,21 @@ export default function TrollCityWall() {
                 <div className="flex items-start gap-4 mb-4">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden flex-shrink-0">
                     {post.avatar_url ? (
-                      <img
-                        src={post.avatar_url}
-                        alt={post.username}
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={post.avatar_url} alt={post.username} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-white font-bold text-lg">
-                        {post.username?.[0]?.toUpperCase() || 'U'}
-                      </span>
+                      <span className="text-white font-bold text-lg">{post.username?.[0]?.toUpperCase() || 'U'}</span>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       {post.username ? (
-                        <ClickableUsername
-                          username={post.username}
-                          userId={post.user_id}
-                          className="font-semibold text-white hover:text-purple-400"
-                        />
+                        <ClickableUsername username={post.username} userId={post.user_id} className="font-semibold text-white hover:text-purple-400" />
                       ) : (
-                        <span className="font-semibold text-gray-500">
-                          Deleted User
-                        </span>
+                        <span className="font-semibold text-gray-500">Deleted User</span>
                       )}
-                      {post.is_admin && (
-                        <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded">
-                          ADMIN
-                        </span>
-                      )}
-                      {post.is_troll_officer && (
-                        <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded">
-                          OFFICER
-                        </span>
-                      )}
-                      {post.is_og_user && (
-                        <span className="px-2 py-0.5 bg-yellow-600 text-white text-xs font-bold rounded">
-                          OG
-                        </span>
-                      )}
+                      {post.is_admin && <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded">ADMIN</span>}
+                      {post.is_troll_officer && <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded">OFFICER</span>}
+                      {post.is_og_user && <span className="px-2 py-0.5 bg-yellow-600 text-white text-xs font-bold rounded">OG</span>}
                       <span className="flex items-center gap-1 text-gray-400 text-xs">
                         {getPostIcon(post.post_type)}
                         {post.post_type.replace('_', ' ')}
@@ -348,6 +497,12 @@ export default function TrollCityWall() {
                     <p className="text-xs text-gray-500">
                       {new Date(post.created_at).toLocaleString()}
                     </p>
+                    {/* Reply indicator */}
+                    {post.reply_to_post_id && (
+                      <p className="text-xs text-purple-400 mt-1">
+                        ↩ Replying to a post
+                      </p>
+                    )}
                   </div>
                   {user && (post.user_id === user.id || post.is_admin || post.is_troll_officer) && (
                     <button
@@ -367,16 +522,12 @@ export default function TrollCityWall() {
                   onClick={() => handlePostClick(post)}
                 >
                   <p className="text-white whitespace-pre-wrap break-words">{post.content}</p>
-                  
-                  {/* Stream Link */}
                   {post.metadata?.stream_id && (
                     <div className="mt-3 flex items-center gap-2 text-purple-400 text-sm">
                       <ExternalLink className="w-4 h-4" />
                       <span>Watch Stream</span>
                     </div>
                   )}
-
-                  {/* Battle Link */}
                   {post.metadata?.battle_id && (
                     <div className="mt-3 flex items-center gap-2 text-purple-400 text-sm">
                       <Sword className="w-4 h-4" />
@@ -385,28 +536,135 @@ export default function TrollCityWall() {
                   )}
                 </div>
 
+                {/* Reactions Display */}
+                {Object.keys(post.reactions || {}).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {Object.entries(post.reactions).map(([type, count]) => {
+                      const reaction = REACTIONS.find(r => r.type === type)
+                      if (!reaction) return null
+                      return (
+                        <span key={type} className="inline-flex items-center gap-1 px-2 py-1 bg-zinc-800 rounded-full text-xs">
+                          {reaction.emoji} {count as number}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Gifts Display */}
+                {Object.keys(post.gifts || {}).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {Object.entries(post.gifts).map(([type, data]) => {
+                      const gift = GIFTS.find(g => g.type === type)
+                      if (!gift) return null
+                      return (
+                        <span key={type} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-900/50 rounded-full text-xs">
+                          {gift.emoji} {(data as { count: number }).count}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
                 {/* Post Actions */}
-                <div className="flex items-center gap-4 pt-4 border-t border-[#2C2C2C]">
+                <div className="flex items-center gap-2 pt-4 border-t border-[#2C2C2C]">
+                  {/* Like Button */}
                   <button
                     type="button"
                     onClick={() => handleLike(post.id)}
                     disabled={!user || likingPosts.has(post.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
                       post.user_liked
                         ? 'bg-pink-600/20 text-pink-400'
                         : 'hover:bg-gray-800 text-gray-400 hover:text-pink-400'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    <Heart className={`w-5 h-5 ${post.user_liked ? 'fill-current' : ''}`} />
-                    <span>{post.likes || 0}</span>
+                    <Heart className={`w-4 h-4 ${post.user_liked ? 'fill-current' : ''}`} />
+                    <span className="text-sm">{post.likes || 0}</span>
                   </button>
+
+                  {/* Reaction Button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReactions(showReactions === post.id ? null : post.id)
+                        setShowGifts(null)
+                      }}
+                      disabled={!user || reactingPosts.has(post.id)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-800 text-gray-400 hover:text-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      <Smile className="w-4 h-4" />
+                    </button>
+                    {/* Reactions Dropdown */}
+                    {showReactions === post.id && (
+                      <div className="absolute bottom-full left-0 mb-2 bg-zinc-800 rounded-lg p-2 flex gap-1 shadow-lg">
+                        {REACTIONS.map(reaction => (
+                          <button
+                            key={reaction.type}
+                            type="button"
+                            onClick={() => handleReaction(post.id, reaction.type)}
+                            className={`w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-700 transition-colors ${post.user_reaction === reaction.type ? 'bg-zinc-700' : ''}`}
+                            title={reaction.label}
+                          >
+                            {reaction.emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Gift Button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowGifts(showGifts === post.id ? null : post.id)
+                        setShowReactions(null)
+                      }}
+                      disabled={!user || sendingGifts.has(post.id)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-800 text-gray-400 hover:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      <Gift className="w-4 h-4" />
+                    </button>
+                    {/* Gifts Dropdown */}
+                    {showGifts === post.id && (
+                      <div className="absolute bottom-full left-0 mb-2 bg-zinc-800 rounded-lg p-2 grid grid-cols-5 gap-1 shadow-lg max-w-xs">
+                        {GIFTS.map(gift => (
+                          <button
+                            key={gift.type}
+                            type="button"
+                            onClick={() => handleGift(post.id, gift.type)}
+                            className="w-10 h-10 flex flex-col items-center justify-center rounded-lg hover:bg-zinc-700 transition-colors"
+                            title={`${gift.name} - ${gift.cost} coins`}
+                          >
+                            <span className="text-lg">{gift.emoji}</span>
+                            <span className="text-[10px] text-gray-400">{gift.cost}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Reply Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowReplyModal(post.id)}
+                    disabled={!user}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Reply className="w-4 h-4" />
+                    <span className="text-sm">Reply</span>
+                  </button>
+
+                  {/* Share Button */}
                   <button
                     type="button"
                     onClick={() => handleShare(post)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-blue-400 transition-colors"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-blue-400 transition-colors ml-auto"
                   >
-                    <Share2 className="w-5 h-5" />
-                    <span>Share</span>
+                    <Share2 className="w-4 h-4" />
+                    <span className="text-sm">Share</span>
                   </button>
                 </div>
               </div>
@@ -426,6 +684,45 @@ export default function TrollCityWall() {
           }}
         />
       )}
+
+      {/* Reply Modal */}
+      {showReplyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md border border-[#2C2C2C]">
+            <h3 className="text-xl font-bold text-white mb-4">Reply to Post</h3>
+            <textarea
+              value={replyContent}
+              onChange={(e) => setReplyContent(e.target.value)}
+              placeholder="Write your reply..."
+              className="w-full h-32 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+            />
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReplyModal(null)
+                  setReplyContent('')
+                }}
+                className="px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReply(showReplyModal)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Post Reply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+function handlePostClick(post: WallPost) {
+  // Placeholder - this needs to be defined in the component
+  console.log('Post clicked:', post)
 }

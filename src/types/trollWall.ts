@@ -23,6 +23,11 @@ export interface WallPost {
   likes: number
   created_at: string
   user_liked?: boolean // Added client-side
+  // New fields for replies, reactions, and gifts
+  reply_to_post_id?: string | null
+  user_reaction?: string | null
+  reactions?: Record<string, number> // reaction_type -> count
+  gifts?: Record<string, { count: number; coins: number }> // gift_type -> data
 }
 
 export interface WallPostMetadata {
