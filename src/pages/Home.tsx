@@ -835,7 +835,8 @@ const HomePageContent = () => {
         }
       } catch (e) {
         console.error(e);
-        if (showLoading) toast.error('Failed to load live streams');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (showLoading && session) toast.error('Failed to load live streams');
       } finally {
         if (showLoading) setLoadingLive(false);
       }
