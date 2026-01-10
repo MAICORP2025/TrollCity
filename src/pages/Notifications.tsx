@@ -6,11 +6,12 @@ import { toast } from 'sonner'
 
 interface Notification {
   id: string
-  type: 'stream_live' | 'join_approved' | 'moderation_alert' | 'new_follower' | 'gift_received' | 'message'
+  type: 'stream_live' | 'join_approved' | 'moderation_alert' | 'new_follower' | 'gift_received' | 'message' | 'announcement'
   title: string
   message: string
   created_at: string
   read: boolean
+  is_dismissed: boolean
   metadata?: any
 }
 
@@ -28,6 +29,7 @@ export default function Notifications() {
         .from('notifications')
         .select('*')
         .eq('user_id', profile.id)
+        .eq('is_dismissed', false)
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -105,10 +107,14 @@ export default function Notifications() {
 
   const dismissNotification = async (id: string) => {
     try {
-      await supabase.from('notifications').delete().eq('id', id)
+      await supabase
+        .from('notifications')
+        .update({ is_dismissed: true, dismissed_at: new Date().toISOString() })
+        .eq('id', id)
       setNotifications(prev => prev.filter(n => n.id !== id))
+      toast.success('Notification dismissed')
     } catch {
-      toast.error('Failed to delete notification')
+      toast.error('Failed to dismiss notification')
     }
   }
 
@@ -120,6 +126,7 @@ export default function Notifications() {
       case 'new_follower': return <User className="w-5 h-5 text-blue-500" />
       case 'gift_received': return <Gift className="w-5 h-5 text-purple-500" />
       case 'message': return <MessageCircle className="w-5 h-5 text-cyan-500" />
+      case 'announcement': return <Bell className="w-5 h-5 text-orange-500" />
       default: return <Bell className="w-5 h-5 text-gray-400" />
     }
   }

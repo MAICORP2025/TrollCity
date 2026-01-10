@@ -1,23 +1,22 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Minus, TrendingUp, TrendingDown } from 'lucide-react'
+import { TrendingUp, TrendingDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
-import { grantAdminCoins, deductAdminCoins, grantAdminLevels, deductAdminLevels, isAdmin } from '../lib/adminCoins'
+import { grantAdminLevels, deductAdminLevels, isAdmin } from '../lib/adminCoins'
 
 interface AdminProfilePanelProps {
   userId: string
   username: string
 }
 
-type Action = 'grant_coins' | 'deduct_coins' | 'grant_levels' | 'deduct_levels' | null
+type Action = 'grant_levels' | 'deduct_levels' | null
 
 export default function AdminProfilePanel({ userId, username }: AdminProfilePanelProps) {
   const { user, profile } = useAuthStore()
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [action, setAction] = useState<Action>(null)
   const [amount, setAmount] = useState<number>(1)
-  const [coinType, setCoinType] = useState<'troll_coins' | 'trollmonds'>('troll_coins')
   const [reason, setReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [targetProfile, setTargetProfile] = useState<any>(null)
@@ -40,7 +39,7 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
     loadTargetProfile()
   }, [userId, user, profile, loadTargetProfile])
 
-  const handleGrant = async (type: 'coins' | 'levels') => {
+  const handleGrant = async () => {
     if (!isAdminUser) {
       toast.error('Admin access required')
       return
@@ -54,32 +53,14 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
     setLoading(true)
 
     try {
-      if (type === 'coins') {
-        const result = await grantAdminCoins(
-          userId,
-          amount,
-          undefined,
-          `Admin grant to ${username}`,
-          coinType
-        )
-        if (result.success) {
-          toast.success(`+${amount} ${coinType} granted to ${username}`)
-          setAmount(1)
-          setReason('')
-          await loadTargetProfile()
-        } else {
-          toast.error(result.error || 'Failed to grant coins')
-        }
+      const result = await grantAdminLevels(userId, amount, reason)
+      if (result.success) {
+        toast.success(`+${amount} Level granted to ${username}`)
+        setAmount(1)
+        setReason('')
+        await loadTargetProfile()
       } else {
-        const result = await grantAdminLevels(userId, amount, reason)
-        if (result.success) {
-          toast.success(`+${amount} Level granted to ${username}`)
-          setAmount(1)
-          setReason('')
-          await loadTargetProfile()
-        } else {
-          toast.error(result.error || 'Failed to grant levels')
-        }
+        toast.error(result.error || 'Failed to grant levels')
       }
     } catch (err: any) {
       toast.error(err.message || 'Action failed')
@@ -89,7 +70,7 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
     }
   }
 
-  const handleDeduct = async (type: 'coins' | 'levels') => {
+  const handleDeduct = async () => {
     if (!isAdminUser) {
       toast.error('Admin access required')
       return
@@ -103,31 +84,14 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
     setLoading(true)
 
     try {
-      if (type === 'coins') {
-        const result = await deductAdminCoins(
-          userId,
-          amount,
-          reason || `Admin deduct from ${username}`,
-          coinType
-        )
-        if (result.success) {
-          toast.success(`-${amount} ${coinType} deducted from ${username}`)
-          setAmount(1)
-          setReason('')
-          await loadTargetProfile()
-        } else {
-          toast.error(result.error || 'Failed to deduct coins')
-        }
+      const result = await deductAdminLevels(userId, amount, reason)
+      if (result.success) {
+        toast.success(`-${amount} Level deducted from ${username}`)
+        setAmount(1)
+        setReason('')
+        await loadTargetProfile()
       } else {
-        const result = await deductAdminLevels(userId, amount, reason)
-        if (result.success) {
-          toast.success(`-${amount} Level deducted from ${username}`)
-          setAmount(1)
-          setReason('')
-          await loadTargetProfile()
-        } else {
-          toast.error(result.error || 'Failed to deduct levels')
-        }
+        toast.error(result.error || 'Failed to deduct levels')
       }
     } catch (err: any) {
       toast.error(err.message || 'Action failed')
@@ -154,7 +118,7 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
           </div>
           <div className="bg-black/50 rounded p-2">
             <div className="text-gray-400">Trollmonds</div>
-            <div className="text-green-400 font-bold">{targetProfile.troll_coins || 0}</div>
+            <div className="text-green-400 font-bold">{targetProfile.trollmonds || 0}</div>
           </div>
           <div className="bg-black/50 rounded p-2">
             <div className="text-gray-400">Level</div>
@@ -166,20 +130,6 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
       {/* Action Buttons */}
       {!action && (
         <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setAction('grant_coins')}
-            className="flex items-center justify-center gap-1 px-3 py-2 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 rounded text-xs font-semibold transition-colors"
-          >
-            <Plus className="w-3 h-3" />
-            Grant Coins
-          </button>
-          <button
-            onClick={() => setAction('deduct_coins')}
-            className="flex items-center justify-center gap-1 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded text-xs font-semibold transition-colors"
-          >
-            <Minus className="w-3 h-3" />
-            Deduct Coins
-          </button>
           <button
             onClick={() => setAction('grant_levels')}
             className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs font-semibold transition-colors"
@@ -198,74 +148,6 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
       )}
 
       {/* Action Forms */}
-      {(action === 'grant_coins' || action === 'deduct_coins') && (
-        <div className="space-y-3 p-3 bg-black/40 rounded">
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Coin Type</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCoinType('troll_coins')}
-                className={`flex-1 px-2 py-1 rounded text-xs font-semibold ${
-                  coinType === 'troll_coins'
-                    ? 'bg-yellow-600 text-yellow-50'
-                    : 'bg-gray-700 text-gray-300'
-                }`}
-              >
-                Troll Coins
-              </button>
-              <button
-                onClick={() => setCoinType('trollmonds')}
-                className={`flex-1 px-2 py-1 rounded text-xs font-semibold ${
-                  coinType === 'trollmonds'
-                    ? 'bg-green-600 text-green-50'
-                    : 'bg-gray-700 text-gray-300'
-                }`}
-              >
-                Trollmonds
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Amount</label>
-            <input
-              type="number"
-              min="1"
-              value={amount}
-              onChange={(e) => setAmount(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Reason (Optional)</label>
-            <input
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g., Compensation, Reward..."
-              className="w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white placeholder-gray-500"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => (action === 'grant_coins' ? handleGrant('coins') : handleDeduct('coins'))}
-              disabled={loading}
-              className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded text-xs font-semibold"
-            >
-              {loading ? 'Processing...' : action === 'grant_coins' ? 'Grant' : 'Deduct'}
-            </button>
-            <button
-              onClick={() => setAction(null)}
-              className="flex-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs font-semibold"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {(action === 'grant_levels' || action === 'deduct_levels') && (
         <div className="space-y-3 p-3 bg-black/40 rounded">
           <div>
@@ -292,7 +174,7 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
 
           <div className="flex gap-2">
             <button
-              onClick={() => (action === 'grant_levels' ? handleGrant('levels') : handleDeduct('levels'))}
+              onClick={() => action === 'grant_levels' ? handleGrant() : handleDeduct()}
               disabled={loading}
               className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded text-xs font-semibold"
             >

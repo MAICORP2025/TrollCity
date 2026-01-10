@@ -864,6 +864,10 @@ export default function AdminDashboard() {
     // Implement emergency stop logic
   }
 
+  const handleBroadcastMessage = () => {
+    navigate('/admin/send-notifications')
+  }
+
   const handleSendNotifications = () => {
     navigate('/admin/send-notifications')
   }

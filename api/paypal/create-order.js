@@ -23,20 +23,24 @@ export default async function handler(req, res) {
         : new paypal.core.LiveEnvironment(clientId, process.env.PAYPAL_CLIENT_SECRET)
     );
 
-    const { amount, coins, user_id } = req.body;
-    console.log('Create Order Request:', { amount, coins, user_id });
+    const { amount, coins, user_id, package_id } = req.body;
+    console.log('Create Order Request:', { amount, coins, user_id, package_id });
+
+    const coinAmount = parseInt(coins, 10);
+    const packageId = package_id || 'default';
 
     const request = new paypal.orders.OrdersCreateRequest();
     request.prefer("return=representation");
     request.requestBody({
-      intent: "AUTHORIZE",
+      intent: "CAPTURE",
       purchase_units: [
         {
           amount: {
             currency_code: "USD",
             value: amount.toString(),
           },
-          custom_id: `${user_id}|${coins}`,
+          custom_id: `uid:${user_id}|pkg:${packageId}|coins:${coinAmount}`,
+          description: `Troll Coins Package: ${coinAmount}`,
         },
       ],
     });

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { WallPost, WallPostType } from '../types/trollWall'
 import CreatePostModal from '../components/trollWall/CreatePostModal'
+import GiftModal from '../components/trollWall/GiftModal'
 import ClickableUsername from '../components/ClickableUsername'
 
 // Available reactions
@@ -40,7 +41,7 @@ const GIFTS = [
 
 export default function TrollCityWall() {
   const { user } = useAuthStore()
-  const navigate = useNavigate()
+  const _navigate = useNavigate()
   const [posts, setPosts] = useState<WallPost[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -48,9 +49,9 @@ export default function TrollCityWall() {
   const [reactingPosts, setReactingPosts] = useState<Set<string>>(new Set())
   const [sendingGifts, setSendingGifts] = useState<Set<string>>(new Set())
   const [showReactions, setShowReactions] = useState<string | null>(null)
-  const [showGifts, setShowGifts] = useState<string | null>(null)
   const [showReplyModal, setShowReplyModal] = useState<string | null>(null)
   const [replyContent, setReplyContent] = useState('')
+  const [giftModalPostId, setGiftModalPostId] = useState<string | null>(null)
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -66,9 +67,9 @@ export default function TrollCityWall() {
       if (data) {
         const postIds = data.map(p => p.id)
         let likedPostIds = new Set<string>()
-        let userReactionTypes: Record<string, string> = {}
-        let reactionsSummary: Record<string, Record<string, number>> = {}
-        let giftsSummary: Record<string, Record<string, { count: number, coins: number }>> = {}
+        const userReactionTypes: Record<string, string> = {}
+        const reactionsSummary: Record<string, Record<string, number>> = {}
+        const giftsSummary: Record<string, Record<string, { count: number, coins: number }>> = {}
 
         if (user?.id) {
           // Check user likes
@@ -332,7 +333,6 @@ export default function TrollCityWall() {
       } else {
         toast.error(data?.error || 'Failed to send gift')
       }
-      setShowGifts(null)
     } catch (err: any) {
       console.error('Error sending gift:', err)
       toast.error('Failed to send gift')
@@ -357,7 +357,7 @@ export default function TrollCityWall() {
     }
 
     try {
-      const { data, error } = await supabase
+      const { data: _data, error } = await supabase
         .rpc('create_wall_post_reply', {
           p_original_post_id: postId,
           p_user_id: user.id,
@@ -384,16 +384,24 @@ export default function TrollCityWall() {
     }
 
     try {
-      const { data: userProfile } = await supabase
+      const { data: userProfile, error: profileError } = await supabase
         .from('user_profiles')
         .select('role, is_admin, is_troll_officer, is_lead_officer')
         .eq('id', user.id)
         .single()
 
+      if (profileError) {
+        console.error('Error fetching profile for delete:', profileError)
+        toast.error('Failed to verify delete permissions')
+        return
+      }
+
       const isStaff = userProfile?.is_admin || 
                      userProfile?.is_troll_officer || 
                      userProfile?.is_lead_officer || 
                      userProfile?.role === 'admin'
+
+      console.log('Delete permissions - isStaff:', isStaff, 'userId:', user.id, 'postId:', postId)
 
       let query = supabase.from('troll_wall_posts').delete().eq('id', postId)
 
@@ -403,7 +411,11 @@ export default function TrollCityWall() {
 
       const { error } = await query
 
-      if (error) throw error
+      if (error) {
+        console.error('Delete error:', error)
+        toast.error('Failed to delete post: ' + error.message)
+        return
+      }
 
       toast.success('Post deleted')
       setPosts(prev => prev.filter(p => p.id !== postId))
@@ -539,7 +551,7 @@ export default function TrollCityWall() {
                 {/* Reactions Display */}
                 {Object.keys(post.reactions || {}).length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-3">
-                    {Object.entries(post.reactions).map(([type, count]) => {
+                    {Object.entries(post.reactions || {}).map(([type, count]) => {
                       const reaction = REACTIONS.find(r => r.type === type)
                       if (!reaction) return null
                       return (
@@ -554,12 +566,12 @@ export default function TrollCityWall() {
                 {/* Gifts Display */}
                 {Object.keys(post.gifts || {}).length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-3">
-                    {Object.entries(post.gifts).map(([type, data]) => {
+                    {Object.entries(post.gifts || {}).map(([type, giftData]) => {
                       const gift = GIFTS.find(g => g.type === type)
                       if (!gift) return null
                       return (
                         <span key={type} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-900/50 rounded-full text-xs">
-                          {gift.emoji} {(data as { count: number }).count}
+                          {gift.emoji} {(giftData as { count: number }).count}
                         </span>
                       )
                     })}
@@ -589,7 +601,6 @@ export default function TrollCityWall() {
                       type="button"
                       onClick={() => {
                         setShowReactions(showReactions === post.id ? null : post.id)
-                        setShowGifts(null)
                       }}
                       disabled={!user || reactingPosts.has(post.id)}
                       className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-800 text-gray-400 hover:text-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -614,36 +625,16 @@ export default function TrollCityWall() {
                     )}
                   </div>
 
-                  {/* Gift Button */}
+                  {/* Gift Button with GiftBox Modal */}
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => {
-                        setShowGifts(showGifts === post.id ? null : post.id)
-                        setShowReactions(null)
-                      }}
+                      onClick={() => setGiftModalPostId(post.id)}
                       disabled={!user || sendingGifts.has(post.id)}
                       className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-800 text-gray-400 hover:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       <Gift className="w-4 h-4" />
                     </button>
-                    {/* Gifts Dropdown */}
-                    {showGifts === post.id && (
-                      <div className="absolute bottom-full left-0 mb-2 bg-zinc-800 rounded-lg p-2 grid grid-cols-5 gap-1 shadow-lg max-w-xs">
-                        {GIFTS.map(gift => (
-                          <button
-                            key={gift.type}
-                            type="button"
-                            onClick={() => handleGift(post.id, gift.type)}
-                            className="w-10 h-10 flex flex-col items-center justify-center rounded-lg hover:bg-zinc-700 transition-colors"
-                            title={`${gift.name} - ${gift.cost} coins`}
-                          >
-                            <span className="text-lg">{gift.emoji}</span>
-                            <span className="text-[10px] text-gray-400">{gift.cost}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   {/* Reply Button */}
@@ -717,6 +708,17 @@ export default function TrollCityWall() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Gift Modal */}
+      {giftModalPostId && (
+        <GiftModal
+          postId={giftModalPostId}
+          onClose={() => setGiftModalPostId(null)}
+          onGiftSent={(giftType, _cost) => {
+            handleGift(giftModalPostId, giftType)
+          }}
+        />
       )}
     </div>
   )

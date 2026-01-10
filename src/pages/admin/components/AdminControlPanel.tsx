@@ -1,16 +1,12 @@
 import { useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
-import { grantAdminCoins } from '../../../lib/adminCoins'
 import { toast } from 'sonner'
 import { 
-  Coins, 
   User, 
-  XCircle, 
   Award, 
   CheckCircle, 
   X, 
-  Gift,
   AlertTriangle
 } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
@@ -34,7 +30,6 @@ export default function AdminControlPanel() {
     role?: string
     rgb_username_expires_at?: string
   } | null>(null)
-  const [amount, setAmount] = useState(0)
   const [level, setLevel] = useState(1)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -92,7 +87,7 @@ export default function AdminControlPanel() {
       return
     }
 
-    if (!selectedUser && action !== 'gift_all') {
+    if (!selectedUser) {
       toast.error('Please select a user')
       return
     }
@@ -109,78 +104,6 @@ export default function AdminControlPanel() {
       let result: { success: boolean; error?: string; message?: string } = { success: false }
 
       switch (action) {
-        case 'grant_coins':
-          if (amount <= 0) {
-            toast.error('Please enter an amount')
-            setLoading(false)
-            return
-          }
-          result = await grantAdminCoins(
-            selectedUser!.id,
-            amount,
-            undefined,
-            `${amount.toLocaleString()} coins (Admin Grant)`
-          )
-          if (result.success) {
-            setMessage(`Successfully granted ${amount.toLocaleString()} coins to ${selectedUser!.username}`)
-            toast.success(`Granted ${amount.toLocaleString()} coins to ${selectedUser!.username}`)
-            setAmount(0)
-          }
-          break
-
-        case 'zero_coins': {
-          if (!selectedUser) {
-            toast.error('Please select a user')
-            setLoading(false)
-            return
-          }
-          // Get current balance
-          const { data: currentProfile } = await supabase
-            .from('user_profiles')
-            .select('troll_coins')
-            .eq('id', selectedUser.id)
-            .single()
-
-          if (currentProfile) {
-            const totalCoins = currentProfile.troll_coins || 0
-
-            // Set both balances to 0
-            const { error: updateError } = await supabase
-              .from('user_profiles')
-              .update({
-                troll_coins: 0,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', selectedUser.id)
-
-            if (updateError) throw updateError
-
-            // Log transaction
-            await supabase
-              .from('coin_transactions')
-              .insert({
-                user_id: selectedUser.id,
-                type: 'admin_grant',
-                amount: -totalCoins,
-                coin_type: 'paid',
-                description: `Admin zeroed coins: ${totalCoins.toLocaleString()} coins removed`,
-                metadata: {
-                  action: 'zero_coins',
-                  previous_balance: totalCoins,
-                  admin_id: user.id
-                },
-                balance_after: 0,
-                status: 'completed',
-                created_at: new Date().toISOString()
-              })
-
-            result = { success: true, message: `Zeroed ${totalCoins.toLocaleString()} coins for ${selectedUser.username}` }
-            setMessage(result.message)
-            toast.success(result.message)
-          }
-          break
-        }
-
         case 'set_user_level': {
           if (!selectedUser) {
             toast.error('Please select a user')
@@ -302,69 +225,6 @@ export default function AdminControlPanel() {
           break
         }
 
-        case 'gift_all': {
-          if (amount <= 0) {
-            toast.error('Please enter an amount')
-            setLoading(false)
-            return
-          }
-
-          // Confirm before gifting to all users
-          const confirmed = window.confirm(
-            `Are you sure you want to gift ${amount.toLocaleString()} coins to ALL users? This action cannot be undone.`
-          )
-
-          if (!confirmed) {
-            setLoading(false)
-            return
-          }
-
-          // Get all user IDs
-          const { data: allUsers, error: usersError } = await supabase
-            .from('user_profiles')
-            .select('id, username')
-
-          if (usersError) throw usersError
-
-          if (!allUsers || allUsers.length === 0) {
-            toast.error('No users found')
-            setLoading(false)
-            return
-          }
-
-          let successCount = 0
-          let errorCount = 0
-
-          // Grant coins to each user
-          for (const targetUser of allUsers) {
-            try {
-              const grantResult = await grantAdminCoins(
-                targetUser.id,
-                amount,
-                undefined,
-                `${amount.toLocaleString()} coins (Admin Gift to All)`
-              )
-              if (grantResult.success) {
-                successCount++
-              } else {
-                errorCount++
-              }
-            } catch (err) {
-              console.error(`Error granting coins to ${targetUser.username}:`, err)
-              errorCount++
-            }
-          }
-
-          result = {
-            success: successCount > 0,
-            message: `Gifted ${amount.toLocaleString()} coins to ${successCount} users${errorCount > 0 ? ` (${errorCount} errors)` : ''}`
-          }
-          setMessage(result.message)
-          toast.success(result.message)
-          setAmount(0)
-          break
-        }
-
         default:
           result = { success: false, error: 'Unknown action' }
       }
@@ -419,11 +279,6 @@ export default function AdminControlPanel() {
                   {selectedUser.email && (
                     <div className="text-xs text-gray-400">{selectedUser.email}</div>
                   )}
-                  {selectedUser.troll_coins !== undefined && (
-                    <div className="text-xs text-yellow-400">
-                      Coins: {selectedUser.troll_coins.toLocaleString()}
-                    </div>
-                  )}
                 </div>
               </div>
               <button
@@ -456,54 +311,48 @@ export default function AdminControlPanel() {
 
               {searchResults.length > 0 && (
                 <div className="bg-zinc-900/90 border border-gray-700 rounded-lg max-h-64 overflow-y-auto">
-                  {searchResults.map((u) => {
-                    const totalCoins = u.troll_coins || 0
-                    return (
-                      <div
-                        key={u.id}
-                        onClick={() => {
-                          setSelectedUser({
-                            id: u.id,
-                            username: u.username,
-                            email: u.email,
-                            troll_coins: totalCoins,
-                            role: u.role,
-                            rgb_username_expires_at: u.rgb_username_expires_at
-                          })
-                          setSearchResults([])
-                          setSearchUsername('')
-                        }}
-                        className="p-3 bg-black/30 hover:bg-purple-500/20 border-b border-gray-700 last:border-b-0 cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-400" />
-                            <div>
-                              <div className="font-semibold flex items-center gap-2">
-                                <span className={u.rgb_username_expires_at && new Date(u.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}>
-                                  {u.username}
+                  {searchResults.map((u) => (
+                    <div
+                      key={u.id}
+                      onClick={() => {
+                        setSelectedUser({
+                          id: u.id,
+                          username: u.username,
+                          email: u.email,
+                          troll_coins: u.troll_coins || 0,
+                          role: u.role,
+                          rgb_username_expires_at: u.rgb_username_expires_at
+                        })
+                        setSearchResults([])
+                        setSearchUsername('')
+                      }}
+                      className="p-3 bg-black/30 hover:bg-purple-500/20 border-b border-gray-700 last:border-b-0 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-gray-400" />
+                          <div>
+                            <div className="font-semibold flex items-center gap-2">
+                              <span className={u.rgb_username_expires_at && new Date(u.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}>
+                                {u.username}
+                              </span>
+                              {u.role && (
+                                <span className="text-xs px-1.5 py-0.5 bg-purple-500/30 rounded text-purple-300">
+                                  {u.role}
                                 </span>
-                                {u.role && (
-                                  <span className="text-xs px-1.5 py-0.5 bg-purple-500/30 rounded text-purple-300">
-                                    {u.role}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xs text-gray-400">{u.email}</div>
+                              )}
                             </div>
+                            <div className="text-xs text-gray-400">{u.email}</div>
                           </div>
-                          <div className="text-right">
-                            <div className="text-sm font-semibold text-yellow-400">
-                              {totalCoins.toLocaleString()} coins
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Total: {totalCoins.toLocaleString()}
-                            </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold text-yellow-400">
+                            {(u.troll_coins || 0).toLocaleString()} coins
                           </div>
                         </div>
                       </div>
-                    )
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -514,18 +363,6 @@ export default function AdminControlPanel() {
               )}
             </div>
           )}
-        </div>
-
-        {/* Amount Input */}
-        <div className="mb-4">
-          <label className="block text-sm font-semibold mb-2">Amount (Coins)</label>
-          <input
-            type="number"
-            value={amount || ''}
-            onChange={(e) => setAmount(Number(e.target.value))}
-            placeholder="Enter coin amount..."
-            className="w-full px-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-          />
         </div>
 
         {/* Level Input */}
@@ -543,24 +380,6 @@ export default function AdminControlPanel() {
 
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => runAction('grant_coins')}
-            disabled={loading || !selectedUser || amount <= 0}
-            className="px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            <Coins className="w-5 h-5" />
-            Grant Coins
-          </button>
-
-          <button
-            onClick={() => runAction('zero_coins')}
-            disabled={loading || !selectedUser}
-            className="px-4 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            <XCircle className="w-5 h-5" />
-            Zero Coins
-          </button>
-
           <button
             onClick={() => runAction('set_user_level')}
             disabled={loading || !selectedUser}
@@ -588,15 +407,6 @@ export default function AdminControlPanel() {
             <X className="w-5 h-5" />
             Reject Officer
           </button>
-
-          <button
-            onClick={() => runAction('gift_all')}
-            disabled={loading || amount <= 0}
-            className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 col-span-2"
-          >
-            <Gift className="w-5 h-5" />
-            Gift Coins to ALL Users
-          </button>
         </div>
 
         {loading && (
@@ -608,7 +418,7 @@ export default function AdminControlPanel() {
 
         {message && (
           <div className={`mt-4 p-4 rounded-lg ${
-            message.includes('Success') || message.includes('granted') || message.includes('Set') || message.includes('Approved') || message.includes('Rejected') || message.includes('Gifted')
+            message.includes('Success') || message.includes('Set') || message.includes('Approved') || message.includes('Rejected')
               ? 'bg-green-600/50 border border-green-500/30 text-green-200'
               : 'bg-red-600/50 border border-red-500/30 text-red-200'
           }`}>
@@ -625,8 +435,6 @@ export default function AdminControlPanel() {
             <h3 className="font-semibold mb-2">⚠️ Admin Actions Warning</h3>
             <ul className="text-sm text-gray-300 space-y-1">
               <li>• All actions are logged and auditable</li>
-              <li>• "Zero Coins" sets both paid and free balances to 0</li>
-              <li>• "Gift to All" affects every user in the system</li>
               <li>• Application actions require a pending application</li>
               <li>• Use with caution - these actions cannot be easily undone</li>
             </ul>
@@ -636,4 +444,3 @@ export default function AdminControlPanel() {
     </div>
   )
 }
-

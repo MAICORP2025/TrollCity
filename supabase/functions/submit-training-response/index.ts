@@ -43,7 +43,8 @@ Deno.serve(async (req) => {
     }
 
     const officerId = authUser.user.id;
-    const { scenarioId, actionTaken, responseTime } = await req.json();
+    const body = await req.json() as { scenarioId?: string; actionTaken?: string; responseTime?: number };
+    const { scenarioId, actionTaken, responseTime } = body;
 
     if (!scenarioId || !actionTaken) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { 
@@ -97,22 +98,40 @@ Deno.serve(async (req) => {
 
     let promoted = false;
     if (sessions && sessions.length > 0) {
-      const totalPoints = sessions.reduce((sum, s) => sum + (s.points_earned || 0), 0);
-      const correctCount = sessions.filter(s => s.is_correct).length;
+      const totalPoints = sessions.reduce((sum: number, s: { points_earned?: number }) => sum + (s.points_earned || 0), 0);
+      const correctCount = sessions.filter((s: { is_correct?: boolean }) => s.is_correct).length;
       const accuracy = (correctCount / sessions.length) * 100;
 
       if (accuracy >= 80 && totalPoints >= 150) {
         // Promote to officer
-        const { error: promoteError } = await supabase
-          .from("user_profiles")
-          .update({ 
-            role: 'troll_officer',
-            is_troll_officer: true 
-          })
-          .eq("id", officerId);
+        console.log('Officer qualifies for promotion, updating profile...');
+        
+        // Use RPC to update profile to avoid JSON coercion issues
+        const { data: _updateResult, error: promoteError } = await supabase.rpc(
+          'update_officer_promotion',
+          { p_user_id: officerId }
+        );
+        
+        if (promoteError) {
+          console.error('Profile update error:', promoteError);
+          // Fallback: try direct update
+          const { error: fallbackError } = await supabase
+            .from("user_profiles")
+            .update({ 
+              role: 'troll_officer',
+              is_troll_officer: true 
+            })
+            .eq("id", officerId);
           
-        if (!promoteError) {
+          if (fallbackError) {
+            console.error('Fallback profile update error:', fallbackError);
+          } else {
+            promoted = true;
+            console.log('Profile updated via fallback');
+          }
+        } else {
           promoted = true;
+          console.log('Profile updated successfully');
         }
       }
     }

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
-import { NotificationType } from '../../lib/sendNotification';
 import { toast } from 'sonner';
 import { 
   Send, 
@@ -10,7 +9,7 @@ import {
   Calendar,
   Trash2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
 } from 'lucide-react';
 
 interface ScheduledAnnouncement {
@@ -49,10 +48,15 @@ const Announcements: React.FC = () => {
   const [scheduledAnnouncements, setScheduledAnnouncements] = useState<ScheduledAnnouncement[]>([]);
   const [broadcastHistory, setBroadcastHistory] = useState<AdminBroadcast[]>([]);
   
+  // Time frame filter
+  const [timeFrame, setTimeFrame] = useState<'all' | '1day' | '1week'>('all');
+  const [deletingAll, setDeletingAll] = useState(false);
+  
   // Load scheduled announcements on mount
   useEffect(() => {
     loadScheduledAnnouncements();
     loadBroadcastHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadScheduledAnnouncements = async () => {
@@ -76,11 +80,23 @@ const Announcements: React.FC = () => {
   const loadBroadcastHistory = async () => {
     setLoadingHistory(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('admin_broadcasts')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100);
+
+      // Apply time frame filter
+      const now = new Date();
+      if (timeFrame === '1day') {
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        query = query.gte('created_at', oneDayAgo.toISOString());
+      } else if (timeFrame === '1week') {
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        query = query.gte('created_at', oneWeekAgo.toISOString());
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setBroadcastHistory(data || []);
@@ -119,28 +135,43 @@ const Announcements: React.FC = () => {
         return;
       }
 
-      // Send notifications to all selected users
-      const notifications = users.map(user => ({
-        user_id: user.id,
-        type: 'message' as NotificationType,
-        title: '📢 Admin Announcement',
-        message: immediateMessage,
-        metadata: { announcement_type: 'immediate', target_audience: targetAudience },
-        read: false,
-        created_at: new Date().toISOString(),
-      }));
+      const userIds = users.map(user => user.id);
 
-      const { error: notifError } = await supabase
-        .from('notifications')
-        .insert(notifications);
+      // Call the edge function to send the announcement
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
 
-      if (notifError) throw notifError;
+      if (!token) throw new Error("Not logged in");
 
-      toast.success(`Announcement sent to ${users.length} users`);
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-announcement`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: '📢 Admin Announcement',
+            body: immediateMessage,
+            user_ids: userIds,
+          }),
+        }
+      );
+
+      const out = await res.json();
+
+      if (!res.ok) {
+        console.error("Edge function error:", out);
+        throw new Error(out?.message || "Failed to send announcement");
+      }
+
+      console.log("Announcement sent:", out);
+      alert(`✅ Announcement sent to ${out.count} users!`);
       setImmediateMessage('');
     } catch (error) {
-      console.error('Error sending immediate announcement:', error);
-      toast.error('Failed to send announcement');
+      console.error("Error sending immediate announcement:", error);
+      toast.error("Failed to send announcement");
     } finally {
       setSending(false);
     }
@@ -228,6 +259,77 @@ const Announcements: React.FC = () => {
     } catch (error) {
       console.error('Error deleting scheduled announcement:', error);
       toast.error('Failed to delete scheduled announcement');
+    }
+  };
+
+  const deleteBroadcast = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this broadcast?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('admin_broadcasts')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success('Broadcast deleted');
+      loadBroadcastHistory();
+    } catch (error) {
+      console.error('Error deleting broadcast:', error);
+      toast.error('Failed to delete broadcast');
+    }
+  };
+
+  const deleteAllBroadcasts = async () => {
+    if (!confirm('Are you sure you want to DELETE ALL broadcasts? This cannot be undone!')) {
+      return;
+    }
+    
+    if (!confirm('This will permanently delete all broadcasts. Continue?')) {
+      return;
+    }
+
+    setDeletingAll(true);
+    try {
+      // Get all broadcast IDs
+      const { data: broadcasts, error: fetchError } = await supabase
+        .from('admin_broadcasts')
+        .select('id');
+      
+      if (fetchError) throw fetchError;
+      
+      if (!broadcasts || broadcasts.length === 0) {
+        toast.info('No broadcasts to delete');
+        return;
+      }
+
+      // Delete all broadcasts in batches
+      const batchSize = 100;
+      let deletedCount = 0;
+      
+      for (let i = 0; i < broadcasts.length; i += batchSize) {
+        const batch = broadcasts.slice(i, i + batchSize);
+        const ids = batch.map(b => b.id);
+        
+        const { error: deleteError } = await supabase
+          .from('admin_broadcasts')
+          .delete()
+          .in('id', ids);
+          
+        if (deleteError) throw deleteError;
+        deletedCount += ids.length;
+      }
+
+      toast.success(`Deleted ${deletedCount} broadcasts`);
+      loadBroadcastHistory();
+    } catch (error) {
+      console.error('Error deleting all broadcasts:', error);
+      toast.error('Failed to delete all broadcasts');
+    } finally {
+      setDeletingAll(false);
     }
   };
 
@@ -485,41 +587,87 @@ const Announcements: React.FC = () => {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="bg-black/60 border border-purple-600/30 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
               <h2 className="text-xl font-semibold">Broadcast History</h2>
+              
+              {/* Time Frame Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-400">Time Frame:</span>
+                <select
+                  value={timeFrame}
+                  onChange={(e) => {
+                    setTimeFrame(e.target.value as any);
+                    loadBroadcastHistory();
+                  }}
+                  className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm"
+                >
+                  <option value="all">All Time</option>
+                  <option value="1day">Last 24 Hours</option>
+                  <option value="1week">Last 7 Days</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 mb-4">
               <button
                 onClick={loadBroadcastHistory}
                 disabled={loadingHistory}
-                className="text-purple-400 hover:text-purple-300"
+                className="text-purple-400 hover:text-purple-300 text-sm"
               >
                 {loadingHistory ? 'Loading...' : 'Refresh'}
               </button>
+              
+              {broadcastHistory.length > 0 && (
+                <button
+                  onClick={deleteAllBroadcasts}
+                  disabled={deletingAll}
+                  className="ml-auto text-red-400 hover:text-red-300 text-sm flex items-center gap-1"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {deletingAll ? 'Deleting...' : 'Delete All'}
+                </button>
+              )}
             </div>
 
             {loadingHistory ? (
               <div className="text-center py-8 text-gray-400">Loading broadcast history...</div>
             ) : broadcastHistory.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">No broadcast history</div>
+              <div className="text-center py-8 text-gray-400">No broadcast history found</div>
             ) : (
-              <div className="space-y-3">
-                {broadcastHistory.map((broadcast) => (
-                  <div
-                    key={broadcast.id}
-                    className="bg-gray-800/50 border border-gray-600 rounded-lg p-4"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <MessageSquare className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm text-gray-400">
-                        {formatDateTime(broadcast.created_at)}
-                      </span>
+              <>
+                <div className="text-sm text-gray-400 mb-3">
+                  Showing {broadcastHistory.length} broadcast{broadcastHistory.length !== 1 ? 's' : ''}
+                </div>
+                <div className="space-y-3">
+                  {broadcastHistory.map((broadcast) => (
+                    <div
+                      key={broadcast.id}
+                      className="bg-gray-800/50 border border-gray-600 rounded-lg p-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 mb-2">
+                          <MessageSquare className="w-4 h-4 text-blue-400" />
+                          <span className="text-sm text-gray-400">
+                            {formatDateTime(broadcast.created_at)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => deleteBroadcast(broadcast.id)}
+                          className="text-red-400 hover:text-red-300 p-1"
+                          title="Delete broadcast"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-white">{broadcast.message}</p>
+                      <p className="text-gray-400 text-sm mt-2">
+                        Admin ID: {broadcast.admin_id}
+                      </p>
                     </div>
-                    <p className="text-white">{broadcast.message}</p>
-                    <p className="text-gray-400 text-sm mt-2">
-                      Admin ID: {broadcast.admin_id}
-                    </p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}

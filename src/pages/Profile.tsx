@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import LiveAvatar from '../components/LiveAvatar';
-import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail } from 'lucide-react';
+import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
@@ -30,6 +30,8 @@ export default function Profile() {
   const [imageFiles, setImageFiles] = useState<FileList | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [creatingPost, setCreatingPost] = useState(false);
+  const [announcementsEnabled, setAnnouncementsEnabled] = useState(true);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   
 
   const fetchInventory = async (uid: string) => {
@@ -356,6 +358,33 @@ export default function Profile() {
   const isOwnProfile = currentUser?.id === profile?.id;
   const canSeeFullProfile = viewerRole === 'admin' || viewerRole === 'lead_troll_officer' || viewerRole === 'secretary' || isOwnProfile;
 
+  // Load announcement preferences
+  useEffect(() => {
+    if (isOwnProfile && profile?.announcements_enabled !== undefined) {
+      setAnnouncementsEnabled(profile.announcements_enabled);
+    }
+  }, [isOwnProfile, profile]);
+
+  const toggleAnnouncements = async () => {
+    if (!currentUser) return;
+    setSavingPreferences(true);
+    try {
+      const newValue = !announcementsEnabled;
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ announcements_enabled: newValue })
+        .eq('id', currentUser.id);
+      
+      if (error) throw error;
+      setAnnouncementsEnabled(newValue);
+      toast.success(newValue ? 'Announcements enabled' : 'Announcements disabled');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to update preferences');
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
+
   const fetchPosts = useCallback(async () => {
     if (!profile?.id) return;
     setPostsLoading(true);
@@ -660,6 +689,9 @@ export default function Profile() {
                <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'inventory' ? 'border-purple-500 text-purple-500' : 'border-transparent text-gray-400 hover:text-gray-300'}`}>Inventory & Perks</button>
                <button onClick={() => setActiveTab('earnings')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'earnings' ? 'border-purple-500 text-purple-500' : 'border-transparent text-gray-400 hover:text-gray-300'}`}>Earnings</button>
                <button onClick={() => setActiveTab('purchases')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'purchases' ? 'border-purple-500 text-purple-500' : 'border-transparent text-gray-400 hover:text-gray-300'}`}>Purchase History</button>
+               {isOwnProfile && (
+                 <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'settings' ? 'border-purple-500 text-purple-500' : 'border-transparent text-gray-400 hover:text-gray-300'}`}>Settings</button>
+               )}
              </>
            )}
         </div>
@@ -913,6 +945,42 @@ export default function Profile() {
                       <div className="p-8 text-center text-gray-500">No recent purchases found.</div>
                    )}
                 </div>
+             </div>
+           )}
+
+           {activeTab === 'settings' && isOwnProfile && (
+             <div className="space-y-6">
+               <h3 className="text-lg font-bold mb-4">Notification Settings</h3>
+               
+               {/* Announcements Toggle */}
+               <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
+                 <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                     {announcementsEnabled ? (
+                       <Bell className="w-6 h-6 text-green-400" />
+                     ) : (
+                       <BellOff className="w-6 h-6 text-gray-400" />
+                     )}
+                     <div>
+                       <h4 className="font-medium text-white">Admin Announcements</h4>
+                       <p className="text-sm text-gray-400">Receive notifications from administrators</p>
+                     </div>
+                   </div>
+                   <button
+                     onClick={toggleAnnouncements}
+                     disabled={savingPreferences}
+                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                       announcementsEnabled ? 'bg-green-500' : 'bg-gray-600'
+                     }`}
+                   >
+                     <span
+                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                         announcementsEnabled ? 'translate-x-6' : 'translate-x-1'
+                       }`}
+                     />
+                   </button>
+                 </div>
+               </div>
              </div>
            )}
         </div>

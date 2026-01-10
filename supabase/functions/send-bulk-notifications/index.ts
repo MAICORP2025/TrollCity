@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -15,8 +15,12 @@ interface NotificationRequest {
   type: string;
   title: string;
   message: string;
-  metadata?: Record<string, any>;
-  targetUserIds?: string[]; // If empty, send to all users
+  metadata?: Record<string, unknown>;
+  targetUserIds?: string[];
+}
+
+interface UserProfile {
+  id: string;
 }
 
 serve(async (req: Request) => {
@@ -56,7 +60,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: cors });
     }
 
-    const body: NotificationRequest = await req.json();
+    const body = await req.json() as NotificationRequest;
     const { type, title, message, metadata = {}, targetUserIds } = body;
 
     if (!type || !title || !message) {
@@ -79,7 +83,7 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: "Failed to fetch users" }), { status: 500, headers: cors });
       }
 
-      userIds = users?.map(u => u.id) ?? [];
+      userIds = users?.map((u: UserProfile) => u.id) ?? [];
     }
 
     if (userIds.length === 0) {
@@ -97,30 +101,42 @@ serve(async (req: Request) => {
       title,
       message,
       metadata,
-      read: false,
+      is_read: false,
       created_at: new Date().toISOString(),
     }));
 
-    // Insert in batches to avoid limits
+    // Insert using RPC function (bypasses RLS)
     const BATCH_SIZE = 1000;
     let insertedCount = 0;
     let errorCount = 0;
 
     for (let i = 0; i < notifications.length; i += BATCH_SIZE) {
       const batch = notifications.slice(i, i + BATCH_SIZE);
-      const { error: insertErr } = await supabase
-        .from("notifications")
-        .insert(batch);
+      
+      // Use RPC function for bulk insert
+      const { error: rpcErr } = await supabase.rpc("bulk_create_notifications", {
+        p_notifications: JSON.stringify(batch),
+      });
 
-      if (insertErr) {
-        console.error("Error inserting notifications batch:", insertErr);
-        errorCount += batch.length;
+      if (rpcErr) {
+        console.error("Error inserting notifications via RPC:", rpcErr);
+        // Fallback to direct insert if RPC fails
+        const { error: insertErr } = await supabase
+          .from("notifications")
+          .insert(batch);
+
+        if (insertErr) {
+          console.error("Error inserting notifications batch:", insertErr);
+          errorCount += batch.length;
+        } else {
+          insertedCount += batch.length;
+        }
       } else {
         insertedCount += batch.length;
       }
     }
 
-    console.log(`✅ Bulk notifications: ${insertedCount} inserted, ${errorCount} failed`);
+    console.log(`Bulk notifications: ${insertedCount} inserted, ${errorCount} failed`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -129,8 +145,9 @@ serve(async (req: Request) => {
       failedCount: errorCount
     }), { status: 200, headers: cors });
 
-  } catch (e: any) {
+  } catch (e) {
     console.error("Server error:", e);
-    return new Response(JSON.stringify({ error: "Internal server error", details: e.message }), { status: 500, headers: cors });
+    const errorMessage = e instanceof Error ? e.message : "Unknown error";
+    return new Response(JSON.stringify({ error: "Internal server error", details: errorMessage }), { status: 500, headers: cors });
   }
 });

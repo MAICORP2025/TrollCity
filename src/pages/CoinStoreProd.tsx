@@ -1,18 +1,20 @@
 // src/pages/CoinStoreProd.tsx
-// Production-ready PayPal coin purchase component
+// Production-ready PayPal coin purchase component with centralized fulfillment
 import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { Loader2, AlertCircle, CheckCircle, Coins } from 'lucide-react'
 
-// Declare PayPal globally from script injection
+// Test function for debugging - call from browser console:
+// window.testPayPalFulfillment('YOUR_ORDER_ID')
 declare global {
   interface Window {
-    paypal: any
-    testPayPalCapture: (orderId: string) => Promise<void>
+    testPayPalFulfillment: (orderId: string) => Promise<void>
   }
 }
+
+import type { PayPalNamespace } from '@paypal/paypal-js'
 
 interface CoinPackage {
   id: string
@@ -23,12 +25,15 @@ interface CoinPackage {
   is_active: boolean
 }
 
-interface CaptureResponse {
+interface FulfillResponse {
   success: boolean
-  coinsAdded: number
   orderId: string
-  captureId: string
+  captureId?: string
+  coinsAdded?: number
+  usdAmount?: number
   error?: string
+  errorCode?: string
+  requiresManualIntervention?: boolean
 }
 
 // Coin package data (mirrors database)
@@ -43,7 +48,7 @@ const COIN_PACKAGES: CoinPackage[] = [
 
 interface PayPalButtonsProps {
   selectedPackage: CoinPackage | null
-  onApprove: (details: any) => Promise<void>
+  onApprove: (details: { orderId: string; packageId?: string; captureResponse?: Record<string, unknown> }) => Promise<void>
 }
 
 const PayPalButtonsWrapper: React.FC<PayPalButtonsProps> = ({ selectedPackage, onApprove }) => {
@@ -59,7 +64,14 @@ const PayPalButtonsWrapper: React.FC<PayPalButtonsProps> = ({ selectedPackage, o
       container.innerHTML = ''
     }
 
-    window.paypal
+    // Type-safe access to PayPal
+    const paypal = window.paypal as PayPalNamespace | null | undefined
+    if (!paypal || !paypal.Buttons) {
+      console.error('PayPal SDK not fully loaded')
+      return
+    }
+    
+    paypal
       .Buttons({
         createOrder: async () => {
           try {
@@ -75,7 +87,10 @@ const PayPalButtonsWrapper: React.FC<PayPalButtonsProps> = ({ selectedPackage, o
                   'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
                 },
                 body: JSON.stringify({
-                  packageId: selectedPackage.id,
+                  amount: selectedPackage.price_usd,
+                  coins: selectedPackage.coins,
+                  user_id: user.id,
+                  package_id: selectedPackage.id,
                 }),
               }
             )
@@ -110,13 +125,17 @@ const PayPalButtonsWrapper: React.FC<PayPalButtonsProps> = ({ selectedPackage, o
             const captureResult = await actions.order.capture()
             console.log("✅ PayPal capture success:", captureResult)
             
-            // Then call our backend to complete the purchase
-            await onApprove(data)
+            // Call the new centralized fulfillment Edge Function
+            // This handles: coin crediting, dashboard updates, and logging
+            await onApprove({
+              orderId: data.orderID,
+              packageId: selectedPackage?.id,
+              captureResponse: captureResult
+            })
           } catch (error: any) {
             console.error('Approval error:', error)
             
             // PayPal recommends restarting checkout for INSTRUMENT_DECLINED
-            // This lets user reselect payment method without rebuilding UI
             if (error?.details?.[0]?.issue === 'INSTRUMENT_DECLINED') {
               console.log('💳 Payment instrument declined, restarting checkout...')
               toast.info('Payment method declined. Please try a different payment method.')
@@ -163,15 +182,19 @@ export default function CoinStoreProd() {
   const [selectedPackage, setSelectedPackage] = useState<CoinPackage | null>(null)
   const [_isProcessing, setIsProcessing] = useState(false)
   const [packages, setPackages] = useState<CoinPackage[]>(COIN_PACKAGES)
-  const [transactionStatus, setTransactionStatus] = useState<{
+  const [transactionStatus, _setTransactionStatus] = useState<{
     status: 'idle' | 'processing' | 'success' | 'error'
     message?: string
   }>({ status: 'idle' })
 
+  const setTransactionStatus = (status: typeof transactionStatus) => {
+    _setTransactionStatus(status)
+  }
+
   // Inject PayPal script
   useEffect(() => {
     const script = document.createElement('script')
-    script.src = `https://www.paypal.com/sdk/js?client-id=${import.meta.env.VITE_PAYPAL_CLIENT_ID}&currency=USD&intent=authorize`
+    script.src = `https://www.paypal.com/sdk/js?client-id=${import.meta.env.VITE_PAYPAL_CLIENT_ID}&currency=USD&intent=capture`
     script.async = true
     script.onload = () => {
       console.log('✅ PayPal SDK loaded')
@@ -210,20 +233,17 @@ export default function CoinStoreProd() {
     loadPackages()
   }, [])
 
-  const handlePayPalApprove = async (orderDetails: any) => {
-    console.log("✅ PayPal Approved - full details:", JSON.stringify(orderDetails, null, 2))
+  const handlePayPalApprove = async (approveData: {
+    orderId: string
+    packageId?: string
+    captureResponse?: Record<string, unknown>
+  }) => {
+    console.log("✅ PayPal Approved - processing fulfillment:", JSON.stringify(approveData, null, 2))
     
-    // Debug: log all keys in orderDetails
-    console.log("🔍 orderDetails keys:", Object.keys(orderDetails || {}))
-    
-    // Try multiple possible key names
-    const orderId = orderDetails?.orderID || orderDetails?.orderId || orderDetails?.order_id || orderDetails?.id
-    console.log("🔍 Extracted orderId:", orderId)
-    console.log("🔍 orderDetails.orderID:", orderDetails?.orderID)
-    console.log("🔍 orderDetails.orderId:", orderDetails?.orderId)
+    const { orderId, packageId, captureResponse } = approveData
     
     if (!orderId) {
-      console.error("❌ Missing orderId in handlePayPalApprove:", orderDetails)
+      console.error("❌ Missing orderId in handlePayPalApprove:", approveData)
       toast.error('Order ID missing - PayPal integration incomplete')
       return
     }
@@ -234,7 +254,7 @@ export default function CoinStoreProd() {
     }
 
     try {
-      setTransactionStatus({ status: 'processing', message: 'Processing payment...' })
+      setTransactionStatus({ status: 'processing', message: 'Processing payment and crediting coins...' })
       setIsProcessing(true)
 
       // Get current auth token
@@ -245,55 +265,66 @@ export default function CoinStoreProd() {
         throw new Error('Not authenticated')
       }
 
-      // Debug: log what we're about to send
-      const requestBody = { orderId: orderId }
-      console.log("📤 Sending request body:", JSON.stringify(requestBody))
-
-      // Call capture edge function
-      const captureResponse = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`,
+      // Call the centralized fulfillment Edge Function
+      // This handles: idempotency, coin crediting, dashboard updates, and logging
+      const fulfillResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fulfill-paypal-purchase`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify({
+            orderId: orderId,
+            packageId: packageId || selectedPackage.id,
+            userId: user.id,
+            captureResponse: captureResponse
+          }),
         }
       )
 
-      // Safely parse response - read text first, then attempt JSON parse
-      const responseText = await captureResponse.text()
-      let captureData: CaptureResponse
+      // Safely parse response
+      const responseText = await fulfillResponse.text()
+      let fulfillData: FulfillResponse
       
       try {
-        captureData = JSON.parse(responseText) as CaptureResponse
+        fulfillData = JSON.parse(responseText) as FulfillResponse
       } catch {
-        // Non-JSON response - wrap raw text
-        console.error("❌ Non-JSON response from edge function:", responseText)
-        if (!captureResponse.ok) {
+        console.error("❌ Non-JSON response from fulfillment function:", responseText)
+        if (!fulfillResponse.ok) {
           throw new Error('Payment processing failed. Please try again.')
         }
         throw new Error('Invalid response from server')
       }
 
-      if (!captureResponse.ok) {
-        throw new Error(captureData.error || 'Failed to capture payment')
+      if (!fulfillResponse.ok) {
+        throw new Error(fulfillData.error || 'Payment fulfillment failed')
       }
 
-      if (!captureData.success) {
-        throw new Error(captureData.error || 'Payment capture failed')
+      if (!fulfillData.success) {
+        // Handle partial success / requires manual intervention
+        if (fulfillData.requiresManualIntervention) {
+          console.warn("⚠️ Payment succeeded but coin credit requires manual intervention:", fulfillData)
+          setTransactionStatus({
+            status: 'error',
+            message: 'Payment completed but coins are delayed. Support has been notified.',
+          })
+          toast.error('Payment completed but coins are delayed. Support has been notified.')
+          return
+        }
+        throw new Error(fulfillData.error || 'Payment fulfillment failed')
       }
 
-      // Update local profile state
-      if (profile) {
+      // Update local profile state with newly credited coins
+      if (profile && fulfillData.coinsAdded) {
         setProfile({
           ...profile,
-          troll_coins: (profile.troll_coins || 0) + captureData.coinsAdded,
+          troll_coins: (profile.troll_coins || 0) + fulfillData.coinsAdded,
         })
       }
 
-      // Refresh profile from database
+      // Refresh profile from database to verify
       await new Promise(resolve => setTimeout(resolve, 1000))
       const { data: freshProfile } = await supabase
         .from('user_profiles')
@@ -307,10 +338,10 @@ export default function CoinStoreProd() {
 
       setTransactionStatus({
         status: 'success',
-        message: `Successfully credited ${captureData.coinsAdded.toLocaleString()} coins!`,
+        message: `Successfully credited ${fulfillData.coinsAdded?.toLocaleString() || 0} coins!`,
       })
 
-      toast.success(`+${captureData.coinsAdded.toLocaleString()} coins credited to your account!`)
+      toast.success(`+${fulfillData.coinsAdded?.toLocaleString() || 0} coins credited to your account!`)
 
       // Reset selection after 3 seconds
       setTimeout(() => {
@@ -318,7 +349,7 @@ export default function CoinStoreProd() {
         setTransactionStatus({ status: 'idle' })
       }, 3000)
     } catch (error) {
-      console.error('Payment capture error:', error)
+      console.error('Payment fulfillment error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Payment processing failed'
 
       setTransactionStatus({
@@ -333,9 +364,9 @@ export default function CoinStoreProd() {
   }
 
   // Test function for debugging - call from browser console:
-  // window.testPayPalCapture('YOUR_ORDER_ID')
-  window.testPayPalCapture = async (orderId: string) => {
-    console.log("🧪 Testing PayPal capture with orderId:", orderId)
+  // window.testPayPalFulfillment('YOUR_ORDER_ID')
+  window.testPayPalFulfillment = async (orderId: string) => {
+    console.log("🧪 Testing PayPal fulfillment with orderId:", orderId)
     try {
       const { data } = await supabase.auth.getSession()
       const token = data.session?.access_token
@@ -345,7 +376,7 @@ export default function CoinStoreProd() {
       }
       
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fulfill-paypal-purchase`,
         {
           method: 'POST',
           headers: {
@@ -483,7 +514,7 @@ export default function CoinStoreProd() {
         {/* Security Notice */}
         <div className="mt-12 max-w-2xl mx-auto bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
           <p className="text-sm text-blue-200">
-            ✓ Payments secured by PayPal • ✓ Coins credited server-side • ✓ Fraud protection enabled
+            ✓ Payments secured by PayPal • ✓ Coins credited server-side • ✓ Fraud protection enabled • ✓ Transaction logging
           </p>
         </div>
       </div>

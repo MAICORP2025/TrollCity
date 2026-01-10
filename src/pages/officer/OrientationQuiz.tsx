@@ -35,6 +35,23 @@ export default function OrientationQuiz() {
   const [quizTimeStart, setQuizTimeStart] = useState<number | null>(null)
   const [orientationStatus, setOrientationStatus] = useState<OrientationStatus | null>(null)
 
+  const startOrientation = useCallback(async () => {
+    if (!user?.id) return
+    try {
+      const { data, error } = await supabase.rpc('start_officer_orientation', {
+        p_user_id: user.id
+      })
+
+      if (error) throw error
+      if (data?.success) {
+        setQuizStarted(true)
+        setQuizTimeStart(Date.now())
+      }
+    } catch (err: unknown) {
+      console.error('Error starting orientation:', err)
+    }
+  }, [user?.id])
+
   const loadOrientationStatus = useCallback(async () => {
     if (!user?.id) return
     try {
@@ -68,24 +85,7 @@ export default function OrientationQuiz() {
     } catch (err: unknown) {
       console.error('Error loading orientation status:', err)
     }
-  }, [user?.id, navigate])
-
-  const startOrientation = useCallback(async () => {
-    if (!user?.id) return
-    try {
-      const { data, error } = await supabase.rpc('start_officer_orientation', {
-        p_user_id: user.id
-      })
-
-      if (error) throw error
-      if (data?.success) {
-        setQuizStarted(true)
-        setQuizTimeStart(Date.now())
-      }
-    } catch (err: unknown) {
-      console.error('Error starting orientation:', err)
-    }
-  }, [user?.id])
+  }, [user?.id, navigate, startOrientation])
 
   const loadQuizQuestions = useCallback(async () => {
     // Don't load questions if already passed or quiz already started

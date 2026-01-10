@@ -1,0 +1,15 @@
+{
+  "tasks": {
+    "start": "supabase functions start send-bulk-notifications"
+  },
+  "imports": {
+    "https://deno.land/std@0.168.0/": "https://deno.land/std@0.168.0/",
+    "@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.39.3"
+  },
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.ns", "ES2020"],
+    "strict": true,
+    "types": ["https://deno.land/x/deno@v1.28.0/cli/dts/lib.deno.d.ts"]
+  }
+}
