@@ -10,6 +10,7 @@ import GlobalLoadingOverlay from "./components/GlobalLoadingOverlay";
 import GlobalErrorBanner from "./components/GlobalErrorBanner";
 import GlobalGiftBanner from "./components/GlobalGiftBanner";
 import GlobalPayoutBanner from "./components/GlobalPayoutBanner";
+import BroadcastAnnouncement from "./components/BroadcastAnnouncement";
 import { useGlobalApp } from "./contexts/GlobalAppContext";
 import { updateRoute } from "./utils/sessionStorage";
 import { useDebouncedProfileUpdate } from "./hooks/useDebouncedProfileUpdate";
@@ -183,7 +184,6 @@ const ExportData = lazy(() => import("./pages/admin/ExportData"));
 const UserSearch = lazy(() => import("./pages/admin/UserSearch"));
 const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
 const StreamMonitorPage = lazy(() => import("./pages/admin/StreamMonitorPage"));
-const GrantCoins = lazy(() => import("./pages/admin/GrantCoins"));
 const PaymentLogs = lazy(() => import("./pages/admin/PaymentLogs"));
 const StorePriceEditor = lazy(() => import("./pages/admin/components/StorePriceEditor"));
 const AdminFinanceDashboard = lazy(() => import("./pages/admin/AdminFinanceDashboard"));
@@ -484,6 +484,9 @@ function AppContent() {
               
               {/* Global Gift Banner */}
               <GlobalGiftBanner />
+
+              {/* Broadcast Announcement */}
+              <BroadcastAnnouncement />
 
               {/* Global Loading Overlay */}
       <GlobalLoadingOverlay
@@ -1080,14 +1083,7 @@ function AppContent() {
                         </RequireRole>
                       }
                     />
-                    <Route
-                      path="/admin/grant-coins"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <GrantCoins />
-                        </RequireRole>
-                      }
-                    />
+                  
                     <Route
                       path="/admin/payment-logs"
                       element={
