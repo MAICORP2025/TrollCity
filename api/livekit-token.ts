@@ -121,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const explicitAllow = parseAllowPublish(payload.allowPublish);
     const roleParam = String(payload.role || "").toLowerCase();
     const canPublish =
-      explicitAllow || roleParam === "broadcaster" || roleParam === "admin";
+      explicitAllow || roleParam === "broadcaster" || roleParam === "admin" || roleParam === "troll_officer" || roleParam === "lead_troll_officer" || roleParam === "officer";
 
     // Create LiveKit token
     const token = new AccessToken(apiKey, apiSecret, {

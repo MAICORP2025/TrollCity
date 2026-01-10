@@ -95,57 +95,62 @@ export function useBroadcastLayout(
         // Actually, if we have 3, we fill Top Left, Top Right 1, Top Right 2.
         // If we have 4, we put the 4th in bottom row.
         
+        // Main/Side layout: broadcaster on LEFT, guests on RIGHT in a responsive column/grid
         const hasBottomRow = count > 3;
-        const topHeightRatio = hasBottomRow ? 0.75 : 1.0;
-        
-        const topSectionHeight = (availHeight * topHeightRatio) - (hasBottomRow ? gap/2 : 0);
-        const bottomSectionHeight = hasBottomRow ? (availHeight * (1 - topHeightRatio) - gap/2) : 0;
-        
-        const mainWidth = (availWidth * 0.75) - gap/2;
-        const sideWidth = (availWidth * 0.25) - gap/2;
-        
-        // 0: Main Broadcaster - 65% width for better proportions
-        const broadcasterWidth = mainWidth * 0.65; // Reduced from 70% to 65% for better fit
-        const broadcasterLeft = padding + (mainWidth - broadcasterWidth); // Center it
-        styles.push({
-            width: `${broadcasterWidth}px`,
-            height: `${topSectionHeight}px`,
-            position: 'absolute',
-            left: `${broadcasterLeft}px`,
-            top: `${padding}px`
-        });
-        
-        // 1 & 2: Side Column
-        const sideItemHeight = (topSectionHeight - gap) / 2;
-        for (let i = 1; i <= 2; i++) {
-            if (i < count) {
-                styles.push({
-                    width: `${sideWidth}px`,
-                    height: `${sideItemHeight}px`,
-                    position: 'absolute',
-                    left: `${padding + mainWidth + gap}px`,
-                    top: `${padding + ((i - 1) * (sideItemHeight + gap))}px`
-                });
-            }
-        }
-        
-        // 3+: Bottom Row
-        if (hasBottomRow) {
-            const bottomStartIndex = 3;
-            const remainingCount = count - bottomStartIndex;
-            const effectiveBottomCount = Math.min(remainingCount, 4); // Max 4 in bottom row
-            
-            const bottomItemWidth = (availWidth - (gap * (effectiveBottomCount - 1))) / effectiveBottomCount;
+        const topHeightRatio = hasBottomRow ? 0.72 : 1.0;
 
-            for (let i = 0; i < effectiveBottomCount; i++) {
-                 styles.push({
-                    width: `${bottomItemWidth}px`,
-                    height: `${bottomSectionHeight}px`,
-                    position: 'absolute',
-                    left: `${padding + (i * (bottomItemWidth + gap))}px`,
-                    top: `${padding + topSectionHeight + gap}px`
-                });
-            }
+        const topSectionHeight = (availHeight * topHeightRatio) - (hasBottomRow ? gap / 2 : 0);
+        const bottomSectionHeight = hasBottomRow ? (availHeight * (1 - topHeightRatio) - gap / 2) : 0;
+
+        // Make the main (broadcaster) take ~65% of the total width and side column ~35%
+        const broadcasterTotalRatio = 0.65; // broadcaster ~65% of width
+        const sideTotalRatio = 1 - broadcasterTotalRatio; // ~35%
+
+        const broadcasterWidth = Math.max(200, Math.floor(availWidth * broadcasterTotalRatio));
+        const sideWidth = Math.max(120, Math.floor(availWidth * sideTotalRatio));
+
+        // Position broadcaster at LEFT padding
+        styles.push({
+          width: `${broadcasterWidth}px`,
+          height: `${topSectionHeight}px`,
+          position: 'absolute',
+          left: `${padding}px`,
+          top: `${padding}px`
+        });
+
+        // Side Column: stack guests vertically (up to 3 slots visible), increase size when fewer guests
+        const sideCandidates = Math.min(3, Math.max(1, count - 1));
+        const sideItemHeight = Math.floor((topSectionHeight - (gap * (sideCandidates - 1))) / sideCandidates);
+
+        for (let i = 0; i < sideCandidates; i++) {
+          if ((i + 1) < count) {
+            styles.push({
+              width: `${sideWidth}px`,
+              height: `${sideItemHeight}px`,
+              position: 'absolute',
+              left: `${padding + broadcasterWidth + gap}px`,
+              top: `${padding + (i * (sideItemHeight + gap))}px`
+            });
+          }
+        }
+
+        // Bottom Row for remaining guests (max 4): distribute across full width with consistent aspect ratio
+        if (hasBottomRow) {
+          const bottomStartIndex = 1 + sideCandidates; // after broadcaster + side slots
+          const remainingCount = count - bottomStartIndex;
+          const effectiveBottomCount = Math.min(remainingCount, 4);
+
+          const bottomItemWidth = Math.floor((availWidth - (gap * (effectiveBottomCount - 1))) / effectiveBottomCount);
+
+          for (let i = 0; i < effectiveBottomCount; i++) {
+            styles.push({
+              width: `${bottomItemWidth}px`,
+              height: `${bottomSectionHeight}px`,
+              position: 'absolute',
+              left: `${padding + (i * (bottomItemWidth + gap))}px`,
+              top: `${padding + topSectionHeight + gap}px`
+            });
+          }
         }
     }
     else {

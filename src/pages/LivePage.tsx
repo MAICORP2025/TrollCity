@@ -1042,8 +1042,20 @@ export default function LivePage() {
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-2 lg:p-4 pt-0 overflow-hidden">
-         {/* Broadcast Layout (Streamer + Guests) */}
-         <div className="lg:w-3/4 h-[55%] lg:h-full min-h-0 flex flex-col relative z-0">
+        {/* Broadcaster End Button (fixed, touch-friendly) */}
+        {isBroadcaster && (
+          <button
+            onClick={endStream}
+            aria-label="End Broadcast"
+            className="fixed top-4 right-4 z-50 bg-red-700 hover:bg-red-600 text-white rounded-lg shadow-lg flex items-center justify-center"
+            style={{ width: 48, height: 48, minWidth: 44, minHeight: 44 }}
+          >
+            <Square size={18} />
+          </button>
+        )}
+
+        {/* Broadcast Layout (Streamer + Guests) */}
+        <div className="lg:w-3/4 h-[56vh] lg:h-full min-h-0 flex flex-col relative z-0">
             <BroadcastLayout 
               room={liveKit.getRoom()} 
               broadcasterId={stream.broadcaster_id}
@@ -1074,7 +1086,7 @@ export default function LivePage() {
          </div>
 
          {/* Right Panel (Chat/Gifts) */}
-         <div className="lg:w-1/4 flex-1 lg:h-full min-h-0 flex flex-col gap-4 overflow-hidden relative z-0">
+         <div className="lg:w-1/4 flex-1 lg:h-full min-h-0 flex flex-col gap-4 overflow-hidden relative z-0 h-[42vh] lg:h-full">
             {isBroadcaster && (
               <BroadcasterControlPanel
                 streamId={streamId || ''}
@@ -1104,20 +1116,24 @@ export default function LivePage() {
                 }}
               />
             )}
-            {/* GiftBox - Hidden on mobile if chat tab active */}
-            <div className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col shrink-0 lg:shrink`}>
-               <GiftBox onSendGift={handleGiftSent} />
+            {/* GiftBox - Hidden on mobile if chat tab active; make scrollable and height-safe */}
+            <div className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-h-0 overflow-hidden`}>
+              <div className="flex-1 min-h-0 overflow-y-auto pr-2">
+                <GiftBox onSendGift={handleGiftSent} participants={[]} />
+              </div>
             </div>
             
-            {/* ChatBox - Hidden on mobile if gifts tab active */}
+            {/* ChatBox - Hidden on mobile if gifts tab active; ensure input is pinned and chat scrolls */}
             <div className={`${activeMobileTab === 'chat' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-h-0`}>
-               <ChatBox 
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <ChatBox 
                   streamId={streamId || ''} 
                   onProfileClick={setSelectedProfile}
                   onCoinSend={handleSendCoinsToUser}
                   room={liveKit.getRoom()}
                   isBroadcaster={isBroadcaster}
-               />
+                />
+              </div>
             </div>
          </div>
       </div>

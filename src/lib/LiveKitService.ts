@@ -583,28 +583,54 @@ export class LiveKitService {
     this.log('✅ Preflight stream published successfully')
   }
 
-  private async captureVideoTrack(): Promise<LocalVideoTrack | null> {
+  private async captureVideoTrack(deviceId?: string): Promise<LocalVideoTrack | null> {
+    // Try high-res first, then fallback to 480p if device can't provide 720p
+    const tryConstraints = async (constraints: any) => {
+      try {
+        const track = await createLocalVideoTrack(constraints as any)
+        return track
+      } catch (err) {
+        return null
+      }
+    }
+
     try {
-      const track = await createLocalVideoTrack({
+      const base: any = {
         resolution: { width: 1280, height: 720 },
         frameRate: { ideal: 30, max: 60 },
-      } as any)
-      return track
+      }
+      if (deviceId) base.deviceId = { exact: deviceId }
+
+      let track = await tryConstraints(base)
+      if (track) return track
+
+      // Fallback 480p
+      const fallback: any = {
+        resolution: { width: 854, height: 480 },
+        frameRate: { ideal: 24, max: 30 }
+      }
+      if (deviceId) fallback.deviceId = { exact: deviceId }
+      track = await tryConstraints(fallback)
+      if (track) return track
+
+      throw new Error('Unable to capture video with available constraints')
     } catch (error: any) {
-      throw new Error(`Camera access failed: ${error.message}`)
+      throw new Error(`Camera access failed: ${error?.message || String(error)}`)
     }
   }
 
-  private async captureAudioTrack(): Promise<LocalAudioTrack | null> {
+  private async captureAudioTrack(deviceId?: string): Promise<LocalAudioTrack | null> {
     try {
-      const track = await createLocalAudioTrack({
+      const opts: any = {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-      } as any)
+      }
+      if (deviceId) opts.deviceId = { exact: deviceId }
+      const track = await createLocalAudioTrack(opts as any)
       return track
     } catch (error: any) {
-      throw new Error(`Microphone access failed: ${error.message}`)
+      throw new Error(`Microphone access failed: ${error?.message || String(error)}`)
     }
   }
 
@@ -1056,6 +1082,33 @@ export class LiveKitService {
     }
   }
 
+  // Allow selecting a specific camera device and hot-switching
+  async selectCamera(deviceId: string): Promise<boolean> {
+    if (!this.room?.localParticipant) return false
+    if (!this.canPublish()) return false
+
+    try {
+      // Stop existing local track if any
+      if (this.localVideoTrack) {
+        try { this.localVideoTrack.stop() } catch (e) {}
+        this.localVideoTrack = null
+      }
+
+      const video = await this.captureVideoTrack(deviceId)
+      if (!video) throw new Error('Failed to capture selected camera')
+
+      this.localVideoTrack = video
+      await this.room.localParticipant.publishTrack(video as any)
+      await this.room.localParticipant.setCameraEnabled(true)
+      this.updateLocalParticipantState()
+      this.log('✅ Camera switched to device', { deviceId })
+      return true
+    } catch (err) {
+      console.error('Failed to switch camera:', err)
+      return false
+    }
+  }
+
   async enableCamera(): Promise<boolean> {
     if (!this.room?.localParticipant) return false
     if (!this.canPublish()) return false
@@ -1116,6 +1169,32 @@ export class LiveKitService {
       return enabled
     } catch (error) {
       console.error('Failed to toggle microphone:', error)
+      return false
+    }
+  }
+
+  // Allow selecting a specific microphone device and hot-switching
+  async selectMicrophone(deviceId: string): Promise<boolean> {
+    if (!this.room?.localParticipant) return false
+    if (!this.canPublish()) return false
+
+    try {
+      if (this.localAudioTrack) {
+        try { this.localAudioTrack.stop() } catch (e) {}
+        this.localAudioTrack = null
+      }
+
+      const audio = await this.captureAudioTrack(deviceId)
+      if (!audio) throw new Error('Failed to capture selected microphone')
+
+      this.localAudioTrack = audio
+      await this.room.localParticipant.publishTrack(audio as any)
+      await this.room.localParticipant.setMicrophoneEnabled(true)
+      this.updateLocalParticipantState()
+      this.log('✅ Microphone switched to device', { deviceId })
+      return true
+    } catch (err) {
+      console.error('Failed to switch microphone:', err)
       return false
     }
   }

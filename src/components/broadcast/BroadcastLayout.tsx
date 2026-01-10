@@ -38,7 +38,7 @@ export default function BroadcastLayout({
   if (!room) return null;
 
   return (
-    <div className="relative w-full h-full bg-black overflow-hidden">
+    <div className="relative w-full h-full min-h-0 bg-black overflow-hidden">
       {/* Responsive Grid System */}
       <ResponsiveVideoGrid
         participants={participants}

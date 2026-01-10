@@ -1,4 +1,4 @@
-import { authorizeOfficer, supabaseAdmin } from './_shared/auth'
+import { authorizeUser, supabaseAdmin } from './_shared/auth'
 
 const ROOM_NAME = 'officer-stream'
 const SEAT_COUNT = 6
@@ -22,7 +22,7 @@ export default async function handler(req: any, res: any) {
 
   let profile
   try {
-    profile = await authorizeOfficer(req)
+    profile = await authorizeUser(req)
   } catch (error: any) {
     const message = error?.message || 'Unauthorized'
     return res.status(403).json({ error: message })
