@@ -8,20 +8,23 @@ interface BroadcastLayoutProps {
   broadcasterId: string
   isHost: boolean
   joinPrice?: number
+  seats?: any[]
   onSetPrice?: (price: number) => void
-  onJoinRequest?: () => void
+  onJoinRequest?: (seatIndex: number) => void
   onLeaveSession?: () => void
   children?: React.ReactNode
 }
 
-export default function BroadcastLayout({ 
-  room, 
-  broadcasterId, 
-  isHost, 
-  joinPrice = 0, 
-  onSetPrice, 
-  onLeaveSession, 
-  children 
+export default function BroadcastLayout({
+  room,
+  broadcasterId,
+  isHost,
+  joinPrice = 0,
+  seats,
+  onSetPrice,
+  onJoinRequest,
+  onLeaveSession,
+  children
 }: BroadcastLayoutProps) {
   const participants = useRoomParticipants(room);
   const [draftPrice, setDraftPrice] = useState<string>('');
@@ -35,12 +38,14 @@ export default function BroadcastLayout({
   return (
     <div className="relative w-full h-full bg-black overflow-hidden">
       {/* Responsive Grid System */}
-      <ResponsiveVideoGrid 
+      <ResponsiveVideoGrid
         participants={participants}
         localParticipant={room.localParticipant}
         broadcasterId={broadcasterId}
+        seats={seats}
         joinPrice={joinPrice}
         onLeaveSession={onLeaveSession}
+        onJoinRequest={onJoinRequest}
       />
 
       {/* Overlays / Children (Gifts, etc) */}

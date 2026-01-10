@@ -17,6 +17,7 @@ import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
 import BroadcastLayout from '../components/broadcast/BroadcastLayout';
 import BroadcastOverlays from '../components/stream/BroadcastOverlays';
+import { useSeatRoster } from '../hooks/useSeatRoster';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -49,6 +50,9 @@ export default function BroadcastPage() {
   
   // LiveKit
   const liveKit = useLiveKit();
+
+  // Seat Roster
+  const { seats, claimSeat } = useSeatRoster(streamId || '');
 
   // Derived
   const isBroadcaster = user?.id === stream?.broadcaster_id;
@@ -146,8 +150,16 @@ export default function BroadcastPage() {
           room={liveKit.getRoom()}
           broadcasterId={stream.broadcaster_id}
           isHost={isBroadcaster}
+          seats={seats}
           onSetPrice={() => {}} // Placeholder
-          onJoinRequest={() => {}} // Placeholder
+          onJoinRequest={async (seatIndex: number) => {
+            try {
+              await claimSeat(seatIndex);
+            } catch (err) {
+              console.error('Failed to claim seat:', err);
+              toast.error('Failed to join seat');
+            }
+          }}
         >
           {/* Overlays */}
           <BroadcastOverlays

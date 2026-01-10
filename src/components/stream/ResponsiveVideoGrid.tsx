@@ -7,16 +7,20 @@ interface ResponsiveVideoGridProps {
   participants: Participant[];
   localParticipant?: LocalParticipant;
   broadcasterId?: string;
+  seats?: any[];
   onLeaveSession?: () => void;
   joinPrice?: number;
+  onJoinRequest?: (seatIndex: number) => void;
 }
 
-export default function ResponsiveVideoGrid({ 
-  participants, 
+export default function ResponsiveVideoGrid({
+  participants,
   localParticipant,
   broadcasterId,
+  seats,
   onLeaveSession,
-  joinPrice = 0
+  joinPrice = 0,
+  onJoinRequest
 }: ResponsiveVideoGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -38,19 +42,10 @@ export default function ResponsiveVideoGrid({
     return () => observer.disconnect();
   }, []);
 
-  // Sort participants: Broadcaster first, then others
-  const sortedParticipants = useMemo(() => {
-    return [...participants].sort((a, b) => {
-      if (a.identity === broadcasterId) return -1;
-      if (b.identity === broadcasterId) return 1;
-      return 0;
-    });
-  }, [participants, broadcasterId]);
-
   const TOTAL_SLOTS = 6;
   
   const { tileStyles } = useBroadcastLayout(
-    sortedParticipants,
+    participants,
     dimensions.width,
     dimensions.height,
     isLandscape,
@@ -67,7 +62,8 @@ export default function ResponsiveVideoGrid({
         const style = tileStyles[i];
         if (!style) return null;
 
-        const p = sortedParticipants[i];
+        const seat = seats && seats[i];
+        const p = seat ? participants.find(p => p.identity === seat.user_id) : null;
 
         if (p) {
           const isLocal = localParticipant && p.identity === localParticipant.identity;
@@ -88,11 +84,11 @@ export default function ResponsiveVideoGrid({
               } as React.CSSProperties}
             />
           );
-        } else {
-          // Empty Slot Placeholder
+        } else if (seat) {
+          // Seat assigned but participant not connected
           return (
             <div
-              key={`empty-${i}`}
+              key={`waiting-${i}`}
               className="absolute bg-zinc-900/50 rounded-2xl border border-white/5 flex items-center justify-center backdrop-blur-sm"
               style={{
                 ...style,
@@ -100,11 +96,34 @@ export default function ResponsiveVideoGrid({
               } as React.CSSProperties}
             >
               <div className="text-white/20 font-bold uppercase tracking-widest text-xs flex flex-col items-center gap-2">
-                 <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-                    <span className="text-lg">+</span>
-                 </div>
-                 {i === 0 ? 'Broadcaster' : `Seat ${i + 1}`}
-              </div>
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                     <span className="text-lg">⏳</span>
+                  </div>
+                  Waiting for {seat.username}
+                </div>
+            </div>
+          );
+        } else {
+          // Empty Slot Placeholder
+          const isCurrentUserSlot = localParticipant && !participants.find(p => p.identity === localParticipant.identity);
+          const canJoin = onJoinRequest && !isCurrentUserSlot && i > 0; // Don't allow joining broadcaster slot
+
+          return (
+            <div
+              key={`empty-${i}`}
+              className={`absolute bg-zinc-900/50 rounded-2xl border border-white/5 flex items-center justify-center backdrop-blur-sm ${canJoin ? 'cursor-pointer hover:bg-zinc-800/50 hover:border-white/10 transition-colors' : ''}`}
+              style={{
+                ...style,
+                transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+              } as React.CSSProperties}
+              onClick={canJoin ? () => onJoinRequest?.(i) : undefined}
+            >
+              <div className="text-white/20 font-bold uppercase tracking-widest text-xs flex flex-col items-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                     <span className="text-lg">+</span>
+                  </div>
+                  {i === 0 ? 'Broadcaster' : `Seat ${i + 1}`}
+                </div>
             </div>
           );
         }
