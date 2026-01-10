@@ -63,7 +63,12 @@ export default function ResponsiveVideoGrid({
         if (!style) return null;
 
         const seat = seats && seats[i];
-        const p = seat ? participants.find(p => p.identity === seat.user_id) : null;
+        let p = seat ? participants.find(p => p.identity === seat.user_id) : null;
+
+        // Special case: Broadcaster slot (i=0) always shows broadcaster if they exist
+        if (i === 0 && !p) {
+          p = participants.find(p => p.identity === broadcasterId) || null;
+        }
 
         if (p) {
           const isLocal = localParticipant && p.identity === localParticipant.identity;
