@@ -840,23 +840,23 @@ export default function CoinStore() {
                       const { data: { session } } = await supabase.auth.getSession();
                       const token = session?.access_token;
 
-                      const captureRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`, {
+                      const verifyRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-paypal-order`, {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
                           Authorization: `Bearer ${token}`,
                           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
                         },
-                        body: JSON.stringify({ orderId: data.orderID }),
+                        body: JSON.stringify({ orderID: data.orderID, user_id: user.id }),
                       });
 
-                      const captureJson = await captureRes.json().catch(() => ({}));
-                      if (captureRes.ok) {
+                      const verifyJson = await verifyRes.json().catch(() => ({}));
+                      if (verifyRes.ok && verifyJson.success) {
                         toast.success(`Troll Pass activated! +${trollPassBundle.coins.toLocaleString()} Troll Coins added.`);
                         await loadWalletData();
                         if (refreshProfile) await refreshProfile();
                       } else {
-                        toast.error(captureJson?.error || "Payment completed, but activation failed.");
+                        toast.error(verifyJson?.error || "Payment completed, but activation failed.");
                       }
                     }}
                     onError={(err) => {
@@ -966,8 +966,8 @@ export default function CoinStore() {
                               const { data: { session } } = await supabase.auth.getSession();
                               const token = session?.access_token;
 
-                              const captureRes = await fetch(
-                                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-capture-order`,
+                              const verifyRes = await fetch(
+                                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-paypal-order`,
                                 {
                                   method: "POST",
                                   headers: {
@@ -977,20 +977,18 @@ export default function CoinStore() {
                                   },
                                   body: JSON.stringify({ 
                                     orderID: data.orderID,
-                                    packageId: pkg.id,
-                                    coins: pkg.coins,
-                                    amount: pkg.price
+                                    user_id: user.id
                                   }),
                                 }
                               );
-                              const captureJson = await captureRes.json().catch(() => ({}));
-                              console.log("💰 Capture result:", captureJson);
-                              if (captureRes.ok) {
+                              const verifyJson = await verifyRes.json().catch(() => ({}));
+                              console.log("💰 Verify result:", verifyJson);
+                              if (verifyRes.ok && verifyJson.success) {
                                 optimisticCredit(pkg.coins || 0);
                                 toast.success(`+${pkg.coins.toLocaleString()} Troll Coins added!`);
                                 loadWalletData(false);
                               } else {
-                                toast.error("Payment completed, but coin update failed.");
+                                toast.error(verifyJson?.error || "Payment completed, but coin update failed.");
                               }
                               } catch (err) {
                                 console.error("❌ PayPal onApprove error:", err);
