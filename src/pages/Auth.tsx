@@ -51,6 +51,44 @@ const Auth = () => {
         
         if (data.user && data.session) {
           console.log('Email login successful:', data.user.email)
+          
+          // Check for concurrent login before proceeding
+          const { data: hasConcurrentLogin, error: concurrentError } = await supabase
+            .rpc('check_concurrent_login', {
+              p_user_id: data.user.id,
+              p_current_session_id: data.session.access_token
+            })
+          
+          if (concurrentError) {
+            console.error('Error checking concurrent login:', concurrentError)
+            // Continue with login if there's an error checking (fail-safe)
+          } else if (hasConcurrentLogin) {
+            // Block login attempt - user is already logged in on another device
+            await supabase.auth.signOut()
+            throw new Error('Login blocked: Your account is already logged in on another device. Please log out from other devices first.')
+          }
+          
+          // Register this session
+          try {
+            const deviceInfo = {
+              browser: navigator.userAgent,
+              platform: navigator.platform,
+              screen: { width: window.screen.width, height: window.screen.height }
+            }
+            
+            await supabase
+              .rpc('register_session', {
+                p_user_id: data.user.id,
+                p_session_id: data.session.access_token,
+                p_device_info: JSON.stringify(deviceInfo), // Convert to JSON string
+                p_ip_address: null, // Would need backend to get real IP
+                p_user_agent: navigator.userAgent
+              })
+          } catch (sessionError) {
+            console.error('Error registering session:', sessionError)
+            // Continue with login even if session registration fails
+          }
+          
           setAuth(data.user, data.session)
           
           // Check if profile exists

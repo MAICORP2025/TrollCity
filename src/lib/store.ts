@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { User, Session } from '@supabase/supabase-js'
-import { supabase, UserProfile, UserRole, validateProfile, ensureSupabaseSession } from '@/lib/supabase'
+import { supabase, UserProfile, UserRole, validateProfile, ensureSupabaseSession } from '../lib/supabase'
 
 interface AuthState {
   user: User | null
@@ -158,17 +158,21 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         console.log('Logging out')
-        
+         
+        const currentState = get()
+        const userId = currentState.user?.id
+        const sessionId = (currentState.session as any)?.access_token
+         
         try {
           // Check if we have a valid session before attempting to sign out
           const { data: { session }, error } = await supabase.auth.getSession()
-          
+           
           // Only attempt signOut if we have a valid session
           if (session && !error) {
             const { error: signOutError } = await supabase.auth.signOut()
             if (signOutError) {
               // Handle specific auth errors gracefully
-              if (signOutError.message.includes('Auth session missing') || 
+              if (signOutError.message.includes('Auth session missing') ||
                   signOutError.message.includes('Invalid JWT') ||
                   signOutError.message.includes('expired')) {
                 console.log('Session already expired or invalid, proceeding with local logout')
@@ -183,10 +187,23 @@ export const useAuthStore = create<AuthState>()(
           // If getSession fails, it's likely already logged out
           console.log('Session check failed, proceeding with local logout:', error)
         }
-        
+         
+        // Mark session as inactive in our tracking system
+        if (userId && sessionId) {
+          try {
+            await supabase
+              .from('active_sessions')
+              .update({ is_active: false, last_active: new Date().toISOString() })
+              .eq('user_id', userId)
+              .eq('session_id', sessionId)
+          } catch (error) {
+            console.error('Error updating session status:', error)
+          }
+        }
+         
         // Always clear local state regardless of server sign out result
         set({ user: null, session: null, profile: null, isLoading: false, isAdmin: null })
-        
+         
         // Clear any persisted auth data
         try {
           localStorage.removeItem('troll-city-auth')

@@ -6,18 +6,33 @@ BEGIN
   WHERE user_id = auth.uid() 
   AND item_type IN ('effect', 'role_effect');
 
-  -- Also update legacy user_entrance_effects if it has is_active column (safeguard)
-  -- We assume it might exist, but to avoid errors if it doesn't, we can skip or use dynamic SQL.
-  -- However, in Supabase SQL editor we can't easily do dynamic SQL for column existence check without permissions sometimes.
-  -- Given the previous migration `20250107_fix_inventory_social.sql` tried to update it, it likely exists or the user wants it to.
-  -- But `UserInventory.tsx` seems to prioritize `user_active_items`.
-  -- Let's stick to `user_active_items` which is the new standard as per the code.
+  -- Deactivate legacy entrance effects table if present
+  UPDATE user_entrance_effects
+  SET is_active = false
+  WHERE user_id = auth.uid();
+
+  -- Clear user_profiles active field
+  UPDATE user_profiles
+  SET active_entrance_effect = NULL
+  WHERE id = auth.uid();
 
   -- 2. Activate the new effect if provided
   IF p_effect_id IS NOT NULL THEN
-    INSERT INTO user_active_items (user_id, item_id, item_type)
-    VALUES (auth.uid(), p_effect_id, p_item_type)
-    ON CONFLICT (user_id, item_id) DO NOTHING;
+    -- Only insert into user_active_items for items that are UUID-based (non-role effects)
+    IF p_item_type <> 'role_effect' THEN
+      INSERT INTO user_active_items (user_id, item_id, item_type)
+      VALUES (auth.uid(), p_effect_id::uuid, p_item_type)
+      ON CONFLICT (user_id, item_id) DO NOTHING;
+
+      UPDATE user_entrance_effects
+      SET is_active = true
+      WHERE user_id = auth.uid() AND effect_id = p_effect_id;
+    END IF;
+
+    -- Always update user_profiles with the provided effect identifier (text)
+    UPDATE user_profiles
+    SET active_entrance_effect = p_effect_id
+    WHERE id = auth.uid();
   END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

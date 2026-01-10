@@ -25,15 +25,19 @@ BEGIN
 
     -- IF ACTIVATING (p_effect_id is not null)
     IF p_effect_id IS NOT NULL THEN
-        -- 1. Insert into user_active_items
-        INSERT INTO user_active_items (user_id, item_id, item_type)
-        VALUES (auth.uid(), p_effect_id, p_item_type)
-        ON CONFLICT (user_id, item_id) DO NOTHING;
+        -- 1. Insert into user_active_items (only for non-role effects that have UUIDs)
+        IF p_item_type <> 'role_effect' THEN
+            INSERT INTO user_active_items (user_id, item_id, item_type)
+            VALUES (auth.uid(), p_effect_id::uuid, p_item_type)
+            ON CONFLICT (user_id, item_id) DO NOTHING;
+        END IF;
 
-        -- 2. Update user_entrance_effects
-        UPDATE user_entrance_effects
-        SET is_active = true
-        WHERE user_id = auth.uid() AND effect_id = p_effect_id;
+        -- 2. Update user_entrance_effects (only for non-role effects)
+        IF p_item_type <> 'role_effect' THEN
+            UPDATE user_entrance_effects
+            SET is_active = true
+            WHERE user_id = auth.uid() AND effect_id = p_effect_id;
+        END IF;
 
         -- 3. Update user_profiles
         UPDATE user_profiles
