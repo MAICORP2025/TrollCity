@@ -7,13 +7,11 @@ import { Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveKit } from '../hooks/useLiveKit';
 import type { LiveKitServiceConfig } from '../lib/LiveKitService';
-import { useCheckOfficerOnboarding } from '../hooks/useCheckOfficerOnboarding';
 import { deductCoins } from '../lib/coinTransactions';
 
 const GoLive: React.FC = () => {
   const navigate = useNavigate();
   const liveKit = useLiveKit();
-  const { checkOnboarding } = useCheckOfficerOnboarding();
   // Note: videoRef removed - no camera preview in setup
 
   const { profile } = useAuthStore(); // Using getState() instead for async operations
@@ -94,10 +92,6 @@ const GoLive: React.FC = () => {
   // START STREAM
   // -------------------------------
   const handleStartStream = async () => {
-    // Check officer onboarding first
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-
     const { profile, user } = useAuthStore.getState();
 
     if (!user || !profile) {
