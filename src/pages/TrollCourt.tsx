@@ -23,7 +23,8 @@ export default function TrollCourt() {
   const [_isSearchingUsers, setIsSearchingUsers] = useState(false)
 
   const [selectedCaseType, setSelectedCaseType] = useState<string>('')
-  
+  const [showDropdown, setShowDropdown] = useState(false)
+
   const CASE_TYPES = [
     'Harassment / Threats',
     'Hate Speech / Discrimination',
@@ -166,7 +167,7 @@ export default function TrollCourt() {
   }
 
   const handleSummonOrStart = async () => {
-    if (!canStartCourt) return
+    if (!canStartCourt || !user) return
 
     setIsStartingSession(true)
     try {
@@ -216,7 +217,7 @@ export default function TrollCourt() {
     } catch (startError) {
       console.error('Error starting/summoning:', startError)
       const message =
-        startError?.message ||
+        (startError as any)?.message ||
         (typeof startError === 'string' ? startError : 'Failed to action')
       toast.error(`Error: ${message}`)
     } finally {

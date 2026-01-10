@@ -7,9 +7,10 @@ interface UserSearchDropdownProps {
   query: string
   onSelect: (userId: string, username: string) => void
   onClose: () => void
+  disableNavigation?: boolean
 }
 
-export default function UserSearchDropdown({ query, onSelect, onClose }: UserSearchDropdownProps) {
+export default function UserSearchDropdown({ query, onSelect, onClose, disableNavigation = false }: UserSearchDropdownProps) {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
