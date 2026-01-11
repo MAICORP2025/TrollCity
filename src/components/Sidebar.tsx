@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
-import { supabase } from '@/lib/supabase'
+import { supabase, UserRole } from '@/lib/supabase'
 
 export default function Sidebar() {
   const { profile } = useAuthStore()
@@ -43,23 +43,26 @@ export default function Sidebar() {
 
   // Role logic for Go Live access
   const canGoLive =
-    profile?.role === "admin" ||
-    profile?.role === "lead_troll_officer" ||
-    profile?.role === "troll_officer" ||
+    profile?.role === UserRole.ADMIN ||
+    profile?.role === UserRole.LEAD_TROLL_OFFICER ||
+    profile?.role === UserRole.TROLL_OFFICER ||
     profile?.is_broadcaster ||
     profile?.is_lead_officer;
 
   // Role definitions
-  const isAdmin = profile?.role === 'admin' || profile?.troll_role === 'admin';
-  const isLead = profile?.role === 'lead_troll_officer' || profile?.is_lead_officer || profile?.troll_role === 'lead_troll_officer' || isAdmin;
+  const isAdmin = profile?.role === UserRole.ADMIN || profile?.troll_role === UserRole.ADMIN || profile?.role === UserRole.HR_ADMIN;
+  const isSecretary = profile?.role === UserRole.SECRETARY || profile?.troll_role === UserRole.SECRETARY;
+  
+  const isLead = profile?.role === UserRole.LEAD_TROLL_OFFICER || profile?.is_lead_officer || profile?.troll_role === UserRole.LEAD_TROLL_OFFICER || isAdmin;
   // Officer check matches the logic in useEffect (isAdmin || isOfficer)
-  const isOfficer = profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.is_lead_officer || profile?.troll_role === 'troll_officer' || profile?.troll_role === 'lead_troll_officer' || isAdmin;
+  const isOfficer = profile?.role === UserRole.TROLL_OFFICER || profile?.role === UserRole.LEAD_TROLL_OFFICER || profile?.is_lead_officer || profile?.troll_role === UserRole.TROLL_OFFICER || profile?.troll_role === UserRole.LEAD_TROLL_OFFICER || isAdmin;
 
   useEffect(() => {
     const checkAccess = async () => {
       if (!profile) { 
         setCanSeeOfficer(false)
         setCanSeeFamilyLounge(false)
+        setCanSeeSecretary(false)
         return 
       }
       
@@ -69,29 +72,28 @@ export default function Sidebar() {
       // Troll Family Lounge: Admin, troll_officer, OR approved family application
       if (isOfficer) { 
         setCanSeeFamilyLounge(true)
-        return 
-      }
-      
-      // Check if user has an approved family application
-      try {
-        const { data: familyApp } = await supabase
-          .from('applications')
-          .select('status')
-          .eq('user_id', profile.id)
-          .eq('type', 'troll_family')
-          .eq('status', 'approved')
-          .maybeSingle()
+      } else {
+        // Check if user has an approved family application
+        try {
+          const { data: familyApp } = await supabase
+            .from('applications')
+            .select('status')
+            .eq('user_id', profile.id)
+            .eq('type', 'troll_family')
+            .eq('status', 'approved')
+            .maybeSingle()
 
-        setCanSeeFamilyLounge(!!familyApp)
-      } catch {
-        setCanSeeFamilyLounge(false)
+          setCanSeeFamilyLounge(!!familyApp)
+        } catch {
+          setCanSeeFamilyLounge(false)
+        }
       }
 
       // Check Secretary Access
-      try {
-        if (isAdmin) {
-          setCanSeeSecretary(true)
-        } else {
+      if (isAdmin || isSecretary) {
+        setCanSeeSecretary(true)
+      } else {
+        try {
           const { data: secData } = await supabase
             .from('secretary_assignments')
             .select('id')
@@ -99,13 +101,13 @@ export default function Sidebar() {
             .maybeSingle()
           
           setCanSeeSecretary(!!secData)
+        } catch {
+          setCanSeeSecretary(false)
         }
-      } catch {
-        setCanSeeSecretary(false)
       }
     }
     checkAccess()
-  }, [profile, isOfficer])
+  }, [profile, isOfficer, isAdmin, isSecretary])
 
   if (!profile) return null
 

@@ -397,6 +397,7 @@ serve(async (req: Request) => {
     // 6. Insert Transaction into coin_transactions
     const { error: txErr } = await supabase.from("coin_transactions").insert({
       user_id: metaUserId,
+      type: 'store_purchase',
       paypal_order_id: orderId,
       paypal_capture_id: capture.id,
       paypal_status: capture.status,

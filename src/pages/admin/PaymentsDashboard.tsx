@@ -55,7 +55,7 @@ export default function PaymentsDashboard() {
     // Subscribe to new coin_transactions
     const channel = supabase
       .channel('payments-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coin_transactions', filter: "type=eq.purchase" }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coin_transactions', filter: "type=eq.store_purchase" }, () => {
         console.log('📊 New purchase detected, refreshing...')
         loadTransactions()
       })
@@ -85,7 +85,7 @@ export default function PaymentsDashboard() {
             square_card_id
           )
         `)
-        .eq('type', 'purchase')
+        .eq('type', 'store_purchase')
         .order('created_at', { ascending: false })
         .limit(1000)
 

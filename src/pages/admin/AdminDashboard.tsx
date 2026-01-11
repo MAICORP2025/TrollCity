@@ -276,7 +276,7 @@ export default function AdminDashboard() {
         supabase.from('user_profiles').select('id').eq('role', 'troll_officer'),
         supabase.from('stream_reports').select('id').eq('status', 'pending'),
         supabase.from('user_profiles').select('troll_coins, sav_bonus_coins'),
-        supabase.from('coin_transactions').select('metadata, platform_profit').eq('type', 'purchase'),
+        supabase.from('coin_transactions').select('metadata, platform_profit').eq('type', 'store_purchase'),
         supabase.from('coin_transactions').select('amount, type').eq('type', 'gift'),
         supabase.from('payout_requests').select('cash_amount, processing_fee'),
         supabase.from('user_tax_info').select('id').eq('status', 'pending'),
@@ -407,13 +407,13 @@ export default function AdminDashboard() {
         const { data: troll_coinsTx } = await supabase
           .from('coin_transactions')
           .select('user_id, amount, type')
-          .in('type', ['purchase', 'cashout'])
+          .in('type', ['store_purchase', 'cashout'])
 
         const troll_coinsMap: Record<string, { purchased: number; spent: number }> = {};
         ((troll_coinsTx || []) as CoinTransaction[]).forEach((tx) => {
           const userId = tx.user_id || 'unknown';
           const existing = troll_coinsMap[userId] || { purchased: 0, spent: 0 }
-          if (tx.type === 'purchase') existing.purchased += Math.abs(Number(tx.amount || 0))
+          if (tx.type === 'store_purchase') existing.purchased += Math.abs(Number(tx.amount || 0))
           if (tx.type === 'cashout') existing.spent += Math.abs(Number(tx.amount || 0))
           troll_coinsMap[userId] = existing
         })
