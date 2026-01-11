@@ -80,7 +80,7 @@ export default function BroadcastSummary() {
     if (data.recording_url) {
       window.open(data.recording_url, '_blank');
     } else {
-      toast.error("Recording not available yet. Please check back later.");
+      toast.info("Recording is still processing. Please check back later.");
     }
   };
 

@@ -292,7 +292,7 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   }
 
   return (
-    <span className="relative inline-block">
+    <span className="relative inline-block z-10">
         <span
         onClick={handleClick}
         ref={usernameRef}

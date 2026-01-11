@@ -363,6 +363,7 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, room, is
                   <ClickableUsername
                     username={msg.sender_profile?.username || 'Unknown'}
                     profile={msg.sender_profile as any}
+                    userId={msg.user_id}
                     isBroadcaster={isBroadcaster}
                     streamId={streamId}
                     className={getUsernameStyle(msg.sender_profile?.perks, msg.sender_profile?.rgbExpiresAt)}

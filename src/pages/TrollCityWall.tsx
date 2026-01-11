@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { 
   MessageSquare, Heart, Plus, Video, Sword, Users, Trophy, 
-  Zap, ExternalLink, Trash2, Share2, Reply, Gift, Smile
+  Zap, ExternalLink, Trash2, Share2, Reply, Gift, Smile, Pin
 } from 'lucide-react'
 import { WallPost, WallPostType } from '../types/trollWall'
 import CreatePostModal from '../components/trollWall/CreatePostModal'
@@ -59,6 +59,7 @@ export default function TrollCityWall() {
       const { data, error } = await supabase
         .from('troll_wall_posts')
         .select('*, user_profiles(username, avatar_url, is_admin, is_troll_officer, is_og_user)')
+        .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(100)
 
@@ -425,6 +426,43 @@ export default function TrollCityWall() {
     }
   }
 
+  const handlePin = async (post: WallPost) => {
+    if (!user?.id) return
+
+    try {
+      const { data, error } = await supabase
+        .rpc('toggle_wall_post_pin', {
+          p_post_id: post.id,
+          p_user_id: user.id
+        })
+
+      if (error) throw error
+
+      const newPinnedStatus = data as boolean
+      
+      setPosts(prev => 
+        prev.map(p => 
+          p.id === post.id 
+            ? { ...p, is_pinned: newPinnedStatus } 
+            : p
+        ).sort((a, b) => {
+          // Re-sort: Pinned first, then by date
+          if (a.id === post.id) a.is_pinned = newPinnedStatus // Ensure current item has updated status for sort
+          
+          if (a.is_pinned === b.is_pinned) {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          }
+          return (a.is_pinned ? -1 : 1)
+        })
+      )
+
+      toast.success(newPinnedStatus ? 'Post pinned' : 'Post unpinned')
+    } catch (err: any) {
+      console.error('Error toggling pin:', err)
+      toast.error('Failed to update pin status')
+    }
+  }
+
   const handleShare = (post: WallPost) => {
     const url = `${window.location.origin}/wall/${post.id}`
     navigator.clipboard.writeText(url)
@@ -505,6 +543,12 @@ export default function TrollCityWall() {
                         {getPostIcon(post.post_type)}
                         {post.post_type.replace('_', ' ')}
                       </span>
+                      {post.is_pinned && (
+                        <span className="flex items-center gap-1 text-yellow-400 text-xs font-bold">
+                          <Pin className="w-3 h-3 fill-current" />
+                          PINNED
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500">
                       {new Date(post.created_at).toLocaleString()}
@@ -516,15 +560,30 @@ export default function TrollCityWall() {
                       </p>
                     )}
                   </div>
-                  {user && (post.user_id === user.id || post.is_admin || post.is_troll_officer) && (
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(post.id)}
-                      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-red-400"
-                      title="Delete post"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  {user && (post.user_id === user.id || profile?.is_admin || profile?.is_troll_officer) && (
+                    <div className="flex items-center gap-1">
+                      {profile?.is_admin && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePin(post);
+                          }}
+                          className={`p-2 hover:bg-yellow-500/20 rounded-lg transition-colors ${post.is_pinned ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'}`}
+                          title={post.is_pinned ? "Unpin post" : "Pin post"}
+                        >
+                          <Pin className={`w-4 h-4 ${post.is_pinned ? 'fill-current' : ''}`} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(post.id)}
+                        className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-red-400"
+                        title="Delete post"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
 

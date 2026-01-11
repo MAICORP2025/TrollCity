@@ -516,7 +516,16 @@ export default function LivePage() {
 
   const handleJoinRequest = async () => {
     if (canPublish) {
-        toast.info("You are already enabled to join!");
+        toast.info("Resuming guest session...");
+        // Ensure media is active if they are clicking join again
+        setTimeout(() => {
+            liveKit.toggleCamera().then((ok) => {
+                 if (ok) setCameraOn(true);
+            });
+            liveKit.toggleMicrophone().then((ok) => {
+                 if (ok) setMicOn(true);
+            });
+        }, 100);
         return;
     }
     

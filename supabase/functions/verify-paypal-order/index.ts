@@ -1,12 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// CORS headers
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 const PAYPAL_CLIENT_ID = Deno.env.get("PAYPAL_CLIENT_ID");
 const PAYPAL_CLIENT_SECRET = Deno.env.get("PAYPAL_CLIENT_SECRET");
@@ -39,13 +37,13 @@ async function getAccessToken() {
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: cors });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...cors, "Content-Type": "application/json" }
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 
@@ -55,7 +53,7 @@ serve(async (req: Request) => {
     if (!orderID || !user_id) {
       return new Response(JSON.stringify({ error: "Missing orderID or user_id" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
@@ -103,7 +101,7 @@ serve(async (req: Request) => {
     if (captureData.status !== "COMPLETED") {
         return new Response(JSON.stringify({ error: "Order not completed", status: captureData.status }), {
             status: 400,
-            headers: { ...cors, "Content-Type": "application/json" }
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
     }
 
@@ -128,7 +126,7 @@ serve(async (req: Request) => {
     if (customData.userId !== user_id) {
         return new Response(JSON.stringify({ error: "User ID mismatch" }), {
             status: 403,
-            headers: { ...cors, "Content-Type": "application/json" }
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
     }
 
@@ -152,7 +150,7 @@ serve(async (req: Request) => {
         console.log(`Order ${orderID} already processed.`);
         return new Response(JSON.stringify({ success: true, message: "Already processed", coins_added: coinsToAdd }), {
             status: 200,
-            headers: { ...cors, "Content-Type": "application/json" }
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
     }
 
@@ -189,14 +187,14 @@ serve(async (req: Request) => {
 
     return new Response(JSON.stringify({ success: true, coins_added: coinsToAdd }), {
         status: 200,
-        headers: { ...cors, "Content-Type": "application/json" }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (err: any) {
     console.error("Verify Error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...cors, "Content-Type": "application/json" }
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 });

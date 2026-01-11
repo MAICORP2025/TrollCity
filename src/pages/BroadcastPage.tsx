@@ -75,7 +75,10 @@ export default function BroadcastPage() {
         
       if (error) {
         console.error('Error loading stream:', error);
-        toast.error('Failed to load stream');
+        // Don't show toast if user is just not logged in yet, as it might be a public stream check
+        if (user) {
+           toast.error('Failed to load stream');
+        }
         return;
       }
       setStream(data);
@@ -350,7 +353,7 @@ export default function BroadcastPage() {
 
       {/* Mobile Chat Sheet/Overlay */}
       {showMobileChat && (
-        <div className="absolute inset-x-0 bottom-0 h-[50vh] bg-[#0b091f] rounded-t-2xl z-40 flex flex-col md:hidden animate-slideUp border-t border-white/10 shadow-2xl">
+        <div className="absolute inset-x-0 bottom-0 h-[65vh] bg-[#0b091f] rounded-t-2xl z-40 flex flex-col md:hidden animate-slideUp border-t border-white/10 shadow-2xl">
            <div className="flex justify-between items-center p-3 border-b border-white/5">
               <span className="font-bold text-sm">Live Chat</span>
               <button onClick={() => setShowMobileChat(false)} className="text-white/50 hover:text-white">Close</button>
