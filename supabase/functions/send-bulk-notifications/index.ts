@@ -4,11 +4,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-const cors = {
-  "Access-Control-Allow-Origin": "*",
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "https://maitrollcity.com",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Content-Type": "application/json"
+  "Vary": "Origin"
 };
 
 interface NotificationRequest {
@@ -24,12 +25,26 @@ interface UserProfile {
 }
 
 serve(async (req: Request) => {
+  // Handle CORS
+  const origin = req.headers.get('origin');
+  const allowedOrigins = [
+    'https://maitrollcity.com',
+    'https://www.maitrollcity.com',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ];
+  
+  let headers = { ...corsHeaders };
+  if (origin && allowedOrigins.includes(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: cors });
+    return new Response(null, { status: 204, headers });
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: cors });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
   }
 
   try {
@@ -38,7 +53,7 @@ serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "").trim();
     
     if (!token) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401, headers: cors });
+      return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401, headers });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -46,7 +61,7 @@ serve(async (req: Request) => {
     // Verify user is admin
     const { data: userData, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !userData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: cors });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
     }
 
     const { data: profile } = await supabase
@@ -57,15 +72,16 @@ serve(async (req: Request) => {
 
     const isAdmin = profile?.role === "admin" || profile?.is_admin === true;
     if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: cors });
+      return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers });
     }
 
     const body = await req.json() as NotificationRequest;
     const { type, title, message, metadata = {}, targetUserIds } = body;
 
     if (!type || !title || !message) {
-      return new Response(JSON.stringify({ error: "Missing required fields: type, title, message" }), { status: 400, headers: cors });
+      return new Response(JSON.stringify({ error: "Missing required fields: type, title, message" }), { status: 400, headers });
     }
+
 
     // Get user IDs - either specific users or all users
     let userIds: string[];
@@ -80,7 +96,7 @@ serve(async (req: Request) => {
 
       if (usersErr) {
         console.error("Error fetching users:", usersErr);
-        return new Response(JSON.stringify({ error: "Failed to fetch users" }), { status: 500, headers: cors });
+        return new Response(JSON.stringify({ error: "Failed to fetch users" }), { status: 500, headers });
       }
 
       userIds = users?.map((u: UserProfile) => u.id) ?? [];
@@ -91,7 +107,7 @@ serve(async (req: Request) => {
         success: true, 
         message: "No users to notify",
         notificationCount: 0 
-      }), { status: 200, headers: cors });
+      }), { status: 200, headers });
     }
 
     // Create notification records
@@ -143,11 +159,11 @@ serve(async (req: Request) => {
       message: `Notifications sent to ${insertedCount} users`,
       notificationCount: insertedCount,
       failedCount: errorCount
-    }), { status: 200, headers: cors });
+    }), { status: 200, headers });
 
   } catch (e) {
     console.error("Server error:", e);
     const errorMessage = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: "Internal server error", details: errorMessage }), { status: 500, headers: cors });
+    return new Response(JSON.stringify({ error: "Internal server error", details: errorMessage }), { status: 500, headers });
   }
 });
