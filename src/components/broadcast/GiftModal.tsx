@@ -1,7 +1,8 @@
 import { X, Coins, Zap } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
 
-const gifts = [
+const fallbackGifts = [
   { id: 0, name: "Troll", emoji: "🧟", coins: 1, rarity: 'troll', color: 'from-green-500 to-emerald-700' },
   { id: 1, name: "Rose", emoji: "🌹", coins: 10, rarity: 'common', color: 'from-red-500 to-rose-700' },
   { id: 2, name: "Heart", emoji: "💗", coins: 50, rarity: 'common', color: 'from-pink-500 to-fuchsia-700' },
@@ -12,8 +13,30 @@ const gifts = [
 ];
 
 export default function GiftModal({ onClose, onSendGift, recipientName, profile }) {
+  const [gifts, setGifts] = useState(fallbackGifts);
   const [selectedGift, setSelectedGift] = useState(null);
   const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    const loadGifts = async () => {
+      const { data, error } = await supabase
+        .from('gift_items')
+        .select('id,name,icon,value,category')
+        .order('value', { ascending: true });
+      if (error || !data?.length) {
+        return;
+      }
+      setGifts(data.map((gift) => ({
+        id: gift.id,
+        name: gift.name,
+        emoji: gift.icon,
+        coins: gift.value,
+        rarity: (gift.category || 'common').toLowerCase(),
+        color: 'from-purple-500 to-violet-700'
+      })));
+    };
+    loadGifts();
+  }, []);
 
   const handleSendGift = () => {
     if (!selectedGift) return;

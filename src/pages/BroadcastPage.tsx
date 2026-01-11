@@ -290,6 +290,7 @@ export default function BroadcastPage() {
           isHost={isBroadcaster}
           seats={seats}
           joinPrice={joinPrice}
+          lastGift={lastGift}
           onSetPrice={(newPrice) => {
             // Update the join price state
             setJoinPrice(newPrice);

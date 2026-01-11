@@ -224,6 +224,28 @@ export default function WatchPage() {
     typeof value === 'string' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+  const resolveGiftId = async (giftId?: string | number, giftName?: string) => {
+    if (isUuid(giftId)) return giftId as string;
+    const rawId = giftId ? String(giftId) : '';
+    if (rawId) {
+      const { data } = await supabase
+        .from('gift_items')
+        .select('id')
+        .eq('id', rawId)
+        .maybeSingle();
+      if (data?.id) return data.id as string;
+    }
+    if (giftName) {
+      const { data } = await supabase
+        .from('gift_items')
+        .select('id')
+        .ilike('name', giftName)
+        .maybeSingle();
+      if (data?.id) return data.id as string;
+    }
+    return null;
+  };
+
   const handleGiftSent = useCallback(async (amountOrGift: any) => {
     let totalCoins = 0;
     let quantity = 1;
@@ -248,20 +270,32 @@ export default function WatchPage() {
     setGiftRecipient(null);
 
     try {
-      await supabase.from('gifts').insert({
+      if (!user?.id || !stream?.id) {
+        toast.error('Unable to send gift right now.');
+        return;
+      }
+      const resolvedGiftId = await resolveGiftId(giftId, giftName);
+      if (!resolvedGiftId) {
+        toast.error('Gift item unavailable. Refresh and try again.');
+        return;
+      }
+      const { error } = await supabase.from('gifts').insert({
         stream_id: stream?.id,
         sender_id: user?.id,
         receiver_id: receiverId,
         coins_spent: totalCoins,
         gift_type: 'paid',
         message: giftName,
-        gift_id: isUuid(giftId) ? giftId : null,
+        gift_id: resolvedGiftId,
         quantity: quantity,
       });
+      if (error) {
+        throw error;
+      }
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }
-  }, [stream?.id, user?.id, giftRecipient?.id]);
+  }, [stream?.id, user?.id, giftRecipient?.id, resolveGiftId]);
 
   const handleCoinsPurchased = useCallback(() => {
     setIsCoinStoreOpen(false);

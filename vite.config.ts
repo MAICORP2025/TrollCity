@@ -17,6 +17,9 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "robots.txt", "apple-touch-icon.png"],
+      devOptions: {
+        enabled: false
+      },
       manifest: {
         name: "Troll City",
         short_name: "TrollCity",
@@ -43,15 +46,10 @@ export default defineConfig({
   ],
   base: '/',
   server: {
-    host: 'localhost',
+    host: true,
     port: 5173,
     strictPort: false,
-    hmr: disableHmr
-      ? false
-      : {
-          host: 'localhost',
-          overlay: false
-        },
+    hmr: disableHmr ? false : { overlay: false },
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.PORT || 3001}`,

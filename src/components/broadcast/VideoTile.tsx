@@ -13,6 +13,7 @@ interface VideoTileProps {
   showControls?: boolean
   fit?: 'cover' | 'contain'
   price?: number
+  coinBalance?: number
   isHost?: boolean
   onDisableGuestMedia?: (participantId: string, disableVideo: boolean, disableAudio: boolean) => void
 }
@@ -26,6 +27,7 @@ export default function VideoTile({
   isLocal,
   fit = 'cover',
   price,
+  coinBalance,
   isHost = false,
   onDisableGuestMedia
 }: VideoTileProps) {
@@ -298,11 +300,21 @@ export default function VideoTile({
         </div>
       </div>
 
-      {/* Price Badge (Bottom Right) */}
-      {typeof price === 'number' && price > 0 && (
-        <div className="absolute bottom-4 right-4 z-10 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-yellow-500/30 text-yellow-300 text-sm flex items-center gap-1">
-          <Coins className="w-4 h-4" />
-          <span>{price.toLocaleString()} coins</span>
+      {/* Balance / Price Badges (Bottom Right) */}
+      {(typeof coinBalance === 'number' || (typeof price === 'number' && price > 0)) && (
+        <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
+          {typeof coinBalance === 'number' && (
+            <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-yellow-500/30 text-yellow-300 text-sm flex items-center gap-1">
+              <Coins className="w-4 h-4" />
+              <span>{coinBalance.toLocaleString()}</span>
+            </div>
+          )}
+          {typeof price === 'number' && price > 0 && (
+            <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-yellow-500/30 text-yellow-300 text-sm flex items-center gap-1">
+              <Coins className="w-4 h-4" />
+              <span>{price.toLocaleString()} coins</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useRoomParticipants } from '../../hooks/useRoomParticipants'
 import { Room } from 'livekit-client'
 import ResponsiveVideoGrid from '../stream/ResponsiveVideoGrid'
+import { supabase } from '../../lib/supabase'
 
 interface BroadcastLayoutProps {
   room: Room
@@ -9,6 +10,7 @@ interface BroadcastLayoutProps {
   isHost: boolean
   joinPrice?: number
   seats?: any[]
+  lastGift?: any
   onSetPrice?: (price: number) => void
   onJoinRequest?: (seatIndex: number) => void
   onLeaveSession?: () => void
@@ -22,6 +24,7 @@ export default function BroadcastLayout({
   isHost,
   joinPrice = 0,
   seats,
+  lastGift,
   onSetPrice,
   onJoinRequest,
   onLeaveSession,
@@ -30,10 +33,68 @@ export default function BroadcastLayout({
 }: BroadcastLayoutProps) {
   const participants = useRoomParticipants(room);
   const [draftPrice, setDraftPrice] = useState<string>('');
+  const [coinBalances, setCoinBalances] = useState<Record<string, number>>({});
+
+  const participantIds = useMemo(
+    () => participants.map((p) => p.identity).filter(Boolean) as string[],
+    [participants]
+  );
+  const participantIdsKey = useMemo(
+    () => participantIds.slice().sort().join('|'),
+    [participantIds]
+  );
 
   useEffect(() => {
     setDraftPrice(joinPrice > 0 ? String(joinPrice) : '');
   }, [joinPrice]);
+
+  useEffect(() => {
+    if (!participantIds.length) return;
+    let isActive = true;
+    const loadBalances = async () => {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id,troll_coins')
+        .in('id', participantIds);
+      if (!isActive || error || !data) return;
+      const next = data.reduce<Record<string, number>>((acc, row: any) => {
+        acc[row.id] = Number(row.troll_coins || 0);
+        return acc;
+      }, {});
+      setCoinBalances((prev) => ({ ...prev, ...next }));
+    };
+    loadBalances();
+    return () => {
+      isActive = false;
+    };
+  }, [participantIdsKey]);
+
+  useEffect(() => {
+    const receiverId =
+      lastGift?.receiver_id ||
+      lastGift?.to_user_id ||
+      lastGift?.receiverId ||
+      lastGift?.receiverID ||
+      null;
+    if (!receiverId) return;
+    let isActive = true;
+    const refreshReceiverBalance = async () => {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('id,troll_coins')
+        .eq('id', receiverId)
+        .maybeSingle();
+      if (!isActive || !data?.id) return;
+      setCoinBalances((prev) => ({
+        ...prev,
+        [data.id]: Number(data.troll_coins || 0)
+      }));
+    };
+    refreshReceiverBalance();
+    return () => {
+      isActive = false;
+    };
+  }, [lastGift]);
   
   if (!room) return null;
 
@@ -49,6 +110,7 @@ export default function BroadcastLayout({
         onLeaveSession={onLeaveSession}
         onJoinRequest={onJoinRequest}
         onDisableGuestMedia={onDisableGuestMedia}
+        coinBalances={coinBalances}
       />
 
       {/* Overlays / Children (Gifts, etc) */}

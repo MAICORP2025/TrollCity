@@ -11,6 +11,7 @@ interface ResponsiveVideoGridProps {
   joinPrice?: number;
   onJoinRequest?: (seatIndex: number) => void;
   onDisableGuestMedia?: (participantId: string) => void;
+  coinBalances?: Record<string, number>;
 }
 
 export default function ResponsiveVideoGrid({
@@ -21,7 +22,8 @@ export default function ResponsiveVideoGrid({
   onLeaveSession,
   joinPrice = 0,
   onJoinRequest,
-  onDisableGuestMedia
+  onDisableGuestMedia,
+  coinBalances
 }: ResponsiveVideoGridProps) {
   const TOTAL_SLOTS = 6;
 
@@ -75,6 +77,7 @@ export default function ResponsiveVideoGrid({
                 onLeave={isLocal && !isBroadcaster ? onLeaveSession : undefined}
                 onDisableGuestMedia={onDisableGuestMedia}
                 price={joinPrice}
+                coinBalance={p.identity ? coinBalances?.[p.identity] : undefined}
                 className="w-full h-full"
                 style={{ width: '100%', height: '100%' }}
               />

@@ -552,6 +552,7 @@ export default function LivePage() {
               coins_spent: joinPrice,
               gift_type: 'paid',
               message: 'Join Fee',
+              gift_id: crypto.randomUUID(),
               quantity: 1
           });
 
@@ -913,6 +914,28 @@ export default function LivePage() {
     typeof value === 'string' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+  const resolveGiftId = async (giftId?: string | number, giftName?: string) => {
+    if (isUuid(giftId)) return giftId as string;
+    const rawId = giftId ? String(giftId) : '';
+    if (rawId) {
+      const { data } = await supabase
+        .from('gift_items')
+        .select('id')
+        .eq('id', rawId)
+        .maybeSingle();
+      if (data?.id) return data.id as string;
+    }
+    if (giftName) {
+      const { data } = await supabase
+        .from('gift_items')
+        .select('id')
+        .ilike('name', giftName)
+        .maybeSingle();
+      if (data?.id) return data.id as string;
+    }
+    return null;
+  };
+
   const handleGiftSent = useCallback(async (amountOrGift: any) => {
     let totalCoins = 0;
     let quantity = 1;
@@ -935,16 +958,28 @@ export default function LivePage() {
     setGiftReceiver(null);
 
     try {
-      await supabase.from('gifts').insert({
+      if (!user?.id || !stream?.id || !targetReceiverId) {
+        toast.error('Unable to send gift right now.');
+        return;
+      }
+      const resolvedGiftId = await resolveGiftId(giftId, giftName);
+      if (!resolvedGiftId) {
+        toast.error('Gift item unavailable. Refresh and try again.');
+        return;
+      }
+      const { error } = await supabase.from('gifts').insert({
         stream_id: stream?.id,
         sender_id: user?.id,
         receiver_id: targetReceiverId,
         coins_spent: totalCoins,
         gift_type: 'paid',
         message: giftName,
-        gift_id: isUuid(giftId) ? giftId : null,
+        gift_id: resolvedGiftId,
         quantity: quantity,
       });
+      if (error) {
+        throw error;
+      }
 
       // Lucky Gift Logic (5% chance)
       if (Math.random() < 0.05 && user?.id) {
@@ -978,7 +1013,7 @@ export default function LivePage() {
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }
-  }, [stream?.id, user?.id, giftReceiver, stream?.broadcaster_id]);
+  }, [stream?.id, user?.id, giftReceiver, stream?.broadcaster_id, resolveGiftId]);
 
   const handleCoinsPurchased = useCallback((_amount: number) => {
     setIsCoinStoreOpen(false);
@@ -1076,12 +1111,13 @@ export default function LivePage() {
         )}
 
         {/* Broadcast Layout (Streamer + Guests) */}
-        <div className="lg:w-3/4 h-[56vh] lg:h-full min-h-0 flex flex-col relative z-0">
+        <div className="lg:w-3/4 flex-1 min-h-[45svh] lg:min-h-0 lg:h-full flex flex-col relative z-0">
             <BroadcastLayout 
               room={liveKit.getRoom()} 
               broadcasterId={stream.broadcaster_id}
               isHost={isBroadcaster}
               joinPrice={joinPrice}
+              lastGift={lastGift}
               onSetPrice={handleSetPrice}
               onJoinRequest={handleJoinRequest}
               onLeaveSession={handleLeaveSession}
@@ -1107,7 +1143,7 @@ export default function LivePage() {
          </div>
 
          {/* Right Panel (Chat/Gifts) */}
-         <div className="lg:w-1/4 flex-1 lg:h-full min-h-0 flex flex-col gap-4 overflow-hidden relative z-0 h-[42vh] lg:h-full">
+         <div className="lg:w-1/4 flex-1 lg:h-full min-h-0 flex flex-col gap-4 overflow-hidden relative z-0 pb-[calc(4rem+env(safe-area-inset-bottom))]">
             {isBroadcaster && (
               <BroadcasterControlPanel
                 streamId={streamId || ''}
