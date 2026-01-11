@@ -182,7 +182,7 @@ serve(async (req: Request) => {
     const token = new AccessToken(apiKey, apiSecret, {
       identity: String(identity),
       name: profile.username,
-      ttl: 60 * 60,
+      ttl: 24 * 60 * 60, // 24 hours
       metadata: JSON.stringify(metadata),
     });
 

@@ -127,7 +127,31 @@ serve(async (req: Request) => {
 
     // 4. Verify Custom ID
     const purchaseUnit = captureData.purchase_units?.[0];
-    const customIdRaw = purchaseUnit?.custom_id;
+    let customIdRaw = purchaseUnit?.custom_id;
+    
+    // Fallback: If custom_id is missing in capture response, fetch order details
+    if (!customIdRaw) {
+        console.log("No custom_id in capture response, fetching order details...");
+        try {
+            const detailsRes = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${orderID}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json"
+                }
+            });
+            
+            if (detailsRes.ok) {
+                const orderDetails = await detailsRes.json();
+                customIdRaw = orderDetails.purchase_units?.[0]?.custom_id;
+                console.log("Retrieved custom_id from order details");
+            } else {
+                console.error("Failed to fetch order details:", await detailsRes.text());
+            }
+        } catch (fetchErr) {
+            console.error("Error fetching order details:", fetchErr);
+        }
+    }
     
     if (!customIdRaw) {
         throw new Error("No custom_id found in PayPal order");
