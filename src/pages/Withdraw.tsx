@@ -2,11 +2,13 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
+import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from "../lib/payoutWindow";
 
 export default function Withdraw() {
   const { user } = useAuthStore();
   const [balance, setBalance] = useState(0);
   const [amount, setAmount] = useState("");
+  const payoutWindowOpen = isPayoutWindowOpen();
 
   const loadBalance = useCallback(async () => {
     if (!user) return;
@@ -40,6 +42,11 @@ export default function Withdraw() {
 
     if (coinAmount > balance) {
       toast.error("You cannot withdraw more than your balance.");
+      return;
+    }
+
+    if (!payoutWindowOpen) {
+      toast.error(PAYOUT_WINDOW_LABEL);
       return;
     }
 
@@ -95,6 +102,12 @@ export default function Withdraw() {
           (${(balance * (25 / 12000)).toFixed(2)})
         </p>
 
+        {!payoutWindowOpen && (
+          <div className="mb-3 rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
+            {PAYOUT_WINDOW_LABEL}
+          </div>
+        )}
+
         <input
           type="number"
           className="w-full p-2 rounded bg-zinc-800 text-white placeholder-gray-400 mb-3 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -106,7 +119,7 @@ export default function Withdraw() {
         <button
           onClick={requestPayout}
           className="bg-green-500 hover:bg-green-600 w-full mt-3 py-2 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={!amount || ![12000,30000,60000,120000].includes(parseInt(amount)) || parseInt(amount) > balance}
+          disabled={!amount || ![12000,30000,60000,120000].includes(parseInt(amount)) || parseInt(amount) > balance || !payoutWindowOpen}
         >
           Request Withdrawal
         </button>

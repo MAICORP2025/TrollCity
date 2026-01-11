@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
 import { DollarSign, CreditCard, Clock, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from '../lib/payoutWindow';
 
 interface PayoutStats {
   total_earned: number;
@@ -25,6 +26,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   const [requestAmount, setRequestAmount] = useState<number>(0);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [_hasReducedFees, setHasReducedFees] = useState(false);
+  const payoutWindowOpen = isPayoutWindowOpen();
 
   const checkReducedFees = React.useCallback(async () => {
     try {
@@ -137,6 +139,11 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
 
     if (!paypalEmail) {
       toast.error('Gift Card email is required');
+      return;
+    }
+
+    if (!payoutWindowOpen) {
+      toast.error(PAYOUT_WINDOW_LABEL);
       return;
     }
 
@@ -302,10 +309,16 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
         </p>
       </div>
 
+      {!payoutWindowOpen && (
+        <div className="mb-6 rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
+          {PAYOUT_WINDOW_LABEL}
+        </div>
+      )}
+
       {/* Request Payout Button */}
       {!showRequestForm && (
         <div className="text-center">
-          {stats.can_request_payout ? (
+          {stats.can_request_payout && payoutWindowOpen ? (
             <button
               onClick={() => setShowRequestForm(true)}
               className="px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 flex items-center gap-2 mx-auto"
@@ -318,8 +331,9 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
               <AlertTriangle className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
               <p className="text-yellow-300 font-medium">Payout Not Available</p>
               <p className="text-yellow-400 text-sm">
-                Need {stats.payout_threshold.toLocaleString()} coins minimum.
-                Currently have {stats.available_for_payout.toLocaleString()} available.
+                {payoutWindowOpen
+                  ? `Need ${stats.payout_threshold.toLocaleString()} coins minimum. Currently have ${stats.available_for_payout.toLocaleString()} available.`
+                  : PAYOUT_WINDOW_LABEL}
               </p>
             </div>
           )}
@@ -378,7 +392,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             </button>
             <button
               onClick={submitPayoutRequest}
-              disabled={requesting || requestAmount < 12000 || requestAmount > stats.available_for_payout}
+              disabled={requesting || requestAmount < 12000 || requestAmount > stats.available_for_payout || !payoutWindowOpen}
               className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded transition-colors flex items-center justify-center gap-2"
               >
               {requesting ? (

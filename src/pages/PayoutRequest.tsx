@@ -3,6 +3,7 @@ import { useAuthStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { DollarSign, ArrowRight } from "lucide-react";
+import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from "../lib/payoutWindow";
 
 const TIERS = [
   { coins: 12000, usd: 25 },
@@ -24,6 +25,7 @@ export default function PayoutRequest() {
   const { user, profile, refreshProfile } = useAuthStore() as any;
   const [coins, setCoins] = useState("");
   const [loading, setLoading] = useState(false);
+  const payoutWindowOpen = isPayoutWindowOpen();
 
   if (!user) {
     return (
@@ -49,6 +51,11 @@ export default function PayoutRequest() {
       
       if (!num || num <= 0) {
         toast.error("Enter a valid coin amount.");
+        return;
+      }
+
+      if (!payoutWindowOpen) {
+        toast.error(PAYOUT_WINDOW_LABEL);
         return;
       }
       
@@ -109,6 +116,12 @@ export default function PayoutRequest() {
           </div>
         </div>
 
+        {!payoutWindowOpen && (
+          <div className="rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
+            {PAYOUT_WINDOW_LABEL}
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-semibold mb-2">
             Select a Visa tier (12k, 30k, 60k, 120k)
@@ -133,7 +146,7 @@ export default function PayoutRequest() {
 
         <button
           onClick={submit}
-          disabled={loading || !coins || ![12000,30000,60000,120000].includes(Number(coins)) || Number(coins) > balance}
+          disabled={loading || !coins || ![12000,30000,60000,120000].includes(Number(coins)) || Number(coins) > balance || !payoutWindowOpen}
           className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? "Submitting..." : "Submit Payout Request"}

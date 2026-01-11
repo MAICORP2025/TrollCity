@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase, getSystemSettings } from '../lib/supabase'
+import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from '../lib/payoutWindow'
 import { toast } from 'sonner'
 import { X, DollarSign, AlertCircle } from 'lucide-react'
 import { RequestPayoutResponse } from '../types/earnings'
@@ -19,6 +20,7 @@ export default function RequestPayoutModal({
 }: RequestPayoutModalProps) {
   const [coinsToRedeem, setCoinsToRedeem] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const payoutWindowOpen = isPayoutWindowOpen()
 
   const MINIMUM_COINS = 7000 // $21 minimum
   // Conversion rate varies by tier: $21/7k = $0.003, $49.50/14k = $0.0035357, $90/27k = $0.00333, $150/47k = $0.00319
@@ -34,6 +36,11 @@ export default function RequestPayoutModal({
     
     if (!isValid) {
       toast.error(`Please enter between ${MINIMUM_COINS.toLocaleString()} and ${availableCoins.toLocaleString()} coins`)
+      return
+    }
+
+    if (!payoutWindowOpen) {
+      toast.error(PAYOUT_WINDOW_LABEL)
       return
     }
 
@@ -92,6 +99,11 @@ export default function RequestPayoutModal({
           <p className="text-sm text-gray-400 mt-1">
             Convert your coins to cash
           </p>
+          {!payoutWindowOpen && (
+            <div className="mt-3 rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
+              {PAYOUT_WINDOW_LABEL}
+            </div>
+          )}
         </div>
 
         {/* Available Balance */}
@@ -172,7 +184,7 @@ export default function RequestPayoutModal({
             </button>
             <button
               type="submit"
-              disabled={!isValid || loading}
+              disabled={!isValid || loading || !payoutWindowOpen}
               className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Submitting...' : 'Submit Request'}
