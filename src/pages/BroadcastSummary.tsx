@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Gift, Heart, Users, AlertCircle, TrendingUp, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +11,13 @@ export default function BroadcastSummary() {
   const { streamId } = useParams();
   const [loading, setLoading] = useState(false);
   const [streamData, setStreamData] = useState<any>(location.state || null);
+  const [coinRate, setCoinRate] = useState({
+    usdPerCoin: 0.00449,
+    coinsPerDollar: 222,
+    per100Usd: 0.45,
+    packageLabel: "Bronze Pack"
+  });
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     if (!streamData && streamId) {
@@ -36,16 +43,15 @@ export default function BroadcastSummary() {
              const end = data.end_time ? new Date(data.end_time) : new Date();
              const duration = (end.getTime() - start.getTime()) / 1000; // seconds
 
-             setStreamData({
-               title: data.title || "Stream Summary",
-               category: data.category || "General",
-               duration: duration,
-               totalGifts: data.total_gifts_coins || 0, // Assuming this field stores gifts count or value
-               totalCoins: data.total_gifts_coins || 0, // Simplify for now
-               coinsPerDollar: 100, // Hardcoded for now
-               viewerCount: data.peak_viewers || data.current_viewers || 0,
-               newFollowers: [], // Would need separate query
-               reports: [], // Would need separate query
+            setStreamData({
+              title: data.title || "Stream Summary",
+              category: data.category || "General",
+              duration: duration,
+              totalGifts: data.total_gifts_coins || 0, // Assuming this field stores gifts count or value
+              totalCoins: data.total_gifts_coins || 0, // Simplify for now
+              viewerCount: data.peak_viewers || data.current_viewers || 0,
+              newFollowers: [], // Would need separate query
+              reports: [], // Would need separate query
                violations: 0,
                level: 1, // Default
                recording_url: data.recording_url
@@ -62,6 +68,93 @@ export default function BroadcastSummary() {
     }
   }, [streamId, streamData]);
 
+  useEffect(() => {
+    let mounted = true;
+    const loadCoinRate = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("coin_packages")
+          .select("coins, price_usd, coin_amount, price, name")
+          .eq("is_active", true)
+          .order("coins", { ascending: true })
+          .limit(1);
+
+        if (error) throw error;
+
+        const pkg = data?.[0];
+        const coins = pkg?.coins ?? pkg?.coin_amount;
+        const price = pkg?.price_usd ?? pkg?.price;
+
+        if (!coins || !price) return;
+
+        const usdPerCoin = Number(price) / Number(coins);
+        const coinsPerDollar = usdPerCoin > 0 ? Math.round(1 / usdPerCoin) : 0;
+        const per100Usd = usdPerCoin * 100;
+
+        if (mounted) {
+          setCoinRate({
+            usdPerCoin,
+            coinsPerDollar,
+            per100Usd,
+            packageLabel: pkg?.name || "Coin Pack",
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load coin rate", err);
+      }
+    };
+
+    void loadCoinRate();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!streamId) return;
+    const channel = supabase
+      .channel(`stream-summary-${streamId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "streams",
+          filter: `id=eq.${streamId}`,
+        },
+        (payload) => {
+          const updated = payload.new;
+          if (!updated) return;
+          setStreamData((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              ...{
+                title: updated.title || prev.title,
+                category: updated.category || prev.category,
+                totalGifts: updated.total_gifts_coins ?? prev.totalGifts,
+                totalCoins: updated.total_gifts_coins ?? prev.totalCoins,
+                viewerCount: updated.current_viewers ?? prev.viewerCount,
+                peakViewers: updated.peak_viewers ?? prev.peakViewers,
+                recording_url: updated.recording_url ?? prev.recording_url,
+              },
+            };
+          });
+        }
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [streamId]);
+
   const [downloadLoading, setDownloadLoading] = useState(false);
 
   const data = streamData || {
@@ -70,13 +163,17 @@ export default function BroadcastSummary() {
     duration: 3600,
     totalGifts: 2450,
     totalCoins: 12500,
-    coinsPerDollar: 100,
     viewerCount: 245,
     newFollowers: ["User123", "StreamFan", "TrollKing"],
     reports: ["Toxicity"],
     violations: 0,
     level: 5,
   };
+
+  const coinsPerDollar = coinRate.coinsPerDollar || 100;
+  const usdPerCoin = coinRate.usdPerCoin || 0.01;
+  const estimatedEarnings = ((data.totalCoins || 0) * usdPerCoin).toFixed(2);
+  const per100Usd = coinRate.per100Usd.toFixed(2);
 
   const handleDownload = async () => {
     if (!data.recording_url) {
@@ -113,7 +210,6 @@ export default function BroadcastSummary() {
     }
   };
 
-  const estimatedEarnings = (data.totalCoins / data.coinsPerDollar).toFixed(2);
   const durationMinutes = Math.floor(data.duration / 60);
   const durationHours = Math.floor(durationMinutes / 60);
   const remainingMinutes = durationMinutes % 60;
@@ -159,7 +255,11 @@ export default function BroadcastSummary() {
               </div>
               <div className="flex justify-between text-xs text-gray-500">
                 <span>Rate</span>
-                <span>{data.coinsPerDollar} coins = $1</span>
+                <span>{coinsPerDollar.toLocaleString()} coins = $1</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>100 coins</span>
+                <span>${per100Usd}</span>
               </div>
             </div>
           </div>
