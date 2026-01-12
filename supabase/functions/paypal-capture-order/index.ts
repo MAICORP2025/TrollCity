@@ -480,6 +480,12 @@ serve(async (req: Request) => {
     const adminAllocation = 1.00;
     console.log(`✅ PayPal transaction complete: $${usdAmount} → $${adminAllocation} admin_spendable, $${usdAmount - adminAllocation} broadcaster_liability`);
 
+    try {
+      await supabase.rpc("mark_user_paid", { p_user_id: metaUserId });
+    } catch (markErr) {
+      console.warn("mark_user_paid failed:", markErr);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

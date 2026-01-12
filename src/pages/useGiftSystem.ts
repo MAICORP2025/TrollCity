@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { useAuthStore } from '../lib/store'
+import { isPurchaseRequiredError, openPurchaseGate } from '../lib/purchaseGate'
 
 interface GiftItem {
   id: string
@@ -33,10 +34,20 @@ export function useGiftSystem(streamerId: string, streamId: string) {
         p_coins_spent: gift.coinCost,
         p_gift_type: gift.type,
       })
-      if (error) throw error
+      if (error) {
+        if (isPurchaseRequiredError(error)) {
+          openPurchaseGate(error?.message || error?.error)
+          return false
+        }
+        throw error
+      }
       toast.success(`Gift sent: ${gift.name} 🎁`)
       return true
-    } catch {
+    } catch (err: any) {
+      if (isPurchaseRequiredError(err)) {
+        openPurchaseGate(err?.message || err?.error)
+        return false
+      }
       toast.error('Failed to send gift.')
       return false
     } finally {

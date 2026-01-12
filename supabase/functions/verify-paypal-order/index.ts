@@ -243,6 +243,12 @@ serve(async (req: Request) => {
         console.error("Failed to log transaction:", logError);
     }
 
+    try {
+        await supabase.rpc("mark_user_paid", { p_user_id: user_id });
+    } catch (markErr) {
+        console.warn("mark_user_paid failed:", markErr);
+    }
+
     return new Response(JSON.stringify({ success: true, coins_added: coinsToAdd }), {
         status: 200,
         headers: { ...headers, "Content-Type": "application/json" }

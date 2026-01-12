@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { isPurchaseRequiredError, openPurchaseGate } from '../lib/purchaseGate'
 
 const DEFAULT_ROOM = 'officer-stream'
 const SEAT_COUNT = 9
@@ -87,6 +88,10 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
         console.error('[useSeatRoster] invoke error:', invokeError)
       }
 
+      if (invokeError && isPurchaseRequiredError(invokeError)) {
+        openPurchaseGate(invokeError?.message || invokeError?.error)
+      }
+
       if (invokeError) {
         throw invokeError
       }
@@ -127,6 +132,9 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
       setError(null)
     } catch (err: any) {
       console.error('[useSeatRoster] refresh failed', err)
+      if (isPurchaseRequiredError(err)) {
+        openPurchaseGate(err?.message || err?.error)
+      }
       setError(err?.message || 'Unable to load seats')
     } finally {
       setLoading(false)
@@ -264,6 +272,10 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
           console.error('[useSeatRoster] claim invoke error:', invokeError)
         }
 
+        if (invokeError && isPurchaseRequiredError(invokeError)) {
+          openPurchaseGate(invokeError?.message || invokeError?.error)
+        }
+
         if (invokeError) {
           throw invokeError
         }
@@ -296,6 +308,11 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
         })
 
         return seat
+      } catch (err: any) {
+        if (isPurchaseRequiredError(err)) {
+          openPurchaseGate(err?.message || err?.error)
+        }
+        throw err
       } finally {
         setIsClaimingSeat(null)
       }

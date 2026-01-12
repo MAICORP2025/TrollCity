@@ -566,6 +566,12 @@ async function fulfillPayPalPurchase(
     });
     
     console.log(`✅ Fulfillment complete: ${coinsToCredit} coins credited to user ${effectiveUserId}`);
+
+    try {
+      await supabase.rpc("mark_user_paid", { p_user_id: effectiveUserId });
+    } catch (markErr) {
+      console.warn("mark_user_paid failed:", markErr);
+    }
     
     return {
       success: true,

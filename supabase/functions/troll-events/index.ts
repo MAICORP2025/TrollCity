@@ -3,6 +3,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { withCors, handleCorsPreflight } from "../_shared/cors.ts";
+import { PURCHASE_REQUIRED_MESSAGE } from "../_shared/purchaseGate.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -130,6 +131,17 @@ export const handler = async (req: Request): Promise<Response> => {
 
         if (!event_id) {
           return withCors({ error: "event_id is required" }, 400);
+        }
+
+        const { data: userProfile } = await supabase
+          .from("user_profiles")
+          .select("has_paid, is_admin, is_lead_officer")
+          .eq("id", user.id)
+          .single();
+
+        const hasElevatedAccess = Boolean(userProfile?.is_admin || userProfile?.is_lead_officer);
+        if (!hasElevatedAccess && !userProfile?.has_paid) {
+          return withCors({ error: PURCHASE_REQUIRED_MESSAGE }, 403);
         }
 
         // Get event

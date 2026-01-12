@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "jsr:@supabase/supabase-js@2"
 import { corsHeaders } from "../_shared/cors.ts"
+import { getPurchaseErrorStatus, PURCHASE_REQUIRED_MESSAGE } from "../_shared/purchaseGate.ts"
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -21,6 +22,7 @@ interface AuthorizedProfile {
   is_lead_officer?: boolean
   is_troll_officer?: boolean
   is_broadcaster?: boolean
+  has_paid?: boolean
 }
 
 async function authorizeUser(req: Request): Promise<AuthorizedProfile> {
@@ -43,13 +45,21 @@ async function authorizeUser(req: Request): Promise<AuthorizedProfile> {
 
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select("id, username, role, avatar_url, is_admin, is_lead_officer, is_troll_officer, is_broadcaster")
+    .select("id, username, role, avatar_url, is_admin, is_lead_officer, is_troll_officer, is_broadcaster, has_paid")
     .eq("id", user.id)
     .single()
 
   if (profileError || !profile) {
     console.error("[broadcast-seats] Profile lookup failed:", profileError?.message)
     throw new Error("Profile not found")
+  }
+
+  const hasElevatedAccess = Boolean(profile.is_admin || profile.is_lead_officer)
+
+  if (!hasElevatedAccess && !profile.has_paid) {
+    const err = new Error(PURCHASE_REQUIRED_MESSAGE)
+    ;(err as any).status = 403
+    throw err
   }
 
   return profile as AuthorizedProfile
@@ -209,11 +219,12 @@ Deno.serve(async (req) => {
     )
   } catch (error: any) {
     console.error("[broadcast-seats] error:", error)
+    const status = getPurchaseErrorStatus(error)
     return new Response(
       JSON.stringify({ error: error?.message || "Internal server error" }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
+        status,
       }
     )
   }

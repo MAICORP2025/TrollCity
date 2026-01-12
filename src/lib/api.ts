@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { AuthApiError } from '@supabase/supabase-js'
+import { isPurchaseRequiredError, openPurchaseGate } from './purchaseGate'
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -196,6 +197,10 @@ async function request<T = any>(
       return { success: true, ...data }
     } else {
       const errorMsg = data?.error || data?.message || `API Error: ${response.status} ${response.statusText}`
+
+      if (isPurchaseRequiredError(data) || isPurchaseRequiredError(errorMsg)) {
+        openPurchaseGate(data?.error || data?.message || errorMsg)
+      }
 
       if (isLiveKitEndpoint || isBroadcastEndpoint) {
         console.error(`[API ${requestId}] ❌ Request failed:`, {

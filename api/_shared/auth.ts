@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+const PURCHASE_REQUIRED_MESSAGE = 'Purchase required to use this feature'
+
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for server-side Supabase access')
 }
@@ -25,6 +27,7 @@ export interface AuthorizedProfile {
   is_lead_officer?: boolean
   is_troll_officer?: boolean
   is_broadcaster?: boolean
+  has_paid?: boolean
 }
 
 function extractToken(req: any): string {
@@ -44,7 +47,7 @@ function extractToken(req: any): string {
 async function lookupProfile(userId: string): Promise<AuthorizedProfile> {
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('user_profiles')
-    .select('id, username, role, avatar_url, is_admin, is_lead_officer, is_troll_officer, is_broadcaster')
+    .select('id, username, role, avatar_url, is_admin, is_lead_officer, is_troll_officer, is_broadcaster, has_paid')
     .eq('id', userId)
     .single()
 
@@ -83,7 +86,16 @@ export async function authorizeUser(req: any): Promise<AuthorizedProfile> {
     }
   }
 
-  return lookupProfile(data.user.id)
+  const profile = await lookupProfile(data.user.id)
+  const hasElevatedAccess = Boolean(profile.is_admin || profile.is_lead_officer)
+
+  if (!hasElevatedAccess && !profile.has_paid) {
+    const err = new Error(PURCHASE_REQUIRED_MESSAGE)
+    ;(err as any).status = 403
+    throw err
+  }
+
+  return profile
 }
 
 export async function authorizeOfficer(req: any): Promise<AuthorizedProfile> {

@@ -5,6 +5,7 @@ import Header from '../Header'
 import { useLocation } from 'react-router-dom'
 import PWAInstallPrompt from '../PWAInstallPrompt'
 import UserCompliancePrompt from '../UserCompliancePrompt'
+import PurchaseRequiredModal from '../PurchaseRequiredModal'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -65,6 +66,7 @@ export default function AppLayout({
 
   return (
     <div className="h-screen w-screen overflow-hidden text-white flex" style={{ background: 'var(--troll-bg-gradient)' }}>
+      <PurchaseRequiredModal />
       <PWAInstallPrompt />
       {/* Desktop Sidebar - Hidden on Mobile */}
       {effectiveShowSidebar && (

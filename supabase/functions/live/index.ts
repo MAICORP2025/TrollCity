@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { PURCHASE_REQUIRED_MESSAGE } from "../_shared/purchaseGate.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = {
@@ -41,12 +42,22 @@ Deno.serve(async (req) => {
     const requesterId = authData.user.id;
     const { data: requesterProfile } = await supabase
       .from('user_profiles')
-      .select('id, is_admin')
+      .select('id, is_admin, is_lead_officer, has_paid')
       .eq('id', requesterId)
       .maybeSingle();
     const isAdmin = !!requesterProfile?.is_admin;
+    const hasElevatedAccess = Boolean(requesterProfile?.is_admin || requesterProfile?.is_lead_officer);
 
     if (action === 'start') {
+      if (!hasElevatedAccess && !requesterProfile?.has_paid) {
+        return new Response(
+          JSON.stringify({ error: PURCHASE_REQUIRED_MESSAGE }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        )
+      }
       if (!user_id || requesterId !== user_id) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
