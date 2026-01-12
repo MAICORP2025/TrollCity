@@ -1,5 +1,6 @@
 import React from 'react';
 import { Participant, LocalParticipant } from 'livekit-client';
+import { MoreHorizontal } from 'lucide-react';
 import VideoTile from '../broadcast/VideoTile';
 
 interface ResponsiveVideoGridProps {
@@ -12,6 +13,7 @@ interface ResponsiveVideoGridProps {
   onJoinRequest?: (seatIndex: number) => void;
   onDisableGuestMedia?: (participantId: string) => void;
   coinBalances?: Record<string, number>;
+  onSeatAction?: (params: { seatIndex: number; seat: any; participant?: Participant }) => void;
 }
 
 export default function ResponsiveVideoGrid({
@@ -68,7 +70,7 @@ export default function ResponsiveVideoGrid({
           const isBroadcaster = p.identity === broadcasterId;
 
           return (
-            <div key={p.identity} className="seat">
+            <div key={p.identity} className="seat relative">
               <VideoTile
                 participant={p}
                 isBroadcaster={isBroadcaster}
@@ -82,6 +84,19 @@ export default function ResponsiveVideoGrid({
                 className="w-full h-full"
                 style={{ width: '100%', height: '100%' }}
               />
+              {onSeatAction && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSeatAction({ seatIndex: i, seat, participant: p });
+                  }}
+                  className="absolute top-2 right-2 z-20 rounded-full bg-black/60 hover:bg-black/80 text-white p-1 backdrop-blur shadow-lg border border-white/20 transition"
+                  aria-label="Seat options"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+              )}
             </div>
           );
         } else if (seat) {

@@ -37,6 +37,7 @@ import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
 import { useSeatRoster } from '../hooks/useSeatRoster';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
+import UserActionsMenu from '../components/broadcast/UserActionsMenu';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -411,7 +412,7 @@ export default function LivePage() {
   }, [stream]);
   
   const isBroadcaster = useIsBroadcaster(profile, stream);
-  const { seats, claimSeat, releaseSeat } = useSeatRoster(streamId || '');
+  const { seats, claimSeat, releaseSeat } = useSeatRoster(seatRoomName);
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
   const canPublish = isBroadcaster || isGuestSeat;
   const liveKit = useLiveKit();
@@ -508,6 +509,29 @@ export default function LivePage() {
 
   const hasValidStreamId = !!streamId && typeof streamId === 'string' && streamId.trim() !== '';
   const sessionReady = !!user && !!profile && hasValidStreamId && !!roomName;
+
+  const seatRoomName = useMemo(() => {
+    return stream?.room_name || stream?.agora_channel || streamId || 'officer-stream';
+  }, [stream?.room_name, stream?.agora_channel, streamId]);
+  useEffect(() => {
+    setSeatActionTarget(null);
+  }, [streamId]);
+
+  const officerRoleNames = ['admin', 'lead_troll_officer', 'troll_officer'];
+  const isOfficerUser = Boolean(
+    profile &&
+      (officerRoleNames.includes(profile.role || '') ||
+        profile.is_admin ||
+        profile.is_lead_officer ||
+        profile.is_troll_officer)
+  );
+
+  const [seatActionTarget, setSeatActionTarget] = useState<{
+    userId: string
+    username?: string
+    role?: string
+    seatIndex: number
+  } | null>(null);
 
   const livekitIdentity = useMemo(() => {
     const id = stableIdentity;
@@ -702,6 +726,54 @@ export default function LivePage() {
       console.error('Failed to claim seat:', err);
       toast.error(err?.message || 'Failed to join seat');
     }
+  };
+
+  const handleSeatAction = (seatIndex: number, seat: any) => {
+    if (!isOfficerUser || !seat?.user_id) return;
+    setSeatActionTarget({
+      userId: seat.user_id,
+      username: seat.username,
+      role: seat.role,
+      seatIndex,
+    });
+  };
+
+  const closeSeatActionMenu = () => {
+    setSeatActionTarget(null);
+  };
+
+  const handleSeatGift = (amount: number) => {
+    if (!seatActionTarget) return;
+    setGiftReceiver({ id: seatActionTarget.userId, username: seatActionTarget.username || '' });
+    setIsGiftModalOpen(true);
+    closeSeatActionMenu();
+  };
+
+  const handleSeatKick = async () => {
+    if (!seatActionTarget) return;
+    await releaseSeat(seatActionTarget.seatIndex, seatActionTarget.userId, { force: true });
+    toast.success('Guest removed from seat');
+    closeSeatActionMenu();
+  };
+
+  const handleSeatReport = () => {
+    if (!seatActionTarget) return;
+    handleAlertOfficers(seatActionTarget.userId);
+    toast.info('Officers alerted');
+    closeSeatActionMenu();
+  };
+
+  const handleSeatFollow = () => {
+    if (!seatActionTarget) return;
+    toast.success(`Follow request sent to ${seatActionTarget.username || 'user'}`);
+    closeSeatActionMenu();
+  };
+
+  const handleSeatSummon = () => {
+    if (!seatActionTarget) return;
+    handleAlertOfficers(seatActionTarget.userId);
+    toast.success('Summon request sent');
+    closeSeatActionMenu();
   };
 
   useEffect(() => {
@@ -1427,6 +1499,7 @@ export default function LivePage() {
               onJoinRequest={handleJoinRequest}
               onLeaveSession={handleLeaveSession}
               onDisableGuestMedia={liveKit.disableGuestMediaByClick}
+              onSeatAction={handleSeatAction}
               giftBalanceDelta={giftBalanceDelta}
             >
                <GiftEventOverlay gift={lastGift} onProfileClick={(p) => setSelectedProfile(p)} />
@@ -1507,6 +1580,21 @@ export default function LivePage() {
             setIsGiftModalOpen(true);
             setSelectedProfile(null);
           }}
+        />
+      )}
+      {seatActionTarget && (
+        <UserActionsMenu
+          user={{
+            name: seatActionTarget.username || 'Seat occupant',
+            role: seatActionTarget.role as any,
+          }}
+          userRole={profile?.role}
+          onClose={closeSeatActionMenu}
+          onGift={handleSeatGift}
+          onKick={handleSeatKick}
+          onReport={handleSeatReport}
+          onFollow={handleSeatFollow}
+          onSummon={handleSeatSummon}
         />
       )}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}

@@ -35,6 +35,7 @@ interface BroadcastLayoutProps {
   onDisableGuestMedia?: (participantId: string) => void
   giftBalanceDelta?: { userId: string; delta: number; key: number } | null
   children?: React.ReactNode
+  onSeatAction?: (params: { seatIndex: number; seat: any; participant?: any }) => void
 }
 
 export default function BroadcastLayout({
@@ -52,6 +53,7 @@ export default function BroadcastLayout({
   onJoinRequest,
   onLeaveSession,
   onDisableGuestMedia,
+  onSeatAction,
   children
 }: BroadcastLayoutProps) {
   const participants = useRoomParticipants(room);
@@ -195,6 +197,7 @@ export default function BroadcastLayout({
         onJoinRequest={onJoinRequest}
         onDisableGuestMedia={onDisableGuestMedia}
         coinBalances={coinBalances}
+        onSeatAction={onSeatAction}
       />
 
       {/* Overlays / Children (Gifts, etc) */}
