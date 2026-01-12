@@ -31,6 +31,7 @@ import EntranceEffect from '../components/broadcast/EntranceEffect';
 import BroadcastLayout from '../components/broadcast/BroadcastLayout';
 import GlobalGiftBanner from '../components/GlobalGiftBanner';
 import GiftEventOverlay from './GiftEventOverlay';
+import { triggerUserEntranceEffect } from '../lib/entranceEffects';
 
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
@@ -424,6 +425,8 @@ export default function LivePage() {
       if (!isActive) return;
       if (!state?.active_theme_id) {
         setBroadcastThemeStyle(undefined);
+        setBroadcastTheme(null);
+        setLastThemeId(null);
         return;
       }
 
@@ -437,12 +440,14 @@ export default function LivePage() {
       if (!theme) {
         setBroadcastThemeStyle(undefined);
         setBroadcastTheme(null);
+        setLastThemeId(null);
         return;
       }
 
       if (theme.background_css) {
         setBroadcastThemeStyle({ background: theme.background_css });
         setBroadcastTheme(theme);
+        setLastThemeId(theme.id || null);
         return;
       }
       if (theme.background_asset_url) {
@@ -453,6 +458,7 @@ export default function LivePage() {
           backgroundRepeat: 'no-repeat'
         });
         setBroadcastTheme(theme);
+        setLastThemeId(theme.id || null);
         return;
       }
       if (theme.image_url) {
@@ -463,10 +469,12 @@ export default function LivePage() {
           backgroundRepeat: 'no-repeat'
         });
         setBroadcastTheme(theme);
+        setLastThemeId(theme.id || null);
         return;
       }
       setBroadcastThemeStyle(undefined);
       setBroadcastTheme(theme);
+      setLastThemeId(theme.id || null);
     };
 
     loadTheme();
@@ -595,6 +603,32 @@ export default function LivePage() {
     });
     toast.success(`Join price set to ${price} coins`);
   };
+
+  const handleAlertOfficers = useCallback(async (targetUserId?: string) => {
+    if (!streamId) return;
+    try {
+      const { data: officers } = await supabase
+        .from('user_profiles')
+        .select('id, username, role, is_officer')
+        .in('role', ['troll_officer','lead_troll_officer','admin']);
+      const list = (officers || []).map((o) => ({
+        user_id: o.id,
+        type: 'officer_update',
+        title: 'dYs" Stream Moderation Alert',
+        message: `Alert in stream ${streamId}${targetUserId ? ` involving user ${targetUserId}` : ''}`,
+        metadata: { stream_id: streamId, target_user_id: targetUserId }
+      }));
+      if (list.length > 0) {
+        await supabase.from('notifications').insert(list);
+        toast.success('Alert sent to troll officers');
+      } else {
+        toast.info('No officers found to notify');
+      }
+    } catch (err) {
+      console.error('Failed to alert officers', err);
+      toast.error('Failed to alert officers');
+    }
+  }, [streamId]);
 
   const handleJoinRequest = async (seatIndex: number) => {
     if (canPublish) {
@@ -736,6 +770,11 @@ export default function LivePage() {
   const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false);
   const [entranceEffect, setEntranceEffect] = useState<any>(null);
   const [giftBalanceDelta, setGiftBalanceDelta] = useState<GiftBalanceDelta | null>(null);
+  const [controlPanelOpen, setControlPanelOpen] = useState(false);
+  const [chatOverlayOpen, setChatOverlayOpen] = useState(false);
+  const [entranceEffectKey, setEntranceEffectKey] = useState(0);
+  const [lastThemeId, setLastThemeId] = useState<string | null>(null);
+  const entranceTimeoutRef = useRef<number | null>(null);
   
   // Entrance effect logic
   useEffect(() => {
@@ -790,19 +829,37 @@ export default function LivePage() {
             try {
               const data = JSON.parse(msg.content);
               setEntranceEffect(data);
-              setTimeout(() => setEntranceEffect(null), 5000);
+              setEntranceEffectKey((prev) => prev + 1);
+
+              if (entranceTimeoutRef.current) {
+                window.clearTimeout(entranceTimeoutRef.current);
+              }
+              entranceTimeoutRef.current = window.setTimeout(() => {
+                setEntranceEffect(null);
+                entranceTimeoutRef.current = null;
+              }, 5000);
+
+              const payloadUserId =
+                data.user_id || data.sender_id || msg.user_id || msg.sender_id;
+              if (payloadUserId) {
+                void triggerUserEntranceEffect(payloadUserId);
+              }
             } catch (e) {
               console.error('Failed to parse entrance effect', e);
             }
           } else if (msg.message_type === 'system' && msg.content?.startsWith('PRICE_UPDATE:')) {
-             const price = parseInt(msg.content.split(':')[1]);
-             if (!isNaN(price)) setJoinPrice(price);
+            const price = parseInt(msg.content.split(':')[1]);
+            if (!isNaN(price)) setJoinPrice(price);
           }
         }
       )
       .subscribe();
 
     return () => {
+      if (entranceTimeoutRef.current) {
+        window.clearTimeout(entranceTimeoutRef.current);
+        entranceTimeoutRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
   }, [streamId]);
@@ -985,6 +1042,45 @@ export default function LivePage() {
     redirectToSummary: true,
   });
 
+  const updateViewerCount = useCallback(async () => {
+    if (!streamId) return;
+    try {
+      const { count, error } = await supabase
+        .from('streams_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('stream_id', streamId)
+        .eq('is_active', true);
+      if (!error && typeof count === 'number') {
+        setStream((prev) => (prev ? { ...prev, current_viewers: count } : prev));
+      }
+    } catch (err) {
+      console.error('Failed to refresh viewer count:', err);
+    }
+  }, [streamId]);
+
+  useEffect(() => {
+    if (!streamId) return;
+    updateViewerCount();
+    const channel = supabase
+      .channel(`stream-watchers-${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'streams_participants',
+          filter: `stream_id=eq.${streamId}`,
+        },
+        () => {
+          updateViewerCount();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [streamId, updateViewerCount]);
+
   // Gift subscription
   const lastGift = useGiftEvents(streamId);
 
@@ -1022,18 +1118,24 @@ export default function LivePage() {
           : giftReceiver?.id || stream?.broadcaster_id;
       setGiftReceiver(null);
 
-      if (!user?.id || !stream?.id || !receiverId) {
+      const senderId = user?.id;
+      const streamIdValue = stream?.id;
+      const broadcasterId = stream?.broadcaster_id;
+      const canonicalGiftName = gift?.name || "Gift";
+      const canonicalGiftSlug = gift?.slug || toGiftSlug(canonicalGiftName);
+
+      if (!senderId || !streamIdValue || !receiverId) {
         toast.error("Unable to send gift right now.");
         return;
       }
 
       try {
         const { error: spendError } = await supabase.rpc("spend_coins", {
-          p_sender_id: user.id,
+          p_sender_id: senderId,
           p_receiver_id: receiverId,
           p_coin_amount: totalCoins,
           p_source: "gift",
-          p_item: gift?.name || "Gift",
+          p_item: canonicalGiftName,
         });
 
         if (spendError) {
@@ -1055,26 +1157,32 @@ export default function LivePage() {
             : prev
         );
 
-        if (stream?.id && stream?.broadcaster_id) {
+        if (streamIdValue && broadcasterId) {
           const eventType = totalCoins >= 1000 ? "super_gift" : "gift";
-          await supabase.from("broadcast_theme_events").insert({
-            room_id: stream.id,
-            broadcaster_id: stream.broadcaster_id,
-            theme_id: broadcastTheme?.id || null,
-            event_type: eventType,
-            payload: {
-              gift_slug: toGiftSlug(gift.name),
-              coins: totalCoins,
-              sender_id: user.id,
-            },
-          });
+          const themeIdToUse = lastThemeId || broadcastTheme?.id;
+          if (!themeIdToUse) {
+            console.warn("[LivePage] Skipping broadcast_theme_events insert because no theme is active");
+          } else {
+            await supabase.from("broadcast_theme_events").insert({
+              room_id: streamIdValue,
+              broadcaster_id: broadcasterId,
+              user_id: senderId,
+              theme_id: themeIdToUse,
+              event_type: eventType,
+              payload: {
+                gift_slug: canonicalGiftSlug,
+                coins: totalCoins,
+                sender_id: senderId,
+              },
+            });
+          }
         }
       } catch (err) {
         console.error("Failed to send gift:", err);
         toast.error("Failed to send gift. Please try again.");
       }
     },
-    [stream?.id, user?.id, giftReceiver, stream?.broadcaster_id, broadcastTheme?.id]
+    [stream?.id, user?.id, giftReceiver, stream?.broadcaster_id, broadcastTheme?.id, lastThemeId]
   );
   useEffect(() => {
     if (!streamId) return;
@@ -1135,7 +1243,7 @@ export default function LivePage() {
       <GlobalGiftBanner />
       {/* Entrance effect for all users */}
       {entranceEffect && (
-        <div className="fixed inset-0 z-[100] pointer-events-none">
+        <div key={entranceEffectKey} className="fixed inset-0 z-[100] pointer-events-none">
           <EntranceEffect username={entranceEffect.username} role={entranceEffect.role} profile={entranceEffect.profile} />
         </div>
       )}
@@ -1161,6 +1269,14 @@ export default function LivePage() {
             <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
               <Users size={16} className="text-green-400" /> <span className="font-bold">{(stream.current_viewers || 0).toLocaleString()}</span>
             </div>
+            {isBroadcaster && (
+              <button
+                onClick={() => setControlPanelOpen(true)}
+                className="px-3 py-2 rounded-lg border border-white/20 text-xs font-bold uppercase tracking-[0.2em] bg-white/5 text-white hover:bg-white/10 transition"
+              >
+                Control Panel
+              </button>
+            )}
             {stream.is_live && (
               isBroadcaster && stream.start_time ? (
                 <BroadcasterTimer startTime={stream.start_time} onClick={endStream} />
@@ -1235,39 +1351,20 @@ export default function LivePage() {
             </button>
          </div>
          )}
+         {showLivePanels && (
+         <div className="flex lg:hidden justify-center px-4 pb-2 pt-1">
+            <button
+              onClick={() => setChatOverlayOpen(true)}
+              className="w-full rounded-full border border-white/20 bg-gradient-to-r from-purple-500 to-pink-500 text-xs font-bold uppercase tracking-[0.3em] text-white py-2 shadow-lg shadow-purple-500/40"
+            >
+              Raise Live Chat
+            </button>
+         </div>
+         )}
 
          {/* Right Panel (Chat/Gifts) */}
          {showLivePanels && (
          <div className="lg:w-1/4 flex-1 lg:h-full min-h-0 flex flex-col gap-4 overflow-hidden relative z-0 pb-[calc(4rem+env(safe-area-inset-bottom))]">
-            {isBroadcaster && (
-              <BroadcasterControlPanel
-                streamId={streamId || ''}
-                onAlertOfficers={async (targetUserId?: string) => {
-                  try {
-                    const { data: officers } = await supabase
-                      .from('user_profiles')
-                      .select('id, username, role, is_officer')
-                      .in('role', ['troll_officer','lead_troll_officer','admin']);
-                    const list = (officers || []).map((o) => ({
-                      user_id: o.id,
-                      type: 'officer_update',
-                      title: '🚨 Stream Moderation Alert',
-                      message: `Alert in stream ${streamId}${targetUserId ? ` involving user ${targetUserId}` : ''}`,
-                      metadata: { stream_id: streamId, target_user_id: targetUserId }
-                    }));
-                    if (list.length > 0) {
-                      await supabase.from('notifications').insert(list);
-                      toast.success('Alert sent to troll officers');
-                    } else {
-                      toast.info('No officers found to notify');
-                    }
-                  } catch (err) {
-                    console.error('Failed to alert officers', err);
-                    toast.error('Failed to alert officers');
-                  }
-                }}
-              />
-            )}
             {/* GiftBox - Hidden on mobile if chat tab active; make scrollable and height-safe */}
             <div className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-h-0 overflow-hidden`}>
               <div className="flex-1 min-h-0 overflow-y-auto pr-2 pb-[env(safe-area-inset-bottom)]">
@@ -1314,6 +1411,46 @@ export default function LivePage() {
         />
       )}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
+      {chatOverlayOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#05010a]/95 p-4 md:hidden">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-[0.3em] text-white/60">Live Chat</h3>
+            <button
+              onClick={() => setChatOverlayOpen(false)}
+              className="text-white/60 hover:text-white text-sm"
+            >
+              Close
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 mt-3">
+            <ChatBox
+              streamId={streamId || ''}
+              onProfileClick={setSelectedProfile}
+              onCoinSend={handleSendCoinsToUser}
+              room={liveKit.getRoom()}
+              isBroadcaster={isBroadcaster}
+            />
+          </div>
+        </div>
+      )}
+      {isBroadcaster && controlPanelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="relative w-full max-w-4xl">
+            <button
+              onClick={() => setControlPanelOpen(false)}
+              className="absolute right-3 top-3 text-white/60 hover:text-white"
+            >
+              Close
+            </button>
+            <div className="bg-[#05010a] border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
+              <BroadcasterControlPanel
+                streamId={streamId || ''}
+                onAlertOfficers={handleAlertOfficers}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

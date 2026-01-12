@@ -34,7 +34,6 @@ import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import TermsAgreement from "./pages/TermsAgreement";
 import LivePage from "./pages/LivePage";
-import LivePage from "./pages/LivePage";
 
 // Sidebar pages (instant load)
 const Messages = lazy(() => import("./pages/Messages"));

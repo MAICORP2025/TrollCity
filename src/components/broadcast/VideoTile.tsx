@@ -3,6 +3,8 @@ import { Participant, Track, LocalParticipant } from 'livekit-client'
 import { User, Mic, MicOff, Camera, CameraOff, X, RefreshCw, Maximize2, Minimize2, Crown, Coins } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
+const CAMERA_ZOOM = 0.85;
+
 interface VideoTileProps {
   participant: Participant
   isBroadcaster?: boolean
@@ -34,6 +36,7 @@ export default function VideoTile({
   onDisableGuestMedia
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [speaking, setSpeaking] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
@@ -78,6 +81,23 @@ export default function VideoTile({
              console.log(`[VideoTile] Cannot attach video for ${participant.identity}. Pub: ${!!vidPub}, Track: ${!!vidPub?.videoTrack}`);
         }
     };
+    const attachAudio = () => {
+        const micPub = participant.getTrackPublication(Track.Source.Microphone);
+        const audioTrack = micPub?.audioTrack;
+        if (audioTrack && audioRef.current) {
+            audioTrack.attach(audioRef.current);
+            audioRef.current.muted = isLocal;
+            audioRef.current.volume = isLocal ? 0 : 1;
+            audioRef.current.play().catch(() => {});
+        }
+    };
+    const detachAudio = () => {
+        const micPub = participant.getTrackPublication(Track.Source.Microphone);
+        const audioTrack = micPub?.audioTrack;
+        if (audioTrack && audioRef.current) {
+            audioTrack.detach(audioRef.current);
+        }
+    };
 
     const onSpeakingChanged = () => setSpeaking(participant.isSpeaking);
     const onTrackMuted = (pub: any) => {
@@ -96,11 +116,13 @@ export default function VideoTile({
             attachVideo();
         }
         if (track.kind === Track.Kind.Audio) {
+            attachAudio();
             setIsAudioEnabled(true);
         }
     };
     const onTrackUnsubscribed = (track: Track) => {
          if (track.kind === Track.Kind.Video) setIsVideoEnabled(false);
+         if (track.kind === Track.Kind.Audio) detachAudio();
     };
 
     const onTrackPublished = (pub: any) => {
@@ -120,6 +142,7 @@ export default function VideoTile({
     // Initial state check
     setSpeaking(participant.isSpeaking);
     attachVideo();
+    attachAudio();
     const audPub = participant.getTrackPublication(Track.Source.Microphone);
     if (audPub) {
         setIsAudioEnabled(!audPub.isMuted);
@@ -132,8 +155,9 @@ export default function VideoTile({
         (participant as any).off('trackSubscribed', onTrackSubscribed);
         (participant as any).off('trackUnsubscribed', onTrackUnsubscribed);
         (participant as any).off('trackPublished', onTrackPublished);
+        detachAudio();
     };
-  }, [participant]);
+  }, [participant, isLocal]);
 
   const toggleCamera = async (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -192,6 +216,12 @@ export default function VideoTile({
   const roleColor = role === 'Admin' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' : 'text-purple-400 border-purple-500/30 bg-purple-500/10';
   const seatUsernameStyle: React.CSSProperties = { fontSize: 'var(--seat-username-size)' };
   const seatCoinStyle: React.CSSProperties = { fontSize: 'var(--seat-coin-size)', padding: 'var(--seat-chip-padding)' };
+  const videoTransformParts = [];
+  if (isLocal) {
+    videoTransformParts.push('scaleX(-1)');
+  }
+  videoTransformParts.push(`scale(${CAMERA_ZOOM})`);
+  const videoTransform = videoTransformParts.join(' ');
 
   const handleBroadcasterClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -244,11 +274,12 @@ export default function VideoTile({
         muted={isLocal}
         playsInline
         autoPlay
-        style={{ 
+        style={{
           objectFit,
-          transform: isLocal ? 'scaleX(-1)' : 'none' 
+          transform: videoTransform
         }}
       />
+      <audio ref={audioRef} autoPlay playsInline muted={isLocal} className="hidden" />
       
       {/* Fallback Profile Picture */}
       {!isVideoEnabled && (

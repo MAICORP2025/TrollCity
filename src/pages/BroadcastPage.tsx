@@ -20,6 +20,7 @@ import BroadcastLayout from '../components/broadcast/BroadcastLayout';
 import BroadcastOverlays from '../components/stream/BroadcastOverlays';
 import { useSeatRoster } from '../hooks/useSeatRoster';
 import SeatCostPopup from '../components/broadcast/SeatCostPopup';
+import BroadcastLayoutPreview, { ViewerLayoutPreview } from '../components/broadcast/BroadcastPreview';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -342,14 +343,20 @@ export default function BroadcastPage() {
         <div className="shrink-0">
            <GiftBox onSendGift={handleGiftSent} />
         </div>
-        <div className="flex-1 min-h-0">
-          <ChatBox
-            streamId={streamId || ''}
-            onProfileClick={setSelectedProfile}
-            onCoinSend={() => setIsGiftModalOpen(true)}
-            room={liveKit.getRoom()}
-            isBroadcaster={isBroadcaster}
-          />
+        <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden px-3">
+          <div className="flex-1 min-h-0">
+            <ChatBox
+              streamId={streamId || ''}
+              onProfileClick={setSelectedProfile}
+              onCoinSend={() => setIsGiftModalOpen(true)}
+              room={liveKit.getRoom()}
+              isBroadcaster={isBroadcaster}
+            />
+          </div>
+          <div className="space-y-4 overflow-y-auto max-h-[380px] pb-4">
+            <BroadcastLayoutPreview />
+            <ViewerLayoutPreview />
+          </div>
         </div>
       </div>
 

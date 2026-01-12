@@ -2,6 +2,7 @@ import React, {
   useCallback, 
   useEffect, 
   useMemo, 
+  useRef,
   useState 
 } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
@@ -58,6 +59,7 @@ export default function WatchPage() {
   const [, setIsLoadingStream] = useState(true);
   const [broadcastTheme, setBroadcastTheme] = useState<any>(null);
   const [broadcastThemeStyle, setBroadcastThemeStyle] = useState<React.CSSProperties | undefined>(undefined);
+  const [lastThemeId, setLastThemeId] = useState<string | null>(null);
   const [reactiveEvent, setReactiveEvent] = useState<{ key: number; style: string; intensity: number } | null>(null);
 
   const liveKit = useLiveKit();
@@ -116,6 +118,8 @@ export default function WatchPage() {
   const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false);
   const [giftRecipient, setGiftRecipient] = useState<any>(null);
   const [entranceEffect, setEntranceEffect] = useState<any>(null);
+  const entranceSentRef = useRef(false);
+  const leaveCleanupRef = useRef(false);
 
   // Load Stream Data
   const loadStreamData = useCallback(async () => {
@@ -177,6 +181,7 @@ export default function WatchPage() {
       if (!state?.active_theme_id) {
         setBroadcastThemeStyle(undefined);
         setBroadcastTheme(null);
+        setLastThemeId(null);
         return;
       }
 
@@ -190,12 +195,14 @@ export default function WatchPage() {
       if (!theme) {
         setBroadcastThemeStyle(undefined);
         setBroadcastTheme(null);
+        setLastThemeId(null);
         return;
       }
 
       if (theme.background_css) {
         setBroadcastThemeStyle({ background: theme.background_css });
         setBroadcastTheme(theme);
+        setLastThemeId(theme.id || null);
         return;
       }
       if (theme.background_asset_url) {
@@ -206,6 +213,7 @@ export default function WatchPage() {
           backgroundRepeat: 'no-repeat'
         });
         setBroadcastTheme(theme);
+        setLastThemeId(theme.id || null);
         return;
       }
       if (theme.image_url) {
@@ -216,17 +224,19 @@ export default function WatchPage() {
           backgroundRepeat: 'no-repeat'
         });
         setBroadcastTheme(theme);
+        setLastThemeId(theme.id || null);
         return;
       }
       setBroadcastThemeStyle(undefined);
       setBroadcastTheme(theme);
+      setLastThemeId(theme.id || null);
     };
 
     loadTheme();
-    return () => {
-      isActive = false;
-    };
-  }, [stream?.broadcaster_id]);
+  return () => {
+    isActive = false;
+  };
+}, [stream?.broadcaster_id]);
 
   useEffect(() => {
     if (!streamId) return;
@@ -352,6 +362,80 @@ export default function WatchPage() {
     joinStream();
   }, [streamId, user?.id, navigate]);
 
+  const markParticipantInactive = useCallback(async () => {
+    if (!streamId || !user?.id) return;
+    if (leaveCleanupRef.current) return;
+    leaveCleanupRef.current = true;
+    try {
+      await supabase
+        .from('streams_participants')
+        .update({ is_active: false, left_at: new Date().toISOString() })
+        .eq('stream_id', streamId)
+        .eq('user_id', user.id);
+    } catch (err) {
+      console.error('Failed to mark participant inactive', err);
+    }
+  }, [streamId, user?.id]);
+
+  useEffect(() => {
+    return () => {
+      void markParticipantInactive();
+    };
+  }, [markParticipantInactive]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleBeforeUnload = () => {
+      void markParticipantInactive();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [markParticipantInactive]);
+
+  useEffect(() => {
+    leaveCleanupRef.current = false;
+  }, [streamId, user?.id]);
+
+  useEffect(() => {
+    entranceSentRef.current = false;
+  }, [streamId, user?.id]);
+
+  useEffect(() => {
+    if (!streamId || !user?.id || !isConnected) return;
+    if (entranceSentRef.current) return;
+    entranceSentRef.current = true;
+
+    const sendEntrance = async () => {
+      try {
+        const { data: effects } = await supabase
+          .from('user_entrance_effects')
+          .select('*, entrance_effects(*)')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (effects?.entrance_effects) {
+          await supabase.from('messages').insert({
+            stream_id: streamId,
+            user_id: user.id,
+            message_type: 'entrance',
+            content: JSON.stringify({
+              username: profile?.username || user.email,
+              role: profile?.role || 'viewer',
+              effect: effects.entrance_effects
+            })
+          });
+        }
+      } catch (err) {
+        console.error('Failed to send entrance effect message', err);
+      }
+    };
+
+    void sendEntrance();
+  }, [streamId, user?.id, isConnected, profile?.username, profile?.role]);
+
   const handleGiftFromProfile = useCallback((profile: any) => {
       setGiftRecipient(profile);
       setIsGiftModalOpen(true);
@@ -381,51 +465,63 @@ export default function WatchPage() {
       const per = Number(g.coins) || 0;
       totalCoins = per * quantity;
       giftName = g.name || giftName;
-      giftSlug = g.slug || toGiftSlug(g.name || giftName);
+      giftSlug = g.slug || toGiftSlug(giftName);
     }
 
-    // setCoinCount(prev => prev + totalCoins);
     setIsGiftModalOpen(false);
-    
+
     const receiverId = giftRecipient?.id || null;
     setGiftRecipient(null);
 
+    const senderId = user?.id;
+    const streamIdValue = stream?.id;
+    const broadcasterId = stream?.broadcaster_id;
+    const canonicalGiftSlug = giftSlug || toGiftSlug(giftName);
+
+    if (!senderId || !streamIdValue) {
+      toast.error('Unable to send gift right now.');
+      return;
+    }
+
     try {
-      if (!user?.id || !stream?.id) {
-        toast.error('Unable to send gift right now.');
-        return;
-      }
       const { error } = await supabase.from('gifts').insert({
-        stream_id: stream?.id,
-        sender_id: user?.id,
+        stream_id: streamIdValue,
+        sender_id: senderId,
         receiver_id: receiverId,
         coins_spent: totalCoins,
         gift_type: 'paid',
         message: giftName,
-        gift_slug: giftSlug || toGiftSlug(giftName),
+        gift_slug: canonicalGiftSlug,
         quantity: quantity,
       });
       if (error) {
         throw error;
       }
-      if (stream?.id && stream?.broadcaster_id) {
+
+      if (streamIdValue && broadcasterId) {
         const eventType = totalCoins >= 1000 ? 'super_gift' : 'gift';
-        await supabase.from('broadcast_theme_events').insert({
-          room_id: stream.id,
-          broadcaster_id: stream.broadcaster_id,
-          theme_id: broadcastTheme?.id || null,
-          event_type: eventType,
-          payload: {
-            gift_slug: giftSlug || toGiftSlug(giftName),
-            coins: totalCoins,
-            sender_id: user?.id
-          }
-        });
+        const themeIdToUse = lastThemeId || broadcastTheme?.id;
+        if (!themeIdToUse) {
+          console.warn('[WatchPage] Skipping broadcast_theme_events insert because no theme is active');
+        } else {
+          await supabase.from('broadcast_theme_events').insert({
+            room_id: streamIdValue,
+            broadcaster_id: broadcasterId,
+            user_id: senderId,
+            theme_id: themeIdToUse,
+            event_type: eventType,
+            payload: {
+              gift_slug: canonicalGiftSlug,
+              coins: totalCoins,
+              sender_id: senderId
+            }
+          });
+        }
       }
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }
-  }, [stream?.id, user?.id, giftRecipient?.id, broadcastTheme?.id]);
+  }, [stream?.id, stream?.broadcaster_id, user?.id, giftRecipient?.id, broadcastTheme?.id, lastThemeId]);
 
   const handleCoinsPurchased = useCallback(() => {
     setIsCoinStoreOpen(false);
