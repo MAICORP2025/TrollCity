@@ -859,7 +859,7 @@ export default function LivePage() {
   // Entrance effect logic
   useEffect(() => {
     const triggerEntrance = async () => {
-      if (!user || !streamId) return;
+      if (!user || !streamId || isBroadcaster) return;
 
       const { effectKey, config } = await getUserEntranceEffect(user.id);
       if (!effectKey) return;
@@ -880,7 +880,7 @@ export default function LivePage() {
     if (isConnected) {
       void triggerEntrance();
     }
-  }, [isConnected, user, streamId, profile]);
+  }, [isConnected, user, streamId, profile, isBroadcaster]);
 
   // Real-time listeners for Entrance and Likes
   useEffect(() => {
