@@ -92,9 +92,9 @@ const ProfileSetup = () => {
         })
         .eq('id', user.id)
         .select('*')
-        .single()
+        .maybeSingle()
       
-      if (error) throw error
+      if (error && error.code !== 'PGRST116') throw error
       
       if (updated) {
         setProfile(updated as any)
@@ -105,7 +105,14 @@ const ProfileSetup = () => {
           )
         } catch {}
       } else {
-        throw new Error('Failed to fetch updated profile data')
+        const { data: fallback } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (fallback) {
+          setProfile(fallback as any)
+        }
       }
       toast.success('Profile saved')
       navigate('/')
@@ -174,12 +181,22 @@ const ProfileSetup = () => {
         .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
         .eq('id', user.id)
         .select('*')
-        .single()
+        .maybeSingle()
       
-      if (updateErr) throw updateErr
-      if (!updated) throw new Error('Failed to fetch updated profile')
+      if (updateErr && updateErr.code !== 'PGRST116') throw updateErr
+      if (!updated) {
+        const { data: fallback } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (fallback) {
+          setProfile(fallback as any)
+        }
+      } else {
+        setProfile(updated as any)
+      }
       
-      setProfile(updated as any)
       toast.success('Avatar uploaded')
     } catch (err: any) {
       console.error('Avatar upload error:', err)
@@ -332,12 +349,21 @@ const ProfileSetup = () => {
                           })
                           .eq('id', user.id)
                           .select('*')
-                          .single()
+                          .maybeSingle()
 
-                        if (profileError) throw profileError
-                        if (!updated) throw new Error('Failed to fetch updated profile')
-
-                        setProfile(updated as any)
+                        if (profileError && profileError.code !== 'PGRST116') throw profileError
+                        if (updated) {
+                          setProfile(updated as any)
+                        } else {
+                          const { data: fallback } = await supabase
+                            .from('user_profiles')
+                            .select('*')
+                            .eq('id', user.id)
+                            .maybeSingle()
+                          if (fallback) {
+                            setProfile(fallback as any)
+                          }
+                        }
                         toast.success('ID uploaded successfully! Your account will be verified by an admin within 24 hours.')
                       } catch (err: any) {
                         console.error('ID upload error:', err)

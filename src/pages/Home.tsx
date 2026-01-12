@@ -1337,7 +1337,7 @@ const HomePageContent = () => {
               <h2 className="text-3xl font-bold text-white">Trollerz</h2>
               <span className="ml-auto text-sm font-semibold text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full">{newUsers.length} members</span>
             </div>
-            <div className="new-trollerz-scroll" style={{ visibility: bufferedUsers.length >= 0 ? "visible" : "hidden", maxHeight: '240px', overflowY: 'auto' }}>
+            <div className="new-trollerz-scroll" style={{ visibility: bufferedUsers.length >= 0 ? "visible" : "hidden", maxHeight: '480px', overflowY: 'auto' }}>
               {newUsers.length === 0 ? (
                 <div className="col-span-full p-6 text-center text-gray-400">No new users yet</div>
               ) : (

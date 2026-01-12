@@ -98,18 +98,18 @@ export default function UserCompliancePrompt() {
   const completionPercentage = Math.round(((2 - missingItems.length) / 2) * 100);
 
   return (
-    <div className="bg-gradient-to-r from-orange-900/95 to-red-900/95 border-b border-orange-500/30 text-white p-3 relative z-40 animate-in slide-in-from-top duration-300">
+    <div className="bg-gradient-to-r from-[#0b1329] via-[#11143a] to-[#2a0f3a] border-b border-pink-500/30 text-white p-3 relative z-40 animate-in slide-in-from-top duration-300">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-center sm:text-left">
-          <div className="bg-orange-500/20 p-2 rounded-full animate-pulse hidden sm:block relative">
-            <AlertTriangle className="w-5 h-5 text-orange-400" />
+          <div className="bg-pink-500/20 p-2 rounded-full animate-pulse hidden sm:block relative">
+            <AlertTriangle className="w-5 h-5 text-pink-300" />
           </div>
           <div>
             <p className="font-bold text-sm flex items-center justify-center sm:justify-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-orange-400 sm:hidden" />
+              <AlertTriangle className="w-4 h-4 text-pink-300 sm:hidden" />
               Action Required ({completionPercentage}% Complete - {2 - missingItems.length}/2 Steps)
             </p>
-            <p className="text-xs text-orange-200">
+            <p className="text-xs text-cyan-100">
               Please complete your {missingItems.includes('profile') && 'Profile (Full Name)'}
               {missingItems.includes('profile') && missingItems.includes('tax') && ' and '}
               {missingItems.includes('tax') && 'Tax Information'} to ensure full account access.
