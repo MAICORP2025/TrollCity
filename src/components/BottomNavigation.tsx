@@ -130,7 +130,7 @@ export default function BottomNavigation() {
       case 'viewer':
       default:
         return [
-          { category: 'General', label: 'Become Broadcaster', icon: Video, path: '/onboarding' },
+          { category: 'General', label: 'Go Live', icon: Video, path: '/go-live' },
           { category: 'General', label: 'Buy Coins', icon: Store, path: '/store' },
           { category: 'General', label: 'Support', icon: Heart, path: '/support' }
         ]

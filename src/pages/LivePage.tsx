@@ -22,18 +22,16 @@ import {
   Camera,
   CameraOff
 } from 'lucide-react';
-
-// Lazy load components to avoid circular dependencies
-const ChatBox = React.lazy(() => import('../components/broadcast/ChatBox'));
-const GiftBox = React.lazy(() => import('../components/broadcast/GiftBox'));
-const TrollLikeButton = React.lazy(() => import('../components/broadcast/TrollLikeButton'));
-const GiftModal = React.lazy(() => import('../components/broadcast/GiftModal'));
-const ProfileModal = React.lazy(() => import('../components/broadcast/ProfileModal'));
-const CoinStoreModal = React.lazy(() => import('../components/broadcast/CoinStoreModal'));
-const GiftEventOverlay = React.lazy(() => import('./GiftEventOverlay'));
-const EntranceEffect = React.lazy(() => import('../components/broadcast/EntranceEffect'));
-const BroadcastLayout = React.lazy(() => import('../components/broadcast/BroadcastLayout'));
-const GlobalGiftBanner = React.lazy(() => import('../components/GlobalGiftBanner'));
+import ChatBox from '../components/broadcast/ChatBox';
+import GiftBox from '../components/broadcast/GiftBox';
+import TrollLikeButton from '../components/broadcast/TrollLikeButton';
+import GiftModal from '../components/broadcast/GiftModal';
+import ProfileModal from '../components/broadcast/ProfileModal';
+import CoinStoreModal from '../components/broadcast/CoinStoreModal';
+import EntranceEffect from '../components/broadcast/EntranceEffect';
+import BroadcastLayout from '../components/broadcast/BroadcastLayout';
+import GlobalGiftBanner from '../components/GlobalGiftBanner';
+import GiftEventOverlay from './GiftEventOverlay';
 
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
@@ -1154,7 +1152,6 @@ export default function LivePage() {
   }
 
   return (
-    <React.Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-[#05010a] text-white">Loading interface...</div>}>
     <div className="h-full w-full flex flex-col bg-[#05010a] text-white overflow-hidden">
       <GlobalGiftBanner />
       {/* Entrance effect for all users */}
@@ -1345,6 +1342,5 @@ export default function LivePage() {
       )}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
     </div>
-    </React.Suspense>
   );
 }

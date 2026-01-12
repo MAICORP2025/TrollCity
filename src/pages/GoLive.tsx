@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 // import api from '../lib/api'; // Uncomment if needed
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
+import { useCoins } from '../lib/hooks/useCoins';
 import { Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveKit } from '../hooks/useLiveKit';
@@ -14,7 +15,8 @@ const GoLive: React.FC = () => {
   const liveKit = useLiveKit();
   // Note: videoRef removed - no camera preview in setup
 
-  const { profile } = useAuthStore(); // Using getState() instead for async operations
+  const { profile, refreshProfile } = useAuthStore(); // Using getState() instead for async operations
+  const { refreshCoins } = useCoins();
 
   const [streamTitle, setStreamTitle] = useState('');
   const [isStreaming] = useState(false);
@@ -196,6 +198,12 @@ const GoLive: React.FC = () => {
       }
       setOwnedThemeIds((prev) => new Set([...Array.from(prev), themeId]));
       setActiveThemeId(themeId);
+      if (refreshCoins) {
+        await refreshCoins();
+      }
+      if (refreshProfile) {
+        await refreshProfile();
+      }
       toast.success('Theme purchased and applied');
     } catch (err: any) {
       console.error('Theme purchase failed', err);
