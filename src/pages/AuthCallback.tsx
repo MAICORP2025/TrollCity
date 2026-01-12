@@ -44,22 +44,24 @@ const AuthCallback = () => {
             const u = data.session.user
             console.log('User authenticated:', u.email)
             
-            // Check for concurrent login before proceeding
-            const { data: hasConcurrentLogin, error: concurrentError } = await supabase
-              .rpc('check_concurrent_login', {
-                p_user_id: u.id,
-                p_current_session_id: data.session.access_token
-              })
-            
-            if (concurrentError) {
-              console.error('Error checking concurrent login:', concurrentError)
-              // Continue with login if there's an error checking (fail-safe)
-            } else if (hasConcurrentLogin) {
-              // Block login attempt - user is already logged in on another device
-              await supabase.auth.signOut()
-              toast.error('Login blocked: Your account is already logged in on another device. Please log out from other devices first.')
-              navigate('/auth')
-              return
+            const sessionId = data.session?.id
+            if (!sessionId) {
+              console.warn('[AuthCallback] Session missing id, skipping concurrent login check')
+            } else {
+              const { data: hasConcurrentLogin, error: concurrentError } = await supabase
+                .rpc('check_concurrent_login', {
+                  p_user_id: u.id,
+                  p_current_session_id: sessionId
+                })
+              
+              if (concurrentError) {
+                console.error('Error checking concurrent login:', concurrentError)
+              } else if (hasConcurrentLogin) {
+                await supabase.auth.signOut()
+                toast.error('Login blocked: Your account is already logged in on another device. Please log out from other devices first.')
+                navigate('/auth')
+                return
+              }
             }
             
             // Register this session
@@ -70,14 +72,18 @@ const AuthCallback = () => {
                 screen: { width: window.screen.width, height: window.screen.height }
               }
               
-              await supabase
-                .rpc('register_session', {
-                  p_user_id: u.id,
-                  p_session_id: data.session.access_token,
-                  p_device_info: JSON.stringify(deviceInfo), // Convert to JSON string
-                  p_ip_address: null, // Would need backend to get real IP
-                  p_user_agent: navigator.userAgent
-                })
+              if (sessionId) {
+                await supabase
+                  .rpc('register_session', {
+                    p_user_id: u.id,
+                    p_session_id: sessionId,
+                    p_device_info: JSON.stringify(deviceInfo), // Convert to JSON string
+                    p_ip_address: null, // Would need backend to get real IP
+                    p_user_agent: navigator.userAgent
+                  })
+              } else {
+                console.warn('[AuthCallback] Skipping register_session because session id is missing')
+              }
             } catch (sessionError) {
               console.error('Error registering session:', sessionError)
               // Continue with login even if session registration fails

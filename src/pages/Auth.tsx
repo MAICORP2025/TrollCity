@@ -53,11 +53,27 @@ const Auth = () => {
           console.log('Email login successful:', data.user.email)
           
           // Check for concurrent login before proceeding
+        const sessionId = data.session?.id;
+        if (!sessionId) {
+          console.warn('[Auth] Session missing id, skipping concurrent login check');
+        }
+
+        if (sessionId) {
           const { data: hasConcurrentLogin, error: concurrentError } = await supabase
             .rpc('check_concurrent_login', {
               p_user_id: data.user.id,
-              p_current_session_id: data.session.access_token
+              p_current_session_id: sessionId
             })
+
+          if (concurrentError) {
+            console.error('Error checking concurrent login:', concurrentError)
+            // Continue with login if there's an error checking (fail-safe)
+          } else if (hasConcurrentLogin) {
+            // Block login attempt - user is already logged in on another device
+            await supabase.auth.signOut()
+            throw new Error('Login blocked: Your account is already logged in on another device. Please log out from other devices first.')
+          }
+        }
           
           if (concurrentError) {
             console.error('Error checking concurrent login:', concurrentError)
@@ -76,14 +92,18 @@ const Auth = () => {
               screen: { width: window.screen.width, height: window.screen.height }
             }
             
+          if (sessionId) {
             await supabase
               .rpc('register_session', {
                 p_user_id: data.user.id,
-                p_session_id: data.session.access_token,
+                p_session_id: sessionId,
                 p_device_info: JSON.stringify(deviceInfo), // Convert to JSON string
                 p_ip_address: null, // Would need backend to get real IP
                 p_user_agent: navigator.userAgent
               })
+          } else {
+            console.warn('[Auth] Skipping register_session because session id is missing')
+          }
           } catch (sessionError) {
             console.error('Error registering session:', sessionError)
             // Continue with login even if session registration fails
