@@ -859,8 +859,8 @@ export default function CoinStore() {
           </div>
         </div>
       ) : (
-        <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6 overflow-x-hidden">
+        <div className="max-w-6xl mx-auto space-y-6 w-full">
           {/* Warning Banner */}
           <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
@@ -875,7 +875,7 @@ export default function CoinStore() {
           </div>
 
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <Coins className="w-8 h-8 text-purple-400" />
               Troll City Coin Store
@@ -891,7 +891,7 @@ export default function CoinStore() {
                 <button type="button" className={`px-3 py-2 rounded ${tab==='live_snacks'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('live_snacks')}>LIVE SNACKS</button>
               )}
             </div>
-            <div className="md:hidden w-full max-w-[200px]">
+            <div className="md:hidden w-full">
               <select
                 value={tab}
                 onChange={(e) => setTab(e.target.value)}
