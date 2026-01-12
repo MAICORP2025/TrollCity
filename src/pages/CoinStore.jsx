@@ -592,6 +592,9 @@ export default function CoinStore() {
 
       setOwnedThemeIds((prev) => new Set([...Array.from(prev), theme.id]));
       await refreshCoins();
+      if (refreshProfile) {
+        await refreshProfile();
+      }
       toast.success('Theme purchased');
       showPurchaseCompleteOverlay();
     } catch (err) {
