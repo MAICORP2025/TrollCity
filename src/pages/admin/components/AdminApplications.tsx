@@ -2,7 +2,7 @@
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
-import { Check, X, Shield, RefreshCw, Video, AlertTriangle } from 'lucide-react'
+import { Check, X, Shield, RefreshCw, AlertTriangle } from 'lucide-react'
 
 interface Application {
   id: string
@@ -45,22 +45,9 @@ interface SellerAppeal {
   }
 }
 
-interface BroadcasterApplication {
-  id: string
-  user_id: string
-  full_name: string
-  username: string
-  email: string
-  application_status: 'pending' | 'approved' | 'rejected'
-  created_at: string
-  reviewed_by: string | null
-  reviewed_at: string | null
-}
-
 export default function AdminApplications() {
   const { user, refreshProfile } = useAuthStore()
   const [applications, setApplications] = useState<Application[]>([])
-  const [broadcasterApplications, setBroadcasterApplications] = useState<BroadcasterApplication[]>([])
   const [sellerAppeals, setSellerAppeals] = useState<SellerAppeal[]>([])
   const [loading, setLoading] = useState(false)
   const [positionFilled, setPositionFilled] = useState(false)
@@ -94,14 +81,6 @@ export default function AdminApplications() {
 
       if (error) throw error
       setApplications(data || [])
-
-      // Load broadcaster applications
-      const { data: bcData, error: bcErr } = await supabase
-        .from('broadcaster_applications')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (!bcErr) setBroadcasterApplications(bcData || [])
 
       // Load seller appeals
       const { data: appealsData, error: appealsErr } = await supabase
@@ -143,15 +122,9 @@ export default function AdminApplications() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, handleRealtimeUpdate)
       .subscribe()
 
-    const channel2 = supabase
-      .channel('broadcaster_applications_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'broadcaster_applications' }, handleRealtimeUpdate)
-      .subscribe()
-
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
       supabase.removeChannel(channel1)
-      supabase.removeChannel(channel2)
     }
   }, [loadApplications])
 
@@ -269,85 +242,8 @@ export default function AdminApplications() {
   }, [user, loadApplications, refreshProfile])
 
 
-  // ⭐ APPROVE BROADCASTER — THE CRITICAL FIX
-  const handleApproveBroadcaster = useCallback(async (app: BroadcasterApplication) => {
-    if (!user) return toast.error("You must be logged in")
 
-    try {
-      setLoading(true)
-
-      // 1) Update broadcaster application
-      const { error: appError } = await supabase
-        .from('broadcaster_applications')
-        .update({
-          application_status: 'approved',
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString()
-        })
-        .eq('id', app.id)
-
-      if (appError) throw appError
-
-      // 2) Update user profile so they can Go Live
-      const { error: profileErr } = await supabase
-        .from('user_profiles')
-        .update({
-          is_broadcaster: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', app.user_id)
-
-      if (profileErr) throw profileErr
-
-      toast.success("Broadcaster approved successfully")
-
-      const scrollY = window.scrollY
-      await loadApplications()
-      if (refreshProfile) await refreshProfile()
-      requestAnimationFrame(() => window.scrollTo(0, scrollY))
-
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to approve broadcaster"
-      toast.error(message)
-    } finally {
-      setLoading(false)
-    }
-  }, [user, loadApplications, refreshProfile])
-
-
-  // REJECT BROADCASTER
-  const handleRejectBroadcaster = useCallback(async (app: BroadcasterApplication) => {
-    if (!user) return toast.error("You must be logged in")
-
-    const reason = prompt("Enter rejection reason:") || "Insufficient information"
-
-    try {
-      setLoading(true)
-
-      const { error } = await supabase.rpc('reject_broadcaster_application', {
-        p_application_id: app.id,
-        p_rejection_reason: reason,
-        p_admin_notes: null
-      })
-
-      if (error) throw error
-
-      toast.error("Broadcaster application denied")
-
-      const scrollY = window.scrollY
-      await loadApplications()
-      if (refreshProfile) await refreshProfile()
-      requestAnimationFrame(() => window.scrollTo(0, scrollY))
-
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to reject broadcaster"
-      toast.error(message)
-    } finally {
-      setLoading(false)
-    }
-  }, [user, loadApplications, refreshProfile])
-
-  // APPROVE SELLER APPEAL
+// APPROVE SELLER APPEAL
   const handleApproveAppeal = useCallback(async (appeal: SellerAppeal) => {
     if (!user) return toast.error("You must be logged in")
 
@@ -422,20 +318,12 @@ export default function AdminApplications() {
 
 
   const counts = {
-    pending:
-      applications.filter(a => a.status === 'pending').length +
-      broadcasterApplications.filter(a => a.application_status === 'pending').length +
-      sellerAppeals.length,
-    approved:
-      applications.filter(a => a.status === 'approved').length +
-      broadcasterApplications.filter(a => a.application_status === 'approved').length,
-    rejected:
-      applications.filter(a => a.status === 'rejected').length +
-      broadcasterApplications.filter(a => a.application_status === 'rejected').length,
+    pending: applications.filter(a => a.status === 'pending').length + sellerAppeals.length,
+    approved: applications.filter(a => a.status === 'approved').length,
+    rejected: applications.filter(a => a.status === 'rejected').length,
   }
 
   const visibleApplications = applications.filter((a) => a.status === activeTab)
-  const visibleBroadcasterApplications = broadcasterApplications.filter((a) => a.application_status === activeTab)
 
   return (
     <div className="space-y-4">
@@ -555,44 +443,6 @@ export default function AdminApplications() {
                 </div>
               )
             })}
-          </div>
-
-          {/* BROADCASTER APPLICATIONS */}
-          <div className="space-y-3 mt-6">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Video className="w-5 h-5 text-purple-400" />
-              Broadcaster Applications
-            </h3>
-
-            {visibleBroadcasterApplications.map(app => (
-              <div key={app.id} className="bg-[#1A1A1A] border border-purple-500/30 rounded-lg p-4">
-
-                <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-white font-semibold">{app.username}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Applied: {new Date(app.created_at).toLocaleDateString()}
-                    </div>
-                  </div>
-
-                  {app.application_status === "pending" && activeTab === 'pending' ? (
-                    <div className="flex gap-2">
-                      <button onClick={() => handleApproveBroadcaster(app)} className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg flex items-center gap-1">
-                        <Check className="w-4" /> Approve
-                      </button>
-                      <button onClick={() => handleRejectBroadcaster(app)} className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg flex items-center gap-1">
-                        <X className="w-4" /> Reject
-                      </button>
-                    </div>
-                  ) : app.application_status === "approved" ? (
-                    <div className="text-green-400 text-sm flex items-center gap-1"><Check className="w-4" /> Approved</div>
-                  ) : (
-                    <div className="text-red-400 text-sm flex items-center gap-1"><X className="w-4" /> Rejected</div>
-                  )}
-                </div>
-
-              </div>
-            ))}
           </div>
 
           {/* SELLER APPEALS */}

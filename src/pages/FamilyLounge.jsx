@@ -331,7 +331,7 @@ const FamilyLounge = () => {
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => navigate('/apply/family')}
+              onClick={() => navigate('/family/browse')}
               className="px-8 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg font-semibold transition-colors border border-zinc-700"
             >
               Browse Families

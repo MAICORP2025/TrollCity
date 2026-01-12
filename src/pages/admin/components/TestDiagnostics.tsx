@@ -118,7 +118,6 @@ export default function TestDiagnostics() {
       'user_profiles',
       'applications',
       'empire_applications',
-      'broadcaster_applications',
       'payout_requests',
       'coin_transactions',
       'officer_shift_logs',

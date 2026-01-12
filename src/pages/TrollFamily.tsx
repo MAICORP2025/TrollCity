@@ -6,8 +6,8 @@ export default function TrollFamily() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Redirect to the new family lounge
-    navigate('/family/lounge', { replace: true })
+    // Redirect to the family browse list
+    navigate('/family/browse', { replace: true })
   }, [navigate])
 
   return null

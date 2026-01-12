@@ -9,6 +9,7 @@ import {
   Users,
   FileText,
   TrendingUp,
+  AlertTriangle,
   LogOut,
   Menu,
   X,
@@ -94,7 +95,7 @@ export default function MobileAdminDashboard() {
       label: 'Users & HR',
       icon: Users,
       items: [
-        { id: 'applications', label: 'Broadcaster Apps', icon: FileText, type: 'tab', value: 'applications' },
+        { id: 'applications', label: 'Applications', icon: FileText, type: 'tab', value: 'applications' },
         { id: 'user_search', label: 'User Search', type: 'link', value: '/admin/user-search' },
         { id: 'hr_dash', label: 'HR Dashboard', type: 'link', value: '/admin/hr' },
         { id: 'roles', label: 'Role Management', type: 'link', value: '/admin/role-management' }
@@ -167,11 +168,11 @@ export default function MobileAdminDashboard() {
 
       const irsRiskUsers = Array.from(creatorTotals.values()).filter(total => total >= 600).length
 
-      // Pending Broadcaster Applications
+      // Pending Applications
       const { data: pendingApps } = await supabase
-        .from('broadcaster_applications')
+        .from('applications')
         .select('id', { count: 'exact' })
-        .eq('application_status', 'pending')
+        .eq('status', 'pending')
 
       const pendingApplications = pendingApps?.length || 0
 
@@ -194,9 +195,9 @@ export default function MobileAdminDashboard() {
         .gte('created_at', yesterday.toISOString())
 
       const { data: newAppsData } = await supabase
-        .from('broadcaster_applications')
+        .from('applications')
         .select('id', { count: 'exact' })
-        .eq('application_status', 'pending')
+        .eq('status', 'pending')
         .gte('created_at', yesterday.toISOString())
 
       const { data: newReportsData } = await supabase
@@ -237,7 +238,7 @@ export default function MobileAdminDashboard() {
     const appChannel = supabase
       .channel('admin_applications_mobile')
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'broadcaster_applications' },
+        { event: '*', schema: 'public', table: 'applications' },
         () => loadStats()
       )
       .subscribe()
@@ -500,7 +501,7 @@ export default function MobileAdminDashboard() {
       {/* Tab Content */}
       <div className="pb-24 px-4">
         {activeTab === 'applications' && (
-          <MobileBroadcasterApplications onStatsUpdate={loadStats} />
+          <MobileApplications onStatsUpdate={loadStats} />
         )}
         {activeTab === 'payouts' && (
           <MobilePayoutQueue onStatsUpdate={loadStats} />
@@ -517,7 +518,7 @@ export default function MobileAdminDashboard() {
 }
 
 // Mobile-optimized components
-function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () => void }) {
+function MobileApplications({ onStatsUpdate }: { onStatsUpdate: () => void }) {
   const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -526,7 +527,7 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
     try {
       // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
       const { data, error } = await supabase
-        .from('broadcaster_applications')
+        .from('applications')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50)
@@ -572,7 +573,7 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
     const channel = supabase
       .channel('mobile_applications_list')
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'broadcaster_applications' },
+        { event: '*', schema: 'public', table: 'applications' },
         () => {
           loadApplications()
           onStatsUpdate()
@@ -585,9 +586,11 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
     }
   }, [loadApplications, onStatsUpdate])
 
+  const formatType = (type?: string) => (type || 'application').replace(/_/g, ' ')
+
   return (
     <div className="space-y-3 mt-4">
-      <h2 className="text-lg font-bold text-white">Broadcaster Applications</h2>
+      <h2 className="text-lg font-bold text-white">Applications</h2>
       {loading ? (
         <div className="text-center text-gray-400 py-8">Loading...</div>
       ) : applications.length === 0 ? (
@@ -604,14 +607,14 @@ function MobileBroadcasterApplications({ onStatsUpdate }: { onStatsUpdate: () =>
                   <p className="font-semibold text-white">
                     {app.user_profiles?.username || 'Unknown'}
                   </p>
-                  <p className="text-xs text-gray-400">{app.user_profiles?.email || ''}</p>
+                  <p className="text-xs text-gray-400">{formatType(app.type)}</p>
                 </div>
                 <span className={`px-2 py-1 rounded text-xs ${
-                  app.application_status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                  app.application_status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                  app.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                  app.status === 'approved' ? 'bg-green-500/20 text-green-400' :
                   'bg-red-500/20 text-red-400'
                 }`}>
-                  {app.application_status.toUpperCase()}
+                  {String(app.status || 'pending').toUpperCase()}
                 </span>
               </div>
               <p className="text-xs text-gray-400">

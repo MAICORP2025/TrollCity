@@ -96,11 +96,11 @@ export default function EarningsTaxOverview() {
       // In reality, platform would keep fees before payouts
       const platformKept = Math.max(0, totalLiability - totalPayouts)
       
-      // 1099 Forms sent (check if there's a 1099 table, otherwise count from broadcaster_applications with tax forms)
+      // 1099 Forms sent (fallback to user_profiles tax metadata)
       const { data: forms1099 } = await supabase
-        .from('broadcaster_applications')
-        .select('id')
-        .eq('tax_form_submitted', true)
+        .from('user_profiles')
+        .select('id, tax_form_url, w9_status')
+        .or('tax_form_url.not.is.null,w9_status.eq.submitted,w9_status.eq.verified')
       
       const forms1099Sent = forms1099?.length || 0
 
@@ -181,23 +181,17 @@ export default function EarningsTaxOverview() {
       const broadcasterIds = Array.from(creatorMap.keys())
       const { data: profiles } = await supabase
         .from('user_profiles')
-        .select('id, username, country')
+        .select('id, username, country, tax_form_url, w9_status')
         .in('id', broadcasterIds)
 
-      // Get broadcaster applications for tax form status
-      const { data: applications } = await supabase
-        .from('broadcaster_applications')
-        .select('user_id, tax_form_submitted')
-        .in('user_id', broadcasterIds)
-
-      const applicationMap = new Map<string, boolean>()
-      applications?.forEach(app => {
-        applicationMap.set(app.user_id, app.tax_form_submitted || false)
-      })
-
-      const profileMap = new Map<string, { username: string; country?: string }>()
+      const profileMap = new Map<string, { username: string; country?: string; tax_form_url?: string | null; w9_status?: string | null }>()
       profiles?.forEach(p => {
-        profileMap.set(p.id, { username: p.username, country: p.country || undefined })
+        profileMap.set(p.id, {
+          username: p.username,
+          country: p.country || undefined,
+          tax_form_url: (p as any).tax_form_url ?? null,
+          w9_status: (p as any).w9_status ?? null
+        })
       })
 
       // Build creators list
@@ -206,7 +200,7 @@ export default function EarningsTaxOverview() {
           const profile = profileMap.get(user_id)
           const totalEarnings = data.total
           const reachedThreshold = totalEarnings >= 600
-          const form1099Generated = applicationMap.get(user_id) || false
+          const form1099Generated = Boolean(profile?.tax_form_url || profile?.w9_status === 'submitted' || profile?.w9_status === 'verified')
           
           return {
             user_id,

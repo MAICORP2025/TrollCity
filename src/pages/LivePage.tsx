@@ -402,6 +402,7 @@ export default function LivePage() {
   const { seats, claimSeat, releaseSeat } = useSeatRoster(streamId || '');
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
   const canPublish = isBroadcaster || isGuestSeat;
+  const liveKit = useLiveKit();
 
   useEffect(() => {
     const broadcasterId = stream?.broadcaster_id;
@@ -477,23 +478,6 @@ export default function LivePage() {
     }
   }, [isBroadcaster]);
 
-  useEffect(() => {
-    if (!isBroadcaster || !isConnected) return;
-    if (!micOn) {
-      void liveKit.enableMicrophone().then((ok) => {
-        setMicOn(Boolean(ok));
-      });
-    }
-    if (!cameraOn) {
-      void liveKit.enableCamera().then((ok) => {
-        setCameraOn(Boolean(ok));
-      });
-    }
-  }, [isBroadcaster, isConnected, cameraOn, micOn, liveKit]);
-
-
-  const liveKit = useLiveKit();
-  
   // 1. Room name derivation: prefer agora_channel (set by GoLive), then room_name, fallback to stream_{id}
   const roomName = useMemo(() => {
     if (stream?.agora_channel) return stream.agora_channel;

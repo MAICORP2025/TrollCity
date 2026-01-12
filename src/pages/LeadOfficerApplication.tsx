@@ -52,7 +52,18 @@ export default function LeadOfficerApplication() {
         status: 'pending'
       }
       
-      const { error } = await supabase.from('applications').insert([applicationData])
+      let { error } = await supabase.from('applications').insert([applicationData])
+
+      if (error?.code === '22P02' && error.message?.includes('array')) {
+        const fallbackData = {
+          ...applicationData,
+          reason: [formData.whyApplying],
+          goals: [formData.vision],
+          data: [JSON.stringify(applicationData.data)]
+        }
+        const retry = await supabase.from('applications').insert([fallbackData])
+        error = retry.error || null
+      }
       
       if (error) {
         console.error('[Lead Officer App] Submission error:', error)

@@ -310,7 +310,7 @@ const FamilyLeaderboard = () => {
             Join a family or create your own to start earning family coins and competing for glory!
           </p>
           <button
-            onClick={() => window.location.href = '/family'}
+            onClick={() => window.location.href = '/family/browse'}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors"
           >
             Explore Families

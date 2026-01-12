@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import {
   FileText,
   Users,
-  Crown,
   Shield,
   CheckCircle,
   XCircle,
@@ -33,15 +32,6 @@ export default function ApplicationsHub({
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/20',
       borderColor: 'border-blue-500/30',
-      count: 0 // Will be populated from data
-    },
-    {
-      id: 'broadcaster',
-      label: 'Broadcaster Applications',
-      icon: <Crown className="w-4 h-4" />,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/20',
-      borderColor: 'border-purple-500/30',
       count: 0 // Will be populated from data
     },
     {
@@ -85,18 +75,6 @@ export default function ApplicationsHub({
         created_at: new Date(Date.now() - 86400000).toISOString(),
         experience: 'Former moderator',
         reason: 'Passionate about community safety'
-      }
-    ],
-    broadcaster: [
-      {
-        id: '3',
-        user_id: 'user-3',
-        username: 'StreamQueen',
-        type: 'broadcaster',
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        content_type: 'Gaming & Entertainment',
-        followers: 1500
       }
     ],
     creator: [
@@ -283,14 +261,10 @@ export default function ApplicationsHub({
       </div>
 
       {/* Summary Stats */}
-      <div className="mt-6 grid grid-cols-4 gap-4">
+      <div className="mt-6 grid grid-cols-3 gap-4">
         <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-blue-400">{mockApplications.officer.length}</div>
           <div className="text-xs text-gray-400">Officer Apps</div>
-        </div>
-        <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-purple-400">{mockApplications.broadcaster.length}</div>
-          <div className="text-xs text-gray-400">Broadcaster Apps</div>
         </div>
         <div className="bg-[#0A0814] border border-[#2C2C2C] rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-yellow-400">{mockApplications.creator.length}</div>

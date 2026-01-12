@@ -269,7 +269,7 @@ const FamilyShop = () => {
             Join a family to unlock exclusive perks and customizations!
           </p>
           <button
-            onClick={() => window.location.href = '/apply/family'}
+            onClick={() => window.location.href = '/family/browse'}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors"
           >
             Browse Families
