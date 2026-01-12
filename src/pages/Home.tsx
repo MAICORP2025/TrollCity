@@ -61,9 +61,40 @@ const NeonParticle: React.FC<{ delay: number; color: string }> = ({ delay, color
   );
 };
 
+const trollLightningStrokes = [
+  { id: 'stroke-1', left: '10%', delay: 0, duration: 4.5, count: 4, opacity: 0.95 },
+  { id: 'stroke-2', left: '26%', delay: 0.6, duration: 4, count: 5, opacity: 0.85 },
+  { id: 'stroke-3', left: '42%', delay: 0.2, duration: 4.7, count: 3, opacity: 0.9 },
+  { id: 'stroke-4', left: '58%', delay: 1.1, duration: 4.2, count: 4, opacity: 0.8 },
+  { id: 'stroke-5', left: '74%', delay: 0.4, duration: 5, count: 5, opacity: 0.85 },
+  { id: 'stroke-6', left: '88%', delay: 0.8, duration: 4.3, count: 3, opacity: 0.9 },
+]
+
 const TrollCityBackground: React.FC = () => {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none trollcity-background" style={{ zIndex: 1 }}>
+      <div className="absolute inset-0 troll-lightning-storm">
+        {trollLightningStrokes.map((stroke) => (
+          <div
+            key={stroke.id}
+            className="troll-lightning-column"
+            style={{ left: stroke.left, opacity: stroke.opacity }}
+          >
+            {Array.from({ length: stroke.count }).map((_, idx) => (
+              <span
+                key={`${stroke.id}-${idx}`}
+                className="troll-lightning-word"
+                style={{
+                  animationDelay: `${stroke.delay + idx * 0.45}s`,
+                  animationDuration: `${stroke.duration}s`,
+                }}
+              >
+                TROLL CITY
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
       {/* City Skyline with parallax depth */}
       <div className="absolute bottom-0 w-full h-3/4 perspective">
         {/* Back buildings - furthest */}

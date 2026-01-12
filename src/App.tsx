@@ -59,6 +59,7 @@ const FamilyLounge = lazy(() => import("./pages/FamilyLounge.jsx"));
 const FamilyWarsHub = lazy(() => import("./pages/FamilyWarsHub.jsx"));
 const FamilyLeaderboard = lazy(() => import("./pages/FamilyLeaderboard.jsx"));
 const FamilyShop = lazy(() => import("./pages/FamilyShop.jsx"));
+const FamilyBrowse = lazy(() => import("./pages/FamilyBrowse"));
 const Support = lazy(() => import("./pages/Support"));
 const Safety = lazy(() => import("./pages/Safety"));
 const AdminRFC = lazy(() => import("./components/AdminRFC"));
@@ -631,6 +632,7 @@ function AppContent() {
 
                   {/* 👨‍👩‍👧 Family */}
                   <Route path="/family" element={<TrollFamily />} />
+                  <Route path="/family/browse" element={<FamilyBrowse />} />
                   <Route path="/family/city" element={<TrollFamilyCity />} />
                   <Route path="/family/profile/:id" element={<FamilyProfilePage />} />
                   <Route path="/family/chat" element={<FamilyChatPage />} />

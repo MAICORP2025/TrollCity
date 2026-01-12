@@ -104,8 +104,9 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         if (active?.call_sound_catalog?.asset_url) {
           setDialToneSrc(active.call_sound_catalog.asset_url);
         }
-      } catch {
+      } catch (error) {
         // ignore
+        void error;
       }
     };
 
@@ -181,7 +182,8 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
             dialAudioRef.current.loop = true;
             await dialAudioRef.current.play();
           }
-        } catch {
+        } catch (error) {
+          void error;
           try {
             const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
             const osc = ctx.createOscillator();
@@ -195,8 +197,10 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
             dialCtxRef.current = ctx;
             dialOscRef.current = osc;
             dialGainRef.current = gain;
-          } catch {}
-        } catch {}
+          } catch (fallbackError) {
+            void fallbackError;
+          }
+        }
 
         newRoom.on(RoomEvent.Connected, () => {
           console.log('✅ Connected to call room');
@@ -213,19 +217,25 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
               try {
                 dialAudioRef.current.pause();
                 dialAudioRef.current.currentTime = 0;
-              } catch {}
+              } catch (error) {
+                void error;
+              }
             }
             if (dialOscRef.current) {
               try {
                 dialOscRef.current.stop();
                 dialOscRef.current.disconnect();
-              } catch {}
+              } catch (error) {
+                void error;
+              }
               dialOscRef.current = null;
             }
             if (dialCtxRef.current) {
               try {
                 dialCtxRef.current.close();
-              } catch {}
+              } catch (error) {
+                void error;
+              }
               dialCtxRef.current = null;
             }
           });
@@ -261,19 +271,25 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         try {
           dialOscRef.current.stop();
           dialOscRef.current.disconnect();
-        } catch {}
+        } catch (error) {
+          void error;
+        }
         dialOscRef.current = null;
       }
       if (dialAudioRef.current) {
         try {
           dialAudioRef.current.pause();
           dialAudioRef.current.currentTime = 0;
-        } catch {}
+        } catch (error) {
+          void error;
+        }
       }
       if (dialCtxRef.current) {
         try {
           dialCtxRef.current.close();
-        } catch {}
+        } catch (error) {
+          void error;
+        }
         dialCtxRef.current = null;
       }
     };

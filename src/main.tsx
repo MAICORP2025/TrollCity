@@ -130,13 +130,13 @@ if (typeof window !== 'undefined') {
 }
 
 createRoot(rootElement).render(
-  <LiveKitProvider>
+  <BrowserRouter>
+    <LiveKitProvider>
       <AuthProvider>
         <GlobalAppProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
+          <App />
         </GlobalAppProvider>
       </AuthProvider>
     </LiveKitProvider>
+  </BrowserRouter>
 )
