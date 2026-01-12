@@ -505,48 +505,7 @@ export default function CoinStore() {
       if (price <= 0) {
         toast.error('Invalid insurance price')
         return
-  }
-
-  const buyBroadcastTheme = async (theme) => {
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-    if (!user?.id) {
-      toast.error('Please log in to purchase a theme');
-      return;
-    }
-
-    if (!theme?.id) {
-      toast.error('Invalid theme');
-      return;
-    }
-
-    if (ownedThemeIds.has(theme.id)) {
-      toast.info('You already own this theme');
-      return;
-    }
-
-    setThemePurchasing(theme.id);
-    try {
-      const { data, error } = await supabase.rpc('purchase_broadcast_theme', {
-        p_user_id: user.id,
-        p_theme_id: theme.id,
-        p_set_active: false,
-      });
-      if (error || data?.success === false) {
-        throw new Error(data?.error || error?.message || 'Theme purchase failed');
       }
-
-      setOwnedThemeIds((prev) => new Set([...Array.from(prev), theme.id]));
-      await refreshCoins();
-      toast.success('Theme purchased');
-      showPurchaseCompleteOverlay();
-    } catch (err) {
-      console.error('Theme purchase error:', err);
-      toast.error(err?.message || 'Failed to purchase theme');
-    } finally {
-      setThemePurchasing(null);
-    }
-  };
 
       if (troll_coins < price) {
         toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`)
@@ -601,6 +560,47 @@ export default function CoinStore() {
      toast.error(err.message || 'Purchase failed')
    }
  }
+
+  const buyBroadcastTheme = async (theme) => {
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+    if (!user?.id) {
+      toast.error('Please log in to purchase a theme');
+      return;
+    }
+
+    if (!theme?.id) {
+      toast.error('Invalid theme');
+      return;
+    }
+
+    if (ownedThemeIds.has(theme.id)) {
+      toast.info('You already own this theme');
+      return;
+    }
+
+    setThemePurchasing(theme.id);
+    try {
+      const { data, error } = await supabase.rpc('purchase_broadcast_theme', {
+        p_user_id: user.id,
+        p_theme_id: theme.id,
+        p_set_active: false,
+      });
+      if (error || data?.success === false) {
+        throw new Error(data?.error || error?.message || 'Theme purchase failed');
+      }
+
+      setOwnedThemeIds((prev) => new Set([...Array.from(prev), theme.id]));
+      await refreshCoins();
+      toast.success('Theme purchased');
+      showPurchaseCompleteOverlay();
+    } catch (err) {
+      console.error('Theme purchase error:', err);
+      toast.error(err?.message || 'Failed to purchase theme');
+    } finally {
+      setThemePurchasing(null);
+    }
+  };
 
   const buyCallMinutes = async (pkg) => {
     // Check officer onboarding first
