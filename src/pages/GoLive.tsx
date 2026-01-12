@@ -29,6 +29,7 @@ const GoLive: React.FC = () => {
   const [themes, setThemes] = useState<any[]>([]);
   const [ownedThemeIds, setOwnedThemeIds] = useState<Set<string>>(new Set());
   const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
+  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   const [themesLoading, setThemesLoading] = useState(false);
   const [themePurchaseId, setThemePurchaseId] = useState<string | null>(null);
   const [streamerEntitlements, setStreamerEntitlements] = useState<any>(null);
@@ -38,58 +39,9 @@ const GoLive: React.FC = () => {
 
 
 
-  const [_broadcasterStatus, setBroadcasterStatus] = useState<{
-    isApproved: boolean;
-    hasApplication: boolean;
-    applicationStatus: string | null;
-  } | null>(null); // Broadcaster approval status
-
   // Note: All camera/mic functionality moved to seat joining in broadcast page
 
-  // -------------------------------
-  // CHECK BROADCASTER STATUS
-  // -------------------------------
   useEffect(() => {
-    const checkStatus = async () => {
-      const { user, profile } = useAuthStore.getState();
-      if (!user || !profile) return;
-
-      // If already marked broadcaster
-      if (profile.is_broadcaster) {
-        setBroadcasterStatus({
-          isApproved: true,
-          hasApplication: true,
-          applicationStatus: 'approved',
-        });
-        return;
-      }
-
-      // Check broadcaster_applications table
-      const { data } = await supabase
-        .from('broadcaster_applications')
-        .select('application_status')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!data) {
-        setBroadcasterStatus({
-          isApproved: false,
-          hasApplication: false,
-          applicationStatus: null,
-        });
-      } else {
-        setBroadcasterStatus({
-          isApproved: data.application_status === 'approved',
-          hasApplication: true,
-          applicationStatus: data.application_status,
-        });
-      }
-    };
-
-    checkStatus();
-    // Prefill broadcaster name if available
     const p = useAuthStore.getState().profile;
     if (p?.username) setBroadcasterName(p.username);
   }, []);
@@ -127,6 +79,7 @@ const GoLive: React.FC = () => {
         setOwnedThemeIds(new Set((owned || []).map((row: any) => row.theme_id)));
         setActiveThemeId(state?.active_theme_id || null);
         setStreamerEntitlements(entitlements || null);
+        setSelectedThemeId(state?.active_theme_id || null);
       } catch (err) {
         console.error('Failed to load broadcast themes', err);
       } finally {
@@ -136,6 +89,12 @@ const GoLive: React.FC = () => {
 
     loadThemes();
   }, []);
+
+  useEffect(() => {
+    if (selectedThemeId === null && activeThemeId) {
+      setSelectedThemeId(activeThemeId);
+    }
+  }, [activeThemeId, selectedThemeId]);
 
   const buildThemeStyle = (theme?: any) => {
     if (!theme) return {};
@@ -202,19 +161,6 @@ const GoLive: React.FC = () => {
       minFollowers,
       minHours,
     };
-  };
-
-  const getRarityFrame = (rarity?: string) => {
-    switch (String(rarity || '').toLowerCase()) {
-      case 'rare':
-        return 'border-blue-500/40 shadow-[0_0_20px_rgba(59,130,246,0.25)]';
-      case 'epic':
-        return 'border-pink-500/40 shadow-[0_0_24px_rgba(236,72,153,0.3)]';
-      case 'legendary':
-        return 'border-yellow-400/50 shadow-[0_0_28px_rgba(250,204,21,0.35)]';
-      default:
-        return 'border-white/10';
-    }
   };
 
   const handleSelectTheme = async (themeId: string | null) => {
@@ -730,34 +676,69 @@ const GoLive: React.FC = () => {
                 </div>
                 <div
                   className="mt-3 h-28 rounded-lg border border-white/10"
-                  style={buildThemeStyle(themes.find(t => t.id === activeThemeId))}
+                  style={buildThemeStyle(themes.find(t => t.id === (selectedThemeId || activeThemeId)))}
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-xl border border-purple-700/30 bg-[#0b091f] p-4 space-y-3">
+                <div className="text-sm font-semibold text-white">Select a theme</div>
+                <select
+                  value={selectedThemeId || ''}
+                  onChange={(e) => setSelectedThemeId(e.target.value || null)}
+                  className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-4 py-3"
+                  disabled={themesLoading}
+                >
+                  <option value="">Default (free)</option>
+                  {themes.map((theme) => {
+                    const owned = ownedThemeIds.has(theme.id);
+                    const eligibility = getEligibility(theme);
+                    const locked = !eligibility.isEligible;
+                    const labelParts = [
+                      theme.name,
+                      owned ? 'Owned' : `${theme.price_coins.toLocaleString()} coins`,
+                      locked ? 'Locked' : null
+                    ].filter(Boolean);
+                    return (
+                      <option key={theme.id} value={theme.id} disabled={locked}>
+                      {labelParts.join(' - ')}
+                      </option>
+                    );
+                  })}
+                </select>
+
                 {themesLoading && <div className="text-xs text-gray-400">Loading themes...</div>}
                 {!themesLoading && themes.length === 0 && (
                   <div className="text-xs text-gray-500">No themes available yet.</div>
                 )}
-                {!themesLoading && themes.map((theme) => {
-                  const owned = ownedThemeIds.has(theme.id);
-                  const isActive = activeThemeId === theme.id;
-                  const eligibility = getEligibility(theme);
-                  const rarityFrame = getRarityFrame(theme.rarity);
-                  const isAnimated = theme.asset_type === 'video';
-                  const isLimited = Boolean(theme.is_limited);
-                  const isExclusive = Boolean(theme.is_streamer_exclusive || theme.min_stream_level || theme.min_followers || theme.min_total_hours_streamed);
-                  return (
-                    <div key={theme.id} className={`rounded-xl border ${rarityFrame} bg-[#120f1f] p-3 space-y-2`}>
-                      <div className="h-20 rounded-lg border border-white/10 overflow-hidden" style={buildThemeStyle(theme)} />
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-white">{theme.name}</div>
-                          <div className="text-[10px] text-gray-400">{theme.rarity || 'standard'}</div>
-                        </div>
-                        <div className="text-xs text-yellow-300">{theme.price_coins.toLocaleString()} coins</div>
+
+                {(() => {
+                  const selectedTheme = themes.find((t) => t.id === selectedThemeId);
+                  if (!selectedTheme) {
+                    return (
+                      <div className="flex items-center justify-between text-xs text-gray-400">
+                        <span>Default background active.</span>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTheme(null)}
+                          className={`px-3 py-1 rounded border ${!activeThemeId ? 'border-cyan-400/70 text-cyan-200' : 'border-white/10 text-white/60'}`}
+                        >
+                          Use Default
+                        </button>
                       </div>
-                      <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.2em] text-gray-400">
+                    );
+                  }
+
+                  const owned = ownedThemeIds.has(selectedTheme.id);
+                  const isActive = activeThemeId === selectedTheme.id;
+                  const eligibility = getEligibility(selectedTheme);
+                  const isAnimated = selectedTheme.asset_type === 'video';
+                  const isLimited = Boolean(selectedTheme.is_limited);
+                  const isExclusive = Boolean(selectedTheme.is_streamer_exclusive || selectedTheme.min_stream_level || selectedTheme.min_followers || selectedTheme.min_total_hours_streamed);
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-gray-400">
+                        <span>{selectedTheme.rarity || 'standard'}</span>
                         {isAnimated && <span className="text-cyan-200">Animated</span>}
                         {isLimited && <span className="text-pink-200">Limited</span>}
                         {isExclusive && <span className="text-amber-200">Exclusive</span>}
@@ -769,8 +750,8 @@ const GoLive: React.FC = () => {
                             <div className="text-[10px] text-white/60">
                               Needs
                               {eligibility.minLevel ? ` Lv ${eligibility.minLevel}` : ''}
-                              {eligibility.minFollowers ? ` • ${eligibility.minFollowers}+ followers` : ''}
-                              {eligibility.minHours ? ` • ${eligibility.minHours}+ hrs` : ''}
+                              {eligibility.minFollowers ? ` - ${eligibility.minFollowers}+ followers` : ''}
+                              {eligibility.minHours ? ` - ${eligibility.minHours}+ hrs` : ''}
                             </div>
                           )}
                         </div>
@@ -778,28 +759,29 @@ const GoLive: React.FC = () => {
                       {eligibility.isEligible && eligibility.seasonalState && (
                         <div className="text-[11px] text-yellow-200">{eligibility.seasonalState}</div>
                       )}
+
                       <div className="flex items-center gap-2">
                         {owned ? (
                           <>
                             <button
                               type="button"
-                              onClick={() => handleSelectTheme(theme.id)}
+                              onClick={() => handleSelectTheme(selectedTheme.id)}
                               className={`flex-1 text-xs px-3 py-2 rounded border ${isActive ? 'border-cyan-400/80 text-cyan-200' : 'border-white/10 text-white/70 hover:text-white'}`}
                             >
-                              {isActive ? 'Active' : 'Use Theme'}
+                              {isActive ? 'Active' : 'Enable'}
                             </button>
                             <span className="text-[10px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-200">Owned</span>
                           </>
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleBuyTheme(theme.id)}
-                            disabled={!eligibility.isEligible || themePurchaseId === theme.id}
+                            onClick={() => handleBuyTheme(selectedTheme.id)}
+                            disabled={!eligibility.isEligible || themePurchaseId === selectedTheme.id}
                             className="flex-1 text-xs px-3 py-2 rounded border border-pink-500/40 text-pink-200 hover:text-white"
                           >
-                            {themePurchaseId === theme.id
+                            {themePurchaseId === selectedTheme.id
                               ? 'Purchasing...'
-                              : Number(theme.price_coins || 0) === 0
+                              : Number(selectedTheme.price_coins || 0) === 0
                                 ? 'Claim Free'
                                 : eligibility.isEligible
                                   ? 'Buy Theme'
@@ -809,7 +791,7 @@ const GoLive: React.FC = () => {
                       </div>
                     </div>
                   );
-                })}
+                })()}
               </div>
             </div>
           </div>
