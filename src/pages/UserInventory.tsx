@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield } from 'lucide-react'
+import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone } from 'lucide-react'
 import { PERK_CONFIG } from '../lib/perkSystem'
 import { ENTRANCE_EFFECTS_MAP, ROLE_BASED_ENTRANCE_EFFECTS, USER_SPECIFIC_ENTRANCE_EFFECTS } from '../lib/entranceEffects'
 
@@ -14,6 +14,7 @@ export default function UserInventory() {
   const [entranceEffects, setEntranceEffects] = useState<any[]>([])
   const [perks, setPerks] = useState<any[]>([])
   const [insurances, setInsurances] = useState<any[]>([])
+  const [callSounds, setCallSounds] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeItems, setActiveItems] = useState<Set<string>>(new Set())
 
@@ -45,13 +46,18 @@ export default function UserInventory() {
         effectsRes,
         perksRes,
         insuranceRes,
-        activeRes
+        activeRes,
+        callSoundsRes
       ] = await Promise.all([
         supabase.from('user_inventory').select('*').eq('user_id', user!.id).order('acquired_at', { ascending: false }),
         supabase.from('user_entrance_effects').select('*').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
         supabase.from('user_perks').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
         supabase.from('user_insurances').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
-        supabase.from('user_active_items').select('item_id').eq('user_id', user!.id)
+        supabase.from('user_active_items').select('item_id').eq('user_id', user!.id),
+        supabase
+          .from('user_call_sounds')
+          .select('sound_id,is_active,call_sound_catalog(id,slug,name,sound_type,asset_url,price_coins)')
+          .eq('user_id', user!.id)
       ]);
 
       // 1. Process Standard Inventory
@@ -106,6 +112,12 @@ export default function UserInventory() {
         ...i,
         plan: insuranceMap[i.insurance_id] || { name: 'Insurance Plan', description: 'Protection' }
       })))
+
+      const callSoundsData = (callSoundsRes?.data || []).map((row: any) => ({
+        ...row,
+        catalog: row.call_sound_catalog
+      }));
+      setCallSounds(callSoundsData)
 
       // 5. Active Items
       const activeSet = new Set(activeRes.data?.map(item => item.item_id) || [])
@@ -311,6 +323,34 @@ export default function UserInventory() {
     }
   }
 
+  const toggleCallSound = async (soundId: string, soundType: string, isActive: boolean) => {
+    if (!user?.id) return
+    try {
+      if (isActive) {
+        const { error } = await supabase
+          .from('user_call_sounds')
+          .update({ is_active: false })
+          .eq('user_id', user.id)
+          .eq('sound_id', soundId)
+        if (error) throw error
+        toast.success('Call sound deactivated')
+      } else {
+        const { data, error } = await supabase.rpc('set_active_call_sound', {
+          p_user_id: user.id,
+          p_sound_id: soundId
+        })
+        if (error || data?.success === false) {
+          throw new Error(data?.error || error?.message || 'Failed to activate sound')
+        }
+        toast.success('Call sound activated')
+      }
+      loadInventory()
+    } catch (err) {
+      console.error('Failed to toggle call sound', err)
+      toast.error('Failed to toggle call sound')
+    }
+  }
+
   const getItemTypeLabel = (type: string) => {
     switch (type) {
       case 'effect': return 'Effect'
@@ -345,7 +385,7 @@ export default function UserInventory() {
               </div>
             ))}
           </div>
-        ) : (inventory.length === 0 && entranceEffects.length === 0 && perks.length === 0 && insurances.length === 0) ? (
+        ) : (inventory.length === 0 && entranceEffects.length === 0 && perks.length === 0 && insurances.length === 0 && callSounds.length === 0) ? (
           <div className="text-center py-12">
             <Package className="w-16 h-16 text-gray-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">Your Inventory is Empty</h2>
@@ -568,6 +608,63 @@ export default function UserInventory() {
                         </button>
                       </div>
                     )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Call Sounds Section */}
+            {callSounds.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <Phone className="w-6 h-6 text-cyan-300" />
+                  Call Sounds
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {callSounds.map((sound) => {
+                    const isActive = sound.is_active;
+                    const catalog = sound.catalog || {};
+                    return (
+                      <div key={sound.sound_id} className="bg-zinc-900 rounded-xl p-6 border border-cyan-500/20 hover:border-cyan-500/40 transition-all">
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Phone className="w-5 h-5 text-cyan-300" />
+                            <span className="text-sm text-gray-400">{catalog.sound_type || 'call sound'}</span>
+                            {isActive && (
+                              <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">
+                                ACTIVE
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-xl font-bold text-white mb-1">
+                            {catalog.name || 'Call Sound'}
+                          </h3>
+                          <p className="text-gray-400 text-sm mb-2">
+                            {catalog.asset_url}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => toggleCallSound(sound.sound_id, catalog.sound_type, isActive)}
+                          className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                            isActive
+                              ? 'bg-red-600 hover:bg-red-700 text-white'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {isActive ? (
+                            <>
+                              <XCircle className="w-4 h-4" />
+                              Deactivate
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4" />
+                              Activate
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
                   })}
                 </div>
               </div>

@@ -44,6 +44,8 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
   const dialCtxRef = useRef<AudioContext | null>(null);
   const dialOscRef = useRef<OscillatorNode | null>(null);
   const dialGainRef = useRef<GainNode | null>(null);
+  const dialAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [dialToneSrc, setDialToneSrc] = useState('/sounds/calls/dialtone-classic.mp3');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -88,6 +90,27 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
 
     loadMinutes();
   }, [user?.id, callType, navigate]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadDialTone = async () => {
+      try {
+        const { data } = await supabase
+          .from('user_call_sounds')
+          .select('is_active,call_sound_catalog(asset_url,sound_type)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        const active = (data || []).find((row: any) => row.call_sound_catalog?.sound_type === 'dialtone');
+        if (active?.call_sound_catalog?.asset_url) {
+          setDialToneSrc(active.call_sound_catalog.asset_url);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    loadDialTone();
+  }, [user?.id]);
 
   // End call
   const endCall = React.useCallback(async () => {
@@ -154,18 +177,25 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
 
         // Start outgoing dial tone until remote audio or video is received
         try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.value = 440;
-          gain.gain.value = 0.03;
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start();
-          dialCtxRef.current = ctx;
-          dialOscRef.current = osc;
-          dialGainRef.current = gain;
+          if (dialAudioRef.current) {
+            dialAudioRef.current.loop = true;
+            await dialAudioRef.current.play();
+          }
+        } catch {
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 440;
+            gain.gain.value = 0.03;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            dialCtxRef.current = ctx;
+            dialOscRef.current = osc;
+            dialGainRef.current = gain;
+          } catch {}
         } catch {}
 
         newRoom.on(RoomEvent.Connected, () => {
@@ -179,6 +209,12 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
               track.attach();
             }
             // Stop dial tone when any remote track arrives
+            if (dialAudioRef.current) {
+              try {
+                dialAudioRef.current.pause();
+                dialAudioRef.current.currentTime = 0;
+              } catch {}
+            }
             if (dialOscRef.current) {
               try {
                 dialOscRef.current.stop();
@@ -228,6 +264,12 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         } catch {}
         dialOscRef.current = null;
       }
+      if (dialAudioRef.current) {
+        try {
+          dialAudioRef.current.pause();
+          dialAudioRef.current.currentTime = 0;
+        } catch {}
+      }
       if (dialCtxRef.current) {
         try {
           dialCtxRef.current.close();
@@ -235,7 +277,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         dialCtxRef.current = null;
       }
     };
-  }, [roomId, user, livekitUrl, token, callType, isVideoOff, navigate, endCall]);
+  }, [roomId, user, livekitUrl, token, callType, isVideoOff, navigate, endCall, dialToneSrc]);
 
   // Get LiveKit token
   useEffect(() => {
@@ -363,6 +405,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
+      <audio ref={dialAudioRef} src={dialToneSrc} />
       {/* Low Minutes Warning */}
       {lowMinutesWarning && (
         <div className="bg-yellow-600 text-black px-4 py-2 text-center font-semibold">

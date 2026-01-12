@@ -77,6 +77,10 @@ export default function CoinStore() {
   const [ownedThemeIds, setOwnedThemeIds] = useState(new Set());
   const [themesNote, setThemesNote] = useState(null);
   const [themePurchasing, setThemePurchasing] = useState(null);
+  const [callSounds, setCallSounds] = useState([]);
+  const [ownedCallSoundIds, setOwnedCallSoundIds] = useState(new Set());
+  const [activeCallSounds, setActiveCallSounds] = useState({});
+  const [callSoundPurchasing, setCallSoundPurchasing] = useState(null);
   const [streamerEntitlements, setStreamerEntitlements] = useState(null);
   const [effectsNote, setEffectsNote] = useState(null);
   const [perksNote, setPerksNote] = useState(null);
@@ -238,7 +242,7 @@ export default function CoinStore() {
 
       await refreshCoins();
 
-      const [effRes, perkRes, planRes, themeRes, themeOwnedRes, entitlementsRes] = await Promise.all([
+      const [effRes, perkRes, planRes, themeRes, themeOwnedRes, entitlementsRes, callSoundRes, callSoundOwnedRes] = await Promise.all([
         supabase.from('entrance_effects').select('*').order('created_at', { ascending: false }),
         supabase.from('perks').select('*').order('created_at', { ascending: false }),
         supabase.from('insurance_options').select('*').order('created_at', { ascending: false }),
@@ -248,7 +252,11 @@ export default function CoinStore() {
           : Promise.resolve({ data: [] }),
         user?.id
           ? supabase.from('user_streamer_entitlements').select('*').eq('user_id', user.id).maybeSingle()
-          : Promise.resolve({ data: null })
+          : Promise.resolve({ data: null }),
+        supabase.from('call_sound_catalog').select('*').eq('is_active', true).order('sound_type', { ascending: true }),
+        user?.id
+          ? supabase.from('user_call_sounds').select('sound_id,is_active,call_sound_catalog(sound_type)').eq('user_id', user.id)
+          : Promise.resolve({ data: [] })
       ]);
       const applyCatalogData = (result, fallback = [], setter, noteSetter, label) => {
         if (result.error) {
@@ -309,6 +317,16 @@ export default function CoinStore() {
 
       setOwnedThemeIds(new Set((themeOwnedRes?.data || []).map((row) => row.theme_id)));
       setStreamerEntitlements(entitlementsRes?.data || null);
+      setCallSounds(callSoundRes?.data || []);
+      const ownedSoundIds = new Set((callSoundOwnedRes?.data || []).map((row) => row.sound_id));
+      setOwnedCallSoundIds(ownedSoundIds);
+      const activeMap = {};
+      (callSoundOwnedRes?.data || []).forEach((row) => {
+        if (row.is_active && row.call_sound_catalog?.sound_type) {
+          activeMap[row.call_sound_catalog.sound_type] = row.sound_id;
+        }
+      });
+      setActiveCallSounds(activeMap);
 
       console.log('Effects, perks, plans, themes loaded:', { effects: loadedEffects.length, perks: loadedPerks.length, plans: loadedPlans.length, themes: loadedThemes.length });
 
@@ -678,6 +696,46 @@ export default function CoinStore() {
       toast.error(err?.message || 'Failed to purchase theme');
     } finally {
       setThemePurchasing(null);
+    }
+  };
+
+  const buyCallSound = async (sound) => {
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+    if (!user?.id) {
+      toast.error('Please log in to purchase a call sound');
+      return;
+    }
+    if (!sound?.id) {
+      toast.error('Invalid call sound');
+      return;
+    }
+    if (ownedCallSoundIds.has(sound.id)) {
+      toast.info('You already own this sound');
+      return;
+    }
+
+    setCallSoundPurchasing(sound.id);
+    try {
+      const { data, error } = await supabase.rpc('purchase_call_sound', {
+        p_user_id: user.id,
+        p_sound_id: sound.id,
+        p_set_active: false,
+      });
+      if (error || data?.success === false) {
+        throw new Error(data?.error || error?.message || 'Call sound purchase failed');
+      }
+      setOwnedCallSoundIds((prev) => new Set([...Array.from(prev), sound.id]));
+      await refreshCoins();
+      if (refreshProfile) {
+        await refreshProfile();
+      }
+      toast.success('Call sound purchased');
+    } catch (err) {
+      console.error('Call sound purchase error:', err);
+      toast.error(err?.message || 'Failed to purchase call sound');
+    } finally {
+      setCallSoundPurchasing(null);
     }
   };
 
@@ -1331,6 +1389,36 @@ export default function CoinStore() {
                 </p>
 
                 <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-purple-300 mb-3">Call Sounds</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {callSounds.map((sound) => {
+                        const owned = ownedCallSoundIds.has(sound.id);
+                        const isActive = activeCallSounds[sound.sound_type] === sound.id;
+                        return (
+                          <div key={sound.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
+                            <div className="font-semibold mb-1">{sound.name}</div>
+                            <div className="text-xs text-gray-400 mb-2">{sound.sound_type}</div>
+                            <div className="text-sm text-gray-300">
+                              {formatCoins(sound.price_coins)} Troll Coins
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => buyCallSound(sound)}
+                              disabled={owned || callSoundPurchasing === sound.id}
+                              className="mt-4 w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded font-semibold"
+                            >
+                              {owned ? (isActive ? 'Owned • Active' : 'Owned') : callSoundPurchasing === sound.id ? 'Processing...' : 'Purchase'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {callSounds.length === 0 && (
+                        <div className="text-gray-400">No call sounds available</div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <h3 className="text-lg font-semibold text-purple-300 mb-3">Audio Call Packages</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

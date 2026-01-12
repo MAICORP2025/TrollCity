@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Phone, PhoneOff, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../lib/store';
+import { supabase } from '../lib/supabase';
 
 interface IncomingCallPopupProps {
   isOpen: boolean;
@@ -24,15 +26,36 @@ export default function IncomingCallPopup({
   onDecline,
 }: IncomingCallPopupProps) {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   // const [isMinimized, setIsMinimized] = React.useState(false);
   // const { profile } = useAuthStore();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const [ringtoneSrc, setRingtoneSrc] = React.useState('/sounds/calls/ringtone-classic.mp3');
 
   useEffect(() => {
     if (!isOpen) return;
+
+    const loadActiveRingtone = async () => {
+      if (!user?.id) return;
+      try {
+        const { data } = await supabase
+          .from('user_call_sounds')
+          .select('is_active,call_sound_catalog(asset_url,sound_type)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        const active = (data || []).find((row: any) => row.call_sound_catalog?.sound_type === 'ringtone');
+        if (active?.call_sound_catalog?.asset_url) {
+          setRingtoneSrc(active.call_sound_catalog.asset_url);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    loadActiveRingtone();
 
     const audioEl = audioRef.current;
 
@@ -86,7 +109,7 @@ export default function IncomingCallPopup({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [isOpen, onDecline]);
+  }, [isOpen, onDecline, user?.id, ringtoneSrc]);
 
   const handleAccept = () => {
     if (audioRef.current) {
@@ -139,7 +162,7 @@ export default function IncomingCallPopup({
 
   return (
     <>
-      <audio ref={audioRef} src="/ringtone.mp3" />
+      <audio ref={audioRef} src={ringtoneSrc} />
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
         <div className="bg-gradient-to-br from-purple-900 to-black border-2 border-purple-500 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
           <div className="text-center">
