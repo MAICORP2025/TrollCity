@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Gift, Users, Crown } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { getGiftEmoji } from "../../lib/giftIcons";
+import { useAuthStore } from "../../lib/store";
 
 export interface GiftItem {
   id: string;
@@ -32,6 +33,8 @@ export default function GiftBox({ onSendGift }: GiftBoxProps) {
   const [gifts, setGifts] = useState<GiftItem[]>(DEFAULT_GIFTS);
   const [isExpanded, setIsExpanded] = useState(true);
   const [recipientMode, setRecipientMode] = useState<RecipientMode>("broadcaster");
+  const { profile } = useAuthStore();
+  const balance = profile?.troll_coins ?? 0;
 
   useEffect(() => {
     let active = true;
@@ -80,6 +83,9 @@ export default function GiftBox({ onSendGift }: GiftBoxProps) {
             <p className="text-xs font-bold uppercase tracking-[0.4em] text-white/70">Quick Gifts</p>
             <p className="text-[10px] text-white/40">Tap any icon to send a single gift</p>
           </div>
+        </div>
+        <div className="text-[10px] text-white/60">
+          Balance: {balance.toLocaleString()} coins
         </div>
         <button
           onClick={() => setIsExpanded((prev) => !prev)}

@@ -23,6 +23,7 @@ import CoinStoreModal from '../components/broadcast/CoinStoreModal';
 import GiftEventOverlay from './GiftEventOverlay';
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
+import { getUserEntranceEffect } from '../lib/entranceEffects';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
 import VideoFeed from '../components/stream/VideoFeed';
 
@@ -409,25 +410,20 @@ export default function WatchPage() {
 
     const sendEntrance = async () => {
       try {
-        const { data: effects } = await supabase
-          .from('user_entrance_effects')
-          .select('*, entrance_effects(*)')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .maybeSingle();
+        const { effectKey, config } = await getUserEntranceEffect(user.id);
+        if (!effectKey) return;
 
-        if (effects?.entrance_effects) {
-          await supabase.from('messages').insert({
-            stream_id: streamId,
-            user_id: user.id,
-            message_type: 'entrance',
-            content: JSON.stringify({
-              username: profile?.username || user.email,
-              role: profile?.role || 'viewer',
-              effect: effects.entrance_effects
-            })
-          });
-        }
+        await supabase.from('messages').insert({
+          stream_id: streamId,
+          user_id: user.id,
+          message_type: 'entrance',
+          content: JSON.stringify({
+            username: profile?.username || user.email,
+            role: profile?.role || 'viewer',
+            effectKey,
+            effect: config,
+          })
+        });
       } catch (err) {
         console.error('Failed to send entrance effect message', err);
       }

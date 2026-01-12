@@ -31,7 +31,7 @@ import EntranceEffect from '../components/broadcast/EntranceEffect';
 import BroadcastLayout from '../components/broadcast/BroadcastLayout';
 import GlobalGiftBanner from '../components/GlobalGiftBanner';
 import GiftEventOverlay from './GiftEventOverlay';
-import { triggerUserEntranceEffect } from '../lib/entranceEffects';
+import { getUserEntranceEffect, triggerUserEntranceEffect } from '../lib/entranceEffects';
 
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
@@ -780,32 +780,25 @@ export default function LivePage() {
   useEffect(() => {
     const triggerEntrance = async () => {
       if (!user || !streamId) return;
-      
-      // Check for active entrance effect
-      const { data: effects } = await supabase
-        .from('user_entrance_effects')
-        .select('*, entrance_effects(*)')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle();
 
-      if (effects?.entrance_effects) {
-        // Send entrance message
-        await supabase.from('messages').insert({
-          stream_id: streamId,
-          user_id: user.id,
-          message_type: 'entrance',
-          content: JSON.stringify({
-            username: profile?.username || user.email,
-            role: profile?.role || 'user',
-            effect: effects.entrance_effects
-          })
-        });
-      }
+      const { effectKey, config } = await getUserEntranceEffect(user.id);
+      if (!effectKey) return;
+
+      await supabase.from('messages').insert({
+        stream_id: streamId,
+        user_id: user.id,
+        message_type: 'entrance',
+        content: JSON.stringify({
+          username: profile?.username || user.email,
+          role: profile?.role || 'user',
+          effectKey,
+          effect: config
+        })
+      });
     };
 
     if (isConnected) {
-      triggerEntrance();
+      void triggerEntrance();
     }
   }, [isConnected, user, streamId, profile]);
 
