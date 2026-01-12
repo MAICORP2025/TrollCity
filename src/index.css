@@ -19,23 +19,23 @@
   color-scheme: dark;
 
   /* Original TrollCity Design Colors */
-  --troll-dark-bg: #0D0D0D;
-  --troll-dark-card: #121212;
-  --troll-gold: #ff48d1;
-  --troll-cyan: #23d7ff;
+  --troll-dark-bg: #06030e;
+  --troll-dark-card: #11081e;
+  --troll-gold: #ff5adf;
+  --troll-cyan: #3ad7ff;
   --troll-white: #E2E2E2;
-  --troll-purple-950: #070517;
-  --troll-purple-900: #0b0a2a;
-  --troll-purple-800: #12143a;
-  --troll-purple-700: #1a1f52;
-  --troll-purple-600: #262b78;
-  --troll-purple-300: #7cc9ff;
-  --troll-green-neon: #25d4ff;
-  --troll-green-glow: #1499ff;
-  --troll-pink-neon: #ff3ac8;
-  --troll-pink-glow: #d61aa6;
-  --troll-blue-neon: #2aa8ff;
-  --troll-cyan-neon: #38f2ff;
+  --troll-purple-950: #070316;
+  --troll-purple-900: #0b0724;
+  --troll-purple-800: #140c33;
+  --troll-purple-700: #1c1144;
+  --troll-purple-600: #27175a;
+  --troll-purple-300: #69c1ff;
+  --troll-green-neon: #35caff;
+  --troll-green-glow: #1b88ff;
+  --troll-pink-neon: #ff45c6;
+  --troll-pink-glow: #e623b6;
+  --troll-blue-neon: #2db3ff;
+  --troll-cyan-neon: #45f0ff;
   --troll-orange-neon: #ff5bd1;
   --troll-red-neon: #ff2f98;
   --troll-yellow-neon: #ff7ad9;
@@ -43,10 +43,11 @@
   --troll-white-neon: #E2E2E2;
 
   --troll-bg-gradient: linear-gradient(
-    135deg,
-    #050611 0%,
-    #0a0d2b 45%,
-    #1d0a2c 100%
+    120deg,
+    #070313 0%,
+    #120825 30%,
+    #0a1430 60%,
+    #220a2f 100%
   );
 
   --seat-username-size: 12px;
