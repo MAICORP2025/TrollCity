@@ -17,6 +17,9 @@ export default function AdminFinanceDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const formatNumber = (value?: number | null) => (value ?? 0).toLocaleString()
+  const formatCurrency = (value?: number | null) => `$${formatNumber(value)}`
+
   const loadSummary = React.useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -57,7 +60,7 @@ export default function AdminFinanceDashboard() {
   const summaryItems = [
     {
       label: 'Total Revenue',
-      value: summary ? `$${(summary.total_revenue_usd || 0).toLocaleString()}` : '$0',
+      value: formatCurrency(summary?.total_revenue_usd),
       color: 'text-green-400',
       bg: 'bg-green-500/10'
     },
@@ -75,13 +78,13 @@ export default function AdminFinanceDashboard() {
     },
     {
       label: 'Processed Payouts',
-      value: summary ? `$${(summary.total_payouts_processed_usd || 0).toLocaleString()}` : '$0',
+      value: formatCurrency(summary?.total_payouts_processed_usd),
       color: 'text-green-400',
       bg: 'bg-green-500/10'
     },
     {
       label: 'Pending Payouts',
-      value: summary ? `$${(summary.total_pending_payouts_usd || 0).toLocaleString()}` : '$0',
+      value: formatCurrency(summary?.total_pending_payouts_usd),
       color: 'text-orange-400',
       bg: 'bg-orange-500/10'
     },
@@ -133,7 +136,7 @@ export default function AdminFinanceDashboard() {
                 <div className="border border-[#2C2C2C] rounded-xl p-5 bg-[#0D0D16]">
                   <h2 className="text-lg font-semibold text-white mb-2">Creator Economy</h2>
                   <p className="text-sm text-gray-400 mb-4">
-                    {summary?.total_creator_earned_coins.toLocaleString()} coins earned by creators through gifts.
+                    {formatNumber(summary?.total_creator_earned_coins)} coins earned by creators through gifts.
                   </p>
                   <div className="text-xs uppercase tracking-[0.4em] text-gray-400">Top Broadcaster</div>
                   <p className="text-xl font-semibold">
@@ -146,7 +149,7 @@ export default function AdminFinanceDashboard() {
                     Track funds waiting to be paid out to creators.
                   </p>
                   <p className="text-xl font-semibold text-orange-300">
-                    ${summary?.total_pending_payouts_usd.toLocaleString()}
+                    {formatCurrency(summary?.total_pending_payouts_usd)}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
                     {summary ? 'Based on live payout requests' : 'Loading data'}

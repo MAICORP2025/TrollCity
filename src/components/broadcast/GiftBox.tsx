@@ -19,14 +19,14 @@ interface GiftBoxProps {
 }
 
 const DEFAULT_GIFTS: GiftItem[] = [
-  { id: "troll_clap", name: "Troll Clap", icon: "dY`?", value: 5, category: "Basic" },
-  { id: "glow_heart", name: "Glow Heart", icon: "dY'o", value: 10, category: "Basic" },
-  { id: "laughing_mask", name: "Laughing Mask", icon: "dYZ-", value: 30, category: "Basic" },
-  { id: "troll_mic_drop", name: "Troll Mic Drop", icon: "dYZ", value: 100, category: "Rare" },
-  { id: "troll_confetti", name: "Troll Confetti", icon: "dYZ%", value: 850, category: "Rare" },
-  { id: "crown_blast", name: "Crown Blast", icon: "dY``", value: 1200, category: "Epic" },
-  { id: "diamond_storm", name: "Diamond Storm", icon: "dY'Z", value: 7000, category: "Epic" },
-  { id: "the_big_crown", name: "The Big Crown", icon: "dY``", value: 15000, category: "Legendary" },
+  { id: "troll_clap", name: "Troll Clap", icon: "👏", value: 5, category: "Basic" },
+  { id: "glow_heart", name: "Glow Heart", icon: "💗", value: 10, category: "Basic" },
+  { id: "laughing_mask", name: "Laughing Mask", icon: "😹", value: 30, category: "Basic" },
+  { id: "troll_mic_drop", name: "Troll Mic Drop", icon: "🎤", value: 100, category: "Rare" },
+  { id: "troll_confetti", name: "Troll Confetti", icon: "🎉", value: 850, category: "Rare" },
+  { id: "crown_blast", name: "Crown Blast", icon: "👑", value: 1200, category: "Epic" },
+  { id: "diamond_storm", name: "Diamond Storm", icon: "💎", value: 7000, category: "Epic" },
+  { id: "the_big_crown", name: "The Big Crown", icon: "🌟", value: 15000, category: "Legendary" },
 ];
 
 export default function GiftBox({ onSendGift }: GiftBoxProps) {

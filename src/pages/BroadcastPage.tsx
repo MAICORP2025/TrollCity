@@ -1,5 +1,6 @@
 import React, {
   useEffect,
+  useRef,
   useState
 } from 'react';
 import { useParams } from 'react-router-dom';
@@ -35,6 +36,7 @@ interface StreamData {
   current_viewers: number;
   total_gifts_coins: number;
   created_at: string;
+  is_private?: boolean;
 }
 
 export default function BroadcastPage() {
@@ -53,21 +55,72 @@ export default function BroadcastPage() {
   const [seatCostPopupVisible, setSeatCostPopupVisible] = useState(false);
   const [seatCost, setSeatCost] = useState<number>(0);
   const [joinPrice, setJoinPrice] = useState<number>(0);
+  const [privateAccessGranted, setPrivateAccessGranted] = useState(false);
+  const [privatePasswordInput, setPrivatePasswordInput] = useState('');
+  const [privateAuthError, setPrivateAuthError] = useState('');
+  const privateAccessStorageKey = streamId ? `private-stream-access:${streamId}` : null;
+  const [entranceEffect, setEntranceEffect] = useState<any>(null);
+  const entranceTimerRef = useRef<number | null>(null);
+  const prevSeatUsersRef = useRef<Set<string>>(new Set());
+  const seatSyncRef = useRef(false);
+  const [cachedPrivatePassword, setCachedPrivatePassword] = useState<string | null>(null);
+  const privatePasswordStorageKey = streamId ? `private-stream-password:${streamId}` : null;
   
   // LiveKit
   const liveKit = useLiveKit();
 
   // Seat Roster
-  const { seats, claimSeat } = useSeatRoster(streamId || '');
+  const { seats, claimSeat, currentOccupants } = useSeatRoster(streamId || '');
 
   // Derived
   const isBroadcaster = user?.id === stream?.broadcaster_id;
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
-  
+
   // Load stream
+  const handlePrivatePasswordSubmit = async () => {
+    setPrivateAuthError('');
+    if (!streamId) {
+      setPrivateAuthError('Stream missing');
+      return;
+    }
+    if (!user) {
+      setPrivateAuthError('Please log in first');
+      return;
+    }
+    if (!privatePasswordInput.trim()) {
+      setPrivateAuthError('Enter the password to join this stream');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('verify_stream_password', {
+        p_stream_id: streamId,
+        p_password: privatePasswordInput.trim(),
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.success) {
+        setPrivateAccessGranted(true);
+        if (privateAccessStorageKey) {
+          localStorage.setItem(privateAccessStorageKey, '1');
+        }
+        setPrivateAuthError('');
+        toast.success('Private access granted');
+      } else {
+        setPrivateAuthError('Incorrect password');
+      }
+    } catch (err: any) {
+      console.error('Private stream verification failed:', err);
+      setPrivateAuthError('Unable to verify password right now');
+    }
+  };
+
   useEffect(() => {
     if (!streamId) return;
-    
+
     const loadStream = async () => {
       const { data, error } = await supabase
         .from('streams')
@@ -96,10 +149,55 @@ export default function BroadcastPage() {
     return () => clearInterval(interval);
   }, [streamId]);
 
+  useEffect(() => {
+    if (!stream || !streamId) {
+      setPrivateAccessGranted(false);
+      setPrivatePasswordInput('');
+      setPrivateAuthError('');
+      return;
+    }
+
+    if (!privateAccessStorageKey) {
+      setPrivateAccessGranted(true);
+      return;
+    }
+
+    if (stream.is_private && user?.id !== stream.broadcaster_id) {
+      const stored = localStorage.getItem(privateAccessStorageKey);
+      setPrivateAccessGranted(Boolean(stored));
+    } else {
+      setPrivateAccessGranted(true);
+      if (privateAccessStorageKey) {
+        localStorage.removeItem(privateAccessStorageKey);
+      }
+    }
+  }, [stream, streamId, user?.id]);
+
+  useEffect(() => {
+    if (!privatePasswordStorageKey) {
+      setCachedPrivatePassword(null);
+      return;
+    }
+
+    if (!stream?.is_private || !isBroadcaster) {
+      setCachedPrivatePassword(null);
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const stored = localStorage.getItem(privatePasswordStorageKey);
+    setCachedPrivatePassword(stored);
+  }, [privatePasswordStorageKey, stream?.is_private, isBroadcaster]);
+
   // Join/Init LiveKit
   useEffect(() => {
     if (!streamId || !user || !profile) return;
-    
+    if (!stream) return;
+    if (stream?.is_private && user?.id !== stream?.broadcaster_id && !privateAccessGranted) return;
+
     const initSession = async () => {
       try {
         await liveKit.connect(streamId, user, {
@@ -122,7 +220,7 @@ export default function BroadcastPage() {
     return () => {
       liveKit.disconnect();
     };
-  }, [streamId, user, isBroadcaster, isGuestSeat, liveKit, profile]);
+  }, [streamId, user, isBroadcaster, isGuestSeat, liveKit, profile, stream?.is_private, stream?.broadcaster_id, privateAccessGranted]);
 
   // Track viewers for this stream
   useViewerTracking(streamId || '', user?.id || null);
@@ -159,6 +257,52 @@ export default function BroadcastPage() {
       enableGuestMedia();
     }
   }, [isBroadcaster, seats, user, streamId, liveKit]);
+
+  useEffect(() => {
+    const occupantIds = currentOccupants
+      .map((seat) => seat?.user_id)
+      .filter(Boolean) as string[];
+    const nextSet = new Set(occupantIds);
+
+    if (!seatSyncRef.current) {
+      prevSeatUsersRef.current = nextSet;
+      seatSyncRef.current = true;
+      return;
+    }
+
+    const newSeat = currentOccupants.find(
+      (seat) => seat?.user_id && !prevSeatUsersRef.current.has(seat.user_id)
+    );
+
+    prevSeatUsersRef.current = nextSet;
+
+    if (!newSeat) {
+      return;
+    }
+
+    setEntranceEffect({
+      username: newSeat.username,
+      role: newSeat.role,
+      profile: newSeat.metadata?.profile,
+    });
+
+    if (entranceTimerRef.current) {
+      window.clearTimeout(entranceTimerRef.current);
+    }
+    entranceTimerRef.current = window.setTimeout(() => {
+      setEntranceEffect(null);
+      entranceTimerRef.current = null;
+    }, 6000);
+  }, [currentOccupants]);
+
+  useEffect(() => {
+    return () => {
+      if (entranceTimerRef.current) {
+        window.clearTimeout(entranceTimerRef.current);
+        entranceTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Handlers
   const toggleMic = async () => {
@@ -205,7 +349,11 @@ export default function BroadcastPage() {
       if (followers && followers.length > 0) {
         // Send notification to each follower
         const followerIds = followers.map(f => f.follower_id);
-        
+        const privateHint =
+          stream.is_private && cachedPrivatePassword
+            ? ` Password: ${cachedPrivatePassword}.`
+            : '';
+
         // Insert notifications into the database
         const { error: notificationError } = await supabase
           .from('notifications')
@@ -213,11 +361,12 @@ export default function BroadcastPage() {
             user_id: followerId,
             type: 'stream_invite',
             title: 'Live Stream Invitation',
-            message: `${profile?.username || 'A broadcaster'} has invited you to join their live stream!`,
+            message: `${profile?.username || 'A broadcaster'} has invited you to join their ${stream.is_private ? 'private ' : ''}live stream!${privateHint}`,
             metadata: {
               stream_id: streamId,
               broadcaster_id: stream.broadcaster_id,
-              broadcaster_name: profile?.username || 'Broadcaster'
+              broadcaster_name: profile?.username || 'Broadcaster',
+              private_stream: stream.is_private
             },
             is_read: false,
             created_at: new Date().toISOString()
@@ -235,6 +384,26 @@ export default function BroadcastPage() {
     } catch (err) {
       console.error('Error inviting followers:', err);
       toast.error('Failed to invite followers');
+    }
+    };
+
+  const handleCopyPrivatePassword = async () => {
+    if (!cachedPrivatePassword) {
+      toast.warning('No private password to copy');
+      return;
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      toast.error('Clipboard not available');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(cachedPrivatePassword);
+      toast.success('Private stream password copied');
+    } catch (err) {
+      console.error('Failed to copy password:', err);
+      toast.error('Unable to copy password right now');
     }
   };
 
@@ -274,13 +443,56 @@ export default function BroadcastPage() {
     }
   };
 
-  // Entrance Effect (Mock for now, or use real data)
-  const [entranceEffect] = useState<any>(null);
-
   if (!stream) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading Broadcast...</div>;
 
   return (
     <div className="fixed inset-0 bg-black text-white overflow-hidden flex flex-col md:flex-row">
+      {stream?.is_private && user?.id !== stream?.broadcaster_id && !privateAccessGranted && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/90 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0c0a16] p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-2">Private stream</h3>
+            <p className="text-sm text-gray-300 mb-4">
+              This broadcast is private. Enter the password provided by the broadcaster to join.
+            </p>
+            <input
+              type="password"
+              value={privatePasswordInput}
+              onChange={(e) => setPrivatePasswordInput(e.target.value)}
+              placeholder="Enter stream password"
+              className="w-full bg-[#05060f] border border-purple-500/40 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-300 focus:outline-none mb-2"
+            />
+            {privateAuthError && (
+              <p className="text-xs text-red-400 mb-2">{privateAuthError}</p>
+            )}
+            <button
+              className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 font-semibold text-sm"
+              onClick={handlePrivatePasswordSubmit}
+            >
+              Submit password
+            </button>
+            {!user && (
+              <p className="mt-3 text-xs text-gray-400">
+                You must be logged in to use the password.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      {stream?.is_private && isBroadcaster && cachedPrivatePassword && (
+        <div className="absolute top-4 right-4 z-[220] w-full max-w-sm rounded-2xl border border-white/10 bg-black/70 p-3 backdrop-blur-2xl shadow-lg shadow-black/70 text-sm text-white">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs uppercase tracking-[0.4em] text-gray-400">Invite password</div>
+            <button
+              onClick={handleCopyPrivatePassword}
+              className="text-xs text-purple-300 hover:text-purple-100"
+            >
+              Copy
+            </button>
+          </div>
+          <div className="font-bold text-lg tracking-[0.12em] text-white/90 break-all mt-1">{cachedPrivatePassword}</div>
+          <p className="text-[10px] text-gray-400 mt-1">Share this with invited viewers.</p>
+        </div>
+      )}
       {entranceEffect && <EntranceEffect username={entranceEffect.username} role={entranceEffect.role} profile={entranceEffect.profile} />}
       
       {/* Main Video Area */}

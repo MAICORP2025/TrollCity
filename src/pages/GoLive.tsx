@@ -10,6 +10,8 @@ import { useLiveKit } from '../hooks/useLiveKit';
 import type { LiveKitServiceConfig } from '../lib/LiveKitService';
 import { deductCoins } from '../lib/coinTransactions';
 
+const PRIVATE_STREAM_COST = 500;
+
 const GoLive: React.FC = () => {
   const navigate = useNavigate();
   const liveKit = useLiveKit();
@@ -28,6 +30,7 @@ const GoLive: React.FC = () => {
   const [broadcasterName, setBroadcasterName] = useState<string>('');
   const [category, setCategory] = useState<string>('Chat');
   const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
+  const [privateStreamPassword, setPrivateStreamPassword] = useState<string>('');
   const [themes, setThemes] = useState<any[]>([]);
   const [ownedThemeIds, setOwnedThemeIds] = useState<Set<string>>(new Set());
   const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
@@ -97,6 +100,12 @@ const GoLive: React.FC = () => {
       setSelectedThemeId(activeThemeId);
     }
   }, [activeThemeId, selectedThemeId]);
+
+  useEffect(() => {
+    if (!isPrivateStream) {
+      setPrivateStreamPassword('');
+    }
+  }, [isPrivateStream]);
 
   const buildThemeStyle = (theme?: any) => {
     if (!theme) return {};
@@ -239,11 +248,15 @@ const GoLive: React.FC = () => {
 
     // Check for Private Stream cost
     if (isPrivateStream) {
+      if (!privateStreamPassword.trim()) {
+        toast.error('Set a password for the private stream so viewers can join');
+        return;
+      }
       const userLevel = profile.level || 0;
       if (userLevel < 40) {
         // Need to pay 1000 coins
         const currentCoins = profile.troll_coins || 0;
-        const COST = 1000;
+        const COST = PRIVATE_STREAM_COST;
         
         if (currentCoins < COST) {
            toast.error(`Private streams cost ${COST} troll_coins. You only have ${currentCoins}.`);
@@ -395,6 +408,7 @@ const GoLive: React.FC = () => {
         category: category,
         is_live: false, // Hidden initially
         status: 'preparing', // Status preparing
+        is_private: isPrivateStream,
         start_time: new Date().toISOString(),
         thumbnail_url: thumbnailUrl,
         current_viewers: 0,
@@ -467,6 +481,28 @@ const GoLive: React.FC = () => {
         preflightStream?.getTracks().forEach(t => t.stop());
         cleanup();
         return;
+      }
+      
+      if (isPrivateStream) {
+        try {
+          const { error: passwordError } = await supabase.rpc('set_stream_password', {
+            p_stream_id: createdId,
+            p_password: privateStreamPassword.trim(),
+          });
+          if (passwordError) {
+            throw passwordError;
+          }
+          if (typeof window !== 'undefined' && privateStreamPassword.trim()) {
+            localStorage.setItem(`private-stream-password:${createdId}`, privateStreamPassword.trim());
+          }
+        } catch (passwordErr: any) {
+          console.error('[GoLive] Failed to set private stream password:', passwordErr);
+          toast.error('Failed to enable the private password. Please try again.');
+          preflightStream?.getTracks().forEach(t => t.stop());
+          await supabase.from('streams').delete().eq('id', createdId);
+          cleanup();
+          return;
+        }
       }
       
       console.log('[GoLive] Stream created successfully:', createdId);
@@ -633,10 +669,27 @@ const GoLive: React.FC = () => {
                   {(profile?.level || 0) >= 40 ? (
                     <span className="text-xs text-green-400 ml-2">(Free for Lvl 40+)</span>
                   ) : (
-                    <span className="text-xs text-purple-300 ml-2">(1000 troll coins)</span>
+                    <span className="text-xs text-purple-300 ml-2">({PRIVATE_STREAM_COST.toLocaleString()} troll coins)</span>
                   )}
                 </label>
               </div>
+              {isPrivateStream && (
+                <div className="space-y-1 mt-2">
+                  <label className="text-xs uppercase tracking-[0.3em] text-gray-400">
+                    Invite Password
+                  </label>
+                  <input
+                    type="password"
+                    value={privateStreamPassword}
+                    onChange={(e) => setPrivateStreamPassword(e.target.value)}
+                    placeholder="Enter a password for invited viewers"
+                    className="w-full bg-[#0E0A1A] border border-purple-600/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-400"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Only viewers who know this password can join. Passwords never expire during the stream.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
