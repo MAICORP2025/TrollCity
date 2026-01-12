@@ -115,7 +115,7 @@ export default function WatchPage() {
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false);
   const [giftRecipient, setGiftRecipient] = useState<any>(null);
-  const [entranceEffect] = useState<any>(null);
+  const [entranceEffect, setEntranceEffect] = useState<any>(null);
 
   // Load Stream Data
   const loadStreamData = useCallback(async () => {
@@ -281,6 +281,39 @@ export default function WatchPage() {
     enabled: !!streamId,
     redirectToSummary: true,
   });
+
+  useEffect(() => {
+    if (!stream?.id) return;
+
+    const channel = supabase
+      .channel(`live-updates-${stream.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `stream_id=eq.${stream.id}`,
+        },
+        (payload) => {
+          const msg = payload.new;
+          if (msg.message_type === 'entrance') {
+            try {
+              const data = JSON.parse(msg.content);
+              setEntranceEffect(data);
+              setTimeout(() => setEntranceEffect(null), 5000);
+            } catch (error) {
+              console.error('Failed to parse entrance effect', error);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [stream?.id]);
 
   // Gift subscription
   const lastGift = useGiftEvents(streamId);
