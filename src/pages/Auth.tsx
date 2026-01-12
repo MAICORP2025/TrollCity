@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
+import { checkConcurrentLogin } from '../lib/sessionUtils'
 
 const Auth = () => {
   const [loading, setLoading] = useState(false)
@@ -53,36 +54,19 @@ const Auth = () => {
           console.log('Email login successful:', data.user.email)
           
           // Check for concurrent login before proceeding
-        const sessionId = data.session?.id;
-        if (!sessionId) {
-          console.warn('[Auth] Session missing id, skipping concurrent login check');
-        }
-
+        const sessionId = data.session?.id
         if (sessionId) {
-          const { data: hasConcurrentLogin, error: concurrentError } = await supabase
-            .rpc('check_concurrent_login', {
-              p_user_id: data.user.id,
-              p_current_session_id: sessionId
-            })
-
-          if (concurrentError) {
-            console.error('Error checking concurrent login:', concurrentError)
-            // Continue with login if there's an error checking (fail-safe)
-          } else if (hasConcurrentLogin) {
+          const hasConcurrentLogin = await checkConcurrentLogin(data.user.id, sessionId)
+          if (hasConcurrentLogin) {
             // Block login attempt - user is already logged in on another device
             await supabase.auth.signOut()
-            throw new Error('Login blocked: Your account is already logged in on another device. Please log out from other devices first.')
+            throw new Error(
+              'Login blocked: Your account is already logged in on another device. Please log out from other devices first.'
+            )
           }
+        } else {
+          console.warn('[Auth] Session missing id, skipping concurrent login check')
         }
-          
-          if (concurrentError) {
-            console.error('Error checking concurrent login:', concurrentError)
-            // Continue with login if there's an error checking (fail-safe)
-          } else if (hasConcurrentLogin) {
-            // Block login attempt - user is already logged in on another device
-            await supabase.auth.signOut()
-            throw new Error('Login blocked: Your account is already logged in on another device. Please log out from other devices first.')
-          }
           
           // Register this session
           try {

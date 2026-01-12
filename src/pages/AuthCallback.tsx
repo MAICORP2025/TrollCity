@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '../lib/store'
 import ProfileSetup from './ProfileSetup'
+import { checkConcurrentLogin } from '../lib/sessionUtils'
 
 const AuthCallback = () => {
   const navigate = useNavigate()
@@ -45,23 +46,18 @@ const AuthCallback = () => {
             console.log('User authenticated:', u.email)
             
             const sessionId = data.session?.id
-            if (!sessionId) {
-              console.warn('[AuthCallback] Session missing id, skipping concurrent login check')
-            } else {
-              const { data: hasConcurrentLogin, error: concurrentError } = await supabase
-                .rpc('check_concurrent_login', {
-                  p_user_id: u.id,
-                  p_current_session_id: sessionId
-                })
-              
-              if (concurrentError) {
-                console.error('Error checking concurrent login:', concurrentError)
-              } else if (hasConcurrentLogin) {
+            if (sessionId) {
+              const hasConcurrentLogin = await checkConcurrentLogin(u.id, sessionId)
+              if (hasConcurrentLogin) {
                 await supabase.auth.signOut()
-                toast.error('Login blocked: Your account is already logged in on another device. Please log out from other devices first.')
+                toast.error(
+                  'Login blocked: Your account is already logged in on another device. Please log out from other devices first.'
+                )
                 navigate('/auth')
                 return
               }
+            } else {
+              console.warn('[AuthCallback] Session missing id, skipping concurrent login check')
             }
             
             // Register this session
