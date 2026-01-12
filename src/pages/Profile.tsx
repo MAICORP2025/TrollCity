@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useInRouterContext } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import LiveAvatar from '../components/LiveAvatar';
@@ -9,7 +9,7 @@ import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
 import { canMessageAdmin } from '@/lib/perkEffects';
 
-export default function Profile() {
+function ProfileInner() {
   const { username, userId } = useParams();
   const navigate = useNavigate();
   const { user: currentUser, refreshProfile } = useAuthStore();
@@ -1017,4 +1017,16 @@ export default function Profile() {
       </div>
     </div>
   );
+}
+
+export default function Profile() {
+  const inRouter = useInRouterContext();
+  if (!inRouter) {
+    return (
+      <div className="min-h-screen bg-[#0A0814] text-white flex items-center justify-center">
+        <div className="text-sm text-gray-400">Profile view is unavailable outside the app router.</div>
+      </div>
+    );
+  }
+  return <ProfileInner />;
 }

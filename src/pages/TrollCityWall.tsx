@@ -400,7 +400,9 @@ export default function TrollCityWall() {
       const isStaff = userProfile?.is_admin || 
                      userProfile?.is_troll_officer || 
                      userProfile?.is_lead_officer || 
-                     userProfile?.role === 'admin'
+                     userProfile?.role === 'admin' ||
+                     userProfile?.role === 'troll_officer' ||
+                     userProfile?.role === 'lead_troll_officer'
 
       console.log('Delete permissions - isStaff:', isStaff, 'userId:', user.id, 'postId:', postId)
 
@@ -560,9 +562,9 @@ export default function TrollCityWall() {
                       </p>
                     )}
                   </div>
-                  {user && (post.user_id === user.id || profile?.is_admin || profile?.is_troll_officer) && (
+                  {user && (post.user_id === user.id || profile?.is_admin || profile?.is_troll_officer || profile?.is_lead_officer || profile?.role === 'lead_troll_officer') && (
                     <div className="flex items-center gap-1">
-                      {profile?.is_admin && (
+                      {(profile?.is_admin || profile?.role === 'admin') && (
                         <button
                           type="button"
                           onClick={(e) => {
