@@ -82,14 +82,14 @@ export default function VideoTile({
         }
     };
     const attachAudio = () => {
-        const micPub = participant.getTrackPublication(Track.Source.Microphone);
-        const audioTrack = micPub?.audioTrack;
-        if (audioTrack && audioRef.current) {
-            audioTrack.attach(audioRef.current);
-            audioRef.current.muted = isLocal;
-            audioRef.current.volume = isLocal ? 0 : 1;
-            audioRef.current.play().catch(() => {});
-        }
+      const micPub = participant.getTrackPublication(Track.Source.Microphone);
+      const audioTrack = micPub?.audioTrack;
+      if (audioTrack && audioRef.current) {
+        audioTrack.attach(audioRef.current);
+        audioRef.current.muted = isLocal ?? false;
+        audioRef.current.volume = isLocal ? 0 : 1;
+        audioRef.current.play().catch(() => {});
+      }
     };
     const detachAudio = () => {
         const micPub = participant.getTrackPublication(Track.Source.Microphone);
@@ -268,8 +268,8 @@ export default function VideoTile({
         onClick={handleBroadcasterClick}
       >
       {/* Video Element */}
-      <video 
-        ref={videoRef} 
+      <video
+        ref={videoRef}
         className="w-full h-full transition-all duration-300"
         muted={isLocal}
         playsInline
@@ -307,7 +307,7 @@ export default function VideoTile({
          <div className="absolute top-3 left-3 z-10 drop-shadow-lg filter">
              <div className="relative">
                 <Crown size={compact ? 16 : 24} className="text-yellow-400 fill-yellow-400 animate-pulse" />
-                <div className="absolute inset-0 bg-yellow-400/50 blur-lg rounded-full" />
+                <div className="absolute inset-0 bg-yellow-400/50 rounded-full" />
              </div>
          </div>
       )}

@@ -13,10 +13,6 @@ import { deductCoins } from '../lib/coinTransactions';
 const PRIVATE_STREAM_COST = 500;
 
 const GoLive: React.FC = () => {
-  const navigate = useNavigate();
-  const liveKit = useLiveKit();
-  // Note: videoRef removed - no camera preview in setup
-
   const { profile, refreshProfile } = useAuthStore(); // Using getState() instead for async operations
   const { refreshCoins } = useCoins();
 
@@ -38,6 +34,9 @@ const GoLive: React.FC = () => {
   const [themesLoading, setThemesLoading] = useState(false);
   const [themePurchaseId, setThemePurchaseId] = useState<string | null>(null);
   const [streamerEntitlements, setStreamerEntitlements] = useState<any>(null);
+
+  const navigate = useNavigate();
+  const liveKit = useLiveKit();
   const liveRestriction = useMemo(() => {
     if (!profile?.live_restricted_until) {
       return { isRestricted: false, message: '' };

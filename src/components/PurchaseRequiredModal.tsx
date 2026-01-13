@@ -9,7 +9,13 @@ export default function PurchaseRequiredModal() {
 
   const handleBuy = () => {
     closePurchaseGate()
-    navigate('/store')
+    // Check if navigate is available (i.e., component is rendered within a Router)
+    if (navigate) {
+      navigate('/store')
+    } else {
+      // Fallback: redirect using window.location
+      window.location.href = '/store'
+    }
   }
 
   return (

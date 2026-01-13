@@ -48,10 +48,10 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, room, is
     const onParticipantConnected = (participant: any) => {
        // Only show join messages for non-local participants (actual viewers joining)
        if (participant.isLocal) return;
-       
+        
        const username = participant.name || participant.identity || 'User';
        const newMsg: Message = {
-           id: `join-${Date.now()}-${participant.identity}`,
+           id: `join-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
            user_id: 'system',
            content: `${username} joined the stream`,
            message_type: 'system-join',

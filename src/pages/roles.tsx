@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { Shield, Users, RefreshCw } from 'lucide-react'
+import { Shield, Users, RefreshCw, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import ClickableUsername from '../components/ClickableUsername'
 
@@ -11,6 +11,7 @@ export default function RolesManager() {
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState<string | null>(null)
   const isAdmin = !!profile && profile.role === 'admin'
+  const [roleBonuses, setRoleBonuses] = useState<Record<string, boolean>>({})
 
   const loadUsers = async () => {
     setLoading(true)
@@ -29,7 +30,7 @@ export default function RolesManager() {
     }
   }
 
-  useEffect(() => { if (isAdmin) { loadUsers() } }, [isAdmin])
+  // Empty useEffect since we moved the logic to the combined useEffect below
 
   const updateUserRole = async (id: string, role: string) => {
     setUpdating(id)
@@ -63,6 +64,62 @@ export default function RolesManager() {
     { id: 'family_leader', label: 'Family Leader' },
     { id: 'member', label: 'Member' }
   ]
+
+  const roleBonusesConfig = {
+    'troll_officer': 10,
+    'broadcaster': 5,
+    'family_leader': 8,
+    'member': 0
+  }
+
+  const toggleRoleBonus = async (roleId: string, isActive: boolean) => {
+    try {
+      // Update the role bonus status in the database
+      const { error } = await supabase
+        .from('role_bonuses')
+        .upsert({
+          role_id: roleId,
+          is_active: isActive,
+          bonus_percentage: roleBonusesConfig[roleId as keyof typeof roleBonusesConfig]
+        })
+
+      if (error) throw error
+
+      // Update local state
+      setRoleBonuses(prev => ({ ...prev, [roleId]: isActive }))
+      
+      toast.success(`Role bonus ${isActive ? 'activated' : 'deactivated'} for ${roleId}`)
+    } catch (err) {
+      console.error('Error updating role bonus:', err)
+      toast.error('Failed to update role bonus')
+    }
+  }
+
+  const loadRoleBonuses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('role_bonuses')
+        .select('role_id, is_active')
+
+      if (error) throw error
+
+      const bonusesMap = data?.reduce((acc, item) => {
+        acc[item.role_id] = item.is_active
+        return acc
+      }, {} as Record<string, boolean>) || {}
+
+      setRoleBonuses(bonusesMap)
+    } catch (err) {
+      console.error('Error loading role bonuses:', err)
+    }
+  }
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadUsers()
+      loadRoleBonuses()
+    }
+  }, [isAdmin])
 
   if (!isAdmin) {
     return (
@@ -117,6 +174,7 @@ export default function RolesManager() {
                     <th className="px-3 py-3">Email</th>
                     <th className="px-3 py-3">Current Role</th>
                     <th className="px-3 py-3">Change Role</th>
+                    <th className="px-3 py-3">Role Bonus</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -148,6 +206,33 @@ export default function RolesManager() {
                             </button>
                           ))}
                         </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        {u.role && roleBonusesConfig[u.role as keyof typeof roleBonusesConfig] > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400">
+                              {roleBonuses[u.role] ? 'Active' : 'Inactive'} ({roleBonusesConfig[u.role as keyof typeof roleBonusesConfig]}%)
+                            </span>
+                            <button
+                              onClick={() => toggleRoleBonus(u.role, !roleBonuses[u.role])}
+                              className={`px-2 py-1 rounded text-xs ${
+                                roleBonuses[u.role]
+                                  ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
+                                  : 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
+                              }`}
+                            >
+                              {roleBonuses[u.role] ? (
+                                <>
+                                  <XCircle className="w-3 h-3 inline" /> Deactivate
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-3 h-3 inline" /> Activate
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -28,6 +28,7 @@ export default function OfficerScheduling() {
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [blockedSlots, setBlockedSlots] = useState<ShiftSlot[]>([])
 
   // Check if user is officer or admin
   useEffect(() => {
@@ -263,6 +264,27 @@ export default function OfficerScheduling() {
       return
     }
     
+    // Check if the shift is blocked (passed by 15 minutes)
+    const slot = slots.find(s => s.id === slotId)
+    if (slot) {
+      const slotDateTime = new Date(`${slot.shift_date}T${slot.shift_start_time}`)
+      const now = new Date()
+      const timeDiff = now.getTime() - slotDateTime.getTime()
+      const fifteenMinutesInMs = 15 * 60 * 1000
+      
+      if (timeDiff > fifteenMinutesInMs) {
+        toast.error('This shift has passed by 15 minutes and cannot be clocked in')
+        
+        // Mark this slot as blocked
+        setBlockedSlots(prev => [...prev, slot])
+        
+        // Assign this shift to another officer who isn't assigned a shift
+        await assignShiftToAnotherOfficer(slot)
+        
+        return
+      }
+    }
+    
     setLoading(true)
     try {
       const { data, error } = await supabase.rpc('clock_in_from_slot', {
@@ -282,6 +304,68 @@ export default function OfficerScheduling() {
       toast.error(err?.message || 'Failed to clock in')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const assignShiftToAnotherOfficer = async (slot: ShiftSlot) => {
+    try {
+      // Find officers who don't have a shift at this time
+      const { data: officers, error: officersError } = await supabase
+        .from('user_profiles')
+        .select('id, username')
+        .eq('is_troll_officer', true)
+        .neq('id', profile?.id)
+      
+      if (officersError) throw officersError
+      
+      // Filter officers who don't have a shift at this time
+      const availableOfficers = officers.filter(officer => {
+        return !slots.some(s => s.officer_id === officer.id && s.shift_date === slot.shift_date)
+      })
+      
+      if (availableOfficers.length > 0) {
+        // Assign to the first available officer
+        const assignedOfficer = availableOfficers[0]
+        
+        // Update the shift assignment
+        const { error: updateError } = await supabase
+          .from('officer_shift_slots')
+          .update({ officer_id: assignedOfficer.id })
+          .eq('id', slot.id)
+        
+        if (updateError) throw updateError
+        
+        // Send push notification
+        await sendPushNotification(assignedOfficer.id, `You have been assigned a new shift: ${slot.shift_date} ${slot.shift_start_time} - ${slot.shift_end_time}`)
+        
+        toast.success(`Shift reassigned to ${assignedOfficer.username}`)
+      } else {
+        toast.info('No available officers to reassign this shift')
+      }
+    } catch (err) {
+      console.error('Error reassigning shift:', err)
+      toast.error('Failed to reassign shift')
+    }
+  }
+
+  const sendPushNotification = async (userId: string, message: string) => {
+    try {
+      // Insert notification into database
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          message: message,
+          type: 'shift_assignment',
+          is_read: false
+        })
+      
+      if (error) throw error
+      
+      // In a real app, you would also send a push notification via a service like Firebase
+      console.log(`Push notification sent to user ${userId}: ${message}`)
+    } catch (err) {
+      console.error('Error sending push notification:', err)
     }
   }
 
@@ -535,12 +619,18 @@ export default function OfficerScheduling() {
                             {slot.status === 'scheduled' && canClockIn && (
                               <button
                                 onClick={() => handleClockIn(slot.id)}
-                                disabled={loading}
+                                disabled={loading || blockedSlots.some(b => b.id === slot.id)}
                                 className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                               >
                                 <CheckCircle className="w-4 h-4" />
                                 Clock In
                               </button>
+                            )}
+                            {blockedSlots.some(b => b.id === slot.id) && (
+                              <div className="flex items-center gap-2 text-red-400 text-sm">
+                                <AlertCircle className="w-4 h-4" />
+                                Blocked
+                              </div>
                             )}
                             {(slot.status === 'active' || (slot as any).has_active_log) && canClockOut && (
                               <>

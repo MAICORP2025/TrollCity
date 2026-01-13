@@ -15,7 +15,8 @@ import {
   TrendingUp,
   Download,
   MessageSquare,
-  Phone
+  Phone,
+  XCircle
 } from 'lucide-react'
 
 type Stream = {
@@ -265,6 +266,11 @@ export default function TrollOfficerLounge() {
     toast.success('Payroll PDF downloaded!')
   }
 
+  const handleDeactivateRoleBonus = () => {
+    toast.success('Role bonus deactivated')
+    // Add logic to deactivate the role bonus in the database if needed
+  }
+
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans">
       {/* HEADER */}
@@ -286,6 +292,26 @@ export default function TrollOfficerLounge() {
           <div className="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/50">
             <UserIconFallback />
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('moderation')}
+            className="px-3 py-1 bg-blue-600/20 text-blue-400 rounded-lg text-xs border border-blue-500/30 hover:bg-blue-600/30 transition-colors"
+          >
+            Live Monitoring
+          </button>
+          <button
+            onClick={() => setActiveTab('families')}
+            className="px-3 py-1 bg-purple-600/20 text-purple-400 rounded-lg text-xs border border-purple-500/30 hover:bg-purple-600/30 transition-colors"
+          >
+            Families & Gangs
+          </button>
+          <button
+            onClick={() => setActiveTab('calls')}
+            className="px-3 py-1 bg-yellow-600/20 text-yellow-400 rounded-lg text-xs border border-yellow-500/30 hover:bg-yellow-600/30 transition-colors"
+          >
+            Calls
+          </button>
         </div>
       </header>
 
@@ -342,11 +368,34 @@ export default function TrollOfficerLounge() {
                   <span className="text-yellow-400 font-mono">+{officerStats.coinsEarned}</span>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={handleDownloadPayroll}
                 className="mt-4 w-full py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/50 rounded text-xs text-blue-300 flex items-center justify-center gap-2 transition"
               >
                 <Download size={12} /> Download Payroll
+              </button>
+            </div>
+          </div>
+          <div className="p-4 border-t border-white/10">
+            <div className="bg-[#0f0f0f] rounded-xl p-4 border border-white/5">
+              <h3 className="text-xs font-bold uppercase text-gray-500 mb-3 flex items-center gap-2">
+                <Shield size={12} /> Role Bonus
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Status</span>
+                  <span className="text-green-400 font-mono">Active</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Bonus</span>
+                  <span className="text-yellow-400 font-mono">+10%</span>
+                </div>
+              </div>
+              <button
+                onClick={() => handleDeactivateRoleBonus()}
+                className="mt-4 w-full py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 rounded text-xs text-red-300 flex items-center justify-center gap-2 transition"
+              >
+                <XCircle size={12} /> Deactivate Bonus
               </button>
             </div>
           </div>

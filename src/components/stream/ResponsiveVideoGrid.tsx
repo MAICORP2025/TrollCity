@@ -105,7 +105,7 @@ export default function ResponsiveVideoGrid({
           return (
             <div
               key={`waiting-${i}`}
-              className="seat bg-zinc-900/50 border border-white/5 flex items-center justify-center backdrop-blur-sm"
+              className="seat bg-zinc-900/50 border border-white/5 flex items-center justify-center"
             >
               <div className="text-white/20 uppercase tracking-widest text-[10px] flex flex-col items-center gap-2">
                   <div className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center">
@@ -123,7 +123,7 @@ export default function ResponsiveVideoGrid({
           return (
             <div
               key={`empty-${i}`}
-              className={`seat bg-zinc-900/50 border border-white/5 flex items-center justify-center backdrop-blur-sm ${canJoin ? 'cursor-pointer hover:bg-zinc-800/50 hover:border-white/10 transition-colors' : ''}`}
+              className={`seat bg-zinc-900/50 border border-white/5 flex items-center justify-center ${canJoin ? 'cursor-pointer hover:bg-zinc-800/50 hover:border-white/10 transition-colors' : ''}`}
               onClick={
                 canJoin
                   ? (event) => {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Store, ShoppingCart, Coins } from 'lucide-react'
+import { Store, ShoppingCart, Coins, Plus } from 'lucide-react'
 
 export default function Marketplace() {
   console.log('🛒 Marketplace component rendering')
@@ -85,6 +85,15 @@ export default function Marketplace() {
           <div className="mt-4 max-w-3xl mx-auto bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3 text-sm text-yellow-300">
             All sales are final. Illegal items or sales are strictly prohibited and will result in enforcement actions.
           </div>
+        </div>
+        <div className="flex justify-center">
+          <button
+            onClick={() => navigate('/sell')}
+            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Create Your Shop
+          </button>
         </div>
 
         {loading ? (
