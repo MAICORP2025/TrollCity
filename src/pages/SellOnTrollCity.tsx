@@ -28,7 +28,12 @@ export default function SellOnTrollCity() {
   // Product editing state
   const [isEditing, setIsEditing] = useState(false)
   const [editProduct, setEditProduct] = useState<any>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string
+    description: string
+    price: string
+    image_url: string | File | null
+  }>({
     name: '',
     description: '',
     price: '',
@@ -38,6 +43,44 @@ export default function SellOnTrollCity() {
   // Shop deletion state
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deletingShop, setDeletingShop] = useState(false)
+
+  const pauseShop = async () => {
+    if (!shop) return
+    try {
+      const { data, error } = await supabase
+        .from('trollcity_shops')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', shop.id)
+        .eq('owner_id', user!.id)
+        .select('*')
+        .single()
+      if (error) throw error
+      setShop(data)
+      toast.success('Shop paused')
+    } catch (err: any) {
+      console.error('Error pausing shop:', err)
+      toast.error('Failed to pause shop')
+    }
+  }
+
+  const resumeShop = async () => {
+    if (!shop) return
+    try {
+      const { data, error } = await supabase
+        .from('trollcity_shops')
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('id', shop.id)
+        .eq('owner_id', user!.id)
+        .select('*')
+        .single()
+      if (error) throw error
+      setShop(data)
+      toast.success('Shop resumed')
+    } catch (err: any) {
+      console.error('Error resuming shop:', err)
+      toast.error('Failed to resume shop')
+    }
+  }
 
   const loadShop = useCallback(async () => {
     setLoading(true)
@@ -154,6 +197,26 @@ export default function SellOnTrollCity() {
       const price = parseFloat(formData.price)
       if (isNaN(price) || price < 0) return toast.error('Invalid price')
 
+      let imagePublicUrl: string | null = null
+      const maybeFile = formData.image_url as unknown as File | null
+      if (maybeFile && typeof (maybeFile as any).name === 'string') {
+        try {
+          const file = maybeFile
+          const ext = file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : ''
+          const path = `shop-items/${user!.id}/${Date.now()}${ext}`
+          const { error: uploadErr } = await supabase.storage
+            .from('post-images')
+            .upload(path, file, { cacheControl: '3600', upsert: false })
+          if (uploadErr) throw uploadErr
+          const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(path)
+          imagePublicUrl = urlData.publicUrl
+        } catch (uploadError: any) {
+          console.error('Product image upload failed:', uploadError)
+          toast.error('Failed to upload product image')
+          return
+        }
+      }
+
       if (isEditing && editProduct) {
         // Update existing product
         const { error } = await supabase
@@ -162,7 +225,7 @@ export default function SellOnTrollCity() {
             name: formData.name,
             description: formData.description,
             price: price,
-            image_url: formData.image_url || null,
+            image_url: imagePublicUrl ?? editProduct.image_url ?? null,
             updated_at: new Date().toISOString()
           })
           .eq('id', editProduct.id)
@@ -178,7 +241,7 @@ export default function SellOnTrollCity() {
             name: formData.name,
             description: formData.description,
             price: price,
-            image_url: formData.image_url || null
+            image_url: imagePublicUrl
           }])
           .select()
           .single()
@@ -329,17 +392,53 @@ export default function SellOnTrollCity() {
                 <p className="text-gray-400">Loading...</p>
               ) : shop ? (
                 <div className="space-y-4">
-                  <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-green-400 font-semibold">✓ Shop Active: {shop.name}</p>
-                      <button
-                        onClick={() => setShowDeleteModal(true)}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
-                      >
-                        Delete Shop
-                      </button>
+                  {shop.is_active ? (
+                    <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-green-400 font-semibold">✓ Shop Active: {shop.name}</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={pauseShop}
+                            className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-sm rounded transition-colors"
+                          >
+                            Pause Shop
+                          </button>
+                          <button
+                            onClick={() => setShowDeleteModal(true)}
+                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+                          >
+                            Delete Shop
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-yellow-300 mt-2">
+                        Pause your shop anytime if you cannot afford weekly fees.
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-yellow-400 font-semibold">Shop Paused: {shop.name}</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={resumeShop}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
+                          >
+                            Resume Shop
+                          </button>
+                          <button
+                            onClick={() => setShowDeleteModal(true)}
+                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+                          >
+                            Delete Shop
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-300 mt-2">
+                        While paused, your shop is hidden and fees are not charged.
+                      </p>
+                    </div>
+                  )}
                   <button onClick={() => setActiveTab('dashboard')} className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
                     Seller Dashboard
                   </button>
@@ -410,29 +509,32 @@ export default function SellOnTrollCity() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Price (USD)</label>
+                  <label className="block text-sm text-gray-400 mb-1">Price (Coins)</label>
                   <div className="relative">
-                    <DollarSign className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
+                    <Coins className="absolute left-3 top-2.5 w-4 h-4 text-purple-400" />
                     <input
                       type="number"
-                      step="0.01"
+                      step="1"
                       value={formData.price}
                       onChange={e => setFormData({...formData, price: e.target.value})}
                       className="w-full pl-10 pr-4 py-2 bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg focus:border-purple-500 outline-none"
-                      placeholder="0.00"
+                      placeholder="0"
                       required
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Image URL (optional)</label>
+                  <label className="block text-sm text-gray-400 mb-1">Product Image</label>
                   <input
-                    type="url"
-                    value={formData.image_url}
-                    onChange={e => setFormData({...formData, image_url: e.target.value})}
+                    type="file"
+                    accept="image/*"
+                    onChange={e => {
+                      const file = e.target.files?.[0] || null
+                      setFormData({...formData, image_url: file ? (file as any) : ''})
+                    }}
                     className="w-full px-4 py-2 bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg focus:border-purple-500 outline-none"
-                    placeholder="https://example.com/image.jpg"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Upload a product image from your device</p>
                 </div>
                 
                 <div className="flex gap-2 pt-2">
@@ -459,104 +561,106 @@ export default function SellOnTrollCity() {
               </form>
             </div>
 
-            {/* List */}
-            <div className="lg:col-span-2 bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
-              <h2 className="text-xl font-semibold mb-4">Your Products ({products.length})</h2>
-              <div className="space-y-4">
-                {products.map(product => (
-                  <div key={product.id} className="bg-[#0D0D0D] p-4 rounded-lg border border-[#2C2C2C] flex justify-between items-center group hover:border-purple-500/50 transition-colors">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-lg text-white">{product.name}</h3>
-                      <p className="text-gray-400 text-sm mb-1">{product.description}</p>
-                      <div className="flex items-center gap-4">
-                        <p className="text-green-400 font-semibold">${product.price.toFixed(2)}</p>
-                        {product.image_url && (
-                          <img
-                            src={product.image_url}
-                            alt={product.name}
-                            className="w-12 h-12 object-cover rounded"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none'
-                            }}
-                          />
-                        )}
+                {/* List */}
+                <div className="lg:col-span-2 bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4">Your Products ({products.length})</h2>
+                  <div className="space-y-4">
+                    {products.map(product => (
+                      <div key={product.id} className="bg-[#0D0D0D] p-4 rounded-lg border border-[#2C2C2C] flex justify-between items-center group hover:border-purple-500/50 transition-colors">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg text-white">{product.name}</h3>
+                          <p className="text-gray-400 text-sm mb-1">{product.description}</p>
+                          <div className="flex items-center gap-4">
+                            <p className="text-yellow-400 font-semibold flex items-center gap-1">
+                              <Coins className="w-4 h-4" /> {product.price}
+                            </p>
+                            {product.image_url && (
+                              <img
+                                src={product.image_url}
+                                alt={product.name}
+                                className="w-12 h-12 object-cover rounded"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none'
+                                }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleEdit(product)}
+                            className="p-2 bg-blue-900/30 text-blue-400 rounded hover:bg-blue-900/50 transition-colors"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteProduct(product.id)}
+                            className="p-2 bg-red-900/30 text-red-400 rounded hover:bg-red-900/50 transition-colors"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {products.length === 0 && (
+                      <div className="text-center py-12 text-gray-500">
+                        <Package className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                        <p>No products listed yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'requirements' && (
+              <div className="space-y-6">
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-orange-400" />
+                    Seller Requirements
+                  </h2>
+
+                  <div className="space-y-4">
+                    <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <h3 className="font-semibold text-red-400 mb-1">Application Required</h3>
+                          <p className="text-gray-300 text-sm">All users must apply to become sellers. Your application will be reviewed before approval.</p>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => handleEdit(product)}
-                        className="p-2 bg-blue-900/30 text-blue-400 rounded hover:bg-blue-900/50 transition-colors"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteProduct(product.id)}
-                        className="p-2 bg-red-900/30 text-red-400 rounded hover:bg-red-900/50 transition-colors"
-                      >
-                        <Trash className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {products.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
-                    <Package className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                    <p>No products listed yet.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'requirements' && (
-          <div className="space-y-6">
-            <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-orange-400" />
-                Seller Requirements
-              </h2>
-
-              <div className="space-y-4">
-                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h3 className="font-semibold text-red-400 mb-1">Application Required</h3>
-                      <p className="text-gray-300 text-sm">All users must apply to become sellers. Your application will be reviewed before approval.</p>
+                    <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <Truck className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <h3 className="font-semibold text-blue-400 mb-1">Shipping Costs</h3>
+                          <p className="text-gray-300 text-sm">Sellers are responsible for all shipping costs. Calculate shipping fees into your product prices.</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Truck className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h3 className="font-semibold text-blue-400 mb-1">Shipping Costs</h3>
-                      <p className="text-gray-300 text-sm">Sellers are responsible for all shipping costs. Calculate shipping fees into your product prices.</p>
+                    <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <DollarSign className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <h3 className="font-semibold text-yellow-400 mb-1">Weekly Platform Fee</h3>
+                          <p className="text-gray-300 text-sm">Platform access requires a weekly fee paid in Troll Coins. If you cannot afford the fee, pause your shop anytime to avoid charges.</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <DollarSign className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h3 className="font-semibold text-yellow-400 mb-1">Weekly Platform Fee</h3>
-                      <p className="text-gray-300 text-sm">$40 per week must be paid to PayPal for platform access. This fee is deducted automatically.</p>
+                    <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <Coins className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <h3 className="font-semibold text-purple-400 mb-1">Payment Processing</h3>
+                          <p className="text-gray-300 text-sm">All marketplace purchases use Troll Coins only. Set item prices in coins; fiat payments are not supported.</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-
-                <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Coins className="w-5 h-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h3 className="font-semibold text-purple-400 mb-1">Payment Processing</h3>
-                      <p className="text-gray-300 text-sm">All payments are processed through PayPal. Sellers receive payments after platform fees and PayPal processing fees.</p>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               <div className="mt-6 p-4 bg-gray-900/50 rounded-lg">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 // import api from '../lib/api'; // Uncomment if needed
 import { supabase } from '../supabaseClient';
@@ -38,6 +38,19 @@ const GoLive: React.FC = () => {
   const [themesLoading, setThemesLoading] = useState(false);
   const [themePurchaseId, setThemePurchaseId] = useState<string | null>(null);
   const [streamerEntitlements, setStreamerEntitlements] = useState<any>(null);
+  const liveRestriction = useMemo(() => {
+    if (!profile?.live_restricted_until) {
+      return { isRestricted: false, message: '' };
+    }
+    const until = Date.parse(profile.live_restricted_until);
+    if (Number.isNaN(until) || until <= Date.now()) {
+      return { isRestricted: false, message: '' };
+    }
+    return {
+      isRestricted: true,
+      message: `You cannot go live until ${new Date(until).toLocaleString()}`,
+    };
+  }, [profile?.live_restricted_until]);
 
   // Note: Camera/mic permissions will be requested when joining seats in broadcast
   // No camera preview needed in setup
@@ -230,6 +243,11 @@ const GoLive: React.FC = () => {
 
     if (!user || !profile) {
       toast.error('You must be logged in.');
+      return;
+    }
+
+    if (liveRestriction.isRestricted) {
+      toast.error(liveRestriction.message);
       return;
     }
 
@@ -610,6 +628,11 @@ const GoLive: React.FC = () => {
         <Video className="text-troll-gold w-8 h-8" />
         Go Live
       </h1>
+      {liveRestriction.isRestricted && (
+        <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm text-red-200">
+          {liveRestriction.message}
+        </div>
+      )}
 
       <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-xl p-8 border border-purple-700/30">
         <div className="text-center text-gray-300">
@@ -839,8 +862,13 @@ const GoLive: React.FC = () => {
 
           <div className="flex items-center gap-4">
             <button
-              onClick={handleStartStream}
-              disabled={isConnecting || !streamTitle.trim() || !broadcasterName.trim()}
+            onClick={handleStartStream}
+            disabled={
+              isConnecting ||
+              !streamTitle.trim() ||
+              !broadcasterName.trim() ||
+              liveRestriction.isRestricted
+            }
               className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isConnecting ? (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { CreditCard, Coins, DollarSign, Check, X, Star } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
-import { supabase } from '../lib/supabase'
+import { supabase, UserProfile } from '../lib/supabase'
 import { deductCoins } from '../lib/coinTransactions'
 import { useCoins } from '../lib/hooks/useCoins'
 import { toast } from 'sonner'
@@ -93,9 +93,9 @@ const EntranceEffects = () => {
       // Update local profile immediately (optimistic)
       const optimisticProfile = {
         ...profile,
-        troll_coins: deductResult.newBalance
+        troll_coins: Number(deductResult.newBalance ?? 0)
       }
-      useAuthStore.getState().setProfile(optimisticProfile)
+      useAuthStore.getState().setProfile(optimisticProfile as UserProfile)
 
       // Refresh profile from DB in background (silent, with delay)
       refreshProfileBackground()
@@ -239,7 +239,7 @@ const EntranceEffects = () => {
               </div>
               <button
                 onClick={() => purchaseEffect(effect)}
-                disabled={purchasing === effect.id || (profile && (profile.troll_coins || 0) < effect.coin_cost)}
+                disabled={purchasing === effect.id || (!!profile && (profile.troll_coins || 0) < effect.coin_cost)}
                 className="px-6 py-2 bg-gradient-to-r from-troll-neon-pink to-troll-neon-purple text-white font-bold rounded-lg hover:from-troll-neon-pink/80 hover:to-troll-neon-purple/80 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
                 {purchasing === effect.id ? 'Purchasing...' : 'Purchase'}

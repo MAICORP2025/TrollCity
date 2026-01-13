@@ -127,8 +127,8 @@ export default function AdminControlPanel() {
           if (levelError) throw levelError
 
           result = { success: true, message: `Set ${selectedUser.username} to level ${level}` }
-          setMessage(result.message)
-          toast.success(result.message)
+          setMessage(result.message || '')
+          toast.success(result.message || '')
           break
         }
 
@@ -181,8 +181,8 @@ export default function AdminControlPanel() {
             result = { success: true, message: `Approved ${application.type} application for ${selectedUser.username}` }
           }
 
-          setMessage(result.message)
-          toast.success(result.message)
+          setMessage(result.message || '')
+          toast.success(result.message || '')
 
           // Refresh profile if granting to self
           if (selectedUser.id === user.id && refreshProfile) {

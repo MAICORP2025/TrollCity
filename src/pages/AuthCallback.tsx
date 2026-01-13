@@ -117,6 +117,23 @@ const AuthCallback = () => {
               
               // Profile is complete - redirect to home
               toast.success('Welcome back!')
+              try {
+                const ipRes = await fetch('https://api.ipify.org?format=json')
+                const ipJson = await ipRes.json()
+                const userIP = ipJson.ip
+                const { data: current } = await supabase
+                  .from('user_profiles')
+                  .select('ip_address_history')
+                  .eq('id', u.id)
+                  .single()
+                const history = current?.ip_address_history || []
+                const entry = { ip: userIP, timestamp: new Date().toISOString() }
+                const updated = [...history, entry].slice(-10)
+                await supabase
+                  .from('user_profiles')
+                  .update({ last_known_ip: userIP, ip_address_history: updated })
+                  .eq('id', u.id)
+              } catch {}
               navigate('/')
               clearTimeout(safetyTimer)
               return

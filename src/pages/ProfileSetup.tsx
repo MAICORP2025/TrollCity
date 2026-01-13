@@ -462,7 +462,6 @@ const ProfileSetup = () => {
                             reason: 'ID verification submitted',
                             data: {
                               id_document_url: urlData.publicUrl,
-                              selfie_url: selfieUrl.publicUrl,
                               verification_status: 'pending'
                             }
                           })

@@ -7,10 +7,13 @@ import { APP_DATA_REFETCH_EVENT_NAME as REFRESH_EVENT } from '../lib/appEvents';
 import { isBirthdayToday } from '../lib/birthdayUtils';
 import { useAuthStore } from '../lib/store';
 import { areUsersLive } from '../lib/liveUtils';
+import { useLiveStreams, useNewUsers } from '../hooks/useQueries';
+import { useQueryClient } from '@tanstack/react-query';
 import BanPage from '../components/BanPage';
 import KickPage from '../components/KickPage';
 import EmptyStateLiveNow from '../components/ui/EmptyStateLiveNow';
 import TrollPassBanner from '../components/ui/TrollPassBanner';
+import { StreamSkeleton, UserCardSkeleton } from '../components/ui/Skeleton';
 
 type HomeStream = {
   id: string;
@@ -582,6 +585,10 @@ NewUserCard.displayName = 'NewUserCard';
 // 🔑 Step 5: Background refresh pattern with dual-state buffering
 const HomePageContent = () => {
   const { profile } = useAuthStore();
+
+  // Use React Query hooks
+  const { data: liveStreams = [], isLoading: loadingLive } = useLiveStreams();
+  const { data: newUsers = [], isLoading: loadingUsers } = useNewUsers();
   
   // Role logic for Go Live access
   const canGoLive =
@@ -599,9 +606,6 @@ const HomePageContent = () => {
   const canEndLive = isAdmin || isOfficer
 
   const endLiveStream = async (streamId: string) => {
-    // Immediately remove from UI
-    setBufferedStreams((prev) => prev.filter((s) => s.id !== streamId))
-
     try {
       const { error } = await supabase
         .from('streams')
@@ -614,8 +618,6 @@ const HomePageContent = () => {
     } catch (error) {
       console.error('Error ending live stream:', error)
       toast.error('Failed to end live stream')
-      // Revert the UI change if the update failed
-      loadLiveRef.current(false)
     }
   }
 
@@ -667,18 +669,8 @@ const HomePageContent = () => {
   }, [])
 
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [liveStreams, setLiveStreams] = useState<HomeStream[]>([]);
-  const [bufferedStreams, setBufferedStreams] = useState<HomeStream[]>([]); // dY Step 5: Buffered state for smooth transitions
-  const [newUsers, setNewUsers] = useState<HomeUser[]>([]);
-  const [bufferedUsers, setBufferedUsers] = useState<HomeUser[]>([]); // dY Step 5: Buffered state for users
   const [liveUsers, setLiveUsers] = useState<Map<string, boolean>>(new Map()); // Track which users are live
-  const prevBufferedUsersRef = useRef<HomeUser[] | null>(null);
-  const prevBufferedStreamsRef = useRef<HomeStream[] | null>(null);
-  const [_loadingLive, setLoadingLive] = useState(false);
-  const [_loadingNewUsers, setLoadingNewUsers] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const loadLiveRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
-  const loadNewUsersRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
   const navigate = useNavigate();
   const location = useLocation();
   const lastGlobalRefetchAt = useRef(0);
@@ -690,11 +682,11 @@ const HomePageContent = () => {
 
   const availableCategories = useMemo(() => {
     const categoriesSet = new Set<string>();
-    bufferedStreams.forEach((stream) => {
+    liveStreams.forEach((stream) => {
       categoriesSet.add(normalizeCategory(stream.category));
     });
     return ['All', ...Array.from(categoriesSet)];
-  }, [bufferedStreams]);
+  }, [liveStreams]);
 
   useEffect(() => {
     if (!availableCategories.includes(selectedCategory)) {
@@ -729,284 +721,27 @@ const HomePageContent = () => {
     }, 60_000);
     return () => clearInterval(timer);
   }, []);
+// 🔑 Step 2: Listen for global refetch signal
+useEffect(() => {
+  const refetch = () => {
+    const path = location.pathname;
+    if (path.startsWith('/profile')) return;
 
-  // 🔑 Step 2: Listen for global refetch signal
-  useEffect(() => {
-    const refetch = () => {
-      const path = location.pathname;
-      if (path.startsWith('/profile')) return;
+    const now = Date.now();
+    if (now - lastGlobalRefetchAt.current < 1000) return;
+    lastGlobalRefetchAt.current = now;
 
-      const now = Date.now();
-      if (now - lastGlobalRefetchAt.current < 1000) return;
-      lastGlobalRefetchAt.current = now;
+    console.log("🔄 Global refetch signal received - refreshing homepage data");
+    // React Query will handle refetching
+  };
 
-      console.log("🔄 Global refetch signal received - refreshing homepage data");
-      loadLiveRef.current(false);
-      loadNewUsersRef.current(false);
-    };
-
-    window.addEventListener("trollcity:refetch", refetch);
-    window.addEventListener(REFRESH_EVENT, refetch);
-    return () => {
-      window.removeEventListener("trollcity:refetch", refetch);
-      window.removeEventListener(REFRESH_EVENT, refetch);
-    };
-  }, [location.pathname]);
-
-  useEffect(() => {
-    const loadLive = async (showLoading = true, skipCache = false) => {
-      if (showLoading) setLoadingLive(true);
-      try {
-        // Prefer cached 30-minute rankings (computed by cron) when available.
-        // Falls back to the legacy live streams query if the cache is empty/unavailable.
-        if (!skipCache) {
-          const { data: ranked, error: rankedError } = await supabase.rpc('get_cached_home_rankings_30m');
-          if (!rankedError && Array.isArray(ranked) && ranked.length > 0) {
-            let normalizedRanked: HomeStream[] = ranked.map((s: any) => ({
-              ...s,
-              user_profiles: Array.isArray(s.user_profiles) ? s.user_profiles[0] : s.user_profiles,
-              stream_momentum: Array.isArray(s.stream_momentum) ? s.stream_momentum[0] : s.stream_momentum,
-            }));
-
-            const missingThumbIds = normalizedRanked
-              .filter((s) => !s.thumbnail_url)
-              .map((s) => s.id)
-              .filter(Boolean);
-
-            if (missingThumbIds.length > 0) {
-              const { data: streamThumbs } = await supabase
-                .from('streams')
-                .select('id, thumbnail_url')
-                .in('id', missingThumbIds);
-
-              if (streamThumbs?.length) {
-                const thumbMap = new Map(streamThumbs.map((row) => [row.id, row.thumbnail_url]));
-                normalizedRanked = normalizedRanked.map((s) => ({
-                  ...s,
-                  thumbnail_url: s.thumbnail_url || thumbMap.get(s.id) || null,
-                }));
-              }
-            }
-            
-            // dY"` Step 5: Dual-state buffering - update buffered state first
-            // Only update when the ranking changed to avoid re-render storms
-            const prevRank = prevBufferedStreamsRef.current;
-            const rankUnchanged = prevRank && prevRank.length === normalizedRanked.length && prevRank.every((p, i) => p.id === normalizedRanked[i].id);
-            if (!rankUnchanged) {
-              setBufferedStreams(normalizedRanked);
-              prevBufferedStreamsRef.current = normalizedRanked;
-            }
-            return;
-          }
-        }
-
-        const { data, error } = await supabase
-          .from('streams')
-          .select(`
-            id,
-            title,
-            category,
-            current_viewers,
-            is_live,
-
-            livekit_url,
-            start_time,
-            broadcaster_id,
-            thumbnail_url,
-            stream_momentum (
-              momentum,
-              last_gift_at,
-              last_decay_at
-            ),
-            user_profiles!broadcaster_id (
-              username,
-              avatar_url,
-              date_of_birth
-            )
-          `)
-          .eq('is_live', true)
-          .order('start_time', { ascending: false });
-        if (error) throw error;
-        
-        const normalizedStreams: HomeStream[] = (data || []).map((s: any) => ({
-          ...s,
-          user_profiles: Array.isArray(s.user_profiles) ? s.user_profiles[0] : s.user_profiles,
-          stream_momentum: Array.isArray(s.stream_momentum) ? s.stream_momentum[0] : s.stream_momentum,
-        }))
-
-        // Sort: birthday users first, then momentum, then by start_time
-        const today = new Date()
-        const sortedStreams = normalizedStreams.sort((a: any, b: any) => {
-          const aBirthday = a.user_profiles?.date_of_birth
-          const bBirthday = b.user_profiles?.date_of_birth
-          
-          const aIsBirthday = aBirthday ?
-            new Date(aBirthday).getMonth() === today.getMonth() &&
-            new Date(aBirthday).getDate() === today.getDate() : false
-          const bIsBirthday = bBirthday ?
-            new Date(bBirthday).getMonth() === today.getMonth() &&
-            new Date(bBirthday).getDate() === today.getDate() : false
-          
-          if (aIsBirthday && !bIsBirthday) return -1
-          if (!aIsBirthday && bIsBirthday) return 1
-
-          const aMomentum = Number(a.stream_momentum?.momentum ?? 100)
-          const bMomentum = Number(b.stream_momentum?.momentum ?? 100)
-          if (aMomentum !== bMomentum) return bMomentum - aMomentum
-
-          return 0 // Keep original order for remaining ties
-        })
-        
-        // 🔑 Step 5: Dual-state buffering - only update when changed
-        const prevRank2 = prevBufferedStreamsRef.current;
-        const rankUnchanged2 = prevRank2 && prevRank2.length === sortedStreams.length && prevRank2.every((p, i) => p.id === sortedStreams[i].id);
-        if (!rankUnchanged2) {
-          setBufferedStreams(sortedStreams);
-          prevBufferedStreamsRef.current = sortedStreams;
-        }
-      } catch (e) {
-        console.error(e);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (showLoading && session) toast.error('Failed to load live streams');
-      } finally {
-        if (showLoading) setLoadingLive(false);
-      }
-    };
-    loadLiveRef.current = loadLive;
-    loadLive(true);
-
-    // Auto-refresh every 10 seconds (background, no loading state)
-    const interval = setInterval(() => {
-      loadLive(false);
-    }, 10000);
-
-    // Real-time subscription - reload when streams are created, updated, or deleted
-    // This ensures streams disappear immediately when is_live becomes false
-    const channel = supabase
-      .channel('home-live-streams')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'streams'
-      }, (payload: any) => {
-        const streamId = payload?.new?.id || payload?.old?.id;
-        const isLive = payload?.new?.is_live ?? payload?.old?.is_live;
-
-        if (payload.eventType === 'UPDATE' && isLive === false && streamId) {
-          setBufferedStreams((prev) => prev.filter((s) => s.id !== streamId));
-          setLiveStreams((prev) => prev.filter((s) => s.id !== streamId));
-          loadLive(false, true);
-          return;
-        }
-
-        loadLive(false);
-      })
-      .subscribe();
-    
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // 🔑 Step 5: Update live streams when buffered data is available
-  useEffect(() => {
-    if (bufferedStreams.length > 0) {
-      setLiveStreams(bufferedStreams);
-    }
-  }, [bufferedStreams]);
-
-  useEffect(() => {
-    const loadNewUsers = async (showLoading = true) => {
-      if (showLoading) setLoadingNewUsers(true);
-      try {
-        // Use direct query to ensure we get all fields including rgb_username_expires_at
-        // RPC get_recent_users might be missing newer columns
-        const { data: directData, error: directError } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url, tier, level, troll_coins, troll_coins, created_at, role, is_banned, banned_until, rgb_username_expires_at')
-          .order('created_at', { ascending: false })
-          .limit(25);
-
-        if (directError) throw directError;
-        const data = directData as HomeUser[];
-        
-        // Separate admin and regular users
-        const adminUser = (data || []).find(user => user.role === 'admin');
-        
-        // Show ALL users (no filtering by avatar or profile completion)
-        // Only exclude obvious test/demo accounts
-        const realUsers = (data || []).filter(user => {
-          if (user.role === 'admin') return false; // Admin handled separately
-          
-          const username = (user.username || '').toLowerCase();
-          
-          // Only exclude test/demo users
-          const isRealUser = !username.includes('test') &&
-                            !username.includes('demo') &&
-                            !username.includes('mock');
-          
-          // Exclude banned users
-          const isNotBanned = !user.is_banned && (!user.banned_until || new Date(user.banned_until) < new Date());
-          
-          return isRealUser && isNotBanned;
-        });
-        
-        // Combine: admin first, then all real users (up to 19 more for total of 20)
-        const displayUsers = adminUser
-          ? [adminUser, ...realUsers.slice(0, 19)]
-          : realUsers.slice(0, 20);
-        
-        console.log(`Loaded ${displayUsers.length} users (all profiles shown)`);
-        
-        // 🔑 Step 5: Dual-state buffering - only update when users actually change
-        const prevUsers = prevBufferedUsersRef.current;
-        const usersUnchanged = prevUsers && prevUsers.length === displayUsers.length && prevUsers.every((p, i) => p.id === displayUsers[i].id);
-        if (!usersUnchanged) {
-          setBufferedUsers(displayUsers);
-          prevBufferedUsersRef.current = displayUsers;
-        }
-      } catch (e: any) {
-        console.error('Failed to load new users:', e);
-        // Don't show error toast on initial load, just log it
-        // toast.error('Failed to load new users');
-        setBufferedUsers([]); // Set empty array instead of leaving it undefined
-        prevBufferedUsersRef.current = [];
-      } finally {
-        if (showLoading) setLoadingNewUsers(false);
-      }
-    };
-    loadNewUsersRef.current = loadNewUsers;
-    loadNewUsers(true);
-
-    // Auto-refresh every 30 seconds (background, no loading state)
-    const interval = setInterval(() => {
-      loadNewUsers(false);
-    }, 30000);
-
-    // Real-time subscription for new user inserts
-    const channel = supabase
-      .channel('home-new-users')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_profiles' }, () => {
-        loadNewUsers(false);
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, () => {
-        loadNewUsers(false);
-      })
-      .subscribe();
-    
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // 🔑 Step 5: Update users when buffered data is available
-  useEffect(() => {
-    if (bufferedUsers.length >= 0) { // Update even with empty array
-      setNewUsers(bufferedUsers);
-    }
-  }, [bufferedUsers]);
+  window.addEventListener("trollcity:refetch", refetch);
+  window.addEventListener(REFRESH_EVENT, refetch);
+  return () => {
+    window.removeEventListener("trollcity:refetch", refetch);
+    window.removeEventListener(REFRESH_EVENT, refetch);
+  };
+}, [location.pathname]);
 
   // Check which users are live
   useEffect(() => {
@@ -1033,23 +768,6 @@ const HomePageContent = () => {
     return () => clearInterval(interval);
   }, [newUsers]);
 
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const refetchUsers = () => {
-      console.log("🔄 Tab resumed — refreshing users");
-      loadNewUsersRef.current?.();
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        refetchUsers();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
 
   // Award birthday bonus on page load if eligible
   useEffect(() => {
@@ -1075,7 +793,7 @@ const HomePageContent = () => {
     awardBirthdayBonus();
   }, [profile?.id]);
 
-  const hasLiveData = bufferedStreams.length > 0;
+  const hasLiveData = liveStreams.length > 0;
   const displayStreams =
     selectedCategory === 'All'
       ? liveStreams
@@ -1238,7 +956,13 @@ const HomePageContent = () => {
 
           <div className="relative rounded-3xl bg-gradient-to-br from-[#1a0f2e]/40 to-[#0d0820]/20 backdrop-blur-xl border border-purple-500/20 p-6 shadow-lg space-y-4">
             {isHolidaySeason && <ChristmasOutline rowCount={6} colCount={3} />}
-            {displayStreams.length > 0 && (
+            {loadingLive ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stream-grid" style={{ minHeight: '400px' }}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <StreamSkeleton key={i} />
+                ))}
+              </div>
+            ) : displayStreams.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stream-grid" style={{ minHeight: '400px' }}>
                 {displayStreams.map((s) => (
                   <button
@@ -1368,16 +1092,22 @@ const HomePageContent = () => {
               <h2 className="text-3xl font-bold text-white">Trollerz</h2>
               <span className="ml-auto text-sm font-semibold text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full">{newUsers.length} members</span>
             </div>
-            <div className="new-trollerz-scroll" style={{ visibility: bufferedUsers.length >= 0 ? "visible" : "hidden", maxHeight: '480px', overflowY: 'auto' }}>
-              {newUsers.length === 0 ? (
+            <div className="new-trollerz-scroll" style={{ maxHeight: '480px', overflowY: 'auto' }}>
+              {loadingUsers ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <UserCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : newUsers.length === 0 ? (
                 <div className="col-span-full p-6 text-center text-gray-400">No new users yet</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {newUsers.map((user) => (
-                    <NewUserCard 
-                      key={user.id} 
-                      user={user} 
-                      onClick={navigate} 
+                    <NewUserCard
+                      key={user.id}
+                      user={user}
+                      onClick={navigate}
                       isLive={liveUsers.get(user.id) || false}
                     />
                   ))}

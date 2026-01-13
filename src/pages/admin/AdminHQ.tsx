@@ -801,7 +801,7 @@ function TeamsDepartmentsTab() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         onSave={loadDepartments}
-        department={editingDepartment}
+        department={editingDepartment || undefined}
       />
     </div>
   );

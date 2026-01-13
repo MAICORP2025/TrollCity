@@ -31,6 +31,20 @@ export default function Marketplace() {
 
       if (shopsError) throw shopsError
 
+      // Fetch owner usernames
+      const ownerIds = [...new Set((shopsData || []).map((s: any) => s.owner_id).filter(Boolean))]
+      let ownerMap: Record<string, { username: string }> = {}
+      if (ownerIds.length > 0) {
+        const { data: ownersData } = await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .in('id', ownerIds)
+        ownerMap = (ownersData || []).reduce((acc: any, u: any) => {
+          acc[u.id] = { username: u.username }
+          return acc
+        }, {})
+      }
+
       // Load items for each shop
       const shopsWithItems = await Promise.all(
         (shopsData || []).map(async (shop) => {
@@ -41,10 +55,10 @@ export default function Marketplace() {
 
           if (itemsError) {
             console.error(`Error loading items for shop ${shop.id}:`, itemsError)
-            return { ...shop, shop_items: [] }
+            return { ...shop, shop_items: [], owner_username: ownerMap[shop.owner_id]?.username || 'unknown' }
           }
 
-          return { ...shop, shop_items: itemsData || [] }
+          return { ...shop, shop_items: itemsData || [], owner_username: ownerMap[shop.owner_id]?.username || 'unknown' }
         })
       )
 
@@ -68,6 +82,9 @@ export default function Marketplace() {
             Troll City Marketplace
           </h1>
           <p className="text-gray-400">Discover and purchase items from fellow Troll City members</p>
+          <div className="mt-4 max-w-3xl mx-auto bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3 text-sm text-yellow-300">
+            All sales are final. Illegal items or sales are strictly prohibited and will result in enforcement actions.
+          </div>
         </div>
 
         {loading ? (
@@ -97,7 +114,7 @@ export default function Marketplace() {
               <div key={shop.id} className="bg-zinc-900 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-all">
                 <div className="mb-4">
                   <h3 className="text-xl font-bold text-purple-300">{shop.name}</h3>
-                  <p className="text-sm text-gray-400">by {shop.owner_id}</p>
+                  <p className="text-sm text-gray-400">by {shop.owner_username}</p>
                 </div>
 
                 <div className="space-y-3 mb-4">
@@ -117,7 +134,7 @@ export default function Marketplace() {
                 </div>
 
                 <button
-                  onClick={() => navigate(`/shop/${shop.id}`)}
+                  onClick={() => navigate(`/shop/${shop.owner_username}`)}
                   className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
                 >
                   <ShoppingCart className="w-4 h-4" />

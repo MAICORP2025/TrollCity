@@ -87,7 +87,7 @@ export default function OfficerPayrollDashboard() {
       setWorkSessions(sessionsData)
 
       // Calculate earnings breakdown
-      const totalHours = sessionsData.reduce((sum, session) => sum + (session.hours_worked || 0), 0)
+      const totalHours = sessionsData.reduce((sum: number, session: { hours_worked?: number }) => sum + (session.hours_worked || 0), 0)
       const basePay = calculateOfficerBaseCoins(totalHours)
 
       // Calculate live streaming earnings from officer streams

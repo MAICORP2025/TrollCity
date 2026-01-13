@@ -185,7 +185,8 @@ export default function TrollCourt() {
         })
 
         if (startError) throw startError
-        activeSessionId = newSessionId
+        const resolvedSessionId = data?.id || newSessionId
+        activeSessionId = resolvedSessionId
         setCourtSession(data)
       }
 
@@ -211,7 +212,7 @@ export default function TrollCourt() {
       }
 
       setIsCreateModalOpen(false)
-      if (!courtSession) {
+      if (!courtSession && activeSessionId) {
          navigate(`/court/${activeSessionId}`)
       }
     } catch (startError) {

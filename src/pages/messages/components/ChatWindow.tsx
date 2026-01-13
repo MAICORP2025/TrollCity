@@ -16,7 +16,7 @@ interface Message {
   seen: boolean
   read_at?: string | null
   sender_username?: string
-  sender_avatar_url?: string
+  sender_avatar_url?: string | null
   sender_rgb_expires_at?: string | null
 }
 
@@ -40,6 +40,10 @@ export default function ChatWindow({
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const [oldestLoadedAt, setOldestLoadedAt] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -58,7 +62,8 @@ export default function ChatWindow({
           `and(sender_id.eq.${profile.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${profile.id})`
         )
         .eq('message_type', 'dm')
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
+        .limit(50)
 
       if (error) {
         console.error('Error loading messages:', error);
@@ -100,20 +105,87 @@ export default function ChatWindow({
         })
       }
 
-      const mappedMessages = messagesData?.map((msg) => ({
+      const mappedMessagesDesc = messagesData?.map((msg) => ({
         ...msg,
         sender_username: senderMap[msg.sender_id]?.username || 'Unknown',
         sender_avatar_url: senderMap[msg.sender_id]?.avatar_url || null,
         sender_rgb_expires_at: senderMap[msg.sender_id]?.rgb_username_expires_at
       })) || []
-
+      const mappedMessages = mappedMessagesDesc.reverse()
       setMessages(mappedMessages)
+      setOldestLoadedAt(mappedMessages[0]?.created_at || null)
+      setHasMore((messagesData || []).length === 50)
     } catch (error) {
       console.error('Error loading messages:', error)
     } finally {
       setLoading(false)
     }
   }, [otherUserId, profile?.id])
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!otherUserId || !profile?.id || !oldestLoadedAt || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    const container = messagesContainerRef.current
+    const prevScrollHeight = container?.scrollHeight || 0
+    const prevScrollTop = container?.scrollTop || 0
+    try {
+      const { data: olderData, error } = await supabase
+        .from('messages')
+        .select('id, sender_id, receiver_id, content, created_at, seen, read_at, message_type')
+        .or(
+          `and(sender_id.eq.${profile.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${profile.id})`
+        )
+        .eq('message_type', 'dm')
+        .lt('created_at', oldestLoadedAt)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) throw error
+
+      if (!olderData || olderData.length === 0) {
+        setHasMore(false)
+        return
+      }
+
+      const senderIds = [...new Set(olderData.map(m => m.sender_id).filter(Boolean))]
+      const senderMap: Record<string, { username: string; avatar_url: string | null; rgb_username_expires_at?: string | null }> = {}
+      if (senderIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('user_profiles')
+          .select('id,username,avatar_url,rgb_username_expires_at')
+          .in('id', senderIds)
+        usersData?.forEach((user) => {
+          senderMap[user.id] = {
+            username: user.username,
+            avatar_url: user.avatar_url,
+            rgb_username_expires_at: user.rgb_username_expires_at
+          }
+        })
+      }
+
+      const mappedOlderDesc = olderData.map((msg) => ({
+        ...msg,
+        sender_username: senderMap[msg.sender_id]?.username || 'Unknown',
+        sender_avatar_url: senderMap[msg.sender_id]?.avatar_url || null,
+        sender_rgb_expires_at: senderMap[msg.sender_id]?.rgb_username_expires_at
+      }))
+      const mappedOlder = mappedOlderDesc.reverse()
+
+      setMessages((prev) => [...mappedOlder, ...prev])
+      setOldestLoadedAt(mappedOlder[0]?.created_at || oldestLoadedAt)
+
+      setTimeout(() => {
+        const el = messagesContainerRef.current
+        if (!el) return
+        const newScrollHeight = el.scrollHeight
+        el.scrollTop = newScrollHeight - prevScrollHeight + prevScrollTop
+      }, 0)
+    } catch (err) {
+      console.error('Error loading older messages:', err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [otherUserId, profile?.id, oldestLoadedAt, hasMore, loadingMore])
   const handleStartCall = async (callType: 'audio' | 'video') => {
     if (!otherUserId || !user?.id || !profile?.id) {
       toast.error('Unable to start call');
@@ -331,7 +403,16 @@ export default function ChatWindow({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        ref={messagesContainerRef}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          if (el.scrollTop < 80 && hasMore && !loadingMore) {
+            loadOlderMessages()
+          }
+        }}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
         {loading ? (
           <div className="text-center text-gray-400 py-8">Loading messages...</div>
         ) : messages.length === 0 ? (
@@ -358,7 +439,7 @@ export default function ChatWindow({
                       <ClickableUsername 
                         userId={msg.sender_id} 
                         username={msg.sender_username || 'Unknown'} 
-                        profile={{ rgb_username_expires_at: msg.sender_rgb_expires_at }}
+                        profile={{ rgb_username_expires_at: msg.sender_rgb_expires_at ?? undefined }}
                         className="text-xs text-gray-400"
                       />
                     </div>

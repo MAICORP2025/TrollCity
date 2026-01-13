@@ -7,7 +7,7 @@ import { deductCoins } from '../lib/coinTransactions'
 import { Store, ShoppingCart, Coins, ArrowLeft, Package, Receipt, X } from 'lucide-react'
 
 export default function ShopView() {
-  const { id } = useParams<{ id: string }>()
+  const { username } = useParams<{ username: string }>()
   const { user } = useAuthStore()
   const navigate = useNavigate()
   const [shop, setShop] = useState<any>(null)
@@ -18,15 +18,28 @@ export default function ShopView() {
   const [purchaseReceipt, setPurchaseReceipt] = useState<any>(null)
 
   const loadShop = useCallback(async () => {
-    if (!id) return
+    if (!username) return
 
     setLoading(true)
     try {
-      // Load shop details
+      // Resolve owner by username
+      const { data: owner, error: ownerErr } = await supabase
+        .from('user_profiles')
+        .select('id, username')
+        .eq('username', username)
+        .single()
+      if (ownerErr) throw ownerErr
+      if (!owner?.id) {
+        toast.error('Seller not found')
+        navigate('/marketplace')
+        return
+      }
+
+      // Load shop details by owner_id
       const { data: shopData, error: shopError } = await supabase
         .from('trollcity_shops')
         .select('*')
-        .eq('id', id)
+        .eq('owner_id', owner.id)
         .eq('is_active', true)
         .single()
 
@@ -43,7 +56,7 @@ export default function ShopView() {
       const { data: itemsData, error: itemsError } = await supabase
         .from('shop_items')
         .select('*')
-        .eq('shop_id', id)
+        .eq('shop_id', shopData.id)
         .order('created_at', { ascending: false })
 
       if (itemsError) throw itemsError
@@ -56,17 +69,17 @@ export default function ShopView() {
     } finally {
       setLoading(false)
     }
-  }, [id, navigate])
+  }, [username, navigate])
 
   useEffect(() => {
     if (!user) {
       navigate('/auth', { replace: true })
       return
     }
-    if (id) {
+    if (username) {
       loadShop()
     }
-  }, [user, id, navigate, loadShop])
+  }, [user, username, navigate, loadShop])
 
   const purchaseItem = async (item: any) => {
     if (!user) return
@@ -245,6 +258,9 @@ export default function ShopView() {
         <div className="max-w-4xl mx-auto">
           <div className="animate-pulse">
             <div className="h-8 bg-gray-700 rounded w-1/3 mb-6"></div>
+            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3 text-sm text-yellow-300 mb-6">
+              All sales are final. Illegal items or sales are strictly prohibited and will result in enforcement actions.
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1,2,3,4,5,6].map(i => (
                 <div key={i} className="bg-zinc-900 rounded-xl p-6 border border-[#2C2C2C]">
@@ -266,6 +282,9 @@ export default function ShopView() {
           <Store className="w-16 h-16 text-gray-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Shop Not Found</h2>
           <p className="text-gray-400 mb-6">This shop may have been removed or is no longer available.</p>
+          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3 text-sm text-yellow-300 mb-6">
+            All sales are final. Illegal items or sales are strictly prohibited and will result in enforcement actions.
+          </div>
           <button
             onClick={() => navigate('/marketplace')}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold"

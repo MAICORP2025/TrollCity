@@ -18,22 +18,26 @@ export default function UserInventory() {
   const [loading, setLoading] = useState(true)
   const [activeItems, setActiveItems] = useState<Set<string>>(new Set())
 
+  const roleEffectKey = (() => {
+    if (!profile) return null;
+    const username = (profile.username || '').toLowerCase();
+    const userSpecific = Object.keys(USER_SPECIFIC_ENTRANCE_EFFECTS).find((k) => k.toLowerCase() === username);
+    if (userSpecific) return `user_${username}`;
+    if (profile.role === 'admin' || profile.troll_role === 'admin') return 'admin';
+    if (profile.role === 'secretary' || profile.troll_role === 'secretary') return 'secretary';
+    if (profile.role === 'lead_troll_officer' || profile.troll_role === 'lead_troll_officer' || profile.is_lead_officer) return 'lead_troll_officer';
+    if (profile.role === 'troll_officer' || profile.troll_role === 'troll_officer') return 'troll_officer';
+    return null;
+  })();
   const roleEffect = (() => {
     if (!profile) return null;
-
-    // Check for user-specific effect first
+    const username = (profile.username || '').toLowerCase();
     const userConfig = Object.entries(USER_SPECIFIC_ENTRANCE_EFFECTS).find(
-      ([key]) => key.toLowerCase() === (profile.username || '').toLowerCase()
+      ([key]) => key.toLowerCase() === username
     )?.[1];
-    
     if (userConfig) return { ...userConfig, type: 'User Exclusive' };
-
-    const role = profile.role === 'admin' || profile.troll_role === 'admin' ? 'admin' :
-                 profile.role === 'secretary' || profile.troll_role === 'secretary' ? 'secretary' :
-                 profile.role === 'lead_troll_officer' || profile.troll_role === 'lead_troll_officer' || profile.is_lead_officer ? 'lead_troll_officer' :
-                 profile.role === 'troll_officer' || profile.troll_role === 'troll_officer' ? 'troll_officer' : null;
-    
-    return role ? ROLE_BASED_ENTRANCE_EFFECTS[role] : null;
+    const roleKey = roleEffectKey;
+    return roleKey && ROLE_BASED_ENTRANCE_EFFECTS[roleKey] ? ROLE_BASED_ENTRANCE_EFFECTS[roleKey] : null;
   })();
 
   const loadInventory = useCallback(async () => {
@@ -175,7 +179,7 @@ export default function UserInventory() {
         entranceEffects.forEach(e => newSet.delete(e.effect_id));
         
         // Also remove role effect if active
-        if (roleEffect) newSet.delete(`role_effect_${roleEffect.id || 'default'}`);
+        if (roleEffectKey) newSet.delete(`role_effect_${roleEffectKey}`);
 
         // Add new one if activating
         if (newEffectId) {
@@ -194,7 +198,7 @@ export default function UserInventory() {
 
   const toggleRoleEffect = async (isActive: boolean) => {
       if (!roleEffect) return;
-      const roleEffectId = `role_effect_${roleEffect.id || 'default'}`;
+      const roleEffectId = `role_effect_${roleEffectKey || 'default'}`;
 
       try {
           if (isActive) {
@@ -521,21 +525,21 @@ export default function UserInventory() {
                         <span className="bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full uppercase">
                           Permanent
                         </span>
-                        {activeItems.has(`role_effect_${roleEffect.id || 'default'}`) && (
+                        {activeItems.has(`role_effect_${roleEffectKey || 'default'}`) && (
                              <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full">ACTIVE</span>
                         )}
                       </div>
                       <p className="text-gray-300 mb-2">{roleEffect.description}</p>
                       <div className="flex items-center gap-4 mt-4">
                         <button
-                          onClick={() => toggleRoleEffect(activeItems.has(`role_effect_${roleEffect.id || 'default'}`))}
+                          onClick={() => toggleRoleEffect(activeItems.has(`role_effect_${roleEffectKey || 'default'}`))}
                           className={`px-6 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 ${
-                            activeItems.has(`role_effect_${roleEffect.id || 'default'}`)
+                            activeItems.has(`role_effect_${roleEffectKey || 'default'}`)
                               ? 'bg-red-600 hover:bg-red-700 text-white'
                               : 'bg-green-600 hover:bg-green-700 text-white'
                           }`}
                         >
-                          {activeItems.has(`role_effect_${roleEffect.id || 'default'}`) ? (
+                          {activeItems.has(`role_effect_${roleEffectKey || 'default'}`) ? (
                             <>
                               <XCircle className="w-4 h-4" />
                               Deactivate

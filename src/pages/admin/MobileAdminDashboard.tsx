@@ -739,7 +739,7 @@ function MobilePayoutQueue({ onStatsUpdate }: { onStatsUpdate: () => void }) {
                     {payout.user_profiles?.username || 'Unknown'}
                   </p>
                   <p className="text-sm text-green-400 font-bold">
-                    {formatCurrency(payout.net_amount || payout.cash_amount)}
+                    {formatCurrency(payout.net_amount ?? payout.cash_amount ?? 0)}
                   </p>
                 </div>
                 <span className={`px-2 py-1 rounded text-xs ${

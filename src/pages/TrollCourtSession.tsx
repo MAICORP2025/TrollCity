@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Scale, AlertCircle, LogOut, Send, Gavel } from "lucide-react";
-import { courtSystem } from "@/lib/courtSystem";
+import { courtSystem, CourtSession } from "@/lib/courtSystem";
 import { roomManager, RoomInstance } from "@/lib/roomManager";
 import { useAuthStore } from "@/lib/store";
 
 export default function TrollCourtSession() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
-  const [activeSession, setActiveSession] = useState(null);
+  const [activeSession, setActiveSession] = useState<CourtSession | null>(null);
   const [chatMessages, setChatMessages] = useState<{ user: string; message: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [courtRoomRef, setCourtRoomRef] = useState<RoomInstance | null>(null);

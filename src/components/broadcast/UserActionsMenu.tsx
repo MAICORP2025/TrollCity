@@ -4,9 +4,9 @@ import { X, Eye, EyeOff, Gift, Ban, AlertCircle, UserPlus, Gavel } from "lucide-
 interface UserActionMenuProps {
   user: {
     name: string;
-    role?: "admin" | "lead_troll_officer" | "troll_officer" | "user";
+    role?: string;
   };
-  userRole?: "admin" | "lead_troll_officer" | "troll_officer" | "user";
+  userRole?: string;
   onClose: () => void;
   onGift?: (amount: number) => void;
   onKick?: () => void;
@@ -29,8 +29,8 @@ export default function UserActionsMenu({
   const [giftAmount, setGiftAmount] = useState(100);
   const [hideRoles, setHideRoles] = useState(false);
 
-  const isOfficer = ["admin", "lead_troll_officer", "troll_officer"].includes(user.role || "");
-  const isCurrentUserOfficer = ["admin", "lead_troll_officer", "troll_officer"].includes(userRole);
+  const isOfficer = ["admin", "lead_troll_officer", "troll_officer"].includes((user.role || "").toString());
+  const isCurrentUserOfficer = ["admin", "lead_troll_officer", "troll_officer"].includes((userRole || "user").toString());
 
   const handleGiftSend = () => {
     onGift?.(giftAmount);

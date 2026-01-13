@@ -410,6 +410,19 @@ export default function LivePage() {
   const viewerDropdownRef = useRef<HTMLDivElement | null>(null);
   const viewerButtonRef = useRef<HTMLButtonElement | null>(null);
   const notifiedMissingFormsRef = useRef<Set<string>>(new Set());
+  const micRestrictionInfo = useMemo(() => {
+    if (!profile?.mic_muted_until) {
+      return { isMuted: false, message: '' };
+    }
+    const until = Date.parse(profile.mic_muted_until);
+    if (Number.isNaN(until) || until <= Date.now()) {
+      return { isMuted: false, message: '' };
+    }
+    return {
+      isMuted: true,
+      message: `Microphone disabled until ${new Date(until).toLocaleString()}`,
+    };
+  }, [profile?.mic_muted_until]);
   const notifyMissingForms = useCallback(async (userId: string, missing: string[]) => {
     if (!missing.length) return;
     try {
@@ -770,7 +783,8 @@ export default function LivePage() {
     }
   };
 
-  const handleSeatAction = (seatIndex: number, seat: any) => {
+  const handleSeatAction = (params: { seatIndex: number; seat: any; participant?: any }) => {
+    const { seatIndex, seat } = params
     if (!isOfficerUser || !seat?.user_id) return;
     setSeatActionTarget({
       userId: seat.user_id,
@@ -852,9 +866,13 @@ export default function LivePage() {
   }, [liveKit]);
 
   const toggleMic = useCallback(async () => {
+    if (!micOn && micRestrictionInfo.isMuted) {
+      toast.error(micRestrictionInfo.message || 'Microphone is disabled.');
+      return;
+    }
     const ok = await liveKit.toggleMicrophone();
     setMicOn(Boolean(ok));
-  }, [liveKit]);
+  }, [liveKit, micOn, micRestrictionInfo.isMuted, micRestrictionInfo.message]);
 
   const endStream = useCallback(async () => {
     if (!confirm("Are you sure you want to end this stream?")) return;
@@ -903,7 +921,7 @@ export default function LivePage() {
   // Entrance effect logic
   useEffect(() => {
     const triggerEntrance = async () => {
-      if (!user || !streamId || isBroadcaster) return;
+      if (!user || !streamId || isBroadcaster || profile?.is_ghost_mode) return;
 
       const { effectKey, config } = await getUserEntranceEffect(user.id);
       if (!effectKey) return;
@@ -1385,7 +1403,7 @@ export default function LivePage() {
       const streamIdValue = stream?.id;
       const broadcasterId = stream?.broadcaster_id;
       const canonicalGiftName = gift?.name || "Gift";
-      const canonicalGiftSlug = gift?.slug || toGiftSlug(canonicalGiftName);
+      const canonicalGiftSlug = toGiftSlug(canonicalGiftName);
 
       if (!senderId || !streamIdValue || !receiverId) {
         toast.error("Unable to send gift right now.");
@@ -1715,7 +1733,7 @@ export default function LivePage() {
             {/* GiftBox - Hidden on mobile if chat tab active; make scrollable and height-safe */}
             <div className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-h-0 overflow-hidden`}>
               <div className="flex-1 min-h-0 overflow-y-auto pr-2 pb-[env(safe-area-inset-bottom)]">
-                <GiftBox onSendGift={handleGiftSent} participants={[]} />
+                <GiftBox onSendGift={handleGiftSent} />
               </div>
             </div>
             
@@ -1750,7 +1768,7 @@ export default function LivePage() {
           currentUser={user}
           onClose={() => setSelectedProfile(null)} 
           onSendCoins={handleSendCoins} 
-          onGift={(profile) => {
+          onGift={(profile: { id: string; username?: string; name?: string }) => {
             setGiftReceiver(profile);
             setIsGiftModalOpen(true);
             setSelectedProfile(null);

@@ -36,7 +36,7 @@ export function useGiftSystem(streamerId: string, streamId: string) {
       })
       if (error) {
         if (isPurchaseRequiredError(error)) {
-          openPurchaseGate(error?.message || error?.error)
+          openPurchaseGate(error?.message)
           return false
         }
         throw error
@@ -45,7 +45,7 @@ export function useGiftSystem(streamerId: string, streamId: string) {
       return true
     } catch (err: any) {
       if (isPurchaseRequiredError(err)) {
-        openPurchaseGate(err?.message || err?.error)
+        openPurchaseGate(err?.message)
         return false
       }
       toast.error('Failed to send gift.')

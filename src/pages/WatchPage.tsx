@@ -41,6 +41,7 @@ interface StreamRow {
   total_likes?: number;
   start_time?: string;
   title?: string;
+  is_private?: boolean;
 }
 
 export default function WatchPage() {
@@ -58,6 +59,10 @@ export default function WatchPage() {
   
   const [stream, setStream] = useState<StreamRow | null>(null);
   const [, setIsLoadingStream] = useState(true);
+  const [privateAccessGranted, setPrivateAccessGranted] = useState(false);
+  const [privatePasswordInput, setPrivatePasswordInput] = useState('');
+  const [privateAuthError, setPrivateAuthError] = useState('');
+  const privateAccessStorageKey = streamId ? `private-stream-access:${streamId}` : null;
   const [broadcastTheme, setBroadcastTheme] = useState<any>(null);
   const [broadcastThemeStyle, setBroadcastThemeStyle] = useState<React.CSSProperties | undefined>(undefined);
   const [lastThemeId, setLastThemeId] = useState<string | null>(null);
@@ -68,6 +73,10 @@ export default function WatchPage() {
 
   const hasValidStreamId = !!streamId && typeof streamId === 'string' && streamId.trim() !== '';
   const sessionReady = !!user && !!profile && hasValidStreamId;
+  const needsPrivateGate = Boolean(stream?.is_private && stream?.broadcaster_id && stream?.broadcaster_id !== user?.id);
+  const canAccessPrivate = !needsPrivateGate || privateAccessGranted;
+  const canJoinStream = sessionReady && hasValidStreamId && canAccessPrivate;
+  const effectiveRoomName = canJoinStream ? roomName : '';
 
   const livekitIdentity = useMemo(() => {
     const id = stableIdentity;
@@ -79,7 +88,8 @@ export default function WatchPage() {
   const {
     isConnected,
   } = useLiveKitSession({
-    roomName: sessionReady && hasValidStreamId ? roomName : '',
+    roomName: effectiveRoomName,
+    connect: canJoinStream,
     user: sessionReady && user
       ? { ...user, identity: livekitIdentity, role: 'viewer' }
       : null,
@@ -142,7 +152,7 @@ export default function WatchPage() {
     try {
         const { data: streamRow, error } = await supabase
           .from("streams")
-          .select("id, broadcaster_id, title, category, status, start_time, end_time, current_viewers, total_gifts_coins, total_unique_gifters, is_live, thumbnail_url, created_at, updated_at")
+        .select("id, broadcaster_id, title, category, status, start_time, end_time, current_viewers, total_gifts_coins, total_unique_gifters, is_live, is_private, thumbnail_url, created_at, updated_at")
           .eq("id", streamId)
           .maybeSingle();
 
@@ -165,6 +175,67 @@ export default function WatchPage() {
   useEffect(() => {
     loadStreamData();
   }, [loadStreamData]);
+
+  useEffect(() => {
+    if (!streamId || !stream) {
+      setPrivateAccessGranted(false);
+      setPrivatePasswordInput('');
+      setPrivateAuthError('');
+      return;
+    }
+
+    if (!privateAccessStorageKey) {
+      setPrivateAccessGranted(true);
+      return;
+    }
+
+    if (stream.is_private && stream.broadcaster_id !== user?.id) {
+      const stored = localStorage.getItem(privateAccessStorageKey);
+      setPrivateAccessGranted(Boolean(stored));
+    } else {
+      setPrivateAccessGranted(true);
+      if (privateAccessStorageKey) {
+        localStorage.removeItem(privateAccessStorageKey);
+      }
+    }
+  }, [streamId, stream?.is_private, stream?.broadcaster_id, user?.id, privateAccessStorageKey, stream]);
+
+  const handlePrivatePasswordSubmit = async () => {
+    setPrivateAuthError('');
+    if (!streamId) {
+      setPrivateAuthError('Stream unavailable');
+      return;
+    }
+    if (!user) {
+      setPrivateAuthError('Sign in to unlock this stream');
+      return;
+    }
+    if (!privatePasswordInput.trim()) {
+      setPrivateAuthError('Enter the stream password');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('verify_stream_password', {
+        p_stream_id: streamId,
+        p_password: privatePasswordInput.trim(),
+      });
+      if (error) throw error;
+      if (data?.success) {
+        setPrivateAccessGranted(true);
+        if (privateAccessStorageKey) {
+          localStorage.setItem(privateAccessStorageKey, '1');
+        }
+        setPrivateAuthError('');
+        toast.success('Private access granted');
+      } else {
+        setPrivateAuthError('Incorrect password');
+      }
+    } catch (err: any) {
+      console.error('Private password verification failed:', err);
+      setPrivateAuthError('Unable to verify password right now');
+    }
+  };
 
   useEffect(() => {
     const broadcasterId = stream?.broadcaster_id;
@@ -410,6 +481,9 @@ export default function WatchPage() {
 
     const sendEntrance = async () => {
       try {
+        if (profile?.is_ghost_mode) {
+          return;
+        }
         const { effectKey, config } = await getUserEntranceEffect(user.id);
         if (!effectKey) return;
 
@@ -430,7 +504,7 @@ export default function WatchPage() {
     };
 
     void sendEntrance();
-  }, [streamId, user?.id, isConnected, profile?.username, profile?.role]);
+  }, [streamId, user?.id, isConnected, profile?.username, profile?.role, profile?.is_ghost_mode]);
 
   const handleGiftFromProfile = useCallback((profile: any) => {
       setGiftRecipient(profile);
@@ -543,6 +617,37 @@ export default function WatchPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#03010c] via-[#05031a] to-[#110117] text-white">
+      {needsPrivateGate && !privateAccessGranted && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/90 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0c0a16] p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-2">Private stream</h3>
+            <p className="text-sm text-gray-300 mb-4">
+              This broadcast requires a password provided by the broadcaster. Enter it below to join.
+            </p>
+            <input
+              type="password"
+              value={privatePasswordInput}
+              onChange={(e) => setPrivatePasswordInput(e.target.value)}
+              placeholder="Enter stream password"
+              className="w-full bg-[#05060f] border border-purple-500/40 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-300 focus:outline-none mb-2"
+            />
+            {privateAuthError && (
+              <p className="text-xs text-red-400 mb-2">{privateAuthError}</p>
+            )}
+            <button
+              className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 font-semibold text-sm"
+              onClick={handlePrivatePasswordSubmit}
+            >
+              Submit password
+            </button>
+            {!user && (
+              <p className="mt-3 text-xs text-gray-400">
+                You must be signed in to enter the password.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       {entranceEffect && <EntranceEffect username={entranceEffect.username} role={entranceEffect.role} profile={entranceEffect.profile} />}
       
       <div className="flex h-screen flex-col">

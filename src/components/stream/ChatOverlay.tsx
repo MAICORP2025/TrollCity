@@ -55,7 +55,8 @@ export default function ChatOverlay({ streamId, isBroadcaster }: ChatOverlayProp
         .limit(50)
 
       if (data) {
-        setMessages(data.reverse()) // Reverse to show oldest first
+        const filtered = (data || []).filter((msg) => !msg.user_profiles?.is_ghost_mode)
+        setMessages(filtered.reverse()) // Reverse to show oldest first
       }
     }
 
@@ -84,6 +85,9 @@ export default function ChatOverlay({ streamId, isBroadcaster }: ChatOverlayProp
             .single()
 
           if (newMsg && newMsg.message_type === 'chat') {
+            if (newMsg.user_profiles?.is_ghost_mode) {
+              return
+            }
             setMessages((prev) => {
               const updated = [...prev, newMsg]
               // Keep only last 50 messages

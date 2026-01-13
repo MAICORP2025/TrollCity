@@ -131,6 +131,23 @@ const Auth = () => {
             
             if (profileData.username) {
               toast.success('Welcome back!')
+              try {
+                const ipRes = await fetch('https://api.ipify.org?format=json')
+                const ipJson = await ipRes.json()
+                const userIP = ipJson.ip
+                const { data: current } = await supabase
+                  .from('user_profiles')
+                  .select('ip_address_history')
+                  .eq('id', data.user.id)
+                  .single()
+                const history = current?.ip_address_history || []
+                const entry = { ip: userIP, timestamp: new Date().toISOString() }
+                const updated = [...history, entry].slice(-10)
+                await supabase
+                  .from('user_profiles')
+                  .update({ last_known_ip: userIP, ip_address_history: updated })
+                  .eq('id', data.user.id)
+              } catch {}
               navigate('/')
             } else {
               toast.success('Login successful! Please complete your profile.')
@@ -156,6 +173,23 @@ const Auth = () => {
               setProfile(prof)
               if (prof.username) {
                 toast.success('Welcome back!')
+                try {
+                  const ipRes = await fetch('https://api.ipify.org?format=json')
+                  const ipJson = await ipRes.json()
+                  const userIP = ipJson.ip
+                  const { data: current } = await supabase
+                    .from('user_profiles')
+                    .select('ip_address_history')
+                    .eq('id', session.user.id)
+                    .single()
+                  const history = current?.ip_address_history || []
+                  const entry = { ip: userIP, timestamp: new Date().toISOString() }
+                  const updated = [...history, entry].slice(-10)
+                  await supabase
+                    .from('user_profiles')
+                    .update({ last_known_ip: userIP, ip_address_history: updated })
+                    .eq('id', session.user.id)
+                } catch {}
                 navigate('/')
               } else {
                 toast.success('Login successful! Please complete your profile.')

@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './index.css'
 import { LiveKitProvider } from './contexts/LiveKitProvider'
@@ -146,14 +147,25 @@ if (typeof window !== 'undefined') {
   })
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 1000, // 30 seconds
+      gcTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+})
+
 createRoot(rootElement).render(
-  <BrowserRouter>
-    <LiveKitProvider>
-      <AuthProvider>
-        <GlobalAppProvider>
-          <App />
-        </GlobalAppProvider>
-      </AuthProvider>
-    </LiveKitProvider>
-  </BrowserRouter>
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <LiveKitProvider>
+        <AuthProvider>
+          <GlobalAppProvider>
+            <App />
+          </GlobalAppProvider>
+        </AuthProvider>
+      </LiveKitProvider>
+    </BrowserRouter>
+  </QueryClientProvider>
 )

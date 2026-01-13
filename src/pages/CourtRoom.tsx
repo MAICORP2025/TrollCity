@@ -564,13 +564,14 @@ export default function CourtRoom() {
       }
 
       const tokenData = await tokenResponse.json();
-      setCourtSession(sessionData || { id: targetCourtId, status: 'active' });
+      const resolvedSessionId = sessionData?.id || targetCourtId;
+      setCourtSession(sessionData || { id: resolvedSessionId, status: 'active' });
       setBoxCount(Math.min(6, Math.max(2, sessionData?.maxBoxes || 2)));
       setToken(tokenData?.token);
       setServerUrl(tokenData?.livekitUrl || tokenData?.serverUrl || import.meta.env.VITE_LIVEKIT_URL);
       toast.success('Court session started');
-      if (targetCourtId !== courtId) {
-        navigate(`/court/${targetCourtId}`);
+      if (resolvedSessionId !== courtId) {
+        navigate(`/court/${resolvedSessionId}`);
       }
     } catch (err) {
       console.error('Error starting court session:', err);

@@ -6,8 +6,27 @@ import { Loader2, UserPlus, Search, Crown, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 export function AssignRecruitPanel() {
-  const [partners, setPartners] = useState([]);
-  const [recruits, setRecruits] = useState([]);
+  interface PartnerProfile {
+    id: string;
+    username?: string;
+    display_name?: string;
+    role?: string;
+  }
+  interface EmpirePartner {
+    user_id: string;
+    empire_partner_request: boolean;
+    status: string;
+    profiles?: PartnerProfile | null;
+  }
+  interface Recruit {
+    id: string;
+    username?: string;
+    display_name?: string;
+    is_contracted?: boolean;
+    recruiter_id?: string | null;
+  }
+  const [partners, setPartners] = useState<EmpirePartner[]>([]);
+  const [recruits, setRecruits] = useState<Recruit[]>([]);
   const [selectedPartner, setSelectedPartner] = useState('');
   const [selectedRecruit, setSelectedRecruit] = useState('');
   const [loading, setLoading] = useState(true);
@@ -40,7 +59,7 @@ export function AssignRecruitPanel() {
         .eq('empire_partner_request', true);
 
       if (partnersError) throw partnersError;
-      setPartners(partnersData || []);
+      setPartners((partnersData as EmpirePartner[]) || []);
 
       // Load available recruits (users with approved TrollTract but not assigned to a partner)
       const { data: recruitsData, error: recruitsError } = await supabase
@@ -57,7 +76,7 @@ export function AssignRecruitPanel() {
         .neq('role', 'admin');
 
       if (recruitsError) throw recruitsError;
-      setRecruits(recruitsData || []);
+      setRecruits((recruitsData as Recruit[]) || []);
       
     } catch (error) {
       console.error('Error loading data:', error);

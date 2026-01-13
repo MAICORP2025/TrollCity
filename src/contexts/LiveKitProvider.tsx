@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LiveKitParticipant,
   LiveKitService,
   LiveKitServiceConfig,
 } from "../lib/LiveKitService";
 import { LiveKitContext, LiveKitContextValue } from "./LiveKitContext";
+import { toast } from "sonner";
+import { useAuthStore } from "../lib/store";
 
 // Helper function to send admin notifications
 const sendAdminNotification = async (message: string) => {
@@ -45,6 +47,19 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
   const [localParticipant, setLocalParticipant] =
     useState<LiveKitParticipant | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const profile = useAuthStore((state) => state.profile);
+  const micMuteInfo = useMemo(() => {
+    if (!profile?.mic_muted_until) return { isMuted: false, message: "" };
+    const until = Date.parse(profile.mic_muted_until);
+    if (Number.isNaN(until)) return { isMuted: false, message: "" };
+    if (until > Date.now()) {
+      return {
+        isMuted: true,
+        message: `Microphone disabled until ${new Date(until).toLocaleString()}`,
+      };
+    }
+    return { isMuted: false, message: "" };
+  }, [profile?.mic_muted_until]);
 
   const syncLocalParticipant = useCallback(() => {
     if (!serviceRef.current) return;
@@ -364,6 +379,10 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
 
   const toggleMicrophone = useCallback(async () => {
     if (!serviceRef.current || !serviceRef.current.isConnected()) return false;
+    if (!localParticipant?.isMicrophoneEnabled && micMuteInfo.isMuted) {
+      toast.error(micMuteInfo.message || "Microphone is disabled.");
+      return false;
+    }
     try {
       const enabled = await serviceRef.current.toggleMicrophone();
       syncLocalParticipant();
@@ -373,10 +392,14 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       setError(`Microphone toggle failed: ${err.message}`);
       return false;
     }
-  }, [syncLocalParticipant]);
+  }, [syncLocalParticipant, localParticipant?.isMicrophoneEnabled, micMuteInfo.isMuted, micMuteInfo.message]);
 
   const enableMicrophone = useCallback(async () => {
     if (!serviceRef.current || !serviceRef.current.isConnected()) return false;
+    if (micMuteInfo.isMuted) {
+      toast.error(micMuteInfo.message || "Microphone is disabled.");
+      return false;
+    }
     try {
       const enabled = await serviceRef.current.enableMicrophone();
       syncLocalParticipant();
@@ -386,7 +409,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       setError(`Microphone enable failed: ${err.message}`);
       return false;
     }
-  }, [syncLocalParticipant]);
+  }, [syncLocalParticipant, micMuteInfo.isMuted, micMuteInfo.message]);
 
   const enableCamera = useCallback(async () => {
     if (!serviceRef.current || !serviceRef.current.isConnected()) return false;

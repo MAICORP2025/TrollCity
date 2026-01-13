@@ -29,6 +29,7 @@ export interface UserProfile {
   id: string
   username: string
   avatar_url: string
+  banner_url?: string | null
   bio: string
   email?: string
   role: UserRole
@@ -50,6 +51,8 @@ export interface UserProfile {
   rgb_username_expires_at?: string | null
   no_kick_until: string | null
   no_ban_until: string | null
+  mic_muted_until?: string | null
+  live_restricted_until?: string | null
   ban_expires_at?: string | null
   terms_accepted?: boolean
   badge?: string | null

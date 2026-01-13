@@ -125,6 +125,18 @@ function ProfileInner() {
     }
   };
 
+  // Move const declarations before useEffects that use them
+  const isOwnProfile = currentUser?.id === profile?.id;
+  const canSeeFullProfile = isOwnProfile;
+  const tabOptions = [
+    { key: 'posts', label: 'Posts', show: true },
+    { key: 'inventory', label: 'Inventory & Perks', show: canSeeFullProfile },
+    { key: 'earnings', label: 'Earnings', show: canSeeFullProfile },
+    { key: 'purchases', label: 'Purchase History', show: canSeeFullProfile },
+    { key: 'settings', label: 'Settings', show: isOwnProfile },
+  ];
+  const activeTabLabel = tabOptions.find((option) => option.key === activeTab)?.label || 'Posts';
+
   useEffect(() => {
     if (!isOwnProfile) return;
     if (activeTab === 'earnings' && profile?.id) {
@@ -363,17 +375,6 @@ function ProfileInner() {
   };
 
   // Defer early returns to after hooks to satisfy lint rules
-
-  const isOwnProfile = currentUser?.id === profile?.id;
-  const canSeeFullProfile = isOwnProfile;
-  const tabOptions = [
-    { key: 'posts', label: 'Posts', show: true },
-    { key: 'inventory', label: 'Inventory & Perks', show: canSeeFullProfile },
-    { key: 'earnings', label: 'Earnings', show: canSeeFullProfile },
-    { key: 'purchases', label: 'Purchase History', show: canSeeFullProfile },
-    { key: 'settings', label: 'Settings', show: isOwnProfile },
-  ];
-  const activeTabLabel = tabOptions.find((option) => option.key === activeTab)?.label || 'Posts';
 
   // Load announcement preferences
   useEffect(() => {

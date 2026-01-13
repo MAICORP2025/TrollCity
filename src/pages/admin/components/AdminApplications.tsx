@@ -467,12 +467,12 @@ export default function AdminApplications() {
                       </span>
                     </div>
 
-                    <div className="text-xs text-gray-500 mb-2">
-                      Originally denied: {new Date(appeal.updated_at).toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-gray-500 mb-3">
-                      Appeal submitted: {new Date(appeal.appeal_requested_at).toLocaleDateString()}
-                    </div>
+                      <div className="text-xs text-gray-500 mb-2">
+                        Originally denied: {appeal.updated_at ? new Date(appeal.updated_at).toLocaleDateString() : '-'}
+                      </div>
+                      <div className="text-xs text-gray-500 mb-3">
+                        Appeal submitted: {appeal.appeal_requested_at ? new Date(appeal.appeal_requested_at).toLocaleDateString() : '-'}
+                      </div>
 
                     {/* Appeal Reason */}
                     <div className="mb-3">

@@ -1,7 +1,10 @@
 import React, {
   useEffect,
   useRef,
-  useState
+  useState,
+  useMemo,
+  lazy,
+  Suspense
 } from 'react';
 import { useParams } from 'react-router-dom';
 import { useLiveKit } from '../hooks/useLiveKit';
@@ -9,11 +12,9 @@ import { useAuthStore } from '../lib/store';
 import { supabase, UserProfile } from '../lib/supabase';
 import { toast } from 'sonner';
 import { useViewerTracking } from '../hooks/useViewerTracking';
+import { useStream } from '../hooks/useQueries';
 import ChatBox from '../components/broadcast/ChatBox';
 import GiftBox from '../components/broadcast/GiftBox';
-import GiftModal from '../components/broadcast/GiftModal';
-import ProfileModal from '../components/broadcast/ProfileModal';
-import CoinStoreModal from '../components/broadcast/CoinStoreModal';
 import GiftEventOverlay from './GiftEventOverlay';
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
@@ -22,6 +23,11 @@ import BroadcastOverlays from '../components/stream/BroadcastOverlays';
 import { useSeatRoster } from '../hooks/useSeatRoster';
 import SeatCostPopup from '../components/broadcast/SeatCostPopup';
 import BroadcastLayoutPreview, { ViewerLayoutPreview } from '../components/broadcast/BroadcastPreview';
+
+// Lazy load heavy modals
+const GiftModal = lazy(() => import('../components/broadcast/GiftModal'));
+const ProfileModal = lazy(() => import('../components/broadcast/ProfileModal'));
+const CoinStoreModal = lazy(() => import('../components/broadcast/CoinStoreModal'));
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -42,9 +48,9 @@ interface StreamData {
 export default function BroadcastPage() {
   const { streamId } = useParams();
   const { user, profile } = useAuthStore();
-  
-  // States
-  const [stream, setStream] = useState<StreamData | null>(null);
+
+  // Use React Query for stream data
+  const { data: stream, isLoading: streamLoading } = useStream(streamId || '');
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
@@ -58,6 +64,19 @@ export default function BroadcastPage() {
   const [privateAccessGranted, setPrivateAccessGranted] = useState(false);
   const [privatePasswordInput, setPrivatePasswordInput] = useState('');
   const [privateAuthError, setPrivateAuthError] = useState('');
+  const micRestrictionInfo = useMemo(() => {
+    if (!profile?.mic_muted_until) {
+      return { isMuted: false, message: '' };
+    }
+    const until = Date.parse(profile.mic_muted_until);
+    if (Number.isNaN(until) || until <= Date.now()) {
+      return { isMuted: false, message: '' };
+    }
+    return {
+      isMuted: true,
+      message: `Microphone disabled until ${new Date(until).toLocaleString()}`,
+    };
+  }, [profile?.mic_muted_until]);
   const privateAccessStorageKey = streamId ? `private-stream-access:${streamId}` : null;
   const [entranceEffect, setEntranceEffect] = useState<any>(null);
   const entranceTimerRef = useRef<number | null>(null);
@@ -119,36 +138,6 @@ export default function BroadcastPage() {
     }
   };
 
-  useEffect(() => {
-    if (!streamId) return;
-
-    const loadStream = async () => {
-      const { data, error } = await supabase
-        .from('streams')
-        .select('*')
-        .eq('id', streamId)
-        .single();
-        
-      if (error) {
-        console.error('Error loading stream:', error);
-        // Don't show toast if user is just not logged in yet, as it might be a public stream check
-        if (user) {
-           toast.error('Failed to load stream');
-        }
-        return;
-      }
-      setStream(data);
-    };
-    
-    loadStream();
-    
-    const interval = setInterval(async () => {
-       const { data } = await supabase.from('streams').select('current_viewers, total_likes, total_gifts_coins, is_live').eq('id', streamId).single();
-       if (data) setStream(prev => prev ? { ...prev, ...data } : prev);
-    }, STREAM_POLL_INTERVAL);
-    
-    return () => clearInterval(interval);
-  }, [streamId]);
 
   useEffect(() => {
     if (!stream || !streamId) {
@@ -213,10 +202,15 @@ export default function BroadcastPage() {
         });
 
         if (isBroadcaster) {
-          const micEnabled = await liveKit.enableMicrophone();
-          const camEnabled = await liveKit.enableCamera();
-          setMicOn(micEnabled);
-          setCameraOn(camEnabled);
+          if (micRestrictionInfo.isMuted) {
+            toast.error(micRestrictionInfo.message || 'Microphone is disabled.');
+            setMicOn(false);
+          } else {
+            const micEnabled = await liveKit.enableMicrophone();
+            const camEnabled = await liveKit.enableCamera();
+            setMicOn(micEnabled);
+            setCameraOn(camEnabled);
+          }
         }
 
         const room = liveKit.getRoom();
@@ -257,17 +251,22 @@ export default function BroadcastPage() {
                                     currentRoom?.localParticipant?.audioTrackPublications.size > 0;
           
           if (!isAlreadyPublishing) {
-            // Enable camera and mic for the guest without disconnecting
-            // Use explicit enable calls instead of toggle to avoid turning off existing streams
-            const micEnabled = await liveKit.enableMicrophone();
-            const cameraEnabled = await liveKit.enableCamera();
-            
-            // Set local state to reflect media is on
-            setMicOn(micEnabled);
-            setCameraOn(cameraEnabled);
-            
-            // Debug: Log the media state after enabling
-            console.log('Guest media enabled:', { micEnabled, cameraEnabled });
+            if (micRestrictionInfo.isMuted) {
+              toast.error(micRestrictionInfo.message || 'Microphone is disabled.');
+              setMicOn(false);
+            } else {
+              // Enable camera and mic for the guest without disconnecting
+              // Use explicit enable calls instead of toggle to avoid turning off existing streams
+              const micEnabled = await liveKit.enableMicrophone();
+              const cameraEnabled = await liveKit.enableCamera();
+              
+              // Set local state to reflect media is on
+              setMicOn(micEnabled);
+              setCameraOn(cameraEnabled);
+              
+              // Debug: Log the media state after enabling
+              console.log('Guest media enabled:', { micEnabled, cameraEnabled });
+            }
           }
         } catch (err) {
           console.error('Failed to enable guest media:', err);
@@ -327,6 +326,10 @@ export default function BroadcastPage() {
 
   // Handlers
   const toggleMic = async () => {
+    if (!micOn && micRestrictionInfo.isMuted) {
+      toast.error(micRestrictionInfo.message || 'Microphone is disabled.');
+      return;
+    }
     const newState = !micOn;
     setMicOn(newState);
     await liveKit.toggleMicrophone();
@@ -464,7 +467,14 @@ export default function BroadcastPage() {
     }
   };
 
-  if (!stream) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading Broadcast...</div>;
+  if (streamLoading || !stream) return (
+    <div className="min-h-screen bg-black flex items-center justify-center text-white">
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p>Loading broadcast...</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 bg-black text-white overflow-hidden flex flex-col md:flex-row">
@@ -613,26 +623,28 @@ export default function BroadcastPage() {
       )}
 
       {/* Modals */}
-      {isGiftModalOpen && (
-        <GiftModal 
-          onClose={() => setIsGiftModalOpen(false)} 
-          onSendGift={handleGiftSent} 
-          recipientName={giftRecipient?.username || 'Broadcaster'} 
-          profile={profile} 
-        />
-      )}
-      
-      {selectedProfile && (
-        <ProfileModal 
-          profile={selectedProfile} 
-          onClose={() => setSelectedProfile(null)} 
-          onSendCoins={() => {}} 
-          onGift={(p: UserProfile) => { setGiftRecipient(p); setIsGiftModalOpen(true); }}
-          currentUser={user} 
-        />
-      )}
-      
-      {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={() => {}} />}
+      <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><div className="text-white">Loading...</div></div>}>
+        {isGiftModalOpen && (
+          <GiftModal
+            onClose={() => setIsGiftModalOpen(false)}
+            onSendGift={handleGiftSent}
+            recipientName={giftRecipient?.username || 'Broadcaster'}
+            profile={profile}
+          />
+        )}
+
+        {selectedProfile && (
+          <ProfileModal
+            profile={selectedProfile}
+            onClose={() => setSelectedProfile(null)}
+            onSendCoins={() => {}}
+            onGift={(p: UserProfile) => { setGiftRecipient(p); setIsGiftModalOpen(true); }}
+            currentUser={user}
+          />
+        )}
+
+        {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={() => {}} />}
+      </Suspense>
       
       {/* Seat Cost Popup - shows when joining a seat with a price */}
       {seatCostPopupVisible && (

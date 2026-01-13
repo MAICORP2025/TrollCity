@@ -6,12 +6,27 @@ import { Loader2, CheckCircle, XCircle, Clock, Eye, User, FileText } from 'lucid
 import { supabase } from '../../lib/supabase';
 
 export function CreatorApplicationsPanel() {
-  const [applications, setApplications] = useState([]);
+  interface CreatorApplication {
+    id: string;
+    status: 'pending' | 'approved' | 'denied' | string;
+    display_name?: string;
+    username?: string;
+    category: string;
+    submitted_at: string;
+    empire_partner_request?: boolean;
+    reviewer_notes?: string;
+    experience_text?: string;
+    social_links?: string;
+    goals_text?: string;
+    empire_partner_reason?: string;
+  }
+  const [applications, setApplications] = useState<CreatorApplication[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [selectedApplication, setSelectedApplication] = useState<CreatorApplication | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewing, setReviewing] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, pending, approved, denied
+  type FilterStatus = 'all' | 'pending' | 'approved' | 'denied';
+  const [filter, setFilter] = useState<FilterStatus>('all');
 
   useEffect(() => {
     loadApplications();
@@ -33,7 +48,7 @@ export function CreatorApplicationsPanel() {
     }
   };
 
-  const handleReview = async (applicationId, status) => {
+  const handleReview = async (applicationId: string, status: 'approved' | 'denied') => {
     if (!reviewNotes.trim()) {
       alert('Please provide review notes.');
       return;
@@ -65,8 +80,8 @@ export function CreatorApplicationsPanel() {
     return app.status === filter;
   });
 
-  const getStatusConfig = (status) => {
-    const configs = {
+  const getStatusConfig = (status: 'pending' | 'approved' | 'denied') => {
+    const configs: Record<'pending' | 'approved' | 'denied', { icon: any; color: string; bg: string; border: string }> = {
       pending: { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
       approved: { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-green-500/30' },
       denied: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/30' }
@@ -102,7 +117,7 @@ export function CreatorApplicationsPanel() {
         <CardContent>
           {/* Filters */}
           <div className="flex gap-2 mb-4">
-            {['all', 'pending', 'approved', 'denied'].map((status) => (
+            {(['all', 'pending', 'approved', 'denied'] as FilterStatus[]).map((status) => (
               <Button
                 key={status}
                 variant={filter === status ? 'default' : 'outline'}
@@ -117,7 +132,7 @@ export function CreatorApplicationsPanel() {
                 {status.charAt(0).toUpperCase() + status.slice(1)}
                 {status !== 'all' && (
                   <Badge variant="secondary" className="ml-2 text-xs">
-                    {applications.filter(app => app.status === status).length}
+                    {status === 'all' ? applications.length : applications.filter(app => app.status === status).length}
                   </Badge>
                 )}
               </Button>
@@ -136,7 +151,7 @@ export function CreatorApplicationsPanel() {
       ) : (
         <div className="grid gap-4">
           {filteredApplications.map((application) => {
-            const statusConfig = getStatusConfig(application.status);
+            const statusConfig = getStatusConfig(application.status as 'pending' | 'approved' | 'denied');
             const StatusIcon = statusConfig.icon;
             
             return (
