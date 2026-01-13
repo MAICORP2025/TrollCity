@@ -59,6 +59,14 @@ interface StreamRow {
   is_private?: boolean;
 }
 
+interface ActiveViewer {
+  userId: string;
+  username: string;
+  avatarUrl?: string | null;
+  role?: string | null;
+  isBroadcaster?: boolean;
+}
+
 interface GiftBalanceDelta {
   userId: string;
   delta: number;
@@ -394,6 +402,10 @@ export default function LivePage() {
   
   const [stream, setStream] = useState<StreamRow | null>(null);
   const [viewerCount, setViewerCount] = useState(0);
+  const [activeViewers, setActiveViewers] = useState<ActiveViewer[]>([]);
+  const [isViewerDropdownOpen, setIsViewerDropdownOpen] = useState(false);
+  const viewerDropdownRef = useRef<HTMLDivElement | null>(null);
+  const viewerButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isLoadingStream, setIsLoadingStream] = useState(true);
   const [privateAccessGranted, setPrivateAccessGranted] = useState(false);
   const [privatePasswordInput, setPrivatePasswordInput] = useState('');
@@ -410,6 +422,19 @@ export default function LivePage() {
       }
     }
   }, [stream]);
+
+  useEffect(() => {
+    if (!isViewerDropdownOpen || typeof window === 'undefined') return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (viewerDropdownRef.current?.contains(event.target as Node)) return;
+      if (viewerButtonRef.current?.contains(event.target as Node)) return;
+      setIsViewerDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isViewerDropdownOpen]);
   
   const seatRoomName = stream?.room_name || stream?.agora_channel || streamId || 'officer-stream';
   const isBroadcaster = useIsBroadcaster(profile, stream);
@@ -1181,27 +1206,63 @@ export default function LivePage() {
     redirectToSummary: true,
   });
 
-  const updateViewerCount = useCallback(async () => {
-    if (!streamId) return;
+  const refreshViewerSnapshot = useCallback(async () => {
+    if (!streamId) {
+      setActiveViewers([]);
+      setViewerCount(0);
+      return;
+    }
+
     try {
-      const { count, error } = await supabase
+      const { data: viewerRows, error: viewerError } = await supabase
         .from('stream_viewers')
-        .select('id', { count: 'exact', head: true })
+        .select('user_id')
         .eq('stream_id', streamId);
 
-      if (!error) {
-        const total = typeof count === 'number' ? count : 0;
-        setViewerCount(total);
-        setStream((prev) => (prev ? { ...prev, current_viewers: total } : prev));
+      if (viewerError) {
+        console.error('Failed to load active viewers:', viewerError);
+        return;
       }
+
+      const viewerIds = (viewerRows || []).map((row: any) => row.user_id).filter(Boolean);
+      const fallbackViewers = viewerIds.map((id: string) => ({
+        userId: id,
+        username: `Viewer ${id.substring(0, 6)}`,
+      }));
+      let mappedViewers = fallbackViewers;
+
+      if (viewerIds.length > 0) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, role, troll_role, is_broadcaster')
+          .in('id', viewerIds);
+
+        if (!profileError && Array.isArray(profileRows) && profileRows.length > 0) {
+          const profileMap = new Map(profileRows.map((p: any) => [p.id, p]));
+          mappedViewers = viewerIds.map((id: string) => {
+            const profile = profileMap.get(id);
+            return {
+              userId: id,
+              username: profile?.username || `Viewer ${id.substring(0, 6)}`,
+              avatarUrl: profile?.avatar_url,
+              role: profile?.role || profile?.troll_role || null,
+              isBroadcaster: Boolean(profile?.is_broadcaster),
+            };
+          });
+        }
+      }
+
+      setActiveViewers(mappedViewers);
+      setViewerCount(viewerIds.length);
+      setStream((prev) => (prev ? { ...prev, current_viewers: viewerIds.length } : prev));
     } catch (err) {
-      console.error('Failed to refresh viewer count:', err);
+      console.error('Failed to refresh viewer snapshot:', err);
     }
   }, [streamId]);
 
   useEffect(() => {
     if (!streamId) return;
-    updateViewerCount();
+    refreshViewerSnapshot();
     const channel = supabase
       .channel(`stream-viewers-${streamId}`)
       .on(
@@ -1213,14 +1274,14 @@ export default function LivePage() {
           filter: `stream_id=eq.${streamId}`,
         },
         () => {
-          updateViewerCount();
+          refreshViewerSnapshot();
         }
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [streamId, updateViewerCount]);
+  }, [streamId, refreshViewerSnapshot]);
 
   // Gift subscription
   const lastGift = useGiftEvents(streamId);
@@ -1444,8 +1505,54 @@ export default function LivePage() {
             <div className="hidden lg:flex px-4 py-2 bg-white/5 rounded-lg border border-white/10 items-center gap-2">
               <Heart size={16} className="text-purple-400" /> <span className="font-bold">{stream?.total_likes || 0}</span>
             </div>
-            <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
-              <Users size={16} className="text-green-400" /> <span className="font-bold">{viewerCount.toLocaleString()}</span>
+            <div className="relative">
+              <button
+                ref={viewerButtonRef}
+                type="button"
+                onClick={() => setIsViewerDropdownOpen((prev) => !prev)}
+                className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-400 transition"
+                aria-expanded={isViewerDropdownOpen}
+              >
+                <Users size={16} className="text-green-400" /> <span className="font-bold">{viewerCount.toLocaleString()}</span>
+              </button>
+              {isViewerDropdownOpen && (
+                <div
+                  ref={viewerDropdownRef}
+                  className="absolute right-0 mt-2 w-64 max-h-72 overflow-hidden rounded-2xl border border-white/10 bg-black/90 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-xl z-20"
+                >
+                  <div className="px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/50">
+                    Active viewers
+                  </div>
+                  <div className="divide-y divide-white/5 max-h-60 overflow-y-auto">
+                    {activeViewers.length === 0 ? (
+                      <div className="px-4 py-3 text-xs text-white/60 text-center">No active viewers</div>
+                    ) : (
+                      activeViewers.map((viewer) => (
+                        <div key={viewer.userId} className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition">
+                          <div className="h-8 w-8 rounded-full bg-white/10 text-xs font-semibold uppercase text-white flex items-center justify-center overflow-hidden">
+                            {viewer.avatarUrl ? (
+                              <img src={viewer.avatarUrl} alt={viewer.username} className="h-full w-full object-cover" />
+                            ) : (
+                              viewer.username?.charAt(0) ?? '?'
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{viewer.username}</p>
+                            {viewer.role && (
+                              <p className="text-[11px] text-white/60 capitalize">{viewer.role}</p>
+                            )}
+                          </div>
+                          {viewer.isBroadcaster && (
+                            <span className="self-start whitespace-nowrap rounded-full border border-emerald-400/50 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                              Host
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             {isBroadcaster && (
               <button

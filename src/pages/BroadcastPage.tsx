@@ -63,6 +63,7 @@ export default function BroadcastPage() {
   const entranceTimerRef = useRef<number | null>(null);
   const prevSeatUsersRef = useRef<Set<string>>(new Set());
   const seatSyncRef = useRef(false);
+  const connectedRef = useRef(false);
   const [cachedPrivatePassword, setCachedPrivatePassword] = useState<string | null>(null);
   const privatePasswordStorageKey = streamId ? `private-stream-password:${streamId}` : null;
   
@@ -197,30 +198,50 @@ export default function BroadcastPage() {
     if (!streamId || !user || !profile) return;
     if (!stream) return;
     if (stream?.is_private && user?.id !== stream?.broadcaster_id && !privateAccessGranted) return;
+    if (connectedRef.current) return;
+
+    connectedRef.current = true;
+
+    const connectRole = isBroadcaster ? 'host' : isGuestSeat ? 'guest' : 'audience';
+    const allowPublish = isBroadcaster || isGuestSeat;
 
     const initSession = async () => {
       try {
         await liveKit.connect(streamId, user, {
-          allowPublish: isBroadcaster || isGuestSeat,
-          role: isBroadcaster ? 'host' : (isGuestSeat ? 'guest' : 'audience')
+          allowPublish,
+          role: connectRole
         });
+
         if (isBroadcaster) {
-           // Enable camera and mic for broadcaster using consistent logic
-           await liveKit.toggleMicrophone();
-           await liveKit.toggleCamera();
+          const micEnabled = await liveKit.enableMicrophone();
+          const camEnabled = await liveKit.enableCamera();
+          setMicOn(micEnabled);
+          setCameraOn(camEnabled);
         }
+
+        const room = liveKit.getRoom();
+        const localPubCount = room?.localParticipant?.videoTrackPublications.size ?? 0;
+        const blurDetected = typeof window !== 'undefined'
+          ? Boolean(document.querySelector('.tile-inner .blur-lg, .tile-inner .backdrop-blur-sm'))
+          : false;
+
+        console.log('ROLE', connectRole);
+        console.log('PUB', localPubCount);
+        console.log('BLUR', blurDetected);
       } catch (err) {
         console.error('Failed to connect to LiveKit:', err);
         toast.error('Failed to start broadcast session');
+        connectedRef.current = false;
       }
     };
-    
+
     initSession();
-    
+
     return () => {
+      connectedRef.current = false;
       liveKit.disconnect();
     };
-  }, [streamId, user, isBroadcaster, isGuestSeat, liveKit, profile, stream?.is_private, stream?.broadcaster_id, privateAccessGranted]);
+  }, [streamId, user?.id, profile?.id, stream?.id, stream?.is_private, privateAccessGranted, liveKit]);
 
   // Track viewers for this stream
   useViewerTracking(streamId || '', user?.id || null);
