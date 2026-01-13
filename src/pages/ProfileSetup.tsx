@@ -30,6 +30,7 @@ const ProfileSetup = () => {
   const [bio, setBio] = React.useState(profile?.bio || '')
   const [loading, setLoading] = React.useState(false)
   const [uploadingAvatar, setUploadingAvatar] = React.useState(false)
+  const [uploadingCover, setUploadingCover] = React.useState(false)
   const [usernameError, setUsernameError] = React.useState('')
 
   const handleUsernameChange = (value: string) => {
@@ -128,6 +129,7 @@ const ProfileSetup = () => {
   }
 
   const avatarInputRef = React.useRef<HTMLInputElement>(null)
+  const coverInputRef = React.useRef<HTMLInputElement>(null)
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -207,9 +209,97 @@ const ProfileSetup = () => {
     }
   }
 
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+
+    const uploadBuckets = ['troll-city-assets', 'avatars', 'public']
+    const uploadPath = `covers/${user.id}-${Date.now()}${file.name.substring(file.name.lastIndexOf('.'))}`
+
+    const tryUpload = async () => {
+      for (const bucket of uploadBuckets) {
+        const result = await supabase.storage
+          .from(bucket)
+          .upload(uploadPath, file, { cacheControl: '3600', upsert: false })
+        if (!result.error) {
+          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadPath)
+          return urlData.publicUrl
+        }
+      }
+      throw new Error('Failed to upload cover photo')
+    }
+
+    try {
+      setUploadingCover(true)
+      if (!file.type.startsWith('image/')) throw new Error('File must be an image')
+      if (file.size > 5 * 1024 * 1024) throw new Error('Image too large (max 5MB)')
+
+      const publicUrl = await tryUpload()
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('user_profiles')
+        .update({ banner_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+        .select('*')
+        .maybeSingle()
+
+      if (updateErr && updateErr.code !== 'PGRST116') throw updateErr
+      if (!updated) {
+        const { data: fallback } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (fallback) {
+          setProfile(fallback as any)
+        }
+      } else {
+        setProfile(updated as any)
+      }
+
+      toast.success('Cover photo updated')
+    } catch (err: any) {
+      console.error('Cover upload error:', err)
+      toast.error(err?.message || 'Failed to upload cover photo')
+    } finally {
+      setUploadingCover(false)
+      if (coverInputRef.current) coverInputRef.current.value = ''
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
       <div className="max-w-4xl mx-auto px-6 py-10">
+
+        {/* Cover Photo */}
+        <div className="relative h-48 rounded-2xl overflow-hidden mb-6 bg-gradient-to-r from-purple-900 via-indigo-900 to-blue-900">
+          {profile?.banner_url ? (
+            <img
+              src={profile.banner_url}
+              alt="Cover"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-300 text-sm uppercase tracking-[0.4em]">
+              Your cover photo goes here
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => coverInputRef.current?.click()}
+            disabled={uploadingCover}
+            className="absolute top-3 right-3 px-3 py-1 text-xs font-semibold rounded-full bg-black/50 text-white border border-white/20 hover:bg-black/60 transition"
+          >
+            {uploadingCover ? 'Uploading...' : 'Change Cover Photo'}
+          </button>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleCoverUpload}
+          />
+        </div>
 
         {/* Avatar & Display */}
         <div className="flex items-center gap-4 mb-6">
