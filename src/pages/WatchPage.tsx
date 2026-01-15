@@ -666,6 +666,10 @@ export default function WatchPage() {
                   <div className="px-4 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
                     <Users size={16} className="text-green-400" /> <span className="font-bold">{(stream?.current_viewers || 0).toLocaleString()}</span>
                   </div>
+                  <div className="px-4 py-2 bg-white/5 rounded-lg border border-yellow-500/30 flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-yellow-500 flex items-center justify-center text-black font-bold text-[8px]">C</div>
+                    <span className="font-bold text-yellow-400">{(stream?.total_gifts_coins || 0).toLocaleString()}</span>
+                  </div>
                   {stream?.is_live && <div className="px-3 py-1 bg-red-600 rounded-full text-xs font-bold animate-pulse">LIVE</div>}
                </div>
             </div>

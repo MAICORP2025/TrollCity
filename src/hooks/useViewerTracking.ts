@@ -58,10 +58,10 @@ export function useViewerTracking(streamId: string | null, userId: string | null
         }
 
         // Update the stream's current_viewers field
-        const { error: updateStreamError } = await supabase
-          .from('streams')
-          .update({ current_viewers: count })
-          .eq('id', streamId)
+        const { error: updateStreamError } = await supabase.rpc('update_viewer_count', {
+          p_stream_id: streamId,
+          p_count: count
+        })
 
         if (updateStreamError) {
           console.error('Error updating stream viewer count:', updateStreamError)

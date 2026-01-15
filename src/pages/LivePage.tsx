@@ -167,16 +167,39 @@ function BroadcasterControlPanel({
 
   const handleAddBox = () => {
     const maxBoxes = 6;
-    onBoxCountChange(Math.min(boxCount + 1, maxBoxes));
+    const next = Math.min(boxCount + 1, maxBoxes);
+    onBoxCountChange(next);
+    if (!streamId) return;
+    void supabase.from('messages').insert({
+      stream_id: streamId,
+      user_id: (supabase.auth.getUser as any)?.() ? undefined : undefined,
+      message_type: 'system',
+      content: `BOX_COUNT_UPDATE:${next}`
+    });
   };
 
   const handleRemoveBox = () => {
-    onBoxCountChange(boxCount > 0 ? boxCount - 1 : 0);
+    const next = boxCount > 0 ? boxCount - 1 : 0;
+    onBoxCountChange(next);
+    if (!streamId) return;
+    void supabase.from('messages').insert({
+      stream_id: streamId,
+      user_id: (supabase.auth.getUser as any)?.() ? undefined : undefined,
+      message_type: 'system',
+      content: `BOX_COUNT_UPDATE:${next}`
+    });
   };
 
   const handleDeleteAllBoxes = () => {
     if (boxCount === 0) return;
     onBoxCountChange(0);
+    if (!streamId) return;
+    void supabase.from('messages').insert({
+      stream_id: streamId,
+      user_id: (supabase.auth.getUser as any)?.() ? undefined : undefined,
+      message_type: 'system',
+      content: 'BOX_COUNT_UPDATE:0'
+    });
   };
 
   const handleApplyJoinPrice = () => {
@@ -1319,7 +1342,6 @@ export default function LivePage() {
     }
   }, [isConnected, user, streamId, profile, isBroadcaster]);
 
-  // Real-time listeners for Entrance and Likes
   useEffect(() => {
     if (!streamId) return;
 
@@ -1338,12 +1360,9 @@ export default function LivePage() {
           if (msg.message_type === 'entrance') {
             try {
               const data = JSON.parse(msg.content);
-              // Determine originating user id for this entrance event
               const payloadUserId =
                 data.user_id || data.sender_id || msg.user_id || msg.sender_id;
 
-              // If this client is the broadcaster and the entrance belongs to the broadcaster,
-              // ignore it so broadcasters don't see an entrance when they start their own live.
               if (payloadUserId && stream?.broadcaster_id && isBroadcaster && payloadUserId === String(stream.broadcaster_id)) {
                 return;
               }
@@ -1360,7 +1379,6 @@ export default function LivePage() {
               }, 5000);
 
               if (payloadUserId) {
-                // Trigger client-side entrance animation for the specified user (unless filtered above)
                 void triggerUserEntranceEffect(payloadUserId);
               }
             } catch (e) {
@@ -1369,6 +1387,15 @@ export default function LivePage() {
           } else if (msg.message_type === 'system' && msg.content?.startsWith('PRICE_UPDATE:')) {
             const price = parseInt(msg.content.split(':')[1]);
             if (!isNaN(price)) setJoinPrice(price);
+          } else if (msg.message_type === 'system' && msg.content?.startsWith('BOX_COUNT_UPDATE:')) {
+            const parts = msg.content.split(':');
+            const raw = parts[1];
+            const parsed = parseInt(raw);
+            if (!isNaN(parsed)) {
+              const maxBoxes = 6;
+              const next = Math.max(0, Math.min(maxBoxes, parsed));
+              setBoxCount(next);
+            }
           }
         }
       )
@@ -1598,6 +1625,40 @@ export default function LivePage() {
   const [activeMobileTab, setActiveMobileTab] = useState<'chat' | 'gifts'>('chat');
 
   // Stream polling
+  useEffect(() => {
+    if (!streamId) return;
+    const channel = supabase
+      .channel(`stream-updates-${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+          filter: `id=eq.${streamId}`,
+        },
+        (payload) => {
+          const newStream = payload.new as StreamRow;
+          setStream(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              total_gifts_coins: newStream.total_gifts_coins,
+              current_viewers: newStream.current_viewers,
+              status: newStream.status,
+              is_live: newStream.is_live,
+              total_likes: newStream.total_likes
+            };
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [streamId]);
+
   useEffect(() => {
     if (!streamId) return;
     const interval = setInterval(async () => {

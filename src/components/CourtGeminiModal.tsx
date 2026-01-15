@@ -78,7 +78,7 @@ export default function CourtGeminiModal({ isOpen, onClose, courtId, isAuthorize
       }));
 
       // 2. Call Backend
-      const response = await api.post(api.trollcourt.ai, {
+      const response = await api.post('/trollcourt-ai', {
         action: activeTab,
         courtId,
         transcript
