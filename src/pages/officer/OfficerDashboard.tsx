@@ -188,12 +188,6 @@ export default function OfficerDashboard() {
           <Shield className="w-8 h-8 text-purple-400" />
           <h1 className="text-3xl font-bold">Officer Dashboard</h1>
         </div>
-        <button
-          onClick={() => navigate('/officer/training')}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
-        >
-          Start Training
-        </button>
       </div>
 
       {/* Ghost Mode Toggle */}
@@ -408,7 +402,7 @@ export default function OfficerDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-2 gap-4">
         <button
           onClick={() => navigate('/officer/payroll')}
           className="p-4 bg-black/60 border border-yellow-600 rounded-lg hover:bg-black/80 transition-colors text-left"
@@ -416,14 +410,6 @@ export default function OfficerDashboard() {
           <DollarSign className="w-6 h-6 text-yellow-400 mb-2" />
           <p className="font-semibold">Payroll Dashboard</p>
           <p className="text-sm opacity-70">View earnings and work hours</p>
-        </button>
-        <button
-          onClick={() => navigate('/officer/training-progress')}
-          className="p-4 bg-black/60 border border-purple-600 rounded-lg hover:bg-black/80 transition-colors text-left"
-        >
-          <Award className="w-6 h-6 text-purple-400 mb-2" />
-          <p className="font-semibold">View Training Progress</p>
-          <p className="text-sm opacity-70">See your training history and stats</p>
         </button>
         <button
           onClick={() => navigate('/officer/moderation')}

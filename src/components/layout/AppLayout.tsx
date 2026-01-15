@@ -6,6 +6,8 @@ import { useLocation } from 'react-router-dom'
 import PWAInstallPrompt from '../PWAInstallPrompt'
 import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
+import GeminiChatButton from '../GeminiChatButton'
+import AdminOnly from '../AdminOnly'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -68,6 +70,9 @@ export default function AppLayout({
     <div className="h-screen w-screen overflow-hidden text-white flex">
       <PurchaseRequiredModal />
       <PWAInstallPrompt />
+      <AdminOnly>
+        <GeminiChatButton />
+      </AdminOnly>
       {/* Desktop Sidebar - Hidden on Mobile */}
       {effectiveShowSidebar && (
         <div className="hidden md:block w-64 h-full shrink-0 border-r border-white/5 bg-[#0A0814] z-20">

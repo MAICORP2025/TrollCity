@@ -25,7 +25,8 @@ import {
   Award,
   Zap,
   Gift,
-  Home
+  Home,
+  PieChart
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { systemManagementRoutes } from '../adminRoutes'
@@ -42,6 +43,7 @@ interface AdditionalTasksGridProps {
   onOpenResetPanel?: () => void
   onOpenEmpireApplications?: () => void
   onOpenReferralBonuses?: () => void
+  onOpenAdminPool?: () => void
   onSelectTab?: (tabId: string) => void
   counts?: {
     intake?: number
@@ -68,6 +70,7 @@ export default function AdditionalTasksGrid({
   onOpenResetPanel,
   onOpenEmpireApplications,
   onOpenReferralBonuses,
+  onOpenAdminPool,
   onSelectTab,
   counts = {}
 }: AdditionalTasksGridProps) {
@@ -269,6 +272,14 @@ export default function AdditionalTasksGrid({
       bgColor: 'bg-green-500/20',
       borderColor: 'border-green-500/30',
       tasks: [
+        {
+          icon: <PieChart className="w-5 h-5" />,
+          label: 'Admin Pool',
+          description: 'View admin pool profits',
+          action: onOpenAdminPool,
+          color: 'text-purple-400',
+          bgColor: 'bg-purple-500/20'
+        },
         {
           icon: <BarChart3 className="w-5 h-5" />,
           label: 'Economy Dashboard',

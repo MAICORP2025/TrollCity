@@ -34,6 +34,13 @@ import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import TermsAgreement from "./pages/TermsAgreement";
 
+import { GameProvider } from "./components/game/GameContext";
+import CarDealershipPage from "./pages/game/CarDealershipPage";
+import MechanicShopPage from "./pages/game/MechanicShopPage";
+import HospitalPage from "./pages/game/HospitalPage";
+import GeneralStorePage from "./pages/game/GeneralStorePage";
+import AuctionsPage from "./pages/AuctionsPage";
+
 // Sidebar pages (instant load)
 const Messages = lazy(() => import("./pages/Messages"));
 
@@ -52,6 +59,7 @@ const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard
 const Application = lazy(() => import("./pages/Application"));
 const ApplicationPage = lazy(() => import("./pages/ApplicationPage"));
 const TrollsTownPage = lazy(() => import("./pages/TrollsTownPage"));
+const TrollsTown3DPage = lazy(() => import("./pages/TrollsTown3DPage"));
 const TrollOfficerLounge = lazy(() => import("./pages/TrollOfficerLounge"));
 const OfficerModeration = lazy(() => import("./pages/OfficerModeration"));
 const TrollFamily = lazy(() => import("./pages/TrollFamily"));
@@ -107,10 +115,6 @@ const Call = lazy(() => import("./pages/Call"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Trollifications = lazy(() => import("./pages/Trollifications"));
 const OfficerScheduling = lazy(() => import("./pages/OfficerScheduling"));
-const Orientation = lazy(() => import("./pages/officer/Orientation"));
-const OrientationQuiz = lazy(() => import("./pages/officer/OrientationQuiz"));
-const OfficerOnboarding = lazy(() => import("./pages/officer/OfficerOnboarding"));
-const OfficerTrainingProgress = lazy(() => import("./pages/officer/OfficerTrainingProgress"));
 const OfficerPayrollDashboard = lazy(() => import("./pages/officer/OfficerPayrollDashboard"));
 const OfficerDashboard = lazy(() => import("./pages/officer/OfficerDashboard"));
 const OfficerOWCDashboard = lazy(() => import("./pages/OfficerOWCDashboard"));
@@ -237,6 +241,8 @@ const LoadingScreen = () => (
     return <Outlet />;
   };
 
+import AdminPoolTab from './pages/admin/components/AdminPoolTab'
+
 function AppContent() {
   // Lightweight render counter (dev only)
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
@@ -330,23 +336,7 @@ function AppContent() {
       return;
     }
 
-    // Only redirect officers who need orientation (lead officers and admins skip quiz)
-    if (profile?.role === 'troll_officer' || profile?.is_troll_officer) {
-      // Admins don't need orientation/quiz - they're automatically active
-      if (profile?.role === 'admin' || profile?.is_admin) {
-        // Admin is already active, no redirect needed
-        return;
-      }
-      // Lead officers don't need orientation/quiz - they're activated immediately
-      if (profile?.is_lead_officer) {
-        // Lead officer is already active, no redirect needed
-        return;
-      }
-      // Regular officers need to complete orientation/quiz
-      if (!profile?.is_officer_active) {
-        navigate('/officer/orientation', { replace: true });
-      }
-    } else if (profile?.role === 'troll_family') {
+    if (profile?.role === 'troll_family') {
       navigate('/family', { replace: true });
     }
   }, [profile, location.pathname, navigate, user]);
@@ -581,6 +571,7 @@ function AppContent() {
       />
 
 
+      <GameProvider>
       <AppLayout showSidebar={!!user} showHeader={!!user} showBottomNav={!!user}>
         {user && <AdminOfficerQuickMenu />}
 
@@ -640,6 +631,14 @@ function AppContent() {
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
+                  <Route path="/trolls-town" element={<TrollsTown3DPage />} />
+                  
+                  {/* New Game Routes */}
+                  <Route path="/dealership" element={<CarDealershipPage />} />
+                  <Route path="/mechanic" element={<MechanicShopPage />} />
+                  <Route path="/hospital" element={<HospitalPage />} />
+                  <Route path="/auctions" element={<AuctionsPage />} />
+                  <Route path="/general-store" element={<GeneralStorePage />} />
                   
                   {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLive />} />
@@ -725,18 +724,6 @@ function AppContent() {
 
                   {/* 👮 Officer */}
                   <Route
-                    path="/officer/onboarding"
-                    element={<OfficerOnboarding />}
-                  />
-                  <Route
-                    path="/officer/orientation"
-                    element={<Orientation />}
-                  />
-                  <Route
-                    path="/officer/orientation/quiz"
-                    element={<OrientationQuiz />}
-                  />
-                  <Route
                     path="/lead-officer/review"
                     element={
                       <RequireRole roles={[UserRole.ADMIN, UserRole.TROLL_OFFICER]}>
@@ -755,7 +742,7 @@ function AppContent() {
                   <Route
                     path="/officer/lounge"
                     element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]} requireActive={true}>
+                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
                         <TrollOfficerLounge />
                       </RequireRole>
                     }
@@ -763,7 +750,7 @@ function AppContent() {
                   <Route
                     path="/officer/moderation"
                     element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]} requireActive={true}>
+                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
                         <OfficerModeration />
                       </RequireRole>
                     }
@@ -771,7 +758,7 @@ function AppContent() {
                   <Route
                     path="/officer/report/:id"
                     element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]} requireActive={true}>
+                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
                         <ReportDetailsPage />
                       </RequireRole>
                     }
@@ -779,7 +766,7 @@ function AppContent() {
                   <Route
                     path="/officer/scheduling"
                     element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]} requireActive={true}>
+                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
                         <OfficerScheduling />
                       </RequireRole>
                     }
@@ -789,7 +776,6 @@ function AppContent() {
                     element={
                       <RequireRole
                         roles={[UserRole.ADMIN, UserRole.TROLL_OFFICER, UserRole.LEAD_TROLL_OFFICER]}
-                        requireActive={true}
                       >
                         <OfficerLoungeStream />
                       </RequireRole>
@@ -806,19 +792,12 @@ function AppContent() {
                   <Route
                     path="/officer/owc"
                     element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]} requireActive={true}>
+                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
                         <OfficerOWCDashboard />
                       </RequireRole>
                     }
                   />
-                  <Route
-                    path="/officer/training-progress"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <OfficerTrainingProgress />
-                      </RequireRole>
-                    }
-                  />
+
                   <Route
                     path="/officer/payroll"
                     element={
@@ -991,6 +970,14 @@ function AppContent() {
                         />
                       )
                     })}
+                    <Route
+                      path="/admin/pool"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <AdminPoolTab />
+                        </RequireRole>
+                      }
+                    />
                     <Route
                       path="/admin/ban-management"
                       element={
@@ -1295,6 +1282,7 @@ function AppContent() {
                 </Suspense>
               </ErrorBoundary>
       </AppLayout>
+      </GameProvider>
 
       {/* Profile setup modal */}
       <ProfileSetupModal

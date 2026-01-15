@@ -8,7 +8,6 @@ import { applyGlowingUsername } from '../lib/perkEffects'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
-import { useCheckOfficerOnboarding } from '../hooks/useCheckOfficerOnboarding'
 
 interface ClickableUsernameProps {
   username: string
@@ -53,7 +52,6 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   const menuRef = useRef<HTMLDivElement>(null)
   const [showMenu, setShowMenu] = useState(false)
   const { user: currentUser, profile: currentUserProfile } = useAuthStore()
-  const { checkOnboarding } = useCheckOfficerOnboarding()
   
   const targetUserId = userId || profile?.id
   const userProfile = profile
@@ -268,9 +266,6 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
 
     // If staff/broadcaster and not clicking themselves, toggle menu
     if (canModerate) {
-        const canProceed = await checkOnboarding()
-        if (!canProceed) return
-
         setShowMenu(!showMenu)
         return
     }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { X, CheckCircle, XCircle, Award, User, Clock, FileText, Calendar, Crown } from 'lucide-react'
+import { CheckCircle, XCircle, Award, User, Clock, FileText, Calendar, Crown } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
 import WeeklyReportForm from '../../components/WeeklyReportForm'
 import WeeklyReportsList from '../../components/WeeklyReportsList'
@@ -14,9 +14,6 @@ type Applicant = {
   username: string
   email?: string
   role?: string
-  score: number | null
-  has_passed: boolean | null
-  completed_at: string | null
 }
 
 type Officer = {
@@ -38,12 +35,7 @@ type ActionLog = {
   created_at: string
 }
 
-type OrientationResult = {
-  submitted_answers: Record<string, string>
-  score: number
-  has_passed: boolean
-  completed_at: string
-}
+
 
 export function LeadOfficerDashboard() {
   const { profile } = useAuthStore()
@@ -53,9 +45,6 @@ export function LeadOfficerDashboard() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [empireApplications, setEmpireApplications] = useState<any[]>([])
 
-  const [viewingUser, setViewingUser] = useState<Applicant | Officer | null>(null)
-  const [viewResult, setViewResult] = useState<OrientationResult | null>(null)
-  const [viewLoading, setViewLoading] = useState(false)
   const [reason, setReason] = useState('')
   const [banReason, setBanReason] = useState('')
   const [loading, setLoading] = useState(false)
@@ -99,16 +88,14 @@ export function LeadOfficerDashboard() {
 
   const loadApplicants = async () => {
     try {
-      // Get troll_officer applications that have completed training and are pending approval
+      // Get troll_officer applications that are pending approval
       const { data: applications, error: applicationsError } = await supabase
         .from('applications')
         .select(`
           id,
           user_id,
-          training_score,
           experience,
           status,
-          training_passed,
           created_at,
           user_profiles!user_id (
             username,
@@ -119,7 +106,6 @@ export function LeadOfficerDashboard() {
           )
         `)
         .eq('type', 'troll_officer')
-        .eq('training_passed', true)
         .eq('status', 'pending')
         .neq('user_profiles.role', 'admin') // Exclude admin users from applicant list
 
@@ -133,9 +119,6 @@ export function LeadOfficerDashboard() {
           username: up?.username || 'Unknown',
           email: up?.email || '',
           role: up?.role || 'user',
-          score: app.training_score,
-          has_passed: app.training_passed,
-          completed_at: app.created_at,
         }
       })
 
@@ -285,34 +268,7 @@ export function LeadOfficerDashboard() {
     }
   }
 
-  const openResult = async (userId: string, userData: any) => {
-    setViewingUser(userData)
-    setViewLoading(true)
-    setViewResult(null)
 
-    try {
-      const { data, error } = await supabase
-        .from('officer_orientation_results')
-        .select('submitted_answers, score, has_passed, completed_at')
-        .eq('user_id', userId)
-        .single()
-
-      setViewLoading(false)
-
-      if (error) {
-        console.error('Error loading result:', error)
-        toast.error('Failed to load test results')
-        return
-      }
-
-      if (data) {
-        setViewResult(data as OrientationResult)
-      }
-    } catch (error: any) {
-      console.error('Error opening result:', error)
-      setViewLoading(false)
-    }
-  }
 
   const banOfficer = async (id: string) => {
     if (!currentUserId) {
@@ -602,9 +558,6 @@ export function LeadOfficerDashboard() {
               <thead className="text-purple-400">
                 <tr className="border-b border-purple-800">
                   <th className="text-left py-2">User</th>
-                  <th>Score</th>
-                  <th>Passed</th>
-                  <th>Completed</th>
                   <th className="text-right">Actions</th>
                 </tr>
               </thead>
@@ -617,30 +570,9 @@ export function LeadOfficerDashboard() {
                     <td className="py-2">
                       <ClickableUsername userId={a.id} username={a.username} />
                     </td>
-                    <td className="text-center">
-                      {a.score === null ? '-' : a.score}
-                    </td>
-                    <td className="text-center">
-                      {a.has_passed ? (
-                        <CheckCircle className="w-5 h-5 text-green-400 mx-auto" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-red-400 mx-auto" />
-                      )}
-                    </td>
-                    <td className="text-center text-xs">
-                      {a.completed_at
-                        ? new Date(a.completed_at).toLocaleString()
-                        : '-'}
-                    </td>
                     <td className="py-2">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          className="rounded-xl border border-purple-600 px-3 py-1 text-xs hover:bg-purple-800/60"
-                          onClick={() => openResult(a.id, a)}
-                        >
-                          View Test
-                        </button>
+
                         <button
                           type="button"
                           className="rounded-xl bg-emerald-600 px-3 py-1 text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
@@ -707,13 +639,7 @@ export function LeadOfficerDashboard() {
                     </td>
                     <td className="py-2">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          className="rounded-xl border border-purple-600 px-3 py-1 text-xs hover:bg-purple-800/60"
-                          onClick={() => openResult(o.id, o)}
-                        >
-                          View Test
-                        </button>
+
                         <button
                           type="button"
                           className="rounded-xl bg-red-700 px-3 py-1 text-xs font-semibold hover:bg-red-800 disabled:opacity-50"
@@ -897,70 +823,7 @@ export function LeadOfficerDashboard() {
         )}
       </section>
 
-      {/* Test viewer modal */}
-      {viewingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-purple-700 bg-black/90 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-purple-200">
-                Orientation Test – {viewingUser.username}
-              </h3>
-              <button
-                className="text-purple-300 hover:text-purple-100"
-                onClick={() => {
-                  setViewingUser(null)
-                  setViewResult(null)
-                }}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            {viewLoading && (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
-              </div>
-            )}
-            {!viewLoading && !viewResult && (
-              <p className="text-sm text-purple-400">
-                No recorded test found for this user.
-              </p>
-            )}
-            {!viewLoading && viewResult && (
-              <div className="space-y-4 text-sm">
-                <div className="text-purple-300">
-                  Score: <b>{viewResult.score}</b> •{' '}
-                  {viewResult.has_passed ? (
-                    <span className="text-green-400">✅ Passed</span>
-                  ) : (
-                    <span className="text-red-400">❌ Not Passed</span>
-                  )}{' '}
-                  • {new Date(viewResult.completed_at).toLocaleString()}
-                </div>
-                <div className="max-h-72 overflow-y-auto space-y-3 border-t border-purple-800 pt-4">
-                  {Object.entries(viewResult.submitted_answers || {}).map(
-                    ([qId, answer], idx) => (
-                      <div
-                        key={qId}
-                        className="rounded-xl border border-purple-800 bg-black/40 p-3"
-                      >
-                        <div className="text-xs text-purple-400 mb-1">
-                          Question ID: {qId}
-                        </div>
-                        <div className="text-xs font-semibold text-purple-200 mb-1">
-                          Answer {idx + 1}:
-                        </div>
-                        <div className="text-sm text-purple-100">
-                          {String(answer)}
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Test viewer modal removed */}
 
 
 

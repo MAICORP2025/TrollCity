@@ -260,9 +260,10 @@ export async function deductCoins(params: {
     }
 
     const amountParam = normalizedAmount.toString()
-    const { data: rpcBalance, error: deductError } = await sb.rpc('rpc_deduct_troll_coins', {
+    const { data: rpcBalance, error: deductError } = await sb.rpc('deduct_user_troll_coins', {
       p_user_id: userId,
-      p_amount: amountParam
+      p_amount: amountParam,
+      p_coin_type: coinType || 'troll_coins'
     })
 
     if (deductError) {
@@ -373,18 +374,17 @@ export async function addCoins(params: {
     }
 
     const currentBalance = profile.troll_coins ?? 0
-
     const newBalance = currentBalance + amount
 
-    // Update balance
-    const { error: updateError } = await sb
-      .from('user_profiles')
-      .update({ troll_coins: newBalance })
-      .eq('id', userId)
+    // Use add_troll_coins RPC for secure addition
+    const { error: updateError } = await sb.rpc('add_troll_coins', {
+      user_id_input: userId,
+      coins_to_add: amount
+    })
 
     if (updateError) {
-      console.error('addCoins: Failed to update balance', updateError)
-      return { success: false, newBalance: currentBalance, transaction: null, error: 'Update failed' }
+      console.error('addCoins: Failed to update balance via RPC', updateError)
+      return { success: false, newBalance: currentBalance, transaction: null, error: updateError.message }
     }
 
     // Record transaction

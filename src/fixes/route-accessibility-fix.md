@@ -50,10 +50,6 @@ All these pages should now work without redirecting to home:
 
 ### Officer Pages
 - `/officer/lounge` - Officer lounge
-- `/officer/orientation` - Orientation
-- `/officer/orientation/quiz` - Orientation quiz
-- `/officer/training` - Training simulator
-- `/officer/training-progress` - Training progress
 - `/officer/dashboard` - Officer dashboard
 
 ### Admin Pages

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { Bell, X, Dot, AlertTriangle, CheckCircle, Video, Gift, User, MessageCircle, Shield } from 'lucide-react'
+import { Bell, X, Dot, AlertTriangle, CheckCircle, Video, Gift, User, MessageCircle, Shield, Car } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Notification {
@@ -137,6 +137,7 @@ export default function Notifications() {
       case 'gift_received': return <Gift className="w-5 h-5 text-purple-500" />
       case 'message': return <MessageCircle className="w-5 h-5 text-cyan-500" />
       case 'announcement': return <Bell className="w-5 h-5 text-orange-500" />
+      case 'vehicle_auction': return <Car className="w-5 h-5 text-purple-400" />
       case 'officer_update': return <Shield className="w-5 h-5 text-red-400" />
       default: return <Bell className="w-5 h-5 text-gray-400" />
     }

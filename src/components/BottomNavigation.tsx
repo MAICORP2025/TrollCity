@@ -1,15 +1,17 @@
 import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, Store, Video, User, Shield, Gavel, Star, Zap, DollarSign, Users, AlertTriangle, Ban, Settings, Heart, LogOut, FileText, ShoppingBag, Briefcase, GraduationCap, Banknote, Gamepad2, Music, Swords, Camera } from 'lucide-react'
+import { Home, MessageSquare, Store, Video, User, Shield, Gavel, Star, Zap, DollarSign, Users, AlertTriangle, Ban, Settings, Heart, LogOut, FileText, ShoppingBag, Briefcase, Banknote, Gamepad2, Music, Swords, Camera } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { useGameNavigate } from './game/GameNavigation'
 
 export default function BottomNavigation() {
   const { user, profile, logout } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
+  const gameNavigate = useGameNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLiveMenuOpen, setIsLiveMenuOpen] = useState(false)
 
@@ -124,7 +126,6 @@ export default function BottomNavigation() {
           { category: 'Moderation', label: 'Kick User', icon: AlertTriangle, path: '/officer/kick' },
           { category: 'Moderation', label: 'Report', icon: Shield, path: '/officer/reports' },
           { category: 'Lounge', label: 'Officer Lounge', icon: Briefcase, path: '/officer/lounge' },
-          { category: 'Training', label: 'Training', icon: GraduationCap, path: '/officer/training' },
           { category: 'Finance', label: 'Payroll', icon: Banknote, path: '/officer/payroll' }
         ]
       case 'viewer':
@@ -186,9 +187,9 @@ export default function BottomNavigation() {
             }
 
             return (
-              <Link
+              <button
                 key={idx}
-                to={item.path!}
+                onClick={() => gameNavigate(item.path!)}
                 className={`flex flex-col items-center justify-center w-1/5 h-full transition-all active:scale-95 active:opacity-80 ${
                   item.active
                     ? 'text-troll-gold'
@@ -197,7 +198,7 @@ export default function BottomNavigation() {
               >
                 <Icon size={24} className="mb-1" />
                 <span className="text-[10px] font-medium truncate">{item.label}</span>
-              </Link>
+              </button>
             )
           })}
         </div>

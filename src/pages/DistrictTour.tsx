@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import DistrictOnboardingTour from '../components/DistrictOnboardingTour'
+import { useGameNavigate } from '../components/game/GameNavigation'
 
 export default function DistrictTour() {
   const { districtName } = useParams<{ districtName: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const gameNavigate = useGameNavigate()
   const [showTour, setShowTour] = useState(false)
   const [district, setDistrict] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -97,17 +99,16 @@ export default function DistrictTour() {
   const handleTourComplete = useCallback(() => {
     // Redirect back to the district's first feature or home
     if (district) {
-      // Navigate to first available feature in the district
       const features = getDistrictFeatures(district.name)
       if (features.length > 0) {
-        navigate(features[0].route_path)
+        gameNavigate(features[0].route_path)
       } else {
-        navigate('/live')
+        gameNavigate('/live')
       }
     } else {
-      navigate('/live')
+      gameNavigate('/live')
     }
-  }, [district, navigate, getDistrictFeatures])
+  }, [district, gameNavigate, getDistrictFeatures])
 
   const handleTourClose = useCallback(() => {
     setShowTour(false)

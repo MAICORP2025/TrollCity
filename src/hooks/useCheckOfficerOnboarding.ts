@@ -1,21 +1,20 @@
-import { useCallback } from 'react'
-import { useAuthStore } from '../lib/store'
+import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
+import { useAuthStore } from '@/lib/store'
 
 export function useCheckOfficerOnboarding() {
-  const { user, profile } = useAuthStore()
+  const navigate = useNavigate()
+  const { profile } = useAuthStore()
 
-  const checkOnboarding = useCallback(async (): Promise<boolean> => {
-    if (!user || !profile) return false
-
-   // Bypass orientation check for all users to allow everyone to access features
-   // Admins always bypass this check
-   if (profile.is_admin || profile.role === 'admin') {
-     return true
-   }
-
-   // Allow all users to bypass officer orientation
-   return true
-  }, [user, profile])
+  const checkOnboarding = async () => {
+    if (profile?.is_troll_officer && !profile?.is_officer_active) {
+      toast.error('Complete officer orientation before using this feature')
+      navigate('/officer/orientation')
+      return false
+    }
+    return true
+  }
 
   return { checkOnboarding }
 }
+

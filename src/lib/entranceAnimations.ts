@@ -298,7 +298,72 @@ async function showTrollRollupAnimation(targetElement?: HTMLElement) {
 
   const car = document.createElement('div');
   car.className = 'entrance-animation troll-rollup';
-  car.innerHTML = '🚗';
+  car.innerHTML = '';
+  car.style.cssText += `
+    width: 120px;
+    height: 50px;
+    border-radius: 14px;
+    background: linear-gradient(to right, #4b5563, #020617);
+    box-shadow: 0 0 24px rgba(15, 23, 42, 0.9);
+    border: 2px solid rgba(148, 163, 184, 0.8);
+  `;
+
+  const roof = document.createElement('div');
+  roof.style.cssText = `
+    position: absolute;
+    left: 18px;
+    right: 32px;
+    top: -18px;
+    height: 26px;
+    border-radius: 10px 10px 4px 4px;
+    background: linear-gradient(to bottom, rgba(248, 250, 252, 0.75), rgba(15, 23, 42, 0.95));
+    border: 1px solid rgba(148, 163, 184, 0.8);
+  `;
+  car.appendChild(roof);
+
+  const headlight = document.createElement('div');
+  headlight.style.cssText = `
+    position: absolute;
+    right: -10px;
+    top: 16px;
+    width: 18px;
+    height: 10px;
+    border-radius: 6px;
+    background: rgba(253, 224, 71, 0.9);
+    box-shadow: 0 0 18px rgba(253, 224, 71, 0.9);
+  `;
+  car.appendChild(headlight);
+
+  const taillight = document.createElement('div');
+  taillight.style.cssText = `
+    position: absolute;
+    left: -8px;
+    top: 20px;
+    width: 12px;
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(248, 113, 113, 0.95);
+    box-shadow: 0 0 14px rgba(248, 113, 113, 0.9);
+  `;
+  car.appendChild(taillight);
+
+  const frontWheel = document.createElement('div');
+  frontWheel.style.cssText = `
+    position: absolute;
+    bottom: -12px;
+    left: 18px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #020617;
+    border: 3px solid #4b5563;
+    box-shadow: 0 0 12px rgba(15, 23, 42, 0.9);
+  `;
+  car.appendChild(frontWheel);
+
+  const rearWheel = frontWheel.cloneNode(true) as HTMLDivElement;
+  rearWheel.style.left = '72px';
+  car.appendChild(rearWheel);
 
   car.style.left = '-100px';
   car.style.bottom = '20px';
@@ -999,7 +1064,6 @@ export const ENTRANCE_ANIMATION_CSS = `
 }
 
 .troll-rollup {
-  font-size: 3rem;
   bottom: 20px;
 }
 

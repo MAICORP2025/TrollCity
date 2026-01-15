@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { useGameNavigate } from './game/GameNavigation'
 import {
   MapPin,
   Home,
@@ -38,9 +39,9 @@ interface DistrictFeature {
 }
 
 export default function DistrictNavigation() {
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const location = useLocation()
-  const navigate = useNavigate()
+  const gameNavigate = useGameNavigate()
   const [districts, setDistricts] = useState<District[]>([])
   const [expandedDistricts, setExpandedDistricts] = useState<Set<string>>(new Set())
   const [currentDistrict, setCurrentDistrict] = useState<string | null>(null)
@@ -162,16 +163,19 @@ export default function DistrictNavigation() {
 
     // If district not completed onboarding, show tour
     if (!district.onboarding_completed && district.visit_count === 0) {
-      // Navigate to first feature in district
       const features = getDistrictFeatures(district.name)
       if (features.length > 0) {
-        navigate(features[0].route_path)
+        gameNavigate(features[0].route_path)
       }
     }
   }
 
   const isFeatureActive = (routePath: string) => {
     return location.pathname === routePath
+  }
+
+  if (!profile) {
+    return null
   }
 
   if (loading) {
@@ -188,13 +192,59 @@ export default function DistrictNavigation() {
 
   return (
     <div className="w-64 min-h-screen bg-[#0A0A14] text-white flex flex-col border-r border-[#2C2C2C] shadow-xl">
-      {/* Header */}
       <div className="p-4 border-b border-[#2C2C2C]">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <MapPin className="w-5 h-5 text-purple-400" />
-          City Districts
-        </h2>
-        <p className="text-xs text-gray-400 mt-1">Navigate Troll City</p>
+        <div className="bg-gradient-to-br from-[#15122b] via-[#110d24] to-[#080516] rounded-2xl p-4 shadow-troll-glow border border-purple-500/40">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative">
+              <img
+                src={profile.avatar_url || `https://ui-avatars.com/api/?name=${profile.username}&background=random`}
+                alt={profile.username}
+                className="w-10 h-10 rounded-full border border-purple-500/60"
+              />
+              <div className="absolute -bottom-1 -right-1 bg-purple-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-[#0A0814]">
+                {profile.level || 1}
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-semibold text-sm truncate">{profile.username}</h3>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/40">
+                  {profile.role === 'admin' ? 'Admin' : profile.title || 'Citizen'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-[10px] text-gray-400 mb-1">
+              <span>XP</span>
+              <span>{(profile.xp || 0).toLocaleString()}</span>
+            </div>
+            <div className="h-1.5 bg-black/40 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-amber-400 rounded-full"
+                style={{ width: `${Math.min(((profile.xp || 0) % 1000) / 10, 100)}%` }}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 text-yellow-400">
+                <span className="w-4 h-4 rounded-full bg-gradient-to-br from-yellow-300 to-yellow-500 flex items-center justify-center text-[9px] font-bold text-black border border-yellow-200">
+                  C
+                </span>
+                <span>{(profile.troll_coins || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-1 text-blue-300">
+                <span className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-[9px] font-bold border border-blue-300">
+                  👑
+                </span>
+                <span>{profile.perk_tokens || 0}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Districts List */}
@@ -251,9 +301,9 @@ export default function DistrictNavigation() {
               {isExpanded && (
                 <div className="ml-6 space-y-1">
                   {features.map((feature, index) => (
-                    <Link
+                    <button
                       key={index}
-                      to={feature.route_path}
+                      onClick={() => gameNavigate(feature.route_path)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
                         isFeatureActive(feature.route_path)
                           ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
@@ -263,15 +313,14 @@ export default function DistrictNavigation() {
                       <div className="w-2 h-2 rounded-full flex-shrink-0"
                            style={{ backgroundColor: district.color }} />
                       <span className="text-sm truncate">{feature.feature_name}</span>
-                    </Link>
+                    </button>
                   ))}
 
                   {/* Onboarding Tour Button */}
                   {!district.onboarding_completed && (
                     <button
                       onClick={() => {
-                        // Start onboarding tour for this district
-                        navigate(`/districts/${district.name}/tour`)
+                        gameNavigate(`/districts/${district.name}/tour`)
                       }}
                       className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#1F1F2E] text-yellow-400 hover:text-yellow-300 transition-all"
                     >

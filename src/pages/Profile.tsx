@@ -3,11 +3,12 @@ import { useParams, useNavigate, useInRouterContext } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import LiveAvatar from '../components/LiveAvatar';
-import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown } from 'lucide-react';
+import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car } from 'lucide-react';
 import { toast } from 'sonner';
 import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
 import { canMessageAdmin } from '@/lib/perkEffects';
+import { cars } from '../data/vehicles';
 
 function ProfileInner() {
   const { username, userId } = useParams();
@@ -128,11 +129,17 @@ function ProfileInner() {
   // Move const declarations before useEffects that use them
   const isOwnProfile = currentUser?.id === profile?.id;
   const canSeeFullProfile = isOwnProfile;
+  const isAdminViewer =
+    viewerRole === 'admin' ||
+    viewerRole === 'troll_officer' ||
+    viewerRole === 'lead_troll_officer';
+  const [ownedCar, setOwnedCar] = useState<any | null>(null);
   const tabOptions = [
     { key: 'posts', label: 'Posts', show: true },
     { key: 'inventory', label: 'Inventory & Perks', show: canSeeFullProfile },
     { key: 'earnings', label: 'Earnings', show: canSeeFullProfile },
     { key: 'purchases', label: 'Purchase History', show: canSeeFullProfile },
+    { key: 'admin_titles', label: 'Admin Titles', show: canSeeFullProfile && isAdminViewer },
     { key: 'settings', label: 'Settings', show: isOwnProfile },
   ];
   const activeTabLabel = tabOptions.find((option) => option.key === activeTab)?.label || 'Posts';
@@ -146,6 +153,15 @@ function ProfileInner() {
       fetchPurchases(profile.id);
     }
   }, [activeTab, profile?.id, isOwnProfile]);
+
+  useEffect(() => {
+    if (profile?.active_vehicle) {
+      const car = cars.find(c => c.id === profile.active_vehicle);
+      setOwnedCar(car || null);
+    } else {
+      setOwnedCar(null);
+    }
+  }, [profile]);
 
   const handleRepurchasePerk = async (perk: any) => {
     if (!currentUser || currentUser.id !== profile.id) return;
@@ -837,8 +853,8 @@ function ProfileInner() {
              </div>
            )}
 
-           {activeTab === 'inventory' && (
-             <div className="space-y-8">
+          {activeTab === 'inventory' && (
+            <div className="space-y-8">
                {/* Perks */}
                <div>
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-400"/> Active Perks</h3>
@@ -917,10 +933,78 @@ function ProfileInner() {
                        </div>
                     ))}
                     {inventory.insurance.length === 0 && <p className="text-gray-500 text-sm">No insurance found.</p>}
-                  </div>
                </div>
              </div>
-           )}
+
+              <div>
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                  <Car className="w-5 h-5 text-red-400" />
+                  Vehicle
+                </h3>
+                <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 flex items-center justify-between gap-4">
+                  {ownedCar ? (
+                    <>
+                      <div className="flex items-center gap-4">
+                        {ownedCar.image ? (
+                          <div className="w-28 h-16 flex items-center justify-center bg-zinc-950 rounded-xl border border-zinc-700 overflow-hidden p-1">
+                            <img 
+                              src={ownedCar.image} 
+                              alt={ownedCar.name} 
+                              className="w-full h-full object-contain drop-shadow-lg" 
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className="w-24 h-14 rounded-xl border border-zinc-700 shadow-inner"
+                            style={{
+                              background:
+                                ownedCar.colorFrom && ownedCar.colorTo
+                                  ? `linear-gradient(90deg, ${ownedCar.colorFrom}, ${ownedCar.colorTo})`
+                                  : 'linear-gradient(90deg, #4b5563, #020617)'
+                            }}
+                          />
+                        )}
+                        <div>
+                          <p className="font-semibold text-white">
+                            {ownedCar.name || 'Equipped Vehicle'}
+                          </p>
+                          {ownedCar.tier && (
+                            <p className="text-xs text-gray-400">
+                              Tier: {ownedCar.tier}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {isOwnProfile && (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/dealership')}
+                          className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium"
+                        >
+                          Manage Vehicle
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between w-full">
+                      <p className="text-sm text-gray-400">
+                        No vehicle equipped. Visit the dealership to purchase one.
+                      </p>
+                      {isOwnProfile && (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/dealership')}
+                          className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium"
+                        >
+                          Visit Dealership
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
            {activeTab === 'earnings' && (
              <div className="space-y-6">
@@ -1001,6 +1085,34 @@ function ProfileInner() {
                       <div className="p-8 text-center text-gray-500">No recent purchases found.</div>
                    )}
                 </div>
+             </div>
+           )}
+
+           {activeTab === 'admin_titles' && canSeeFullProfile && isAdminViewer && (
+             <div className="space-y-6">
+               <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
+                 <h3 className="text-lg font-bold mb-4">Admin Titles</h3>
+                 <div className="space-y-3 text-sm text-gray-300">
+                   <div className="flex items-center justify-between">
+                     <span>System role</span>
+                     <span className="px-3 py-1 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs font-semibold uppercase tracking-wide">
+                       {profile.role || 'user'}
+                     </span>
+                   </div>
+                   <div className="flex items-center justify-between">
+                     <span>Troll role</span>
+                     <span className="px-3 py-1 rounded-full border border-indigo-500/40 bg-indigo-500/10 text-xs font-semibold uppercase tracking-wide">
+                       {profile.troll_role || 'none'}
+                     </span>
+                   </div>
+                   <div className="flex items-center justify-between">
+                     <span>Lead officer</span>
+                     <span className="px-3 py-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-xs font-semibold uppercase tracking-wide">
+                       {profile.is_lead_officer ? 'Yes' : 'No'}
+                     </span>
+                   </div>
+                 </div>
+               </div>
              </div>
            )}
 

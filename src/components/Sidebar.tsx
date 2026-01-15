@@ -27,6 +27,7 @@ import {
 
 import { useAuthStore } from '@/lib/store'
 import { supabase, UserRole } from '@/lib/supabase'
+import { useCoins } from '@/lib/hooks/useCoins'
 
 export default function Sidebar() {
   const { profile } = useAuthStore()
@@ -41,6 +42,8 @@ export default function Sidebar() {
   const [showCourtModal, setShowCourtModal] = useState(false)
   const [showStatsPanel, setShowStatsPanel] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  const { balances, loading } = useCoins()
 
   // Role logic for Go Live access
   const canGoLive =
@@ -190,7 +193,7 @@ export default function Sidebar() {
           <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/10">
             <div className="flex items-center gap-1.5 text-xs text-yellow-400">
               <Coins size={14} />
-              <span>{profile.troll_coins?.toLocaleString() || 0}</span>
+              <span>{loading ? '...' : balances.troll_coins.toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-blue-400">
               <Crown size={14} />
@@ -216,7 +219,7 @@ export default function Sidebar() {
         {/* Main Group */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "Main"} isCollapsed={isSidebarCollapsed}>
           <SidebarItem icon={Home} label="Home" to="/" active={isActive('/')} collapsed={isSidebarCollapsed} />
-          <SidebarItem icon={Building2} label="Troll Town" to="/trollstown" active={isActive('/trollstown')} collapsed={isSidebarCollapsed} />
+          <SidebarItem icon={Building2} label="Troll Town" to="/trolls-town" active={isActive('/trolls-town')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={FileText} label="The Wall" to="/wall" active={isActive('/wall')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} collapsed={isSidebarCollapsed} />

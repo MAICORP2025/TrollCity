@@ -46,6 +46,8 @@ type UpgradeDefinition = {
   tasksRequiredTotal: number
 }
 
+import { formatCompactNumber } from '../lib/utils'
+
 const STARTER_HOME_BASE_VALUE = 1500
 const UPGRADE_ROI = 0.75
 const BASE_MONTHLY_RATE = -0.005
@@ -216,12 +218,69 @@ const HOME_TIERS = [
     description: 'High-tier Troll Town home with elite potential.'
   },
   {
+    id: 'tier_50m',
+    name: 'Troll Mansion',
+    price: 50_000_000,
+    description: 'A luxurious mansion for the elite of Troll City.'
+  },
+  {
     id: 'tier_100m',
     name: 'Mega Estate',
     price: 100_000_000,
     description: 'Ultra-rare estate for top Trolls with massive balances.'
   }
 ]
+
+type HomeVisualTier = 'starter' | 'mid' | 'luxury' | 'apartment' | 'mansion' | 'mega'
+
+const getHomeVisualTier = (value: number | null, isStarter: boolean | null): HomeVisualTier => {
+  if (isStarter) return 'starter'
+  const val = value || 0
+  if (val >= 100_000_000) return 'mega'
+  if (val >= 50_000_000) return 'mansion'
+  if (val >= 10_000_000) return 'luxury'
+  if (val >= 1_000_000) return 'apartment'
+  if (val >= 250_000) return 'mid'
+  return 'starter'
+}
+
+const HomeVisual: React.FC<{ value: number | null; isStarter: boolean | null }> = ({
+  value,
+  isStarter
+}) => {
+  const tier = getHomeVisualTier(value, isStarter)
+  const collageUrl =
+    import.meta.env.VITE_GEMINI_HOUSE_COLLAGE_URL || '/assets/house_options.jpg'
+
+  // Map tiers to background positions on the collage
+  // Assuming a grid layout in the source image
+  const bgPosition = {
+    starter: '0% 0%',
+    mid: '33% 0%',
+    apartment: '66% 0%',
+    luxury: '100% 0%',
+    mansion: '0% 50%',
+    mega: '50% 50%'
+  }[tier] || 'center'
+
+  return (
+    <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden shadow-lg shadow-slate-900/70 bg-slate-900">
+      <div 
+        className="w-full h-full transition-transform duration-500 hover:scale-105"
+        style={{
+          backgroundImage: `url('${collageUrl}')`,
+          backgroundSize: '300% auto', // Zoom in to show just one house from the collage
+          backgroundPosition: bgPosition,
+          backgroundRepeat: 'no-repeat'
+        }}
+      />
+      
+      {/* Overlay for depth */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute bottom-1 left-0 right-0 h-2 bg-black/70 blur-sm" />
+    </div>
+  )
+}
 
 const TrollsTownPage: React.FC = () => {
   const { user, profile } = useAuthStore()
@@ -594,20 +653,25 @@ const TrollsTownPage: React.FC = () => {
     }
 
     try {
-      const newBalance = balance - tier.price
+      // 1. Deduct coins first using the secure RPC wrapper
+      const result = await deductCoins({
+        userId: user.id,
+        amount: tier.price,
+        type: 'troll_town_purchase',
+        coinType: 'troll_coins',
+        description: 'Troll Town system home purchase',
+        metadata: {
+          tier_id: tier.id,
+          tier_name: tier.name
+        }
+      })
 
-      const { error: updateError } = await supabase
-        .from('user_profiles')
-        .update({
-          troll_coins: newBalance,
-          total_spent_coins: (profile.total_spent_coins || 0) + tier.price
-        })
-        .eq('id', user.id)
-
-      if (updateError) {
-        throw updateError
+      if (!result.success) {
+        toast.error(result.error || 'Failed to purchase home')
+        return
       }
 
+      // 2. Create the property
       const { data: newProperty, error: createError } = await supabase
         .from('properties')
         .insert({
@@ -622,10 +686,20 @@ const TrollsTownPage: React.FC = () => {
         .select('*')
         .single()
 
+      if (newProperty) {
+        try {
+          localStorage.setItem(`trollcity_home_owned_${user.id}`, 'true')
+        } catch {}
+      }
+
       if (createError) {
+        // Critical: Failed to create property after deduction.
+        console.error('CRITICAL: Property creation failed after deduction', createError)
+        toast.error('Error creating property. Please contact support.')
         throw createError
       }
 
+      // 3. Create deed
       const { data: deed, error: deedError } = await supabase
         .from('deeds')
         .insert({
@@ -636,26 +710,24 @@ const TrollsTownPage: React.FC = () => {
         .single()
 
       if (deedError) {
-        throw deedError
+        console.error('Failed to create deed', deedError)
+      } else {
+        if (result.transaction && result.transaction.id) {
+           await supabase
+             .from('coin_transactions')
+             .update({
+               metadata: {
+                 ...result.transaction.metadata,
+                 property_id: newProperty.id,
+                 deed_id: deed.id
+               }
+             })
+             .eq('id', result.transaction.id)
+        }
       }
 
-      const tx = await recordCoinTransaction({
-        userId: user.id,
-        amount: -tier.price,
-        type: 'troll_town_purchase',
-        coinType: 'troll_coins',
-        description: 'Troll Town system home purchase',
-        metadata: {
-          property_id: newProperty.id,
-          deed_id: deed.id,
-          tier_id: tier.id,
-          tier_name: tier.name
-        },
-        balanceAfter: newBalance
-      })
-
-      if (tx) {
-        setTransactions(prev => [tx, ...prev].slice(0, 20))
+      if (result.transaction) {
+        setTransactions(prev => [result.transaction, ...prev].slice(0, 20))
       }
 
       const updatedOwned = [...ownedProperties, newProperty as PropertyRow]
@@ -703,89 +775,79 @@ const TrollsTownPage: React.FC = () => {
 
     setBuyingId(property.id)
     try {
-      const { data: sellerProfile, error: sellerError } = await supabase
-        .from('user_profiles')
-        .select('id, troll_coins')
-        .eq('id', property.owner_user_id)
-        .maybeSingle()
+      // 1. Process payment via spend_coins RPC (handles deduction and transfer)
+      // Step 1: Deduct full amount from buyer
+      const deductResult = await deductCoins({
+        userId: user.id,
+        amount: ask,
+        type: 'troll_town_purchase',
+        coinType: 'troll_coins',
+        description: 'Troll Town home purchase',
+        metadata: {
+          property_id: property.id,
+          seller_id: property.owner_user_id,
+          ask_price: ask
+        }
+      })
 
-      if (sellerError) {
-        throw sellerError
+      if (!deductResult.success) {
+        toast.error(deductResult.error || 'Payment failed')
+        return
       }
 
-      const sellerBalance = Number(sellerProfile?.troll_coins || 0)
+      // Step 2: Add net amount to seller
+      const { error: addError } = await supabase.rpc('add_troll_coins', {
+        user_id_input: property.owner_user_id,
+        coins_to_add: sellerNet
+      })
 
-      const newBuyerBalance = currentBalance - ask
-      const newSellerBalance = sellerBalance + sellerNet
+      if (addError) {
+        console.error('Failed to pay seller', addError)
+        // Critical error: Buyer paid, seller didn't get paid.
+      } else {
+        // Log seller transaction
+        await recordCoinTransaction({
+            userId: property.owner_user_id,
+            amount: sellerNet,
+            type: 'troll_town_sale',
+            coinType: 'troll_coins',
+            description: 'Troll Town home sale',
+            metadata: {
+                property_id: property.id,
+                buyer_id: user.id,
+                ask_price: ask,
+                deed_fee: deedFee
+            }
+        })
+      }
 
-      const { data: poolRow, error: poolError } = await supabase
+      // Step 3: Add fee to admin pool
+      const { data: poolRow } = await supabase
         .from('admin_pool')
         .select('id, trollcoins_balance')
         .maybeSingle()
-
-      if (poolError && poolError.code !== 'PGRST116' && poolError.code !== 'PGRST106') {
-        throw poolError
-      }
-
-      const poolId = poolRow?.id
-      const currentPoolBalance = Number(poolRow?.trollcoins_balance || 0)
-      const newPoolBalance = currentPoolBalance + deedFee
-
-      const updates: any[] = []
-
-      updates.push(
-        supabase
-          .from('user_profiles')
-          .update({
-            troll_coins: newBuyerBalance,
-            total_spent_coins: (profile.total_spent_coins || 0) + ask
-          })
-          .eq('id', user.id)
-          .then(result => result)
-      )
-
-      updates.push(
-        supabase
-          .from('user_profiles')
-          .update({
-            troll_coins: newSellerBalance,
-            total_earned_coins: (sellerProfile as any)?.total_earned_coins
-              ? Number((sellerProfile as any).total_earned_coins) + sellerNet
-              : sellerNet
-          })
-          .eq('id', property.owner_user_id)
-          .then(result => result)
-      )
-
-      if (poolId) {
-        updates.push(
-          supabase
+      
+      if (poolRow) {
+         await supabase
             .from('admin_pool')
-            .update({ trollcoins_balance: newPoolBalance })
-            .eq('id', poolId)
-            .then(result => result)
-        )
+            .update({ trollcoins_balance: (poolRow.trollcoins_balance || 0) + deedFee })
+            .eq('id', poolRow.id)
       } else {
-        updates.push(
-          supabase
+         await supabase
             .from('admin_pool')
-            .insert({ trollcoins_balance: newPoolBalance })
-            .then(result => result)
-        )
+            .insert({ trollcoins_balance: deedFee })
       }
 
-      updates.push(
-        supabase
-          .from('properties')
-          .update({
-            owner_user_id: user.id,
-            is_listed: false,
-            ask_price: null,
-            is_starter: false
-          })
-          .eq('id', property.id)
-          .then(result => result)
-      )
+      // Step 4: Transfer Property & Deed
+      await supabase
+        .from('properties')
+        .update({
+          owner_user_id: user.id,
+          is_listed: false,
+          ask_price: null,
+          is_starter: false
+        })
+        .eq('id', property.id)
 
       const { data: existingDeed } = await supabase
         .from('deeds')
@@ -794,36 +856,27 @@ const TrollsTownPage: React.FC = () => {
         .maybeSingle()
 
       let deedId = existingDeed?.id
-
       if (!deedId) {
-        const { data: newDeed, error: newDeedError } = await supabase
+        const { data: newDeed } = await supabase
           .from('deeds')
           .insert({
             property_id: property.id,
             current_owner_user_id: user.id
           })
-          .select('*')
+          .select()
           .single()
-        if (newDeedError) {
-          throw newDeedError
-        }
-        deedId = newDeed.id
+        deedId = newDeed?.id
       } else {
-        updates.push(
-          supabase
-            .from('deeds')
-            .update({
-              current_owner_user_id: user.id
-            })
-            .eq('id', deedId)
-            .then(result => result)
-        )
+        await supabase
+          .from('deeds')
+          .update({ current_owner_user_id: user.id })
+          .eq('id', deedId)
       }
 
-      updates.push(
-        supabase
-          .from('deed_transfers')
-          .insert({
+      // Step 5: Record Deed Transfer
+      await supabase
+        .from('deed_transfers')
+        .insert({
             deed_id: deedId,
             property_id: property.id,
             seller_user_id: property.owner_user_id,
@@ -832,51 +885,10 @@ const TrollsTownPage: React.FC = () => {
             deed_fee: deedFee,
             seller_net: sellerNet,
             system_value_at_sale: systemVal
-          })
-          .then(result => result)
-      )
+        })
 
-      await Promise.all(updates)
-
-      const purchaseTx = await recordCoinTransaction({
-        userId: user.id,
-        amount: -ask,
-        type: 'troll_town_purchase',
-        coinType: 'troll_coins',
-        description: 'Troll Town home purchase',
-        metadata: {
-          property_id: property.id,
-          deed_id: deedId,
-          deed_fee: deedFee,
-          seller_net: sellerNet,
-          system_value_at_sale: systemVal,
-          ask_price: ask
-        },
-        balanceAfter: newBuyerBalance
-      })
-
-      const saleTx = await recordCoinTransaction({
-        userId: property.owner_user_id,
-        amount: sellerNet,
-        type: 'troll_town_sale',
-        coinType: 'troll_coins',
-        description: 'Troll Town home sale',
-        metadata: {
-          property_id: property.id,
-          deed_id: deedId,
-          deed_fee: deedFee,
-          seller_net: sellerNet,
-          system_value_at_sale: systemVal,
-          ask_price: ask
-        },
-        balanceAfter: newSellerBalance
-      })
-
-      const newTransactions: any[] = []
-      if (purchaseTx) newTransactions.push(purchaseTx)
-      if (saleTx) newTransactions.push(saleTx)
-      if (newTransactions.length > 0) {
-        setTransactions(prev => [...newTransactions, ...prev].slice(0, 20))
+      if (deductResult.transaction) {
+        setTransactions(prev => [deductResult.transaction, ...prev].slice(0, 20))
       }
 
       await refreshCoins()
@@ -1106,7 +1118,7 @@ const TrollsTownPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <Coins className="w-4 h-4 text-yellow-400" />
               <span className="text-lg font-semibold text-yellow-300">
-                {effectiveBalance.toLocaleString()}
+                {formatCompactNumber(effectiveBalance)}
               </span>
             </div>
           </div>
@@ -1131,9 +1143,14 @@ const TrollsTownPage: React.FC = () => {
                     key={tier.id}
                     className="border border-white/10 rounded-xl p-4 bg-black/30 flex flex-col justify-between gap-3"
                   >
-                    <div>
-                      <p className="text-sm font-semibold text-white">{tier.name}</p>
-                      <p className="text-[11px] text-gray-400 mt-1">{tier.description}</p>
+                    <div className="space-y-2">
+                      <HomeVisual value={tier.price} isStarter={false} />
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{tier.name}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">{tier.description}</p>
+                        </div>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between mt-2">
                       <div>
@@ -1141,7 +1158,7 @@ const TrollsTownPage: React.FC = () => {
                           Price
                         </p>
                         <p className="text-lg font-semibold text-yellow-300">
-                          {tier.price.toLocaleString()} TC
+                          {formatCompactNumber(tier.price)} TC
                         </p>
                       </div>
                       <button
@@ -1161,8 +1178,11 @@ const TrollsTownPage: React.FC = () => {
             <div className="bg-black/40 border border-purple-500/30 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-purple-600/40 flex items-center justify-center">
-                    <Home className="w-5 h-5 text-purple-200" />
+                  <div className="w-24">
+                    <HomeVisual
+                      value={myProperty?.base_value ?? null}
+                      isStarter={myProperty?.is_starter ?? null}
+                    />
                   </div>
                   <div>
                     <h2 className="text-xl font-semibold">My Home</h2>
@@ -1185,18 +1205,51 @@ const TrollsTownPage: React.FC = () => {
                         <button
                           key={p.id}
                           onClick={() => handleSelectProperty(p)}
-                          className={`px-3 py-1.5 rounded-full text-xs border ${
+                          className={`px-3 py-1.5 rounded-full text-xs border flex items-center gap-1.5 ${
                             isActive
                               ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200'
                               : 'border-white/10 bg-black/40 text-gray-300 hover:border-emerald-400'
                           }`}
                         >
-                          Home {p.id.slice(0, 6).toUpperCase()}
-                          {p.is_starter ? ' • Starter' : ''}
+                          <div className="w-16">
+                            <HomeVisual value={p.base_value} isStarter={p.is_starter} />
+                          </div>
+                          <span>
+                            Home {p.id.slice(0, 6).toUpperCase()}
+                            {p.is_starter ? ' • Starter' : ''}
+                          </span>
                         </button>
                       )
                     })}
                   </div>
+
+                  {/* My Deed Section */}
+                  {myDeed && (
+                    <div className="mt-4 p-4 border border-yellow-500/30 bg-yellow-900/10 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                         <h3 className="text-sm font-bold text-yellow-400 uppercase tracking-widest">
+                           Property Deed
+                         </h3>
+                         <div className="text-[10px] text-yellow-600/70 font-mono">
+                           ID: {myDeed.id.slice(0, 8)}...
+                         </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-xs text-yellow-200/80">
+                         <div>
+                           <p className="text-yellow-600 uppercase text-[10px]">Owner</p>
+                           <p className="font-medium truncate">{profile?.username || 'You'}</p>
+                         </div>
+                         <div>
+                           <p className="text-yellow-600 uppercase text-[10px]">Issued</p>
+                           <p className="font-medium">{new Date(myDeed.created_at).toLocaleDateString()}</p>
+                         </div>
+                         <div className="col-span-2">
+                           <p className="text-yellow-600 uppercase text-[10px]">Property ID</p>
+                           <p className="font-mono text-[10px]">{myDeed.property_id}</p>
+                         </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1229,7 +1282,7 @@ const TrollsTownPage: React.FC = () => {
                         <TrendingUp className="w-4 h-4 text-emerald-400" />
                       </div>
                       <div className="text-2xl font-bold text-emerald-300">
-                        {systemValue.toLocaleString()}
+                        {formatCompactNumber(systemValue)}
                       </div>
                       <p className="text-[10px] text-gray-500 mt-1">
                         Auto-calculated from base value, condition, upgrades, and inflation.
@@ -1257,7 +1310,7 @@ const TrollsTownPage: React.FC = () => {
                         <ShoppingBag className="w-4 h-4 text-pink-400" />
                       </div>
                       <div className="text-2xl font-bold text-pink-300">
-                        {(myProperty.upgrade_spend_total || 0).toLocaleString()}
+                        {formatCompactNumber(myProperty.upgrade_spend_total || 0)}
                       </div>
                       <p className="text-[10px] text-gray-500 mt-1">
                         Only a portion of this is reflected in value to keep realism.
@@ -1273,10 +1326,10 @@ const TrollsTownPage: React.FC = () => {
                             Listed For Sale
                           </p>
                           <div className="text-lg font-semibold text-yellow-300">
-                            {myProperty.ask_price.toLocaleString()} TrollCoins
+                            {formatCompactNumber(myProperty.ask_price)} TrollCoins
                           </div>
                           <p className="text-[11px] text-gray-500">
-                            System Max Allowed: {maxAskPrice.toLocaleString()} TrollCoins
+                            System Max Allowed: {formatCompactNumber(maxAskPrice)} TrollCoins
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -1319,8 +1372,8 @@ const TrollsTownPage: React.FC = () => {
                           </button>
                         </div>
                         <div className="text-[11px] text-gray-500 md:text-right">
-                          Max allowed listing price: {maxAskPrice.toLocaleString()} TrollCoins
-                        </div>
+                            Max allowed listing price: {formatCompactNumber(maxAskPrice)} TrollCoins
+                          </div>
                       </>
                     )}
                   </div>
@@ -1358,7 +1411,7 @@ const TrollsTownPage: React.FC = () => {
                               <div className="text-right">
                                 <p className="text-xs text-gray-400">{up.category}</p>
                                 <p className="text-sm font-semibold text-yellow-300">
-                                  {up.cost.toLocaleString()} TC
+                                  {formatCompactNumber(up.cost)} TC
                                 </p>
                               </div>
                             </div>
@@ -1377,7 +1430,7 @@ const TrollsTownPage: React.FC = () => {
                         <p className="text-[11px] text-gray-400 uppercase tracking-widest">
                           Active Tasks
                         </p>
-                        {upgrades.length === 0 && (
+                    {upgrades.length === 0 && (
                           <p className="text-xs text-gray-500">
                             No upgrades in progress yet. Start one to see tasks here.
                           </p>
@@ -1478,14 +1531,19 @@ const TrollsTownPage: React.FC = () => {
                         className="border border-white/10 rounded-lg p-3 bg-black/30 space-y-2"
                       >
                         <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-semibold">
-                              Home {row.id.slice(0, 6).toUpperCase()}
-                            </p>
-                            <p className="text-[11px] text-gray-500">
-                              Starter: {row.is_starter ? 'Yes' : 'No'} • Created{' '}
-                              {new Date(row.created_at).toLocaleDateString()}
-                            </p>
+                          <div className="flex items-center gap-3">
+                            <div className="w-20">
+                              <HomeVisual value={row.base_value} isStarter={row.is_starter} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold">
+                                Home {row.id.slice(0, 6).toUpperCase()}
+                              </p>
+                              <p className="text-[11px] text-gray-500">
+                                Starter: {row.is_starter ? 'Yes' : 'No'} • Created{' '}
+                                {new Date(row.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
                           </div>
                           <div className="text-right">
                             <p className="text-xs text-gray-400">Ask Price</p>

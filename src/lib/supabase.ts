@@ -167,6 +167,10 @@ export interface UserProfile {
   tax_status?: string
   tax_last_updated?: string
   tax_form_url?: string
+
+  // Vehicle fields
+  active_vehicle?: number | null // Car ID
+  vehicle_image?: string | null // Static image URL
 }
 
 

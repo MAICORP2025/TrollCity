@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { 
   generateCourtAiResponse, 
-  CourtAgentRole, 
   getCourtSessionState, 
   toggleCourtSession 
 } from '../lib/courtAi';
@@ -126,8 +125,8 @@ export default function CourtAIController({ caseId, isJudge, evidence, caseDetai
               await generateCourtAiResponse(caseId, 'Defense', context);
             }
 
-          } catch (err) {
-            console.error('AI Trigger Error:', err);
+          } catch {
+            console.error('AI Trigger Error');
           } finally {
             processingRef.current = false;
             setIsProcessing(false);
@@ -151,7 +150,7 @@ export default function CourtAIController({ caseId, isJudge, evidence, caseDetai
       }
       await toggleCourtSession(caseId, userId, !isLive);
       toast.success(isLive ? 'Court Session Paused' : 'Court Session LIVE');
-    } catch (err) {
+    } catch {
       toast.error('Failed to toggle session');
     }
   };

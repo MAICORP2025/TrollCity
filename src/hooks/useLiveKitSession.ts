@@ -200,6 +200,42 @@ export function useLiveKitSession(options: SessionOptions) {
           throw new Error("Room is full");
         }
 
+        try {
+          const activeRoomParticipant = activeRoom.localParticipant;
+          const userIdForCar = options.user?.id;
+          if (activeRoomParticipant && userIdForCar && typeof window !== "undefined") {
+            let baseMetadata: any = {};
+            if (activeRoomParticipant.metadata) {
+              try {
+                baseMetadata = JSON.parse(activeRoomParticipant.metadata);
+              } catch {
+                baseMetadata = {};
+              }
+            }
+
+            let carPayload: any = null;
+            try {
+              const storageKey = `trollcity_car_${userIdForCar}`;
+              const raw = window.localStorage.getItem(storageKey);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === "object") {
+                  carPayload = parsed;
+                }
+              }
+            } catch {
+              carPayload = null;
+            }
+
+            if (carPayload) {
+              const merged = { ...baseMetadata, car: carPayload };
+              await activeRoomParticipant.setMetadata(JSON.stringify(merged));
+            }
+          }
+        } catch (metaError) {
+          console.warn("[useLiveKitSession] metadata update failed", metaError);
+        }
+
         /**
          * ✅ Publishing (host only)
          */

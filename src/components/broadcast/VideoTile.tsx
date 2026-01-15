@@ -230,8 +230,9 @@ export default function VideoTile({
     }
   }, [participant.metadata]);
 
-  const level = metadata.level || 1;
-  const role = metadata.role || 'Guest';
+  const level = (metadata as any).level || 1;
+  const role = (metadata as any).role || 'Guest';
+  const carMetadata = (metadata as any).car || null;
   const roleColor = role === 'Admin' ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' : 'text-purple-400 border-purple-500/30 bg-purple-500/10';
   const seatUsernameStyle: React.CSSProperties = { fontSize: 'var(--seat-username-size)' };
   const seatCoinStyle: React.CSSProperties = { fontSize: 'var(--seat-coin-size)', padding: 'var(--seat-chip-padding)' };
@@ -378,6 +379,23 @@ export default function VideoTile({
               <div className={`flex items-center gap-1 px-2 py-0.5 rounded border ${roleColor}`}>
                   <span className="text-[10px] font-medium uppercase tracking-wider">{role}</span>
               </div>
+              {carMetadata && (
+                <div className="flex items-center gap-1">
+                  <div
+                    className="h-4 w-8 rounded-full border border-white/20"
+                    style={{
+                      background: carMetadata.colorFrom && carMetadata.colorTo
+                        ? `linear-gradient(90deg, ${carMetadata.colorFrom}, ${carMetadata.colorTo})`
+                        : 'linear-gradient(90deg, #4b5563, #111827)'
+                    }}
+                  />
+                  {carMetadata.name && (
+                    <span className="text-[9px] font-medium text-gray-200 truncate max-w-[80px]">
+                      {carMetadata.name}
+                    </span>
+                  )}
+                </div>
+              )}
           </div>
         </div>
       )}

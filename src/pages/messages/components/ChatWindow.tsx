@@ -38,7 +38,7 @@ export default function ChatWindow({
   const navigate = useNavigate()
   const [messages, setMessages] = useState<Message[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [oldestLoadedAt, setOldestLoadedAt] = useState<string | null>(null)
@@ -86,15 +86,11 @@ export default function ChatWindow({
       return conversation.id
     } catch (error) {
       console.error('Error ensuring conversation:', error)
+      toast.error('Unable to start conversation. Please try again.')
+      setLoading(false)
       return null
     }
   }, [profile?.id, otherUserId, conversationId])
-
-  useEffect(() => {
-    if (otherUserId && profile?.id) {
-      ensureConversationId()
-    }
-  }, [otherUserId, profile?.id, ensureConversationId])
 
   const loadMessages = useCallback(async (options?: { background?: boolean }) => {
     const background = options?.background ?? false
@@ -275,15 +271,20 @@ export default function ChatWindow({
     if (!otherUserId || !profile?.id) {
       setConversationId(null)
       setMessages([])
+      setLoading(false)
       return
     }
 
     let cancelled = false
 
     const init = async () => {
+      setLoading(true)
       const id = await ensureConversationId()
       if (!cancelled && id) {
         setConversationId(id)
+      }
+      if (!cancelled && !id) {
+        setLoading(false)
       }
     }
 

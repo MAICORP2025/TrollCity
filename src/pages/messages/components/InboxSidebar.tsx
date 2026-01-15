@@ -20,6 +20,7 @@ interface InboxSidebarProps {
   activeTab: string
   onTabChange: (tab: string) => void
   onlineUsers?: Record<string, boolean>
+  onConversationsLoaded?: (conversations: Conversation[]) => void
 }
 
 export default function InboxSidebar({
@@ -27,7 +28,8 @@ export default function InboxSidebar({
   onSelectConversation,
   activeTab,
   onTabChange,
-  onlineUsers = {}
+  onlineUsers = {},
+  onConversationsLoaded
 }: InboxSidebarProps) {
   const { profile } = useAuthStore()
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -71,6 +73,7 @@ export default function InboxSidebar({
 
         if (conversationIds.length === 0) {
           setConversations([])
+          onConversationsLoaded?.([])
           if (!background) setLoading(false)
           return
         }
@@ -125,12 +128,15 @@ export default function InboxSidebar({
           }
         }
 
-        setConversations(newConversations.sort((a, b) => 
+        const sorted = newConversations.sort((a, b) => 
           new Date(b.last_timestamp).getTime() - new Date(a.last_timestamp).getTime()
-        ))
+        )
+        setConversations(sorted)
+        onConversationsLoaded?.(sorted)
       } else {
         // For other tabs, show filtered messages
         setConversations([])
+        onConversationsLoaded?.([])
       }
     } catch (error) {
       console.error('Error loading conversations:', error)
@@ -139,7 +145,7 @@ export default function InboxSidebar({
         setLoading(false)
       }
     }
-  }, [profile?.id, activeTab])
+  }, [profile?.id, activeTab, onConversationsLoaded])
 
   useEffect(() => {
     if (!profile?.id) return

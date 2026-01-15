@@ -74,14 +74,6 @@ const RequireRole: React.FC<RequireRoleProps> = ({
     return <Navigate to={fallbackPath || "/access-denied"} replace />;
   }
 
-  // Additional officer-specific checks
-  if (requireActive && (profile.role === UserRole.TROLL_OFFICER || profile.is_troll_officer)) {
-    if (!profile.is_officer_active) {
-      console.log('Officer not active, redirecting to orientation');
-      return <Navigate to="/officer/orientation" replace />;
-    }
-  }
-
   return <>{children}</>;
 };
 

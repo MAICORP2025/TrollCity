@@ -7,6 +7,17 @@ import NewMessageModal from './messages/components/NewMessageModal'
 import IncomingCallPopup from '../components/IncomingCallPopup'
 import { supabase } from '../lib/supabase'
 
+interface SidebarConversation {
+  other_user_id: string
+  other_username: string
+  other_avatar_url: string | null
+  last_message: string
+  last_timestamp: string
+  unread_count: number
+  is_online?: boolean
+  rgb_username_expires_at?: string | null
+}
+
 export default function Messages() {
   const { user } = useAuthStore()
   const [searchParams] = useSearchParams()
@@ -184,6 +195,14 @@ export default function Messages() {
     setShowNewMessageModal(false)
   }
 
+  const handleConversationsLoaded = (conversations: SidebarConversation[]) => {
+    if (!activeConversation && conversations.length > 0) {
+      const first = conversations[0]
+      setActiveConversation(first.other_user_id)
+      navigate(`/messages?user=${first.other_user_id}`, { replace: true })
+    }
+  }
+
   return (
     <div className="w-full min-h-full bg-gradient-to-br from-[#0b0b12] via-[#0d0d1a] to-[#14061a] flex justify-center items-stretch py-4 md:py-8">
       <div className="relative flex w-full max-w-6xl bg-[#0b0b12] rounded-3xl border border-white/10 overflow-hidden">
@@ -195,6 +214,7 @@ export default function Messages() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onlineUsers={onlineUsers}
+            onConversationsLoaded={handleConversationsLoaded}
           />
         </div>
 

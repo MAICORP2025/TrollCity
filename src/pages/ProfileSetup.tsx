@@ -3,10 +3,13 @@ import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useAvatar } from '../lib/hooks/useAvatar'
+import Avatar3D from '../components/avatar/Avatar3D'
 
 const ProfileSetup = () => {
   const navigate = useNavigate()
   const { user, profile, setProfile } = useAuthStore()
+  const { config: avatarConfig, setConfig: setAvatarConfig } = useAvatar()
 
   // Ensure loading is false when component mounts
   React.useEffect(() => {
@@ -302,21 +305,102 @@ const ProfileSetup = () => {
         </div>
 
         {/* Avatar & Display */}
-        <div className="flex items-center gap-4 mb-6">
-          <img
-            src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`}
-            alt="avatar"
-            className="w-20 h-20 rounded-full border border-[#2C2C2C] object-cover"
-          />
-          <button
-            type="button"
-            onClick={() => avatarInputRef.current?.click()}
-            disabled={uploadingAvatar}
-            className="px-4 py-2 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] text-white rounded"
-          >
-            {uploadingAvatar ? 'Uploading…' : 'Change Avatar'}
-          </button>
-          <input ref={avatarInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-24 h-24 rounded-full border border-[#2C2C2C] bg-[#14141c] flex items-center justify-center overflow-hidden">
+              <Avatar3D config={avatarConfig} size="lg" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-xs rounded border border-[#3C3C4C] hover:bg-[#2A2A35]"
+                  onClick={() =>
+                    setAvatarConfig(prev => ({
+                      ...prev,
+                      skinTone: prev.skinTone === 'light' ? 'medium' : prev.skinTone === 'medium' ? 'dark' : 'light'
+                    }))
+                  }
+                >
+                  Cycle Skin Tone
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-xs rounded border border-[#3C3C4C] hover:bg-[#2A2A35]"
+                  onClick={() =>
+                    setAvatarConfig(prev => ({
+                      ...prev,
+                      hairStyle:
+                        prev.hairStyle === 'short'
+                          ? 'long'
+                          : prev.hairStyle === 'long'
+                          ? 'buzz'
+                          : prev.hairStyle === 'buzz'
+                          ? 'none'
+                          : 'short'
+                    }))
+                  }
+                >
+                  Cycle Hair
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-xs rounded border border-[#3C3C4C] hover:bg-[#2A2A35]"
+                  onClick={() =>
+                    setAvatarConfig(prev => ({
+                      ...prev,
+                      accessory:
+                        prev.accessory === 'none'
+                          ? 'glasses'
+                          : prev.accessory === 'glasses'
+                          ? 'hat'
+                          : prev.accessory === 'hat'
+                          ? 'mask'
+                          : 'none'
+                    }))
+                  }
+                >
+                  Cycle Accessory
+                </button>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none mt-1">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-500 bg-[#23232b]"
+                  checked={avatarConfig.useAsProfilePicture}
+                  onChange={e =>
+                    setAvatarConfig(prev => ({
+                      ...prev,
+                      useAsProfilePicture: e.target.checked
+                    }))
+                  }
+                />
+                Use 3D avatar in game loading screens and some profile displays
+              </label>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <img
+              src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`}
+              alt="avatar"
+              className="w-20 h-20 rounded-full border border-[#2C2C2C] object-cover"
+            />
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="px-4 py-2 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] text-white rounded"
+            >
+              {uploadingAvatar ? 'Uploading…' : 'Change Avatar Image'}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarUpload}
+              className="hidden"
+            />
+          </div>
         </div>
 
         {/* Profile Info */}

@@ -91,6 +91,7 @@ type TabId =
   | 'tax_reviews'
   | 'payment_logs'
   | 'store_pricing'
+  | 'admin_pool'
   | 'create_schedule'
   | 'officer_shifts'
   | 'shift_requests_approval'
@@ -904,6 +905,7 @@ export default function AdminDashboard() {
   const handleOpenResetPanel = () => navigate('/admin/reset-maintenance')
   const handleOpenEmpireApplications = () => navigate('/admin/empire-applications')
   const handleOpenReferralBonuses = () => navigate('/admin/referral-bonuses')
+  const handleOpenAdminPool = () => navigate('/admin/pool')
 
   const redirectRoutes = useMemo(
     () =>
@@ -928,6 +930,7 @@ export default function AdminDashboard() {
         tax_reviews: '/admin/tax-reviews',
         payment_logs: '/admin/payment-logs',
         store_pricing: '/admin/store-pricing',
+        admin_pool: '/admin/pool',
         create_schedule: '/admin/create-schedule',
         officer_shifts: '/admin/officer-shifts',
         // NOTE: /admin/shift-requests-approval route does not exist; keep the action working by
@@ -1196,6 +1199,7 @@ export default function AdminDashboard() {
           onOpenTestDiagnostics={handleOpenTestDiagnostics}
           onOpenControlPanel={handleOpenControlPanel}
           onOpenGrantCoins={handleOpenGrantCoins}
+          onOpenAdminPool={handleOpenAdminPool}
           onOpenFinanceDashboard={handleOpenFinanceDashboard}
           onOpenCreateSchedule={handleOpenCreateSchedule}
           onOpenOfficerShifts={handleOpenOfficerShifts}

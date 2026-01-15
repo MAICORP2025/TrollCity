@@ -220,14 +220,25 @@ const FamilyLounge = () => {
             xp: 0
           })
 
-          // Load active tasks
-          const { data: tasks } = await supabase
+          // Load tasks, prefer active but fall back to any recent if needed
+          let { data: tasks } = await supabase
             .from('family_tasks')
             .select('*')
             .eq('family_id', familyId)
             .eq('status', 'active')
             .order('created_at', { ascending: false })
             .limit(5)
+
+          if (!tasks || tasks.length === 0) {
+            const { data: anyTasks } = await supabase
+              .from('family_tasks')
+              .select('*')
+              .eq('family_id', familyId)
+              .order('created_at', { ascending: false })
+              .limit(5)
+
+            tasks = anyTasks || []
+          }
 
           setFamilyTasks(tasks || [])
 
