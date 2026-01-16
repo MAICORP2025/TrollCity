@@ -146,7 +146,16 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
             profile = await fetchUserProfile(newMsg.user_id);
           }
 
-          setMessages(prev => [...prev, { ...newMsg, sender_profile: profile }]);
+          setMessages(prev => {
+            const createdAt = new Date(newMsg.created_at).getTime();
+            const cleaned = prev.filter((msg) => {
+              if (msg.user_id !== newMsg.user_id) return true;
+              if (msg.content !== newMsg.content) return true;
+              const msgTime = new Date(msg.created_at).getTime();
+              return Math.abs(msgTime - createdAt) > 3000;
+            });
+            return [...cleaned, { ...newMsg, sender_profile: profile }];
+          });
         }
       )
       .subscribe();
@@ -247,6 +256,19 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
 
       if (error) throw error;
 
+      const profile = await fetchUserProfile(user.id);
+      const optimisticMessage: Message = {
+        id: (globalThis.crypto && 'randomUUID' in globalThis.crypto)
+          ? (globalThis.crypto as Crypto).randomUUID()
+          : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        user_id: user.id,
+        content: inputValue,
+        message_type: 'chat',
+        created_at: new Date().toISOString(),
+        sender_profile: profile,
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+
       setInputValue("");
       suppressAutoScrollRef.current = true;
       setTimeout(() => {
@@ -299,33 +321,8 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
             return true;
           });
         }, [messages]).map((msg) => {
-          // Handle entrance messages
-          if (msg.message_type === 'entrance') {
-            let content;
-            try {
-              content = JSON.parse(msg.content);
-            } catch {
-              content = { username: 'Unknown', role: 'viewer' };
-            }
-            
-            const hasRgb = msg.sender_profile?.rgbExpiresAt && new Date(msg.sender_profile.rgbExpiresAt) > new Date();
-            
-            return (
-              <div key={msg.id} className="text-xs text-center my-2 animate-fadeIn bg-white/5 rounded p-1 border border-white/10">
-                 <span className={`font-bold ${hasRgb ? 'rgb-username' : 'text-yellow-400'}`}>
-                   {content.username || msg.sender_profile?.username}
-                 </span>
-                 <span className="text-gray-300 ml-1">has entered the chat!</span>
-              </div>
-            );
-          }
-          
-          if (msg.message_type === 'system-join') {
-             return (
-               <div key={msg.id} className="text-xs text-center text-gray-400 my-1 animate-fadeIn">
-                 <span className="font-bold text-cyan-300">{msg.sender_profile?.username}</span> joined the stream!
-               </div>
-             );
+          if (msg.message_type === 'entrance' || msg.message_type === 'system-join') {
+            return null;
           }
 
           if (msg.message_type === 'system' && msg.content === 'ACTION:LIKE') {

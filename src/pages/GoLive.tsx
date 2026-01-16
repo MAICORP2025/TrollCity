@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 // import api from '../lib/api'; // Uncomment if needed
 import { supabase } from '../supabaseClient';
@@ -11,6 +11,7 @@ import type { LiveKitServiceConfig } from '../lib/LiveKitService';
 import { deductCoins } from '../lib/coinTransactions';
 
 const PRIVATE_STREAM_COST = 500;
+type StreamQuality = 'STANDARD' | 'HD_BOOST' | 'HIGHEST';
 
 const GoLive: React.FC = () => {
   const { profile, refreshProfile } = useAuthStore(); // Using getState() instead for async operations
@@ -34,6 +35,8 @@ const GoLive: React.FC = () => {
   const [themesLoading, setThemesLoading] = useState(false);
   const [themePurchaseId, setThemePurchaseId] = useState<string | null>(null);
   const [streamerEntitlements, setStreamerEntitlements] = useState<any>(null);
+  const [requestedQuality, setRequestedQuality] = useState<StreamQuality>('STANDARD');
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const navigate = useNavigate();
   const liveKit = useLiveKit();
@@ -50,6 +53,19 @@ const GoLive: React.FC = () => {
       message: `You cannot go live until ${new Date(until).toLocaleString()}`,
     };
   }, [profile?.live_restricted_until]);
+
+  const isPrivileged = useMemo(() => {
+    const role = String(profile?.role || '').toLowerCase();
+    if (role.includes('admin') || role.includes('secretary') || role.includes('officer')) return true;
+    if (profile?.is_admin || profile?.is_lead_officer || profile?.is_troll_officer) return true;
+    return false;
+  }, [profile?.role, profile?.is_admin, profile?.is_lead_officer, profile?.is_troll_officer]);
+
+  useEffect(() => {
+    if (isPrivileged) {
+      setRequestedQuality('HIGHEST');
+    }
+  }, [isPrivileged]);
 
   // Note: Camera/mic permissions will be requested when joining seats in broadcast
   // No camera preview needed in setup
@@ -294,22 +310,59 @@ const GoLive: React.FC = () => {
       } catch {}
     };
 
+    let sessionId: string | null = null;
+    let allowedQuality: StreamQuality = 'STANDARD';
+    let publishConfig: any = null;
+    let livekitToken: string | null = null;
+    let hdPaid = false;
+
     try {
-      const streamId = crypto.randomUUID();
-      const roomName = streamId; // Use streamId as LiveKit room name
+      const idempotencyKey = idempotencyKeyRef.current || crypto.randomUUID();
+      idempotencyKeyRef.current = idempotencyKey;
+
+      const prepareResponse = await supabase.functions.invoke('go-live-prepare-session', {
+        body: {
+          requestedQuality,
+          idempotencyKey,
+        }
+      });
+
+      if (prepareResponse.error || prepareResponse.data?.error) {
+        const errorCode = prepareResponse.data?.error;
+        if (errorCode === 'INSUFFICIENT_COINS') {
+          toast.error('HD Boost requires 500 Troll Coins. Switching to Standard.');
+          setRequestedQuality('STANDARD');
+          cleanup();
+          return;
+        }
+        throw new Error(prepareResponse.error?.message || prepareResponse.data?.error || 'Failed to prepare session');
+      }
+
+      sessionId = prepareResponse.data.sessionId;
+      allowedQuality = prepareResponse.data.allowedQuality as StreamQuality;
+      publishConfig = prepareResponse.data.publishConfig;
+      livekitToken = prepareResponse.data.livekitToken;
+      hdPaid = Boolean(prepareResponse.data.hdPaid);
+      if (allowedQuality !== requestedQuality) {
+        setRequestedQuality(allowedQuality);
+      }
+
+      const streamId = sessionId;
+      const roomName = sessionId; // Use sessionId as LiveKit room name
       let thumbnailUrl: string | null = null;
 
       // 1. Request camera and microphone access FIRST (preflight stream)
       // This ensures we don't create a stream entry if the user denies permissions
       let preflightStream: MediaStream | null = null;
       try {
+        const capture = publishConfig?.captureConstraints || {
+          width: { ideal: 960 },
+          height: { ideal: 540 },
+          frameRate: { ideal: 24 },
+          facingMode: 'user'
+        };
         preflightStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            facingMode: 'user',
-            frameRate: { ideal: 30, max: 60 }
-          },
+          video: capture,
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -320,6 +373,11 @@ const GoLive: React.FC = () => {
       } catch (permErr: any) {
         console.error('[GoLive] Camera/mic permission failed:', permErr);
         toast.error('Camera/microphone access denied. Please allow permissions.');
+        if (hdPaid && sessionId) {
+          await supabase.functions.invoke('go-live-refund-hd-boost', {
+            body: { sessionId, reason: 'permission_denied' }
+          });
+        }
         cleanup();
         return;
       }
@@ -499,6 +557,8 @@ const GoLive: React.FC = () => {
         allowPublish: true,
         autoPublish: true,
         preflightStream,
+        tokenOverride: livekitToken || undefined,
+        publishConfig,
       } as Partial<LiveKitServiceConfig>);
 
       if (!service) {
@@ -507,6 +567,11 @@ const GoLive: React.FC = () => {
         preflightStream?.getTracks().forEach(t => t.stop());
         // Clean up the stream we just created since we can't broadcast
         await supabase.from('streams').delete().eq('id', createdId);
+        if (hdPaid && sessionId) {
+          await supabase.functions.invoke('go-live-refund-hd-boost', {
+            body: { sessionId, reason: 'livekit_connect_failed' }
+          });
+        }
         cleanup();
         return;
       }
@@ -521,6 +586,12 @@ const GoLive: React.FC = () => {
           status: 'starting' 
         })
         .eq('id', createdId);
+
+      if (sessionId) {
+        await supabase.functions.invoke('go-live-mark-live', {
+          body: { sessionId, status: 'live', streamId: createdId }
+        });
+      }
 
       console.log('[GoLive] ✅ Stream status updated to STARTING');
       
@@ -556,6 +627,13 @@ const GoLive: React.FC = () => {
         // Don't return here, let it fall through to finally block
       }
     } catch (err: any) {
+      if (hdPaid && sessionId) {
+        try {
+          await supabase.functions.invoke('go-live-refund-hd-boost', {
+            body: { sessionId, reason: 'start_stream_failed' }
+          });
+        } catch {}
+      }
       console.error('[GoLive] Error starting stream:', {
         error: err,
         message: err?.message,
@@ -680,6 +758,50 @@ const GoLive: React.FC = () => {
                     Only viewers who know this password can join. Passwords never expire during the stream.
                   </p>
                 </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-gray-300">Stream Quality</label>
+            <div className="mt-2 grid gap-2">
+              {isPrivileged ? (
+                <div className="flex items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-200">Highest (Role Access)</p>
+                    <p className="text-xs text-emerald-100/70">1080p @ 30fps • 3–5 Mbps</p>
+                  </div>
+                  <span className="text-xs uppercase tracking-[0.2em] text-emerald-300">Locked</span>
+                </div>
+              ) : (
+                <>
+                  <label className="flex items-center gap-3 rounded-lg border border-purple-500/30 bg-purple-900/10 px-4 py-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="stream-quality"
+                      value="STANDARD"
+                      checked={requestedQuality === 'STANDARD'}
+                      onChange={() => setRequestedQuality('STANDARD')}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-white">Standard (Free)</p>
+                      <p className="text-xs text-white/60">540p @ 24fps • 0.6–0.9 Mbps</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="stream-quality"
+                      value="HD_BOOST"
+                      checked={requestedQuality === 'HD_BOOST'}
+                      onChange={() => setRequestedQuality('HD_BOOST')}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-200">HD Boost (500 Troll Coins)</p>
+                      <p className="text-xs text-amber-100/70">720p @ 30fps • 1.5–2.5 Mbps</p>
+                    </div>
+                  </label>
+                </>
               )}
             </div>
           </div>

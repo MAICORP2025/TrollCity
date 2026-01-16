@@ -532,6 +532,13 @@ function OfficerActionBubble({
   onMuteAll,
   onKickAll,
   onDisableChat,
+  targets,
+  selectedTargetId,
+  onTargetChange,
+  onMuteUser,
+  onDisableUserChat,
+  onKickUser,
+  onRemoveSeat,
   onClose,
   position,
   onMouseDown
@@ -542,10 +549,18 @@ function OfficerActionBubble({
   onMuteAll: () => void;
   onKickAll: () => void;
   onDisableChat: () => void;
+  targets: Array<{ id: string; username: string; seatIndex?: number | null }>;
+  selectedTargetId: string | null;
+  onTargetChange: (userId: string | null) => void;
+  onMuteUser: (userId: string, minutes: number) => void;
+  onDisableUserChat: (userId: string) => void;
+  onKickUser: (userId: string) => void;
+  onRemoveSeat: (userId: string) => void;
   onClose: () => void;
   position: { x: number; y: number } | null;
   onMouseDown: (e: React.MouseEvent) => void;
 }) {
+  const selectedTarget = targets.find((t) => t.id === selectedTargetId) || null;
   return (
     <div
       className="fixed z-[200] w-64 bg-black/90 border border-red-500/50 rounded-xl shadow-[0_0_30px_rgba(220,38,38,0.3)] backdrop-blur-xl overflow-hidden"
@@ -565,6 +580,21 @@ function OfficerActionBubble({
         >
           <span className="text-lg">⛔</span> END BROADCAST
         </button>
+        <div className="col-span-2">
+          <label className="text-[10px] uppercase tracking-[0.2em] text-white/50">Target user</label>
+          <select
+            value={selectedTargetId || ''}
+            onChange={(e) => onTargetChange(e.target.value || null)}
+            className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
+          >
+            <option value="">Select user</option>
+            {targets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.username}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           onClick={onAddBox}
           className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
@@ -577,17 +607,61 @@ function OfficerActionBubble({
         >
           <span className="text-lg">🧹</span> Clear Stage
         </button>
-         <button
+        <button
           onClick={onMuteAll}
           className="col-span-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
         >
           <span className="text-lg">🔇</span> Mute All
         </button>
+        <div className="col-span-2 grid grid-cols-3 gap-2">
+          <button
+            disabled={!selectedTarget}
+            onClick={() => selectedTarget && onMuteUser(selectedTarget.id, 5)}
+            className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold py-2 rounded disabled:opacity-50"
+          >
+            Mute 5m
+          </button>
+          <button
+            disabled={!selectedTarget}
+            onClick={() => selectedTarget && onMuteUser(selectedTarget.id, 15)}
+            className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold py-2 rounded disabled:opacity-50"
+          >
+            Mute 15m
+          </button>
+          <button
+            disabled={!selectedTarget}
+            onClick={() => selectedTarget && onMuteUser(selectedTarget.id, 30)}
+            className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold py-2 rounded disabled:opacity-50"
+          >
+            Mute 30m
+          </button>
+        </div>
         <button
           onClick={onDisableChat}
           className="col-span-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2"
         >
           <span className="text-lg">💬</span> Disable Chat (Global)
+        </button>
+        <button
+          disabled={!selectedTarget}
+          onClick={() => selectedTarget && onDisableUserChat(selectedTarget.id)}
+          className="col-span-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          <span className="text-lg">🔕</span> Disable Chat (User)
+        </button>
+        <button
+          disabled={!selectedTarget}
+          onClick={() => selectedTarget && onKickUser(selectedTarget.id)}
+          className="col-span-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          <span className="text-lg">🚫</span> Kick From Stream
+        </button>
+        <button
+          disabled={!selectedTarget || selectedTarget?.seatIndex === undefined || selectedTarget?.seatIndex === null}
+          onClick={() => selectedTarget && onRemoveSeat(selectedTarget.id)}
+          className="col-span-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          <span className="text-lg">📦</span> Remove From Box
         </button>
       </div>
     </div>
@@ -1204,29 +1278,158 @@ export default function LivePage() {
       if (!confirm('OFFICER ACTION: Force END this broadcast?')) return;
       try {
         await supabase.from('streams').update({ status: 'ended', is_live: false, ended_at: new Date().toISOString() }).eq('id', streamId);
+        if (streamId) {
+          const channel = supabase.channel(`stream-${streamId}`);
+          await channel.subscribe();
+          await channel.send({
+            type: 'broadcast',
+            event: 'stream-ended',
+            payload: { streamId }
+          });
+          supabase.removeChannel(channel);
+        }
         toast.success('Broadcast ended by Officer');
       } catch { toast.error('Failed to end broadcast'); }
   };
   
   const handleOfficerMuteAll = async () => {
       if(!confirm('OFFICER ACTION: Mute all participants?')) return;
-      toast.info('Mute All: Sent request');
+      try {
+        const until = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        await supabase
+          .from('streams_participants')
+          .update({ can_chat: false, chat_mute_until: until })
+          .eq('stream_id', streamId);
+        toast.success('All participants muted for 10 minutes');
+      } catch (err) {
+        console.error('Failed to mute all participants', err);
+        toast.error('Failed to mute all participants');
+      }
   };
 
   const handleOfficerDisableChat = async () => {
        if(!confirm('OFFICER ACTION: Disable chat globally?')) return;
-       toast.info('Disable Chat: Sent request');
+       try {
+         await supabase
+           .from('streams_participants')
+           .update({ can_chat: false, chat_mute_until: null })
+           .eq('stream_id', streamId);
+         toast.success('Chat disabled for all participants');
+       } catch (err) {
+         console.error('Failed to disable chat globally', err);
+         toast.error('Failed to disable chat globally');
+       }
   };
   
   const handleOfficerKickAll = () => {
       if(!confirm('OFFICER ACTION: Clear the stage (remove all boxes)?')) return;
       setBoxCount(0);
+      if (streamId) {
+        void supabase.from('messages').insert({
+          stream_id: streamId,
+          message_type: 'system',
+          content: 'BOX_COUNT_UPDATE:0'
+        });
+      }
+      seats.forEach((seat, index) => {
+        if (seat?.user_id) {
+          void releaseSeat(index, seat.user_id, { force: true });
+        }
+      });
       toast.success('Stage cleared');
   };
   
   const handleOfficerAddBox = () => {
-      setBoxCount(prev => Math.min(6, prev + 1));
+      const maxBoxes = 6;
+      const next = Math.min(maxBoxes, boxCount + 1);
+      setBoxCount(next);
+      if (streamId) {
+        void supabase.from('messages').insert({
+          stream_id: streamId,
+          message_type: 'system',
+          content: `BOX_COUNT_UPDATE:${next}`
+        });
+      }
       toast.success('Added box');
+  };
+
+  const officerTargets = useMemo(() => {
+    const map = new Map<string, { id: string; username: string; seatIndex?: number | null }>();
+    activeViewers.forEach((viewer) => {
+      if (!viewer?.userId) return;
+      map.set(viewer.userId, {
+        id: viewer.userId,
+        username: viewer.username || `Viewer ${viewer.userId.slice(0, 6)}`,
+      });
+    });
+    seats.forEach((seat, index) => {
+      if (!seat?.user_id) return;
+      const existing = map.get(seat.user_id);
+      map.set(seat.user_id, {
+        id: seat.user_id,
+        username: seat.username || existing?.username || `User ${seat.user_id.slice(0, 6)}`,
+        seatIndex: index,
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.username.localeCompare(b.username));
+  }, [activeViewers, seats]);
+
+  const handleOfficerMuteUser = async (userId: string, minutes: number) => {
+    if (!streamId) return;
+    try {
+      const until = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+      await supabase
+        .from('streams_participants')
+        .update({ can_chat: false, chat_mute_until: until })
+        .eq('stream_id', streamId)
+        .eq('user_id', userId);
+      toast.success(`User muted for ${minutes} minutes`);
+    } catch (err) {
+      console.error('Failed to mute user', err);
+      toast.error('Failed to mute user');
+    }
+  };
+
+  const handleOfficerDisableUserChat = async (userId: string) => {
+    if (!streamId) return;
+    try {
+      await supabase
+        .from('streams_participants')
+        .update({ can_chat: false, chat_mute_until: null })
+        .eq('stream_id', streamId)
+        .eq('user_id', userId);
+      toast.success('User chat disabled');
+    } catch (err) {
+      console.error('Failed to disable user chat', err);
+      toast.error('Failed to disable user chat');
+    }
+  };
+
+  const handleOfficerKickUser = async (userId: string) => {
+    if (!streamId) return;
+    try {
+      await supabase
+        .from('streams_participants')
+        .update({ is_active: false, left_at: new Date().toISOString() })
+        .eq('stream_id', streamId)
+        .eq('user_id', userId);
+      toast.success('User kicked from stream');
+    } catch (err) {
+      console.error('Failed to kick user', err);
+      toast.error('Failed to kick user');
+    }
+  };
+
+  const handleOfficerRemoveSeat = async (userId: string) => {
+    const seatIndex = seats.findIndex((seat) => seat?.user_id === userId);
+    if (seatIndex < 0) return;
+    try {
+      await releaseSeat(seatIndex, userId, { force: true });
+      toast.success('User removed from box');
+    } catch (err) {
+      console.error('Failed to remove user from seat', err);
+      toast.error('Failed to remove user from seat');
+    }
   };
 
   const toggleMic = useCallback(async () => {
@@ -1299,6 +1502,7 @@ export default function LivePage() {
   const [messageBubblePosition, setMessageBubblePosition] = useState<{ x: number; y: number } | null>(null);
   const messageBubbleDraggingRef = useRef(false);
   const messageBubbleDragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [officerTargetId, setOfficerTargetId] = useState<string | null>(null);
   
 
   const entranceTimeoutRef = useRef<number | null>(null);
@@ -1335,14 +1539,6 @@ export default function LivePage() {
             effect: config
           })
         });
-      } else {
-        // Send standard join message if no effect
-        await supabase.from('messages').insert({
-          stream_id: streamId,
-          user_id: user.id,
-          message_type: 'system-join',
-          content: 'joined the stream'
-        });
       }
     };
 
@@ -1368,7 +1564,10 @@ export default function LivePage() {
           const msg = payload.new;
           if (msg.message_type === 'entrance') {
             try {
-              const data = JSON.parse(msg.content);
+              const rawContent = msg.content;
+              const data = typeof rawContent === 'string'
+                ? JSON.parse(rawContent)
+                : (rawContent || {});
               const payloadUserId =
                 data.user_id || data.sender_id || msg.user_id || msg.sender_id;
 
@@ -1376,7 +1575,13 @@ export default function LivePage() {
                 return;
               }
 
-              setEntranceEffect(data);
+              setEntranceEffect({
+                username: data.username || 'Viewer',
+                role: data.role || 'viewer',
+                profile: data.profile,
+                effectKey: data.effectKey,
+                effect: data.effect,
+              });
               setEntranceEffectKey((prev) => prev + 1);
 
               if (entranceTimeoutRef.current) {
@@ -2392,6 +2597,13 @@ export default function LivePage() {
           onMuteAll={handleOfficerMuteAll}
           onKickAll={handleOfficerKickAll}
           onDisableChat={handleOfficerDisableChat}
+          targets={officerTargets}
+          selectedTargetId={officerTargetId}
+          onTargetChange={setOfficerTargetId}
+          onMuteUser={handleOfficerMuteUser}
+          onDisableUserChat={handleOfficerDisableUserChat}
+          onKickUser={handleOfficerKickUser}
+          onRemoveSeat={handleOfficerRemoveSeat}
           onClose={() => setIsOfficerBubbleVisible(false)}
           position={officerBubblePos}
           onMouseDown={handleOfficerDragStart}
@@ -2399,7 +2611,7 @@ export default function LivePage() {
       )}
       
       {/* Header Area */}
-      <div className="shrink-0 px-[clamp(8px,2.5vw,14px)] pt-2 pb-2 flex flex-nowrap justify-between items-center gap-2 z-10">
+      <div className="shrink-0 px-[clamp(8px,2.5vw,14px)] pt-2 pb-2 flex flex-wrap justify-between items-center gap-2 z-10">
          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-[0_0_15px_rgba(147,51,234,0.5)]">
                <span className="font-bold text-lg text-white">TC</span>
@@ -2410,7 +2622,7 @@ export default function LivePage() {
             </div>
          </div>
          
-         <div className="flex items-center gap-2 overflow-x-auto">
+         <div className="flex w-full lg:w-auto flex-wrap items-center justify-end gap-2 overflow-x-auto">
             <button
               type="button"
               onClick={() => setUseFlyingChats((prev) => !prev)}
@@ -2432,11 +2644,6 @@ export default function LivePage() {
                 </div>
               )
             )}
-
-            <div className="px-2 py-1.5 bg-black/40 backdrop-blur-sm rounded-xl border border-yellow-500/30 flex items-center gap-2 shadow-[0_0_10px_rgba(234,179,8,0.2)]">
-              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-bold text-[10px] border border-yellow-300">C</div>
-              <span className="font-bold text-yellow-400 text-[clamp(11px,3vw,14px)]">{(stream.total_gifts_coins || 0).toLocaleString()}</span>
-            </div>
 
             {isBroadcaster && (
               <button
@@ -2542,6 +2749,7 @@ export default function LivePage() {
           <div className="shrink-0 min-h-0 flex flex-col relative">
             <BroadcastLayout 
               className="h-auto lg:h-full"
+              streamId={streamId || ''}
               room={liveKit.getRoom()} 
               broadcasterId={stream.broadcaster_id}
               isHost={isBroadcaster}

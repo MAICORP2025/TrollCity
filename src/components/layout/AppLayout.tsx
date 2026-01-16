@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import BottomNavigation from '../BottomNavigation'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
@@ -23,9 +23,23 @@ export default function AppLayout({
   showBottomNav = true 
 }: AppLayoutProps) {
   const location = useLocation();
+  const [isMobile, setIsMobile] = useState(false);
   // Hide UI elements on specific routes if needed, or rely on props
   const isAuthPage = location.pathname.startsWith('/auth');
   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/broadcast/');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener('change', update);
+      return () => media.removeEventListener('change', update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
 
   // Overrides based on route
   const effectiveShowSidebar = showSidebar && !isAuthPage && !isLivePage;
@@ -41,7 +55,7 @@ export default function AppLayout({
       <PurchaseRequiredModal />
       <PWAInstallPrompt />
       <AdminOnly>
-        <GeminiChatButton />
+        {!isLivePage || !isMobile ? <GeminiChatButton /> : null}
       </AdminOnly>
       {/* Desktop Sidebar - Hidden on Mobile */}
       {effectiveShowSidebar && (

@@ -194,38 +194,86 @@ export default function CarDealershipPage() {
       return;
     }
 
-    let owned: number[] = [];
-    try {
-      const rawList = localStorage.getItem(`trollcity_owned_vehicles_${user.id}`);
-      if (rawList) {
-        owned = JSON.parse(rawList).filter((id: any) => typeof id === 'number');
-      }
-    } catch {
-      owned = [];
-    }
+    const loadOwnedFromProfile = () => {
+      const profileOwned = Array.isArray(profile?.owned_vehicle_ids)
+        ? profile?.owned_vehicle_ids.filter((id) => typeof id === 'number')
+        : [];
 
-    let activeId = profile?.active_vehicle ?? null;
+      let owned = profileOwned.length > 0 ? [...profileOwned] : [];
 
-    if (!activeId) {
-      const key = `trollcity_car_${user.id}`;
       try {
-        const raw = localStorage.getItem(key);
-        const stored = raw ? JSON.parse(raw) : null;
-        if (stored && typeof stored.carId === 'number') {
-          activeId = stored.carId;
+        const rawList = localStorage.getItem(`trollcity_owned_vehicles_${user.id}`);
+        if (rawList) {
+          const parsed = JSON.parse(rawList).filter((id: any) => typeof id === 'number');
+          parsed.forEach((id: number) => {
+            if (!owned.includes(id)) owned.push(id);
+          });
         }
       } catch {
-        activeId = null;
+        // ignore local storage parse issues
       }
-    }
 
-    if (activeId && !owned.includes(activeId)) {
-      owned = [activeId, ...owned];
-    }
+      let activeId = profile?.active_vehicle ?? null;
+      if (!activeId) {
+        const key = `trollcity_car_${user.id}`;
+        try {
+          const raw = localStorage.getItem(key);
+          const stored = raw ? JSON.parse(raw) : null;
+          if (stored && typeof stored.carId === 'number') {
+            activeId = stored.carId;
+          }
+        } catch {
+          activeId = null;
+        }
+      }
 
-    setOwnedVehicleIds(owned);
-    setOwnedCarId(activeId);
-  }, [user?.id, profile?.active_vehicle]);
+      if (activeId && !owned.includes(activeId)) {
+        owned = [activeId, ...owned];
+      }
+
+      setOwnedVehicleIds(owned);
+      setOwnedCarId(activeId);
+    };
+
+    const loadFromDbIfNeeded = async () => {
+      if (profile?.active_vehicle || (profile?.owned_vehicle_ids && profile.owned_vehicle_ids.length > 0)) {
+        loadOwnedFromProfile();
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('active_vehicle, owned_vehicle_ids')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (error) {
+          loadOwnedFromProfile();
+          return;
+        }
+        const ownedDb = Array.isArray(data?.owned_vehicle_ids)
+          ? data?.owned_vehicle_ids.filter((id: any) => typeof id === 'number')
+          : [];
+        const activeDb = typeof data?.active_vehicle === 'number' ? data?.active_vehicle : null;
+        const mergedOwned = activeDb && !ownedDb.includes(activeDb)
+          ? [activeDb, ...ownedDb]
+          : ownedDb;
+        if (mergedOwned.length > 0) {
+          localStorage.setItem(`trollcity_owned_vehicles_${user.id}`, JSON.stringify(mergedOwned));
+        }
+        if (activeDb) {
+          localStorage.setItem(
+            `trollcity_car_${user.id}`,
+            JSON.stringify({ carId: activeDb })
+          );
+        }
+        setOwnedVehicleIds(mergedOwned);
+        setOwnedCarId(activeDb);
+      } catch {
+        loadOwnedFromProfile();
+      }
+    };
+    loadFromDbIfNeeded();
+  }, [user?.id, profile?.active_vehicle, profile?.owned_vehicle_ids]);
 
   const handlePurchase = async (carId: number) => {
     if (!user || !profile) {
@@ -281,6 +329,13 @@ export default function CarDealershipPage() {
       } catch {
         ownedList = [];
       }
+      if (Array.isArray(profile?.owned_vehicle_ids)) {
+        profile.owned_vehicle_ids.forEach((id) => {
+          if (typeof id === 'number' && !ownedList.includes(id)) {
+            ownedList.push(id);
+          }
+        });
+      }
       if (!ownedList.includes(car.id)) {
         ownedList.push(car.id);
         localStorage.setItem(ownedKey, JSON.stringify(ownedList));
@@ -291,7 +346,8 @@ export default function CarDealershipPage() {
         .from('user_profiles')
         .update({
           active_vehicle: car.id,
-          vehicle_image: car.image
+          vehicle_image: car.image,
+          owned_vehicle_ids: ownedList
         })
         .eq('id', user.id);
       
@@ -321,13 +377,31 @@ export default function CarDealershipPage() {
       })
     );
 
+    const ownedFromLocal = (() => {
+      try {
+        const raw = localStorage.getItem(`trollcity_owned_vehicles_${user.id}`);
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+    const nextOwnedList = Array.isArray(profile?.owned_vehicle_ids)
+      ? Array.from(new Set([...(profile?.owned_vehicle_ids || []), ...ownedFromLocal, car.id]))
+      : Array.from(new Set([...(ownedFromLocal || []), car.id]));
+
     await supabase
       .from('user_profiles')
       .update({
         active_vehicle: car.id,
-        vehicle_image: car.image
+        vehicle_image: car.image,
+        owned_vehicle_ids: nextOwnedList
       })
       .eq('id', user.id);
+
+    localStorage.setItem(
+      `trollcity_owned_vehicles_${user.id}`,
+      JSON.stringify(nextOwnedList)
+    );
 
     setOwnedCarId(car.id);
     refreshProfile();
@@ -448,7 +522,8 @@ export default function CarDealershipPage() {
           active_vehicle: nextActive,
           vehicle_image: nextActive
             ? cars.find(c => c.id === nextActive)?.image || null
-            : null
+            : null,
+          owned_vehicle_ids: ownedList
         })
         .eq('id', user.id);
 

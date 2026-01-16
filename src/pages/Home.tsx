@@ -530,6 +530,14 @@ NewUserCard.displayName = 'NewUserCard';
 const HomePageContent = () => {
   const { profile } = useAuthStore();
 
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.body) return;
+    document.body.classList.remove('no-scroll');
+    return () => {
+      document.body.classList.remove('no-scroll');
+    };
+  }, []);
+
   // Use React Query hooks
   const { data: liveStreams = [], isLoading: loadingLive } = useLiveStreams();
   const { data: newUsers = [], isLoading: loadingUsers } = useNewUsers();

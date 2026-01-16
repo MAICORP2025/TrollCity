@@ -3,7 +3,7 @@ import { Participant, Track, LocalParticipant } from 'livekit-client'
 import { User, Mic, MicOff, Camera, CameraOff, X, RefreshCw, Maximize2, Minimize2, Crown, Coins } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-const CAMERA_ZOOM = 0.85;
+const CAMERA_ZOOM = 0.9;
 
 interface VideoTileProps {
   participant: Participant

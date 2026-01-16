@@ -26,6 +26,11 @@ export default function BottomNavigation() {
     }
   }, [isMenuOpen, isLiveMenuOpen])
 
+  useEffect(() => {
+    setIsMenuOpen(false)
+    setIsLiveMenuOpen(false)
+  }, [location.pathname])
+
   const liveCategories = [
     { label: 'All Streams', icon: Video, path: '/live' },
     { label: 'Just Chatting', icon: MessageSquare, path: '/live/just-chatting' },

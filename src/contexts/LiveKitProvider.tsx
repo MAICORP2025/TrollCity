@@ -175,6 +175,7 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
           autoPublish: allowPublish ? options.autoPublish : false,
           preflightStream: allowPublish ? options.preflightStream : undefined,
           url: options.url,
+          publishConfig: (options as any).publishConfig,
 
           onConnected: () => {
             setIsConnected(true);

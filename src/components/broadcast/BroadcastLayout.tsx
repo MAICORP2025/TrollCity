@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 
 interface BroadcastLayoutProps {
   room: Room
+  streamId?: string
   broadcasterId: string
   isHost: boolean
   className?: string
@@ -33,6 +34,7 @@ interface BroadcastLayoutProps {
 export default function BroadcastLayout({
   giftBalanceDelta,
   room,
+  streamId,
   broadcasterId,
   isHost,
   className,
@@ -88,6 +90,89 @@ export default function BroadcastLayout({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participantIdsKey]);
+
+  useEffect(() => {
+    if (!streamId) return;
+
+    const channel = supabase
+      .channel(`gifts-${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'gifts',
+          filter: `stream_id=eq.${streamId}`,
+        },
+        async (payload) => {
+          const newGift: any = payload.new;
+          const receiverId =
+            newGift?.receiver_id ||
+            newGift?.to_user_id ||
+            newGift?.receiverId ||
+            null;
+          const senderId =
+            newGift?.sender_id ||
+            newGift?.from_user_id ||
+            newGift?.senderId ||
+            null;
+          const amount = Number(
+            newGift?.coin_amount ??
+              newGift?.coinAmount ??
+              newGift?.coins ??
+              newGift?.amount ??
+              0
+          );
+
+          if (receiverId && amount) {
+            setCoinBalances((prev) => ({
+              ...prev,
+              [receiverId]: (prev[receiverId] || 0) + amount,
+            }));
+          }
+
+          if (senderId && amount) {
+            setCoinBalances((prev) => ({
+              ...prev,
+              [senderId]: (prev[senderId] || 0) - amount,
+            }));
+          }
+
+          if (receiverId) {
+            const { data } = await supabase
+              .from('user_profiles')
+              .select('id,troll_coins')
+              .eq('id', receiverId)
+              .maybeSingle();
+            if (data?.id) {
+              setCoinBalances((prev) => ({
+                ...prev,
+                [data.id]: Number(data.troll_coins || 0),
+              }));
+            }
+          }
+
+          if (senderId) {
+            const { data } = await supabase
+              .from('user_profiles')
+              .select('id,troll_coins')
+              .eq('id', senderId)
+              .maybeSingle();
+            if (data?.id) {
+              setCoinBalances((prev) => ({
+                ...prev,
+                [data.id]: Number(data.troll_coins || 0),
+              }));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [streamId]);
 
   useEffect(() => {
     const receiverId =

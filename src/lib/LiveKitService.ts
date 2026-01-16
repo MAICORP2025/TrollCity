@@ -46,6 +46,21 @@ export interface LiveKitServiceConfig {
   autoPublish?: boolean
   tokenOverride?: string // For testing or special cases
   url?: string // Custom LiveKit server URL
+  publishConfig?: {
+    quality?: string
+    video?: {
+      width?: number
+      height?: number
+      frameRate?: number
+      bitrate?: number
+      maxBitrate?: number
+      simulcast?: boolean
+    }
+    audio?: {
+      bitrate?: number
+    }
+    captureConstraints?: MediaTrackConstraints
+  }
 }
 
 export class LiveKitService {
@@ -122,7 +137,7 @@ export class LiveKitService {
      this.log('📹 Publishing video track directly', { label: mediaStreamTrack.label });
      
      // Modern Publishing: Let LiveKit manage the track
-     await this.room.localParticipant.publishTrack(mediaStreamTrack, { name: 'camera', source: Track.Source.Camera });
+    await this.room.localParticipant.publishTrack(mediaStreamTrack, this.getVideoPublishOptions());
      // await this.room.localParticipant.setCameraEnabled(true); // Redundant and causes LocalTrackUnpublished
      this.updateLocalParticipantState();
      this.log('✅ Video track published');
@@ -550,6 +565,8 @@ export class LiveKitService {
       throw new Error('No video or audio track available from preflight stream')
     }
 
+    const videoPublishOptions = this.getVideoPublishOptions()
+
     if (videoTrack) {
       this.log('📹 Publishing video track', {
         enabled: videoTrack.enabled,
@@ -557,7 +574,7 @@ export class LiveKitService {
         label: videoTrack.label
       })
       // Modern Publishing: Let LiveKit manage the track
-      await this.room.localParticipant.publishTrack(videoTrack, { name: 'camera', source: Track.Source.Camera });
+      await this.room.localParticipant.publishTrack(videoTrack, videoPublishOptions);
       // await this.room.localParticipant.setCameraEnabled(true) // ✅ Ensure camera is marked enabled
       this.log('✅ Video track published')
     } else {
@@ -588,6 +605,19 @@ export class LiveKitService {
     this.log('✅ Preflight stream published successfully')
   }
 
+  private getVideoPublishOptions(): any {
+    const options: any = { name: 'camera', source: Track.Source.Camera };
+    const videoConfig = this.config.publishConfig?.video;
+    if (videoConfig?.simulcast) {
+      options.simulcast = true;
+    }
+    const maxBitrate = videoConfig?.maxBitrate ?? videoConfig?.bitrate;
+    if (typeof maxBitrate === 'number' && maxBitrate > 0) {
+      options.videoEncoding = { maxBitrate };
+    }
+    return options;
+  }
+
   private async captureVideoTrack(deviceId?: string): Promise<LocalVideoTrack | null> {
     // Try high-res first, then fallback to 480p if device can't provide 720p
     const tryConstraints = async (constraints: any) => {
@@ -600,9 +630,27 @@ export class LiveKitService {
     }
 
     try {
+      const preferred = this.config.publishConfig?.video;
+      const capture = this.config.publishConfig?.captureConstraints || {};
+      const width =
+        (capture as any)?.width?.ideal ||
+        (capture as any)?.width ||
+        preferred?.width ||
+        1280;
+      const height =
+        (capture as any)?.height?.ideal ||
+        (capture as any)?.height ||
+        preferred?.height ||
+        720;
+      const frameRate =
+        (capture as any)?.frameRate?.ideal ||
+        (capture as any)?.frameRate ||
+        preferred?.frameRate ||
+        30;
+
       const base: any = {
-        resolution: { width: 1280, height: 720 },
-        frameRate: { ideal: 30, max: 60 },
+        resolution: { width, height },
+        frameRate: { ideal: frameRate, max: Math.max(frameRate, 30) },
       }
       if (deviceId) base.deviceId = { exact: deviceId }
 
@@ -1067,7 +1115,7 @@ export class LiveKitService {
         const video = await this.captureVideoTrack()
         if (video) {
           this.localVideoTrack = video
-          await this.room.localParticipant.publishTrack(video as any)
+          await this.room.localParticipant.publishTrack(video as any, this.getVideoPublishOptions())
         }
       }
 
@@ -1103,7 +1151,7 @@ export class LiveKitService {
       if (!video) throw new Error('Failed to capture selected camera')
 
       this.localVideoTrack = video
-      await this.room.localParticipant.publishTrack(video as any)
+      await this.room.localParticipant.publishTrack(video as any, this.getVideoPublishOptions())
       await this.room.localParticipant.setCameraEnabled(true)
       this.updateLocalParticipantState()
       this.log('✅ Camera switched to device', { deviceId })
@@ -1131,7 +1179,7 @@ export class LiveKitService {
         const video = await this.captureVideoTrack()
         if (video) {
           this.localVideoTrack = video
-          await this.room.localParticipant.publishTrack(video as any)
+          await this.room.localParticipant.publishTrack(video as any, this.getVideoPublishOptions())
         }
       }
 
@@ -1263,7 +1311,7 @@ export class LiveKitService {
     this.localVideoTrack = videoTrack
     this.localAudioTrack = audioTrack
 
-    if (videoTrack) await this.room.localParticipant.publishTrack(videoTrack as any)
+    if (videoTrack) await this.room.localParticipant.publishTrack(videoTrack as any, this.getVideoPublishOptions())
     if (audioTrack) await this.room.localParticipant.publishTrack(audioTrack as any)
 
     await this.room.localParticipant.setCameraEnabled(!!videoTrack)

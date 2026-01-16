@@ -28,12 +28,16 @@ ALTER TABLE public.xp_ledger ENABLE ROW LEVEL SECURITY;
 
 -- 4. Policies
 -- user_stats: Users can view their own stats. System updates them.
-CREATE POLICY "Users can view own stats" ON public.user_stats
-    FOR SELECT USING (auth.uid() = user_id);
+DO $$ BEGIN
+    CREATE POLICY "Users can view own stats" ON public.user_stats
+        FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- xp_ledger: Users can view their own ledger.
-CREATE POLICY "Users can view own ledger" ON public.xp_ledger
-    FOR SELECT USING (auth.uid() = user_id);
+DO $$ BEGIN
+    CREATE POLICY "Users can view own ledger" ON public.xp_ledger
+        FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 5. Helper function to compute level (Deterministic)
 -- Level 1: 0-100 XP

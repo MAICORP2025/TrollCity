@@ -171,6 +171,7 @@ export interface UserProfile {
   // Vehicle fields
   active_vehicle?: number | null // Car ID
   vehicle_image?: string | null // Static image URL
+  owned_vehicle_ids?: number[] | null
 }
 
 

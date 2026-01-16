@@ -35,22 +35,51 @@ export default function GameControlPanel() {
     });
   };
 
+  const handleTouchMove = (event: TouchEvent) => {
+    const state = dragStateRef.current;
+    if (!state) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    event.preventDefault();
+    const dx = touch.clientX - state.startX;
+    const dy = touch.clientY - state.startY;
+    setDragOffset({
+      x: state.originX + dx,
+      y: state.originY + dy,
+    });
+  };
+
   const handleDragEnd = () => {
     dragStateRef.current = null;
     window.removeEventListener('mousemove', handleDragMove);
     window.removeEventListener('mouseup', handleDragEnd);
+    window.removeEventListener('touchmove', handleTouchMove as EventListener);
+    window.removeEventListener('touchend', handleDragEnd);
   };
 
-  const handleDragStart = (event: React.MouseEvent) => {
-    event.preventDefault();
+  const startDrag = (clientX: number, clientY: number) => {
     dragStateRef.current = {
-      startX: event.clientX,
-      startY: event.clientY,
+      startX: clientX,
+      startY: clientY,
       originX: dragOffset.x,
       originY: dragOffset.y,
     };
     window.addEventListener('mousemove', handleDragMove);
     window.addEventListener('mouseup', handleDragEnd);
+    window.addEventListener('touchmove', handleTouchMove as EventListener, { passive: false });
+    window.addEventListener('touchend', handleDragEnd);
+  };
+
+  const handleDragStart = (event: React.MouseEvent) => {
+    event.preventDefault();
+    startDrag(event.clientX, event.clientY);
+  };
+
+  const handleTouchStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    event.preventDefault();
+    startDrag(touch.clientX, touch.clientY);
   };
 
   useEffect(() => {
@@ -217,6 +246,7 @@ export default function GameControlPanel() {
           <div
             className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-800 cursor-move"
             onMouseDown={handleDragStart}
+            onTouchStart={handleTouchStart}
           >
             <h3 className="font-bold text-zinc-200">Game Controls</h3>
             <span className="text-xs text-zinc-500 uppercase tracking-wider">Troll City OS</span>
@@ -318,6 +348,8 @@ export default function GameControlPanel() {
       {/* Toggle Button */}
       <button
         onClick={togglePanel}
+        onMouseDown={handleDragStart}
+        onTouchStart={handleTouchStart}
         className="pointer-events-auto flex items-center justify-center w-14 h-14 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-lg shadow-purple-900/30 transition-all active:scale-95 border-2 border-purple-400/50"
       >
         {isOpen ? <ChevronDown size={28} /> : <Car size={28} />}

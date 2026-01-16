@@ -2961,6 +2961,7 @@ iframe[src*="paypalobjects.com"] {
   letter-spacing: 0.6em;
   text-transform: uppercase;
   background: linear-gradient(120deg, #82ffb4, #4c9bff, #ff75d4);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow:
