@@ -36,6 +36,7 @@ import AuthCallback from "./pages/AuthCallback";
 import TermsAgreement from "./pages/TermsAgreement";
 
 import { GameProvider } from "./components/game/GameContext";
+import GameControlPanel from "./components/game/GameControlPanel";
 import CarDealershipPage from "./pages/game/CarDealershipPage";
 import MechanicShopPage from "./pages/game/MechanicShopPage";
 import HospitalPage from "./pages/game/HospitalPage";
@@ -592,6 +593,7 @@ function AppContent() {
       <GameProvider>
       <AppLayout showSidebar={!!user} showHeader={!!user} showBottomNav={!!user}>
         {user && <AdminOfficerQuickMenu />}
+        {user && <GameControlPanel />}
 
         <ErrorBoundary>
           <Suspense fallback={<LoadingScreen />}>
