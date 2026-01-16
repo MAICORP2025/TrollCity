@@ -24,6 +24,8 @@ export default function PaymentMethodManager({
   title = 'Wallet & Payments',
   description = 'Add a payment method to speed up Stripe Checkout in the coin store.',
 }: PaymentMethodManagerProps) {
+  const stripeApiBase = import.meta.env.VITE_API_URL || '/api/stripe'
+  const stripePaymentBase = import.meta.env.VITE_STRIPE_PM_URL || stripeApiBase
   const { profile } = useAuthStore()
   const [methods, setMethods] = useState<Method[]>([])
   const [loading, setLoading] = useState(false)
@@ -91,12 +93,13 @@ export default function PaymentMethodManager({
         const token = session?.access_token
         if (!token) throw new Error('No auth token')
 
-        const res = await fetch('/api/stripe/create-setup-intent', {
+        const res = await fetch(stripePaymentBase, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
+          body: JSON.stringify({ action: 'create-setup-intent' }),
         })
 
         if (!res.ok) {
@@ -174,13 +177,13 @@ export default function PaymentMethodManager({
       const token = session?.access_token
       if (!token) throw new Error('No auth token')
 
-      const res = await fetch('/api/stripe/save-payment-method', {
+      const res = await fetch(stripePaymentBase, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ paymentMethodId })
+        body: JSON.stringify({ action: 'save-payment-method', paymentMethodId })
       })
 
       if (!res.ok) {
@@ -210,13 +213,13 @@ export default function PaymentMethodManager({
       const token = session?.access_token
       if (!token) throw new Error('No auth token')
 
-      const res = await fetch('/api/stripe/delete-payment-method', {
+      const res = await fetch(stripePaymentBase, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ action: 'delete-payment-method', id })
       })
 
       const j = await res.json().catch(() => ({}))
@@ -239,13 +242,13 @@ export default function PaymentMethodManager({
       const token = session?.access_token
       if (!token) throw new Error('No auth token')
 
-      const res = await fetch('/api/stripe/set-default-payment-method', {
+      const res = await fetch(stripePaymentBase, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ action: 'set-default-payment-method', id })
       })
 
       const j = await res.json().catch(() => ({}))

@@ -20,7 +20,6 @@
     "@livekit/components-react": "^2.9.17",
     "@livekit/components-styles": "^1.2.0",
     "@stripe/stripe-js": "^3.3.0",
-    "stripe": "^14.25.0",
     "@supabase/supabase-js": "^2.90.1",
     "@tanstack/react-query": "^5.90.16",
     "@vercel/node": "^3.2.29",
@@ -42,8 +41,9 @@
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.8.3",
     "sonner": "^1.7.0",
+    "stripe": "^14.25.0",
     "tailwind-merge": "^3.0.2",
-    "tesseract.js": "^2.1.5",
+    "tesseract.js": "^7.0.0",
     "vite-plugin-pwa": "^1.2.0",
     "zustand": "^5.0.3"
   },

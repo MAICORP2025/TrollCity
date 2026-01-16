@@ -51,6 +51,7 @@ const isMissingTableError = (error) =>
   );
 
 export default function CoinStore() {
+  const stripeCheckoutUrl = import.meta.env.VITE_API_URL || '/api/stripe';
   const { user, profile, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
   const { troll_coins, refreshCoins } = useCoins();
@@ -828,7 +829,7 @@ export default function CoinStore() {
       const token = session?.access_token;
       if (!token) throw new Error('No authentication token available');
 
-      const res = await fetch('/api/stripe/create-checkout-session', {
+      const res = await fetch(stripeCheckoutUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -866,6 +867,47 @@ export default function CoinStore() {
     }
 
     await startCheckout(pkg);
+  };
+
+  const handleBuyTrollPass = async () => {
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+
+    if (!_isViewerOnly || trollPassActive) return;
+
+    setLoadingPackage(trollPassBundle.id);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('No authentication token available');
+
+      const res = await fetch(stripeCheckoutUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+        ,
+        body: JSON.stringify({ purchaseType: 'troll_pass_bundle' })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error('❌ Backend error:', txt);
+        throw new Error(`Checkout error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data.url) throw new Error('Missing checkout URL');
+
+      window.location.href = data.url;
+    } catch (err) {
+      console.error('❌ Failed to start Troll Pass checkout:', err);
+      toast.error('Unable to start Troll Pass checkout.');
+    } finally {
+      setLoadingPackage(null);
+    }
   };
 
   const purchaseCompleteActive =
@@ -1028,7 +1070,7 @@ export default function CoinStore() {
                   <span>🎟️</span> Troll Pass
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                  Bundle temporarily unavailable. +{trollPassBundle.coins.toLocaleString()} Troll Coins + 30-day Troll Pass perk (chat boost + +5% gift bonus)
+                  +{trollPassBundle.coins.toLocaleString()} Troll Coins + 30-day Troll Pass perk (chat boost + +5% gift bonus)
                 </div>
 {trollPassActive ? (
                  <div className="text-xs text-green-400 mt-2">
@@ -1050,10 +1092,17 @@ export default function CoinStore() {
                 <div className="mt-2">
                   <button
                     type="button"
-                    disabled
-                    className="px-4 py-2 bg-gray-700 text-gray-300 rounded font-semibold cursor-not-allowed"
+                    onClick={handleBuyTrollPass}
+                    disabled={!_isViewerOnly || trollPassActive || loadingPackage === trollPassBundle.id}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded font-semibold"
                   >
-                    Unavailable
+                    {loadingPackage === trollPassBundle.id
+                      ? 'Starting checkout...'
+                      : trollPassActive
+                        ? 'Active'
+                        : _isViewerOnly
+                          ? 'Checkout with Stripe'
+                          : 'Viewer only'}
                   </button>
                 </div>
               </div>
