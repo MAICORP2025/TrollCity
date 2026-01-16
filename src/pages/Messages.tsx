@@ -204,8 +204,8 @@ export default function Messages() {
   }
 
   return (
-    <div className="w-full min-h-full bg-gradient-to-br from-[#0b0b12] via-[#0d0d1a] to-[#14061a] flex justify-center items-stretch py-4 md:py-8">
-      <div className="relative flex w-full max-w-6xl bg-[#0b0b12] rounded-3xl border border-white/10 overflow-hidden">
+    <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#0b0b12] via-[#0d0d1a] to-[#14061a] flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8">
+      <div className="relative flex w-full max-w-6xl bg-[#0b0b12] rounded-2xl md:rounded-3xl border border-white/10 overflow-hidden flex-col md:flex-row">
         {/* Column 1: Sidebar with Conversations */}
         <div className={`flex-col border-r border-white/5 bg-[#0b0b12] w-full md:w-80 lg:w-96 ${activeConversation ? 'hidden md:flex' : 'flex'}`}>
           <InboxSidebar
@@ -215,6 +215,7 @@ export default function Messages() {
             onTabChange={setActiveTab}
             onlineUsers={onlineUsers}
             onConversationsLoaded={handleConversationsLoaded}
+            onNewMessage={() => setShowNewMessageModal(true)}
           />
         </div>
 

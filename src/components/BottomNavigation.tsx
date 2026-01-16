@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Home, MessageSquare, Store, Video, User, Shield, Gavel, Star, Zap, DollarSign, Users, AlertTriangle, Ban, Settings, Heart, LogOut, FileText, ShoppingBag, Briefcase, Banknote, Gamepad2, Music, Swords, Camera } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
@@ -14,6 +14,17 @@ export default function BottomNavigation() {
   const gameNavigate = useGameNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLiveMenuOpen, setIsLiveMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (isMenuOpen || isLiveMenuOpen) {
+      document.body.classList.add('no-scroll')
+    } else {
+      document.body.classList.remove('no-scroll')
+    }
+    return () => {
+      document.body.classList.remove('no-scroll')
+    }
+  }, [isMenuOpen, isLiveMenuOpen])
 
   const liveCategories = [
     { label: 'All Streams', icon: Video, path: '/live' },
@@ -147,8 +158,8 @@ export default function BottomNavigation() {
 
   return (
     <>
-      <nav className="bg-[#0D0D0D] border-t border-purple-700/30 safe-area-bottom shrink-0 z-50">
-        <div className="flex items-center justify-around h-16 px-0">
+      <nav className="bottom-nav bg-[#0D0D0D] border-t border-purple-700/30">
+        <div className="bottom-nav-inner flex items-center justify-around px-0">
           {orderedItems.map((item: any, idx) => {
             const Icon = item.icon
             
@@ -157,7 +168,7 @@ export default function BottomNavigation() {
                  <button
                    key="center-btn"
                    onClick={item.action}
-                   className="flex flex-col items-center justify-center w-1/5 h-full -mt-6"
+                   className="flex flex-col items-center justify-center w-1/5 h-full -mt-4"
                  >
                    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-purple-600 to-blue-600 p-[2px] shadow-[0_0_15px_rgba(124,58,237,0.5)]">
                      <div className="w-full h-full rounded-full bg-[#0D0D0D] flex items-center justify-center hover:bg-[#1a1a1a] transition-colors">

@@ -155,7 +155,7 @@ export default function MessageInput({ otherUserId, conversationId, onMessageSen
   }
 
   return (
-    <div className="p-4 border-t border-[#8a2be2]/30 bg-[rgba(10,0,30,0.6)]">
+    <div className="sticky bottom-0 p-4 pb-[calc(16px+env(safe-area-inset-bottom))] border-t border-[#8a2be2]/30 bg-[rgba(10,0,30,0.85)] backdrop-blur">
       <div className="flex items-end gap-2">
         <button
           type="button"

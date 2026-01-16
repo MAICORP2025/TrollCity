@@ -158,7 +158,38 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (data) {
-            get().setProfile(data as UserProfile)
+            let profileData = data as any
+            try {
+              const nowIso = new Date().toISOString()
+              const { data: rgbPerk } = await supabase
+                .from('user_perks')
+                .select('expires_at')
+                .eq('user_id', u.id)
+                .eq('perk_id', 'perk_rgb_username')
+                .eq('is_active', true)
+                .gt('expires_at', nowIso)
+                .order('expires_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+              const desiredRgb = rgbPerk?.expires_at || null
+              const currentRgb = profileData?.rgb_username_expires_at || null
+
+              if (desiredRgb !== currentRgb) {
+                const { error: rgbUpdateError } = await supabase
+                  .from('user_profiles')
+                  .update({ rgb_username_expires_at: desiredRgb })
+                  .eq('id', u.id)
+
+                if (!rgbUpdateError) {
+                  profileData = { ...profileData, rgb_username_expires_at: desiredRgb }
+                }
+              }
+            } catch (err) {
+              console.error('RGB perk sync failed:', err)
+            }
+
+            get().setProfile(profileData as UserProfile)
           }
         } catch (err) {
           console.error('refreshProfile failed:', err)

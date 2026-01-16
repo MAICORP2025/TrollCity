@@ -1632,6 +1632,18 @@ export default function LivePage() {
 
   const [activeMobileTab, setActiveMobileTab] = useState<'chat' | 'gifts'>('chat');
 
+  useEffect(() => {
+    const shouldLock = chatOverlayOpen || controlPanelOpen || isGiftModalOpen || isCoinStoreOpen
+    if (shouldLock) {
+      document.body.classList.add('no-scroll')
+    } else {
+      document.body.classList.remove('no-scroll')
+    }
+    return () => {
+      document.body.classList.remove('no-scroll')
+    }
+  }, [chatOverlayOpen, controlPanelOpen, isGiftModalOpen, isCoinStoreOpen]);
+
   // Stream polling
   useEffect(() => {
     if (!streamId) return;
@@ -2288,7 +2300,7 @@ export default function LivePage() {
       <div className="fixed inset-0 bg-black/30 -z-10" />
       <div className={`fixed inset-0 pointer-events-none ${reactiveClass} -z-0`} />
 
-      <div className="relative z-10 h-full w-full flex flex-col">
+      <div className="relative z-10 h-full w-full flex flex-col min-h-[100dvh]">
         <GlobalGiftBanner />
       {needsPrivateGate && !privateAccessGranted && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/90 px-4">
@@ -2344,7 +2356,7 @@ export default function LivePage() {
       )}
       
       {/* Header Area */}
-      <div className="shrink-0 p-4 pb-2 flex justify-between items-center z-10">
+      <div className="shrink-0 px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-2 flex flex-wrap justify-between items-center gap-3 z-10">
          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-[0_0_15px_rgba(147,51,234,0.5)]">
                <span className="font-bold text-lg text-white">TC</span>
@@ -2453,10 +2465,10 @@ export default function LivePage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-2 lg:p-4 pt-0 overflow-y-auto lg:overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 px-2 pb-2 pt-0 overflow-hidden">
         {/* Broadcast Layout (Streamer + Guests) */}
         <div
-          className="lg:w-[72%] h-[40svh] md:h-[46svh] lg:h-full min-h-0 flex flex-col relative z-0"
+          className="lg:w-[72%] flex-1 min-h-[32dvh] lg:min-h-0 flex flex-col relative z-0 video-cover"
           onClick={() => {
             if (!showLivePanels) setShowLivePanels(true);
           }}
@@ -2510,7 +2522,7 @@ export default function LivePage() {
 
          {/* Mobile Tab Bar */}
         {showLivePanels && (
-         <div className="flex lg:hidden bg-[#0b091f]/95 rounded-lg p-1 shrink-0 gap-2 sticky bottom-0 z-20 border border-white/10">
+         <div className="flex lg:hidden bg-[#0b091f]/95 rounded-lg p-1 shrink-0 gap-2 border border-white/10">
             <button 
               onClick={() => setActiveMobileTab('chat')}
               className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${activeMobileTab === 'chat' ? 'bg-purple-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
@@ -2525,32 +2537,24 @@ export default function LivePage() {
             </button>
          </div>
          )}
-         {showLivePanels && (
-         <div className="flex lg:hidden justify-center px-4 pb-2 pt-1">
-            <button
-              onClick={() => setChatOverlayOpen(true)}
-              className="w-full rounded-full border border-white/20 bg-gradient-to-r from-purple-500 to-pink-500 text-xs font-bold uppercase tracking-[0.3em] text-white py-2 shadow-lg shadow-purple-500/40"
-            >
-              Raise Live Chat
-            </button>
-         </div>
-         )}
-
          {/* Right Panel (Chat/Gifts) */}
          {showLivePanels && (
-         <div className="lg:w-[28%] flex-1 lg:h-full min-h-0 flex flex-col gap-4 overflow-hidden relative z-0 pb-[calc(4rem+env(safe-area-inset-bottom))]">
+         <div className="lg:w-[28%] flex-1 lg:h-full min-h-0 flex flex-col gap-3 overflow-hidden relative z-0">
             <div
               className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col ${
                 activeMobileTab === 'gifts' ? 'flex-[2]' : 'flex-[1]'
               } min-h-0 overflow-hidden`}
             >
-              <div className="flex-1 min-h-0 overflow-y-auto pr-2 pb-[env(safe-area-inset-bottom)]">
+              <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10">Gifts</div>
+                <div className="h-full min-h-0 overflow-y-auto pr-2 pb-[env(safe-area-inset-bottom)]">
                 <GiftBox
                   onSendGift={handleGiftSent}
                   gifts={quickGifts}
                   loading={quickGiftsLoading}
                   loadError={quickGiftsError}
                 />
+                </div>
               </div>
             </div>
             
@@ -2559,14 +2563,26 @@ export default function LivePage() {
                 activeMobileTab === 'chat' ? 'flex-[2]' : 'flex-[1]'
               } min-h-0`}
             >
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]">
-                <ChatBox 
-                  streamId={streamId || ''} 
-                  onProfileClick={setSelectedProfile}
-                  onCoinSend={handleSendCoinsToUser}
-                  room={liveKit.getRoom()}
-                  isBroadcaster={isBroadcaster}
-                />
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10 flex items-center justify-between">
+                  <span>Chat</span>
+                  <button
+                    type="button"
+                    onClick={() => setChatOverlayOpen(true)}
+                    className="lg:hidden text-[10px] px-2 py-1 rounded-full border border-white/15 text-white/70"
+                  >
+                    Expand
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <ChatBox 
+                    streamId={streamId || ''} 
+                    onProfileClick={setSelectedProfile}
+                    onCoinSend={handleSendCoinsToUser}
+                    room={liveKit.getRoom()}
+                    isBroadcaster={isBroadcaster}
+                  />
+                </div>
               </div>
             </div>
          </div>

@@ -14,6 +14,7 @@ const Header = () => {
   // const [showNotifications, setShowNotifications] = useState(false)
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = React.useState('')
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [searchResults, setSearchResults] = useState<any[]>([])
@@ -22,23 +23,22 @@ const Header = () => {
   useEffect(() => {
     const runSearch = async () => {
       if (!searchQuery.trim()) {
-        const data = await searchUsers({ query: '', limit: 50 })
-        setSearchResults(data || [])
-        setShowUserDropdown(true)
+        setSearchResults([])
+        setShowUserDropdown(false)
         return
       }
 
       const query = searchQuery.trim().replace('@', '')
 
       try {
-        if (query.length < 3) {
+        if (query.length < 2) {
           setSearchResults([])
           setShowUserDropdown(false)
           return
         }
         const data = await searchUsers({ query, limit: 20 })
         setSearchResults(data || [])
-        setShowUserDropdown(true)
+        setShowUserDropdown(isSearchFocused)
       } catch (err) {
         console.error('Search error:', err)
         setSearchResults([])
@@ -47,7 +47,7 @@ const Header = () => {
 
     const timeoutId = setTimeout(runSearch, 300)
     return () => clearTimeout(timeoutId)
-  }, [searchQuery])
+  }, [searchQuery, isSearchFocused])
 
   // Load notifications
   useEffect(() => {
@@ -213,6 +213,37 @@ const Header = () => {
     }
   }
 
+  const handleClearCacheReload = async () => {
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+    } catch (e) {
+      console.warn('Error clearing storage:', e)
+    }
+
+    try {
+      if (window.indexedDB) {
+        const dbs = await window.indexedDB.databases()
+        dbs.forEach((db: any) => {
+          if (db.name) window.indexedDB.deleteDatabase(db.name)
+        })
+      }
+    } catch (e) {
+      console.warn('Error clearing IndexedDB:', e)
+    }
+
+    try {
+      if ('caches' in window) {
+        const cacheNames = await caches.keys()
+        await Promise.all(cacheNames.map((name) => caches.delete(name)))
+      }
+    } catch (e) {
+      console.warn('Error clearing caches:', e)
+    }
+
+    window.location.reload()
+  }
+
   const _handleProfileClick = () => {
     if (profile?.username) {
       navigate(`/profile/${profile.username}`)
@@ -234,14 +265,22 @@ const Header = () => {
               setSearchQuery(e.target.value)
               setShowUserDropdown(true)
             }}
-            onFocus={() => setShowUserDropdown(true)}
-            onBlur={() => setTimeout(() => setShowUserDropdown(false), 200)}
+            onFocus={() => {
+              setIsSearchFocused(true)
+              if (searchQuery.trim().length >= 2) {
+                setShowUserDropdown(true)
+              }
+            }}
+            onBlur={() => {
+              setIsSearchFocused(false)
+              setTimeout(() => setShowUserDropdown(false), 200)
+            }}
             onKeyDown={handleSearch}
             placeholder="Search users..."
             autoComplete="off"
             className="w-full pl-12 pr-6 py-3 bg-troll-dark-card/50 border border-troll-neon-pink/30 rounded-xl text-white placeholder-troll-neon-blue/50 focus:outline-none focus:ring-2 focus:ring-troll-neon-pink focus:border-troll-neon-pink transition-all duration-300 shadow-lg focus:shadow-troll-neon-pink/30"
           />
-          {showUserDropdown && searchResults.length > 0 && (
+          {isSearchFocused && showUserDropdown && searchResults.length > 0 && (
             <div className="absolute top-full mt-2 w-full bg-[#1A1A1A] border border-purple-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                   {searchResults.map((user) => (
                     <div
@@ -295,13 +334,24 @@ const Header = () => {
           <Store className="w-5 h-5" />
         </Link>
 
-        <button
-          onClick={handleLogout}
-          className="p-3 text-red-400 hover:text-red-300 transition-all duration-300 hover:bg-red-500/10 rounded-xl hidden md:block"
-          title="Logout"
-        >
-          <LogOut className="w-6 h-6" />
-        </button>
+        <div className="hidden md:flex items-center gap-2">
+          <button
+            onClick={handleClearCacheReload}
+            className="px-3 py-2 text-xs font-semibold text-cyan-200/90 bg-cyan-500/10 hover:bg-cyan-500/20 rounded-lg border border-cyan-400/20"
+            title="Clear cache and hard reload"
+            type="button"
+          >
+            Clear cache
+          </button>
+          <button
+            onClick={handleLogout}
+            className="p-3 text-red-400 hover:text-red-300 transition-all duration-300 hover:bg-red-500/10 rounded-xl"
+            title="Logout"
+            type="button"
+          >
+            <LogOut className="w-6 h-6" />
+          </button>
+        </div>
       </div>
     </header>
   )

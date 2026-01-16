@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useEffect } from 'react'
 import BottomNavigation from '../BottomNavigation'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
@@ -26,8 +26,6 @@ export default function AppLayout({
   // Hide UI elements on specific routes if needed, or rely on props
   const isAuthPage = location.pathname.startsWith('/auth');
   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/broadcast/');
-  const [showLiveNav, setShowLiveNav] = useState(false);
-  const revealTimerRef = useRef<number | null>(null);
 
   // Overrides based on route
   const effectiveShowSidebar = showSidebar && !isAuthPage && !isLivePage;
@@ -35,39 +33,11 @@ export default function AppLayout({
   // On Live page, we might want BottomNav on mobile for navigation, but maybe not if it covers controls.
   // User said "Bottom Nav 'SIDEBAR' ... for main pages". Live page is a main page.
   // Let's keep it for now, unless it's the broadcaster view.
-  const effectiveShowBottomNav = showBottomNav && !isAuthPage && (!isLivePage || showLiveNav);
-  const mainPaddingClass = effectiveShowBottomNav ? 'pb-16 md:pb-0' : 'pb-[env(safe-area-inset-bottom)]';
-
-  const revealLiveNav = useCallback(() => {
-    setShowLiveNav(true);
-    if (revealTimerRef.current) {
-      window.clearTimeout(revealTimerRef.current);
-    }
-    revealTimerRef.current = window.setTimeout(() => {
-      setShowLiveNav(false);
-    }, 3000);
-  }, []);
-
-  useEffect(() => {
-    if (!isLivePage) {
-      setShowLiveNav(false);
-      if (revealTimerRef.current) {
-        window.clearTimeout(revealTimerRef.current);
-        revealTimerRef.current = null;
-      }
-    }
-  }, [isLivePage]);
-
-  useEffect(() => {
-    return () => {
-      if (revealTimerRef.current) {
-        window.clearTimeout(revealTimerRef.current);
-      }
-    };
-  }, []);
+  const effectiveShowBottomNav = showBottomNav && !isAuthPage;
+  const mainPaddingClass = effectiveShowBottomNav ? 'app-content app-content--with-nav' : 'app-content app-content--no-nav';
 
   return (
-    <div className="h-screen w-screen overflow-hidden text-white flex">
+    <div className="app-viewport w-screen overflow-hidden text-white flex">
       <PurchaseRequiredModal />
       <PWAInstallPrompt />
       <AdminOnly>
@@ -92,18 +62,9 @@ export default function AppLayout({
         {!isAuthPage && <UserCompliancePrompt />}
 
         {/* Main Content Area */}
-        <main className={`flex-1 w-full h-full relative overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-purple-900/50 scrollbar-track-transparent ${mainPaddingClass}`}>
+        <main className={`flex-1 w-full h-full relative overflow-x-hidden scrollbar-thin scrollbar-thumb-purple-900/50 scrollbar-track-transparent ${mainPaddingClass}`}>
           {children}
         </main>
-
-        {isLivePage && !showLiveNav && (
-          <button
-            type="button"
-            onClick={revealLiveNav}
-            className="md:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+8px)] left-1/2 -translate-x-1/2 z-40 w-14 h-2 rounded-full bg-white/30 backdrop-blur border border-white/20"
-            aria-label="Show navigation"
-          />
-        )}
 
         {/* Mobile Bottom Navigation - Fixed at bottom */}
         {effectiveShowBottomNav && (

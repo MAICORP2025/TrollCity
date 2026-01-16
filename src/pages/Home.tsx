@@ -479,7 +479,7 @@ const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) =>
   return (
     <button
       onClick={handleProfileClick}
-      className="relative group bg-gradient-to-br from-[#1f1535]/80 via-[#16102a]/60 to-[#0f0820]/40 rounded-xl p-4 border border-purple-500/30 hover:border-purple-400/60 shadow-lg hover:shadow-xl hover:shadow-purple-500/20 transition-all duration-300 flex flex-col items-center gap-3 overflow-hidden home-outline-rgb"
+      className="relative group w-full aspect-[3/4] bg-gradient-to-br from-[#1f1535]/80 via-[#16102a]/60 to-[#0f0820]/40 rounded-xl p-3 border border-purple-500/30 hover:border-purple-400/60 shadow-md hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300 flex flex-col items-center gap-2 overflow-hidden home-outline-rgb"
     >
       <div className="absolute inset-0 bg-gradient-to-t from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
@@ -504,7 +504,7 @@ const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) =>
       </div>
       
       <div className="relative z-10 text-center flex-1 w-full">
-        <p className={`text-lg font-semibold truncate ${hasRgbUsername ? 'rgb-username' : 'text-white'}`}>{displayName}</p>
+        <p className={`text-[clamp(12px,3.5vw,16px)] font-semibold truncate ${hasRgbUsername ? 'rgb-username' : 'text-white'}`}>{displayName}</p>
         <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all home-outline-rgb-pill ${
             isAdmin
@@ -1066,7 +1066,7 @@ useEffect(() => {
             </div>
             <div className="new-trollerz-scroll" style={{ maxHeight: '480px', overflowY: 'auto' }}>
               {loadingUsers ? (
-                <div className="grid grid-cols-5 md:grid-cols-5 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <UserCardSkeleton key={i} />
                   ))}
@@ -1074,7 +1074,7 @@ useEffect(() => {
               ) : newUsers.length === 0 ? (
                 <div className="col-span-full p-6 text-center text-gray-400">No new users yet</div>
               ) : (
-                <div className="grid grid-cols-5 md:grid-cols-5 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {newUsers.map((user) => (
                     <NewUserCard
                       key={user.id}

@@ -14,6 +14,23 @@ export default function DrivingAnimation({ destination, onComplete, isRaid = fal
   const [raidAlert, setRaidAlert] = useState(false);
   const { user, profile } = useAuthStore();
   const [driveSpeed, setDriveSpeed] = useState(60);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.add('no-scroll');
+    return () => {
+      document.body.classList.remove('no-scroll');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(media.matches);
+    const handler = () => setPrefersReducedMotion(media.matches);
+    media.addEventListener?.('change', handler);
+    return () => media.removeEventListener?.('change', handler);
+  }, []);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -76,7 +93,7 @@ export default function DrivingAnimation({ destination, onComplete, isRaid = fal
   }, [user?.id, profile?.active_vehicle]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex min-h-[100dvh] w-full flex-col items-center justify-center overflow-hidden">
       <div
         className="absolute inset-0"
         style={{
@@ -108,7 +125,7 @@ export default function DrivingAnimation({ destination, onComplete, isRaid = fal
         </div>
       </div>
 
-      {activeCarImage && (
+      {!prefersReducedMotion && activeCarImage && (
         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10 w-72 max-w-[70vw]">
           <img
             src={activeCarImage}

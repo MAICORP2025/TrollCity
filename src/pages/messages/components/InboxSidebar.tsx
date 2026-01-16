@@ -21,6 +21,7 @@ interface InboxSidebarProps {
   onTabChange: (tab: string) => void
   onlineUsers?: Record<string, boolean>
   onConversationsLoaded?: (conversations: Conversation[]) => void
+  onNewMessage?: () => void
 }
 
 export default function InboxSidebar({
@@ -29,7 +30,8 @@ export default function InboxSidebar({
   activeTab,
   onTabChange,
   onlineUsers = {},
-  onConversationsLoaded
+  onConversationsLoaded,
+  onNewMessage
 }: InboxSidebarProps) {
   const { profile } = useAuthStore()
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -214,16 +216,28 @@ export default function InboxSidebar({
   )
 
   return (
-    <div className="w-80 h-full flex flex-col bg-[#060011] border-r border-[#8a2be2]">
+    <div className="w-full md:w-80 h-full flex flex-col bg-[#060011] border-r border-[#8a2be2]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#8a2be2]/30 bg-[rgba(10,0,30,0.6)]">
+        <div className="text-sm font-semibold text-white">Messages</div>
+        <button
+          type="button"
+          onClick={onNewMessage}
+          className="px-3 py-1 rounded-lg bg-gradient-to-r from-[#9b32ff] to-[#00ffcc] text-black text-xs font-bold"
+        >
+          New Message
+        </button>
+      </div>
+
       {/* Tabs */}
-      <div className="flex border-b border-[#8a2be2]/30 bg-[rgba(10,0,30,0.6)]">
+      <div className="flex gap-2 overflow-x-auto border-b border-[#8a2be2]/30 bg-[rgba(10,0,30,0.6)] px-3 py-2">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onTabChange(tab.id)}
             className={`
-              flex-1 px-3 py-2 text-xs font-semibold transition
+              flex-none px-3 py-2 text-xs font-semibold rounded-full transition whitespace-nowrap
               ${activeTab === tab.id
                 ? 'bg-gradient-to-r from-[#9b32ff] to-[#00ffcc] text-black shadow-lg'
                 : 'text-gray-300 hover:text-white hover:bg-[rgba(155,50,255,0.1)]'
@@ -254,9 +268,16 @@ export default function InboxSidebar({
         {loading ? (
           <div className="p-4 text-center text-gray-400">Loading...</div>
         ) : filteredConversations.length === 0 ? (
-          <div className="p-4 text-center text-gray-400">
+          <div className="p-6 text-center text-gray-400">
             <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No conversations yet</p>
+            <button
+              type="button"
+              onClick={onNewMessage}
+              className="mt-3 px-4 py-2 rounded-lg bg-white/10 text-white text-xs"
+            >
+              Start a new message
+            </button>
           </div>
         ) : (
           <div className="divide-y divide-[#8a2be2]/20">
