@@ -656,6 +656,9 @@ function ProfileInner() {
             src={profile.banner_url} 
             alt="Banner" 
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
           />
         )}
       </div>

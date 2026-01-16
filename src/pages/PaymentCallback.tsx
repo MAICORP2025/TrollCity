@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useAuthStore } from '../lib/store'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 
 const PaymentCallback = () => {
-  const { user, profile, setProfile, refreshProfile } = useAuthStore()
+  const { user } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
   
@@ -22,105 +21,24 @@ const PaymentCallback = () => {
       }
 
       const params = new URLSearchParams(location.search)
-      const orderId = params.get('token') || params.get('orderId') || params.get('paymentId')
-      const userId = params.get('userId')
-      
-      // Verify user matches if userId is provided
-      if (userId && userId !== user.id) {
+      const canceled = params.get('canceled')
+      const success = params.get('success')
+
+      if (canceled) {
         setStatus('error')
-        setMessage('User mismatch. Please contact support.')
-        toast.error('User mismatch')
+        setMessage('Payment was cancelled.')
+        toast.info('Payment cancelled')
         return
       }
 
-      // If we have an orderId, complete the payment
-      if (orderId) {
-        try {
-          setStatus('processing')
-          setMessage('Completing payment...')
-
-          const response = await fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/paypal-complete-order`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`
-            },
-            body: JSON.stringify({
-              user_id: user.id,
-              paypal_order_id: orderId
-            })
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Payment failed' }))
-            throw new Error(errorData.error || errorData.message || 'Payment failed')
-          }
-
-          const result = await response.json()
-
-          if (!result.success) {
-            throw new Error(result.error || 'Payment failed')
-          }
-
-          // Success!
-          setStatus('success')
-          setCoinsAwarded(result.coins_awarded || result.coinsAdded || null)
-          
-          // Handle Empire Partner fee payment
-          if (result.type === 'empire_partner_fee') {
-            setMessage('Empire Partner application fee paid successfully! Your application is pending admin review.')
-            toast.success('Application fee paid! Your application is pending review.')
-            
-            // Refresh application status
-            setTimeout(() => {
-              navigate('/empire-partner-apply')
-            }, 2000)
-          } else {
-            setMessage(result.coins_awarded 
-              ? `Payment successful! ${result.coins_awarded.toLocaleString()} coins added to your account.`
-              : 'Payment successful!'
-            )
-            toast.success(`Purchase complete! +${(result.coins_awarded || result.coinsAdded || 0).toLocaleString()} coins added`)
-          }
-
-          // Refresh profile to get updated balance
-          if (refreshProfile) {
-            await refreshProfile()
-          } else {
-            // Fallback: manually refresh profile
-            const { data: updatedProfile } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('id', user.id)
-              .single()
-            
-            if (updatedProfile && setProfile) {
-              setProfile(updatedProfile)
-            }
-          }
-
-        } catch (error: any) {
-          console.error('Payment callback error:', error)
-          setStatus('error')
-          setMessage(error.message || 'Payment processing failed. Please contact support if you were charged.')
-          toast.error(error.message || 'Payment failed')
-        }
-      } else {
-        // No orderId - might be a cancel or error
-        const cancel = params.get('cancel')
-        const error = params.get('error')
-        
-        if (cancel === 'true' || error) {
-          setStatus('error')
-          setMessage(error || 'Payment was cancelled.')
-          toast.info('Payment cancelled')
-        } else {
-          // Missing required parameters
-          setStatus('error')
-          setMessage('Invalid payment callback. Missing order information.')
-          toast.error('Invalid payment callback')
-        }
+      if (success) {
+        setStatus('success')
+        setMessage('Payment successful. Your wallet will update shortly.')
+        return
       }
+
+      setStatus('processing')
+      setMessage('Waiting for payment confirmation...')
     }
 
     processPayment()
@@ -147,11 +65,6 @@ const PaymentCallback = () => {
               <div className="bg-purple-900/30 border border-purple-600/50 rounded-lg p-4 mb-6">
                 <p className="text-sm text-gray-400">Coins Added</p>
                 <p className="text-3xl font-bold text-purple-400">{coinsAwarded.toLocaleString()}</p>
-                {profile && (
-                  <p className="text-sm text-gray-500 mt-2">
-                    New Balance: {((profile.troll_coins || 0) + coinsAwarded).toLocaleString()} coins
-                  </p>
-                )}
               </div>
             )}
             <button

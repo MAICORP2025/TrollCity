@@ -6,6 +6,7 @@ import { OFFICER_BASE_HOURLY_COINS } from '../../lib/officerPay'
 import { toast } from 'sonner'
 import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
 import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
+import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
 
 interface WorkSession {
   id: string
@@ -222,6 +223,10 @@ export default function OfficerDashboard() {
             }
           </button>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <OfficerShiftCalendar title="All Officer Shifts" />
       </div>
 
       {/* Live Status */}

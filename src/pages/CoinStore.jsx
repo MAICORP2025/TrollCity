@@ -10,15 +10,6 @@ import { addCoins, deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
 import { useStreamMomentum } from '@/lib/hooks/useStreamMomentum';
 import { useCheckOfficerOnboarding } from '@/hooks/useCheckOfficerOnboarding';
-import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
-
-const PAYPAL_OPTIONS = {
-  "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID,
-  currency: "USD",
-  intent: "capture"
-};
-
-const PAYPAL_BUTTON_STYLE = { layout: "horizontal" };
 
 const SAMPLE_EFFECTS = [
   { id: 'effect_confetti_pop', name: 'Confetti Pop', description: 'Confetti burst', coin_cost: 1000 },
@@ -62,7 +53,7 @@ const isMissingTableError = (error) =>
 export default function CoinStore() {
   const { user, profile, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
-  const { troll_coins, refreshCoins, optimisticCredit } = useCoins();
+  const { troll_coins, refreshCoins } = useCoins();
   const { checkOnboarding } = useCheckOfficerOnboarding();
   const STORE_TAB_KEY = 'tc-store-active-tab';
   const STORE_COMPLETE_KEY = 'tc-store-show-complete';
@@ -85,6 +76,10 @@ export default function CoinStore() {
   const [effectsNote, setEffectsNote] = useState(null);
   const [perksNote, setPerksNote] = useState(null);
   const [insuranceNote, setInsuranceNote] = useState(null);
+  const [savedMethods, setSavedMethods] = useState([]);
+  const [methodsLoading, setMethodsLoading] = useState(false);
+  const [paymentPickerOpen, setPaymentPickerOpen] = useState(false);
+  const [pendingPackage, setPendingPackage] = useState(null);
   const activeStreamId = useLiveContextStore((s) => s.activeStreamId);
   const { momentum } = useStreamMomentum(activeStreamId);
   const [liveStreamIsLive, setLiveStreamIsLive] = useState(false);
@@ -339,6 +334,22 @@ export default function CoinStore() {
     }
   }, [user?.id, refreshCoins]);
 
+  const loadPaymentMethods = useCallback(async () => {
+    if (!profile?.id) return;
+    setMethodsLoading(true);
+    const { data, error } = await supabase
+      .from('user_payment_methods')
+      .select('id, provider, display_name, is_default, brand, last4, exp_month, exp_year')
+      .eq('user_id', profile.id)
+      .order('is_default', { ascending: false });
+
+    if (error) {
+      console.error('Failed to load payment methods:', error);
+    }
+    setSavedMethods(data || []);
+    setMethodsLoading(false);
+  }, [profile?.id]);
+
   useEffect(() => {
     if (!user) {
       navigate('/auth', { replace: true });
@@ -347,6 +358,10 @@ export default function CoinStore() {
 
     loadWalletData(true);
   }, [user, navigate, loadWalletData]);
+
+  useEffect(() => {
+    loadPaymentMethods();
+  }, [loadPaymentMethods]);
 
   useEffect(() => {
     let isActive = true;
@@ -805,64 +820,52 @@ export default function CoinStore() {
     }
   };
 
-  const handleBuy = async (pkg) => {
-    // Check officer onboarding first
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-
-    console.log('🛒 Starting PayPal checkout for package:', pkg.id);
+  const startCheckout = async (pkg) => {
     setLoadingPackage(pkg.id);
 
     try {
-      // Get session token
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error('No authentication token available');
 
-      const payload = {
-        amount: pkg.price,
-        coins: pkg.coins,
-        user_id: user.id
-      };
-
-      console.log("📤 Sending payload →", payload);
-
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-create-order`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      console.log("📡 PayPal response status:", res.status);
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ packageId: pkg.id })
+      });
 
       if (!res.ok) {
         const txt = await res.text();
-        console.error("❌ Backend error:", txt);
-        throw new Error(`Backend error: ${res.status}`);
+        console.error('❌ Backend error:', txt);
+        throw new Error(`Checkout error: ${res.status}`);
       }
 
       const data = await res.json();
-      console.log("📦 Order created:", data);
+      if (!data.url) throw new Error('Missing checkout URL');
 
-      if (!data.orderID) throw new Error("Backend did not return orderID");
-
-      // THIS IS THE REAL FLOW → RETURN THE ORDER ID TO PAYPAL BUTTONS
-      return data.orderID;
-
+      window.location.href = data.url;
     } catch (err) {
-      console.error("❌ Failed to start PayPal checkout:", err);
-      toast.error("Unable to start checkout.");
-      throw err;
+      console.error('❌ Failed to start Stripe checkout:', err);
+      toast.error('Unable to start checkout.');
     } finally {
       setLoadingPackage(null);
     }
+  };
+
+  const handleBuy = async (pkg) => {
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+
+    if (savedMethods.length > 0) {
+      setPendingPackage(pkg);
+      setPaymentPickerOpen(true);
+      return;
+    }
+
+    await startCheckout(pkg);
   };
 
   const purchaseCompleteActive =
@@ -875,21 +878,7 @@ export default function CoinStore() {
   }, [purchaseCompleteActive, showPurchaseComplete]);
 
   return (
-    <PayPalScriptProvider
-      options={PAYPAL_OPTIONS}
-      onError={(err) => {
-        console.error("PayPal Script Provider Error:", err);
-        console.log("Env values:", import.meta.env.VITE_PAYPAL_CLIENT_ID, import.meta.env.VITE_SUPABASE_URL);
-        toast.error("PayPal is currently unavailable. Please try again later.");
-      }}
-      onInit={() => {
-        console.log("PayPal Script Provider initialized successfully");
-      }}
-      onApprove={() => {
-        console.log("PayPal Script Provider onApprove callback");
-      }}
-    >
-      {purchaseCompleteActive ? (
+      purchaseCompleteActive ? (
         <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center p-6">
           <div className="text-center">
             <Loader2 className="w-10 h-10 animate-spin text-purple-400 mx-auto mb-4" />
@@ -927,10 +916,55 @@ export default function CoinStore() {
                 Start with $0.75 coin purchase before making large transactions to ensure coins are routed correctly back to your account.
               </p>
               <p>
-                PayPal is used temporarily. Apple Pay, Cash App, Venmo, and others coming soon.
+                Stripe Checkout is used for purchases. More payment options coming soon.
               </p>
             </div>
           </div>
+
+          {tab === 'coins' && (
+            <div className="bg-zinc-900/80 border border-[#2C2C2C] rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-purple-300" />
+                  <p className="font-semibold">Saved payment methods</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/profile/setup')}
+                  className="text-xs px-3 py-1 rounded bg-[#1A1A24] border border-gray-700 hover:bg-[#2A2A35]"
+                >
+                  Manage in Edit Profile
+                </button>
+              </div>
+
+              <div className="mt-3">
+                {methodsLoading ? (
+                  <p className="text-sm text-gray-400">Loading payment methods…</p>
+                ) : savedMethods.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {savedMethods.map((method) => (
+                      <div
+                        key={method.id}
+                        className="px-3 py-2 rounded-lg border border-[#2C2C2C] bg-black/40 text-sm"
+                      >
+                        <div className="font-medium">
+                          {method.display_name || method.brand || 'Payment Method'}
+                          {method.is_default ? ' • Default' : ''}
+                        </div>
+                        {method.last4 ? (
+                          <div className="text-xs text-gray-400">•••• {method.last4}</div>
+                        ) : (
+                          <div className="text-xs text-gray-500">Saved method</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">No saved payment methods yet.</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Header */}
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -994,7 +1028,7 @@ export default function CoinStore() {
                   <span>🎟️</span> Troll Pass
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                  PayPal-only bundle: +{trollPassBundle.coins.toLocaleString()} Troll Coins + 30-day Troll Pass perk (chat boost + +5% gift bonus)
+                  Bundle temporarily unavailable. +{trollPassBundle.coins.toLocaleString()} Troll Coins + 30-day Troll Pass perk (chat boost + +5% gift bonus)
                 </div>
 {trollPassActive ? (
                  <div className="text-xs text-green-400 mt-2">
@@ -1014,70 +1048,13 @@ export default function CoinStore() {
                 <div className="text-yellow-400 font-bold">+{trollPassBundle.coins.toLocaleString()} Troll Coins</div>
                 <div className="text-green-400 font-bold">{formatUSD(trollPassBundle.price)}</div>
                 <div className="mt-2">
-                  <PayPalButtons
-                    style={{ layout: "horizontal" }}
-                    fundingSource="paypal"
-                    createOrder={async () => {
-                      // Check officer onboarding first
-                      const canProceed = await checkOnboarding();
-                      if (!canProceed) throw new Error("Onboarding required");
-
-                      const { data: { session } } = await supabase.auth.getSession();
-                      const token = session?.access_token;
-                      if (!token) throw new Error('No authentication token available');
-
-                      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paypal-create-order`, {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          Authorization: `Bearer ${token}`,
-                          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY
-                        },
-                        body: JSON.stringify({
-                          amount: trollPassBundle.price,
-                          coins: trollPassBundle.coins,
-                          user_id: user.id,
-                          package_id: trollPassBundle.id,
-                        }),
-                      });
-
-                      if (!res.ok) {
-                        const txt = await res.text();
-                        throw new Error(txt || `Backend error: ${res.status}`);
-                      }
-
-                      const created = await res.json();
-                      if (!created.orderID) throw new Error("Backend did not return orderID");
-                      return created.orderID;
-                    }}
-                    onApprove={async (data) => {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      const token = session?.access_token;
-
-                      const verifyRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-paypal-order`, {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          Authorization: `Bearer ${token}`,
-                          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-                        },
-                        body: JSON.stringify({ orderID: data.orderID, user_id: user.id }),
-                      });
-
-                      const verifyJson = await verifyRes.json().catch(() => ({}));
-                      if (verifyRes.ok && verifyJson.success) {
-                        toast.success(`Troll Pass activated! +${trollPassBundle.coins.toLocaleString()} Troll Coins added.`);
-                        await loadWalletData();
-                        if (refreshProfile) await refreshProfile();
-                      } else {
-                        toast.error(verifyJson?.error || "Payment completed, but activation failed.");
-                      }
-                    }}
-                    onError={(err) => {
-                      console.error("PayPal error:", err);
-                      toast.error("PayPal checkout error.");
-                    }}
-                  />
+                  <button
+                    type="button"
+                    disabled
+                    className="px-4 py-2 bg-gray-700 text-gray-300 rounded font-semibold cursor-not-allowed"
+                  >
+                    Unavailable
+                  </button>
                 </div>
               </div>
             </div>
@@ -1155,67 +1132,16 @@ export default function CoinStore() {
                         <p className="text-xl font-bold text-green-400">{formatUSD(pkg.price)}</p>
                       </div>
                       <div className="mt-4">
-                        {!import.meta.env.VITE_PAYPAL_CLIENT_ID && (
-                          <div className="bg-red-600 text-white p-2 rounded text-center text-sm mb-2">
-                            PayPal client ID not configured. Please check environment variables.
-                            <div className="text-xs mt-1">Env values: VITE_PAYPAL_CLIENT_ID={import.meta.env.VITE_PAYPAL_CLIENT_ID}, VITE_SUPABASE_URL={import.meta.env.VITE_SUPABASE_URL}</div>
-                          </div>
-                        )}
-                        <PayPalButtons
-                            style={PAYPAL_BUTTON_STYLE}
-                            fundingSource="paypal"
-                            createOrder={async () => {
-                              try {
-                                return await handleBuy(pkg);
-                              } catch (err) {
-                                console.error("❌ PayPal createOrder error:", err);
-                                toast.error("Unable to start PayPal checkout. Please try again.");
-                                throw err;
-                              }
-                            }}
-                            onApprove={async (data) => {
-                            try {
-                              console.log("✅ PayPal approved:", data);
-
-                              const { data: { session } } = await supabase.auth.getSession();
-                              const token = session?.access_token;
-
-                              const verifyRes = await fetch(
-                                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-paypal-order`,
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                    Authorization: `Bearer ${token}`,
-                                    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-                                  },
-                                  body: JSON.stringify({ 
-                                    orderID: data.orderID,
-                                    user_id: user.id
-                                  }),
-                                }
-                              );
-                              const verifyJson = await verifyRes.json().catch(() => ({}));
-                              console.log("💰 Verify result:", verifyJson);
-                              if (verifyRes.ok && verifyJson.success) {
-                                optimisticCredit(pkg.coins || 0);
-                                toast.success(`+${pkg.coins.toLocaleString()} Troll Coins added!`);
-                                loadWalletData(false);
-                              } else {
-                                toast.error(verifyJson?.error || "Payment completed, but coin update failed.");
-                              }
-                              } catch (err) {
-                                console.error("❌ PayPal onApprove error:", err);
-                                toast.error("Payment processing failed. Please contact support.");
-                              }
-                            }}
-                            onError={(err) => {
-                              console.error("❌ PayPal error:", err);
-                              toast.error("PayPal checkout error. Please try again later.");
-                            }}
-                          />
+                        <button
+                          type="button"
+                          onClick={() => handleBuy(pkg)}
+                          disabled={loadingPackage === pkg.id}
+                          className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded font-semibold"
+                        >
+                          {loadingPackage === pkg.id ? 'Starting checkout...' : 'Checkout with Stripe'}
+                        </button>
                         <div className="mt-2 text-xs text-gray-400 text-center">
-                          Secure PayPal checkout
+                          Secure Stripe checkout
                         </div>
                       </div>
                     </div>
@@ -1597,8 +1523,8 @@ export default function CoinStore() {
                   <span className="text-white text-sm">2</span>
                 </div>
                 <div>
-                  <p className="font-semibold">Pay with PayPal</p>
-                  <p className="text-sm text-gray-400">Secure payment processing through PayPal checkout</p>
+                  <p className="font-semibold">Pay with Stripe</p>
+                  <p className="text-sm text-gray-400">Secure payment processing through Stripe Checkout</p>
                 </div>
               </div>
 
@@ -1608,14 +1534,71 @@ export default function CoinStore() {
                 </div>
                 <div>
                   <p className="font-semibold">Coins Added After Payment</p>
-                  <p className="text-sm text-gray-400">Coins are only added after successful PayPal payment completion</p>
+                  <p className="text-sm text-gray-400">Coins are only added after successful Stripe payment completion</p>
                 </div>
               </div>
             </div>
           </div>
+
+          {paymentPickerOpen && pendingPackage && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-[#0D0D1A] border border-[#2C2C2C] rounded-xl p-6 w-full max-w-lg">
+                <h3 className="text-lg font-semibold mb-2">Confirm payment method</h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  We found saved payment methods on your account. Stripe will show these again at checkout.
+                </p>
+
+                <div className="space-y-2 mb-4">
+                  {savedMethods.map((method) => (
+                    <div key={method.id} className="flex items-center justify-between px-3 py-2 rounded border border-[#2C2C2C]">
+                      <div>
+                        <div className="text-sm font-medium">
+                          {method.display_name || method.brand || 'Payment Method'}
+                          {method.is_default ? ' • Default' : ''}
+                        </div>
+                        {method.last4 ? (
+                          <div className="text-xs text-gray-400">•••• {method.last4}</div>
+                        ) : (
+                          <div className="text-xs text-gray-500">Saved method</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="text-xs text-gray-500 mb-4">
+                  Stripe verifies methods automatically (you may see a $0.00 authorization).
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentPickerOpen(false);
+                      setPendingPackage(null);
+                    }}
+                    className="px-4 py-2 rounded bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pkg = pendingPackage;
+                      setPaymentPickerOpen(false);
+                      setPendingPackage(null);
+                      if (pkg) startCheckout(pkg);
+                    }}
+                    className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700"
+                  >
+                    Continue to Checkout
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      )}
-    </PayPalScriptProvider>
+      )
   );
 }

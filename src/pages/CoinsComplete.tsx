@@ -1,69 +1,36 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
 
 export default function CoinsComplete() {
   const [search] = useSearchParams();
   const navigate = useNavigate();
-  const { refreshProfile } = useAuthStore() as any;
   const [status, setStatus] = useState<"pending" | "success" | "error">(
     "pending"
   );
   const [message, setMessage] = useState<string>("Finishing your purchase...");
 
   useEffect(() => {
-    const orderId = search.get("token") || search.get("orderId") || search.get("PayerID");
-    if (!orderId) {
+    const canceled = search.get("canceled");
+    const success = search.get("success");
+
+    if (canceled) {
       setStatus("error");
-      setMessage("Missing PayPal order ID.");
+      setMessage("Payment was cancelled.");
+      toast.info("Payment cancelled");
       return;
     }
 
-    const run = async () => {
-      try {
-        const { data: session } = await supabase.auth.getSession();
-        const token = session.session?.access_token;
-        if (!token) throw new Error("No auth token");
+    if (success) {
+      setStatus("success");
+      setMessage("Payment successful. Your wallet will update shortly.");
+      toast.success("Payment successful!");
+      return;
+    }
 
-        const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
-          'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1';
-
-        const res = await fetch(
-          `${edgeFunctionsUrl}/paypal-capture-order`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify({ orderId })
-          }
-        );
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("Capture failed:", errorText);
-          throw new Error("Capture failed");
-        }
-
-        const json = await res.json();
-        setStatus("success");
-        setMessage(`Purchase complete! +${json.coinsAdded?.toLocaleString() || 0} coins added to your account.`);
-        toast.success(`+${json.coinsAdded?.toLocaleString() || 0} coins added!`);
-        
-        if (refreshProfile) await refreshProfile();
-      } catch (e: any) {
-        console.error(e);
-        setStatus("error");
-        setMessage("There was a problem finalizing your purchase. Please contact support if coins were not added.");
-        toast.error("Payment processing error");
-      }
-    };
-
-    run();
-  }, [search, refreshProfile]);
+    setStatus("pending");
+    setMessage("Waiting for payment confirmation...");
+  }, [search]);
 
   return (
     <div className="p-6 max-w-xl mx-auto text-center text-white min-h-screen flex items-center justify-center">

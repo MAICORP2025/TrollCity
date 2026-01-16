@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAvatar } from '../lib/hooks/useAvatar'
 import Avatar3D from '../components/avatar/Avatar3D'
+import PaymentMethodManager from '../components/payments/PaymentMethodManager'
 
 const ProfileSetup = () => {
   const navigate = useNavigate()
@@ -288,6 +289,7 @@ const ProfileSetup = () => {
               src={bannerUrl}
               alt="Cover"
               className="w-full h-full object-cover"
+              onError={() => setBannerUrl('')}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-300 text-sm uppercase tracking-[0.4em]">
@@ -467,6 +469,23 @@ const ProfileSetup = () => {
                 {loading ? 'Saving…' : 'Save Profile'}
               </button>
             </form>
+          </div>
+        </details>
+
+
+
+        {/* Payment Methods */}
+        <details className="bg-[#1A1A1A] rounded-lg border border-[#2C2C2C] mt-6" open>
+          <summary className="cursor-pointer px-6 py-4 flex items-center justify-between">
+            <span className="font-semibold">Payment Methods</span>
+            <span className="text-sm bg-[#7C3AED] text-white px-3 py-1 rounded">Manage</span>
+          </summary>
+
+          <div className="px-6 pb-6">
+            <PaymentMethodManager
+              title="Add Payment Method"
+              description="Add a Stripe-supported payment method for faster coin purchases."
+            />
           </div>
         </details>
 

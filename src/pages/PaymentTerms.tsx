@@ -46,7 +46,7 @@ export default function PaymentTerms() {
             </p>
             <ul className="list-disc list-inside text-gray-300 space-y-1 ml-4">
               <li>Credit/Debit Cards</li>
-              <li>Digital Wallets (PayPal, Apple Pay, Google Pay)</li>
+              <li>Digital Wallets (Apple Pay, Google Pay)</li>
               <li>Bank transfers where available</li>
               <li>Cryptocurrency (future feature)</li>
             </ul>

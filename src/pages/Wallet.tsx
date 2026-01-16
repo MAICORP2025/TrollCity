@@ -200,7 +200,7 @@ export default function Wallet() {
           <div className="text-sm mt-1">
             {profile?.payout_paypal_email ? (
               <>
-                <div className="font-mono text-xs text-green-300">PayPal Connected</div>
+                <div className="font-mono text-xs text-green-300">Payout Email Connected</div>
                 <div className="text-xs text-gray-400 mt-1">
                   {profile.payout_paypal_email.substring(0, 20)}...
                 </div>

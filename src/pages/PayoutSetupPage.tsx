@@ -8,7 +8,7 @@ import { CreditCard, Save, Mail, Coins } from 'lucide-react'
 export default function PayoutSetupPage() {
   const { profile, user } = useAuthStore()
   const navigate = useNavigate()
-  const [paypalEmail, setPaypalEmail] = useState(profile?.payout_paypal_email || '')
+  const [payoutEmail, setPayoutEmail] = useState(profile?.payout_paypal_email || '')
   const [saving, setSaving] = useState(false)
   const initialized = useRef(!!profile?.payout_paypal_email)
 
@@ -20,7 +20,7 @@ export default function PayoutSetupPage() {
 
     // Load current Gift Card email only if not already initialized
     if (profile?.payout_paypal_email && !initialized.current) {
-      setPaypalEmail(profile.payout_paypal_email)
+      setPayoutEmail(profile.payout_paypal_email)
       initialized.current = true
     }
   }, [user, profile, navigate])
@@ -35,12 +35,12 @@ export default function PayoutSetupPage() {
       return
     }
 
-    if (!paypalEmail.trim()) {
+    if (!payoutEmail.trim()) {
       toast.error('Please enter your Gift Card email')
       return
     }
 
-    if (!validateEmail(paypalEmail)) {
+    if (!validateEmail(payoutEmail)) {
       toast.error('Please enter a valid email address')
       return
     }
@@ -50,7 +50,7 @@ export default function PayoutSetupPage() {
       const { error } = await supabase
         .from('user_profiles')
         .update({
-          payout_paypal_email: paypalEmail.trim(),
+          payout_paypal_email: payoutEmail.trim(),
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
@@ -62,7 +62,7 @@ export default function PayoutSetupPage() {
       // Update local profile
       useAuthStore.getState().setProfile({
         ...profile,
-        payout_paypal_email: paypalEmail.trim()
+        payout_paypal_email: payoutEmail.trim()
       } as any)
 
       // Navigate back or to earnings page
@@ -122,14 +122,14 @@ export default function PayoutSetupPage() {
           {/* Gift Card Email Input */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-300 mb-2">
-              Gift Card Email Address *
+              Payout Email Address *
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="email"
-                value={paypalEmail}
-                onChange={(e) => setPaypalEmail(e.target.value)}
+                value={payoutEmail}
+                onChange={(e) => setPayoutEmail(e.target.value)}
                 placeholder="your.email@example.com"
                 className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
@@ -153,7 +153,7 @@ export default function PayoutSetupPage() {
           {/* Save Button */}
           <button
             onClick={handleSave}
-            disabled={saving || !paypalEmail.trim() || !validateEmail(paypalEmail)}
+            disabled={saving || !payoutEmail.trim() || !validateEmail(payoutEmail)}
             className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Save className="w-5 h-5" />

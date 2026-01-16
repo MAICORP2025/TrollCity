@@ -7,6 +7,7 @@ import ClickableUsername from '../../components/ClickableUsername'
 import WeeklyReportForm from '../../components/WeeklyReportForm'
 import WeeklyReportsList from '../../components/WeeklyReportsList'
 import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
+import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
 import '../../styles/LeadOfficerDashboard.css'
 
 type Applicant = {
@@ -531,6 +532,10 @@ export function LeadOfficerDashboard() {
 
       <section>
         <OfficerStreamGrid />
+      </section>
+
+      <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
+        <OfficerShiftCalendar title="All Officer Shifts" />
       </section>
 
       {/* Applicants */}

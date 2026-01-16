@@ -12,15 +12,17 @@ import {
   FileText,
   LogOut,
   ShieldAlert,
-  Home
+  Home,
+  Calendar
 } from 'lucide-react'
+import OfficerShiftCalendar from '../components/officer/OfficerShiftCalendar'
 import ExecutiveIntakeList from './admin/components/shared/ExecutiveIntakeList'
 import CashoutRequestsList from './admin/components/shared/CashoutRequestsList'
 import GiftCardFulfillmentList from './admin/components/shared/GiftCardFulfillmentList'
 import CriticalAlertsList from './admin/components/shared/CriticalAlertsList'
 import ExecutiveReportsList from './admin/components/shared/ExecutiveReportsList'
 
-type TabId = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'troll_town'
+type TabId = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'troll_town' | 'shifts'
 
 export default function SecretaryConsole() {
   const { user, profile } = useAuthStore()
@@ -167,6 +169,12 @@ export default function SecretaryConsole() {
             label="Report Builder"
           />
           <NavButton 
+            active={activeTab === 'shifts'} 
+            onClick={() => setActiveTab('shifts')}
+            icon={<Calendar className="w-5 h-5" />}
+            label="Officer Shifts"
+          />
+          <NavButton 
             active={activeTab === 'troll_town'} 
             onClick={() => setActiveTab('troll_town')}
             icon={<Home className="w-5 h-5" />}
@@ -210,6 +218,7 @@ export default function SecretaryConsole() {
             {activeTab === 'giftcards' && <GiftCardFulfillmentList viewMode="secretary" />}
             {activeTab === 'alerts' && <CriticalAlertsList viewMode="secretary" />}
             {activeTab === 'reports' && <ExecutiveReportsList viewMode="secretary" />}
+            {activeTab === 'shifts' && <OfficerShiftCalendar title="All Officer Shifts" />}
             {activeTab === 'troll_town' && <SecretaryTrollTownDeeds />}
         </div>
       </div>

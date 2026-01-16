@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { CheckCircle, Coins, CreditCard, Shield } from 'lucide-react'
+import { CheckCircle, Coins, Shield } from 'lucide-react'
 
 export default function VerificationPage() {
   const { user, profile, refreshProfile } = useAuthStore()
   const navigate = useNavigate()
-  const [processing, setProcessing] = useState<'paypal' | 'coins' | null>(null)
+  const [processing, setProcessing] = useState<'coins' | null>(null)
 
   if (!user) {
     return (
@@ -44,54 +44,6 @@ export default function VerificationPage() {
         </div>
       </div>
     )
-  }
-
-  const payWithPayPal = async () => {
-    if (processing) return
-
-    setProcessing('paypal')
-    try {
-      const { data: session } = await supabase.auth.getSession()
-      const token = session.session?.access_token
-
-      if (!token) {
-        toast.error('Not authenticated')
-        return
-      }
-
-      const edgeFunctionsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
-
-      const response = await fetch(`${edgeFunctionsUrl}/verify-user-paypal`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to create payment')
-      }
-
-      const data = await response.json()
-
-      if (!data.approvalUrl) {
-        throw new Error('Missing approval URL')
-      }
-
-      // Store order ID for completion
-      sessionStorage.setItem('verification_order_id', data.orderId)
-
-      // Redirect to PayPal
-      window.location.href = data.approvalUrl
-    } catch (error: any) {
-      console.error('Error starting PayPal payment:', error)
-      toast.error(error?.message || 'Failed to start payment')
-    } finally {
-      setProcessing(null)
-    }
   }
 
   const payWithCoins = async () => {
@@ -193,15 +145,6 @@ export default function VerificationPage() {
 
         {/* Payment Options */}
         <div className="space-y-4">
-          <button
-            onClick={payWithPayPal}
-            disabled={processing !== null}
-            className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            <CreditCard className="w-5 h-5" />
-            {processing === 'paypal' ? 'Processing...' : 'Pay $5 via PayPal'}
-          </button>
-
           <div className="relative">
             <button
               onClick={payWithCoins}
