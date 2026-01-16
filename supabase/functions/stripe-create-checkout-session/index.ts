@@ -187,7 +187,8 @@ serve(async (req: Request) => {
           : typeof packageCoins === "number" && typeof packagePrice === "number"
             ? `coins=eq.${packageCoins}&price_usd=eq.${packagePrice}`
             : "";
-      const restUrl = `${SUPABASE_URL}/rest/v1/coin_packages?${filterId}&is_active=eq.true&stripe_price_id=is.not_null&select=id,coins,price_usd,amount_cents,stripe_price_id,is_active,paypal_sku`;
+      const stripeFilter = "stripe_price_id=is.not_null";
+      const restUrl = `${SUPABASE_URL}/rest/v1/coin_packages?${filterId}&is_active=eq.true&${stripeFilter}&select=id,coins,price_usd,amount_cents,stripe_price_id,is_active,paypal_sku`;
       const restRes = await fetch(restUrl, {
         headers: {
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
