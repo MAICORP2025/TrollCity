@@ -2465,10 +2465,10 @@ export default function LivePage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 px-2 pb-2 pt-0 overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 px-2 pb-2 pt-0 overflow-hidden">
         {/* Broadcast Layout (Streamer + Guests) */}
         <div
-          className="lg:w-[72%] flex-1 min-h-[32dvh] lg:min-h-0 flex flex-col relative z-0 video-cover"
+          className="lg:w-[72%] flex-none h-[36dvh] sm:h-[40dvh] lg:h-full lg:flex-1 min-h-0 flex flex-col relative z-0 video-cover"
           onClick={() => {
             if (!showLivePanels) setShowLivePanels(true);
           }}
@@ -2539,13 +2539,13 @@ export default function LivePage() {
          )}
          {/* Right Panel (Chat/Gifts) */}
          {showLivePanels && (
-         <div className="lg:w-[28%] flex-1 lg:h-full min-h-0 flex flex-col gap-3 overflow-hidden relative z-0">
+         <div className="lg:w-[28%] flex-1 lg:h-full min-h-0 flex flex-col gap-2 overflow-hidden relative z-0">
             <div
               className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col ${
                 activeMobileTab === 'gifts' ? 'flex-[2]' : 'flex-[1]'
               } min-h-0 overflow-hidden`}
             >
-              <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-white/10 bg-black/40">
+              <div className="flex-1 min-h-0 max-h-[22dvh] sm:max-h-[26dvh] lg:max-h-none overflow-hidden rounded-xl border border-white/10 bg-black/40">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10">Gifts</div>
                 <div className="h-full min-h-0 overflow-y-auto pr-2 pb-[env(safe-area-inset-bottom)]">
                 <GiftBox
@@ -2563,7 +2563,7 @@ export default function LivePage() {
                 activeMobileTab === 'chat' ? 'flex-[2]' : 'flex-[1]'
               } min-h-0`}
             >
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/40">
+              <div className="flex-1 min-h-0 max-h-[22dvh] sm:max-h-[26dvh] lg:max-h-none flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/40">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10 flex items-center justify-between">
                   <span>Chat</span>
                   <button

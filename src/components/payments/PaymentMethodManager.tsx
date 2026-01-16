@@ -151,6 +151,7 @@ export default function PaymentMethodManager({
   }, [profile?.id, setupCounter])
 
   const handleLinkCard = async () => {
+    if (linking) return
     if (!profile?.id || !stripeRef.current || !elementsRef.current) {
       return toast.error('Please sign in.')
     }
@@ -160,12 +161,18 @@ export default function PaymentMethodManager({
 
       const { error, setupIntent } = await stripeRef.current.confirmSetup({
         elements: elementsRef.current,
-        confirmParams: {},
+        confirmParams: {
+          return_url: window.location.href,
+        },
         redirect: 'if_required',
       })
 
       if (error) {
         throw new Error(error.message || 'Setup failed')
+      }
+
+      if (setupIntent?.status === 'succeeded') {
+        // proceed
       }
 
       const paymentMethodId = setupIntent?.payment_method
