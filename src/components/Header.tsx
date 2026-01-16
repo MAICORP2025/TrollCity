@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Bell, LogOut, Store } from 'lucide-react'
+import { Search, Bell, LogOut, Store, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase, searchUsers } from '../lib/supabase'
@@ -322,6 +322,15 @@ const Header = () => {
             </span>
           )}
         </Link>
+
+        <button
+          onClick={handleClearCacheReload}
+          className="md:hidden flex items-center justify-center w-10 h-10 rounded-full bg-cyan-500/15 text-cyan-200 border border-cyan-400/30 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all duration-300"
+          title="Clear cache and hard reload"
+          type="button"
+        >
+          <RefreshCw className="w-5 h-5" />
+        </button>
         
         <div className="hidden md:block">
           <ProfileDropdown />

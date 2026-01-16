@@ -28,6 +28,7 @@ import ProfileModal from '../components/broadcast/ProfileModal';
 import CoinStoreModal from '../components/broadcast/CoinStoreModal';
 import EntranceEffect from '../components/broadcast/EntranceEffect';
 import BroadcastLayout from '../components/broadcast/BroadcastLayout';
+import FlyingChatOverlay from '../components/broadcast/FlyingChatOverlay';
 import GlobalGiftBanner from '../components/GlobalGiftBanner';
 import GiftEventOverlay from './GiftEventOverlay';
 import { getUserEntranceEffect, triggerUserEntranceEffect } from '../lib/entranceEffects';
@@ -1630,7 +1631,9 @@ export default function LivePage() {
 
   }, [isBroadcaster, streamId, isConnected, roomName, stream?.status, stream?.is_live]);
 
-  const [activeMobileTab, setActiveMobileTab] = useState<'chat' | 'gifts'>('chat');
+  const [useFlyingChats, setUseFlyingChats] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const lastTapRef = useRef(0);
 
   useEffect(() => {
     const shouldLock = chatOverlayOpen || controlPanelOpen || isGiftModalOpen || isCoinStoreOpen
@@ -1643,6 +1646,46 @@ export default function LivePage() {
       document.body.classList.remove('no-scroll')
     }
   }, [chatOverlayOpen, controlPanelOpen, isGiftModalOpen, isCoinStoreOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(max-width: 1023px)');
+    const update = () => setIsMobileViewport(media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener('change', update);
+    } else {
+      media.addListener(update);
+    }
+    return () => {
+      if (media.removeEventListener) {
+        media.removeEventListener('change', update);
+      } else {
+        media.removeListener(update);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      setUseFlyingChats(false);
+    }
+  }, [isMobileViewport]);
+
+  const openGiftPopup = useCallback(() => {
+    if (!isMobileViewport) return;
+    setGiftReceiver(null);
+    setIsGiftModalOpen(true);
+  }, [isMobileViewport]);
+
+  const handleStageTouchEnd = useCallback(() => {
+    if (!isMobileViewport) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      openGiftPopup();
+    }
+    lastTapRef.current = now;
+  }, [isMobileViewport, openGiftPopup]);
 
   // Stream polling
   useEffect(() => {
@@ -2264,7 +2307,7 @@ export default function LivePage() {
   }
 
   return (
-    <div className="h-full w-full flex flex-col text-white overflow-hidden relative">
+    <div className="h-[100dvh] min-h-[100dvh] w-full flex flex-col text-white overflow-hidden relative pt-[env(safe-area-inset-top,0px)] pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px))] lg:pt-0 lg:pb-0">
       {hasVideoBackground ? (
         <video
           className="fixed inset-0 w-full h-full object-cover -z-20"
@@ -2300,7 +2343,7 @@ export default function LivePage() {
       <div className="fixed inset-0 bg-black/30 -z-10" />
       <div className={`fixed inset-0 pointer-events-none ${reactiveClass} -z-0`} />
 
-      <div className="relative z-10 h-full w-full flex flex-col min-h-[100dvh]">
+      <div className="relative z-10 w-full flex flex-col min-h-0 flex-1">
         <GlobalGiftBanner />
       {needsPrivateGate && !privateAccessGranted && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/90 px-4">
@@ -2356,18 +2399,29 @@ export default function LivePage() {
       )}
       
       {/* Header Area */}
-      <div className="shrink-0 px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-2 flex flex-wrap justify-between items-center gap-3 z-10">
+      <div className="shrink-0 px-[clamp(8px,2.5vw,14px)] pt-2 pb-2 flex flex-nowrap justify-between items-center gap-2 z-10">
          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-[0_0_15px_rgba(147,51,234,0.5)]">
                <span className="font-bold text-lg text-white">TC</span>
             </div>
             <div>
-               <h1 className="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 shadow-purple-500/50 drop-shadow-md">TROLL CITY</h1>
-               <p className="text-xs text-white/50 tracking-widest uppercase">Live Broadcast</p>
+               <h1 className="text-[clamp(14px,4vw,20px)] font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 shadow-purple-500/50 drop-shadow-md">TROLL CITY</h1>
+               <p className="text-[clamp(10px,2.8vw,12px)] text-white/50 tracking-widest uppercase">Live Broadcast</p>
             </div>
          </div>
          
-         <div className="flex items-center gap-4">
+         <div className="flex items-center gap-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setUseFlyingChats((prev) => !prev)}
+              className={`lg:hidden px-2 py-1.5 rounded-lg border text-[10px] font-semibold uppercase tracking-wide transition ${
+                useFlyingChats
+                  ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200'
+                  : 'border-white/15 bg-white/5 text-white/70'
+              }`}
+            >
+              {useFlyingChats ? 'Chat Box' : 'Flying Chats'}
+            </button>
             {stream.is_live && (
               isBroadcaster && stream.start_time ? (
                 <BroadcasterTimer startTime={stream.start_time} onClick={endStream} />
@@ -2379,17 +2433,17 @@ export default function LivePage() {
               )
             )}
 
-            <div className="px-3 py-2 bg-black/40 backdrop-blur-sm rounded-xl border border-yellow-500/30 flex items-center gap-2 shadow-[0_0_10px_rgba(234,179,8,0.2)]">
+            <div className="px-2 py-1.5 bg-black/40 backdrop-blur-sm rounded-xl border border-yellow-500/30 flex items-center gap-2 shadow-[0_0_10px_rgba(234,179,8,0.2)]">
               <div className="w-5 h-5 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-bold text-[10px] border border-yellow-300">C</div>
-              <span className="font-bold text-yellow-400 text-sm">{(stream.total_gifts_coins || 0).toLocaleString()}</span>
+              <span className="font-bold text-yellow-400 text-[clamp(11px,3vw,14px)]">{(stream.total_gifts_coins || 0).toLocaleString()}</span>
             </div>
 
             {isBroadcaster && (
               <button
                 onClick={() => setControlPanelOpen(true)}
-                className="px-4 py-2 rounded-xl border border-purple-500/30 bg-purple-900/20 text-xs font-bold uppercase tracking-wider text-purple-200 hover:bg-purple-800/40 hover:border-purple-400/50 transition-all shadow-[0_0_10px_rgba(147,51,234,0.2)]"
+                className="px-2 py-1.5 rounded-xl border border-purple-500/30 bg-purple-900/20 text-[10px] font-bold uppercase tracking-wider text-purple-200 hover:bg-purple-800/40 hover:border-purple-400/50 transition-all shadow-[0_0_10px_rgba(147,51,234,0.2)]"
               >
-                Control Panel
+                Control
               </button>
             )}
 
@@ -2406,10 +2460,10 @@ export default function LivePage() {
                 ref={viewerButtonRef}
                 type="button"
                 onClick={() => setIsViewerDropdownOpen((prev) => !prev)}
-                className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-400 transition"
+                className="px-2 py-1.5 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-green-400 transition"
                 aria-expanded={isViewerDropdownOpen}
               >
-                <Users size={16} className="text-green-400" /> <span className="font-bold">{viewerCount.toLocaleString()}</span>
+                <Users size={16} className="text-green-400" /> <span className="font-bold text-[clamp(11px,3vw,14px)]">{viewerCount.toLocaleString()}</span>
               </button>
               {isViewerDropdownOpen && (
                 <div
@@ -2453,10 +2507,10 @@ export default function LivePage() {
 
             {isBroadcaster && (
               <>
-                <button onClick={toggleMic} className={`p-2 rounded-lg border ${micOn ? 'bg-purple-600 border-purple-400' : 'bg-red-900/50 border-red-500'}`}>
+                <button onClick={toggleMic} className={`p-1.5 rounded-lg border ${micOn ? 'bg-purple-600 border-purple-400' : 'bg-red-900/50 border-red-500'}`}>
                   {micOn ? <Mic size={18} /> : <MicOff size={18} />}
                 </button>
-                <button onClick={toggleCamera} className={`p-2 rounded-lg border ${cameraOn ? 'bg-purple-600 border-purple-400' : 'bg-red-900/50 border-red-500'}`}>
+                <button onClick={toggleCamera} className={`p-1.5 rounded-lg border ${cameraOn ? 'bg-purple-600 border-purple-400' : 'bg-red-900/50 border-red-500'}`}>
                   {cameraOn ? <Camera size={18} /> : <CameraOff size={18} />}
                 </button>
               </>
@@ -2465,14 +2519,18 @@ export default function LivePage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 px-2 pb-2 pt-0 overflow-hidden">
-        {/* Broadcast Layout (Streamer + Guests) */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 px-[clamp(8px,2.5vw,12px)] pb-2 overflow-hidden">
+        {/* Live Stage (Video + Guests) */}
         <div
-          className="lg:w-[72%] flex-none h-[36dvh] sm:h-[40dvh] lg:h-full lg:flex-1 min-h-0 flex flex-col relative z-0 video-cover"
+          className="flex flex-col min-h-0 gap-2 lg:gap-2 flex-1 lg:flex-1 lg:w-[72%] relative z-0 video-cover"
           onClick={() => {
             if (!showLivePanels) setShowLivePanels(true);
           }}
-          onDoubleClick={handleOfficerDoubleClick}
+          onDoubleClick={(e) => {
+            handleOfficerDoubleClick(e);
+            openGiftPopup();
+          }}
+          onTouchEnd={handleStageTouchEnd}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
@@ -2481,7 +2539,9 @@ export default function LivePage() {
             }
           }}
         >
+          <div className="shrink-0 min-h-0 flex flex-col relative">
             <BroadcastLayout 
+              className="h-auto lg:h-full"
               room={liveKit.getRoom()} 
               broadcasterId={stream.broadcaster_id}
               isHost={isBroadcaster}
@@ -2518,61 +2578,62 @@ export default function LivePage() {
             >
                <GiftEventOverlay gift={lastGift} onProfileClick={(p) => setSelectedProfile(p)} />
             </BroadcastLayout>
-         </div>
 
-         {/* Mobile Tab Bar */}
+            {useFlyingChats && (
+              <div className="absolute inset-0 pointer-events-none lg:hidden">
+                <div className="chat-container">
+                  <div className="message-list">
+                    <FlyingChatOverlay streamId={streamId || ''} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Chat Panel (hidden when flying chats enabled) */}
+          {showLivePanels && !useFlyingChats && (
+            <div className="lg:hidden relative flex flex-col min-h-0 h-[clamp(160px,26vh,240px)] overflow-hidden rounded-xl border border-white/10 bg-black/40">
+              <button
+                type="button"
+                onClick={() => setChatOverlayOpen(true)}
+                className="absolute top-2 right-2 z-10 text-[10px] px-2 py-1 rounded-full border border-white/20 text-white/70 bg-black/40"
+              >
+                Expand
+              </button>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <ChatBox 
+                  streamId={streamId || ''} 
+                  onProfileClick={setSelectedProfile}
+                  onCoinSend={handleSendCoinsToUser}
+                  room={liveKit.getRoom()}
+                  isBroadcaster={isBroadcaster}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Right Panel (Chat/Gifts) */}
         {showLivePanels && (
-         <div className="flex lg:hidden bg-[#0b091f]/95 rounded-lg p-1 shrink-0 gap-2 border border-white/10">
-            <button 
-              onClick={() => setActiveMobileTab('chat')}
-              className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${activeMobileTab === 'chat' ? 'bg-purple-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
-            >
-              Chat
-            </button>
-            <button 
-              onClick={() => setActiveMobileTab('gifts')}
-              className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${activeMobileTab === 'gifts' ? 'bg-purple-600 text-white shadow-lg' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
-            >
-              Gifts
-            </button>
-         </div>
-         )}
-         {/* Right Panel (Chat/Gifts) */}
-         {showLivePanels && (
-         <div className="lg:w-[28%] flex-1 lg:h-full min-h-0 flex flex-col gap-2 overflow-hidden relative z-0">
-            <div
-              className={`${activeMobileTab === 'gifts' ? 'flex' : 'hidden'} lg:flex flex-col ${
-                activeMobileTab === 'gifts' ? 'flex-[2]' : 'flex-[1]'
-              } min-h-0 overflow-hidden`}
-            >
-              <div className="flex-1 min-h-0 max-h-[22dvh] sm:max-h-[26dvh] lg:max-h-none overflow-hidden rounded-xl border border-white/10 bg-black/40">
+          <div className="hidden lg:flex lg:w-[28%] flex-1 lg:h-full min-h-0 flex-col gap-2 overflow-hidden relative z-0">
+            <div className="flex flex-col flex-[1] min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-white/10 bg-black/40">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10">Gifts</div>
                 <div className="h-full min-h-0 overflow-y-auto pr-2 pb-[env(safe-area-inset-bottom)]">
-                <GiftBox
-                  onSendGift={handleGiftSent}
-                  gifts={quickGifts}
-                  loading={quickGiftsLoading}
-                  loadError={quickGiftsError}
-                />
+                  <GiftBox
+                    onSendGift={handleGiftSent}
+                    gifts={quickGifts}
+                    loading={quickGiftsLoading}
+                    loadError={quickGiftsError}
+                  />
                 </div>
               </div>
             </div>
-            
-            <div
-              className={`${activeMobileTab === 'chat' ? 'flex' : 'hidden'} lg:flex flex-col ${
-                activeMobileTab === 'chat' ? 'flex-[2]' : 'flex-[1]'
-              } min-h-0`}
-            >
-              <div className="flex-1 min-h-0 max-h-[22dvh] sm:max-h-[26dvh] lg:max-h-none flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/40">
-                <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10 flex items-center justify-between">
+
+            <div className="flex flex-col flex-[1] min-h-0">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10">
                   <span>Chat</span>
-                  <button
-                    type="button"
-                    onClick={() => setChatOverlayOpen(true)}
-                    className="lg:hidden text-[10px] px-2 py-1 rounded-full border border-white/15 text-white/70"
-                  >
-                    Expand
-                  </button>
                 </div>
                 <div className="flex-1 min-h-0">
                   <ChatBox 
@@ -2585,9 +2646,19 @@ export default function LivePage() {
                 </div>
               </div>
             </div>
-         </div>
-         )}
+          </div>
+        )}
       </div>
+
+      {useFlyingChats && (
+        <button
+          type="button"
+          onClick={() => setChatOverlayOpen(true)}
+          className="lg:hidden fixed right-3 bottom-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+12px)] z-[70] px-3 py-2 rounded-full bg-purple-600/90 border border-purple-400/60 text-xs font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(147,51,234,0.6)]"
+        >
+          Chat
+        </button>
+      )}
 
       {/* Modals */}
       {isGiftModalOpen && (
@@ -2699,24 +2770,26 @@ export default function LivePage() {
       )}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
       {chatOverlayOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#05010a]/95 p-4 md:hidden">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-[0.3em] text-white/60">Live Chat</h3>
-            <button
-              onClick={() => setChatOverlayOpen(false)}
-              className="text-white/60 hover:text-white text-sm"
-            >
-              Close
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 mt-3">
-            <ChatBox
-              streamId={streamId || ''}
-              onProfileClick={setSelectedProfile}
-              onCoinSend={handleSendCoinsToUser}
-              room={liveKit.getRoom()}
-              isBroadcaster={isBroadcaster}
-            />
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50 p-2 md:hidden">
+          <div className="w-full max-h-[80vh] bg-[#05010a] rounded-t-2xl border border-white/10 overflow-hidden pb-[env(safe-area-inset-bottom,0px)]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <h3 className="text-sm font-bold uppercase tracking-[0.3em] text-white/60">Live Chat</h3>
+              <button
+                onClick={() => setChatOverlayOpen(false)}
+                className="text-white/60 hover:text-white text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden p-3">
+              <ChatBox
+                streamId={streamId || ''}
+                onProfileClick={setSelectedProfile}
+                onCoinSend={handleSendCoinsToUser}
+                room={liveKit.getRoom()}
+                isBroadcaster={isBroadcaster}
+              />
+            </div>
           </div>
         </div>
       )}

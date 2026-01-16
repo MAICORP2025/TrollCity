@@ -282,10 +282,10 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
   };
 
   return (
-    <div className="h-full flex flex-col min-h-0 bg-gradient-to-b from-gray-900 to-black rounded-lg p-4 purple-neon">
-      <h3 className="text-sm font-bold mb-3">LIVE CHAT</h3>
+    <div className="h-full flex flex-col min-h-0 bg-gradient-to-b from-gray-900 to-black rounded-lg p-[clamp(8px,2.5vw,16px)] purple-neon">
+      <h3 className="text-[clamp(11px,3.5vw,14px)] font-bold mb-3">LIVE CHAT</h3>
 
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-0 pr-2">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto overscroll-contain space-y-2 mb-3 min-h-0 pr-2">
         {/** Render messages deduplicated by `id` to avoid duplicate React keys */}
         {useMemo(() => {
           const map = new Map<string, Message>();
@@ -398,14 +398,14 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
         <div ref={chatEndRef} />
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 sticky bottom-0 bg-gray-900/95 px-1 py-2 -mx-1 sm:static sm:bg-transparent sm:px-0 sm:py-0 sm:mx-0">
         <input
           type="text"
           placeholder="Type a message..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyPress={handleKeyPress}
-          className="flex-1 bg-gray-800 text-white placeholder-gray-500 rounded px-3 py-2 text-sm focus:outline-none purple-neon transition-all"
+          className="flex-1 bg-gray-800 text-white placeholder-gray-500 rounded px-3 py-2 text-[clamp(12px,3.5vw,14px)] focus:outline-none purple-neon transition-all"
         />
         <button
           onClick={handleSendMessage}

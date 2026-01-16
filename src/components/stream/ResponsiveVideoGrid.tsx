@@ -88,9 +88,9 @@ export default function ResponsiveVideoGrid({
   });
 
   return (
-    <div className="w-full h-full flex flex-col gap-3 sm:gap-6 p-3 sm:p-6">
+    <div className="w-full h-full flex flex-col gap-2 sm:gap-4 lg:gap-6 p-2 sm:p-4 lg:p-6">
       {/* Main Broadcaster Area */}
-      <div className="w-full flex-1 min-h-0 relative rounded-2xl sm:rounded-3xl overflow-hidden border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)] bg-black/40 group">
+      <div className="w-full flex-none lg:flex-1 min-h-0 h-[clamp(220px,40vh,320px)] lg:h-auto relative rounded-2xl sm:rounded-3xl overflow-hidden border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)] bg-black/40 group">
         <VideoTile
           participant={broadcaster}
           isBroadcaster
@@ -135,13 +135,13 @@ export default function ResponsiveVideoGrid({
       </div>
 
       {guestSeatCount > 0 && (
-        <div className="shrink-0 grid gap-2 sm:gap-3 lg:gap-4 auto-rows-max">
-          {/* Mobile: 2 columns, Tablet: 3 columns, Desktop: 6 columns in grid pattern */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
+        <div className="shrink-0 h-[clamp(72px,14vw,110px)] lg:h-auto">
+          {/* Mobile: horizontal seat row. Desktop: grid pattern */}
+          <div className="flex h-full items-stretch gap-2 overflow-x-auto pb-1 lg:overflow-visible lg:grid lg:grid-cols-6 lg:gap-4">
             {guestAssignments.slice(0, 6).map(({ key, seatIndex, participant }) => (
               <div 
                 key={key} 
-                className="aspect-video relative rounded-lg sm:rounded-xl overflow-hidden bg-[#1a0b2e]/50 border border-purple-500/20 shadow-inner group transition-all hover:border-purple-500/40 hover:bg-[#1a0b2e]/70"
+                className="h-full aspect-square shrink-0 min-w-[72px] max-w-[110px] lg:min-w-0 lg:max-w-none lg:h-auto lg:aspect-video relative rounded-lg sm:rounded-xl overflow-hidden bg-[#1a0b2e]/50 border border-purple-500/20 shadow-inner group transition-all hover:border-purple-500/40 hover:bg-[#1a0b2e]/70"
               >
                 {participant ? (
                   <VideoTile

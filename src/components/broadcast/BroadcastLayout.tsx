@@ -8,6 +8,7 @@ interface BroadcastLayoutProps {
   room: Room
   broadcasterId: string
   isHost: boolean
+  className?: string
   joinPrice?: number
   boxCount?: number
   seats?: any[]
@@ -34,6 +35,7 @@ export default function BroadcastLayout({
   room,
   broadcasterId,
   isHost,
+  className,
   joinPrice = 0,
   boxCount = 0,
   seats,
@@ -128,7 +130,7 @@ export default function BroadcastLayout({
   if (!room) return null;
 
   return (
-    <div className="relative w-full h-full min-h-0 overflow-hidden" style={backgroundStyle}>
+    <div className={`relative w-full min-h-0 overflow-hidden ${className || ''}`} style={backgroundStyle}>
       <div className="relative z-10">
         <ResponsiveVideoGrid
           participants={participants}
