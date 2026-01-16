@@ -905,7 +905,7 @@ export default function CoinStore() {
         body: JSON.stringify(
           purchaseType
             ? { purchaseType }
-            : { packageId: pkg.id, coins: pkg.coins, price: pkg.price }
+            : { packageId: pkg.id }
         )
       });
 
