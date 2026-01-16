@@ -1692,8 +1692,8 @@ export default function CoinStore() {
           </div>
 
           {paymentModalOpen && pendingPackage && (
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-[#0D0D1A] border border-[#2C2C2C] rounded-xl p-6 w-full max-w-lg">
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-[#0D0D1A] border border-[#2C2C2C] rounded-xl p-6 w-full max-w-lg max-h-[100dvh] overflow-y-auto">
                 <h3 className="text-lg font-semibold mb-2">Complete payment</h3>
                 <p className="text-sm text-gray-400 mb-4">
                   Confirm your Stripe payment to finish this purchase.

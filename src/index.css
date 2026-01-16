@@ -536,8 +536,8 @@ body::before {
 .rgb-username {
   animation: rgb-glow 3s ease-in-out infinite alternate;
   background: linear-gradient(90deg, #ff0080, #ffea00, #00ffff, #ff4d4d, #9d4edd);
-  background-clip: text;
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
   font-weight: 700;
 }

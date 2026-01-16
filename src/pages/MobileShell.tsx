@@ -1,8 +1,20 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useCallback, memo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { hasRole, UserRole } from '../lib/supabase'
-import { Video, MessageSquare, Wallet, Gavel, Shield, Radio, Users, LayoutDashboard, HelpCircle, Crown, LucideIcon } from 'lucide-react'
+import {
+  Video,
+  MessageSquare,
+  Wallet,
+  Gavel,
+  Shield,
+  Radio,
+  Users,
+  LayoutDashboard,
+  HelpCircle,
+  Crown,
+  LucideIcon,
+} from 'lucide-react'
 import { cn } from '../lib/utils'
 
 interface NavButtonProps {
@@ -13,26 +25,27 @@ interface NavButtonProps {
   colorClass: string
   bgClass: string
   borderClass?: string
+  isActive: boolean
+  onClick: (path: string) => void
 }
 
 export default function MobileShell() {
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
-  const location = useLocation()
+  const { pathname } = useLocation()
 
-  const go = React.useCallback((path: string) => {
-    navigate(path)
-  }, [navigate])
+  const go = useCallback(
+    (path: string) => {
+      navigate(path)
+    },
+    [navigate]
+  )
 
   useEffect(() => {
-    if (!user) {
-      navigate('/login')
-    }
+    if (!user) navigate('/login', { replace: true })
   }, [user, navigate])
 
-  if (!user) {
-    return null
-  }
+  if (!user) return null
 
   if (!profile) {
     return (
@@ -48,6 +61,8 @@ export default function MobileShell() {
     allowAdminOverride: true,
   })
 
+  const isActive = (base: string) => pathname === base || pathname.startsWith(base + '/')
+
   return (
     <div className="min-h-dvh flex flex-col bg-gradient-to-b from-[#05010a] via-[#080316] to-[#05010a] pb-safe">
       <div className="px-4 pt-safe pt-4 pb-3 border-b border-white/10 bg-black/40 backdrop-blur-sm sticky top-0 z-10">
@@ -57,24 +72,26 @@ export default function MobileShell() {
             <div className="text-lg font-bold text-white">Mobile Control Center</div>
             <div className="text-xs text-white/60 mt-1">All your tools in one mobile view.</div>
           </div>
+
           <div className="flex flex-col items-end text-right">
             <div className="text-sm font-semibold text-white truncate max-w-[120px]">
               {profile.username || profile.email || 'User'}
             </div>
+
             <div className="flex items-center gap-1 text-[11px] text-white/50">
-              {isAdmin && (
+              {isAdmin ? (
                 <>
                   <Crown className="w-3 h-3 text-yellow-400" />
                   <span>Admin</span>
                 </>
-              )}
-              {!isAdmin && isOfficer && (
+              ) : isOfficer ? (
                 <>
                   <Shield className="w-3 h-3 text-emerald-400" />
                   <span>Officer</span>
                 </>
+              ) : (
+                <span>Viewer</span>
               )}
-              {!isAdmin && !isOfficer && <span>Viewer</span>}
             </div>
           </div>
         </div>
@@ -85,6 +102,7 @@ export default function MobileShell() {
           <div className="flex items-center justify-between">
             <div className="text-xs uppercase tracking-[0.25em] text-white/50">My App</div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <NavButton
               icon={Video}
@@ -93,7 +111,7 @@ export default function MobileShell() {
               path="/live"
               colorClass="text-purple-400"
               bgClass="bg-purple-500/20"
-              isActive={location.pathname === '/live'}
+              isActive={isActive('/live')}
               onClick={go}
             />
             <NavButton
@@ -104,7 +122,7 @@ export default function MobileShell() {
               colorClass="text-purple-200"
               bgClass="bg-purple-600/30"
               borderClass="border-purple-500/40"
-              isActive={location.pathname === '/go-live'}
+              isActive={isActive('/go-live')}
               onClick={go}
             />
             <NavButton
@@ -114,7 +132,7 @@ export default function MobileShell() {
               path="/messages"
               colorClass="text-cyan-300"
               bgClass="bg-cyan-500/20"
-              isActive={location.pathname === '/messages'}
+              isActive={isActive('/messages')}
               onClick={go}
             />
             <NavButton
@@ -124,7 +142,7 @@ export default function MobileShell() {
               path="/wallet"
               colorClass="text-amber-300"
               bgClass="bg-amber-500/20"
-              isActive={location.pathname === '/wallet'}
+              isActive={isActive('/wallet')}
               onClick={go}
             />
             <NavButton
@@ -134,7 +152,7 @@ export default function MobileShell() {
               path="/troll-court"
               colorClass="text-rose-300"
               bgClass="bg-rose-500/20"
-              isActive={location.pathname === '/troll-court'}
+              isActive={isActive('/troll-court')}
               onClick={go}
             />
             <NavButton
@@ -144,7 +162,7 @@ export default function MobileShell() {
               path="/support"
               colorClass="text-sky-300"
               bgClass="bg-sky-500/20"
-              isActive={location.pathname === '/support'}
+              isActive={isActive('/support')}
               onClick={go}
             />
           </div>
@@ -155,6 +173,7 @@ export default function MobileShell() {
             <div className="flex items-center justify-between">
               <div className="text-xs uppercase tracking-[0.25em] text-emerald-300/80">Officer Tools</div>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <NavButton
                 icon={Users}
@@ -164,7 +183,7 @@ export default function MobileShell() {
                 colorClass="text-emerald-300"
                 bgClass="bg-emerald-500/20"
                 borderClass="border-emerald-500/40 bg-emerald-900/40"
-                isActive={location.pathname === '/officer/lounge'}
+                isActive={isActive('/officer/lounge')}
                 onClick={go}
               />
               <NavButton
@@ -175,7 +194,7 @@ export default function MobileShell() {
                 colorClass="text-emerald-300"
                 bgClass="bg-emerald-500/20"
                 borderClass="border-emerald-500/40 bg-emerald-900/40"
-                isActive={location.pathname === '/officer/dashboard'}
+                isActive={isActive('/officer/dashboard')}
                 onClick={go}
               />
               <NavButton
@@ -186,7 +205,7 @@ export default function MobileShell() {
                 colorClass="text-emerald-300"
                 bgClass="bg-emerald-500/20"
                 borderClass="border-emerald-500/40 bg-emerald-900/40"
-                isActive={location.pathname === '/officer/moderation'}
+                isActive={isActive('/officer/moderation')}
                 onClick={go}
               />
               <NavButton
@@ -197,7 +216,7 @@ export default function MobileShell() {
                 colorClass="text-emerald-300"
                 bgClass="bg-emerald-500/20"
                 borderClass="border-emerald-500/40 bg-emerald-900/40"
-                isActive={location.pathname === '/officer/stream'}
+                isActive={isActive('/officer/stream')}
                 onClick={go}
               />
             </div>
@@ -209,6 +228,7 @@ export default function MobileShell() {
             <div className="flex items-center justify-between">
               <div className="text-xs uppercase tracking-[0.25em] text-yellow-300/80">Admin</div>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <NavButton
                 icon={LayoutDashboard}
@@ -218,10 +238,9 @@ export default function MobileShell() {
                 colorClass="text-yellow-300"
                 bgClass="bg-yellow-500/20"
                 borderClass="border-yellow-500/40 bg-yellow-900/40"
-                isActive={location.pathname === '/admin'}
+                isActive={isActive('/admin')}
                 onClick={go}
               />
-              {/* Removed redundant Admin Mobile button */}
               <NavButton
                 icon={Shield}
                 label="Officer Reports"
@@ -230,7 +249,7 @@ export default function MobileShell() {
                 colorClass="text-yellow-300"
                 bgClass="bg-yellow-500/20"
                 borderClass="border-yellow-500/40 bg-yellow-900/40"
-                isActive={location.pathname === '/admin/officer-reports'}
+                isActive={isActive('/admin/officer-reports')}
                 onClick={go}
               />
               <NavButton
@@ -241,7 +260,7 @@ export default function MobileShell() {
                 colorClass="text-yellow-300"
                 bgClass="bg-yellow-500/20"
                 borderClass="border-yellow-500/40 bg-yellow-900/40"
-                isActive={location.pathname === '/admin/ban-management'}
+                isActive={isActive('/admin/ban-management')}
                 onClick={go}
               />
             </div>
@@ -252,7 +271,17 @@ export default function MobileShell() {
   )
 }
 
-const NavButton = React.memo(({ icon: Icon, label, sublabel, path, colorClass, bgClass, borderClass, isActive, onClick }: NavButtonProps & { isActive: boolean; onClick: (path: string) => void }) => {
+const NavButton = memo(function NavButton({
+  icon: Icon,
+  label,
+  sublabel,
+  path,
+  colorClass,
+  bgClass,
+  borderClass,
+  isActive,
+  onClick,
+}: NavButtonProps) {
   return (
     <button
       type="button"
@@ -260,17 +289,18 @@ const NavButton = React.memo(({ icon: Icon, label, sublabel, path, colorClass, b
       aria-label={label}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        "relative flex items-center gap-3 rounded-2xl px-3 py-3 transition-all active:scale-[0.97] focus:outline-none w-full text-left rgb-outline-card",
-        "bg-[#110e1b]", // Base background
-        isActive ? "bg-[#1a1625]" : "hover:bg-[#1a1625]",
-        borderClass // Allow specific background overrides (borders will be suppressed by rgb-outline-card)
+        'relative flex items-center gap-3 rounded-2xl px-3 py-3 transition-all active:scale-[0.97] focus:outline-none w-full text-left rgb-outline-card',
+        'bg-[#110e1b]',
+        isActive ? 'bg-[#1a1625]' : 'hover:bg-[#1a1625]',
+        borderClass
       )}
     >
-      <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center relative z-10", bgClass, colorClass)}>
+      <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center relative z-10', bgClass, colorClass)}>
         <Icon className="w-5 h-5" />
       </div>
+
       <div className="flex flex-col items-start text-left relative z-10">
-        <div className={cn("text-xs font-semibold", isActive ? "text-white" : "text-white/90")}>{label}</div>
+        <div className={cn('text-xs font-semibold', isActive ? 'text-white' : 'text-white/90')}>{label}</div>
         <div className="text-[11px] text-white/60">{sublabel}</div>
       </div>
     </button>
