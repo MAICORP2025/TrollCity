@@ -179,32 +179,4 @@ export default function ResponsiveVideoGrid({
       )}
     </div>
   );
-                  coinBalance={participant.identity ? coinBalances?.[participant.identity] : undefined}
-                  compact
-                  className="w-full h-full"
-                  style={{ width: '100%', height: '100%' }}
-                  onClick={() => onUserClick?.(participant)}
-                />
-              ) : (
-                <div 
-                  className="w-full h-full flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors"
-                  onClick={() => onJoinRequest?.(seatIndex)}
-                >
-                  <div className="text-2xl font-bold text-purple-300/30 mb-1 group-hover:text-purple-300/50 transition-colors">
-                    #{seatIndex + 1}
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-all shadow-[0_0_10px_rgba(168,85,247,0.2)] group-hover:shadow-[0_0_15px_rgba(168,85,247,0.5)]">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
