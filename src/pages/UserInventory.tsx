@@ -8,7 +8,7 @@ import { PERK_CONFIG } from '../lib/perkSystem'
 import { ENTRANCE_EFFECTS_MAP, ROLE_BASED_ENTRANCE_EFFECTS, USER_SPECIFIC_ENTRANCE_EFFECTS } from '../lib/entranceEffects'
 
 export default function UserInventory({ embedded = false }: { embedded?: boolean }) {
-  const { user, profile } = useAuthStore()
+  const { user, profile, refreshProfile } = useAuthStore()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<any[]>([])
   const [entranceEffects, setEntranceEffects] = useState<any[]>([])
@@ -332,6 +332,21 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
         }, { onConflict: 'user_id,item_id' })
       }
       
+      const perkEntry = perks.find((p) => p.id === perkId)
+      if (perkEntry?.perk_id === 'perk_rgb_username') {
+        const rgbValue = isActive ? null : perkEntry.expires_at
+        const { error: rgbError } = await supabase
+          .from('user_profiles')
+          .update({ rgb_username_expires_at: rgbValue })
+          .eq('id', user?.id)
+
+        if (rgbError) {
+          console.error('Failed to update RGB username status:', rgbError)
+        } else {
+          await refreshProfile()
+        }
+      }
+
       setActiveItems(prev => {
         const newSet = new Set(prev);
         if (isActive) newSet.delete(perkId);
