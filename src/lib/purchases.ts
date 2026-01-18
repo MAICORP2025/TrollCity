@@ -3,8 +3,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { UserPurchase, UserActiveItem, PurchaseActivationOptions } from '@/types/purchases';
-import { toast } from 'sonner';
+import { UserPurchase, PurchaseActivationOptions } from '@/types/purchases';
 
 /**
  * Create a purchase record when user buys an item

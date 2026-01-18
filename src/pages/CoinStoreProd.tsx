@@ -4,17 +4,18 @@ import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Loader2, AlertCircle, CheckCircle, Coins } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle, Coins, Wallet } from 'lucide-react'
 
 // Test function for debugging - call from browser console:
 // window.testPayPalFulfillment('YOUR_ORDER_ID')
 declare global {
   interface Window {
-    testPayPalFulfillment: (orderId: string) => Promise<void>
+    testPayPalFulfillment: (orderId: string) => Promise<void>;
+    paypal?: {
+      Buttons?: (config: any) => { render: (selector: string) => void };
+    };
   }
 }
-
-import type { PayPalNamespace } from '@paypal/paypal-js'
 
 interface CoinPackage {
   id: string
@@ -65,7 +66,7 @@ const PayPalButtonsWrapper: React.FC<PayPalButtonsProps> = ({ selectedPackage, o
     }
 
     // Type-safe access to PayPal
-    const paypal = window.paypal as PayPalNamespace | null | undefined
+    const paypal = window.paypal
     if (!paypal || !paypal.Buttons) {
       console.error('PayPal SDK not fully loaded')
       return
@@ -182,6 +183,7 @@ export default function CoinStoreProd() {
   const [selectedPackage, setSelectedPackage] = useState<CoinPackage | null>(null)
   const [_isProcessing, setIsProcessing] = useState(false)
   const [packages, setPackages] = useState<CoinPackage[]>(COIN_PACKAGES)
+  const [customCoins, setCustomCoins] = useState<number | ''>('')
   const [transactionStatus, _setTransactionStatus] = useState<{
     status: 'idle' | 'processing' | 'success' | 'error'
     message?: string
@@ -487,20 +489,89 @@ export default function CoinStoreProd() {
               )}
             </div>
           ))}
+
+          <div
+            className={`relative p-6 rounded-xl border-2 cursor-pointer transition-all ${
+              selectedPackage?.id?.startsWith('custom_')
+                ? 'border-purple-500 bg-purple-500/10 shadow-lg shadow-purple-500/50'
+                : 'border-dashed border-gray-700 bg-[#1A1A24] hover:border-purple-500/50'
+            }`}
+          >
+            <h3 className="text-lg font-bold mb-2">Custom Amount</h3>
+            <p className="text-sm text-gray-400 mb-3">
+              Choose an exact number of coins. Price is based on 100 coins = $1.00.
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs text-gray-400 mb-1">Coins</label>
+              <input
+                type="number"
+                min={100}
+                step={100}
+                value={customCoins === '' ? '' : customCoins}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value || '0', 10)
+                  if (!value || value <= 0) {
+                    setCustomCoins('')
+                  } else {
+                    setCustomCoins(value)
+                  }
+                }}
+                className="w-full bg-black/40 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-400 outline-none"
+                placeholder="Enter coins (e.g. 12000)"
+              />
+            </div>
+            <div className="flex justify-between items-center mb-4 text-sm">
+              <span className="text-gray-400">Estimated price</span>
+              <span className="text-xl font-semibold text-yellow-400">
+                {customCoins === '' ? '$0.00' : `$${((customCoins as number) / 100).toFixed(2)}`}
+              </span>
+            </div>
+            <button
+              disabled={customCoins === '' || (customCoins as number) <= 0}
+              onClick={() => {
+                if (customCoins === '' || (customCoins as number) <= 0) return
+                const coins = customCoins as number
+                const priceUsd = Number((coins / 100).toFixed(2))
+                setSelectedPackage({
+                  id: `custom_${coins}`,
+                  name: `Custom ${coins.toLocaleString()} Coins`,
+                  coins,
+                  price_usd: priceUsd,
+                  paypal_sku: `custom_${coins}`,
+                  is_active: true,
+                })
+              }}
+              className="w-full py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-500"
+            >
+              Use this amount
+            </button>
+          </div>
         </div>
 
-        {/* PayPal Checkout */}
+        {/* Checkout Panel */}
         {selectedPackage && (
-          <div className="bg-[#1A1A24] border border-purple-500/30 rounded-xl p-8 max-w-md mx-auto">
+          <div className="bg-[#1A1A24] border border-purple-500/30 rounded-xl p-8 max-w-2xl mx-auto">
             <h2 className="text-xl font-bold mb-4">Complete Purchase</h2>
             <p className="text-gray-400 mb-6">
               {selectedPackage.name} • {selectedPackage.coins.toLocaleString()} coins • ${selectedPackage.price_usd.toFixed(2)}
             </p>
 
-            <PayPalButtonsWrapper
-              selectedPackage={selectedPackage}
-              onApprove={handlePayPalApprove}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* PayPal */}
+              <div className="border border-gray-700 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <img src="/paypal.svg" alt="PayPal" className="w-6 h-6" />
+                  <span className="font-semibold">PayPal</span>
+                </div>
+                <PayPalButtonsWrapper
+                  selectedPackage={selectedPackage}
+                  onApprove={handlePayPalApprove}
+                />
+              </div>
+
+              {/* Manual via Cash App */}
+              <ManualCashAppOption selectedPackage={selectedPackage} />
+            </div>
 
             <button
               onClick={() => setSelectedPackage(null)}
@@ -518,6 +589,121 @@ export default function CoinStoreProd() {
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+type ManualProps = { selectedPackage: CoinPackage }
+
+const ManualCashAppOption: React.FC<ManualProps> = ({ selectedPackage }) => {
+  const { user, profile } = useAuthStore()
+  const [creating, setCreating] = useState(false)
+  const [orderId, setOrderId] = useState<string | null>(null)
+  const [cashTag, setCashTag] = useState('')
+  const [cashTagError, setCashTagError] = useState<string | null>(null)
+  const usernamePrefix = String(profile?.username || user?.email?.split('@')[0] || 'user').slice(0, 6).toUpperCase()
+  const suggestedNote = `${usernamePrefix}-${selectedPackage.coins}`
+
+  const normalizeCashTag = (value: string) => {
+    const trimmed = (value || '').trim()
+    const withoutDollar = trimmed.replace(/^\$+/, '')
+    if (!withoutDollar) return { tag: '', error: 'Enter your Cash App tag (no $)' }
+    if (!/^[A-Za-z0-9._-]{2,20}$/.test(withoutDollar)) {
+      return { tag: '', error: 'Cash App tag must be 2-20 letters/numbers (no $).' }
+    }
+    return { tag: withoutDollar, error: '' }
+  }
+
+  const ensureCashTag = () => {
+    const { tag, error } = normalizeCashTag(cashTag)
+    if (error) {
+      setCashTagError(error)
+      toast.error(error)
+      return null
+    }
+    setCashTagError(null)
+    setCashTag(tag)
+    return tag
+  }
+
+  const submitManualOrder = async () => {
+    if (!user) return toast.error('Please sign in')
+    const tag = ensureCashTag()
+    if (!tag) return
+    try {
+      setCreating(true)
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          action: 'create',
+          package_id: selectedPackage.id,
+          coins: selectedPackage.coins,
+          amount_usd: selectedPackage.price_usd,
+          username: profile?.username,
+          cashapp_tag: tag,
+        }),
+      })
+      const text = await res.text()
+      let json: any = null
+      try { json = JSON.parse(text) } catch {}
+      if (!res.ok) throw new Error(json?.error || 'Failed to create manual order')
+      setOrderId(json.orderId)
+      toast.success('Manual order created. Follow the Cash App instructions below.')
+    } catch (e: any) {
+      console.error('Manual order error:', e)
+      toast.error(e?.message || 'Failed to create manual order')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="border border-yellow-700 rounded-lg p-4 bg-yellow-900/10">
+      <div className="flex items-center gap-2 mb-2">
+        <Wallet className="w-6 h-6 text-yellow-400" />
+        <span className="font-semibold">Manual (Cash App)</span>
+      </div>
+      <p className="text-sm text-yellow-200 mb-2">Use this while Stripe verification is pending.</p>
+      <div className="mb-3">
+        <div className="text-xs text-yellow-100 font-semibold mb-1">Your Cash App tag (no $)</div>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-2 bg-yellow-800/40 border border-yellow-500/40 rounded text-yellow-100 text-sm">$</span>
+          <input
+            value={cashTag}
+            onChange={(e) => setCashTag(e.target.value)}
+            onBlur={() => cashTag && ensureCashTag()}
+            placeholder="yourcashtag"
+            className="flex-1 bg-black/30 border border-yellow-500/40 rounded px-3 py-2 text-sm text-white focus:border-yellow-300 outline-none"
+          />
+        </div>
+        {cashTagError && <div className="text-xs text-red-300 mt-1">{cashTagError}</div>}
+        <p className="text-[11px] text-yellow-200 mt-1">We attach your tag so admins can verify your Cash App payment.</p>
+      </div>
+      <ul className="text-sm text-yellow-100 list-disc pl-5 space-y-1 mb-3">
+        <li>Send payment to <span className="font-semibold">$trollcity95</span></li>
+        <li>In the Cash App note, include: <span className="font-mono">{suggestedNote}</span></li>
+        <li>Example: <span className="font-mono">{usernamePrefix}-{selectedPackage.coins}</span></li>
+        <li>Coins will be granted after verification.</li>
+      </ul>
+      <button
+        disabled={creating}
+        onClick={submitManualOrder}
+        className="w-full py-2 bg-yellow-700 hover:bg-yellow-600 rounded-lg text-white transition disabled:opacity-50"
+      >
+        {creating ? 'Submitting...' : 'Submit Manual Order'}
+      </button>
+      {orderId && (
+        <p className="mt-3 text-xs text-yellow-200">Reference ID: {orderId}. Keep this for support.</p>
+      )}
     </div>
   )
 }

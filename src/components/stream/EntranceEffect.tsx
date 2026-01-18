@@ -1,6 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { UserBadge } from '../UserBadge'
+import Avatar3D from '../avatar/Avatar3D'
+import type { AvatarConfig } from '../../lib/hooks/useAvatar'
+import { getUserAvatarConfig } from '../../lib/purchases'
 
 type UserRole = 'viewer' | 'troller' | 'officer' | 'vip' | 'donor'
 
@@ -10,6 +13,39 @@ interface EntranceEffectProps {
   onComplete?: () => void
   isFullScreen?: boolean
   profile?: any // User profile for badges
+  userId?: string
+  avatarConfig?: AvatarConfig
+}
+
+function useEntranceAvatar(userId?: string, initialConfig?: AvatarConfig) {
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(initialConfig || null)
+
+  useEffect(() => {
+    setAvatarConfig(initialConfig || null)
+  }, [initialConfig])
+
+  useEffect(() => {
+    let active = true
+    if (!userId || initialConfig) return
+
+    const loadAvatar = async () => {
+      try {
+        const data = await getUserAvatarConfig(userId)
+        if (!active) return
+        if (data?.avatar_config) {
+          setAvatarConfig(data.avatar_config as AvatarConfig)
+        }
+      } catch {
+      }
+    }
+
+    void loadAvatar()
+    return () => {
+      active = false
+    }
+  }, [userId, initialConfig])
+
+  return avatarConfig
 }
 
 const roleConfigs: Record<UserRole, { color: string; emoji: string; glowColor: string }> = {
@@ -21,9 +57,10 @@ const roleConfigs: Record<UserRole, { color: string; emoji: string; glowColor: s
 }
 
 // Full-screen entrance effect (for VIP/Officer)
-export function FullScreenEntrance({ username, role, onComplete, profile: userProfile }: EntranceEffectProps) {
+export function FullScreenEntrance({ username, role, onComplete, profile: userProfile, userId, avatarConfig }: EntranceEffectProps) {
   const [visible, setVisible] = useState(true)
   const config = roleConfigs[role]
+  const entranceAvatar = useEntranceAvatar(userId, avatarConfig)
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -78,6 +115,11 @@ export function FullScreenEntrance({ username, role, onComplete, profile: userPr
               transition={{ type: 'spring', stiffness: 200, damping: 15 }}
             >
               <div className="text-center">
+                {entranceAvatar && (
+                  <div className="flex justify-center mb-4">
+                    <Avatar3D config={entranceAvatar} size="lg" />
+                  </div>
+                )}
                 <motion.div
                   className="text-7xl mb-4"
                   style={{ color: config.color }}
@@ -151,9 +193,10 @@ export function FullScreenEntrance({ username, role, onComplete, profile: userPr
 }
 
 // Compact entrance banner (for chat panel)
-export default function EntranceBanner({ username, role, onComplete, profile: userProfile }: EntranceEffectProps) {
+export default function EntranceBanner({ username, role, onComplete, profile: userProfile, userId, avatarConfig }: EntranceEffectProps) {
   const [visible, setVisible] = useState(true)
   const config = roleConfigs[role]
+  const entranceAvatar = useEntranceAvatar(userId, avatarConfig)
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -194,7 +237,13 @@ export default function EntranceBanner({ username, role, onComplete, profile: us
             }
             transition={{ duration: 0.5, repeat: Infinity }}
           >
-            {config.emoji}
+            {entranceAvatar ? (
+              <div className="flex items-center justify-center">
+                <Avatar3D config={entranceAvatar} size="sm" />
+              </div>
+            ) : (
+              config.emoji
+            )}
           </motion.span>
           <span 
             className={`font-semibold ${hasRgbUsername ? 'rgb-username' : ''}`}

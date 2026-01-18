@@ -41,6 +41,7 @@ export interface UserProfile {
   xp_multiplier?: number
   coin_multiplier?: number
   troll_coins: number
+  paid_coins?: number
   reserved_troll_coins?: number
   trollmonds?: number
   has_paid?: boolean
@@ -168,10 +169,14 @@ export interface UserProfile {
   tax_last_updated?: string
   tax_form_url?: string
 
+  password_reset_pin_hash?: string | null
+  password_reset_pin_set_at?: string | null
+
   // Vehicle fields
   active_vehicle?: number | null // Car ID
   vehicle_image?: string | null // Static image URL
   owned_vehicle_ids?: number[] | null
+  gender?: string | null
 }
 
 
@@ -269,16 +274,6 @@ export interface CashoutTier {
   updated_at: string
 }
 
-
-export interface WheelSlice {
-  id: string
-  name: string
-  type: 'coins' | 'bankrupt' | 'perk'
-  value: number
-  perk_type: 'no_kick' | 'no_ban' | null
-  probability: number
-  color: string
-}
 
 export interface InsurancePackage {
   id: string

@@ -39,6 +39,7 @@ import { GameProvider } from "./components/game/GameContext";
 import GameControlPanel from "./components/game/GameControlPanel";
 import CarDealershipPage from "./pages/game/CarDealershipPage";
 import MechanicShopPage from "./pages/game/MechanicShopPage";
+import GaragePage from "./pages/game/GaragePage";
 import HospitalPage from "./pages/game/HospitalPage";
 import GeneralStorePage from "./pages/game/GeneralStorePage";
 import AuctionsPage from "./pages/AuctionsPage";
@@ -68,7 +69,6 @@ const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard
 const Application = lazy(() => import("./pages/Application"));
 const ApplicationPage = lazy(() => import("./pages/ApplicationPage"));
 const TrollsTownPage = lazy(() => import("./pages/TrollsTownPage"));
-const TrollsTown3DPage = lazy(() => import("./pages/TrollsTown3DPage"));
 const TrollOfficerLounge = lazy(() => import("./pages/TrollOfficerLounge"));
 const OfficerModeration = lazy(() => import("./pages/OfficerModeration"));
 const TrollFamily = lazy(() => import("./pages/TrollFamily"));
@@ -153,7 +153,6 @@ const Profile = lazy(() => import("./pages/Profile"));
 const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const Stats = lazy(() => import("./pages/Stats"));
 const EmpirePartnerApply = lazy(() => import("./pages/EmpirePartnerApply"));
-const AddCard = lazy(() => import("./pages/AddCard"));
 const EarningsDashboard = lazy(() => import("./pages/EarningsDashboard"));
 const CreatorOnboarding = lazy(() => import("./pages/CreatorOnboarding"));
 const CreatorSwitchProgram = lazy(() => import("./pages/CreatorSwitchProgram"));
@@ -176,6 +175,7 @@ const ExecutiveSecretaries = lazy(() => import("./pages/admin/ExecutiveSecretari
 const GiftCardsManager = lazy(() => import("./pages/admin/GiftCardsManager"));
 const ExecutiveIntake = lazy(() => import("./pages/admin/ExecutiveIntake"));
 const ExecutiveReports = lazy(() => import("./pages/admin/ExecutiveReports"));
+const AdminManualOrders = lazy(() => import("./pages/admin/components/AdminManualOrders"));
 const CashoutManager = lazy(() => import("./pages/admin/CashoutManager"));
 const CriticalAlertsManager = lazy(() => import("./pages/admin/CriticalAlertsManager"));
 const OfficerManager = lazy(() => import("./pages/admin/OfficerManager"));
@@ -188,6 +188,7 @@ const TrollBattleSetup = lazy(() => import("./pages/TrollBattleSetup"));
 const ShopView = lazy(() => import("./pages/ShopView"));
 const CourtRoom = lazy(() => import("./pages/CourtRoom"));
 const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
+const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 
 // Admin pages
 const BanManagement = lazy(() => import("./pages/admin/BanManagement"));
@@ -243,6 +244,18 @@ const LoadingScreen = () => (
       location.pathname !== "/callback"
     ) {
       return <Navigate to="/profile/setup" replace />;
+    }
+
+    // Require AI verification before accessing protected app routes
+    if (
+      profile &&
+      !profile.is_verified &&
+      location.pathname !== "/ai-verification" &&
+      location.pathname !== "/verification" &&
+      location.pathname !== "/verification/complete" &&
+      location.pathname !== "/support"
+    ) {
+      return <Navigate to="/ai-verification" replace />;
     }
     
     if (
@@ -363,13 +376,19 @@ function AppContent() {
     }
   }, [profile, location.pathname, navigate, user]);
 
-  // 🔹 Check if user is kicked or banned and show re-entry modal
+  // 🔹 Check if user is kicked or banned and route to fee pages
   useEffect(() => {
-    if (profile && (profile.is_kicked || profile.is_banned)) {
-      // Dynamic-load the kick re-entry modal for when we need to show it.
-      void import('./components/KickReentryModal');
+    if (!profile) return;
+
+    if (profile.is_banned && location.pathname !== '/ban-fee') {
+      navigate('/ban-fee', { replace: true });
+      return;
     }
-  }, [profile]);
+
+    if (profile.is_kicked && location.pathname !== '/kick-fee') {
+      navigate('/kick-fee', { replace: true });
+    }
+  }, [profile, location.pathname, navigate]);
 
   // 🔹 Track user IP address and check for IP bans
   useEffect(() => {
@@ -612,6 +631,7 @@ function AppContent() {
                 <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                 <Route path="/payment-terms" element={<PaymentTerms />} />
                 <Route path="/creator-agreement" element={<CreatorAgreement />} />
+                <Route path="/reset-password" element={<PasswordReset />} />
                 <Route path="/tax-onboarding" element={<TaxOnboarding />} />
                 <Route path="/verification" element={<VerificationPage />} />
                 <Route path="/verification/complete" element={<VerificationComplete />} />
@@ -657,11 +677,11 @@ function AppContent() {
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
-                  <Route path="/admin/trolls-town-3d" element={<TrollsTown3DPage />} />
                   
                   {/* New Game Routes */}
                   <Route path="/dealership" element={<CarDealershipPage />} />
                   <Route path="/mechanic" element={<MechanicShopPage />} />
+                  <Route path="/garage" element={<GaragePage />} />
                   <Route path="/hospital" element={<HospitalPage />} />
                   <Route path="/auctions" element={<AuctionsPage />} />
                   <Route path="/church" element={<ChurchPage />} />
@@ -704,7 +724,7 @@ function AppContent() {
 
 
                   {/* 💳 Payment Methods */}
-                  <Route path="/add-card" element={<AddCard />} />
+                  <Route path="/add-card" element={<Navigate to="/profile/setup" replace />} />
                    
                   {/* 📝 Creator Onboarding */}
                   <Route path="/onboarding/creator" element={<CreatorOnboarding />} />
@@ -1214,6 +1234,14 @@ function AppContent() {
                       }
                     />
                     <Route
+                      path="/admin/manual-orders"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN, UserRole.SECRETARY]}>
+                          <AdminManualOrders />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
                       path="/admin/buckets"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
@@ -1345,3 +1373,4 @@ function App() {
 }
 
 export default App;
+// Removed stray JSX outside of App component

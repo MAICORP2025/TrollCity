@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
+import api, { API_ENDPOINTS } from "../../../lib/api";
 import { toast } from "sonner";
 import { RefreshCw, Users, Clock, Database, Video } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -16,11 +17,14 @@ const StreamMonitor = () => {
     setLoading(true);
     try {
       // 1. Fetch real LiveKit rooms via Edge Function
-      const { data: rooms, error: lkError } = await supabase.functions.invoke('livekit-api', {
-        body: { action: 'list_rooms' }
+      const response = await api.request(API_ENDPOINTS.livekit.api, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'list_rooms' })
       });
       
-      if (lkError) throw lkError;
+      const { data: rooms, error: lkError } = response;
+      
+      if (lkError) throw new Error(lkError);
       setLiveKitRooms(rooms || []);
 
       // 2. Fetch DB streams
@@ -58,10 +62,12 @@ const StreamMonitor = () => {
   const fetchParticipants = async (roomName: string) => {
     setLoadingParticipants(true);
     try {
-      const { data, error } = await supabase.functions.invoke('livekit-api', {
-        body: { action: 'get_participants', room: roomName }
+      const response = await api.request(API_ENDPOINTS.livekit.api, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'get_participants', room: roomName })
       });
-      if (error) throw error;
+      const { data, error } = response;
+      if (error) throw new Error(error);
       setParticipants(data || []);
     } catch (err) {
       console.error('Error fetching participants:', err);

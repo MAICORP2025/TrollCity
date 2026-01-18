@@ -3,6 +3,7 @@ import { useAuthStore } from "../lib/store";
 import { useNavigate } from "react-router-dom";
 import { Wallet as WalletIcon, Coins, DollarSign, RefreshCw, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
 import { getTransactionHistory, logCoinAction } from "../lib/coinUtils";
+import { format12hr } from "../utils/timeFormat";
 import { toast } from "sonner";
 
 interface CoinTx {
@@ -368,7 +369,7 @@ export default function Wallet() {
                   <div className="text-xs text-gray-400 space-y-1">
                     <div className="flex items-center gap-4">
                       <span>{new Date(tx.created_at).toLocaleDateString()}</span>
-                      <span>{new Date(tx.created_at).toLocaleTimeString()}</span>
+                      <span>{format12hr(tx.created_at)}</span>
                       <span>•</span>
                       <span className="capitalize">{tx.source || 'app'}</span>
                       {tx.payment_status && (

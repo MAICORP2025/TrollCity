@@ -858,7 +858,7 @@ useEffect(() => {
                  Welcome to Trolls Town
                </h3>
                <p className="text-xs sm:text-sm font-semibold text-purple-200 tracking-wide group-hover:text-white transition-colors">
-                 Enter Troll Town &middot; Own Homes &middot; Upgrade &middot; Trade
+                 Enter Troll Town &middot; Own Homes &middot; Upgrade &middot; Sell
                </p>
             </div>
 

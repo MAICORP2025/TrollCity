@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ROLE_BASED_ENTRANCE_EFFECTS } from "../../lib/entranceEffects";
+import Avatar3D from "../avatar/Avatar3D";
+import type { AvatarConfig } from "../../lib/hooks/useAvatar";
+import { getUserAvatarConfig } from "../../lib/purchases";
 
 interface EntranceEffectProps {
   username: string;
@@ -8,10 +11,13 @@ interface EntranceEffectProps {
   profile?: {
     rgb_username_expires_at?: string;
   };
+  userId?: string;
+  avatarConfig?: AvatarConfig;
 }
 
-export default function EntranceEffect({ username, role, profile }: EntranceEffectProps) {
+export default function EntranceEffect({ username, role, profile, userId, avatarConfig }: EntranceEffectProps) {
   const [isVisible, setIsVisible] = useState(true);
+  const [avatarConfigState, setAvatarConfigState] = useState<AvatarConfig | null>(avatarConfig || null);
 
   const roleConfig = ROLE_BASED_ENTRANCE_EFFECTS[role];
   const fallbackEmoji = (roleConfig as any)?.emoji || "dY`<";
@@ -24,6 +30,31 @@ export default function EntranceEffect({ username, role, profile }: EntranceEffe
         new Date(profile.rgb_username_expires_at) > new Date()
     );
   }, [profile]);
+
+  useEffect(() => {
+    setAvatarConfigState(avatarConfig || null);
+  }, [avatarConfig]);
+
+  useEffect(() => {
+    let active = true;
+    if (!userId || avatarConfig) return;
+
+    const loadAvatar = async () => {
+      try {
+        const data = await getUserAvatarConfig(userId);
+        if (!active) return;
+        if (data?.avatar_config) {
+          setAvatarConfigState(data.avatar_config as AvatarConfig);
+        }
+      } catch {
+      }
+    };
+
+    void loadAvatar();
+    return () => {
+      active = false;
+    };
+  }, [userId, avatarConfig]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -46,7 +77,13 @@ export default function EntranceEffect({ username, role, profile }: EntranceEffe
         className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2"
       >
         <div className="flex items-center gap-3 rounded-full border border-white/10 bg-black/70 px-6 py-2 text-white shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-lg">
-          <span className="text-2xl">{fallbackEmoji}</span>
+          {avatarConfigState ? (
+            <div className="flex items-center justify-center">
+              <Avatar3D config={avatarConfigState} size="sm" />
+            </div>
+          ) : (
+            <span className="text-2xl">{fallbackEmoji}</span>
+          )}
           <div className="flex flex-col leading-tight">
             <span
               className={`text-sm font-semibold uppercase tracking-[0.4em] ${hasRgb ? "rgb-username" : ""}`}

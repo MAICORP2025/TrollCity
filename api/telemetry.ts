@@ -1,5 +1,4 @@
 
-import { createClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from './_shared/auth'
 import crypto from 'crypto'
 
@@ -47,11 +46,9 @@ function sanitizeContent(text: string | undefined): string | undefined {
   if (!text) return text;
   // Simple regex to mask potential credit card numbers (Luhn check not applied, just pattern)
   // Matches 13-19 digits, possibly separated by dashes or spaces
-  let sanitized = text.replace(/\b(?:\d[ -]*?){13,16}\b/g, '[REDACTED_CARD]');
-  
+  const sanitized = text.replace(/\b(?:\d[ -]*?){13,16}\b/g, '[REDACTED_CARD]');
   // Mask potential email addresses if not explicitly allowed (simple check)
   // sanitized = sanitized.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]');
-  
   return sanitized;
 }
 

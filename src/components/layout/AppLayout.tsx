@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import BottomNavigation from '../BottomNavigation'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
+import DrivingScene from '../DrivingScene'
 import { useLocation } from 'react-router-dom'
 import PWAInstallPrompt from '../PWAInstallPrompt'
 import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
-import GeminiChatButton from '../GeminiChatButton'
-import AdminOnly from '../AdminOnly'
+import { useAuthStore } from '../../lib/store'
+import { UserRole } from '../../lib/supabase'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -23,40 +24,37 @@ export default function AppLayout({
   showBottomNav = true 
 }: AppLayoutProps) {
   const location = useLocation();
-  const [isMobile, setIsMobile] = useState(false);
-  // Hide UI elements on specific routes if needed, or rely on props
+  const profile = useAuthStore((s) => s.profile)
+  const showLegacySidebar = useAuthStore((s) => s.showLegacySidebar)
   const isAuthPage = location.pathname.startsWith('/auth');
   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/broadcast/');
+  const isStaff = Boolean(
+    profile &&
+      (
+        profile.role === UserRole.ADMIN ||
+        profile.role === UserRole.TROLL_OFFICER ||
+        profile.role === UserRole.LEAD_TROLL_OFFICER ||
+        profile.role === UserRole.HR_ADMIN ||
+        profile.is_admin ||
+        profile.is_troll_officer ||
+        profile.is_lead_officer
+      )
+  )
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const media = window.matchMedia('(max-width: 768px)');
-    const update = () => setIsMobile(media.matches);
-    update();
-    if (media.addEventListener) {
-      media.addEventListener('change', update);
-      return () => media.removeEventListener('change', update);
-    }
-    media.addListener(update);
-    return () => media.removeListener(update);
   }, []);
 
-  // Overrides based on route
-  const effectiveShowSidebar = showSidebar && !isAuthPage && !isLivePage;
+  const effectiveShowSidebar = showSidebar && isStaff && showLegacySidebar && !isAuthPage && !isLivePage;
   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage;
-  // On Live page, we might want BottomNav on mobile for navigation, but maybe not if it covers controls.
-  // User said "Bottom Nav 'SIDEBAR' ... for main pages". Live page is a main page.
-  // Let's keep it for now, unless it's the broadcaster view.
   const effectiveShowBottomNav = showBottomNav && !isAuthPage;
   const mainPaddingClass = effectiveShowBottomNav ? 'app-content app-content--with-nav' : 'app-content app-content--no-nav';
 
   return (
-    <div className="app-viewport w-screen overflow-hidden text-white flex">
+    <div className="app-viewport w-screen overflow-hidden text-white flex relative">
+      <DrivingScene />
       <PurchaseRequiredModal />
       <PWAInstallPrompt />
-      <AdminOnly>
-        {!isLivePage || !isMobile ? <GeminiChatButton /> : null}
-      </AdminOnly>
       {/* Desktop Sidebar - Hidden on Mobile */}
       {effectiveShowSidebar && (
         <div className="hidden md:block w-64 h-full shrink-0 border-r border-white/5 bg-[#0A0814] z-20">

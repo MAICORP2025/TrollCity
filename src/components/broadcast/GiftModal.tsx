@@ -20,7 +20,7 @@ const fallbackGifts = [
 
 export default function GiftModal({ onClose, onSendGift, recipientName, profile }) {
   const [gifts, setGifts] = useState(fallbackGifts);
-  const [selectedGift, setSelectedGift] = useState(null);
+  const [selectedGift, setSelectedGift] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [sendToAll, setSendToAll] = useState(false);
   const [sending, setSending] = useState(false);
@@ -59,7 +59,15 @@ export default function GiftModal({ onClose, onSendGift, recipientName, profile 
     if (!selectedGift) return;
     setSending(true);
     try {
-      const giftPayload = { ...selectedGift, slug: toGiftSlug(selectedGift?.name), quantity };
+      const giftPayload = {
+        id: String(selectedGift.id),
+        name: selectedGift.name,
+        icon: selectedGift.emoji,
+        value: selectedGift.coins,
+        category: selectedGift.rarity || 'common',
+        slug: toGiftSlug(selectedGift?.name),
+        quantity,
+      };
       if (typeof onSendGift === 'function') {
         await onSendGift(giftPayload, sendToAll);
       }

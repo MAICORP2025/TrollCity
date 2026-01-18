@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import CourtEntryModal from './CourtEntryModal'
 import SidebarGroup from './ui/SidebarGroup'
@@ -85,6 +85,10 @@ export default function Sidebar() {
   const isLead = profile?.role === UserRole.LEAD_TROLL_OFFICER || profile?.is_lead_officer || profile?.troll_role === UserRole.LEAD_TROLL_OFFICER || isAdmin;
   // Officer check matches the logic in useEffect (isAdmin || isOfficer)
   const isOfficer = profile?.role === UserRole.TROLL_OFFICER || profile?.role === UserRole.LEAD_TROLL_OFFICER || profile?.is_lead_officer || profile?.troll_role === UserRole.TROLL_OFFICER || profile?.troll_role === UserRole.LEAD_TROLL_OFFICER || isAdmin;
+  const hasRgb = useMemo(() => {
+    if (!profile?.rgb_username_expires_at) return false
+    return new Date(profile.rgb_username_expires_at) > new Date()
+  }, [profile?.rgb_username_expires_at])
 
   useEffect(() => {
     if (profile?.id) {
@@ -187,7 +191,7 @@ export default function Sidebar() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-sm truncate">{profile.username}</h3>
+                <h3 className={`font-semibold text-sm truncate ${hasRgb ? 'rgb-username' : ''}`}>{profile.username}</h3>
                 <button
                   onClick={handleClearCacheReload}
                   className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-300"
@@ -246,7 +250,7 @@ export default function Sidebar() {
       )}
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-4 space-y-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto py-4 space-y-6 custom-scrollbar min-h-0">
         {/* Main Group */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "Main"} isCollapsed={isSidebarCollapsed}>
           <SidebarItem icon={Home} label="Home" to="/" active={isActive('/')} collapsed={isSidebarCollapsed} />

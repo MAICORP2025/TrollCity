@@ -59,7 +59,7 @@ export default function TermsOfService() {
         <h2>5. Payouts and Taxes</h2>
         <p>
           Only eligible users may request a payout. At minimum, you must hold at least{' '}
-          <strong>7,000 troll_coins</strong>, complete our identity verification, and
+          <strong>12,000 troll_coins</strong>, complete our identity verification, and
           comply with all rules. Payouts are not guaranteed, may be processed manually,
           and are subject to review. You are solely responsible for any taxes related
           to income or benefits you receive from Troll City.

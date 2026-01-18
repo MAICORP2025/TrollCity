@@ -32,7 +32,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const raidChance = Math.max(0.02, baseChance - armorReduction);
     const triggerRaid = Math.random() < raidChance;
     setIsRaidActive(triggerRaid);
-  }, []);
+  }, [profile?.active_vehicle]);
 
   const handleArrival = useCallback(() => {
     setIsDriving(false);
@@ -46,7 +46,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   return (
     <GameContext.Provider value={{ isDriving, destination, startDriving, isRaidActive }}>
-      {children}
+      <div className={isDriving ? 'hidden' : 'contents'}>
+        {children}
+      </div>
       {isDriving && destination && (
         <DrivingAnimation 
           destination={destination} 

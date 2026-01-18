@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import api, { API_ENDPOINTS } from '../lib/api'
 import { isPurchaseRequiredError, openPurchaseGate } from '../lib/purchaseGate'
 
 const DEFAULT_ROOM = 'officer-stream'
@@ -76,12 +77,15 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke('broadcast-seats', {
-        body: {
+      const response = await api.request(API_ENDPOINTS.broadcastSeats.list, {
+        method: 'POST',
+        body: JSON.stringify({
           action: 'list',
           room: roomName,
-        },
+        }),
       })
+
+      const { data, error: invokeError } = response
 
       // Only log errors, not successful responses
       if (invokeError) {
@@ -89,7 +93,11 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
       }
 
       if (invokeError && isPurchaseRequiredError(invokeError)) {
-        openPurchaseGate(invokeError?.message || invokeError?.error)
+        const message =
+          typeof invokeError === 'string'
+            ? invokeError
+            : (invokeError as any)?.message || (invokeError as any)?.error || 'Purchase required to join seats'
+        openPurchaseGate(message)
       }
 
       if (invokeError) {
@@ -133,9 +141,13 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
     } catch (err: any) {
       console.error('[useSeatRoster] refresh failed', err)
       if (isPurchaseRequiredError(err)) {
-        openPurchaseGate(err?.message || err?.error)
+        const message =
+          typeof err === 'string'
+            ? err
+            : (err as any)?.message || (err as any)?.error || 'Purchase required to join seats'
+        openPurchaseGate(message)
       }
-      setError(err?.message || 'Unable to load seats')
+      setError(err?.message || (typeof err === 'string' ? err : 'Unable to load seats'))
     } finally {
       setLoading(false)
     }
@@ -260,8 +272,9 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
           }
         }
 
-        const { data, error: invokeError } = await supabase.functions.invoke('broadcast-seats', {
-          body: {
+        const response = await api.request(API_ENDPOINTS.broadcastSeats.action, {
+          method: 'POST',
+          body: JSON.stringify({
             action: 'claim',
             room: roomName,
             seat_index: safeIndex + 1,
@@ -270,8 +283,10 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
             avatar_url,
             role,
             metadata,
-          },
+          }),
         })
+
+        const { data, error: invokeError } = response
 
         // Only log errors
         if (invokeError) {
@@ -279,22 +294,26 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
         }
 
         if (invokeError && isPurchaseRequiredError(invokeError)) {
-          openPurchaseGate(invokeError?.message || invokeError?.error)
+          const message =
+            typeof invokeError === 'string'
+              ? invokeError
+              : (invokeError as any)?.message || (invokeError as any)?.error || 'Purchase required to claim seat'
+          openPurchaseGate(message)
         }
 
         if (invokeError) {
           throw invokeError
         }
 
-        const response: any = data
+        const claimResult: any = data
 
-        if (!response?.success) {
-          throw new Error(response?.error || 'Seat claim failed')
+        if (!claimResult?.success) {
+          throw new Error(claimResult?.error || 'Seat claim failed')
         }
 
-        const seat = response?.seat
-        const created = response?.created ?? false
-        const isOwner = response?.is_owner ?? false
+        const seat = claimResult?.seat
+        const created = claimResult?.created ?? false
+        const isOwner = claimResult?.is_owner ?? false
 
         if (!seat) {
           throw new Error('Seat claim returned no data')
@@ -316,7 +335,11 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
         return seat
       } catch (err: any) {
         if (isPurchaseRequiredError(err)) {
-          openPurchaseGate(err?.message || err?.error)
+          const message =
+            typeof err === 'string'
+              ? err
+              : (err as any)?.message || (err as any)?.error || 'Purchase required to claim seat'
+          openPurchaseGate(message)
         }
         throw err
       } finally {
@@ -336,15 +359,18 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
       }
 
       try {
-        const { error: invokeError } = await supabase.functions.invoke('broadcast-seats', {
-          body: {
+        const response = await api.request(API_ENDPOINTS.broadcastSeats.action, {
+          method: 'POST',
+          body: JSON.stringify({
             action: 'release',
             room: roomName,
             seat_index: safeIndex + 1,
             user_id: targetUserId,
             force: Boolean(options?.force),
-          },
+          }),
         })
+
+        const { error: invokeError } = response
 
         // Only log errors
         if (invokeError) {

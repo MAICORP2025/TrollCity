@@ -83,7 +83,7 @@ export const cars = [
     armor: 45,
     colorFrom: '#111827',
     colorTo: '#0f172a',
-    image: '/assets/cars/obsidian_one_apex.png'
+    image: '/assets/cars/vehicle_1_original.png'
   },
   {
     id: 8,
@@ -95,7 +95,7 @@ export const cars = [
     armor: 100,
     colorFrom: '#0b0f1a',
     colorTo: '#111827',
-    image: '/assets/cars/titan_enforcer.png'
+    image: '/assets/cars/vehicle_2_original.png'
   },
   {
     id: 9,
@@ -107,7 +107,7 @@ export const cars = [
     armor: 22,
     colorFrom: '#22d3ee',
     colorTo: '#3b82f6',
-    image: '/assets/cars/neon_hatch_s.png'
+    image: '/assets/cars/vehicle_3_original.png'
   },
   {
     id: 10,
@@ -119,7 +119,7 @@ export const cars = [
     armor: 16,
     colorFrom: '#f59e0b',
     colorTo: '#f97316',
-    image: '/assets/cars/courier_spark_bike.png'
+    image: '/assets/cars/vehicle_4_original.png'
   },
   {
     id: 11,
@@ -131,7 +131,7 @@ export const cars = [
     armor: 45,
     colorFrom: '#60a5fa',
     colorTo: '#1d4ed8',
-    image: '/assets/cars/apex_trail_suv.png'
+    image: '/assets/cars/vehicle_5_original.png'
   },
   {
     id: 12,
@@ -143,7 +143,7 @@ export const cars = [
     armor: 38,
     colorFrom: '#7c3aed',
     colorTo: '#ec4899',
-    image: '/assets/cars/quantum_veil.png'
+    image: '/assets/cars/vehicle_6_original.png'
   },
   {
     id: 13,
@@ -155,7 +155,7 @@ export const cars = [
     armor: 20,
     colorFrom: '#06b6d4',
     colorTo: '#3b82f6',
-    image: '/assets/cars/driftline_pulse_bike.png'
+    image: '/assets/cars/vehicle_7_original.png'
   },
   {
     id: 14,
@@ -167,7 +167,7 @@ export const cars = [
     armor: 50,
     colorFrom: '#0f172a',
     colorTo: '#334155',
-    image: '/assets/cars/regal_meridian.png'
+    image: '/assets/cars/vehicle_8_original.png'
   },
   {
     id: 15,
@@ -179,7 +179,7 @@ export const cars = [
     armor: 32,
     colorFrom: '#1f2937',
     colorTo: '#111827',
-    image: '/assets/cars/luxe_voyager.png'
+    image: '/assets/cars/vehicle_1_original.png'
   },
   {
     id: 16,
@@ -191,6 +191,6 @@ export const cars = [
     armor: 42,
     colorFrom: '#312e81',
     colorTo: '#9333ea',
-    image: '/assets/cars/eclipse_seraph.png'
+    image: '/assets/cars/vehicle_2_original.png'
   }
 ];

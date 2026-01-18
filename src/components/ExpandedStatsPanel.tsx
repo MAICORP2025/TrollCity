@@ -16,6 +16,7 @@ interface UserStats {
   totalXp: number
   nextLevelXp: number
   troll_coins: number
+  paid_coins: number
   trollmonds: number
   familyName?: string
   familyLevel?: number
@@ -48,11 +49,15 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
 
         // Load family data
         let familyData = null
-        const { data: familyMember } = await supabase
+        const { data: familyMember, error: familyError } = await supabase
           .from('family_members')
           .select('family_id, role')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
+        
+        if (familyError && familyError.code !== 'PGRST116') {
+          console.error('Error fetching family member:', familyError)
+        }
 
         if (familyMember?.family_id) {
           const familyStats = await getFamilySeasonStats(familyMember.family_id)
@@ -90,7 +95,8 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
           totalXp: levelData.total_xp,
           nextLevelXp: levelData.next_level_xp,
           troll_coins: profile?.troll_coins || 0,
-          trollmonds: profile?.troll_coins || 0,
+          paid_coins: profile?.paid_coins || 0,
+          trollmonds: profile?.trollmonds || 0,
           ...familyData,
           ...warStats,
           badges
@@ -214,12 +220,24 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-white flex items-center gap-2">
-                      <span className="text-lg">💰</span>
-                      Troll Coins
+                      <span className="text-lg">�️</span>
+                      Admin Coins
                     </span>
-                    <span className="font-bold text-green-400">
+                    <span className="font-bold text-gray-400">
                       {stats.troll_coins.toLocaleString()}
                     </span>
+                  </div>
+                  <div className="flex justify-between items-center relative group">
+                    <span className="text-white flex items-center gap-2">
+                      <span className="text-lg">💰</span>
+                      Gifted Coins
+                    </span>
+                    <span className="font-bold text-green-400">
+                      {stats.paid_coins.toLocaleString()}
+                    </span>
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/95 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 border border-green-500/30">
+                      Actual Value Coins
+                    </div>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-white flex items-center gap-2">
@@ -233,7 +251,7 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
                   <div className="flex justify-between items-center pt-2 border-t border-[#2C2C2C]">
                     <span className="text-gray-300">Cashout Value</span>
                     <span className="font-bold text-yellow-400">
-                      ${(stats.troll_coins * 0.0001 * 0.8).toFixed(2)}
+                      ${(stats.paid_coins * 0.0001 * 0.8).toFixed(2)}
                     </span>
                   </div>
                 </div>

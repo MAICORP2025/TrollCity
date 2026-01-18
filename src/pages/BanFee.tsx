@@ -1,15 +1,74 @@
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, Scale, Home } from "lucide-react";
+import { useAuthStore } from "../lib/store";
+import { supabase } from "../lib/supabase";
+import { toast } from "sonner";
 
 export default function BanFee() {
   const navigate = useNavigate();
-  const banDays = localStorage.getItem("banDays") ? parseInt(localStorage.getItem("banDays")!) : 7;
-  const banFee = 2000;
+  const { user, profile, refreshProfile } = useAuthStore();
+  const [banDays, setBanDays] = useState(7);
+  const [loading, setLoading] = useState(false);
+  const [showCashAppInfo, setShowCashAppInfo] = useState(false);
 
-  const handlePayForAppeal = () => {
-    alert(`Paid ${banFee} coins to appeal ban in Troll Court!`);
-    localStorage.removeItem("banDays");
-    navigate("/troll-court");
+  const banFee = 3000;
+  const usernamePrefix = String(
+    profile?.username || user?.email?.split("@")[0] || "user"
+  )
+    .slice(0, 6)
+    .toUpperCase();
+  const suggestedNote = `${usernamePrefix}-BAN-APPEAL`;
+
+  useEffect(() => {
+    const localBanDays = localStorage.getItem("banDays");
+    if (localBanDays) {
+      const parsed = parseInt(localBanDays);
+      if (!Number.isNaN(parsed)) {
+        setBanDays(parsed);
+      }
+    }
+  }, []);
+
+  const handlePayForAppeal = async () => {
+    if (!user || !profile) {
+      toast.error("You must be logged in");
+      navigate("/auth");
+      return;
+    }
+
+    if ((profile.troll_coins || 0) < banFee) {
+      toast.error("Not enough troll_coins to restore account");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("pay_ban_restoration_fee", {
+        p_user_id: user.id,
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success("Ban restoration fee paid. Account can be restored.");
+        localStorage.removeItem("banDays");
+        refreshProfile?.();
+        navigate("/troll-court", { replace: true });
+      } else {
+        toast.error(data?.error || "Failed to pay ban restoration fee");
+      }
+    } catch (err: any) {
+      console.error("Error paying ban restoration fee:", err);
+      toast.error(err?.message || "Failed to pay ban restoration fee");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePayWithCashApp = () => {
+    setShowCashAppInfo(true);
+    toast.info("Follow the Cash App instructions below to complete your appeal fee.");
   };
 
   return (
@@ -46,19 +105,48 @@ export default function BanFee() {
           <div className="space-y-3">
             <button
               onClick={handlePayForAppeal}
+              disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-bold transition flex items-center justify-center gap-2 purple-neon"
             >
               <Scale size={18} />
-              Appeal in Troll Court ({banFee} 🪙)
+              {loading ? "Processing..." : `Appeal in Troll Court (${banFee} 🪙)`}
             </button>
 
             <button
-              onClick={() => navigate("/")}
+              onClick={handlePayWithCashApp}
               className="w-full py-3 bg-gray-800 hover:bg-gray-700 rounded-lg font-bold transition flex items-center justify-center gap-2 text-gray-300"
             >
-              <Home size={18} />
-              Return Home
+              <Scale size={18} />
+              Pay via Cash App (manual)
             </button>
+
+            {showCashAppInfo && (
+              <div className="w-full py-3 px-4 bg-blue-950/60 border border-blue-500/40 rounded-lg text-sm text-blue-100 space-y-2">
+                <div className="font-semibold">Manual Cash App payment</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>
+                    Send payment to <span className="font-mono font-semibold">$trollcity95</span>
+                  </li>
+                  <li>
+                    In the Cash App note include:{" "}
+                    <span className="font-mono">{suggestedNote}</span>
+                  </li>
+                  <li>
+                    Keep your Cash App receipt so support or Troll Court can verify your payment.
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            <div className="flex justify-center">
+              <button
+                onClick={() => navigate("/")}
+                className="w-full py-3 bg-gray-800 hover:bg-gray-700 rounded-lg font-bold transition flex items-center justify-center gap-2 text-gray-300"
+              >
+                <Home size={18} />
+                Return Home
+              </button>
+            </div>
           </div>
 
           <p className="text-xs text-gray-500 text-center mt-6">

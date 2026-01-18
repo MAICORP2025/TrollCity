@@ -39,39 +39,32 @@ DO $$ BEGIN
         FOR SELECT USING (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- 5. Helper function to compute level (Deterministic)
--- Level 1: 0-100 XP
--- Level 2: 101-300 XP (Next 200)
--- Level 3: 301-600 XP (Next 300)
--- Formula: Level N requires N * 100 XP more than previous? Or simple curve.
--- Let's use a simple formula: level = floor(sqrt(xp_total / 100)) + 1
--- Or strict table lookups. Let's use the one requested: "Level 1 starts at 0 XP. XP requirement increases gradually."
-CREATE OR REPLACE FUNCTION calculate_level(xp BIGINT) 
-RETURNS TABLE (lvl INT, xp_next BIGINT, progress FLOAT) AS $$
-DECLARE
-    l INT := 1;
-    req BIGINT := 100;
-    prev_req BIGINT := 0;
-    cur_xp BIGINT := xp;
+-- 5. Helper function to compute level (aligned with baseline signature)
+DROP FUNCTION IF EXISTS calculate_level(bigint);
+
+CREATE OR REPLACE FUNCTION calculate_level(xp BIGINT)
+RETURNS integer
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
 BEGIN
-    -- Simple linear growth for requirements: 100, 200, 300, 400...
-    -- Cumulative: 100, 300, 600, 1000...
-    LOOP
-        IF cur_xp < req THEN
-            EXIT;
-        END IF;
-        l := l + 1;
-        prev_req := req;
-        req := req + (l * 100); -- Next level needs L*100 more
-    END LOOP;
-    
-    lvl := l;
-    xp_next := req;
-    progress := (cur_xp - prev_req)::FLOAT / (req - prev_req)::FLOAT;
-    
-    RETURN QUERY SELECT lvl, xp_next, progress;
+  IF xp >= 400000 THEN RETURN 30;
+  ELSIF xp >= 250000 THEN RETURN 25;
+  ELSIF xp >= 150000 THEN RETURN 20;
+  ELSIF xp >= 70000 THEN RETURN 15;
+  ELSIF xp >= 30000 THEN RETURN 10;
+  ELSIF xp >= 23000 THEN RETURN 9;
+  ELSIF xp >= 17000 THEN RETURN 8;
+  ELSIF xp >= 12000 THEN RETURN 7;
+  ELSIF xp >= 8000 THEN RETURN 6;
+  ELSIF xp >= 5000 THEN RETURN 5;
+  ELSIF xp >= 3000 THEN RETURN 4;
+  ELSIF xp >= 1500 THEN RETURN 3;
+  ELSIF xp >= 500 THEN RETURN 2;
+  ELSE RETURN 1;
+  END IF;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$;
 
 -- 6. grant_xp RPC
 CREATE OR REPLACE FUNCTION grant_xp(

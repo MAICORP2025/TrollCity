@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
-import { DollarSign, PieChart } from 'lucide-react'
+import { PieChart } from 'lucide-react'
 
 type AdminPoolTransaction = {
   id: string

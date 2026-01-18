@@ -12,6 +12,7 @@ interface UserStats {
   totalXp: number
   nextLevelXp: number
   troll_coins: number
+  paid_coins: number
   trollmonds: number
   familyName?: string
   familyLevel?: number
@@ -84,7 +85,8 @@ export default function Stats() {
           totalXp: levelData.total_xp,
           nextLevelXp: levelData.next_level_xp,
           troll_coins: balances.troll_coins || 0,
-          trollmonds: balances.troll_coins || 0,
+          paid_coins: balances.paid_coins || 0,
+          trollmonds: balances.trollmonds || 0,
           ...familyData,
           ...warStats,
           badges
@@ -97,7 +99,7 @@ export default function Stats() {
     }
 
     loadStats()
-  }, [user?.id, user?.email, balances.troll_coins])
+  }, [user?.id, user?.email, balances.troll_coins, balances.paid_coins, balances.trollmonds])
 
   const xpProgress = stats ? (stats.xp / stats.nextLevelXp) * 100 : 0
   const familyXpProgress = stats?.familyXp ? Math.min((stats.familyXp / 1000) * 100, 100) : 0
@@ -215,12 +217,24 @@ export default function Stats() {
               <div className="space-y-3">
                 <div className="bg-[#2A2A34] rounded-lg p-4 flex justify-between items-center">
                   <span className="text-white flex items-center gap-2">
-                    <span className="text-2xl">💰</span>
-                    Troll Coins
+                    <span className="text-2xl">�️</span>
+                    Admin Coins
                   </span>
-                  <span className="font-bold text-green-400 text-xl">
+                  <span className="font-bold text-gray-400 text-xl">
                     {stats.troll_coins.toLocaleString()}
                   </span>
+                </div>
+                <div className="bg-[#2A2A34] rounded-lg p-4 flex justify-between items-center relative group">
+                  <span className="text-white flex items-center gap-2">
+                    <span className="text-2xl">💰</span>
+                    Gifted Coins
+                  </span>
+                  <span className="font-bold text-green-400 text-xl">
+                    {stats.paid_coins.toLocaleString()}
+                  </span>
+                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Actual Value Coins
+                  </div>
                 </div>
                 <div className="bg-[#2A2A34] rounded-lg p-4 flex justify-between items-center">
                   <span className="text-white flex items-center gap-2">
@@ -234,7 +248,7 @@ export default function Stats() {
                 <div className="bg-[#1A1A24] border border-white/10 rounded-lg p-4 flex justify-between items-center">
                   <span className="text-gray-300">Estimated Cashout Value</span>
                   <span className="font-bold text-yellow-400 text-lg">
-                    ${(stats.troll_coins * 0.0001 * 0.8).toFixed(2)}
+                    ${(stats.paid_coins * 0.0001 * 0.8).toFixed(2)}
                   </span>
                 </div>
               </div>

@@ -10,32 +10,66 @@ create table if not exists public.wallets (
   updated_at timestamp with time zone not null default now()
 );
 
--- Add Stripe fields to coin_packages
-alter table public.coin_packages
-  add column if not exists stripe_price_id text,
-  add column if not exists amount_cents integer;
+-- Add Stripe fields to coin_packages if table is present
+DO $$
+DECLARE
+  v_exists boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'coin_packages'
+  ) INTO v_exists;
 
--- Backfill amount_cents from price_usd if needed
-update public.coin_packages
-set amount_cents = round((price_usd * 100))::int
-where amount_cents is null and price_usd is not null;
+  IF v_exists THEN
+    ALTER TABLE public.coin_packages
+      ADD COLUMN IF NOT EXISTS stripe_price_id text,
+      ADD COLUMN IF NOT EXISTS amount_cents integer;
 
--- Coin orders for Stripe purchases
-create table if not exists public.coin_orders (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  package_id uuid references public.coin_packages(id) on delete set null,
-  coins integer not null,
-  amount_cents integer not null,
-  status text not null default 'created',
-  stripe_checkout_session_id text not null,
-  stripe_payment_intent_id text,
-  paid_at timestamp with time zone,
-  fulfilled_at timestamp with time zone,
-  created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now(),
-  constraint coin_orders_status_check check (status in ('created', 'paid', 'fulfilled', 'canceled', 'failed'))
-);
+    UPDATE public.coin_packages
+    SET amount_cents = round((price_usd * 100))::int
+    WHERE amount_cents IS NULL AND price_usd IS NOT NULL;
+  END IF;
+END $$;
+
+-- Coin orders for Stripe purchases (gracefully handle missing coin_packages table)
+DO $$
+DECLARE
+  v_packages boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'coin_packages'
+  ) INTO v_packages;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'coin_orders'
+  ) THEN
+    CREATE TABLE public.coin_orders (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references auth.users(id) on delete cascade,
+      package_id uuid,
+      coins integer not null,
+      amount_cents integer not null,
+      status text not null default 'created',
+      stripe_checkout_session_id text not null,
+      stripe_payment_intent_id text,
+      paid_at timestamp with time zone,
+      fulfilled_at timestamp with time zone,
+      created_at timestamp with time zone not null default now(),
+      updated_at timestamp with time zone not null default now(),
+      constraint coin_orders_status_check check (status in ('created', 'paid', 'fulfilled', 'canceled', 'failed'))
+    );
+  END IF;
+
+  IF v_packages THEN
+    BEGIN
+      ALTER TABLE public.coin_orders
+        ADD CONSTRAINT coin_orders_package_fk
+        FOREIGN KEY (package_id) REFERENCES public.coin_packages(id) ON DELETE SET NULL;
+    EXCEPTION WHEN duplicate_object THEN NULL; END;
+  END IF;
+END $$;
 
 create unique index if not exists coin_orders_stripe_session_id_key
   on public.coin_orders(stripe_checkout_session_id);
@@ -72,10 +106,22 @@ create table if not exists public.stripe_customers (
 create unique index if not exists stripe_customers_customer_id_key
   on public.stripe_customers(stripe_customer_id);
 
--- Extend user_payment_methods for Stripe
-alter table public.user_payment_methods
-  add column if not exists stripe_customer_id text,
-  add column if not exists stripe_payment_method_id text;
+-- Extend user_payment_methods for Stripe if table exists
+DO $$
+DECLARE
+  v_exists boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'user_payment_methods'
+  ) INTO v_exists;
+
+  IF v_exists THEN
+    ALTER TABLE public.user_payment_methods
+      ADD COLUMN IF NOT EXISTS stripe_customer_id text,
+      ADD COLUMN IF NOT EXISTS stripe_payment_method_id text;
+  END IF;
+END $$;
 
 -- RPC to credit coins (idempotent)
 create or replace function public.credit_coins(

@@ -70,7 +70,7 @@ export async function recordOfficerActionWithFee(input: {
   reason?: string
   related_stream_id?: string
   fee_coins: number
-  officer_commission_pct: number // e.g. 0.3 = 30%
+  officer_commission_pct: number // 0.005 = 0.5%
 }) {
   // 1) charge user (negative coins)
   const feeTx = await recordCoinTransaction({
@@ -143,6 +143,36 @@ export async function recordOfficerActionWithFee(input: {
       commission_rate: input.officer_commission_pct
     }
   })
+
+  // 5) route remaining moderation fee to admin pool
+  try {
+    const adminProfitCoins = Math.max(0, input.fee_coins - commissionCoins)
+    if (adminProfitCoins > 0) {
+      const cashoutAmount = coinsToUsd(input.fee_coins)
+      const adminProfit = coinsToUsd(adminProfitCoins)
+
+      await adminClient
+        .from('admin_pool_transactions')
+        .insert({
+          transaction_id: null,
+          user_id: input.target_user_id,
+          cashout_amount: cashoutAmount,
+          admin_fee: 0,
+          admin_profit: adminProfit,
+          transaction_type: 'other_fee',
+          source_details: {
+            kind: 'moderation_fee',
+            action_type: input.action_type,
+            officer_id: input.officer_id,
+            target_user_id: input.target_user_id,
+            fee_coins: input.fee_coins,
+            commission_coins: commissionCoins
+          }
+        })
+    }
+  } catch (err) {
+    console.warn('[Economy] Failed to record admin pool moderation fee:', err)
+  }
 
   return { feeTx, action, offEarn }
 }

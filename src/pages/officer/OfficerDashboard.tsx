@@ -4,9 +4,11 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { OFFICER_BASE_HOURLY_COINS } from '../../lib/officerPay'
 import { toast } from 'sonner'
+import { format12hr } from '../../utils/timeFormat'
 import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
 import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
+import OfficerClock from '../../components/officer/OfficerClock'
 
 interface WorkSession {
   id: string
@@ -191,35 +193,36 @@ export default function OfficerDashboard() {
         </div>
       </div>
 
-      {/* Ghost Mode Toggle */}
-      <div className="bg-black/60 border border-purple-600 rounded-lg p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Ghost className={`w-6 h-6 ${profile?.is_ghost_mode ? 'text-purple-400' : 'text-gray-400'}`} />
-            <div>
-              <p className="font-semibold">Ghost Mode</p>
-              <p className="text-sm opacity-70">
-                {profile?.is_ghost_mode 
-                  ? 'You are invisible to users' 
-                  : 'Become invisible to users while keeping moderation tools'
-                }
-              </p>
+      <div className="mb-6 grid md:grid-cols-2 gap-6">
+        <OfficerClock onActionComplete={loadData} />
+        
+        <div className="bg-black/60 border border-purple-600 rounded-lg p-6 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Ghost className={`w-6 h-6 ${profile?.is_ghost_mode ? 'text-purple-400' : 'text-gray-400'}`} />
+              <h2 className="text-xl font-bold">Ghost Mode</h2>
             </div>
+            <p className="text-sm opacity-70">
+              {profile?.is_ghost_mode 
+                ? 'You are invisible to users. They cannot see your location or status.' 
+                : 'Become invisible to users while keeping all moderation tools active.'
+              }
+            </p>
           </div>
           <button
             onClick={toggleGhostMode}
             disabled={togglingGhost}
-            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+            className={`mt-4 w-full py-3 rounded-xl font-bold transition-all ${
               profile?.is_ghost_mode 
-                ? 'bg-gray-800 hover:bg-gray-700' 
+                ? 'bg-gray-800 hover:bg-gray-700 border border-white/10' 
                 : 'bg-purple-600 hover:bg-purple-700'
             }`}
           >
             {togglingGhost 
               ? 'Toggling...' 
               : profile?.is_ghost_mode 
-                ? '👻 Ghost Mode Active' 
-                : '🛡 Become Visible'
+                ? '👻 Deactivate Ghost Mode' 
+                : '🛡 Activate Ghost Mode'
             }
           </button>
         </div>
@@ -318,7 +321,7 @@ export default function OfficerDashboard() {
                   <tr key={slot.id} className="border-b border-gray-800 hover:bg-gray-900/30">
                     <td className="p-3">{start.toLocaleDateString()}</td>
                     <td className="p-3 text-sm">
-                      {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {format12hr(start)} - {format12hr(end)}
                     </td>
                     <td className="p-3 text-sm">
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${

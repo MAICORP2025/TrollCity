@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import mkcert from 'vite-plugin-mkcert'
 // import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
 // 🚫 Removed dotenv — not needed on Vercel
@@ -17,6 +18,7 @@ export default defineConfig({
   plugins: [
     react(),
     tsconfigPaths(),
+    mkcert(),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "robots.txt", "apple-touch-icon.png"],

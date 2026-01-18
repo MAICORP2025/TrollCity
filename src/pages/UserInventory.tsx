@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone } from 'lucide-react'
+import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone, X } from 'lucide-react'
 import { PERK_CONFIG } from '../lib/perkSystem'
 import { ENTRANCE_EFFECTS_MAP, ROLE_BASED_ENTRANCE_EFFECTS, USER_SPECIFIC_ENTRANCE_EFFECTS } from '../lib/entranceEffects'
+import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPicker'
+import AvatarCustomizer from './AvatarCustomizer'
 
 export default function UserInventory({ embedded = false }: { embedded?: boolean }) {
   const { user, profile, refreshProfile } = useAuthStore()
@@ -17,6 +19,8 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
   const [callSounds, setCallSounds] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeItems, setActiveItems] = useState<Set<string>>(new Set())
+  const [showColorPickerModal, setShowColorPickerModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<'inventory' | 'avatar'>('inventory')
 
   const roleEffectKey = (() => {
     if (!profile) return null;
@@ -39,6 +43,34 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
     const roleKey = roleEffectKey;
     return roleKey && ROLE_BASED_ENTRANCE_EFFECTS[roleKey] ? ROLE_BASED_ENTRANCE_EFFECTS[roleKey] : null;
   })();
+
+  const deleteInventoryItem = useCallback(
+    async (recordId: string, itemId: string) => {
+      if (!user?.id) return
+
+      if (activeItems.has(itemId)) {
+        toast.error('Deactivate item before deleting')
+        return
+      }
+
+      try {
+        const { error } = await supabase
+          .from('user_inventory')
+          .delete()
+          .eq('id', recordId)
+          .eq('user_id', user.id)
+
+        if (error) throw error
+
+        setInventory(prev => prev.filter(entry => entry.id !== recordId))
+        toast.success('Item deleted from inventory')
+      } catch (err) {
+        console.error('Error deleting inventory item:', err)
+        toast.error('Failed to delete item')
+      }
+    },
+    [user?.id, activeItems]
+  )
 
   const loadInventory = useCallback(async () => {
     try {
@@ -436,7 +468,36 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
         </div>
       )}
 
-        {loading ? (
+        <div className="flex items-center justify-center">
+          <div className="inline-flex bg-black/40 border border-[#2C2C2C] rounded-full p-1">
+            <button
+              onClick={() => setActiveTab('inventory')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                activeTab === 'inventory'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Items
+            </button>
+            <button
+              onClick={() => setActiveTab('avatar')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                activeTab === 'avatar'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Avatar
+            </button>
+          </div>
+        </div>
+
+        {activeTab === 'avatar' ? (
+          <div className="mt-4">
+            <AvatarCustomizer />
+          </div>
+        ) : loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1,2,3,4,5,6].map(i => (
               <div key={i} className="bg-zinc-900 rounded-xl p-6 border border-[#2C2C2C] animate-pulse">
@@ -496,19 +557,33 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
                             </p>
                           )}
                         </div>
-                        <button
-                          onClick={() => togglePerk(perk.id, isActive)}
-                          disabled={isExpired}
-                          className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                            isExpired 
-                              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                              : isActive
-                                ? 'bg-red-600 hover:bg-red-700 text-white'
-                                : 'bg-green-600 hover:bg-green-700 text-white'
-                          }`}
-                        >
-                          {isExpired ? 'Expired' : isActive ? 'Deactivate' : 'Activate'}
-                        </button>
+                        <div className="space-y-2">
+                          <button
+                            onClick={() => togglePerk(perk.id, isActive)}
+                            disabled={isExpired}
+                            className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                              isExpired 
+                                ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                : isActive
+                                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                                  : 'bg-green-600 hover:bg-green-700 text-white'
+                            }`}
+                          >
+                            {isExpired ? 'Expired' : isActive ? 'Deactivate' : 'Activate'}
+                          </button>
+                          {/* Show color picker button for glowing username perks */}
+                          {perk.perk_id === 'perk_global_highlight' && isActive && !isExpired && (
+                            <button
+                              onClick={() => {
+                                setShowColorPickerModal(true)
+                              }}
+                              className="w-full py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                            >
+                              <Palette className="w-4 h-4" />
+                              Choose Glow Color
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -744,7 +819,6 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
 
                     return (
                       <div key={item.id} className="bg-zinc-900 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-all">
-                        {/* Item Info */}
                         <div className="mb-4">
                           <div className="flex items-center gap-2 mb-2">
                             {getItemIcon(item.marketplace_item?.type)}
@@ -771,33 +845,51 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
                           </p>
                         </div>
 
-                        {/* Action Button */}
                         {isDigital ? (
-                          <button
-                            onClick={() => toggleItemActivation(item.item_id, item.marketplace_item?.type)}
-                            className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                              isActive
-                                ? 'bg-red-600 hover:bg-red-700 text-white'
-                                : 'bg-green-600 hover:bg-green-700 text-white'
-                            }`}
-                          >
-                            {isActive ? (
-                              <>
-                                <XCircle className="w-4 h-4" />
-                                Deactivate
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle className="w-4 h-4" />
-                                Activate
-                              </>
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => toggleItemActivation(item.item_id, item.marketplace_item?.type)}
+                              className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                                isActive
+                                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                                  : 'bg-green-600 hover:bg-green-700 text-white'
+                              }`}
+                            >
+                              {isActive ? (
+                                <>
+                                  <XCircle className="w-4 h-4" />
+                                  Deactivate
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-4 h-4" />
+                                  Activate
+                                </>
+                              )}
+                            </button>
+
+                            {!isActive && (
+                              <button
+                                onClick={() => deleteInventoryItem(item.id, item.item_id)}
+                                className="w-full py-2 rounded-lg font-semibold border border-red-600 text-red-400 hover:bg-red-600 hover:text-white transition-colors text-sm"
+                              >
+                                Delete Item
+                              </button>
                             )}
-                          </button>
+                          </div>
                         ) : (
-                          <div className="text-center py-3 text-gray-400">
-                            <Package className="w-5 h-5 mx-auto mb-1" />
-                            <p className="text-sm">Physical Item</p>
-                            <p className="text-xs">Contact seller for delivery</p>
+                          <div className="space-y-2">
+                            <div className="text-center py-3 text-gray-400">
+                              <Package className="w-5 h-5 mx-auto mb-1" />
+                              <p className="text-sm">Physical Item</p>
+                              <p className="text-xs">Contact seller for delivery</p>
+                            </div>
+                            <button
+                              onClick={() => deleteInventoryItem(item.id, item.item_id)}
+                              className="w-full py-2 rounded-lg font-semibold border border-red-600 text-red-400 hover:bg-red-600 hover:text-white transition-colors text-sm"
+                            >
+                              Delete Item
+                            </button>
                           </div>
                         )}
                       </div>
@@ -848,8 +940,39 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
-      {content}
-    </div>
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
+        {content}
+      </div>
+      
+      {/* Glowing Username Color Picker Modal */}
+      {showColorPickerModal && user?.id && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-[#0A0A14] border border-[#2C2C2C] rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[#2C2C2C]">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-yellow-400" />
+                Choose Glow Color
+              </h2>
+              <button
+                onClick={() => setShowColorPickerModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <GlowingUsernameColorPicker
+                userId={user.id}
+                onColorSelected={() => {
+                  setShowColorPickerModal(false)
+                  toast.success('Color saved!')
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

@@ -101,19 +101,46 @@ export function dnaClassFor(primary: string | null | undefined) {
 }
 
 export async function currentIdentity(userId: string) {
-  const { data: lvl } = await supabase.from('user_levels').select('*').eq('user_id', userId).maybeSingle()
-  const { data: dna } = await supabase.from('troll_dna_profiles').select('*').eq('user_id', userId).maybeSingle()
-  return { level: lvl || { level: 1, xp: 0, next_level_xp: 100 }, dna: dna || { primary_dna: null, traits: [] } }
+  try {
+    const { data: lvl, error: lvlError } = await supabase.from('user_levels').select('*').eq('user_id', userId).maybeSingle()
+    if (lvlError && lvlError.code !== 'PGRST116') {
+      console.error('Error fetching user levels:', lvlError)
+    }
+    const { data: dna, error: dnaError } = await supabase.from('troll_dna_profiles').select('*').eq('user_id', userId).maybeSingle()
+    if (dnaError && dnaError.code !== 'PGRST116') {
+      console.error('Error fetching DNA profile:', dnaError)
+    }
+    return { level: lvl || { level: 1, xp: 0, next_level_xp: 100 }, dna: dna || { primary_dna: null, traits: [] } }
+  } catch (err) {
+    console.error('Exception in currentIdentity:', err)
+    return { level: { level: 1, xp: 0, next_level_xp: 100 }, dna: { primary_dna: null, traits: [] } }
+  }
 }
 
 export async function getLevelProfile(userId: string) {
-  const { data } = await supabase.from('user_levels').select('*').eq('user_id', userId).maybeSingle()
-  return data || { level: 1, xp: 0, total_xp: 0, next_level_xp: 100 }
+  try {
+    const { data, error } = await supabase.from('user_levels').select('*').eq('user_id', userId).maybeSingle()
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching level profile:', error)
+    }
+    return data || { level: 1, xp: 0, total_xp: 0, next_level_xp: 100, buyer_xp: 0, buyer_level: 1, stream_xp: 0, stream_level: 1, updated_at: new Date().toISOString() }
+  } catch (err) {
+    console.error('Exception in getLevelProfile:', err)
+    return { level: 1, xp: 0, total_xp: 0, next_level_xp: 100, buyer_xp: 0, buyer_level: 1, stream_xp: 0, stream_level: 1, updated_at: new Date().toISOString() }
+  }
 }
 
 export async function getDnaProfile(userId: string) {
-  const { data } = await supabase.from('troll_dna_profiles').select('*').eq('user_id', userId).maybeSingle()
-  return data || { primary_dna: null, traits: [], aura_style: null, personality_scores: {}, evolution_score: 0 }
+  try {
+    const { data, error } = await supabase.from('troll_dna_profiles').select('*').eq('user_id', userId).maybeSingle()
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching DNA profile:', error)
+    }
+    return data || { primary_dna: null, traits: [], aura_style: null, personality_scores: {}, evolution_score: 0 }
+  } catch (err) {
+    console.error('Exception in getDnaProfile:', err)
+    return { primary_dna: null, traits: [], aura_style: null, personality_scores: {}, evolution_score: 0 }
+  }
 }
 
 export async function getUserFullIdentity(userId: string) {

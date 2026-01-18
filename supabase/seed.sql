@@ -14,7 +14,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Lead Officer
 INSERT INTO public.user_profiles (id, username, email, role, is_lead_officer, troll_coins, created_at)
 VALUES 
-  ('a0000000-0000-0000-0000-000000000002', 'officer_chief', 'chief@trollcity.app', 'lead_officer', true, 50000, now())
+  ('a0000000-0000-0000-0000-000000000002', 'officer_chief', 'chief@trollcity.app', 'lead_troll_officer', true, 50000, now())
 ON CONFLICT (id) DO NOTHING;
 
 -- Standard Streamer
@@ -26,7 +26,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Rich Viewer
 INSERT INTO public.user_profiles (id, username, email, role, troll_coins, created_at)
 VALUES 
-  ('a0000000-0000-0000-0000-000000000004', 'rich_viewer', 'viewer@test.com', 'user', false, 500000, now())
+  ('a0000000-0000-0000-0000-000000000004', 'rich_viewer', 'viewer@test.com', 'user', 500000, now())
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Create Tax Info (for Streamer)

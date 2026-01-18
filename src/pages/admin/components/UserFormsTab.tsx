@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { useAuthStore } from '../../../lib/store';
 import { FileText, AlertCircle, Bell, Check, Search, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import UserDetailsModal from '../../../components/admin/UserDetailsModal';
 
 interface UserFormStatus {
   id: string;

@@ -21,40 +21,45 @@ export default function GameControlPanel() {
   const [hasDebuff, setHasDebuff] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const positionInitializedRef = useRef(false);
+  const isDraggingRef = useRef(false);
 
   const togglePanel = () => setIsOpen(!isOpen);
 
-  const handleDragMove = (event: MouseEvent) => {
+  const clampPosition = (nextX: number, nextY: number) => {
+    const bounds = containerRef.current?.getBoundingClientRect();
+    const margin = 8;
+    const width = bounds?.width ?? 56;
+    const height = bounds?.height ?? 56;
+    const maxX = Math.max(margin, window.innerWidth - width - margin);
+    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const clampedX = Math.min(maxX, Math.max(margin, nextX));
+    const clampedY = Math.min(maxY, Math.max(margin, nextY));
+    return { x: clampedX, y: clampedY };
+  };
+
+  const handlePointerMove = (event: PointerEvent) => {
     const state = dragStateRef.current;
     if (!state) return;
     const dx = event.clientX - state.startX;
     const dy = event.clientY - state.startY;
-    setDragOffset({
-      x: state.originX + dx,
-      y: state.originY + dy,
-    });
+    const next = clampPosition(state.originX + dx, state.originY + dy);
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      isDraggingRef.current = true;
+    }
+    setDragOffset(next);
   };
 
-  const handleTouchMove = (event: TouchEvent) => {
-    const state = dragStateRef.current;
-    if (!state) return;
-    const touch = event.touches[0];
-    if (!touch) return;
-    event.preventDefault();
-    const dx = touch.clientX - state.startX;
-    const dy = touch.clientY - state.startY;
-    setDragOffset({
-      x: state.originX + dx,
-      y: state.originY + dy,
-    });
-  };
-
-  const handleDragEnd = () => {
+  const handlePointerUp = () => {
     dragStateRef.current = null;
-    window.removeEventListener('mousemove', handleDragMove);
-    window.removeEventListener('mouseup', handleDragEnd);
-    window.removeEventListener('touchmove', handleTouchMove as EventListener);
-    window.removeEventListener('touchend', handleDragEnd);
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+    window.removeEventListener('pointercancel', handlePointerUp);
+    window.removeEventListener('blur', handlePointerUp);
+    setTimeout(() => {
+      isDraggingRef.current = false;
+    }, 0);
   };
 
   const startDrag = (clientX: number, clientY: number) => {
@@ -64,25 +69,25 @@ export default function GameControlPanel() {
       originX: dragOffset.x,
       originY: dragOffset.y,
     };
-    window.addEventListener('mousemove', handleDragMove);
-    window.addEventListener('mouseup', handleDragEnd);
-    window.addEventListener('touchmove', handleTouchMove as EventListener, { passive: false });
-    window.addEventListener('touchend', handleDragEnd);
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    window.addEventListener('blur', handlePointerUp);
   };
 
-  const handleDragStart = (event: React.MouseEvent) => {
+  const handlePointerDown = (event: React.PointerEvent) => {
+    if (event.button !== 0 && event.pointerType === 'mouse') return;
     event.preventDefault();
     startDrag(event.clientX, event.clientY);
   };
 
-  const handleTouchStart = (event: React.TouchEvent) => {
-    const touch = event.touches[0];
-    if (!touch) return;
-    event.preventDefault();
-    startDrag(touch.clientX, touch.clientY);
-  };
-
   useEffect(() => {
+    if (!positionInitializedRef.current) {
+      positionInitializedRef.current = true;
+      const initialX = Math.max(8, window.innerWidth - 16 - 56);
+      const initialY = Math.max(8, window.innerHeight - 96 - 56);
+      setDragOffset({ x: initialX, y: initialY });
+    }
     if (!user?.id) {
       setHasCar(false);
       setHasHouse(false);
@@ -189,6 +194,7 @@ export default function GameControlPanel() {
   const locations = [
     { label: 'Drive to Home', path: '/', visible: true },
     { label: 'Drive to Troll Town', path: '/trollstown', visible: true },
+    { label: 'Drive to Garage', path: '/garage', visible: true },
     { label: 'Drive to Car Dealership', path: '/dealership', visible: true },
     { label: 'Drive to Mechanic Shop', path: '/mechanic', visible: true },
     { label: 'Drive to General Store', path: '/general-store', visible: true },
@@ -200,6 +206,7 @@ export default function GameControlPanel() {
     { label: 'Drive to Inventory', path: '/inventory', visible: true },
     { label: 'Drive to The Wall', path: '/wall', visible: true },
     { label: 'Drive to Leaderboard', path: '/leaderboard', visible: true },
+    { label: 'Drive to Go Live', path: '/go-live', visible: true },
   ].filter(loc => loc.visible);
 
   const showBackButton = locations.some(loc => 
@@ -237,7 +244,8 @@ export default function GameControlPanel() {
 
   return (
     <div
-      className="fixed bottom-24 right-4 z-40 flex flex-col items-end pointer-events-none"
+      ref={containerRef}
+      className="fixed left-0 top-0 z-40 flex flex-col items-end pointer-events-none"
       style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
     >
       {/* Expanded Panel */}
@@ -245,8 +253,8 @@ export default function GameControlPanel() {
         <div className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl p-4 shadow-2xl mb-4 w-72 pointer-events-auto animate-in slide-in-from-bottom-5 fade-in duration-200">
           <div
             className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-800 cursor-move"
-            onMouseDown={handleDragStart}
-            onTouchStart={handleTouchStart}
+            onPointerDown={handlePointerDown}
+            style={{ touchAction: 'none' }}
           >
             <h3 className="font-bold text-zinc-200">Game Controls</h3>
             <span className="text-xs text-zinc-500 uppercase tracking-wider">Troll City OS</span>
@@ -259,7 +267,7 @@ export default function GameControlPanel() {
                     label="Drive to Location" 
                     onClick={() => setShowDriveMenu(!showDriveMenu)} 
                 />
-                
+
                 {showDriveMenu && (
                     <div className="pl-4 space-y-1 border-l-2 border-zinc-800 ml-4">
                         {locations.map(loc => (
@@ -347,9 +355,12 @@ export default function GameControlPanel() {
 
       {/* Toggle Button */}
       <button
-        onClick={togglePanel}
-        onMouseDown={handleDragStart}
-        onTouchStart={handleTouchStart}
+        onClick={() => {
+          if (isDraggingRef.current) return;
+          togglePanel();
+        }}
+        onPointerDown={handlePointerDown}
+        style={{ touchAction: 'none' }}
         className="pointer-events-auto flex items-center justify-center w-14 h-14 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-lg shadow-purple-900/30 transition-all active:scale-95 border-2 border-purple-400/50"
       >
         {isOpen ? <ChevronDown size={28} /> : <Car size={28} />}

@@ -3620,4 +3620,23 @@ html, body, #root {
   -webkit-backdrop-filter: none !important;
 }
 
+@keyframes laneMove {
+  0% {
+    background-position-y: 0;
+  }
+  100% {
+    background-position-y: 56px;
+  }
+}
+
+@keyframes lanePulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* (dynamic seat hover & connection effects reverted) */

@@ -4,6 +4,7 @@ import { supabase, isAdminEmail } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { Calendar, Clock, Plus, Trash2, CheckCircle, XCircle, AlertCircle, DollarSign } from 'lucide-react'
+import { format12hr } from '../utils/timeFormat'
 
 interface ShiftSlot {
   id: string
@@ -31,10 +32,7 @@ export default function OfficerScheduling() {
   const [blockedSlots, setBlockedSlots] = useState<ShiftSlot[]>([])
 
   const formatTime12h = (time: string) => {
-    if (!time) return ''
-    const date = new Date(`1970-01-01T${time}`)
-    if (Number.isNaN(date.getTime())) return time
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    return format12hr(time);
   }
 
   // Check if user is officer or admin

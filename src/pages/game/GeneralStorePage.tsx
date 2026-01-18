@@ -1,40 +1,75 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Shield, Package } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
-import { deductCoins } from '../../lib/coinTransactions';
+import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 
 export default function GeneralStorePage() {
-  const { user, profile } = useAuthStore();
+  const { user } = useAuthStore();
   const [buyingPolicy, setBuyingPolicy] = useState(false);
+  const [hasHomeInsurance, setHasHomeInsurance] = useState(false);
 
-  const handleBuyPolicy = async () => {
-    if (!user || !profile) {
-      toast.error('You must be logged in');
+  useEffect(() => {
+    if (!user?.id) {
+      setHasHomeInsurance(false);
       return;
     }
 
-    const price = 2000;
-    if ((profile.troll_coins || 0) < price) {
-      toast.error('Not enough troll coins');
+    try {
+      const raw = localStorage.getItem(`trollcity_home_insurance_${user.id}`);
+      if (!raw) {
+        setHasHomeInsurance(false);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setHasHomeInsurance(Boolean(parsed && parsed.active));
+    } catch {
+      setHasHomeInsurance(false);
+    }
+  }, [user?.id]);
+
+  const handleBuyPolicy = async () => {
+    if (!user) {
+      toast.error('You must be logged in');
       return;
     }
 
     setBuyingPolicy(true);
     try {
-      const result = await deductCoins({
-        userId: user.id,
-        amount: price,
-        type: 'insurance_purchase',
-        description: 'Home insurance purchase (7 days)',
-        metadata: { source: 'general_store', protection: 'home_7d' }
-      });
+      const { data: properties, error: propsError } = await supabase
+        .from('properties')
+        .select('id')
+        .eq('owner_user_id', user.id)
+        .eq('is_listed', false)
+        .order('created_at', { ascending: true });
 
-      if (!result.success) {
-        toast.error(result.error || 'Failed to purchase policy');
+      if (propsError) {
+        console.error('Failed to load properties for insurance:', propsError);
+        toast.error(propsError.message || 'Failed to load your properties');
         return;
       }
 
+      const propertyRows = Array.isArray(properties) ? properties : [];
+
+      if (!propertyRows.length) {
+        toast.error('You must own a property before buying insurance');
+        return;
+      }
+
+      const targetProperty = propertyRows[0] as any;
+
+      const { error: rpcError } = await supabase.rpc('buy_property_insurance', {
+        house_id: targetProperty.id,
+        plan_id: null
+      });
+
+      if (rpcError) {
+        console.error('buy_property_insurance RPC failed:', rpcError);
+        toast.error(rpcError.message || 'Failed to purchase policy');
+        return;
+      }
+
+      setHasHomeInsurance(true);
       toast.success('Home insurance activated for 7 days');
       localStorage.setItem(`trollcity_home_insurance_${user.id}`, JSON.stringify({ active: true }));
     } finally {
@@ -88,10 +123,10 @@ export default function GeneralStorePage() {
                <span className="text-xl font-bold text-blue-300">2,000 Coins</span>
                <button
                  onClick={handleBuyPolicy}
-                 disabled={buyingPolicy}
+                 disabled={buyingPolicy || hasHomeInsurance}
                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                >
-                 {buyingPolicy ? 'Processing...' : 'Buy Policy'}
+                 {buyingPolicy ? 'Processing...' : hasHomeInsurance ? 'Policy Active' : 'Buy Policy'}
                </button>
              </div>
            </div>

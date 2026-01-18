@@ -179,7 +179,7 @@ await logCoinTransaction({
 // Credit receiver
 await logCoinTransaction({
   userId: receiverId,
-  amount: 450, // 90% of gift value
+  amount: 475, // 95% of gift value
   coinType: 'paid',
   transactionType: 'gift_received',
   description: 'Received Rose gift from @sender',
@@ -190,7 +190,7 @@ await logCoinTransaction({
     gift_name: 'Rose',
     original_value: 500
   },
-  liability: 4.50 // 10% platform fee
+  liability: 2.50 // 5% platform fee
 })
 ```
 

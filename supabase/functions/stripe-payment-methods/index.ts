@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "@supabase/supabase-js";
-import Stripe from "https://cdn.skypack.dev/stripe@14.25.0?min";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Removed Stripe Node SDK import; use Stripe REST via fetch
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -24,9 +24,46 @@ if (!STRIPE_SECRET_KEY) {
 const supabaseAdmin = createClient(SUPABASE_URL ?? "", SUPABASE_SERVICE_ROLE_KEY ?? "", {
   auth: { persistSession: false, autoRefreshToken: false },
 });
-const stripe = new Stripe(STRIPE_SECRET_KEY ?? "", {
-  apiVersion: "2023-10-16",
-});
+// Removed Stripe SDK client; using REST helpers instead
+
+// Edge-safe Stripe helpers (use fetch to Stripe REST API)
+function toForm(body: Record<string, string | number | boolean | undefined>): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(body)) {
+    if (v !== undefined && v !== null) params.append(k, String(v));
+  }
+  return params;
+}
+
+async function stripePost<T = any>(path: string, form: URLSearchParams): Promise<T> {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form,
+    }
+  );
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message ?? "Stripe error");
+  return json as T;
+}
+
+async function stripeGet<T = any>(path: string): Promise<T> {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      },
+    }
+  );
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message ?? "Stripe error");
+  return json as T;
+}
 
 const getOrCreateCustomer = async (userId: string) => {
   const { data: existing } = await supabaseAdmin
@@ -37,10 +74,7 @@ const getOrCreateCustomer = async (userId: string) => {
 
   if (existing?.stripe_customer_id) return existing.stripe_customer_id;
 
-  const customer = await stripe.customers.create({
-    metadata: { user_id: userId },
-  });
-
+  const customer = await stripePost<{ id: string }>("customers", toForm({ "metadata[user_id]": userId }));
   const { error } = await supabaseAdmin
     .from("stripe_customers")
     .insert({ user_id: userId, stripe_customer_id: customer.id });
@@ -103,10 +137,10 @@ serve(async (req: Request) => {
     if (action === "create-setup-intent") {
       const customerId = await getOrCreateCustomer(authData.user.id);
 
-      const intent = await stripe.setupIntents.create({
-        customer: customerId,
-        usage: "off_session",
-      });
+        const intent = await stripePost<{ client_secret: string }>("setup_intents", toForm({
+          customer: customerId,
+          usage: "off_session",
+        }));
 
       return new Response(JSON.stringify({ clientSecret: intent.client_secret }), {
         status: 200,
@@ -123,24 +157,73 @@ serve(async (req: Request) => {
         });
       }
 
-      const customerId = await getOrCreateCustomer(authData.user.id);
-
-      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-
-      if (!paymentMethod?.customer || paymentMethod.customer !== customerId) {
-        await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
+      console.log('[save-payment-method] Starting for user:', authData.user.id);
+      
+      let customerId: string;
+      let paymentMethod: any;
+      try {
+        customerId = await getOrCreateCustomer(authData.user.id);
+        // Declare early then fetch
+        paymentMethod = await stripeGet<any>(`payment_methods/${paymentMethodId}`);
+      } catch (err: any) {
+        console.error('[save-payment-method] getOrCreateCustomer error:', err);
+        return new Response(JSON.stringify({ 
+          error: "Failed to get/create Stripe customer", 
+          details: err.message 
+        }), {
+          status: 500,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
       }
 
-      await stripe.customers.update(customerId, {
-        invoice_settings: { default_payment_method: paymentMethodId },
-      });
+      // Ensure payment method is attached to customer
+      try {
+        await stripePost(`payment_methods/${paymentMethodId}/attach`, toForm({ customer: customerId }));
+        console.log('[save-payment-method] Attached payment method to customer (id:', paymentMethodId, ')');
+      } catch (err: any) {
+        console.error('[save-payment-method] Stripe attach error:', err);
+        return new Response(JSON.stringify({ 
+          error: "Failed to attach payment method to customer", 
+          details: err.message 
+        }), {
+          status: 500,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
 
-      await supabaseAdmin
-        .from("user_payment_methods")
-        .update({ is_default: false })
-        .eq("user_id", authData.user.id);
+      // Refresh payment method info
+      try {
+        paymentMethod = await stripeGet<any>(`payment_methods/${paymentMethodId}`);
+      } catch {}
 
-      const card = (paymentMethod as Stripe.PaymentMethod).card;
+      try {
+        await stripePost(`customers/${customerId}`, toForm({
+          "invoice_settings[default_payment_method]": paymentMethodId,
+        }));
+        console.log('[save-payment-method] Updated customer default payment method');
+      } catch (err: any) {
+        console.error('[save-payment-method] Stripe customer update error:', err);
+        return new Response(JSON.stringify({ 
+          error: "Failed to set default payment method in Stripe", 
+          details: err.message 
+        }), {
+          status: 500,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+
+      try {
+        await supabaseAdmin
+          .from("user_payment_methods")
+          .update({ is_default: false })
+          .eq("user_id", authData.user.id);
+        console.log('[save-payment-method] Cleared other default payment methods');
+      } catch (err: any) {
+        console.error('[save-payment-method] Clear defaults error:', err);
+        // Non-fatal, continue
+      }
+
+      const card = paymentMethod?.card || null;
       const displayName = card
         ? `${String(card.brand || "Card").toUpperCase()} •••• ${card.last4 || ""}`
         : paymentMethod?.type || "payment_method";
@@ -165,7 +248,11 @@ serve(async (req: Request) => {
 
       if (saveError) {
         console.error("save-payment-method error", saveError);
-        return new Response(JSON.stringify({ error: "Failed to save payment method" }), {
+        return new Response(JSON.stringify({ 
+          error: "Failed to save payment method", 
+          details: saveError.message,
+          code: saveError.code 
+        }), {
           status: 500,
           headers: { ...cors, "Content-Type": "application/json" },
         });
@@ -207,7 +294,8 @@ serve(async (req: Request) => {
       }
 
       if (method.stripe_payment_method_id) {
-        await stripe.paymentMethods.detach(method.stripe_payment_method_id);
+        // Detach payment method via Stripe REST
+        await stripePost(`payment_methods/${method.stripe_payment_method_id}/detach`, toForm({}));
       }
 
       const { error: deleteError } = await supabaseAdmin
@@ -258,9 +346,9 @@ serve(async (req: Request) => {
       }
 
       if (method.stripe_customer_id && method.stripe_payment_method_id) {
-        await stripe.customers.update(method.stripe_customer_id, {
-          invoice_settings: { default_payment_method: method.stripe_payment_method_id },
-        });
+        await stripePost(`customers/${method.stripe_customer_id}`, toForm({
+          "invoice_settings[default_payment_method]": method.stripe_payment_method_id,
+        }));
       }
 
       await supabaseAdmin

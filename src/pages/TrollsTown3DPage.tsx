@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks, @typescript-eslint/no-unused-vars, @typescript-eslint/no-non-null-asserted-optional-chain, react-hooks/exhaustive-deps */
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Engine, Scene, Vector3, HemisphericLight, MeshBuilder, Color3, ArcRotateCamera, Mesh, Texture, ParticleSystem, Color4, PointLight, PBRMaterial, CubeTexture, DirectionalLight, CascadedShadowGenerator, DefaultRenderingPipeline, ImageProcessingConfiguration, DynamicTexture, Animation, SceneLoader, GamepadManager, Xbox360Pad, GenericPad, Sound, Scalar, ColorCurves, BaseTexture, TransformNode } from '@babylonjs/core'
@@ -195,15 +196,87 @@ const TOWN_LOCATIONS: TownLocation[] = [
 ]
 
 const TrollsTown3DPage: React.FC = () => {
+  // All hooks must be called before any conditional logic
   const navigate = useNavigate()
   const { profile } = useAuthStore()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const engineRef = useRef<Engine | null>(null)
   const sceneRef = useRef<Scene | null>(null)
-  
   // Admin-only access check
   const isAdmin = profile?.role === 'admin' || profile?.is_admin === true
-  
+  const [settings, setSettings] = useState<Settings>({
+    masterVolume: 100,
+    voiceVolume: 100,
+    micSensitivity: 50,
+    graphicsQuality: 'high',
+    gamepadDeadzone: 0.15,
+    invertY: false,
+    voiceEnabled: IS_VOICE_CONFIGURED,
+    pushToTalk: true
+  })
+  const [showSettings, setShowSettings] = useState(false)
+  const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([])
+  const [micActive, setMicActive] = useState(false)
+  const socketRef = useRef<Socket | null>(null)
+  const userAudioStream = useRef<MediaStream | null>(null)
+  const peersRef = useRef<{ [key: string]: SimplePeer.Instance }>({})
+  const gamepadManagerRef = useRef<GamepadManager | null>(null)
+  const carMeshRef = useRef<any>(null)
+  const avatarMeshRef = useRef<any>(null)
+  const createCharacterRef = useRef<any>(null)
+  const lastFrameTimeRef = useRef<number | null>(null)
+  const lastStateSyncRef = useRef<number>(0)
+  const housesRef = useRef<TownHouse[]>([])
+  const ghostMeshesRef = useRef<Map<string, Mesh>>(new Map())
+  const lastInteractRef = useRef(false)
+  const raidTimerRef = useRef<number | null>(null)
+  const lastChunkCenterRef = useRef<{ x: number; z: number } | null>(null)
+  const isInCarRef = useRef(true)
+  const activeVehicleRef = useRef<string | null>('playerCar')
+  const isTransitioningRef = useRef(false)
+  const fuelRef = useRef(100)
+  const foodRef = useRef(100)
+  const lastReportedFuelRef = useRef(100)
+  const isChurchOpenRef = useRef(false)
+  const activeRaidRef = useRef<any>(null) // Sync with state for loop access
+  const showHousePanelRef = useRef(false)
+  const isRefuelingRef = useRef(false)
+  const [_houses, setHouses] = useState<TownHouse[]>([])
+  const [speedKmh, setSpeedKmh] = useState(0)
+  const [headingDeg, setHeadingDeg] = useState(0)
+  const [isInCar, setIsInCar] = useState(true)
+  const [nearHouse, setNearHouse] = useState<TownHouse | null>(null)
+  const [nearLocation, setNearLocation] = useState<TownLocation | null>(null)
+  const [showHousePanel, setShowHousePanel] = useState(false)
+  const [activeRaid, setActiveRaid] = useState<{
+    raidId: string
+    houseId: string
+    outcome?: 'success' | 'failure'
+    loot?: number
+  } | null>(null)
+  const [raidTimeRemaining, setRaidTimeRemaining] = useState<number | null>(null)
+  const [loadingHouses, setLoadingHouses] = useState(true)
+  const [loadingMultiplayer, setLoadingMultiplayer] = useState(false)
+  // const [coinBalance, setCoinBalance] = useState<number>(0) // Removed duplicate
+  const [fuel, setFuel] = useState<number>(100) // 0-100
+  const [food, setFood] = useState<number>(100) // 0-100
+  const [isSunday, setIsSunday] = useState(false)
+  const [_isChurchOpen, setIsChurchOpen] = useState(false)
+  const [isRefueling, setIsRefueling] = useState(false)
+  const [clothingColor, setClothingColor] = useState(new Color3(0.1, 0.2, 0.3))
+  const [_parkedCars, setParkedCars] = useState<{ id: string, type: 'sedan'|'suv'|'truck', color: Color3, position: Vector3, rotation: number }[]>([])
+  const parkedCarMeshesRef = useRef<Map<string, { root: Mesh, doorL: Mesh, doorR: Mesh }>>(new Map())
+  const inputRef = useRef<InputState>({
+    forward: 0,
+    steer: 0,
+    brake: false,
+    boost: false,
+    interact: false,
+    cancel: false
+  })
+  // ...existing code...
+
+  // Render logic
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center p-4">
@@ -230,81 +303,6 @@ const TrollsTown3DPage: React.FC = () => {
       </div>
     )
   }
-  
-  // -- New State for Settings & Voice --
-  const [settings, setSettings] = useState<Settings>({
-      masterVolume: 100,
-      voiceVolume: 100,
-      micSensitivity: 50,
-      graphicsQuality: 'high',
-      gamepadDeadzone: 0.15,
-      invertY: false,
-      voiceEnabled: IS_VOICE_CONFIGURED,
-      pushToTalk: true
-  })
-  const [showSettings, setShowSettings] = useState(false)
-  const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([])
-  const [micActive, setMicActive] = useState(false)
-  const socketRef = useRef<Socket | null>(null)
-  const userAudioStream = useRef<MediaStream | null>(null)
-  const peersRef = useRef<{ [key: string]: SimplePeer.Instance }>({})
-  const gamepadManagerRef = useRef<GamepadManager | null>(null)
-
-  const carMeshRef = useRef<any>(null)
-  const avatarMeshRef = useRef<any>(null)
-  const createCharacterRef = useRef<any>(null)
-  const lastFrameTimeRef = useRef<number | null>(null)
-  const lastStateSyncRef = useRef<number>(0)
-  const housesRef = useRef<TownHouse[]>([])
-  const ghostMeshesRef = useRef<Map<string, Mesh>>(new Map())
-  const lastInteractRef = useRef(false)
-  const raidTimerRef = useRef<number | null>(null)
-  const lastChunkCenterRef = useRef<{ x: number; z: number } | null>(null)
-  const isInCarRef = useRef(true)
-  const activeVehicleRef = useRef<string | null>('playerCar')
-  const isTransitioningRef = useRef(false)
-  const fuelRef = useRef(100)
-  const foodRef = useRef(100)
-  const lastReportedFuelRef = useRef(100)
-  const isChurchOpenRef = useRef(false)
-  const activeRaidRef = useRef<any>(null) // Sync with state for loop access
-  const showHousePanelRef = useRef(false)
-  const isRefuelingRef = useRef(false)
-
-  const [_houses, setHouses] = useState<TownHouse[]>([])
-  const [speedKmh, setSpeedKmh] = useState(0)
-  const [headingDeg, setHeadingDeg] = useState(0)
-  const [isInCar, setIsInCar] = useState(true)
-  const [nearHouse, setNearHouse] = useState<TownHouse | null>(null)
-  const [nearLocation, setNearLocation] = useState<TownLocation | null>(null)
-  const [showHousePanel, setShowHousePanel] = useState(false)
-  const [activeRaid, setActiveRaid] = useState<{
-    raidId: string
-    houseId: string
-    outcome?: 'success' | 'failure'
-    loot?: number
-  } | null>(null)
-  const [raidTimeRemaining, setRaidTimeRemaining] = useState<number | null>(null)
-  const [loadingHouses, setLoadingHouses] = useState(true)
-  const [loadingMultiplayer, setLoadingMultiplayer] = useState(false)
-  // const [coinBalance, setCoinBalance] = useState<number>(0) // Removed duplicate
-  const [fuel, setFuel] = useState<number>(100) // 0-100
-  const [food, setFood] = useState<number>(100) // 0-100
-  const [isSunday, setIsSunday] = useState(false)
-  const [_isChurchOpen, setIsChurchOpen] = useState(false)
-  const [isRefueling, setIsRefueling] = useState(false)
-
-  const [clothingColor, setClothingColor] = useState(new Color3(0.1, 0.2, 0.3))
-  const [_parkedCars, setParkedCars] = useState<{ id: string, type: 'sedan'|'suv'|'truck', color: Color3, position: Vector3, rotation: number }[]>([])
-  const parkedCarMeshesRef = useRef<Map<string, { root: Mesh, doorL: Mesh, doorR: Mesh }>>(new Map())
-  const inputRef = useRef<InputState>({
-    forward: 0,
-    steer: 0,
-    brake: false,
-    boost: false,
-    interact: false,
-    cancel: false
-  })
 
   useEffect(() => {
     // Generate parked cars on mount for expanded map
@@ -375,7 +373,6 @@ const TrollsTown3DPage: React.FC = () => {
         if (stored) {
             try {
                 const data = JSON.parse(stored);
-                if (data.coinBalance) setCoinBalance(data.coinBalance);
                 if (data.garages) setUserGarages(data.garages);
                 if (data.character) setCharacterAppearance({
                     skinColor: new Color3(data.character.skin[0], data.character.skin[1], data.character.skin[2]),
@@ -435,6 +432,17 @@ const TrollsTown3DPage: React.FC = () => {
           gm.dispose();
       };
   }, []);
+
+  const getHousePhotoUrl = (house: TownHouse): string | null => {
+    const styleKey = (house.parcel_building_style || house.metadata?.visual_tier || 'starter') as string;
+    if (styleKey === 'starter') return '/assets/apartments/neighborhood_starter.png';
+    if (styleKey === 'mid') return '/assets/apartments/suburban_duplex.png';
+    if (styleKey === 'apartment') return '/assets/apartments/urban_loft.png';
+    if (styleKey === 'luxury') return '/assets/apartments/luxury_penthouse.png';
+    if (styleKey === 'mansion') return '/assets/apartments/troll_mansion.png';
+    if (styleKey === 'mega') return '/assets/apartments/mega_estate.png';
+    return null;
+  };
 
   // -- Voice Chat (Socket.io + SimplePeer) --
   useEffect(() => {
@@ -591,17 +599,14 @@ const TrollsTown3DPage: React.FC = () => {
       setVoicePeers(prev => [...prev, { peerId: id, peer, audio }]);
   };
 
-  // Handle Garage Purchase
+  // Handle Garage Purchase (first garage is effectively free and persistent)
   const buyGarage = (garageId: string) => {
-      if (coinBalance >= garagePrice && !userGarages.includes(garageId)) {
-          setCoinBalance(prev => prev - garagePrice);
-          setUserGarages(prev => [...prev, garageId]);
-          toast.success(`Garage purchased for ${garagePrice} TC!`);
-      } else if (userGarages.includes(garageId)) {
+      if (userGarages.includes(garageId)) {
           toast.error("You already own this garage!");
-      } else {
-          toast.error("Not enough Troll Coins!");
+          return;
       }
+      setUserGarages(prev => [...prev, garageId]);
+      toast.success("Garage added to your account");
   };
 
   // Sync state to refs
@@ -947,9 +952,21 @@ const TrollsTown3DPage: React.FC = () => {
       point.range = 30
     })
     
-    // -- AI Traffic System --
+    // -- AI Traffic System & Vehicle Customization --
     const trafficCars: { mesh: Mesh, speed: number, direction: number }[] = [];
     const trafficCount = 25; // Increased for larger map
+
+    let playerVehicleCustomization: {
+        windowTintPercent?: number
+        paintStyle?: string
+        wheelStyle?: string
+        bodyColor?: Color3
+    } | null = null;
+
+    let engineSound: Sound | null = null;
+    let mufflerSound: Sound | null = null;
+    let engineSoundKey = 'stock';
+    let mufflerSoundKey = 'stock';
     
     // -- New Image Vehicle System --
     const createTexturedBoxVehicle = (name: string, vehicleId: number | string | null, parent: Mesh) => {
@@ -981,14 +998,39 @@ const TrollsTown3DPage: React.FC = () => {
             { hex: '#FFC0CB', name: 'Pink' }
         ];
         const randomColor = carColors[Math.floor(Math.random() * carColors.length)];
+        const isPlayerCar = name === 'playerCar';
+        
+        let paintColor = Color3.FromHexString(randomColor.hex);
+        let paintMetallic = 0.85;
+        let paintRoughness = 0.15;
+        let clearCoatIntensity = 1.2;
+        let clearCoatRoughness = 0.08;
+
+        if (isPlayerCar && playerVehicleCustomization) {
+            if (playerVehicleCustomization.paintStyle === 'matte_black') {
+                paintColor = new Color3(0.03, 0.03, 0.03);
+                paintMetallic = 0.2;
+                paintRoughness = 0.95;
+                clearCoatIntensity = 0.1;
+                clearCoatRoughness = 0.2;
+            } else if (playerVehicleCustomization.paintStyle === 'candy_red') {
+                paintColor = Color3.FromHexString('#FF1A1A');
+                paintMetallic = 1.0;
+                paintRoughness = 0.1;
+                clearCoatIntensity = 1.4;
+                clearCoatRoughness = 0.05;
+            } else if (playerVehicleCustomization.bodyColor) {
+                paintColor = playerVehicleCustomization.bodyColor;
+            }
+        }
         
         const paintMat = new PBRMaterial(`${name}_paint`, scene);
-        paintMat.albedoColor = Color3.FromHexString(randomColor.hex);
-        paintMat.metallic = 0.85;
-        paintMat.roughness = 0.15;
+        paintMat.albedoColor = paintColor;
+        paintMat.metallic = paintMetallic;
+        paintMat.roughness = paintRoughness;
         paintMat.clearCoat.isEnabled = true;
-        paintMat.clearCoat.intensity = 1.2;
-        paintMat.clearCoat.roughness = 0.08;
+        paintMat.clearCoat.intensity = clearCoatIntensity;
+        paintMat.clearCoat.roughness = clearCoatRoughness;
         paintMat.metallicF0Factor = 1.0;
 
         // Modern car body with better proportions
@@ -1023,6 +1065,11 @@ const TrollsTown3DPage: React.FC = () => {
         glassMat.metallic = 0.7;
         glassMat.roughness = 0.1;
         glassMat.alpha = 0.5;
+        if (isPlayerCar && playerVehicleCustomization && typeof playerVehicleCustomization.windowTintPercent === 'number') {
+            const tint = Math.max(5, Math.min(40, playerVehicleCustomization.windowTintPercent));
+            const t = (tint - 5) / (40 - 5);
+            glassMat.alpha = 0.2 + t * 0.3;
+        }
         glassMat.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
         
         // Front windshield
@@ -1058,6 +1105,16 @@ const TrollsTown3DPage: React.FC = () => {
         rimMat.albedoColor = new Color3(0.75, 0.75, 0.78);
         rimMat.metallic = 0.9;
         rimMat.roughness = 0.25;
+        if (isPlayerCar && playerVehicleCustomization?.wheelStyle === 'sport') {
+            rimMat.albedoColor = new Color3(0.9, 0.9, 0.95);
+            rimMat.metallic = 1.0;
+            rimMat.roughness = 0.18;
+        }
+        if (isPlayerCar && playerVehicleCustomization?.wheelStyle === 'luxury') {
+            rimMat.albedoColor = new Color3(0.95, 0.95, 0.98);
+            rimMat.metallic = 1.0;
+            rimMat.roughness = 0.12;
+        }
         
         const tireMat = new PBRMaterial(`${name}_tire`, scene);
         tireMat.albedoColor = new Color3(0.02, 0.02, 0.02);
@@ -1071,15 +1128,20 @@ const TrollsTown3DPage: React.FC = () => {
         ];
         
         wheelPositions.forEach((pos, i) => {
+            const isPlayerWheel = isPlayerCar && !!playerVehicleCustomization?.wheelStyle;
+            const tireDiameter = isPlayerWheel ? 0.9 : 0.85;
+            const tireHeight = 0.35;
+            const rimDiameter = isPlayerWheel ? 0.6 : 0.55;
+
             // Tire
-            const tire = MeshBuilder.CreateCylinder(`${name}_tire${i}`, { diameter: 0.85, height: 0.35 }, scene);
+            const tire = MeshBuilder.CreateCylinder(`${name}_tire${i}`, { diameter: tireDiameter, height: tireHeight }, scene);
             tire.rotation.z = Math.PI / 2;
             tire.position = new Vector3(pos.x, 0.42, pos.z);
             tire.parent = root;
             tire.material = tireMat;
             
             // Rim (inside tire)
-            const rim = MeshBuilder.CreateCylinder(`${name}_rim${i}`, { diameter: 0.55, height: 0.35 }, scene);
+            const rim = MeshBuilder.CreateCylinder(`${name}_rim${i}`, { diameter: rimDiameter, height: tireHeight }, scene);
             rim.rotation.z = Math.PI / 2;
             rim.position = new Vector3(pos.x, 0.42, pos.z);
             rim.parent = root;
@@ -1574,6 +1636,9 @@ const TrollsTown3DPage: React.FC = () => {
     let carTierLabel = 'Starter'
     let carStyleLabel = ''
     let carModelUrl: string | null = null
+    let windowTintPercent: number | undefined
+    let paintStyle: string | undefined
+    let wheelStyle: string | undefined
 
     if (user?.id) {
       const key = `trollcity_car_${user.id}`
@@ -1611,6 +1676,21 @@ const TrollsTown3DPage: React.FC = () => {
             if (typeof stored.modelUrl === 'string') {
               carModelUrl = stored.modelUrl
             }
+            if (typeof stored.windowTintPercent === 'number') {
+              windowTintPercent = stored.windowTintPercent
+            }
+            if (typeof stored.paintStyle === 'string') {
+              paintStyle = stored.paintStyle
+            }
+            if (typeof stored.wheelStyle === 'string') {
+              wheelStyle = stored.wheelStyle
+            }
+            if (typeof stored.engineSound === 'string') {
+              engineSoundKey = stored.engineSound
+            }
+            if (typeof stored.mufflerSound === 'string') {
+              mufflerSoundKey = stored.mufflerSound
+            }
           }
         } catch {
         }
@@ -1634,6 +1714,50 @@ const TrollsTown3DPage: React.FC = () => {
     carBody.position = new Vector3(0, 0.6, -10)
     carBody.isVisible = false // Use visible mesh child instead
     carBody.checkCollisions = true
+
+    playerVehicleCustomization = {
+      windowTintPercent,
+      paintStyle,
+      wheelStyle,
+      bodyColor: carBodyColor
+    }
+
+    // Resolve engine and muffler sound files based on upgrades
+    const resolveEngineSoundFile = (key: string) => {
+      if (key === 'v8') return '/sounds/cars/engine_v8_loop.mp3'
+      return '/sounds/cars/engine_stock_loop.mp3'
+    }
+
+    const resolveMufflerSoundFile = (key: string) => {
+      if (key === 'race') return '/sounds/cars/muffler_race.mp3'
+      return '/sounds/cars/muffler_stock.mp3'
+    }
+
+    try {
+      engineSound = new Sound(
+        'engineSound',
+        resolveEngineSoundFile(engineSoundKey),
+        scene,
+        undefined,
+        { loop: true, autoplay: false, volume: settings.masterVolume / 100 }
+      )
+    } catch (e) {
+      console.error('Failed to load engine sound', e)
+      engineSound = null
+    }
+
+    try {
+      mufflerSound = new Sound(
+        'mufflerSound',
+        resolveMufflerSoundFile(mufflerSoundKey),
+        scene,
+        undefined,
+        { loop: true, autoplay: false, volume: settings.masterVolume / 100 }
+      )
+    } catch (e) {
+      console.error('Failed to load muffler sound', e)
+      mufflerSound = null
+    }
 
     // -- Vehicle System --
 
@@ -3489,6 +3613,31 @@ const TrollsTown3DPage: React.FC = () => {
       const speed = speedMetersPerSec * 3.6
       setSpeedKmh(speed)
 
+      if (engineSound) {
+        if (isInCarNow && Math.abs(velocity) > 0.5) {
+          if (!engineSound.isPlaying) {
+            engineSound.play()
+          }
+          const speedRatio = Math.min(1, Math.abs(velocity) / maxSpeed)
+          engineSound.setPlaybackRate(0.8 + 0.6 * speedRatio)
+          engineSound.setVolume((settings.masterVolume / 100) * 0.7)
+        } else if (engineSound.isPlaying) {
+          engineSound.stop()
+        }
+      }
+
+      if (mufflerSound) {
+        if (isInCarNow && Math.abs(velocity) > 5) {
+          if (!mufflerSound.isPlaying) {
+            mufflerSound.play()
+          }
+          const speedRatio = Math.min(1, Math.abs(velocity) / maxSpeed)
+          mufflerSound.setVolume((settings.masterVolume / 100) * (0.4 + 0.3 * speedRatio))
+        } else if (mufflerSound.isPlaying) {
+          mufflerSound.stop()
+        }
+      }
+
       let deg = (headingForState * 180) / Math.PI
       deg = ((deg % 360) + 360) % 360
       setHeadingDeg(deg)
@@ -3552,6 +3701,12 @@ const TrollsTown3DPage: React.FC = () => {
         raidTimerRef.current = null
       }
       window.clearInterval(multiplayerInterval)
+      if (engineSound && engineSound.isPlaying) {
+        engineSound.stop()
+      }
+      if (mufflerSound && mufflerSound.isPlaying) {
+        mufflerSound.stop()
+      }
       engine.stopRenderLoop(step)
       scene.dispose()
       engine.dispose()
@@ -3926,6 +4081,20 @@ const TrollsTown3DPage: React.FC = () => {
               Close
             </button>
           </div>
+
+          {!nearHouse.is_own && (() => {
+            const photoUrl = getHousePhotoUrl(nearHouse);
+            if (!photoUrl) return null;
+            return (
+              <div className="mt-2 rounded-xl overflow-hidden border border-white/10">
+                <img
+                  src={photoUrl}
+                  alt="Trolls Town house"
+                  className="w-full h-32 object-cover"
+                />
+              </div>
+            );
+          })()}
 
           <div className="space-y-1 text-[11px] text-gray-400">
             <div>

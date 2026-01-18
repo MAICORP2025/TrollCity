@@ -24,7 +24,8 @@
     }
   },
   "include": [
-    "src"
+    "src",
+    "CITY_3D_IMPLEMENTATION_EXAMPLES.tsx"
   ],
   "exclude": [
     "node_modules",

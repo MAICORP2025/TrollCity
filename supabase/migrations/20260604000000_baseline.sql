@@ -15190,39 +15190,45 @@ CREATE OR REPLACE FUNCTION "public"."send_wall_post_gift"("p_post_id" "uuid", "p
     AS $$
 DECLARE
   v_sender_id UUID := auth.uid();
-  v_gift_cost BIGINT;
-  v_sender_coins BIGINT;
+  v_gift_cost INTEGER;
+  v_sender_coins INTEGER;
   v_post_owner_id UUID;
+  v_receiver_reward INTEGER;
+  v_tx_sender UUID;
+  v_tx_receiver UUID;
+  v_default_cost INTEGER := 10;
+  v_safe_quantity INTEGER;
+  v_gift_slug TEXT;
 BEGIN
   IF v_sender_id IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  IF p_quantity < 1 THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Invalid quantity');
-  END IF;
+  v_safe_quantity := GREATEST(1, p_quantity);
 
-  SELECT coin_cost INTO v_gift_cost
+  SELECT coin_cost, COALESCE(gift_slug, slug, name)
+  INTO v_gift_cost, v_gift_slug
   FROM gifts
-  WHERE LOWER(name) = LOWER(p_gift_type)
+  WHERE LOWER(COALESCE(gift_slug, slug, name)) = LOWER(p_gift_type)
   LIMIT 1;
 
   IF v_gift_cost IS NULL THEN
-    v_gift_cost := 10;
+    v_gift_cost := v_default_cost;
+    v_gift_slug := p_gift_type;
   END IF;
 
-  v_gift_cost := v_gift_cost * p_quantity;
+  v_gift_cost := v_gift_cost * v_safe_quantity;
 
-  SELECT coins INTO v_sender_coins
+  SELECT troll_coins INTO v_sender_coins
   FROM user_profiles
   WHERE id = v_sender_id;
 
-  IF v_sender_coins < v_gift_cost THEN
+  IF COALESCE(v_sender_coins, 0) < v_gift_cost THEN
     RETURN jsonb_build_object(
       'success', false,
       'error', 'Insufficient coins',
       'required', v_gift_cost,
-      'available', v_sender_coins
+      'available', COALESCE(v_sender_coins, 0)
     );
   END IF;
 
@@ -15235,22 +15241,57 @@ BEGIN
   END IF;
 
   UPDATE user_profiles
-  SET coins = coins - v_gift_cost
+  SET troll_coins = COALESCE(troll_coins, 0) - v_gift_cost
   WHERE id = v_sender_id;
 
+  v_receiver_reward := FLOOR(v_gift_cost * 0.8);
+
   UPDATE user_profiles
-  SET coins = coins + (v_gift_cost * 0.8)
+  SET troll_coins = COALESCE(troll_coins, 0) + v_receiver_reward
   WHERE id = v_post_owner_id;
 
   INSERT INTO troll_wall_gifts (post_id, sender_id, gift_type, quantity, coin_cost)
-  VALUES (p_post_id, v_sender_id, p_gift_type, p_quantity, v_gift_cost);
+  VALUES (p_post_id, v_sender_id, v_gift_slug, v_safe_quantity, v_gift_cost);
+
+  INSERT INTO coin_transactions (user_id, amount, type, description, metadata)
+  VALUES (
+    v_sender_id,
+    -v_gift_cost,
+    'gift_sent_wall',
+    'Gift sent on wall post',
+    jsonb_build_object(
+      'post_id', p_post_id,
+      'gift_type', v_gift_slug,
+      'quantity', v_safe_quantity,
+      'receiver_id', v_post_owner_id
+    )
+  )
+  RETURNING id INTO v_tx_sender;
+
+  INSERT INTO coin_transactions (user_id, amount, type, description, metadata)
+  VALUES (
+    v_post_owner_id,
+    v_receiver_reward,
+    'gift_received_wall',
+    'Gift received on wall post',
+    jsonb_build_object(
+      'post_id', p_post_id,
+      'gift_type', v_gift_slug,
+      'quantity', v_safe_quantity,
+      'sender_id', v_sender_id
+    )
+  )
+  RETURNING id INTO v_tx_receiver;
 
   RETURN jsonb_build_object(
     'success', true,
-    'gift_type', p_gift_type,
-    'quantity', p_quantity,
+    'gift_type', v_gift_slug,
+    'quantity', v_safe_quantity,
     'total_cost', v_gift_cost,
-    'sender_coins', v_sender_coins - v_gift_cost
+    'sender_coins', COALESCE(v_sender_coins, 0) - v_gift_cost,
+    'receiver_reward', v_receiver_reward,
+    'tx_sender', v_tx_sender,
+    'tx_receiver', v_tx_receiver
   );
 END;
 $$;
@@ -49164,7 +49205,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
 
 
 

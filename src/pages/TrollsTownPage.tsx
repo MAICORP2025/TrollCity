@@ -34,6 +34,19 @@ type DeedRow = {
   property_id: string
   current_owner_user_id: string
   created_at: string
+  property_name?: string | null
+}
+
+type DeedTransferRow = {
+  id: string
+  property_id: string
+  seller_user_id: string
+  buyer_user_id: string
+  sale_price: number
+  deed_fee: number
+  seller_net: number
+  system_value_at_sale: number | null
+  created_at: string
 }
 
 type UpgradeDefinition = {
@@ -192,49 +205,49 @@ const HOME_TIERS = [
     name: 'Neighborhood Starter',
     price: 5000,
     description: 'A simple extra home to practice upgrades and tasks.',
-    image: '/assets/properties/neighborhood_starter.png'
+    image: '/assets/apartments/neighborhood_starter.png'
   },
   {
     id: 'tier_50k',
     name: 'Suburban Duplex',
     price: 50_000,
     description: 'Medium-tier property with more room for experiments.',
-    image: '/assets/properties/suburban_duplex.png'
+    image: '/assets/apartments/suburban_duplex.png'
   },
   {
     id: 'tier_250k',
     name: 'Urban Loft',
     price: 250_000,
     description: 'Stylish loft in a busy part of Troll City.',
-    image: '/assets/properties/urban_loft.png'
+    image: '/assets/apartments/urban_loft.png'
   },
   {
     id: 'tier_1m',
     name: 'City High-Rise',
     price: 1_000_000,
     description: 'Premium city property with room for serious projects.',
-    image: '/assets/properties/city_high_rise.png'
+    image: '/assets/apartments/city_high_rise.png'
   },
   {
     id: 'tier_10m',
     name: 'Luxury Penthouse',
     price: 10_000_000,
     description: 'High-tier Troll Town home with elite potential.',
-    image: '/assets/properties/luxury_penthouse.png'
+    image: '/assets/apartments/luxury_penthouse.png'
   },
   {
     id: 'tier_50m',
     name: 'Troll Mansion',
     price: 50_000_000,
     description: 'A luxurious mansion for the elite of Troll City.',
-    image: '/assets/properties/troll_mansion.png'
+    image: '/assets/apartments/troll_mansion.png'
   },
   {
     id: 'tier_100m',
     name: 'Mega Estate',
     price: 100_000_000,
     description: 'Ultra-rare estate for top Trolls with massive balances.',
-    image: '/assets/properties/mega_estate.png'
+    image: '/assets/apartments/mega_estate.png'
   }
 ]
 
@@ -312,6 +325,8 @@ const TrollsTownPage: React.FC = () => {
   const [ownedProperties, setOwnedProperties] = useState<PropertyRow[]>([])
   const [activePropertyId, setActivePropertyId] = useState<string | null>(null)
   const [myDeed, setMyDeed] = useState<DeedRow | null>(null)
+  const [homeNameDraft, setHomeNameDraft] = useState<string>('')
+  const [deedHistory, setDeedHistory] = useState<DeedTransferRow[]>([])
   const [upgrades, setUpgrades] = useState<PropertyUpgradeRow[]>([])
   const [listings, setListings] = useState<PropertyRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -322,6 +337,7 @@ const TrollsTownPage: React.FC = () => {
   const [completingUpgradeId, setCompletingUpgradeId] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<any[]>([])
   const [loadingTransactions, setLoadingTransactions] = useState(false)
+  const [sellingToBank, setSellingToBank] = useState(false)
 
   const effectiveBalance = useMemo(() => {
     const hookBalance = typeof trollCoins === 'number' ? trollCoins : 0
@@ -357,8 +373,23 @@ const TrollsTownPage: React.FC = () => {
 
       if (!deedError && deed) {
         setMyDeed(deed as DeedRow)
+        setHomeNameDraft((deed as DeedRow).property_name || '')
       } else {
         setMyDeed(null)
+        setHomeNameDraft('')
+      }
+
+      const { data: historyRows, error: historyError } = await supabase
+        .from('deed_transfers')
+        .select('*')
+        .eq('property_id', property.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (!historyError && historyRows) {
+        setDeedHistory(historyRows as DeedTransferRow[])
+      } else {
+        setDeedHistory([])
       }
 
       const { data: upgradesData, error: upgradesError } = await supabase
@@ -463,13 +494,15 @@ const TrollsTownPage: React.FC = () => {
         .from('deeds')
         .insert({
           property_id: newProperty.id,
-          current_owner_user_id: user.id
+          current_owner_user_id: user.id,
+          property_name: null
         })
         .select('*')
         .single()
 
       if (!deedError && deed) {
         setMyDeed(deed as DeedRow)
+        setHomeNameDraft((deed as DeedRow).property_name || '')
       }
 
       const updatedOwned = [...ownedProperties, newProperty as PropertyRow]
@@ -558,6 +591,57 @@ const TrollsTownPage: React.FC = () => {
     }
   }
 
+  const handleSellHomeToBank = async () => {
+    if (!user || !myProperty) return
+    if (myProperty.is_listed) {
+      toast.error('Cancel your listing before selling to the bank')
+      return
+    }
+
+    setSellingToBank(true)
+    try {
+      const { error } = await supabase.rpc('sell_house_to_bank', {
+        house_id: myProperty.id
+      })
+
+      if (error) {
+        throw error
+      }
+
+      await refreshCoins()
+
+      const { data: properties, error: propError } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('owner_user_id', user.id)
+        .order('created_at', { ascending: true })
+
+      if (propError && propError.code !== 'PGRST116' && propError.code !== 'PGRST106') {
+        throw propError
+      }
+
+      if (properties && properties.length > 0) {
+        const rows = properties as PropertyRow[]
+        setOwnedProperties(rows)
+        const starter = rows.find(p => p.is_starter)
+        const selected = starter || rows[0]
+        await loadPropertyDetails(selected)
+      } else {
+        setOwnedProperties([])
+        setMyProperty(null)
+        setMyDeed(null)
+        setUpgrades([])
+      }
+
+      toast.success('Home sold to bank')
+    } catch (error: any) {
+      console.error('Failed to sell home to bank', error)
+      toast.error(error?.message || 'Failed to sell home to bank')
+    } finally {
+      setSellingToBank(false)
+    }
+  }
+
   const loadListings = useCallback(async () => {
     if (!user) return
     try {
@@ -607,7 +691,13 @@ const TrollsTownPage: React.FC = () => {
           .from('coin_transactions')
           .select('id, created_at, amount, type, description, metadata, balance_after')
           .eq('user_id', user.id)
-          .in('type', ['troll_town_purchase', 'troll_town_sale', 'troll_town_upgrade'])
+          .in('type', [
+            'troll_town_purchase',
+            'troll_town_sale',
+            'troll_town_upgrade',
+            'troll_town_bank_sale',
+            'troll_town_bank'
+          ])
           .order('created_at', { ascending: false })
           .limit(20)
 
@@ -635,7 +725,15 @@ const TrollsTownPage: React.FC = () => {
         },
         payload => {
           const row = payload.new as any
-          if (!['troll_town_purchase', 'troll_town_sale', 'troll_town_upgrade'].includes(row.type)) {
+          if (
+            ![
+              'troll_town_purchase',
+              'troll_town_sale',
+              'troll_town_upgrade',
+              'troll_town_bank_sale',
+              'troll_town_bank'
+            ].includes(row.type)
+          ) {
             return
           }
           setTransactions(prev => [row, ...prev].slice(0, 20))
@@ -882,7 +980,8 @@ const TrollsTownPage: React.FC = () => {
           .from('deeds')
           .insert({
             property_id: property.id,
-            current_owner_user_id: user.id
+            current_owner_user_id: user.id,
+            property_name: existingDeed?.property_name ?? null
           })
           .select()
           .single()
@@ -1252,8 +1351,8 @@ const TrollsTownPage: React.FC = () => {
 
                   {/* My Deed Section */}
                   {myDeed && (
-                    <div className="mt-4 p-4 border border-yellow-500/30 bg-yellow-900/10 rounded-xl">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="mt-4 p-4 border border-yellow-500/30 bg-yellow-900/10 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between">
                          <h3 className="text-sm font-bold text-yellow-400 uppercase tracking-widest">
                            Property Deed
                          </h3>
@@ -1274,6 +1373,78 @@ const TrollsTownPage: React.FC = () => {
                            <p className="text-yellow-600 uppercase text-[10px]">Property ID</p>
                            <p className="font-mono text-[10px]">{myDeed.property_id}</p>
                          </div>
+                      </div>
+                      <div className="pt-2 border-t border-yellow-500/20 mt-2 space-y-3">
+                        <p className="text-yellow-600 uppercase text-[10px] mb-1">Home Name (optional)</p>
+                        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                          <input
+                            value={homeNameDraft}
+                            onChange={e => setHomeNameDraft(e.target.value)}
+                            maxLength={60}
+                            placeholder="Enter a name for this home"
+                            className="flex-1 px-3 py-1.5 rounded-md bg-yellow-900/40 border border-yellow-500/40 text-xs text-yellow-50 placeholder:text-yellow-700/80 outline-none focus:border-yellow-300"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!user || !myDeed) return
+                              const trimmed = homeNameDraft.trim()
+                              try {
+                                const { data, error } = await supabase
+                                  .from('deeds')
+                                  .update({
+                                    property_name: trimmed || null
+                                  })
+                                  .eq('id', myDeed.id)
+                                  .select('*')
+                                  .maybeSingle()
+                                if (error) {
+                                  throw error
+                                }
+                                if (data) {
+                                  setMyDeed(data as DeedRow)
+                                  setHomeNameDraft((data as DeedRow).property_name || '')
+                                }
+                                toast.success('Home name updated')
+                              } catch (err: any) {
+                                console.error('Failed to update home name', err)
+                                toast.error(err?.message || 'Failed to update home name')
+                              }
+                            }}
+                            className="px-4 py-1.5 rounded-md bg-yellow-500 text-black text-xs font-semibold hover:bg-yellow-400 whitespace-nowrap"
+                          >
+                            Save Name
+                          </button>
+                        </div>
+                        {myDeed.property_name && (
+                          <p className="text-[11px] text-yellow-200/80">
+                            Current name: <span className="font-semibold">&ldquo;{myDeed.property_name}&rdquo;</span>
+                          </p>
+                        )}
+
+                        {deedHistory.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-yellow-600 uppercase text-[10px] mb-1">
+                              Recent Deed Transfers
+                            </p>
+                            <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                              {deedHistory.map(row => (
+                                <div
+                                  key={row.id}
+                                  className="flex items-center justify-between text-[11px] text-yellow-100/90"
+                                >
+                                  <span>
+                                    {new Date(row.created_at).toLocaleDateString()} • Sold for{' '}
+                                    {row.sale_price.toLocaleString()} TC
+                                  </span>
+                                  <span className="text-yellow-400/80">
+                                    Fee {row.deed_fee.toLocaleString()} • Net {row.seller_net.toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1399,10 +1570,28 @@ const TrollsTownPage: React.FC = () => {
                           </button>
                         </div>
                         <div className="text-[11px] text-gray-500 md:text-right">
-                            Max allowed listing price: {formatCompactNumber(maxAskPrice)} TrollCoins
-                          </div>
+                          Max allowed listing price: {formatCompactNumber(maxAskPrice)} TrollCoins
+                        </div>
                       </>
                     )}
+                  </div>
+
+                  <div className="border border-white/10 rounded-xl p-4 mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-gray-400 uppercase tracking-widest">
+                        Sell Home To Bank
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        Bank buys at system value and routes most coins to the stability pool.
+                      </p>
+                    </div>
+                    <button
+                      disabled={sellingToBank}
+                      onClick={handleSellHomeToBank}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold disabled:opacity-60"
+                    >
+                      {sellingToBank ? 'Selling...' : 'Sell Home For Coins'}
+                    </button>
                   </div>
 
                   <div className="border border-white/10 rounded-xl p-4 space-y-4">
@@ -1640,8 +1829,12 @@ const TrollsTownPage: React.FC = () => {
                       tx.type === 'troll_town_purchase'
                         ? 'Home purchase'
                         : tx.type === 'troll_town_sale'
-                        ? 'Home sale'
-                        : 'Upgrade'
+                        ? 'Market sale'
+                        : tx.type === 'troll_town_upgrade'
+                        ? 'Home upgrade'
+                        : tx.type === 'troll_town_bank_sale' || tx.type === 'troll_town_bank'
+                        ? 'Bank sale'
+                        : 'Troll Town transaction'
                     return (
                       <div
                         key={tx.id}

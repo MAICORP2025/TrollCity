@@ -3,7 +3,7 @@
 
 import { supabase } from './supabase';
 
-export type ProtectionType = 'bankrupt' | 'kick' | 'full';
+export type ProtectionType = 'kick' | 'full';
 
 export interface InsurancePlan {
   id: string;
@@ -200,41 +200,10 @@ export async function purchaseInsurance(userId: string, planId: string): Promise
  */
 
 /**
- * Check if bankrupt penalty should be blocked
- */
-export async function shouldBlockBankrupt(userId: string): Promise<boolean> {
-  return await hasProtection(userId, 'bankrupt');
-}
-
-/**
  * Check if kick penalty should be blocked
  */
 export async function shouldBlockKick(userId: string): Promise<boolean> {
   return await hasProtection(userId, 'kick');
-}
-
-/**
- * Apply bankrupt penalty (with insurance check)
- */
-export async function applyBankruptPenalty(userId: string): Promise<{blocked: boolean, insuranceUsed?: ActiveInsurance}> {
-  const blocked = await shouldBlockBankrupt(userId);
-
-  if (blocked) {
-    // Log the block
-    const activeInsurance = await getActiveInsurance(userId);
-    const insurance = activeInsurance.find(ins =>
-      ins.protection_type === 'bankrupt' || ins.protection_type === 'full'
-    );
-
-    if (insurance) {
-      await logInsuranceBlock(userId, insurance.protection_type, 'bankrupt');
-      return { blocked: true, insuranceUsed: insurance };
-    }
-  }
-
-  // Apply penalty - wipe wallet
-  await wipeWallet(userId);
-  return { blocked: false };
 }
 
 /**
@@ -277,24 +246,6 @@ async function logInsuranceBlock(userId: string, protectionType: ProtectionType,
   } catch (err) {
     console.error('Failed to log insurance block:', err);
     // Don't fail the main operation if logging fails
-  }
-}
-
-/**
- * Wipe user wallet (bankrupt penalty)
- */
-async function wipeWallet(userId: string): Promise<void> {
-  try {
-    await supabase
-      .from('user_profiles')
-      .update({
-        troll_coins: 0,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId);
-  } catch (err) {
-    console.error('Failed to wipe wallet:', err);
-    throw err;
   }
 }
 

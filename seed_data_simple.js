@@ -48,10 +48,8 @@ async function seedData() {
     
     // Insert insurance options
     const insurance = [
-      { id: 'insurance_bankrupt_24h', name: 'Bankrupt Insurance (24h)', cost: 1500, description: 'Protect from wheel bankrupt for 24 hours', duration_hours: 24, protection_type: 'bankrupt' },
       { id: 'insurance_kick_24h', name: 'Kick Insurance (24h)', cost: 1200, description: 'Protect from kick penalties for 24 hours', duration_hours: 24, protection_type: 'kick' },
       { id: 'insurance_full_24h', name: 'Full Protection (24h)', cost: 2500, description: 'Complete protection for 24 hours', duration_hours: 24, protection_type: 'full' },
-      { id: 'insurance_bankrupt_week', name: 'Bankrupt Insurance (1 Week)', cost: 8000, description: 'Protect from wheel bankrupt for 1 week', duration_hours: 168, protection_type: 'bankrupt' },
       { id: 'insurance_full_week', name: 'Full Protection (1 Week)', cost: 15000, description: 'Complete protection for 1 week', duration_hours: 168, protection_type: 'full' }
     ];
 

@@ -303,7 +303,6 @@ export default function TrollCityWall() {
       const { data, error } = await supabase
         .rpc('send_wall_post_gift', {
           p_post_id: postId,
-          p_sender_id: user.id,
           p_gift_type: giftType,
           p_quantity: 1
         })

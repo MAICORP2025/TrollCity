@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Download, Share, PlusSquare, X } from 'lucide-react';
+import { Download, Share, PlusSquare, X, GripHorizontal } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showIOSPrompt, setShowIOSPrompt] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
     // Check if already installed
@@ -53,22 +55,42 @@ export default function PWAInstallPrompt() {
     localStorage.setItem('ios_install_dismissed', 'true');
   };
 
-  if (isStandalone) return null;
+  if (isStandalone || isDismissed) return null;
 
   return (
     <>
-      {/* Android / Chrome Install Button (Floating) */}
-      {deferredPrompt && (
-        <div className="fixed top-4 right-4 z-[100] animate-bounce-in">
-          <button
-            onClick={handleInstallClick}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-full font-bold shadow-lg hover:shadow-purple-500/50 transition-all active:scale-95"
+      {/* Android / Chrome Install Button (Floating & Draggable) */}
+      <AnimatePresence>
+        {deferredPrompt && (
+          <motion.div 
+            drag
+            dragMomentum={false}
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed top-20 right-4 z-[100] cursor-grab active:cursor-grabbing"
+            style={{ touchAction: 'none' }}
           >
-            <Download size={18} />
-            Install App
-          </button>
-        </div>
-      )}
+            <div className="relative group">
+              <button
+                onClick={handleInstallClick}
+                className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-full font-bold shadow-lg hover:shadow-purple-500/50 transition-all active:scale-95"
+              >
+                <GripHorizontal size={14} className="opacity-50 group-hover:opacity-100 transition-opacity" />
+                <Download size={18} />
+                Install App
+              </button>
+              
+              <button 
+                onClick={() => setIsDismissed(true)}
+                className="absolute -top-2 -right-2 bg-black/60 hover:bg-black rounded-full p-1 border border-white/20 text-white/70 hover:text-white"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* iOS Install Instructions (Bottom Sheet) */}
       {showIOSPrompt && (

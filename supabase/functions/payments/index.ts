@@ -212,6 +212,88 @@ async function handleSaveCard(req: Request, supabase: any, requestId: string) {
   }
 }
 
+async function handleDeleteMethod(req: Request, supabase: any, requestId: string) {
+  try {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) return withCors({ success: false, error: 'Unauthorized' }, 401)
+    
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+    if (userError || !user) return withCors({ success: false, error: 'Invalid user' }, 401)
+
+    const { id } = await req.json()
+    if (!id) return withCors({ success: false, error: 'ID is required' }, 400)
+
+    // Check ownership
+    const { data: method } = await supabase
+      .from('user_payment_methods')
+      .select('user_id, square_card_id')
+      .eq('id', id)
+      .single()
+
+    if (!method || method.user_id !== user.id) {
+      return withCors({ success: false, error: 'Forbidden' }, 403)
+    }
+
+    // Optional: Unvault from Square if square_card_id exists
+    // (Skipped for brevity, but row deletion is mandatory)
+
+    const { error: deleteError } = await supabase
+      .from('user_payment_methods')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) throw deleteError
+
+    return withCors({ success: true })
+  } catch (e: any) {
+    console.error(`[Payments ${requestId}] Delete error:`, e)
+    return withCors({ success: false, error: e.message }, 500)
+  }
+}
+
+async function handleSetDefaultMethod(req: Request, supabase: any, requestId: string) {
+  try {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) return withCors({ success: false, error: 'Unauthorized' }, 401)
+    
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+    if (userError || !user) return withCors({ success: false, error: 'Invalid user' }, 401)
+
+    const { id } = await req.json()
+    if (!id) return withCors({ success: false, error: 'ID is required' }, 400)
+
+    // Check ownership
+    const { data: method } = await supabase
+      .from('user_payment_methods')
+      .select('user_id')
+      .eq('id', id)
+      .single()
+
+    if (!method || method.user_id !== user.id) {
+      return withCors({ success: false, error: 'Forbidden' }, 403)
+    }
+
+    // Set all others to false
+    await supabase
+      .from('user_payment_methods')
+      .update({ is_default: false })
+      .eq('user_id', user.id)
+
+    // Set this one to true
+    await supabase
+      .from('user_payment_methods')
+      .update({ is_default: true })
+      .eq('id', id)
+
+    return withCors({ success: true })
+  } catch (e: any) {
+    console.error(`[Payments ${requestId}] Default error:`, e)
+    return withCors({ success: false, error: e.message }, 500)
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const requestId = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   
@@ -242,8 +324,19 @@ Deno.serve(async (req: Request) => {
   
   console.log(`[Payments ${requestId}] Supabase client created`)
 
-  // Handle POST requests for saving cards
+  // Handle POST requests for saving cards or deleting
   if (req.method === 'POST') {
+    // Check if it's a deletion action
+    const clonedReq = req.clone()
+    const body = await clonedReq.json().catch(() => ({}))
+    
+    if (body.action === 'delete-payment-method') {
+      return handleDeleteMethod(req, supabase, requestId)
+    }
+    if (body.action === 'set-default-payment-method') {
+      return handleSetDefaultMethod(req, supabase, requestId)
+    }
+    
     return handleSaveCard(req, supabase, requestId)
   }
 

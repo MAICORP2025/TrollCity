@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, X, Code, GitBranch, Terminal, Sparkles } from 'lucide-react';
+import { MessageSquare, Send, X, GitBranch, Terminal, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function GeminiChatButton() {

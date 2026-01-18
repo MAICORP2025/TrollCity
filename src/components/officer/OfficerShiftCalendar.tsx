@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Calendar } from 'lucide-react'
+import { format12hr } from '../../utils/timeFormat'
 
 interface ShiftSlotRow {
   id: string
@@ -32,7 +33,7 @@ const formatDayLabel = (value: string) => {
   })
 }
 
-const formatTime = (value: string) => value.slice(0, 5)
+const formatTime = (value: string) => format12hr(value)
 
 export default function OfficerShiftCalendar({ title = 'Officer Shift Calendar', daysAhead = 30 }: OfficerShiftCalendarProps) {
   const [loading, setLoading] = useState(true)

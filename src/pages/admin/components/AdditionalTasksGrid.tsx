@@ -327,6 +327,14 @@ export default function AdditionalTasksGrid({
           action: pickTab('payment_logs'),
           color: 'text-blue-400',
           bgColor: 'bg-blue-500/20'
+        },
+        {
+          icon: <ShoppingCart className="w-5 h-5" />,
+          label: 'Manual Cash Orders',
+          description: 'Admin/Secretary Cash App queue',
+          action: () => navigate('/admin/manual-orders'),
+          color: 'text-emerald-400',
+          bgColor: 'bg-emerald-500/20'
         }
       ]
     },

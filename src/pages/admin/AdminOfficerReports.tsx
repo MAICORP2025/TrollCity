@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
-import { FileText, Calendar, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
+import { FileText, Calendar, ChevronDown, ChevronUp, AlertTriangle, User } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
 import '../../styles/LeadOfficerDashboard.css'
 
@@ -60,6 +60,7 @@ export default function AdminOfficerReports() {
   const [reports, setReports] = useState<WeeklyReport[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedReport, setExpandedReport] = useState<string | null>(null)
+  const [filterOfficerId, setFilterOfficerId] = useState<string>('all')
 
   useEffect(() => {
     loadReports()
@@ -114,6 +115,19 @@ export default function AdminOfficerReports() {
     })
   }
 
+  const filteredReports = reports.filter((report) =>
+    filterOfficerId === 'all' ? true : report.lead_officer_id === filterOfficerId
+  )
+
+  const officerOptions = Array.from(
+    new Map(
+      reports.map((report) => [
+        report.lead_officer_id,
+        report.lead_officer?.username || 'Unknown'
+      ])
+    ).entries()
+  )
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
@@ -127,24 +141,45 @@ export default function AdminOfficerReports() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
       <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-purple-300 mb-2 flex items-center gap-2">
-            <FileText className="w-8 h-8" />
-            Officer Reports
-          </h1>
-          <p className="text-sm text-purple-400">
-            Weekly reports submitted by Lead Officers
-          </p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-purple-300 mb-2 flex items-center gap-2">
+              <FileText className="w-8 h-8" />
+              Officer Reports
+            </h1>
+            <p className="text-sm text-purple-400">
+              Weekly reports submitted by Lead Officers
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-purple-300 flex items-center gap-1">
+              <User className="w-4 h-4" />
+              Filter by officer
+            </label>
+            <select
+              value={filterOfficerId}
+              onChange={(e) => setFilterOfficerId(e.target.value)}
+              className="bg-black/40 border border-purple-700 rounded px-3 py-1 text-sm text-white"
+            >
+              <option value="all">All Officers</option>
+              {officerOptions.map(([id, username]) => (
+                <option key={id} value={id}>
+                  {username} ({id.slice(0, 8)})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {reports.length === 0 ? (
-          <div className="rounded-2xl border border-purple-800 bg-black/40 p-12 text-center">
-            <FileText className="w-16 h-16 text-purple-500 mx-auto mb-4 opacity-50" />
-            <p className="text-purple-400">No reports submitted yet</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {reports.map((report) => (
+        {filteredReports.length === 0 ? (
+        <div className="rounded-2xl border border-purple-800 bg-black/40 p-12 text-center">
+          <FileText className="w-16 h-16 text-purple-500 mx-auto mb-4 opacity-50" />
+          <p className="text-purple-400">No reports submitted yet</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredReports.map((report) => (
               <div
                 key={report.id}
                 className="rounded-2xl border border-purple-800 bg-black/40 overflow-hidden hover:border-purple-600 transition-colors"

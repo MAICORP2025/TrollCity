@@ -1,10 +1,9 @@
 import React, { useState } from 'react'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { toast } from 'sonner'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
-import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
-import { checkConcurrentLogin } from '../lib/sessionUtils'
+import { Mail, Lock, User, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 
 const Auth = () => {
   const [loading, setLoading] = useState(false)
@@ -17,6 +16,10 @@ const Auth = () => {
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showAlertAdmin, setShowAlertAdmin] = useState(false)
+  const [alertEmail, setAlertEmail] = useState('')
+  const [alertDetails, setAlertDetails] = useState('')
+  const [alertSubmitting, setAlertSubmitting] = useState(false)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, profile, setAuth, setProfile } = useAuthStore()
@@ -42,10 +45,10 @@ const Auth = () => {
           console.error('Login error:', error)
           // Handle specific auth errors
           if (error.message.includes('Email not confirmed')) {
-             throw new Error('Please confirm your email address before logging in.')
+            throw new Error('Login failed. Please try again or contact support if the issue persists.')
           }
           if (error.message.includes('Invalid login credentials')) {
-             throw new Error('Invalid email or password.')
+            throw new Error('Invalid email or password.')
           }
           throw error
         }
@@ -53,19 +56,7 @@ const Auth = () => {
         if (data.user && data.session) {
           console.log('Email login successful:', data.user.email)
           
-          const sessionId = data.session.access_token
-          if (sessionId) {
-            const hasConcurrentLogin = await checkConcurrentLogin(data.user.id, sessionId)
-            if (hasConcurrentLogin) {
-              await supabase.auth.signOut()
-              throw new Error(
-                'Login blocked: Your account is already logged in on another device. Please log out from other devices first.'
-              )
-            }
-          } else {
-            console.warn('[Auth] Session missing access_token, skipping concurrent login check')
-          }
-          
+          const sessionId = crypto.randomUUID()
           // Register this session
           try {
             const deviceInfo = {
@@ -201,7 +192,7 @@ const Auth = () => {
             }
           }
         } else if (data.user && !data.session) {
-           throw new Error('Please confirm your email address before logging in.')
+          throw new Error('Login failed. Please try again or contact support if the issue persists.')
         } else {
           throw new Error('Login failed - no user data returned')
         }
@@ -232,12 +223,6 @@ const Auth = () => {
           throw new Error(signUpError.message || 'Signup failed')
         }
         
-        if (signUpData.user && !signUpData.session) {
-          toast.success('Please check your email to confirm your account.')
-          setLoading(false)
-          return
-        }
-
         console.log('User created and signed in')
         let session = signUpData.session
         if (!session) {
@@ -310,6 +295,40 @@ const Auth = () => {
       toast.error(err.message || 'Authentication failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAlertAdminSubmit = async () => {
+    if (alertSubmitting) return
+    const trimmedDetails = alertDetails.trim()
+    const emailToSend = alertEmail.trim() || email.trim()
+    if (!emailToSend) {
+      toast.error('Please enter your email so we can contact you')
+      return
+    }
+    if (!trimmedDetails) {
+      toast.error('Please describe the issue you are having')
+      return
+    }
+    setAlertSubmitting(true)
+    try {
+      const { error } = await supabase.from('critical_alerts').insert({
+        message: `AUTH LOGIN ISSUE from ${emailToSend}: ${trimmedDetails}`,
+        severity: 'critical',
+        resolved: false,
+        source: 'auth_login_issue'
+      })
+      if (error) {
+        throw error
+      }
+      toast.success('Alert sent. Please check your email within 5 minutes.')
+      setShowAlertAdmin(false)
+      setAlertDetails('')
+    } catch (err: any) {
+      console.error('Failed to send login alert:', err)
+      toast.error(err?.message || 'Failed to send alert, please try again')
+    } finally {
+      setAlertSubmitting(false)
     }
   }
 
@@ -473,6 +492,31 @@ const Auth = () => {
           </button>
         </form>
 
+        <div className="flex justify-between items-center mb-6 text-sm">
+          <div className="text-gray-400">
+            Forgot your password?{' '}
+            <Link
+              to={email ? `/reset-password?email=${encodeURIComponent(email)}` : "/reset-password"}
+              className="text-[#FFC93C] hover:underline"
+            >
+              Reset via TrollCity Password Manager
+            </Link>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowAlertAdmin(true)
+              if (!alertEmail && email) {
+                setAlertEmail(email)
+              }
+            }}
+            className="ml-4 text-[#FFC93C] hover:underline flex items-center gap-1"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>Alert admin</span>
+          </button>
+        </div>
+
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-600"></div>
@@ -515,6 +559,57 @@ const Auth = () => {
           </div>
         )}
       </div>
+      {showAlertAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-xl bg-[#18181b] border border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-[#FFC93C]" />
+                <h2 className="text-lg font-semibold">Trouble signing in?</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAlertAdmin(false)}
+                className="text-gray-400 hover:text-white text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">
+              This will notify the Troll City technical team so they can contact you and help fix the issue.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Email we should contact</label>
+                <input
+                  type="email"
+                  value={alertEmail}
+                  onChange={(e) => setAlertEmail(e.target.value)}
+                  className="w-full rounded-lg border border-gray-600 bg-[#23232b] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FFC93C]"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Describe what is happening</label>
+                <textarea
+                  value={alertDetails}
+                  onChange={(e) => setAlertDetails(e.target.value)}
+                  className="w-full rounded-lg border border-gray-600 bg-[#23232b] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FFC93C] resize-none h-24"
+                  placeholder="Example: I reset my password but still get an error, or the code does not work."
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAlertAdminSubmit}
+                disabled={alertSubmitting}
+                className="w-full py-3 bg-gradient-to-r from-[#FFC93C] to-[#FFD700] text-black font-semibold rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {alertSubmitting ? 'Sending alert...' : 'Send alert to admin'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

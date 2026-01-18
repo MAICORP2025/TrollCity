@@ -25,9 +25,7 @@ interface BroadcastLayoutProps {
   onHostSeatChange?: (seatIndex: number) => void
   onUserClick?: (participant: Participant) => void
   onToggleCamera?: () => void
-  onToggleScreenShare?: () => void
   isCameraOn?: boolean
-  isScreenShareOn?: boolean
   onSetPrice?: (price: number) => void
 }
 
@@ -52,9 +50,7 @@ export default function BroadcastLayout({
   onHostSeatChange,
   onUserClick,
   onToggleCamera,
-  onToggleScreenShare,
   isCameraOn,
-  isScreenShareOn,
   onSetPrice: _onSetPrice
 }: BroadcastLayoutProps) {
   const participants = useRoomParticipants(room);
@@ -234,9 +230,7 @@ export default function BroadcastLayout({
           boxCount={boxCount}
           onUserClick={onUserClick}
           onToggleCamera={onToggleCamera}
-          onToggleScreenShare={onToggleScreenShare}
           isCameraOn={isCameraOn}
-          isScreenShareOn={isScreenShareOn}
         />
       </div>
 

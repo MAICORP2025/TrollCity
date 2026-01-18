@@ -3,7 +3,7 @@ import { useParams, useNavigate, useInRouterContext } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import LiveAvatar from '../components/LiveAvatar';
-import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw } from 'lucide-react';
+import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home } from 'lucide-react';
 import { toast } from 'sonner';
 import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
@@ -21,7 +21,7 @@ function ProfileInner() {
   const [activeTab, setActiveTab] = useState('posts');
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
-  const [inventory, setInventory] = useState<{perks: any[], effects: any[], insurance: any[], callMinutes: any}>({perks: [], effects: [], insurance: [], callMinutes: null});
+  const [inventory, setInventory] = useState<{perks: any[], effects: any[], insurance: any[], callMinutes: any, homeListings: any[], vehicleListings: any[]}>({perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: []});
   const [earnings, setEarnings] = useState<any[]>([]);
   const [earningsLoading, setEarningsLoading] = useState(false);
   const viewerRole = useAuthStore.getState().profile?.troll_role || useAuthStore.getState().profile?.role || 'user';
@@ -62,11 +62,13 @@ function ProfileInner() {
   const fetchInventory = async (uid: string) => {
     // setInventoryLoading(true);
     try {
-      const [perksRes, effectsRes, insuranceUserRes, callRes] = await Promise.all([
+      const [perksRes, effectsRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes] = await Promise.all([
         supabase.from('user_perks').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
         supabase.from('user_entrance_effects').select('*').eq('user_id', uid),
         supabase.from('user_insurances').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
-        supabase.from('call_minutes').select('*').eq('user_id', uid).single()
+        supabase.from('call_minutes').select('*').eq('user_id', uid).single(),
+        supabase.from('properties').select('*').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
+        supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false })
       ]);
 
       let insuranceList = insuranceUserRes.data || [];
@@ -99,7 +101,9 @@ function ProfileInner() {
         perks: perksRes.data || [],
         effects: effectsRes.data || [],
         insurance: insuranceList || [],
-        callMinutes: callRes.data || null
+        callMinutes: callRes.data || null,
+        homeListings: homesRes.data || [],
+        vehicleListings: vehicleListingsRes.data || []
       });
     } catch (e) {
       console.error('Error fetching inventory', e);
@@ -284,7 +288,7 @@ function ProfileInner() {
         if (currentUser?.id === data.id) {
           fetchInventory(data.id);
         } else {
-          setInventory({ perks: [], effects: [], insurance: [], callMinutes: null });
+          setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [] });
           setEarnings([]);
           setPurchases([]);
         }
@@ -957,8 +961,8 @@ function ProfileInner() {
                   </div>
                </div>
                
-               {/* Insurance */}
-               <div>
+              {/* Insurance */}
+              <div>
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-green-400"/> Insurance Plans</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {inventory.insurance.map(plan => (
@@ -1038,6 +1042,98 @@ function ProfileInner() {
                   )}
                 </div>
               </div>
+
+              {inventory.homeListings && inventory.homeListings.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <Home className="w-5 h-5 text-emerald-400" />
+                    Homes For Sale
+                  </h3>
+                  <div className="space-y-3">
+                    {inventory.homeListings.map((home: any) => (
+                      <div
+                        key={home.id}
+                        className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 flex items-center justify-between gap-4"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-white">
+                            Home {String(home.id).slice(0, 6).toUpperCase()}
+                            {home.is_starter ? ' • Starter' : ''}
+                          </p>
+                          {home.ask_price && (
+                            <p className="text-xs text-gray-400">
+                              Listed for {Number(home.ask_price).toLocaleString()} TrollCoins
+                            </p>
+                          )}
+                        </div>
+                        {isOwnProfile && (
+                          <button
+                            type="button"
+                            onClick={() => navigate('/trollstown')}
+                            className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium"
+                          >
+                            Manage In Troll Town
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {inventory.vehicleListings && inventory.vehicleListings.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <Car className="w-5 h-5 text-purple-400" />
+                    Vehicle Listings
+                  </h3>
+                  <div className="space-y-3">
+                    {inventory.vehicleListings.map((listing: any) => {
+                      const vehicle = cars.find(c => c.id === listing.vehicle_id);
+                      const name =
+                        listing.metadata?.vehicle_name ||
+                        vehicle?.name ||
+                        `Vehicle #${listing.vehicle_id}`;
+                      const tier =
+                        listing.metadata?.tier ||
+                        (vehicle as any)?.tier;
+                      return (
+                        <div
+                          key={listing.id}
+                          className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 flex items-center justify-between gap-4"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-white">{name}</p>
+                            <p className="text-xs text-gray-400">
+                              {listing.listing_type === 'auction' ? 'Auction starting at ' : 'Listed for '}
+                              {Number(listing.price).toLocaleString()} TrollCoins
+                            </p>
+                            {tier && (
+                              <p className="text-xs text-gray-500">
+                                Tier: {tier}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border border-white/10 text-gray-300">
+                              {listing.listing_type === 'auction' ? 'Auction' : 'Sale'}
+                            </span>
+                            {isOwnProfile && (
+                              <button
+                                type="button"
+                                onClick={() => navigate(listing.listing_type === 'auction' ? '/auctions' : '/dealership')}
+                                className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-medium"
+                              >
+                                Manage Listing
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

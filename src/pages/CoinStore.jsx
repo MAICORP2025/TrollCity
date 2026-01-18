@@ -5,7 +5,7 @@ import { useAuthStore } from '@/lib/store';
 import { useCoins } from '@/lib/hooks/useCoins';
 import { toast } from 'sonner';
 import { loadStripe } from '@stripe/stripe-js';
-import { Coins, DollarSign, ShoppingCart, CreditCard, CheckCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { Coins, DollarSign, ShoppingCart, CreditCard, CheckCircle, Loader2 } from 'lucide-react';
 import { formatCoins, formatUSD } from '../lib/coinMath';
 import { addCoins, deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
@@ -23,13 +23,17 @@ const SAMPLE_EFFECTS = [
 ];
 
 const SAMPLE_PERKS = [
-  { id: 'perk_rgb_username', name: 'RGB Username', description: 'Rainbow username everywhere (24h)', cost: 5000, duration_minutes: 1440, perk_type: 'cosmetic' },
-  { id: 'perk_chat_shine', name: 'Chat Shine', description: 'Chat messages glow', cost: 2000, duration_minutes: 1440, perk_type: 'visibility' },
-  { id: 'perk_stream_boost_lite', name: 'Stream Boost Lite', description: 'Slight discovery boost', cost: 3500, duration_minutes: 1440, perk_type: 'boost' },
-  { id: 'perk_coin_magnet', name: 'Coin Magnet', description: '+5% coin reward', cost: 4500, duration_minutes: 1440, perk_type: 'boost' },
-  { id: 'perk_troll_shield', name: 'Troll Shield', description: '-10% TrollCourt fines', cost: 5000, duration_minutes: 1440, perk_type: 'protection' },
-  { id: 'perk_priority_tag', name: 'Priority Tag', description: 'Name above chat', cost: 7500, duration_minutes: 1440, perk_type: 'cosmetic' },
-  { id: 'perk_faster_cooldowns', name: 'Faster Cooldowns', description: '-15% cooldown time', cost: 10000, duration_minutes: 1440, perk_type: 'boost' },
+  { id: 'perk_rgb_username', name: 'RGB Username (24h)', description: 'Rainbow glow visible to everyone', cost: 450, duration_minutes: 24 * 60, perk_type: 'cosmetic' },
+  { id: 'perk_disappearing_chats', name: 'Disappearing Chats (30m)', description: 'Chats auto-hide after 10s for 30 minutes', cost: 190, duration_minutes: 30, perk_type: 'chat' },
+  { id: 'perk_ghost_mode', name: 'Ghost Mode (30m)', description: 'View streams in stealth without status indicators', cost: 560, duration_minutes: 30, perk_type: 'privacy' },
+  { id: 'perk_message_admin', name: 'Message Admin (Officer Only)', description: 'Unlock DM to Admin', cost: 230, duration_minutes: 24 * 60, perk_type: 'access', role_required: 'officer' },
+  { id: 'perk_glowing_username', name: 'Glowing Username (1h)', description: 'Neon glow in all chats & gift animations', cost: 5750, duration_minutes: 60, perk_type: 'cosmetic' },
+  { id: 'perk_slowmo_chat', name: 'Slow-Motion Chat Control (5h)', description: 'Activate chat slow-mode in any live stream', cost: 3600, duration_minutes: 5 * 60, perk_type: 'control' },
+  { id: 'perk_troll_alarm', name: 'Troll Alarm Arrival (100h)', description: 'Sound + flash announces your arrival', cost: 3000, duration_minutes: 100 * 60, perk_type: 'entrance' },
+  { id: 'perk_ban_shield', name: 'Ban Shield (2h)', description: 'Immunity from kick, mute, or ban for 2 hours', cost: 1660, duration_minutes: 2 * 60, perk_type: 'protection' },
+  { id: 'perk_double_xp', name: 'Double XP Mode (1h)', description: 'Earn 2x XP for the next hour', cost: 780, duration_minutes: 60, perk_type: 'boost' },
+  { id: 'perk_golden_banner', name: 'Golden Flex Banner (100h)', description: 'Golden crown banner on all your messages', cost: 3390, duration_minutes: 100 * 60, perk_type: 'cosmetic' },
+  { id: 'perk_troll_spell', name: 'Troll Spell (1h)', description: "Randomly change another user's username style & emoji for 1 hour", cost: 2240, duration_minutes: 60, perk_type: 'fun' },
 ];
 
 const SAMPLE_INSURANCE_PLANS = [
@@ -54,12 +58,14 @@ const isMissingTableError = (error) =>
 export default function CoinStore() {
   const stripeCheckoutUrl = import.meta.env.VITE_API_URL || '/api/stripe';
   const stripePaymentIntentUrl = import.meta.env.VITE_STRIPE_PI_URL || stripeCheckoutUrl;
+  const STRIPE_ENABLED = String(import.meta.env.VITE_STRIPE_ENABLED || '').trim() === '1';
   const { user, profile, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
   const { troll_coins, refreshCoins } = useCoins();
   const { checkOnboarding } = useCheckOfficerOnboarding();
   const STORE_TAB_KEY = 'tc-store-active-tab';
   const STORE_COMPLETE_KEY = 'tc-store-show-complete';
+  const CASHAPP_TAG_KEY = 'tc-cashapp-tag';
   const [loading, setLoading] = useState(true);
   const [loadingPackage, setLoadingPackage] = useState(null);
   const [tab, setTab] = useState('coins');
@@ -102,6 +108,16 @@ export default function CoinStore() {
   const elementsRef = useRef(null);
   const paymentElementRef = useRef(null);
   const paymentAttachedRef = useRef(false);
+  const [manualOrderRefId, setManualOrderRefId] = useState(null);
+  const [cashAppTag, setCashAppTag] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(CASHAPP_TAG_KEY) || '';
+  });
+  const [cashAppTagError, setCashAppTagError] = useState(null);
+
+  const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
+  const isSecretary = profile?.role === 'secretary' || profile?.troll_role === 'secretary';
+  const isOfficer = profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.is_lead_officer === true || profile?.troll_role === 'troll_officer' || profile?.troll_role === 'lead_troll_officer';
 
   useEffect(() => {
     const loadCoinPackages = async () => {
@@ -124,6 +140,11 @@ export default function CoinStore() {
 
     loadCoinPackages();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(CASHAPP_TAG_KEY, (cashAppTag || '').trim());
+  }, [cashAppTag]);
 
   const getThemeStyle = (theme) => {
     if (!theme) return undefined;
@@ -205,6 +226,28 @@ export default function CoinStore() {
         return 'border-white/10';
     }
   };
+
+  const normalizeCashAppTag = useCallback((value) => {
+    const trimmed = String(value || '').trim();
+    const withoutDollar = trimmed.replace(/^\$+/, '');
+    if (!withoutDollar) return { tag: null, error: 'Enter your Cash App tag (no $)' };
+    if (!/^[A-Za-z0-9._-]{2,20}$/.test(withoutDollar)) {
+      return { tag: null, error: 'Cash App tag must be 2-20 letters/numbers (no $).' };
+    }
+    return { tag: withoutDollar, error: null };
+  }, []);
+
+  const ensureCashAppTag = useCallback(() => {
+    const { tag, error } = normalizeCashAppTag(cashAppTag);
+    if (error || !tag) {
+      setCashAppTagError(error || 'Cash App tag is required');
+      toast.error(error || 'Cash App tag is required');
+      return null;
+    }
+    setCashAppTagError(null);
+    setCashAppTag(tag);
+    return tag;
+  }, [cashAppTag, normalizeCashAppTag]);
 
   const showLiveSnacks = Boolean(activeStreamId && liveStreamIsLive);
   const callPackages = {
@@ -336,6 +379,12 @@ export default function CoinStore() {
         setInsuranceNote,
         'insurance plans',
       );
+
+      const filteredPlans = (loadedPlans || []).filter((p) => p.protection_type !== 'bankrupt');
+      if (filteredPlans.length !== (loadedPlans || []).length) {
+        setInsuranceNote((prev) => prev || 'Bankrupt insurance retired with Troll Wheel removal.');
+      }
+      setPlans(filteredPlans);
 
       const loadedThemes = applyCatalogData(
         themeRes,
@@ -605,6 +654,11 @@ export default function CoinStore() {
    // Check officer onboarding first
    const canProceed = await checkOnboarding();
    if (!canProceed) return;
+
+   if (perk.role_required === 'officer' && !(isOfficer || isAdmin || isSecretary)) {
+     toast.error('This perk is limited to officers');
+     return;
+   }
 
    try {
      const basePrice = getPerkPrice(perk)
@@ -955,19 +1009,158 @@ export default function CoinStore() {
     const canProceed = await checkOnboarding();
     if (!canProceed) return;
     setPendingPackage(pkg);
+    if (!STRIPE_ENABLED) {
+      // Manual Cash App flow
+      try {
+        const tag = ensureCashAppTag();
+        if (!tag) return;
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) throw new Error('Not authenticated');
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            action: 'create',
+            package_id: pkg.id,
+            coins: pkg.coins || pkg?.coins_amount || 0,
+            amount_usd: pkg.price_usd || Number(String(pkg.price).replace(/[^0-9.]/g, '')) || 0,
+            cashapp_tag: tag,
+          }),
+        });
+        const txt = await res.text();
+        let json = null;
+        try { json = JSON.parse(txt); } catch {}
+        if (!res.ok) throw new Error(json?.error || 'Failed to create manual order');
+        setManualOrderRefId(json?.orderId || null);
+        setPaymentModalOpen(true);
+        toast.success('Manual order created. Follow Cash App instructions.');
+      } catch (e) {
+        console.error('Manual order error:', e);
+        toast.error(e?.message || 'Failed to create manual order');
+      }
+      return;
+    }
     await startPaymentIntent(pkg);
+  };
+
+  const openAdminManualTab = (orderId, pkg) => {
+    if (!orderId) return;
+    const params = new URLSearchParams({
+      orderId,
+      user: profile?.username || profile?.id || '',
+      coins: String(pkg?.coins || 0),
+      amount: String(pkg?.price_usd || ''),
+    });
+    window.open(`/admin/manual-orders?${params.toString()}`, '_blank', 'noopener');
+  };
+
+  const handleCashApp = async (pkg) => {
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+    const tag = ensureCashAppTag();
+    if (!tag) return;
+    setPendingPackage(pkg);
+    setLoadingPackage(pkg?.id || null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          action: 'create',
+          package_id: pkg.id,
+          coins: pkg.coins || pkg?.coins_amount || 0,
+          amount_usd: pkg.price_usd || Number(String(pkg.price).replace(/[^0-9.]/g, '')) || 0,
+          username: profile?.username,
+            cashapp_tag: tag,
+        }),
+      });
+      const txt = await res.text();
+      let json = null;
+      try { json = JSON.parse(txt); } catch {}
+      if (!res.ok) throw new Error(json?.error || 'Failed to create manual order');
+      setManualOrderRefId(json?.orderId || null);
+      setPaymentModalOpen(true);
+      openAdminManualTab(json?.orderId, pkg);
+      toast.success('Manual order created. Cash App instructions ready.');
+    } catch (e) {
+      console.error('Manual order error:', e);
+      toast.error(e?.message || 'Failed to create manual order');
+    } finally {
+      setLoadingPackage(null);
+    }
   };
 
   const handleBuyTrollPass = async () => {
     const canProceed = await checkOnboarding();
     if (!canProceed) return;
 
-    if (!_isViewerOnly || trollPassActive) return;
+    if (trollPassActive) return;
     setPendingPackage({
       ...trollPassBundle,
       name: 'Troll Pass Bundle',
     });
     await startPaymentIntent(null, 'troll_pass_bundle');
+  };
+
+  const handleBuyTrollPassCashApp = async () => {
+    const canProceed = await checkOnboarding();
+    if (!canProceed) return;
+    if (trollPassActive) return;
+    const tag = ensureCashAppTag();
+    if (!tag) return;
+    
+    setPendingPackage({
+      ...trollPassBundle,
+      name: 'Troll Pass Bundle',
+    });
+    setLoadingPackage(trollPassBundle.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          action: 'create',
+          package_id: trollPassBundle.id,
+          coins: trollPassBundle.coins,
+          amount_usd: trollPassBundle.price,
+          username: profile?.username,
+          cashapp_tag: tag,
+          purchase_type: 'troll_pass',
+        }),
+      });
+      const txt = await res.text();
+      let json = null;
+      try { json = JSON.parse(txt); } catch {}
+      if (!res.ok) throw new Error(json?.error || 'Failed to create manual order');
+      setManualOrderRefId(json?.orderId || null);
+      setPaymentModalOpen(true);
+      openAdminManualTab(json?.orderId, { ...trollPassBundle, name: 'Troll Pass Bundle' });
+      toast.success('Troll Pass manual order created. Cash App instructions ready.');
+    } catch (e) {
+      console.error('Manual order error:', e);
+      toast.error(e?.message || 'Failed to create manual order');
+    } finally {
+      setLoadingPackage(null);
+    }
   };
 
   const closePaymentModal = () => {
@@ -1054,14 +1247,16 @@ export default function CoinStore() {
         <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6 overflow-x-hidden">
         <div className="max-w-6xl mx-auto space-y-6 w-full">
           {/* Warning Banner */}
-          <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-            <div className="text-yellow-200 text-sm font-medium space-y-1">
+          <div className="bg-purple-500/10 border border-purple-500/50 rounded-xl p-4 flex items-start gap-3">
+            <CreditCard className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+            <div className="text-purple-200 text-sm font-medium space-y-1">
               <p>
-                Start with $0.75 coin purchase before making large transactions to ensure coins are routed correctly back to your account.
+                {STRIPE_ENABLED
+                  ? 'Secure payments are processed via Stripe.'
+                  : 'Manual Cash App flow is active. Stripe verification is temporarily disabled.'}
               </p>
               <p>
-                Stripe Payment is used for purchases. More payment options coming soon.
+                Link your preferred payment method in your profile for a faster checkout experience.
               </p>
             </div>
           </div>
@@ -1166,7 +1361,7 @@ export default function CoinStore() {
             </div>
 
             {/* Troll Pass (viewer-only) */}
-            <div className="mt-6 bg-zinc-900 rounded-xl p-4 border border-green-500/20">
+              <div className="mt-6 bg-zinc-900 rounded-xl p-4 border border-green-500/20">
               <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="font-semibold text-white flex items-center gap-2">
@@ -1192,21 +1387,29 @@ export default function CoinStore() {
               <div className="text-right">
                 <div className="text-yellow-400 font-bold">+{trollPassBundle.coins.toLocaleString()} Troll Coins</div>
                 <div className="text-green-400 font-bold">{formatUSD(trollPassBundle.price)}</div>
-                <div className="mt-2">
+                <div className="mt-2 space-y-2">
                   <button
                     type="button"
                     onClick={handleBuyTrollPass}
                     disabled={!_isViewerOnly || trollPassActive || loadingPackage === trollPassBundle.id}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded font-semibold"
+                    className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded font-semibold text-sm"
                   >
                     {loadingPackage === trollPassBundle.id
                       ? 'Starting payment...'
                       : trollPassActive
                         ? 'Active'
-                        : _isViewerOnly
-                          ? 'Pay with Stripe'
-                          : 'Viewer only'}
+                        : 'Pay with Stripe'}
                   </button>
+                  {!STRIPE_ENABLED && !trollPassActive && _isViewerOnly && (
+                    <button
+                      type="button"
+                      onClick={handleBuyTrollPassCashApp}
+                      disabled={loadingPackage === trollPassBundle.id}
+                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded font-semibold text-sm"
+                    >
+                      {loadingPackage === trollPassBundle.id ? 'Creating order...' : 'Pay with Cash App'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1259,6 +1462,28 @@ export default function CoinStore() {
                   <ShoppingCart className="w-5 h-5 text-purple-400" />
                   Available Coin Packages
                 </h2>
+                {!STRIPE_ENABLED && (
+                  <div className="mb-4 bg-green-500/5 border border-green-500/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-semibold text-green-200">Cash App tag (required for manual payments)</div>
+                      <span className="text-[11px] text-green-300">No $ sign</span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="px-2 py-2 bg-green-500/10 border border-green-500/30 rounded text-green-200 text-sm">$</span>
+                      <input
+                        value={cashAppTag}
+                        onChange={(e) => setCashAppTag(e.target.value)}
+                        onBlur={() => cashAppTag && ensureCashAppTag()}
+                        placeholder="yourcashtag"
+                        className="w-full bg-black/40 border border-green-500/30 rounded px-3 py-2 text-sm text-white focus:border-green-400 outline-none"
+                      />
+                    </div>
+                    {cashAppTagError && (
+                      <div className="text-xs text-red-300 mt-1">{cashAppTagError}</div>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">We display your tag to admins/secretaries so they can match your Cash App payment quickly.</p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {coinPackages.map((pkg) => (
                     <div key={pkg.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20 hover:border-purple-500/40 transition-all">
@@ -1282,17 +1507,29 @@ export default function CoinStore() {
                         </div>
                         <p className="text-xl font-bold text-green-400">{formatUSD(pkg.price_usd)}</p>
                       </div>
-                      <div className="mt-4">
+                      <div className="mt-4 space-y-2">
+                        {!STRIPE_ENABLED && (
+                          <button
+                            type="button"
+                            onClick={() => handleCashApp(pkg)}
+                            disabled={loadingPackage === pkg.id}
+                            className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded font-semibold"
+                          >
+                            {loadingPackage === pkg.id ? 'Creating manual order...' : 'Pay with Cash App'}
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => handleBuy(pkg)}
-                          disabled={loadingPackage === pkg.id}
-                          className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded font-semibold"
+                          onClick={() => STRIPE_ENABLED && handleBuy(pkg)}
+                          disabled={!STRIPE_ENABLED || loadingPackage === pkg.id}
+                          className={`w-full px-4 py-2 rounded font-semibold border border-purple-500/30 ${STRIPE_ENABLED ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-800 text-gray-400 cursor-not-allowed'}`}
                         >
-                          {loadingPackage === pkg.id ? 'Starting payment...' : 'Pay with Stripe'}
+                          {STRIPE_ENABLED ? (loadingPackage === pkg.id ? 'Starting Stripe...' : 'Pay with Stripe') : 'Stripe temporarily disabled'}
                         </button>
-                        <div className="mt-2 text-xs text-gray-400 text-center">
-                          Secure Stripe payment
+                        <div className="mt-1 text-[11px] text-gray-400 text-center">
+                          {STRIPE_ENABLED
+                            ? 'Stripe securely processes this purchase.'
+                            : 'Cash App sends a manual request to admins when Stripe is disabled.'}
                         </div>
                       </div>
                     </div>
@@ -1674,8 +1911,10 @@ export default function CoinStore() {
                   <span className="text-white text-sm">2</span>
                 </div>
                 <div>
-                  <p className="font-semibold">Pay with Stripe</p>
-                  <p className="text-sm text-gray-400">Secure payment processing through Stripe</p>
+                  <p className="font-semibold">{STRIPE_ENABLED ? 'Pay with Stripe' : 'Pay via Cash App'}</p>
+                  <p className="text-sm text-gray-400">
+                    {STRIPE_ENABLED ? 'Secure payment processing through Stripe' : 'Send to $trollcity95 with note: PREFIX-COINS (first 6 chars of username and coin amount)'}
+                  </p>
                 </div>
               </div>
 
@@ -1695,43 +1934,54 @@ export default function CoinStore() {
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
               <div className="bg-[#0D0D1A] border border-[#2C2C2C] rounded-xl p-6 w-full max-w-lg max-h-[100dvh] overflow-y-auto">
                 <h3 className="text-lg font-semibold mb-2">Complete payment</h3>
-                <p className="text-sm text-gray-400 mb-4">
-                  Confirm your Stripe payment to finish this purchase.
-                </p>
-
-                {savedMethods.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    {savedMethods.map((method) => (
-                      <div key={method.id} className="flex items-center justify-between px-3 py-2 rounded border border-[#2C2C2C]">
-                        <div>
-                          <div className="text-sm font-medium">
-                            {method.display_name || method.brand || 'Payment Method'}
-                            {method.is_default ? ' • Default' : ''}
+                {STRIPE_ENABLED ? (
+                  <>
+                    <p className="text-sm text-gray-400 mb-4">Confirm your Stripe payment to finish this purchase.</p>
+                    {savedMethods.length > 0 && (
+                      <div className="space-y-2 mb-4">
+                        {savedMethods.map((method) => (
+                          <div key={method.id} className="flex items-center justify-between px-3 py-2 rounded border border-[#2C2C2C]">
+                            <div>
+                              <div className="text-sm font-medium">
+                                {method.display_name || method.brand || 'Payment Method'}{method.is_default ? ' • Default' : ''}
+                              </div>
+                              {method.last4 ? (
+                                <div className="text-xs text-gray-400">•••• {method.last4}</div>
+                              ) : (
+                                <div className="text-xs text-gray-500">Saved method</div>
+                              )}
+                            </div>
                           </div>
-                          {method.last4 ? (
-                            <div className="text-xs text-gray-400">•••• {method.last4}</div>
-                          ) : (
-                            <div className="text-xs text-gray-500">Saved method</div>
-                          )}
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+                    <div id="stripe-coin-payment-element" className="p-3 rounded border border-[#2C2C2C] bg-black mb-3" />
+                    {paymentSetupLoading && (<div className="text-xs text-gray-400 mb-3">Loading payment options…</div>)}
+                    {paymentError && (<div className="text-xs text-red-400 mb-3">{paymentError}</div>)}
+                    <div className="text-xs text-gray-500 mb-4">Stripe verifies methods automatically (you may see a $0.00 authorization).</div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-yellow-200 mb-4">Send payment to <span className="font-semibold">$trollcity95</span>. In the Cash App note, include: <span className="font-mono">PREFIX-COINS</span> (first 6 characters of your username and coin amount).</p>
+                    {manualOrderRefId && (
+                      <div className="text-xs text-yellow-300 mb-3">Reference ID: {manualOrderRefId}. Keep this for support.</div>
+                    )}
+                    <div className="text-xs text-gray-400 mb-4">Coins are granted after manual verification.</div>
+                    {(isAdmin || isSecretary) && (
+                      <div className="flex items-center justify-between bg-emerald-900/30 border border-emerald-500/30 rounded p-2 mb-3 text-xs text-emerald-100">
+                        <span>Staff: manage manual payments</span>
+                        <a
+                          href="/admin/manual-orders"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-white text-xs font-semibold"
+                        >
+                          Open dashboard
+                        </a>
+                      </div>
+                    )}
+                  </>
                 )}
-
-                <div id="stripe-coin-payment-element" className="p-3 rounded border border-[#2C2C2C] bg-black mb-3" />
-
-                {paymentSetupLoading && (
-                  <div className="text-xs text-gray-400 mb-3">Loading payment options…</div>
-                )}
-
-                {paymentError && (
-                  <div className="text-xs text-red-400 mb-3">{paymentError}</div>
-                )}
-
-                <div className="text-xs text-gray-500 mb-4">
-                  Stripe verifies methods automatically (you may see a $0.00 authorization).
-                </div>
 
                 <div className="flex gap-2 justify-end">
                   <button
@@ -1741,14 +1991,24 @@ export default function CoinStore() {
                   >
                     Cancel
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmPayment}
-                    disabled={paymentProcessing || paymentSetupLoading}
-                    className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    {paymentProcessing ? 'Processing…' : 'Confirm Payment'}
-                  </button>
+                  {STRIPE_ENABLED ? (
+                    <button
+                      type="button"
+                      onClick={handleConfirmPayment}
+                      disabled={paymentProcessing || paymentSetupLoading}
+                      className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                    >
+                      {paymentProcessing ? 'Processing…' : 'Confirm Payment'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={closePaymentModal}
+                      className="px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-700"
+                    >
+                      Done
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

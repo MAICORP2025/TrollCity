@@ -27,20 +27,26 @@ export const API_ENDPOINTS = {
     chargeCard: '/charge-stored-card',
   },
   livekit: {
-    token: '/livekit-token',   // 👈 Correct path for STREAM token
+    token: '/livekit-token',   // Correct path for STREAM token
+    api: '/livekit-api',
   },
   broadcastSeats: {
     list: '/broadcast-seats',
     action: '/broadcast-seats',
   },
   stream: {
-    create: '/stream/create',      // 👈 You'll use this soon
+    create: '/stream/create',
+    prepare: '/go-live-prepare-session',
+    markLive: '/go-live-mark-live',
+    reset: '/go-live-reset',
+    refundHDBoost: '/go-live-refund-hd-boost',
   },
   rtmp: {
     start: '/rtmp-relay',
   },
   admin: {
     trollDrop: '/admin/troll-drop',
+    sendAnnouncement: '/send-announcement',
   },
   trollcourt: {
     ai: '/trollcourt-ai',
@@ -113,8 +119,11 @@ async function request<T = any>(
 
     // Enhanced logging for specific endpoints
     const isLiveKitEndpoint = endpoint.includes('livekit');
-    const isBroadcastEndpoint = endpoint.includes('broadcast');
-
+    const isBroadcastEndpoint = endpoint.includes('broadcast') || 
+                               endpoint.includes('live-prepare') || 
+                               endpoint.includes('live-mark') ||
+                               endpoint.includes('refund-hd-boost') ||
+                               endpoint.includes('announcement');
 
     if (isLiveKitEndpoint || isBroadcastEndpoint) {
       console.log(`[API ${requestId}] Session check:`, {

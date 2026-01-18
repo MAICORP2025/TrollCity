@@ -314,9 +314,9 @@ CREATE TABLE IF NOT EXISTS broadcaster_earnings (
 - ✅ Proper tracking in coin_transactions table
 
 ### Revenue Splits (Configured)
-- ✅ Platform: 40%
-- ✅ Broadcaster: 60%
-- ✅ Officer commission: 30%
+- ✅ Platform: 5%
+- ✅ Broadcaster: 95%
+- ✅ Officer commission: 0.5%
 
 ---
 

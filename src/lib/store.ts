@@ -9,10 +9,12 @@ interface AuthState {
   profile: UserProfile | null
   isLoading: boolean
   isAdmin: boolean | null
+  showLegacySidebar: boolean
   setAuth: (user: User | null, session: Session | null) => void
   setProfile: (profile: UserProfile | null) => void
   setLoading: (loading: boolean) => void
   setAdmin: (isAdmin: boolean | null) => void
+  setShowLegacySidebar: (value: boolean) => void
   refreshProfile: () => Promise<void>
   logout: () => void
 }
@@ -25,6 +27,7 @@ export const useAuthStore = create<AuthState>()(
       profile: null,
       isLoading: false,
       isAdmin: null,
+       showLegacySidebar: true,
 
       // Called when Supabase auth changes
       setAuth: (user, session) => {
@@ -123,6 +126,8 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (loading) => set({ isLoading: loading }),
 
       setAdmin: (adminState) => set({ isAdmin: adminState }),
+
+      setShowLegacySidebar: (value) => set({ showLegacySidebar: value }),
 
       // Reload profile from DB
       refreshProfile: async () => {

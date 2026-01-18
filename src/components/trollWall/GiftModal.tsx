@@ -14,6 +14,7 @@ interface GiftItem {
   icon: string
   value: number
   category: string
+  slug?: string
 }
 
 export default function GiftModal({ postId: _postId, onClose, onGiftSent }: GiftModalProps) {
@@ -37,32 +38,33 @@ export default function GiftModal({ postId: _postId, onClose, onGiftSent }: Gift
             name: item.name,
             icon: item.icon,
             value: item.value,
-            category: item.category || 'Common'
+            category: item.category || 'Common',
+            slug: item.gift_slug || item.name || item.id,
           })))
         } else {
           // Fallback gifts
           setGifts([
-            { id: 'rose', name: 'Rose', icon: '🌹', value: 10, category: 'Basic' },
-            { id: 'heart', name: 'Heart', icon: '💖', value: 25, category: 'Basic' },
-            { id: 'star', name: 'Star', icon: '⭐', value: 50, category: 'Basic' },
-            { id: 'crown', name: 'Crown', icon: '👑', value: 100, category: 'Premium' },
-            { id: 'diamond', name: 'Diamond', icon: '💎', value: 200, category: 'Premium' },
-            { id: 'trophy', name: 'Trophy', icon: '🏆', value: 500, category: 'Epic' },
-            { id: 'coffee', name: 'Coffee', icon: '☕', value: 15, category: 'Basic' },
-            { id: 'pizza', name: 'Pizza', icon: '🍕', value: 30, category: 'Basic' },
-            { id: 'rocket', name: 'Rocket', icon: '🚀', value: 1000, category: 'Epic' },
-            { id: 'dragon', name: 'Dragon', icon: '🐉', value: 5000, category: 'Legendary' },
+            { id: 'rose', name: 'Rose', icon: '🌹', value: 10, category: 'Basic', slug: 'rose' },
+            { id: 'heart', name: 'Heart', icon: '💖', value: 25, category: 'Basic', slug: 'heart' },
+            { id: 'star', name: 'Star', icon: '⭐', value: 50, category: 'Basic', slug: 'star' },
+            { id: 'crown', name: 'Crown', icon: '👑', value: 100, category: 'Premium', slug: 'crown' },
+            { id: 'diamond', name: 'Diamond', icon: '💎', value: 200, category: 'Premium', slug: 'diamond' },
+            { id: 'trophy', name: 'Trophy', icon: '🏆', value: 500, category: 'Epic', slug: 'trophy' },
+            { id: 'coffee', name: 'Coffee', icon: '☕', value: 15, category: 'Basic', slug: 'coffee' },
+            { id: 'pizza', name: 'Pizza', icon: '🍕', value: 30, category: 'Basic', slug: 'pizza' },
+            { id: 'rocket', name: 'Rocket', icon: '🚀', value: 1000, category: 'Epic', slug: 'rocket' },
+            { id: 'dragon', name: 'Dragon', icon: '🐉', value: 5000, category: 'Legendary', slug: 'dragon' },
           ])
         }
       } catch (err) {
         console.error('Error fetching gifts:', err)
         // Fallback gifts
         setGifts([
-          { id: 'rose', name: 'Rose', icon: '🌹', value: 10, category: 'Basic' },
-          { id: 'heart', name: 'Heart', icon: '💖', value: 25, category: 'Basic' },
-          { id: 'star', name: 'Star', icon: '⭐', value: 50, category: 'Basic' },
-          { id: 'crown', name: 'Crown', icon: '👑', value: 100, category: 'Premium' },
-          { id: 'diamond', name: 'Diamond', icon: '💎', value: 200, category: 'Premium' },
+          { id: 'rose', name: 'Rose', icon: '🌹', value: 10, category: 'Basic', slug: 'rose' },
+          { id: 'heart', name: 'Heart', icon: '💖', value: 25, category: 'Basic', slug: 'heart' },
+          { id: 'star', name: 'Star', icon: '⭐', value: 50, category: 'Basic', slug: 'star' },
+          { id: 'crown', name: 'Crown', icon: '👑', value: 100, category: 'Premium', slug: 'crown' },
+          { id: 'diamond', name: 'Diamond', icon: '💎', value: 200, category: 'Premium', slug: 'diamond' },
         ])
       }
     }
@@ -75,7 +77,8 @@ export default function GiftModal({ postId: _postId, onClose, onGiftSent }: Gift
 
     setSending(true)
     try {
-      await onGiftSent(selectedGift.id, selectedGift.value)
+      const giftType = selectedGift.slug || selectedGift.id
+      await onGiftSent(giftType, selectedGift.value)
       onClose()
     } finally {
       setSending(false)

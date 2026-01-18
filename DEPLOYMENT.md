@@ -244,9 +244,9 @@ Test these endpoints:
 - Coin packages (6 tiers)
 - Cashout system (minimum $21)
 - Revenue splits:
-  - 60% broadcaster
-  - 40% platform
-  - 30% officer commission
+  - 95% broadcaster
+  - 5% platform
+  - 0.5% officer commission on moderation fees
 
 ### ✅ Security
 - Row Level Security (RLS) on all tables

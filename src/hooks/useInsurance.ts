@@ -132,7 +132,7 @@ export function useCanAffordInsurance(planId: string) {
 /**
  * Hook to check if specific protection is active
  */
-export function useProtectionStatus(protectionType: 'bankrupt' | 'kick' | 'full') {
+export function useProtectionStatus(protectionType: 'kick' | 'full') {
   const { activeInsurance } = useActiveInsurance();
 
   const hasProtection = activeInsurance.some(insurance =>

@@ -1,16 +1,6 @@
 import React, { useState } from 'react'
 import { useAuthStore } from '../lib/store'
-import {
-  Shield,
-  Coins,
-  Banknote,
-  Gift,
-  Crown,
-  Activity,
-  DollarSign,
-  ChevronDown,
-  ChevronUp
-} from 'lucide-react'
+import { Shield, Coins, Banknote, Gift, Crown, DollarSign, ChevronDown, ChevronUp } from 'lucide-react'
 
 export default function AdminRFC() {
   const { profile } = useAuthStore()
@@ -197,8 +187,8 @@ export default function AdminRFC() {
               content: (
                 <>
                   • 100 coins = $1 USD<br />
-                  • Minimum withdrawal: 10,000 coins ($100)<br />
-                  • Platform commission: 20% per gifted coin<br />
+                  • Minimum withdrawal: 12,000 coins (≈ $36)<br />
+                  • Platform commission: 5% per gifted coin<br />
                   • Finix / Square payout processing fee: 2.9% + $0.30<br />
                   • 1099-K issued for earnings over $600 per year (US law)<br />
                 </>

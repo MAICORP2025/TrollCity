@@ -26,17 +26,19 @@ interface UserProfile {
 
 serve(async (req: Request) => {
   // Handle CORS
-  const origin = req.headers.get('origin');
+  const origin = req.headers.get("origin");
   const allowedOrigins = [
-    'https://maitrollcity.com',
-    'https://www.maitrollcity.com',
-    'http://localhost:3000',
-    'http://localhost:5173'
+    "https://maitrollcity.com",
+    "https://www.maitrollcity.com",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://localhost:3000",
+    "https://localhost:5173",
   ];
   
   const headers = { ...corsHeaders };
   if (origin && allowedOrigins.includes(origin)) {
-    headers['Access-Control-Allow-Origin'] = origin;
+    headers["Access-Control-Allow-Origin"] = origin;
   }
 
   if (req.method === "OPTIONS") {

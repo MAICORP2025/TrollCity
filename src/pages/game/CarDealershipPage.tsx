@@ -12,11 +12,16 @@ export default function CarDealershipPage() {
   const [buyingId, setBuyingId] = useState<number | null>(null);
   const [insuring, setInsuring] = useState(false);
   const [selling, setSelling] = useState(false);
+  const [hasCarInsurance, setHasCarInsurance] = useState(false);
   const [ownedCarId, setOwnedCarId] = useState<number | null>(null);
   const [ownedVehicleIds, setOwnedVehicleIds] = useState<number[]>([]);
+  const [garageCars, setGarageCars] = useState<
+    { id: string; car_model_id: number; is_active: boolean }[]
+  >([]);
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [listingPrice, setListingPrice] = useState('');
   const [listingType, setListingType] = useState<'sale' | 'auction'>('sale');
+  const [auctionDurationHours, setAuctionDurationHours] = useState('24');
   const [creatingListing, setCreatingListing] = useState(false);
   const [customModelUrl, setCustomModelUrl] = useState('');
   const [vehicleUpgrades, setVehicleUpgrades] = useState<
@@ -32,6 +37,12 @@ export default function CarDealershipPage() {
       cost: 750
     },
     {
+      id: 'engine_v8',
+      name: 'V8 Engine Swap',
+      description: 'Deeper exhaust note and more aggressive engine sound.',
+      cost: 1200
+    },
+    {
       id: 'armor_plating',
       name: 'Armor Plating',
       description: 'Extra armor to protect your ride.',
@@ -42,8 +53,75 @@ export default function CarDealershipPage() {
       name: 'Neon Underglow',
       description: 'Cosmetic upgrade that makes your car stand out.',
       cost: 400
+    },
+    {
+      id: 'paint_matte_black',
+      name: 'Matte Black Paint',
+      description: 'Full-body stealth matte black respray.',
+      cost: 300
+    },
+    {
+      id: 'paint_candy_red',
+      name: 'Candy Red Paint',
+      description: 'High-gloss candy red finish for maximum flex.',
+      cost: 300
+    },
+    {
+      id: 'tint_5',
+      name: 'Window Tint 5%',
+      description: 'Limo tint – darkest windows allowed.',
+      cost: 200
+    },
+    {
+      id: 'tint_20',
+      name: 'Window Tint 20%',
+      description: 'Dark tint with good visibility at night.',
+      cost: 180
+    },
+    {
+      id: 'tint_40',
+      name: 'Window Tint 40%',
+      description: 'Light privacy tint, subtle but clean.',
+      cost: 150
+    },
+    {
+      id: 'wheels_sport',
+      name: 'Sport Wheels',
+      description: 'Lightweight performance rims with aggressive styling.',
+      cost: 400
+    },
+    {
+      id: 'wheels_luxury',
+      name: 'Luxury Wheels',
+      description: 'High-end chrome wheels for VIP status.',
+      cost: 450
+    },
+    {
+      id: 'muffler_race',
+      name: 'Race Muffler',
+      description: 'Loud, aggressive exhaust note heard by everyone nearby.',
+      cost: 500
     }
   ];
+
+  useEffect(() => {
+    if (!user?.id) {
+      setHasCarInsurance(false);
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem(`trollcity_car_insurance_${user.id}`);
+      if (!raw) {
+        setHasCarInsurance(false);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setHasCarInsurance(Boolean(parsed && parsed.active));
+    } catch {
+      setHasCarInsurance(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id || !ownedCarId) {
@@ -178,6 +256,57 @@ export default function CarDealershipPage() {
       }
 
       setVehicleUpgrades((prev) => [...prev, inserted as any]);
+
+      try {
+        const storageKey = `trollcity_car_${user.id}`;
+        const raw = localStorage.getItem(storageKey);
+        let stored: any = {};
+        if (raw) {
+          try {
+            stored = JSON.parse(raw);
+          } catch {
+            stored = {};
+          }
+        }
+
+        const updated: any = {
+          ...stored,
+          carId: ownedCarId
+        };
+
+        if (upgrade.id === 'paint_matte_black') {
+          updated.paintStyle = 'matte_black';
+        }
+        if (upgrade.id === 'paint_candy_red') {
+          updated.paintStyle = 'candy_red';
+        }
+        if (upgrade.id === 'tint_5') {
+          updated.windowTintPercent = 5;
+        }
+        if (upgrade.id === 'tint_20') {
+          updated.windowTintPercent = 20;
+        }
+        if (upgrade.id === 'tint_40') {
+          updated.windowTintPercent = 40;
+        }
+        if (upgrade.id === 'wheels_sport') {
+          updated.wheelStyle = 'sport';
+        }
+        if (upgrade.id === 'wheels_luxury') {
+          updated.wheelStyle = 'luxury';
+        }
+        if (upgrade.id === 'engine_v8' || upgrade.id === 'engine_tune') {
+          updated.engineSound = 'v8';
+        }
+        if (upgrade.id === 'muffler_race') {
+          updated.mufflerSound = 'race';
+        }
+
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to sync vehicle customization to localStorage', e);
+      }
+
       toast.success('Vehicle upgrade installed');
     } catch (error: any) {
       console.error('Failed to start vehicle upgrade', error);
@@ -191,169 +320,246 @@ export default function CarDealershipPage() {
     if (!user?.id) {
       setOwnedCarId(null);
       setOwnedVehicleIds([]);
+      setGarageCars([]);
       return;
     }
 
-    const loadOwnedFromProfile = () => {
-      const profileOwned = Array.isArray(profile?.owned_vehicle_ids)
-        ? profile?.owned_vehicle_ids.filter((id) => typeof id === 'number')
-        : [];
-
-      let owned = profileOwned.length > 0 ? [...profileOwned] : [];
-
-      try {
-        const rawList = localStorage.getItem(`trollcity_owned_vehicles_${user.id}`);
-        if (rawList) {
-          const parsed = JSON.parse(rawList).filter((id: any) => typeof id === 'number');
-          parsed.forEach((id: number) => {
-            if (!owned.includes(id)) owned.push(id);
-          });
-        }
-      } catch {
-        // ignore local storage parse issues
-      }
-
-      let activeId = profile?.active_vehicle ?? null;
-      if (!activeId) {
-        const key = `trollcity_car_${user.id}`;
-        try {
-          const raw = localStorage.getItem(key);
-          const stored = raw ? JSON.parse(raw) : null;
-          if (stored && typeof stored.carId === 'number') {
-            activeId = stored.carId;
-          }
-        } catch {
-          activeId = null;
-        }
-      }
-
-      if (activeId && !owned.includes(activeId)) {
-        owned = [activeId, ...owned];
-      }
-
-      setOwnedVehicleIds(owned);
-      setOwnedCarId(activeId);
-    };
-
-    const loadFromDbIfNeeded = async () => {
-      if (profile?.active_vehicle || (profile?.owned_vehicle_ids && profile.owned_vehicle_ids.length > 0)) {
-        loadOwnedFromProfile();
-        return;
-      }
+    const refreshGarage = async () => {
       try {
         const { data, error } = await supabase
-          .from('user_profiles')
-          .select('active_vehicle, owned_vehicle_ids')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (error) {
-          loadOwnedFromProfile();
-          return;
-        }
-        const ownedDb = Array.isArray(data?.owned_vehicle_ids)
-          ? data?.owned_vehicle_ids.filter((id: any) => typeof id === 'number')
-          : [];
-        const activeDb = typeof data?.active_vehicle === 'number' ? data?.active_vehicle : null;
-        const mergedOwned = activeDb && !ownedDb.includes(activeDb)
-          ? [activeDb, ...ownedDb]
-          : ownedDb;
-        if (mergedOwned.length > 0) {
-          localStorage.setItem(`trollcity_owned_vehicles_${user.id}`, JSON.stringify(mergedOwned));
-        }
-        if (activeDb) {
+          .from('user_garage')
+          .select('id, car_model_id, is_active, acquired_at')
+          .eq('user_id', user.id)
+          .order('acquired_at', { ascending: false });
+
+        if (error) throw error;
+
+        const rows = Array.isArray(data) ? data : [];
+
+        setGarageCars(rows as any);
+
+        if (rows.length > 0) {
+          const ownedIds = rows
+            .map((row) => Number(row.car_model_id))
+            .filter((id) => Number.isFinite(id));
+
+          const activeRow =
+            rows.find((row) => row.is_active) || (rows.length > 0 ? rows[0] : null);
+
+          const activeCarId =
+            activeRow && typeof activeRow.car_model_id === 'number'
+              ? activeRow.car_model_id
+              : null;
+
+          setOwnedVehicleIds(ownedIds);
+          setOwnedCarId(activeCarId);
+
           localStorage.setItem(
-            `trollcity_car_${user.id}`,
-            JSON.stringify({ carId: activeDb })
+            `trollcity_owned_vehicles_${user.id}`,
+            JSON.stringify(ownedIds)
           );
+
+          if (activeRow) {
+            const activeCarConfig = cars.find(
+              (c) => c.id === Number(activeRow.car_model_id)
+            );
+            if (activeCarConfig) {
+              localStorage.setItem(
+                `trollcity_car_${user.id}`,
+                JSON.stringify({
+                  carId: activeCarConfig.id,
+                  colorFrom: activeCarConfig.colorFrom,
+                  colorTo: activeCarConfig.colorTo,
+                  name: activeCarConfig.name,
+                  tier: activeCarConfig.tier,
+                  price: activeCarConfig.price,
+                  style: activeCarConfig.style
+                })
+              );
+            }
+          }
+        } else {
+          const ownedIdsFromProfile =
+            Array.isArray(profile?.owned_vehicle_ids) && profile.owned_vehicle_ids.length > 0
+              ? (profile.owned_vehicle_ids as any[])
+                  .map((id) => Number(id))
+                  .filter((id) => Number.isFinite(id))
+              : [];
+
+          const activeFromProfile =
+            typeof (profile as any)?.active_vehicle === 'number'
+              ? (profile as any).active_vehicle
+              : ownedIdsFromProfile[0] ?? null;
+
+          setOwnedVehicleIds(ownedIdsFromProfile);
+          setOwnedCarId(activeFromProfile || null);
+
+          if (ownedIdsFromProfile.length > 0) {
+            localStorage.setItem(
+              `trollcity_owned_vehicles_${user.id}`,
+              JSON.stringify(ownedIdsFromProfile)
+            );
+          }
+
+          if (activeFromProfile) {
+            const activeCarConfig = cars.find((c) => c.id === Number(activeFromProfile));
+            if (activeCarConfig) {
+              localStorage.setItem(
+                `trollcity_car_${user.id}`,
+                JSON.stringify({
+                  carId: activeCarConfig.id,
+                  colorFrom: activeCarConfig.colorFrom,
+                  colorTo: activeCarConfig.colorTo,
+                  name: activeCarConfig.name,
+                  tier: activeCarConfig.tier,
+                  price: activeCarConfig.price,
+                  style: activeCarConfig.style
+                })
+              );
+            }
+          }
         }
-        setOwnedVehicleIds(mergedOwned);
-        setOwnedCarId(activeDb);
-      } catch {
-        loadOwnedFromProfile();
+      } catch (err) {
+        console.error('Failed to load vehicle data from DB:', err);
+        try {
+          const rawLocal = localStorage.getItem(`trollcity_owned_vehicles_${user.id}`);
+          if (rawLocal) {
+            setOwnedVehicleIds(JSON.parse(rawLocal));
+          } else if (Array.isArray(profile?.owned_vehicle_ids)) {
+            const fromProfile = (profile.owned_vehicle_ids as any[])
+              .map((id) => Number(id))
+              .filter((id) => Number.isFinite(id));
+            setOwnedVehicleIds(fromProfile);
+            if (fromProfile.length > 0) {
+              localStorage.setItem(
+                `trollcity_owned_vehicles_${user.id}`,
+                JSON.stringify(fromProfile)
+              );
+            }
+          }
+        } catch {}
       }
     };
-    loadFromDbIfNeeded();
-  }, [user?.id, profile?.active_vehicle, profile?.owned_vehicle_ids]);
+
+    refreshGarage();
+  }, [user, profile]);
 
   const handlePurchase = async (carId: number) => {
-    if (!user || !profile) {
+    if (!user) {
       toast.error('You must be logged in');
       return;
     }
 
-    const car = cars.find(c => c.id === carId);
+    const car = cars.find((c) => c.id === carId);
     if (!car) return;
-
-    if ((profile.troll_coins || 0) < car.price) {
-      toast.error('Not enough troll coins');
-      return;
-    }
 
     setBuyingId(carId);
     try {
-      const result = await deductCoins({
-        userId: user.id,
-        amount: car.price,
-        type: 'purchase',
-        description: `Purchase vehicle: ${car.name}`,
-        metadata: { source: 'car_dealership', car_id: car.id }
+      const { error } = await supabase.rpc('buy_car_with_coins', {
+        car_model_id: car.id,
+        paint_color: car.colorFrom,
+        rims: 'stock',
+        decals: null
       });
 
-      if (!result.success) {
-        toast.error(result.error || 'Failed to purchase vehicle');
+      if (error) {
+        console.error('buy_car_with_coins RPC failed:', error);
+        toast.error(error.message || 'Failed to purchase vehicle');
         return;
       }
 
-      toast.success(`You purchased ${car.name}`);
-      
-      // Update local storage (active vehicle)
-      localStorage.setItem(
-        `trollcity_car_${user.id}`,
-        JSON.stringify({
-          carId: car.id,
-          colorFrom: car.colorFrom,
-          colorTo: car.colorTo,
-          name: car.name,
-          tier: car.tier,
-          price: car.price,
-          style: car.style
-        })
-      );
+      toast.success(`You purchased ${car.name}. Added to your garage.`);
 
-      // Track owned vehicles list
-      const ownedKey = `trollcity_owned_vehicles_${user.id}`;
-      let ownedList: number[] = [];
-      try {
-        const raw = localStorage.getItem(ownedKey);
-        ownedList = raw ? JSON.parse(raw) : [];
-      } catch {
-        ownedList = [];
-      }
-      if (Array.isArray(profile?.owned_vehicle_ids)) {
-        profile.owned_vehicle_ids.forEach((id) => {
-          if (typeof id === 'number' && !ownedList.includes(id)) {
-            ownedList.push(id);
+      if (user.id) {
+        let ownedIds: number[] = [];
+        let activeCarId: number | null = null;
+
+        try {
+          const { data: garageData, error: garageError } = await supabase
+            .from('user_garage')
+            .select('id, car_model_id, is_active, acquired_at')
+            .eq('user_id', user.id)
+            .order('acquired_at', { ascending: false });
+
+          if (garageError) {
+            console.error('Failed to refresh garage after purchase:', garageError);
+          } else {
+            const rows = Array.isArray(garageData) ? garageData : [];
+            setGarageCars(rows as any);
+
+            ownedIds = rows
+              .map((row) => Number(row.car_model_id))
+              .filter((id) => Number.isFinite(id));
+
+            const activeRow =
+              rows.find((row) => row.is_active) || (rows.length > 0 ? rows[0] : null);
+
+            activeCarId =
+              activeRow && typeof activeRow.car_model_id === 'number'
+                ? activeRow.car_model_id
+                : null;
           }
-        });
-      }
-      if (!ownedList.includes(car.id)) {
-        ownedList.push(car.id);
-        localStorage.setItem(ownedKey, JSON.stringify(ownedList));
-      }
+        } catch (refreshErr) {
+          console.error('Error refreshing garage after purchase:', refreshErr);
+        }
 
-      // Update user profile with active vehicle
-      await supabase
-        .from('user_profiles')
-        .update({
-          active_vehicle: car.id,
-          vehicle_image: car.image,
-          owned_vehicle_ids: ownedList
-        })
-        .eq('id', user.id);
-      
-      refreshProfile();
-      setOwnedCarId(car.id);
-      setOwnedVehicleIds(ownedList);
+        if (!ownedIds.length) {
+          const existing = new Set<number>(ownedVehicleIds || []);
+          existing.add(car.id);
+          ownedIds = Array.from(existing);
+        }
+
+        if (!activeCarId) {
+          activeCarId = car.id;
+        }
+
+        setOwnedVehicleIds(ownedIds);
+        setOwnedCarId(activeCarId);
+
+        localStorage.setItem(
+          `trollcity_owned_vehicles_${user.id}`,
+          JSON.stringify(ownedIds)
+        );
+
+        const activeCarConfig =
+          cars.find((c) => c.id === activeCarId) ||
+          cars.find((c) => c.id === car.id) ||
+          null;
+
+        if (activeCarConfig) {
+          localStorage.setItem(
+            `trollcity_car_${user.id}`,
+            JSON.stringify({
+              carId: activeCarConfig.id,
+              colorFrom: activeCarConfig.colorFrom,
+              colorTo: activeCarConfig.colorTo,
+              name: activeCarConfig.name,
+              tier: activeCarConfig.tier,
+              price: activeCarConfig.price,
+              style: activeCarConfig.style
+            })
+          );
+        }
+
+        try {
+          await supabase
+            .from('user_profiles')
+            .update({
+              active_vehicle: activeCarId,
+              vehicle_image: activeCarId
+                ? cars.find((c) => c.id === activeCarId)?.image || null
+                : null,
+              owned_vehicle_ids: ownedIds
+            })
+            .eq('id', user.id);
+          refreshProfile();
+        } catch (profileErr) {
+          console.error('Failed to sync profile after vehicle purchase:', profileErr);
+        }
+      }
+    } catch (err: any) {
+      console.error('Purchase flow failed:', err);
+      toast.error('Transaction failed: ' + (err.message || 'Unknown error'));
     } finally {
       setBuyingId(null);
     }
@@ -363,6 +569,28 @@ export default function CarDealershipPage() {
     if (!user) return;
     const car = cars.find(c => c.id === vehicleId);
     if (!car) return;
+
+    const garageCar = garageCars.find((g) => g.car_model_id === vehicleId);
+    if (!garageCar) {
+      toast.error('Vehicle not found in your garage');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.rpc('set_active_car', {
+        garage_car_id: garageCar.id
+      });
+
+      if (error) {
+        console.error('set_active_car RPC failed:', error);
+        toast.error(error.message || 'Failed to set active vehicle');
+        return;
+      }
+    } catch (err: any) {
+      console.error('Failed to set active vehicle:', err);
+      toast.error(err?.message || 'Failed to set active vehicle');
+      return;
+    }
 
     localStorage.setItem(
       `trollcity_car_${user.id}`,
@@ -376,65 +604,43 @@ export default function CarDealershipPage() {
         style: car.style
       })
     );
-
-    const ownedFromLocal = (() => {
-      try {
-        const raw = localStorage.getItem(`trollcity_owned_vehicles_${user.id}`);
-        return raw ? JSON.parse(raw) : [];
-      } catch {
-        return [];
-      }
-    })();
-    const nextOwnedList = Array.isArray(profile?.owned_vehicle_ids)
-      ? Array.from(new Set([...(profile?.owned_vehicle_ids || []), ...ownedFromLocal, car.id]))
-      : Array.from(new Set([...(ownedFromLocal || []), car.id]));
-
-    await supabase
-      .from('user_profiles')
-      .update({
-        active_vehicle: car.id,
-        vehicle_image: car.image,
-        owned_vehicle_ids: nextOwnedList
-      })
-      .eq('id', user.id);
-
-    localStorage.setItem(
-      `trollcity_owned_vehicles_${user.id}`,
-      JSON.stringify(nextOwnedList)
-    );
-
     setOwnedCarId(car.id);
-    refreshProfile();
     toast.success(`${car.name} is now active.`);
   };
 
   const handleInsurance = async () => {
-    if (!user || !profile) {
+    if (!user) {
       toast.error('You must be logged in');
       return;
     }
 
-    const price = 3000;
-    if ((profile.troll_coins || 0) < price) {
-      toast.error('Not enough troll coins');
+    if (!garageCars.length) {
+      toast.error('You must own a vehicle before buying insurance');
+      return;
+    }
+
+    const activeGarageCar =
+      garageCars.find((g) => g.is_active) || (garageCars.length > 0 ? garageCars[0] : null);
+
+    if (!activeGarageCar) {
+      toast.error('No active vehicle found in your garage');
       return;
     }
 
     setInsuring(true);
     try {
-      const result = await deductCoins({
-        userId: user.id,
-        amount: price,
-        type: 'insurance_purchase',
-        description: 'Vehicle insurance purchase',
-        metadata: { source: 'car_dealership', kind: 'vehicle_insurance' }
+      const { error: rpcError } = await supabase.rpc('buy_car_insurance', {
+        car_garage_id: activeGarageCar.id,
+        plan_id: null
       });
 
-      if (!result.success) {
-        toast.error(result.error || 'Failed to purchase insurance');
+      if (rpcError) {
+        console.error('buy_car_insurance RPC failed:', rpcError);
+        toast.error(rpcError.message || 'Failed to purchase insurance');
         return;
       }
 
+      setHasCarInsurance(true);
       toast.success('Vehicle insurance activated');
       localStorage.setItem(`trollcity_car_insurance_${user.id}`, JSON.stringify({ active: true }));
     } finally {
@@ -579,6 +785,18 @@ export default function CarDealershipPage() {
       return;
     }
 
+    const durationNumber =
+      listingType === 'auction' ? Number(auctionDurationHours || '0') : 0;
+    if (listingType === 'auction' && (!Number.isFinite(durationNumber) || durationNumber <= 0)) {
+      toast.error('Select a valid auction duration');
+      return;
+    }
+
+    const endAt =
+      listingType === 'auction'
+        ? new Date(Date.now() + durationNumber * 60 * 60 * 1000).toISOString()
+        : null;
+
     setCreatingListing(true);
     try {
       const { data: existing, error: existingError } = await supabase
@@ -610,7 +828,9 @@ export default function CarDealershipPage() {
           metadata: {
             vehicle_name: vehicle.name,
             tier: (vehicle as any).tier ?? null,
-            style: (vehicle as any).style ?? null
+            style: (vehicle as any).style ?? null,
+            end_at: endAt,
+            auction_duration_hours: listingType === 'auction' ? durationNumber : null
           }
         })
         .select('*')
@@ -719,17 +939,22 @@ export default function CarDealershipPage() {
                     />
                   </div>
                 ) : (
-                  <div className="relative w-32 h-16">
-                    <div
-                      className="absolute inset-0 rounded-xl shadow-xl transform skew-x-[-10deg]"
-                      style={{ background: `linear-gradient(90deg, ${car.colorFrom}, ${car.colorTo})` }}
-                    />
-                    <div className="absolute inset-x-2 bottom-2 h-3 bg-black/50 rounded-b-xl" />
-                    <div className="absolute -bottom-4 left-3 w-8 h-8 bg-black rounded-full border-2 border-zinc-500" />
-                    <div className="absolute -bottom-4 right-3 w-8 h-8 bg-black rounded-full border-2 border-zinc-500" />
-                    <div className="absolute top-1 right-4 w-12 h-6 bg-sky-300/70 rounded-md border border-sky-100/60" />
-                    <div className="absolute inset-y-2 left-4 flex items-center">
-                      <Car className="text-white/80" size={20} />
+                  <div className="relative flex flex-col items-center justify-center gap-4">
+                    {/* Blueprint/Concept Visual for missing photos */}
+                    <div className="relative w-40 h-20 group-hover:scale-110 transition-transform duration-500">
+                      <div
+                        className="absolute inset-0 rounded-xl shadow-[0_0_30px_rgba(255,255,255,0.1)] transform skew-x-[-12deg] border-t border-white/20"
+                        style={{ background: `linear-gradient(135deg, ${car.colorFrom}, ${car.colorTo})` }}
+                      >
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay" />
+                      </div>
+                      <div className="absolute inset-x-2 bottom-2 h-4 bg-black/40 rounded-b-xl backdrop-blur-[2px]" />
+                      <div className="absolute -bottom-4 left-4 w-10 h-10 bg-zinc-950 rounded-full border-2 border-zinc-700 shadow-lg group-hover:rotate-180 transition-transform duration-1000" />
+                      <div className="absolute -bottom-4 right-4 w-10 h-10 bg-zinc-950 rounded-full border-2 border-zinc-700 shadow-lg group-hover:rotate-180 transition-transform duration-1000" />
+                      <div className="absolute top-2 right-6 w-14 h-7 bg-blue-400/30 rounded-md border border-white/20 blur-[1px]" />
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-mono tracking-tighter uppercase px-2 py-1 border border-zinc-800 rounded bg-black/60">
+                      Concept Render / Photo Pending
                     </div>
                   </div>
                 )}
@@ -754,22 +979,30 @@ export default function CarDealershipPage() {
                   <span>Armor: {car.armor}</span>
                 </div>
                 {ownedVehicleIds.includes(car.id) && (
-                  <div className="text-xs font-semibold text-emerald-400">
-                    {ownedCarId === car.id ? 'Active vehicle' : 'Owned vehicle'}
+                  <div className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block border ${ownedCarId === car.id ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'}`}>
+                    {ownedCarId === car.id ? 'Active vehicle' : 'Owned'}
                   </div>
                 )}
-                <button
-                  onClick={() => handlePurchase(car.id)}
-                  disabled={buyingId === car.id || ownedVehicleIds.includes(car.id)}
-                  className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <ShoppingCart size={16} />
-                  {ownedVehicleIds.includes(car.id)
-                    ? 'Car Owned'
-                    : buyingId === car.id
-                    ? 'Processing...'
-                    : 'Purchase Vehicle'}
-                </button>
+                
+                {ownedVehicleIds.includes(car.id) ? (
+                  <button
+                    onClick={() => handleSelectActiveVehicle(car.id)}
+                    disabled={ownedCarId === car.id}
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-black/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale disabled:bg-zinc-800 disabled:border-zinc-700"
+                  >
+                    {ownedCarId === car.id ? <ShieldCheck size={16} /> : <Wrench size={16} />}
+                    {ownedCarId === car.id ? 'Equipped & Ready' : 'Equip This Car'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handlePurchase(car.id)}
+                    disabled={buyingId === car.id}
+                    className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-black/40 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <ShoppingCart size={16} />
+                    {buyingId === car.id ? 'Securing Ride...' : 'Purchase Vehicle'}
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -785,11 +1018,11 @@ export default function CarDealershipPage() {
           </div>
           <button
             onClick={handleInsurance}
-            disabled={insuring}
+            disabled={insuring || hasCarInsurance}
             className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg shadow-blue-900/20 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Palette size={18} />
-            {insuring ? 'Processing...' : 'Get Insured'}
+            {insuring ? 'Processing...' : hasCarInsurance ? 'Insured' : 'Get Insured'}
           </button>
         </div>
 
@@ -997,6 +1230,48 @@ export default function CarDealershipPage() {
                     </button>
                   </div>
                 </div>
+                {listingType === 'auction' && (
+                  <div className="flex flex-col sm:flex-row gap-2 items-center justify-between">
+                    <p className="text-[11px] text-zinc-400">
+                      Set how long the auction will run.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAuctionDurationHours('4')}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border ${
+                          auctionDurationHours === '4'
+                            ? 'bg-purple-600 text-white border-purple-500'
+                            : 'bg-black/40 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        4 hours
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuctionDurationHours('24')}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border ${
+                          auctionDurationHours === '24'
+                            ? 'bg-purple-600 text-white border-purple-500'
+                            : 'bg-black/40 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        24 hours
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuctionDurationHours('72')}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border ${
+                          auctionDurationHours === '72'
+                            ? 'bg-purple-600 text-white border-purple-500'
+                            : 'bg-black/40 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        3 days
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <p className="text-[11px] text-zinc-400">
                   Listings are visible in the marketplace so other users can buy or bid on your vehicle.
                 </p>

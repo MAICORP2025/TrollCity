@@ -148,8 +148,8 @@ export default function ShopView() {
       }
 
       // Create purchase record (uses marketplace item UUID)
-      const platformFee = Math.floor(item.price * 0.1) // 10% platform fee
-      const sellerEarnings = item.price - platformFee
+      const platformFee = 0
+      const sellerEarnings = item.price
 
       const { data: purchaseData, error: purchaseError } = await supabase
         .from('marketplace_purchases')
@@ -442,14 +442,18 @@ export default function ShopView() {
                     <span>Item Price:</span>
                     <span className="text-yellow-400">{purchaseReceipt.price.toLocaleString()} coins</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Platform Fee (10%):</span>
-                    <span className="text-red-400">-{purchaseReceipt.platformFee} coins</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-semibold border-t border-zinc-600 pt-2">
-                    <span>Seller Earnings:</span>
-                    <span className="text-green-400">{purchaseReceipt.sellerEarnings} coins</span>
-                  </div>
+                  {purchaseReceipt.platformFee > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span>Platform Fee:</span>
+                        <span className="text-red-400">-{purchaseReceipt.platformFee} coins</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-semibold border-t border-zinc-600 pt-2">
+                        <span>Seller Earnings:</span>
+                        <span className="text-green-400">{purchaseReceipt.sellerEarnings} coins</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Receipt Info */}

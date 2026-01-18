@@ -150,7 +150,7 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
           toast.success(`Blocked ${target.username} from bans for 24 hours.`)
 
           await recordOfficerAction(officerProfile.id, 'block', {
-            fee_coins: 100,
+            fee_coins: 500,
             metadata: { block_until: blockUntil.toISOString() },
           })
           break
@@ -220,9 +220,9 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
       })
 
       if (data?.auto_banned) {
-        toast.success(`${target.username} was kicked and auto-banned. They must pay 2000 troll_coins to restore.`)
+        toast.success(`${target.username} was kicked and auto-banned. They must pay 3000 troll_coins to restore.`)
       } else {
-        toast.success(`${target.username} was kicked. They can pay 250 coins to re-enter.`)
+        toast.success(`${target.username} was kicked. They can pay 500 coins to re-enter.`)
       }
 
       onActionComplete()
@@ -261,7 +261,7 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
         metadata: { reason: reason.trim() },
       })
 
-      toast.success(`${target.username} has been banned. They must pay 2000 troll_coins to restore.`)
+      toast.success(`${target.username} has been banned. They must pay 3000 troll_coins to restore.`)
       onActionComplete()
       onClose()
     } catch (err: any) {

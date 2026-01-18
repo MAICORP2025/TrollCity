@@ -10,7 +10,7 @@ const PaymentCallback = () => {
   
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
   const [message, setMessage] = useState('Processing payment...')
-  const [coinsAwarded, setCoinsAwarded] = useState<number | null>(null)
+  const [coinsAwarded] = useState<number | null>(null)
 
   useEffect(() => {
     const processPayment = async () => {
@@ -42,7 +42,7 @@ const PaymentCallback = () => {
     }
 
     processPayment()
-  }, [location.search, navigate, user, refreshProfile, setProfile])
+  }, [location.search, navigate, user])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center">

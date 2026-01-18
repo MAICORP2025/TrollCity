@@ -554,22 +554,31 @@ const FamilyLounge = () => {
               </div>
             ) : (
               familyTasks.map((task) => {
-                const progress = (task.current_value / task.goal_value) * 100
+                const goal = task.goal_value ?? task.target_value ?? 1
+                const current = task.current_value ?? task.progress_value ?? 0
+                const progress = goal > 0 ? (current / goal) * 100 : 0
+                const title = task.task_title || task.title || 'Family Task'
+                const description = task.task_description || task.description || ''
+                const rewardCoins = task.reward_family_coins ?? task.reward_coins ?? 0
+                const rewardXp = task.reward_family_xp ?? task.reward_xp ?? 0
+
                 return (
                   <div key={task.id} className="bg-zinc-800/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-purple-400">{task.task_title}</h3>
+                      <h3 className="font-semibold text-purple-400">{title}</h3>
                       <div className="flex items-center gap-2">
                         <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-sm text-yellow-400">+{task.reward_family_coins}</span>
+                        <span className="text-sm text-yellow-400">+{rewardCoins}</span>
                         <Star className="w-4 h-4 text-blue-400" />
-                        <span className="text-sm text-blue-400">+{task.reward_family_xp} XP</span>
+                        <span className="text-sm text-blue-400">+{rewardXp} XP</span>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-300 mb-3">{task.task_description}</p>
+                    {description && (
+                      <p className="text-sm text-gray-300 mb-3">{description}</p>
+                    )}
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-gray-400">
-                        Progress: {task.current_value} / {task.goal_value}
+                        Progress: {current} / {goal}
                       </span>
                       <span className="text-sm text-gray-400">{Math.round(progress)}%</span>
                     </div>

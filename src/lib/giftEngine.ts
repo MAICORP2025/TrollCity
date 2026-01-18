@@ -3,7 +3,7 @@ import { UserProfile } from './supabase';
 import { deductCoins, addCoins } from './coinTransactions';
 import giftCatalog, { giftCategories, tierPriority } from './giftCatalog';
 
-const BROADCASTER_SHARE = 0.7;
+const BROADCASTER_SHARE = 0.95;
 const PLATFORM_SHARE = 1 - BROADCASTER_SHARE;
 const INVENTORY_TABLE = 'gifts_owned';
 const TRANSACTION_TABLE = 'gift_transactions';

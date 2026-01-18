@@ -4,7 +4,7 @@ import { useAuthStore } from '../lib/store';
 import { UserRole } from '../lib/supabase';
 
 const AdminOfficerQuickMenu: React.FC = () => {
-  const { profile } = useAuthStore();
+  const { profile, showLegacySidebar, setShowLegacySidebar } = useAuthStore();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -35,14 +35,43 @@ const AdminOfficerQuickMenu: React.FC = () => {
 
   const quickActions = [
     {
+      label: showLegacySidebar ? 'Switch to Game Hub View (Hide Sidebar)' : 'Switch to Legacy Sidebar View',
+      action: () => setShowLegacySidebar(!showLegacySidebar),
+      icon: '🎮'
+    },
+    {
       label: 'Go to Dashboard',
       action: () => navigate(getDashboardPath()),
       icon: '📊'
     },
     ...(isAdmin ? [
+      // Core
+      { label: 'Admin HQ', action: () => navigate('/admin/control-panel'), icon: '🎛️' },
+      { label: 'City Control Center', action: () => navigate('/admin/system/health'), icon: '🏥' },
+      
+      // Management
       { label: 'User Search', action: () => navigate('/admin/user-search'), icon: '🔍' },
+      { label: 'Ban Management', action: () => navigate('/admin/ban-management'), icon: '🔨' },
+      { label: 'Role Management', action: () => navigate('/admin/role-management'), icon: '👥' },
+      { label: 'Officer Operations', action: () => navigate('/admin/officer-operations'), icon: '👮' },
+      { label: 'Officer Shifts', action: () => navigate('/admin/officer-shifts'), icon: '📅' },
+      
+      // Finance
+      { label: 'Economy Dashboard', action: () => navigate('/admin/economy'), icon: '💰' },
+      { label: 'Finance & Cashouts', action: () => navigate('/admin/finance'), icon: '💸' },
+      { label: 'Grant Coins', action: () => navigate('/admin/grant-coins'), icon: '🪙' },
+      
+      // Content & Apps
       { label: 'Reports Queue', action: () => navigate('/admin/reports-queue'), icon: '📋' },
-      { label: 'Economy Dashboard', action: () => navigate('/admin/economy'), icon: '💰' }
+      { label: 'Applications', action: () => navigate('/admin/applications'), icon: '📝' },
+      { label: 'Empire Applications', action: () => navigate('/admin/empire-applications'), icon: '🏰' },
+      { label: 'Marketplace', action: () => navigate('/admin/marketplace'), icon: '🛍️' },
+      { label: 'Support Tickets', action: () => navigate('/admin/support-tickets'), icon: '🎫' },
+      
+      // System
+      { label: 'System Config', action: () => navigate('/admin/system/config'), icon: '⚙️' },
+      { label: 'Database Backup', action: () => navigate('/admin/system/backup'), icon: '💾' },
+      { label: 'Test Diagnostics', action: () => navigate('/admin/test-diagnostics'), icon: '🧪' },
     ] : []),
     ...((isOfficer || isLeadOfficer) ? [
       { label: 'Moderation', action: () => navigate('/officer/moderation'), icon: '🛡️' },
@@ -72,7 +101,7 @@ const AdminOfficerQuickMenu: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full mt-2 right-0 w-64 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-lg z-50">
+        <div className="absolute top-full mt-2 right-0 w-64 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-lg z-50 max-h-[80vh] overflow-y-auto custom-scrollbar">
           <div className="py-2">
             {quickActions.map((action, index) => (
               <button

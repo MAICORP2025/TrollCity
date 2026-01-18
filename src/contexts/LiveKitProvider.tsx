@@ -8,18 +8,20 @@ import { LiveKitContext, LiveKitContextValue } from "./LiveKitContext";
 import { toast } from "sonner";
 import { useAuthStore } from "../lib/store";
 
+import api, { API_ENDPOINTS } from "../lib/api";
+
 // Helper function to send admin notifications
 const sendAdminNotification = async (message: string) => {
   try {
-    const { supabase } = await import('../lib/supabase');
     // Send to admin announcements or notifications
-    await supabase.functions.invoke('send-announcement', {
-      body: {
+    await api.request(API_ENDPOINTS.admin.sendAnnouncement, {
+      method: 'POST',
+      body: JSON.stringify({
         title: 'Live Stream Error Alert',
         message: message,
         type: 'error',
         targetRoles: ['admin']
-      }
+      })
     });
   } catch (err) {
     console.error('Failed to send admin notification:', err);
@@ -425,22 +427,6 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
     }
   }, [syncLocalParticipant]);
 
-  const toggleScreenShare = useCallback(async () => {
-    if (!serviceRef.current || !serviceRef.current.isConnected()) return false;
-    try {
-      const room = serviceRef.current.getRoom();
-      if (!room?.localParticipant) return false;
-      
-      const isSharing = room.localParticipant.isScreenShareEnabled;
-      await room.localParticipant.setScreenShareEnabled(!isSharing);
-      return !isSharing;
-    } catch (err: any) {
-      console.error('Toggle screen share failed:', err);
-      toast.error('Failed to start screen share');
-      return false;
-    }
-  }, []);
-
   const disableGuestMedia = useCallback(async (participantId: string, disableVideo: boolean, disableAudio: boolean) => {
     if (!serviceRef.current || !serviceRef.current.isConnected()) return false;
     try {
@@ -531,7 +517,6 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
       startPublishing,
       getRoom,
       markClientDisconnectIntent,
-      toggleScreenShare,
     };
     // Note: participants is a Map and will change identity when updated intentionally
   }, [
@@ -551,7 +536,6 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
     startPublishing,
     getRoom,
     markClientDisconnectIntent,
-    toggleScreenShare,
   ]);
 
   // Dev: lightweight render counter for this provider

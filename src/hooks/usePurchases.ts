@@ -2,7 +2,7 @@
 // File: src/hooks/usePurchases.ts
 
 import { useState, useCallback, useEffect } from 'react';
-import { UserPurchase, UserActiveItem } from '@/types/purchases';
+import { UserPurchase } from '@/types/purchases';
 import {
   getUserPurchases,
   getUserActiveItems,

@@ -137,7 +137,7 @@ export const PERKS_SUMMARY: PerkSummary[] = [
   },
 ]
 
-export type ProtectionType = 'bankrupt' | 'kick' | 'full' | 'gambling' | 'dispute' | 'supreme'
+export type ProtectionType = 'kick' | 'full' | 'gambling' | 'dispute' | 'supreme'
 
 export interface InsuranceSummary {
   id: string
@@ -148,12 +148,6 @@ export interface InsuranceSummary {
 
 export const INSURANCE_SUMMARY: InsuranceSummary[] = [
   {
-    id: 'insurance_bankrupt_24h',
-    name: 'Bankrupt Insurance (24h)',
-    protectionType: 'bankrupt',
-    action: 'Blocks wheel bankrupt penalties for a 24 hour period.',
-  },
-  {
     id: 'insurance_kick_24h',
     name: 'Kick Insurance (24h)',
     protectionType: 'kick',
@@ -163,19 +157,13 @@ export const INSURANCE_SUMMARY: InsuranceSummary[] = [
     id: 'insurance_full_24h',
     name: 'Full Protection (24h)',
     protectionType: 'full',
-    action: 'Covers both bankrupt and kick style penalties for 24 hours.',
-  },
-  {
-    id: 'insurance_bankrupt_week',
-    name: 'Bankrupt Insurance (1 Week)',
-    protectionType: 'bankrupt',
-    action: 'Blocks wheel bankrupt penalties for seven days.',
+    action: 'Covers kick and other major penalties for 24 hours.',
   },
   {
     id: 'insurance_full_week',
     name: 'Full Protection (1 Week)',
     protectionType: 'full',
-    action: 'Covers both bankrupt and kick style penalties for seven days.',
+    action: 'Covers kick and other major penalties for seven days.',
   },
   {
     id: 'insurance_basic_week',
@@ -323,4 +311,3 @@ export const BROADCAST_THEMES_SUMMARY: BroadcastThemeSummary[] = [
     source: 'supabase_broadcast_background_themes',
   },
 ]
-

@@ -24,15 +24,20 @@ serve(async (req) => {
 
     const officerId = authUser.user.id;
 
-    // Verify user is an officer
+    // Verify user is authorized (Officer, Admin, or Secretary)
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("role, is_troll_officer")
       .eq("id", officerId)
       .single();
 
-    if (!profile || (!profile.is_troll_officer && profile.role !== "troll_officer" && profile.role !== "admin")) {
-      return new Response("Only officers can use ghost mode", { status: 403 });
+    const role = profile?.role || "";
+    const isOfficer = profile?.is_troll_officer === true || role === "troll_officer";
+    const isAdmin = role === "admin";
+    const isSecretary = role === "secretary";
+
+    if (!profile || (!isOfficer && !isAdmin && !isSecretary)) {
+      return new Response("Only officers, admins, or secretaries can use ghost mode", { status: 403 });
     }
 
     const { enabled } = await req.json();

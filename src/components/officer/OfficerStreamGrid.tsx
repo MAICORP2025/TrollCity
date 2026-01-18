@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Users, Radio, Shield, Eye } from 'lucide-react';
+import { format12hr } from '../../utils/timeFormat';
 
 interface StreamRow {
   id: string;
@@ -140,7 +141,7 @@ export default function OfficerStreamGrid() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
-                  {stream.start_time ? new Date(stream.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                  {stream.start_time ? format12hr(stream.start_time) : '--:--'}
                 </div>
               </div>
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../../../lib/supabase";
 import { sendNotification } from "../../../lib/sendNotification";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ const AdminSupportTickets: React.FC = () => {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<{ id: string; message: string } | null>(null);
+  const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
 
   const loadTickets = useCallback(async () => {
     const { data, error } = await supabase
@@ -85,77 +86,170 @@ const AdminSupportTickets: React.FC = () => {
     }
   }, [responding, loadTickets]);
 
+  const closeTicket = useCallback(async (ticketId: string) => {
+    try {
+      const { error } = await supabase
+        .from("support_tickets")
+        .update({ status: "closed", response_at: new Date().toISOString() })
+        .eq("id", ticketId);
+      if (error) throw error;
+      toast.success("Ticket closed");
+      loadTickets();
+    } catch (e) {
+      console.error("Close ticket failed", e);
+      toast.error("Failed to close ticket");
+    }
+  }, [loadTickets]);
+
+  const deleteTicket = useCallback(async (ticketId: string) => {
+    try {
+      if (!confirm("Delete this support ticket? This cannot be undone.")) return;
+      const { error } = await supabase
+        .from("support_tickets")
+        .delete()
+        .eq("id", ticketId);
+      if (error) throw error;
+      toast.success("Ticket deleted");
+      setTickets((prev) => prev.filter((t) => t.id !== ticketId));
+    } catch (e) {
+      console.error("Delete ticket failed", e);
+      toast.error("Failed to delete ticket");
+    }
+  }, []);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { user_id: string; username: string; email: string; tickets: SupportTicket[] }>();
+    tickets.forEach((ticket) => {
+      const entry = map.get(ticket.user_id);
+      if (entry) {
+        entry.tickets.push(ticket);
+      } else {
+        map.set(ticket.user_id, {
+          user_id: ticket.user_id,
+          username: ticket.username,
+          email: ticket.email,
+          tickets: [ticket],
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [tickets]);
+
   return (
     <div className="p-4 text-white max-w-5xl mx-auto">
       <h2 className="text-xl font-bold mb-4">Support Tickets</h2>
 
-      {tickets.map((t) => (
+      {loading && <p className="text-center mt-10 text-gray-400">Loading tickets...</p>}
+
+      {!loading && grouped.length === 0 && (
+        <p className="text-center text-gray-400">No tickets yet.</p>
+      )}
+
+      {grouped.map((group) => (
         <div
-          key={t.id}
-          className="bg-gray-800 p-4 rounded-lg shadow mb-4 border border-gray-700"
+          key={group.user_id}
+          className="bg-gray-900 border border-gray-700 rounded-xl shadow mb-4"
         >
-          <p className="text-sm text-gray-300">
-            From: <span className="text-purple-400">@{t.username}</span>
-          </p>
-          <p className="text-xs text-gray-400">{t.email}</p>
-          <p className="text-xs mt-1">
-            Category: <strong>{t.category}</strong>
-          </p>
-          <h3 className="font-semibold mt-2">{t.subject}</h3>
-          <p className="bg-gray-900 p-2 rounded text-sm mt-1">{t.message}</p>
-          <p className="text-xs text-yellow-400 mt-1">Status: {t.status}</p>
-
-          {!t.admin_response && (
-            <button
-              onClick={() =>
-                setResponding({ id: t.id, message: "" })
-              }
-              className="mt-3 bg-purple-600 px-3 py-1 rounded text-xs"
-            >
-              Reply to Ticket
-            </button>
-          )}
-
-          {responding?.id === t.id && (
-            <div className="mt-3">
-              <textarea
-                value={responding.message}
-                onChange={(e) =>
-                  setResponding({ ...responding, message: e.target.value })
-                }
-                className="w-full bg-gray-900 p-2 text-sm rounded border border-gray-700"
-                rows={4}
-                placeholder="Write your response here..."
-              />
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={() => sendResponse(t.id, t.user_id)}
-                  className="bg-green-500 px-3 py-1 rounded text-xs"
-                >
-                  Send Response
-                </button>
-                <button
-                  onClick={() => setResponding(null)}
-                  className="bg-gray-700 px-3 py-1 rounded text-xs"
-                >
-                  Cancel
-                </button>
-              </div>
+          <button
+            onClick={() =>
+              setExpandedUsers((prev) => ({
+                ...prev,
+                [group.user_id]: !prev[group.user_id],
+              }))
+            }
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <div>
+              <p className="text-sm text-gray-400">@{group.username}</p>
+              <p className="text-xs text-gray-500">{group.email}</p>
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-purple-300">{group.tickets.length} ticket(s)</span>
+              <span className="text-xs text-gray-300">
+                {expandedUsers[group.user_id] ? "Collapse" : "Expand"}
+              </span>
+            </div>
+          </button>
 
-          {t.admin_response && (
-            <div className="mt-3 bg-gray-900 p-3 rounded-lg">
-              <p className="text-sm text-green-400">Admin Reply:</p>
-              <p className="text-xs">{t.admin_response}</p>
+          {expandedUsers[group.user_id] && (
+            <div className="divide-y divide-gray-800">
+              {group.tickets.map((t) => (
+                <div
+                  key={t.id}
+                  className="p-4 space-y-3"
+                >
+                  <div>
+                    <p className="text-xs text-gray-400">Category: <strong>{t.category}</strong></p>
+                    <h3 className="font-semibold text-white">{t.subject}</h3>
+                    <p className="text-sm text-yellow-400">Status: {t.status}</p>
+                  </div>
+
+                  <p className="bg-gray-900 p-3 rounded text-sm">{t.message}</p>
+
+                  {!t.admin_response && (
+                    <button
+                      onClick={() => setResponding({ id: t.id, message: "" })}
+                      className="mt-1 bg-purple-600 px-3 py-1 rounded text-xs"
+                    >
+                      Reply to Ticket
+                    </button>
+                  )}
+
+                  {responding?.id === t.id && (
+                    <div className="mt-3 space-y-2">
+                      <textarea
+                        value={responding.message}
+                        onChange={(e) =>
+                          setResponding({ ...responding, message: e.target.value })
+                        }
+                        className="w-full bg-gray-900 p-2 text-sm rounded border border-gray-700"
+                        rows={3}
+                        placeholder="Write your response..."
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => sendResponse(t.id, t.user_id)}
+                          className="bg-green-500 px-3 py-1 rounded text-xs"
+                        >
+                          Send Response
+                        </button>
+                        <button
+                          onClick={() => setResponding(null)}
+                          className="bg-gray-700 px-3 py-1 rounded text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {t.admin_response && (
+                    <div className="mt-3 bg-gray-900 p-3 rounded-lg">
+                      <p className="text-sm text-green-400">Admin Reply:</p>
+                      <p className="text-xs text-gray-200">{t.admin_response}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      onClick={() => closeTicket(t.id)}
+                      className="bg-yellow-600 hover:bg-yellow-500 px-3 py-1 rounded text-xs"
+                    >
+                      Close Ticket
+                    </button>
+                    <button
+                      onClick={() => deleteTicket(t.id)}
+                      className="bg-red-600 hover:bg-red-500 px-3 py-1 rounded text-xs"
+                    >
+                      Delete Ticket
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
       ))}
-
-      {loading && (
-        <p className="text-center mt-10 text-gray-400">Loading tickets...</p>
-      )}
     </div>
   );
 };

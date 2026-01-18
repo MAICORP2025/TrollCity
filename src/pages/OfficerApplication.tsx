@@ -333,7 +333,7 @@ export default function OfficerApplication() {
             </p>
             <ul className="list-disc list-inside text-sm text-[#E2E2E2]/60 mt-2 space-y-1 ml-2">
               <li>Officer positions are volunteer-based with performance incentives</li>
-              <li>Officers receive 30% commission on enforcement fees collected</li>
+              <li>Officers receive 0.5% commission on enforcement fees collected</li>
               <li>This role requires maintaining high standards of professionalism</li>
               <li>Employment may be terminated for misconduct or policy violations</li>
             </ul>

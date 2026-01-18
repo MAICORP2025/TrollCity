@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { deductCoins, addCoins, recordCoinTransaction } from '../lib/coinTransactions';
 import { toast } from 'sonner';
 import { Gavel, Car, Coins, Clock } from 'lucide-react';
 import { cars } from '../data/vehicles';
@@ -17,14 +18,20 @@ interface VehicleListing {
   created_at: string;
 }
 
+interface HighestBidInfo {
+  amount: number;
+  bidderId: string;
+}
+
 export default function AuctionsPage() {
-  const { user } = useAuthStore();
+  const { user, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
   const [listings, setListings] = useState<VehicleListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [bidInputs, setBidInputs] = useState<Record<string, string>>({});
-  const [highestBids, setHighestBids] = useState<Record<string, number>>({});
+  const [highestBids, setHighestBids] = useState<Record<string, HighestBidInfo>>({});
   const [placingBidFor, setPlacingBidFor] = useState<string | null>(null);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -58,15 +65,18 @@ export default function AuctionsPage() {
       if (ids.length > 0) {
         const { data: bidsData, error: bidsError } = await supabase
           .from('vehicle_auction_bids')
-          .select('listing_id, bid_amount')
+          .select('listing_id, bid_amount, bidder_id')
           .in('listing_id', ids);
 
         if (!bidsError && bidsData) {
-          const map: Record<string, number> = {};
+          const map: Record<string, HighestBidInfo> = {};
           for (const bid of bidsData as any[]) {
-            const current = map[bid.listing_id] ?? 0;
-            if (bid.bid_amount > current) {
-              map[bid.listing_id] = bid.bid_amount;
+            const existing = map[bid.listing_id];
+            if (!existing || bid.bid_amount > existing.amount) {
+              map[bid.listing_id] = {
+                amount: bid.bid_amount,
+                bidderId: bid.bidder_id
+              };
             }
           }
           setHighestBids(map);
@@ -106,7 +116,18 @@ export default function AuctionsPage() {
       return;
     }
 
-    const currentHighest = highestBids[listing.id] ?? listing.price;
+    const now = new Date();
+    const endAtIso = listing.metadata?.end_at as string | undefined;
+    if (endAtIso) {
+      const endAt = new Date(endAtIso);
+      if (!isNaN(endAt.getTime()) && now >= endAt) {
+        toast.error('This auction has already ended');
+        return;
+      }
+    }
+
+    const highestInfo = highestBids[listing.id];
+    const currentHighest = highestInfo ? highestInfo.amount : listing.price;
     if (amount <= currentHighest) {
       toast.error(`Bid must be higher than ${currentHighest.toLocaleString()} TrollCoins`);
       return;
@@ -146,6 +167,147 @@ export default function AuctionsPage() {
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     return d.toLocaleString();
+  };
+
+  const formatCountdown = (endIso: string | undefined) => {
+    if (!endIso) return null;
+    const endAt = new Date(endIso);
+    if (isNaN(endAt.getTime())) return null;
+    const now = new Date();
+    const diff = endAt.getTime() - now.getTime();
+    if (diff <= 0) return 'Ended';
+    const totalMinutes = Math.floor(diff / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0) {
+      return `${minutes}m remaining`;
+    }
+    return `${hours}h ${minutes}m remaining`;
+  };
+
+  const handleClaimAuction = async (listing: VehicleListing, finalPrice: number) => {
+    if (!user) {
+      navigate('/auth', { replace: true });
+      return;
+    }
+    const highestInfo = highestBids[listing.id];
+    if (!highestInfo || highestInfo.bidderId !== user.id) {
+      toast.error('You are not the highest bidder for this auction');
+      return;
+    }
+    const endAtIso = listing.metadata?.end_at as string | undefined;
+    if (endAtIso) {
+      const endAt = new Date(endAtIso);
+      if (!isNaN(endAt.getTime()) && new Date() < endAt) {
+        toast.error('This auction has not ended yet');
+        return;
+      }
+    }
+
+    setClaimingId(listing.id);
+    try {
+      const deductResult = await deductCoins({
+        userId: user.id,
+        amount: finalPrice,
+        type: 'troll_town_purchase',
+        coinType: 'troll_coins',
+        description: 'Vehicle auction purchase',
+        metadata: {
+          source: 'vehicle_auction',
+          listing_id: listing.id,
+          vehicle_id: listing.vehicle_id,
+          seller_id: listing.seller_id
+        }
+      });
+
+      if (!deductResult.success) {
+        const message = deductResult.error || 'Failed to process payment';
+        toast.error(message);
+        return;
+      }
+
+      const addResult = await addCoins({
+        userId: listing.seller_id,
+        amount: finalPrice,
+        type: 'troll_town_sale',
+        coinType: 'troll_coins',
+        description: 'Vehicle auction sale',
+        metadata: {
+          source: 'vehicle_auction',
+          listing_id: listing.id,
+          vehicle_id: listing.vehicle_id,
+          buyer_id: user.id
+        }
+      });
+
+      if (!addResult.success) {
+        console.error('Failed to credit seller for auction sale', addResult.error);
+      } else {
+        await recordCoinTransaction({
+          userId: listing.seller_id,
+          amount: finalPrice,
+          type: 'troll_town_sale',
+          coinType: 'troll_coins',
+          description: 'Vehicle auction sale',
+          metadata: {
+            listing_id: listing.id,
+            vehicle_id: listing.vehicle_id,
+            buyer_id: user.id
+          }
+        });
+      }
+
+      const mergedMetadata = {
+        ...(listing.metadata || {}),
+        winner_id: user.id,
+        final_price: finalPrice,
+        finalized_at: new Date().toISOString()
+      };
+
+      await supabase
+        .from('vehicle_listings')
+        .update({
+          status: 'sold',
+          metadata: mergedMetadata
+        })
+        .eq('id', listing.id);
+
+      try {
+        const ownedKey = `trollcity_owned_vehicles_${user.id}`;
+        let ownedList: number[] = [];
+        try {
+          const raw = localStorage.getItem(ownedKey);
+          ownedList = raw ? JSON.parse(raw) : [];
+        } catch {
+          ownedList = [];
+        }
+        if (!ownedList.includes(listing.vehicle_id)) {
+          ownedList.push(listing.vehicle_id);
+        }
+        localStorage.setItem(ownedKey, JSON.stringify(ownedList));
+
+        await supabase
+          .from('user_profiles')
+          .update({
+            owned_vehicle_ids: ownedList
+          })
+          .eq('id', user.id);
+      } catch (e) {
+        console.error('Failed to update buyer vehicle ownership', e);
+      }
+
+      if (refreshProfile) {
+        await refreshProfile();
+      }
+
+      toast.success('Auction won. Vehicle added to your garage.');
+      await loadAuctions();
+    } catch (err: any) {
+      console.error('Failed to claim auction', err);
+      toast.error(err?.message || 'Failed to claim auction');
+    } finally {
+      setClaimingId((current) => (current === listing.id ? null : current));
+    }
   };
 
   return (
@@ -198,9 +360,14 @@ export default function AuctionsPage() {
               const vehicleName =
                 listing.metadata?.vehicle_name || vehicle?.name || `Vehicle #${listing.vehicle_id}`;
               const tier = listing.metadata?.tier || (vehicle as any)?.tier;
-              const style = listing.metadata?.style || (vehicle as any)?.style;
-              const highest = highestBids[listing.id];
+              const highestInfo = highestBids[listing.id];
+              const highest = highestInfo?.amount;
               const currentPrice = highest && highest > listing.price ? highest : listing.price;
+              const endAtIso = listing.metadata?.end_at as string | undefined;
+              const countdown = formatCountdown(endAtIso);
+              const hasEnded = countdown === 'Ended';
+              const isWinner =
+                !!highestInfo && !!user && highestInfo.bidderId === user.id && hasEnded;
 
               return (
                 <div
@@ -220,11 +387,13 @@ export default function AuctionsPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs uppercase tracking-wide text-purple-400">
-                        Active Auction
+                        {hasEnded ? 'Auction Ended' : 'Active Auction'}
                       </p>
                       <p className="text-[11px] text-zinc-500 flex items-center gap-1 justify-end">
                         <Clock className="w-3 h-3" />
-                        {formatDate(listing.created_at)}
+                        {endAtIso && countdown
+                          ? countdown
+                          : formatDate(listing.created_at)}
                       </p>
                     </div>
                   </div>
@@ -249,24 +418,41 @@ export default function AuctionsPage() {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          className="flex-1 px-3 py-2 rounded-lg bg-black/40 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Your bid (TrollCoins)"
-                          value={bidInputs[listing.id] || ''}
-                          onChange={(e) => handleBidInputChange(listing.id, e.target.value)}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handlePlaceBid(listing)}
-                        disabled={placingBidFor === listing.id}
-                        className="w-full mt-1 px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        {placingBidFor === listing.id ? 'Placing bid...' : 'Place Bid'}
-                      </button>
+                      {hasEnded ? (
+                        <button
+                          type="button"
+                          onClick={() => handleClaimAuction(listing, currentPrice)}
+                          disabled={!isWinner || claimingId === listing.id}
+                          className="w-full mt-1 px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isWinner
+                            ? claimingId === listing.id
+                              ? 'Claiming...'
+                              : 'Claim Vehicle'
+                            : 'Auction Ended'}
+                        </button>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              className="flex-1 px-3 py-2 rounded-lg bg-black/40 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              placeholder="Your bid (TrollCoins)"
+                              value={bidInputs[listing.id] || ''}
+                              onChange={(e) => handleBidInputChange(listing.id, e.target.value)}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handlePlaceBid(listing)}
+                            disabled={placingBidFor === listing.id}
+                            className="w-full mt-1 px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {placingBidFor === listing.id ? 'Placing bid...' : 'Place Bid'}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

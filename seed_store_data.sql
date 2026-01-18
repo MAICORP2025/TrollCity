@@ -31,11 +31,9 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Insert insurance options
 INSERT INTO insurance_options (id, name, cost, description, duration_hours, protection_type) VALUES
-  ('insurance_bankrupt_24h', 'Bankrupt Insurance (24h)', 1500, 'Protect from wheel bankrupt for 24 hours', 24, 'bankrupt'),
   ('insurance_kick_24h', 'Kick Insurance (24h)', 1200, 'Protect from kick penalties for 24 hours', 24, 'kick'),
   ('insurance_full_24h', 'Full Protection (24h)', 2500, 'Complete protection for 24 hours', 24, 'full'),
-  ('insurance_bankrupt_week', 'Bankrupt Insurance (1 Week)', 8000, 'Protect from wheel bankrupt for 1 week', 168, 'bankrupt'),
-  ('insurance_full_week', 'Full Protection (1 Week)', 15000, 'Complete protection for 1 week', 168, 'full')
+  ('insurance_full_week', 'Full Protection (1 Week)', 15000, 'Full Protection (1 Week)', 168, 'full')
 ON CONFLICT (id) DO NOTHING;
 
 -- Verify data insertion

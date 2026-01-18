@@ -55,7 +55,7 @@ export default function PayoutPolicy() {
 
         <h2>4. Minimum and Maximum Payouts</h2>
         <ul>
-          <li><strong>Minimum:</strong> 7,000 troll_coins ($70 USD)</li>
+          <li><strong>Minimum:</strong> 12,000 troll_coins ($120 USD)</li>
           <li><strong>Maximum per request:</strong> No maximum, but large payouts
             may require additional verification</li>
           <li><strong>Frequency:</strong> You may submit one payout request at a time.

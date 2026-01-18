@@ -88,7 +88,7 @@ export default function TaxUploadPage() {
       
       // Redirect after 2 seconds
       setTimeout(() => {
-        navigate('/account/wallet')
+        navigate('/profile/setup')
       }, 2000)
     } catch (error: any) {
       console.error('Tax form upload error:', error)

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Participant, LocalParticipant } from 'livekit-client';
 import VideoTile from '../broadcast/VideoTile';
-import { Camera, Monitor } from 'lucide-react';
+import { Camera } from 'lucide-react';
 
 interface ResponsiveVideoGridProps {
   participants: Participant[];
@@ -20,9 +20,7 @@ interface ResponsiveVideoGridProps {
   boxCount?: number;
   onUserClick?: (participant: Participant) => void;
   onToggleCamera?: () => void;
-  onToggleScreenShare?: () => void;
   isCameraOn?: boolean;
-  isScreenShareOn?: boolean;
 }
 
 export default function ResponsiveVideoGrid({
@@ -42,9 +40,7 @@ export default function ResponsiveVideoGrid({
   boxCount = 0,
   onUserClick,
   onToggleCamera,
-  onToggleScreenShare,
-  isCameraOn,
-  isScreenShareOn
+  isCameraOn
 }: ResponsiveVideoGridProps) {
   const broadcaster =
     (broadcasterId && participants.find((p) => p.identity === broadcasterId)) ||
@@ -90,7 +86,7 @@ export default function ResponsiveVideoGrid({
   return (
     <div className="w-full h-full min-h-0 flex flex-col gap-2 sm:gap-4 lg:gap-6 p-2 sm:p-4 lg:p-6">
       {/* Main Broadcaster Area */}
-      <div className="w-full flex-none lg:flex-1 min-h-0 h-[clamp(220px,40vh,320px)] lg:h-full relative rounded-2xl sm:rounded-3xl overflow-hidden border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)] bg-black/40 group">
+      <div className="w-full flex-none min-h-0 h-[clamp(220px,40vh,320px)] lg:h-[clamp(260px,52vh,520px)] relative rounded-2xl sm:rounded-3xl overflow-hidden border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)] bg-black/40 group">
         <VideoTile
           participant={broadcaster}
           isBroadcaster
@@ -106,8 +102,8 @@ export default function ResponsiveVideoGrid({
           onClick={() => onUserClick?.(broadcaster)}
         />
         
-        {/* Broadcaster Controls Overlay (Start Camera / Screen Share) */}
-        {isLocalBroadcaster && !isCameraOn && !isScreenShareOn && (
+        {/* Broadcaster Controls Overlay (Start Camera) */}
+        {isLocalBroadcaster && !isCameraOn && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-20">
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
               <button 
@@ -118,16 +114,6 @@ export default function ResponsiveVideoGrid({
                   <Camera size={24} className="sm:w-8 sm:h-8 text-white" />
                 </div>
                 <span className="text-base sm:text-lg font-bold text-white tracking-wide">Start Camera</span>
-              </button>
-              
-              <button 
-                onClick={onToggleScreenShare}
-                className="group flex flex-col items-center gap-3 p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-blue-600/20 border border-blue-500/50 hover:bg-blue-600/40 hover:border-blue-400 hover:scale-105 transition-all duration-300"
-              >
-                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.5)] group-hover:shadow-[0_0_30px_rgba(37,99,235,0.7)]">
-                  <Monitor size={24} className="sm:w-8 sm:h-8 text-white" />
-                </div>
-                <span className="text-base sm:text-lg font-bold text-white tracking-wide">Start Screen Share</span>
               </button>
             </div>
           </div>

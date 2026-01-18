@@ -24,6 +24,7 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
   const [giftCardCode, setGiftCardCode] = useState('')
   const [isFulfillModalOpen, setIsFulfillModalOpen] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>('pending')
+  const [filterUser, setFilterUser] = useState<string>('')
 
   const fetchRequests = useCallback(async () => {
     setLoading(true)
@@ -133,24 +134,32 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
 
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 relative">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center gap-4 mb-6 flex-wrap">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           <DollarSign className="w-5 h-5 text-green-400" />
           Cashout Requests
         </h2>
-        <select 
-          className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white"
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-        >
-          <option value="all">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="processing">Processing</option>
-          <option value="fulfilled">Fulfilled</option>
-          <option value="failed">Failed</option>
-          <option value="denied">Denied</option>
-        </select>
+        <div className="flex items-center gap-3 flex-wrap">
+          <input
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white placeholder:text-slate-500"
+            placeholder="Filter by user, email, or ID"
+            value={filterUser}
+            onChange={(e) => setFilterUser(e.target.value)}
+          />
+          <select 
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="processing">Processing</option>
+            <option value="fulfilled">Fulfilled</option>
+            <option value="failed">Failed</option>
+            <option value="denied">Denied</option>
+          </select>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -171,7 +180,17 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
             ) : requests.length === 0 ? (
               <tr><td colSpan={6} className="p-4 text-center">No requests found</td></tr>
             ) : (
-              requests.map(req => (
+              requests
+                .filter(req => {
+                  if (!filterUser.trim()) return true
+                  const q = filterUser.toLowerCase()
+                  return (
+                    (req.user_profile?.username || '').toLowerCase().includes(q) ||
+                    (req.user_profile?.email || '').toLowerCase().includes(q) ||
+                    req.user_id.toLowerCase().includes(q)
+                  )
+                })
+                .map(req => (
                 <tr key={req.id} className="hover:bg-slate-700/30 transition-colors">
                   <td className="p-3 font-medium text-white">
                     {req.user_profile?.username || 'Unknown'}

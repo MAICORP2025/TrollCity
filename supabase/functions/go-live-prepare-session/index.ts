@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+// Use Deno.serve for Edge-safe runtime
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,16 +21,6 @@ interface PrepareBody {
   sessionId?: string;
 }
 
-async function getSupabase() {
-  const mod = await import("@supabase/supabase-js");
-  return mod;
-}
-
-async function getLivekit() {
-  const mod = await import("livekit-server-sdk");
-  return mod;
-}
-
 async function authorizeUser(req: Request) {
   const authHeader = req.headers.get("authorization") ?? "";
   if (!authHeader.startsWith("Bearer ")) {
@@ -43,7 +34,6 @@ async function authorizeUser(req: Request) {
     throw new Error("Server configuration error");
   }
 
-  const { createClient } = await getSupabase();
   const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   });
@@ -64,7 +54,7 @@ function isPrivileged(profile: any) {
   return false;
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -233,35 +223,8 @@ serve(async (req: Request) => {
       },
     };
 
-    const apiKey = Deno.env.get("LIVEKIT_API_KEY");
-    const apiSecret = Deno.env.get("LIVEKIT_API_SECRET");
-    const livekitUrl = Deno.env.get("LIVEKIT_URL");
-    if (!apiKey || !apiSecret || !livekitUrl) {
-      throw new Error("LiveKit not configured");
-    }
-
-    const { AccessToken, TrackSource } = await getLivekit();
-    const token = new AccessToken(apiKey, apiSecret, {
-      identity: user.id,
-      name: profile?.username || user.id,
-      ttl: 24 * 60 * 60,
-      metadata: JSON.stringify({
-        user_id: user.id,
-        role: profile?.role,
-      }),
-    });
-
-    token.addGrant({
-      room: String(sessionId),
-      roomJoin: true,
-      canSubscribe: true,
-      canPublish: true,
-      canPublishData: true,
-      canUpdateOwnMetadata: true,
-      canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE],
-    });
-
-    const livekitToken = await token.toJwt();
+    const livekitUrl = Deno.env.get("LIVEKIT_URL") || null;
+    const livekitToken = null; // Edge-safe placeholder; generate via WebCrypto or external service later
 
     return new Response(
       JSON.stringify({

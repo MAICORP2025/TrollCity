@@ -95,7 +95,7 @@ const Header = () => {
 
     // Real-time notification listener
     const channel = supabase
-      .channel('notifications')
+      .channel(`notifications-${user.id}`)
       .on(
         'postgres_changes', 
         { 
@@ -106,12 +106,15 @@ const Header = () => {
         },
         (payload) => {
           const newNotif = payload.new as any
-          // Show toast notification
-          toast(newNotif.title || 'New notification', {
-            description: newNotif.message,
-            duration: 5000
-          })
-          setUnreadNotifications((prev) => prev + 1)
+          // Only count if not already read
+          if (!newNotif.is_read) {
+            // Show toast notification
+            toast(newNotif.title || 'New notification', {
+              description: newNotif.message,
+              duration: 5000
+            })
+            setUnreadNotifications((prev) => Math.max(0, prev + 1))
+          }
         }
       )
       .on(
@@ -124,9 +127,15 @@ const Header = () => {
         },
         async (payload) => {
           const updatedNotif = payload.new as any
-          // If notification was marked as read, reload count
-          if (updatedNotif.is_read === true) {
-            loadNotifications()
+          const oldNotif = payload.old as any
+          
+          // If notification was marked as read
+          if (!oldNotif.is_read && updatedNotif.is_read === true) {
+            setUnreadNotifications((prev) => Math.max(0, prev - 1))
+          }
+          // If notification was unmarked from read
+          else if (oldNotif.is_read && updatedNotif.is_read === false) {
+            setUnreadNotifications((prev) => prev + 1)
           }
         }
       )
@@ -138,9 +147,12 @@ const Header = () => {
           table: 'notifications', 
           filter: `user_id=eq.${user.id}` 
         },
-        async () => {
-          // Reload notification count when one is deleted
-          loadNotifications()
+        async (payload) => {
+          const deletedNotif = payload.old as any
+          // Only decrement if it was unread
+          if (!deletedNotif.is_read) {
+            setUnreadNotifications((prev) => Math.max(0, prev - 1))
+          }
         }
       )
       .subscribe()

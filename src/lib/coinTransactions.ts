@@ -488,7 +488,7 @@ export async function addCoins(params: {
  */
 export async function hasActiveInsurance(
   userId: string,
-  protectionType: 'bankrupt' | 'kick' | 'full',
+  protectionType: 'kick' | 'full',
   supabaseClient?: SupabaseClient
 ): Promise<boolean> {
   const sb = supabaseClient || supabase

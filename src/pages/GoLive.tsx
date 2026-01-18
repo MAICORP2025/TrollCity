@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-// import api from '../lib/api'; // Uncomment if needed
+import api, { API_ENDPOINTS } from '../lib/api';
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { useCoins } from '../lib/hooks/useCoins';
@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useLiveKit } from '../hooks/useLiveKit';
 import type { LiveKitServiceConfig } from '../lib/LiveKitService';
 import { deductCoins } from '../lib/coinTransactions';
+import { sendNotification } from '../lib/sendNotification';
 
 const PRIVATE_STREAM_COST = 500;
 type StreamQuality = 'STANDARD' | 'HD_BOOST' | 'HIGHEST';
@@ -20,11 +21,6 @@ const GoLive: React.FC = () => {
   const [streamTitle, setStreamTitle] = useState('');
   const [isStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  const [_uploadingThumbnail, setUploadingThumbnail] = useState(false); // Thumbnail upload state
-  const [broadcasterName, setBroadcasterName] = useState<string>('');
   const [category, setCategory] = useState<string>('Chat');
   const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
   const [privateStreamPassword, setPrivateStreamPassword] = useState<string>('');
@@ -35,7 +31,7 @@ const GoLive: React.FC = () => {
   const [themesLoading, setThemesLoading] = useState(false);
   const [themePurchaseId, setThemePurchaseId] = useState<string | null>(null);
   const [streamerEntitlements, setStreamerEntitlements] = useState<any>(null);
-  const [requestedQuality, setRequestedQuality] = useState<StreamQuality>('STANDARD');
+  const [requestedQuality, setRequestedQuality] = useState<StreamQuality>('HIGHEST');
   const idempotencyKeyRef = useRef<string | null>(null);
 
   const navigate = useNavigate();
@@ -61,24 +57,13 @@ const GoLive: React.FC = () => {
     return false;
   }, [profile?.role, profile?.is_admin, profile?.is_lead_officer, profile?.is_troll_officer]);
 
-  useEffect(() => {
-    if (isPrivileged) {
-      setRequestedQuality('HIGHEST');
-    }
-  }, [isPrivileged]);
-
   // Note: Camera/mic permissions will be requested when joining seats in broadcast
   // No camera preview needed in setup
 
 
 
   // Note: All camera/mic functionality moved to seat joining in broadcast page
-
-  useEffect(() => {
-    const p = useAuthStore.getState().profile;
-    if (p?.username) setBroadcasterName(p.username);
-  }, []);
-
+ 
   useEffect(() => {
     const loadThemes = async () => {
       const { user } = useAuthStore.getState();
@@ -249,6 +234,12 @@ const GoLive: React.FC = () => {
       return;
     }
 
+    const availableCoins = Number(profile.troll_coins || 0);
+    if (!isPrivileged && availableCoins < 500) {
+      toast.error('You need at least 500 coins to go live. Go make friends and gain more followers to go live.');
+      return;
+    }
+
     // All users are now approved to broadcast - no restrictions
     // if (!profile.is_broadcaster) {
     //   toast.error('🚫 You must be an approved broadcaster to go live.');
@@ -311,7 +302,6 @@ const GoLive: React.FC = () => {
     };
 
     let sessionId: string | null = null;
-    let allowedQuality: StreamQuality = 'STANDARD';
     let publishConfig: any = null;
     let livekitToken: string | null = null;
     let hdPaid = false;
@@ -320,45 +310,45 @@ const GoLive: React.FC = () => {
       const idempotencyKey = idempotencyKeyRef.current || crypto.randomUUID();
       idempotencyKeyRef.current = idempotencyKey;
 
-      const prepareResponse = await supabase.functions.invoke('go-live-prepare-session', {
-        body: {
+      const prepareResponse = await api.request(API_ENDPOINTS.stream.prepare, {
+        method: 'POST',
+        body: JSON.stringify({
           requestedQuality,
           idempotencyKey,
-        }
+        })
       });
 
-      if (prepareResponse.error || prepareResponse.data?.error) {
-        const errorCode = prepareResponse.data?.error;
-        if (errorCode === 'INSUFFICIENT_COINS') {
-          toast.error('HD Boost requires 500 Troll Coins. Switching to Standard.');
-          setRequestedQuality('STANDARD');
+      if (!prepareResponse.success || prepareResponse.error) {
+        const errorCode = prepareResponse.error || prepareResponse.message;
+        console.error('[GoLive] prepare-session error:', errorCode);
+        
+        if (errorCode?.includes('No active session') || errorCode?.includes('authenticat')) {
+          toast.error('Authentication error: Your session may have expired. Please try again.');
           cleanup();
           return;
         }
-        throw new Error(prepareResponse.error?.message || prepareResponse.data?.error || 'Failed to prepare session');
+
+        throw new Error(errorCode || 'Failed to prepare session');
       }
 
-      sessionId = prepareResponse.data.sessionId;
-      allowedQuality = prepareResponse.data.allowedQuality as StreamQuality;
-      publishConfig = prepareResponse.data.publishConfig;
-      livekitToken = prepareResponse.data.livekitToken;
-      hdPaid = Boolean(prepareResponse.data.hdPaid);
-      if (allowedQuality !== requestedQuality) {
-        setRequestedQuality(allowedQuality);
-      }
+      sessionId = prepareResponse.sessionId;
+      publishConfig = prepareResponse.publishConfig;
+      livekitToken = prepareResponse.livekitToken;
+      // Support both top-level and nested response shapes
+      hdPaid = Boolean((prepareResponse as any).hdPaid ?? (prepareResponse as any)?.data?.hdPaid);
+      setRequestedQuality('HIGHEST');
 
       const streamId = sessionId;
       const roomName = sessionId; // Use sessionId as LiveKit room name
-      let thumbnailUrl: string | null = null;
 
       // 1. Request camera and microphone access FIRST (preflight stream)
       // This ensures we don't create a stream entry if the user denies permissions
       let preflightStream: MediaStream | null = null;
       try {
         const capture = publishConfig?.captureConstraints || {
-          width: { ideal: 960 },
-          height: { ideal: 540 },
-          frameRate: { ideal: 24 },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30 },
           facingMode: 'user'
         };
         preflightStream = await navigator.mediaDevices.getUserMedia({
@@ -374,50 +364,13 @@ const GoLive: React.FC = () => {
         console.error('[GoLive] Camera/mic permission failed:', permErr);
         toast.error('Camera/microphone access denied. Please allow permissions.');
         if (hdPaid && sessionId) {
-          await supabase.functions.invoke('go-live-refund-hd-boost', {
-            body: { sessionId, reason: 'permission_denied' }
+          await api.request(API_ENDPOINTS.stream.refundHDBoost, {
+            method: 'POST',
+            body: JSON.stringify({ sessionId, reason: 'permission_denied' })
           });
         }
         cleanup();
         return;
-      }
-
-      // Optimized thumbnail upload (skip if not needed for faster stream creation)
-      if (thumbnailFile) {
-        console.log('[GoLive] Starting thumbnail upload...');
-        setUploadingThumbnail(true);
-
-        try {
-          const fileName = `thumb-${streamId}-${Date.now()}.${thumbnailFile.name.split('.').pop()}`;
-          const filePath = `thumbnails/${fileName}`;
-
-          // Use timeout for thumbnail upload to prevent hanging
-          const uploadPromise = supabase.storage
-            .from('troll-city-assets')
-            .upload(filePath, thumbnailFile, { upsert: false });
-
-          const uploadResult = await Promise.race([
-            uploadPromise,
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Thumbnail upload timed out')), 15000)
-            )
-          ]);
-
-          if (!uploadResult.error) {
-            const { data: url } = supabase.storage.from('troll-city-assets').getPublicUrl(filePath);
-            thumbnailUrl = url.publicUrl;
-            console.log('[GoLive] Thumbnail uploaded successfully');
-          } else {
-            console.warn('[GoLive] Thumbnail upload failed, continuing without thumbnail:', uploadResult.error);
-          }
-        } catch (uploadErr: any) {
-          console.warn('[GoLive] Thumbnail upload failed, continuing without thumbnail:', uploadErr);
-          // Don't fail the entire stream creation if thumbnail upload fails
-        } finally {
-          setUploadingThumbnail(false);
-        }
-      } else {
-        console.log('[GoLive] No thumbnail provided, skipping upload');
       }
 
       // Optimized stream creation with retry logic and better error handling
@@ -454,7 +407,7 @@ const GoLive: React.FC = () => {
         status: 'preparing', // Status preparing
         is_private: isPrivateStream,
         start_time: new Date().toISOString(),
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: null,
         current_viewers: 0,
         total_gifts_coins: 0,
         total_unique_gifters: 0,
@@ -529,15 +482,47 @@ const GoLive: React.FC = () => {
       
       if (isPrivateStream) {
         try {
+          const trimmedPassword = privateStreamPassword.trim();
           const { error: passwordError } = await supabase.rpc('set_stream_password', {
             p_stream_id: createdId,
-            p_password: privateStreamPassword.trim(),
+            p_password: trimmedPassword,
           });
           if (passwordError) {
             throw passwordError;
           }
-          if (typeof window !== 'undefined' && privateStreamPassword.trim()) {
-            localStorage.setItem(`private-stream-password:${createdId}`, privateStreamPassword.trim());
+          if (typeof window !== 'undefined' && trimmedPassword) {
+            localStorage.setItem(`private-stream-password:${createdId}`, trimmedPassword);
+          }
+
+          try {
+            const { data: following, error: followingError } = await supabase
+              .from('user_follows')
+              .select('following_id')
+              .eq('follower_id', user.id);
+
+            if (followingError) {
+              throw followingError;
+            }
+
+            const targets = (following || []).map((row: any) => row.following_id).filter(Boolean);
+
+            for (const targetId of targets) {
+              await sendNotification(
+                targetId,
+                'stream_live',
+                'Private Stream Invite',
+                `${profile.username} started a private stream. Password: ${trimmedPassword}`,
+                {
+                  stream_id: createdId,
+                  is_private: true,
+                  password: trimmedPassword,
+                  broadcaster_id: user.id,
+                  broadcaster_username: profile.username,
+                }
+              );
+            }
+          } catch (notifyErr) {
+            console.error('[GoLive] Failed to send private stream notifications:', notifyErr);
           }
         } catch (passwordErr: any) {
           console.error('[GoLive] Failed to set private stream password:', passwordErr);
@@ -568,8 +553,9 @@ const GoLive: React.FC = () => {
         // Clean up the stream we just created since we can't broadcast
         await supabase.from('streams').delete().eq('id', createdId);
         if (hdPaid && sessionId) {
-          await supabase.functions.invoke('go-live-refund-hd-boost', {
-            body: { sessionId, reason: 'livekit_connect_failed' }
+          await api.request(API_ENDPOINTS.stream.refundHDBoost, {
+            method: 'POST',
+            body: JSON.stringify({ sessionId, reason: 'livekit_connect_failed' })
           });
         }
         cleanup();
@@ -588,8 +574,9 @@ const GoLive: React.FC = () => {
         .eq('id', createdId);
 
       if (sessionId) {
-        await supabase.functions.invoke('go-live-mark-live', {
-          body: { sessionId, status: 'live', streamId: createdId }
+        await api.request(API_ENDPOINTS.stream.markLive, {
+          method: 'POST',
+          body: JSON.stringify({ sessionId, status: 'live', streamId: createdId })
         });
       }
 
@@ -608,7 +595,7 @@ const GoLive: React.FC = () => {
         current_viewers: insertedStream.current_viewers || 0,
         total_gifts_coins: insertedStream.total_gifts_coins || 0,
         total_unique_gifters: insertedStream.total_unique_gifters || 0,
-        thumbnail_url: insertedStream.thumbnail_url || thumbnailUrl,
+        thumbnail_url: insertedStream.thumbnail_url || null,
         created_at: insertedStream.created_at || new Date().toISOString(),
         updated_at: insertedStream.updated_at || new Date().toISOString(),
         livekit_room_name: roomName,
@@ -629,8 +616,9 @@ const GoLive: React.FC = () => {
     } catch (err: any) {
       if (hdPaid && sessionId) {
         try {
-          await supabase.functions.invoke('go-live-refund-hd-boost', {
-            body: { sessionId, reason: 'start_stream_failed' }
+          await api.request(API_ENDPOINTS.stream.refundHDBoost, {
+            method: 'POST',
+            body: JSON.stringify({ sessionId, reason: 'start_stream_failed' })
           });
         } catch {}
       }
@@ -702,16 +690,6 @@ const GoLive: React.FC = () => {
             />
           </div>
 
-          <div>
-            <label className="text-gray-300">Broadcaster Name *</label>
-            <input
-              value={broadcasterName}
-              onChange={(e) => setBroadcasterName(e.target.value)}
-              className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-4 py-3"
-              placeholder="Your display name..."
-            />
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-gray-300">Category *</label>
@@ -764,70 +742,8 @@ const GoLive: React.FC = () => {
 
           <div>
             <label className="text-gray-300">Stream Quality</label>
-            <div className="mt-2 grid gap-2">
-              {isPrivileged ? (
-                <div className="flex items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-200">Highest (Role Access)</p>
-                    <p className="text-xs text-emerald-100/70">1080p @ 30fps • 3–5 Mbps</p>
-                  </div>
-                  <span className="text-xs uppercase tracking-[0.2em] text-emerald-300">Locked</span>
-                </div>
-              ) : (
-                <>
-                  <label className="flex items-center gap-3 rounded-lg border border-purple-500/30 bg-purple-900/10 px-4 py-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="stream-quality"
-                      value="STANDARD"
-                      checked={requestedQuality === 'STANDARD'}
-                      onChange={() => setRequestedQuality('STANDARD')}
-                    />
-                    <div>
-                      <p className="text-sm font-semibold text-white">Standard (Free)</p>
-                      <p className="text-xs text-white/60">540p @ 24fps • 0.6–0.9 Mbps</p>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="stream-quality"
-                      value="HD_BOOST"
-                      checked={requestedQuality === 'HD_BOOST'}
-                      onChange={() => setRequestedQuality('HD_BOOST')}
-                    />
-                    <div>
-                      <p className="text-sm font-semibold text-amber-200">HD Boost (500 Troll Coins)</p>
-                      <p className="text-xs text-amber-100/70">720p @ 30fps • 1.5–2.5 Mbps</p>
-                    </div>
-                  </label>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-gray-300">Stream Thumbnail (Optional)</label>
-            <div className="mt-2">
-              <label className="block w-full border-2 border-dashed border-purple-700/30 rounded-lg p-6 text-center cursor-pointer">
-                {thumbnailPreview ? (
-                  <img src={thumbnailPreview} className="mx-auto max-h-40 object-contain" />
-                ) : (
-                  <div className="text-gray-400">Click to upload thumbnail<br/><span className="text-xs text-gray-500">PNG, JPG up to 5MB</span></div>
-                )}
-                <input
-                  type="file"
-                  accept="image/png, image/jpeg"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] || null;
-                    if (f) {
-                      setThumbnailFile(f);
-                      setThumbnailPreview(URL.createObjectURL(f));
-                    }
-                  }}
-                />
-              </label>
+            <div className="mt-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+              HD streaming is enabled for everyone by default. No boosts or upgrades needed.
             </div>
           </div>
 
@@ -956,7 +872,6 @@ const GoLive: React.FC = () => {
             disabled={
               isConnecting ||
               !streamTitle.trim() ||
-              !broadcasterName.trim() ||
               liveRestriction.isRestricted
             }
               className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"

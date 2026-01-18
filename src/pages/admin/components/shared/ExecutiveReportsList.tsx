@@ -2,11 +2,16 @@ import React, { useEffect, useState } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { ExecutiveReport } from '../../../../types/admin'
 import { toast } from 'sonner'
-import { FileText, CheckCircle, Plus, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText, CheckCircle, Plus, ChevronDown, ChevronUp, User } from 'lucide-react'
 import { useAuthStore } from '../../../../lib/store'
 
 interface ExecutiveReportsListProps {
   viewMode: 'admin' | 'secretary'
+}
+
+interface ReporterUser {
+  id: string
+  username: string | null
 }
 
 export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListProps) {
@@ -16,6 +21,8 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
   const [showBuilder, setShowBuilder] = useState(false)
   const [newReport, setNewReport] = useState({ title: '', summary: '' })
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [reporters, setReporters] = useState<ReporterUser[]>([])
+  const [filterUserId, setFilterUserId] = useState<string>('')
 
   useEffect(() => {
     fetchReports()
@@ -30,7 +37,34 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
         .order('report_date', { ascending: false })
 
       if (error) throw error
-      setReports(data || [])
+      const list = (data || []) as ExecutiveReport[]
+      setReports(list)
+
+      const ids = Array.from(
+        new Set(
+          list
+            .map((r) => r.created_by)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        )
+      )
+
+      if (ids.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .in('id', ids)
+
+        if (!usersError && usersData) {
+          setReporters(
+            (usersData as any[]).map((u) => ({
+              id: u.id as string,
+              username: (u.username as string) ?? null
+            }))
+          )
+        }
+      } else {
+        setReporters([])
+      }
     } catch (error) {
       console.error('Error fetching reports:', error)
       toast.error('Failed to load reports')
@@ -81,6 +115,16 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
       console.error(error)
       toast.error('Failed to update report')
     }
+  }
+
+  const visibleReports = reports.filter((report) =>
+    !filterUserId ? true : report.created_by === filterUserId
+  )
+
+  const getReporterName = (createdBy: string) => {
+    const found = reporters.find((r) => r.id === createdBy)
+    if (found?.username) return found.username
+    return createdBy.slice(0, 8)
   }
 
   return (
@@ -134,15 +178,35 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
       )}
 
       <div className="bg-slate-800 rounded-lg border border-slate-700 p-6">
-        <h2 className="text-xl font-bold text-white mb-6">Submitted Reports</h2>
-        
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <h2 className="text-xl font-bold text-white">Submitted Reports</h2>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-400 flex items-center gap-1">
+              <User className="w-4 h-4" />
+              Filter by user
+            </label>
+            <select
+              value={filterUserId}
+              onChange={(e) => setFilterUserId(e.target.value)}
+              className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white"
+            >
+              <option value="">All Users</option>
+              {reporters.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.username || r.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="space-y-4">
           {loading ? (
             <div className="text-center text-slate-400">Loading reports...</div>
-          ) : reports.length === 0 ? (
+          ) : visibleReports.length === 0 ? (
             <div className="text-center text-slate-400">No reports found</div>
           ) : (
-            reports.map(report => (
+            visibleReports.map(report => (
               <div key={report.id} className="bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
                 <div 
                   className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-800/50 transition-colors"
@@ -158,7 +222,7 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
-                      {new Date(report.report_date).toLocaleDateString()} • By {report.created_by.slice(0, 8)}
+                      {new Date(report.report_date).toLocaleDateString()} • By {getReporterName(report.created_by)}
                     </p>
                   </div>
                   {expandedId === report.id ? <ChevronUp className="text-slate-400" /> : <ChevronDown className="text-slate-400" />}

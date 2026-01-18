@@ -19,7 +19,8 @@ import {
   Mic,
   MicOff,
   Camera,
-  CameraOff
+  CameraOff,
+  RefreshCw
 } from 'lucide-react';
 import ChatBox from '../components/broadcast/ChatBox';
 import GiftBox, { GiftItem, RecipientMode } from '../components/broadcast/GiftBox';
@@ -45,13 +46,17 @@ const STREAM_POLL_INTERVAL = 2000;
 
 const DEFAULT_GIFTS: GiftItem[] = [
   { id: "troll_clap", name: "Troll Clap", icon: "👏", value: 5, category: "Basic" },
-  { id: "glow_heart", name: "Glow Heart", icon: "💗", value: 10, category: "Basic" },
+  { id: "glow_heart", name: "Glow Heart", icon: "💖", value: 10, category: "Basic" },
   { id: "laughing_mask", name: "Laughing Mask", icon: "😹", value: 30, category: "Basic" },
   { id: "troll_mic_drop", name: "Troll Mic Drop", icon: "🎤", value: 100, category: "Rare" },
   { id: "troll_confetti", name: "Troll Confetti", icon: "🎉", value: 850, category: "Rare" },
   { id: "crown_blast", name: "Crown Blast", icon: "👑", value: 1200, category: "Epic" },
-  { id: "diamond_storm", name: "Diamond Storm", icon: "💎", value: 7000, category: "Epic" },
-  { id: "the_big_crown", name: "The Big Crown", icon: "🌟", value: 15000, category: "Legendary" },
+  { id: "diamond_storm", name: "Diamond Storm", icon: "💎", value: 7000, category: "Legendary" },
+  { id: "the_big_crown", name: "The Big Crown", icon: "👑✨", value: 15000, category: "Legendary" },
+  { id: "troll", name: "Troll", icon: "🧟", value: 1, category: "Basic" },
+  { id: "rose", name: "Rose", icon: "🌹", value: 20, category: "Basic" },
+  { id: "sparkles", name: "Sparkles", icon: "✨", value: 75, category: "Rare" },
+  { id: "fireworks", name: "Fireworks", icon: "🎆", value: 2000, category: "Legendary" },
 ];
 
 // Types
@@ -679,13 +684,21 @@ export default function LivePage() {
   const [boxCount, setBoxCount] = useState(0);
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
-  const [screenShareOn, setScreenShareOn] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>(() => {
+    if (typeof window === 'undefined') return 'user';
+    const stored = window.localStorage.getItem('tc_camera_facing');
+    return stored === 'environment' ? 'environment' : 'user';
+  });
   const [hostSeatIndex, setHostSeatIndex] = useState(0);
   const [showLivePanels, setShowLivePanels] = useState(true);
   const [broadcastThemeStyle, setBroadcastThemeStyle] = useState<React.CSSProperties | undefined>(undefined);
   const [broadcastTheme, setBroadcastTheme] = useState<any>(null);
   const [reactiveEvent, setReactiveEvent] = useState<{ key: number; style: string; intensity: number } | null>(null);
   const [reactiveClass, setReactiveClass] = useState('');
+  const [hasViewerGift, setHasViewerGift] = useState(false);
+  const noViewerTimerRef = useRef<number | null>(null);
+  const noGiftTimerRef = useRef<number | null>(null);
+  const autoEndTriggeredRef = useRef(false);
 
   const stableIdentity = useMemo(() => {
     const id = user?.id || profile?.id;
@@ -759,6 +772,10 @@ export default function LivePage() {
   
   const seatRoomName = stream?.room_name || stream?.agora_channel || streamId || 'officer-stream';
   const isBroadcaster = useIsBroadcaster(profile, stream);
+  const isRoleExempt = useMemo(() => {
+    const role = (profile?.troll_role || profile?.role || '').toLowerCase();
+    return ['admin', 'lead_troll_officer', 'secretary', 'troll_officer'].includes(role);
+  }, [profile?.role, profile?.troll_role]);
   const { seats, claimSeat, releaseSeat } = useSeatRoster(seatRoomName);
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
   const canPublish = isBroadcaster || isGuestSeat;
@@ -1122,13 +1139,6 @@ export default function LivePage() {
 
     try {
       await claimSeat(seatIndex, { joinPrice: joinPriceForClaim });
-      
-      // Auto-disable screen share when a box is added for smooth transition
-      if (screenShareOn) {
-        const ok = await liveKit.toggleScreenShare();
-        setScreenShareOn(Boolean(ok));
-        console.log('[LivePage] Screen share auto-disabled on box add');
-      }
     } catch (err: any) {
       console.error('Failed to claim seat:', err);
       toast.error(err?.message || 'Failed to join seat');
@@ -1221,6 +1231,63 @@ export default function LivePage() {
       hostSeatIndex,
     });
   }, [liveKit, hostSeatIndex]);
+
+  const switchCameraFacing = useCallback(async () => {
+    const nextFacing: 'user' | 'environment' = cameraFacing === 'user' ? 'environment' : 'user';
+
+    if (!cameraOn) {
+      setCameraFacing(nextFacing);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('tc_camera_facing', nextFacing);
+      }
+      toast.success(nextFacing === 'user' ? 'Front camera will be used next time' : 'Rear camera will be used next time');
+      return;
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+      toast.error('Camera switching not supported on this device');
+      return;
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+      if (!videoInputs.length) {
+        toast.error('No cameras found');
+        return;
+      }
+
+      const matchLabel = (label: string, facing: 'user' | 'environment') => {
+        const l = label.toLowerCase();
+        if (facing === 'user') {
+          return l.includes('front') || l.includes('user') || l.includes('self') || l.includes('face');
+        }
+        return l.includes('back') || l.includes('rear') || l.includes('environment') || l.includes('world');
+      };
+
+      let target = videoInputs.find((d) => matchLabel(d.label || '', nextFacing));
+      if (!target) {
+        target = videoInputs.length > 1 ? videoInputs[1] : videoInputs[0];
+      }
+
+      if (liveKit.service && (liveKit.service as any).selectCamera) {
+        const ok = await (liveKit.service as any).selectCamera(target.deviceId);
+        if (!ok) {
+          toast.error('Failed to switch camera');
+          return;
+        }
+      }
+
+      setCameraFacing(nextFacing);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('tc_camera_facing', nextFacing);
+      }
+      toast.success(nextFacing === 'user' ? 'Front camera selected' : 'Rear camera selected');
+    } catch (err) {
+      console.error('Camera switch failed', err);
+      toast.error('Camera switch failed');
+    }
+  }, [cameraFacing, cameraOn, liveKit.service]);
 
   // Officer Tool Handlers
   const [isOfficerBubbleVisible, setIsOfficerBubbleVisible] = useState(true);
@@ -1441,16 +1508,27 @@ export default function LivePage() {
     setMicOn(Boolean(ok));
   }, [liveKit, micOn, micRestrictionInfo.isMuted, micRestrictionInfo.message]);
 
-  const toggleScreenShare = useCallback(async () => {
-    const ok = await liveKit.toggleScreenShare();
-    setScreenShareOn(Boolean(ok));
-    console.log('[LivePage] Screen share toggled', {
-      screenShareOn: Boolean(ok)
-    });
-  }, [liveKit]);
+  const endStreamAuto = useCallback(async (reason: string) => {
+    if (autoEndTriggeredRef.current) return;
+    autoEndTriggeredRef.current = true;
+
+    try {
+      if (streamId) {
+        await supabase.from('streams').update({ status: 'ended', is_live: false }).eq('id', streamId);
+      }
+    } catch (err) {
+      console.error('Auto-end stream update failed:', err);
+    }
+
+    toast.error(reason);
+    liveKit.markClientDisconnectIntent();
+    liveKit.disconnect();
+    navigate('/stream-ended');
+  }, [liveKit, navigate, streamId]);
 
   const endStream = useCallback(async () => {
     if (!confirm("Are you sure you want to end this stream?")) return;
+    autoEndTriggeredRef.current = true;
     
     try {
       if (streamId) {
@@ -1581,6 +1659,7 @@ export default function LivePage() {
                 profile: data.profile,
                 effectKey: data.effectKey,
                 effect: data.effect,
+                userId: payloadUserId || null,
               });
               setEntranceEffectKey((prev) => prev + 1);
 
@@ -1966,6 +2045,88 @@ export default function LivePage() {
     redirectToSummary: true,
   });
 
+  const NO_VIEWER_JOIN_MS = 15 * 60 * 1000;
+  const NO_GIFT_GRACE_MS = 10 * 60 * 1000;
+
+  useEffect(() => {
+    autoEndTriggeredRef.current = false;
+    setHasViewerGift(false);
+    if (noViewerTimerRef.current) {
+      clearTimeout(noViewerTimerRef.current);
+      noViewerTimerRef.current = null;
+    }
+    if (noGiftTimerRef.current) {
+      clearTimeout(noGiftTimerRef.current);
+      noGiftTimerRef.current = null;
+    }
+  }, [streamId]);
+
+  useEffect(() => {
+    if (!isBroadcaster || isRoleExempt || !stream?.is_live) {
+      if (noViewerTimerRef.current) {
+        clearTimeout(noViewerTimerRef.current);
+        noViewerTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (activeViewers.length > 0) {
+      if (noViewerTimerRef.current) {
+        clearTimeout(noViewerTimerRef.current);
+        noViewerTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (!noViewerTimerRef.current) {
+      noViewerTimerRef.current = window.setTimeout(() => {
+        if (activeViewers.length === 0) {
+          void endStreamAuto('Stream ended: no viewers joined within 15 minutes.');
+        }
+      }, NO_VIEWER_JOIN_MS);
+    }
+
+    return () => {
+      if (noViewerTimerRef.current) {
+        clearTimeout(noViewerTimerRef.current);
+        noViewerTimerRef.current = null;
+      }
+    };
+  }, [activeViewers.length, endStreamAuto, isBroadcaster, isRoleExempt, stream?.is_live, NO_VIEWER_JOIN_MS]);
+
+  useEffect(() => {
+    if (!isBroadcaster || isRoleExempt || !stream?.is_live) {
+      if (noGiftTimerRef.current) {
+        clearTimeout(noGiftTimerRef.current);
+        noGiftTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (hasViewerGift) {
+      if (noGiftTimerRef.current) {
+        clearTimeout(noGiftTimerRef.current);
+        noGiftTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (!noGiftTimerRef.current) {
+      noGiftTimerRef.current = window.setTimeout(() => {
+        if (!hasViewerGift) {
+          void endStreamAuto('Stream ended: no gifts received from viewers.');
+        }
+      }, NO_GIFT_GRACE_MS);
+    }
+
+    return () => {
+      if (noGiftTimerRef.current) {
+        clearTimeout(noGiftTimerRef.current);
+        noGiftTimerRef.current = null;
+      }
+    };
+  }, [endStreamAuto, hasViewerGift, isBroadcaster, isRoleExempt, stream?.is_live, NO_GIFT_GRACE_MS]);
+
   const refreshViewerSnapshot = useCallback(async () => {
     if (!streamId) {
       setActiveViewers([]);
@@ -2109,6 +2270,19 @@ export default function LivePage() {
       return { ...prev, total_gifts_coins: updatedCoins };
     });
   }, [lastGift]);
+
+  useEffect(() => {
+    if (!lastGift || !isBroadcaster || isRoleExempt || !stream?.is_live) return;
+    const senderRole = (lastGift.sender_troll_role || lastGift.sender_role || '').toLowerCase();
+    const senderPrivileged = ['admin', 'lead_troll_officer', 'secretary', 'troll_officer'].includes(senderRole);
+    if (!senderPrivileged) {
+      setHasViewerGift(true);
+      if (noGiftTimerRef.current) {
+        clearTimeout(noGiftTimerRef.current);
+        noGiftTimerRef.current = null;
+      }
+    }
+  }, [isBroadcaster, isRoleExempt, lastGift, stream?.is_live]);
 
   const toGiftSlug = (value?: string) => {
     if (!value) return 'gift';
@@ -2311,16 +2485,15 @@ export default function LivePage() {
       const recipients: string[] = [];
 
       if (sendToAll) {
-         // Send to all active viewers (excluding self)
-         const viewers = activeViewers.filter(v => v.userId !== senderId).map(v => v.userId);
-         const uniqueRecipients = Array.from(new Set(viewers));
-         recipients.push(...uniqueRecipients);
+        const viewers = activeViewers.filter(v => v.userId !== senderId).map(v => v.userId);
+        const uniqueRecipients = Array.from(new Set(viewers));
+        recipients.push(...uniqueRecipients);
       } else {
-         const receiverId = targetMode === "broadcaster"
+        const receiverId = targetMode === "broadcaster"
           ? stream?.broadcaster_id
           : giftReceiver?.id || stream?.broadcaster_id;
-         
-         if (receiverId) recipients.push(receiverId);
+
+        if (receiverId) recipients.push(receiverId);
       }
 
       if (recipients.length === 0) {
@@ -2331,83 +2504,136 @@ export default function LivePage() {
       setGiftReceiver(null);
 
       let successCount = 0;
-      
+
       try {
-          const promises = recipients.map(async (receiverId) => {
-             const { error } = await supabase.rpc("spend_coins", {
-              p_sender_id: senderId,
-              p_receiver_id: receiverId,
-              p_coin_amount: totalCoins,
-              p_source: "gift",
-              p_item: canonicalGiftName,
-            });
-            if (error) throw error;
-            
-            // Grant XP for sending and receiving gift
-            try {
-              await processGiftXp(senderId, receiverId, totalCoins);
-            } catch (xpErr) {
-              console.warn('[LivePage] Failed to process gift XP:', xpErr);
-            }
-            
-             setGiftBalanceDelta({
-              userId: receiverId,
-              delta: totalCoins,
-              key: Date.now(),
-            });
-            successCount++;
+        const promises = recipients.map(async (receiverId) => {
+          const { data: spendResult, error } = await supabase.rpc("spend_coins", {
+            p_sender_id: senderId,
+            p_receiver_id: receiverId,
+            p_coin_amount: totalCoins,
+            p_source: "gift",
+            p_item: canonicalGiftName,
           });
 
-          await Promise.all(promises);
+          if (error) throw error;
 
-          if (typeof refreshProfile === 'function') {
-            refreshProfile().catch((err) => {
-              console.warn('Failed to refresh profile after sending gift:', err);
-            });
+          if (spendResult && typeof spendResult === 'object' && 'success' in spendResult && !(spendResult as any).success) {
+            const errorMsg = (spendResult as any).error || 'Failed to send gift';
+            throw new Error(errorMsg);
           }
-          
-           setStream((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  total_gifts_coins: (prev.total_gifts_coins || 0) + (totalCoins * successCount),
+
+          try {
+            if (streamIdValue) {
+              const giftId = (spendResult as any)?.gift_id;
+              if (giftId && typeof giftId === 'string') {
+                const { error: giftUpdateError } = await supabase
+                  .from('gifts')
+                  .update({
+                    stream_id: streamIdValue,
+                    gift_slug: canonicalGiftSlug,
+                  })
+                  .eq('id', giftId)
+                  .limit(1);
+
+                if (giftUpdateError) {
+                  console.warn('Could not update gift with stream context:', giftUpdateError);
                 }
-              : prev
-          );
-          
-          if (streamIdValue && broadcasterId) {
-              const eventType = totalCoins >= 1000 ? "super_gift" : "gift";
-              const themeIdToUse = lastThemeId || broadcastTheme?.id;
-
-              if (themeIdToUse) {
-                 const themeEvents = recipients.map(rid => ({
-                    room_id: streamIdValue,
-                    broadcaster_id: broadcasterId,
-                    user_id: senderId,
-                    theme_id: themeIdToUse,
-                    event_type: eventType,
-                    payload: {
-                        gift_slug: canonicalGiftSlug,
-                        coins: totalCoins,
-                        sender_id: senderId,
-                        recipient_id: rid
-                    }
-                 }));
-                 
-                 await supabase.from("broadcast_theme_events").insert(themeEvents);
               }
-          }
-          
-          if (sendToAll) {
-              toast.success(`Sent ${gift.name} to ${successCount} users!`);
+
+              await supabase.from('stream_gifts').insert({
+                stream_id: streamIdValue,
+                sender_id: senderId,
+                sender_name: profile?.username || null,
+                gift_type: 'paid',
+                coins_spent: totalCoins,
+                coins_amount: totalCoins,
+                message: canonicalGiftName,
+              });
+            }
+          } catch (streamGiftErr) {
+            console.warn('Failed to insert stream gift event', streamGiftErr);
           }
 
+          try {
+            await processGiftXp(senderId, receiverId, totalCoins);
+          } catch (xpErr) {
+            console.warn('[LivePage] Failed to process gift XP:', xpErr);
+          }
+
+          setGiftBalanceDelta({
+            userId: receiverId,
+            delta: totalCoins,
+            key: Date.now(),
+          });
+          successCount++;
+        });
+
+        await Promise.all(promises);
+
+        if (streamIdValue && senderId) {
+          const senderName = profile?.username || 'Someone';
+          const content = sendToAll
+            ? `${senderName} sent ${gift.name} to ${successCount} users`
+            : `${senderName} sent ${gift.name}`;
+          try {
+            await supabase.from('messages').insert({
+              stream_id: streamIdValue,
+              user_id: senderId,
+              content,
+              message_type: 'gift',
+            });
+          } catch (chatErr) {
+            console.warn('Failed to insert gift chat message', chatErr);
+          }
+        }
+
+        if (typeof refreshProfile === 'function') {
+          refreshProfile().catch((err) => {
+            console.warn('Failed to refresh profile after sending gift:', err);
+          });
+        }
+
+        setStream((prev) =>
+          prev
+            ? {
+                ...prev,
+                total_gifts_coins: (prev.total_gifts_coins || 0) + (totalCoins * successCount),
+              }
+            : prev
+        );
+
+        if (streamIdValue && broadcasterId) {
+          const eventType = totalCoins >= 1000 ? "super_gift" : "gift";
+          const themeIdToUse = lastThemeId || broadcastTheme?.id;
+
+          if (themeIdToUse) {
+            const themeEvents = recipients.map(rid => ({
+              room_id: streamIdValue,
+              broadcaster_id: broadcasterId,
+              user_id: senderId,
+              theme_id: themeIdToUse,
+              event_type: eventType,
+              payload: {
+                gift_slug: canonicalGiftSlug,
+                coins: totalCoins,
+                sender_id: senderId,
+                recipient_id: rid
+              }
+            }));
+
+            await supabase.from("broadcast_theme_events").insert(themeEvents);
+          }
+        }
+
+        if (sendToAll) {
+          toast.success(`Sent ${gift.name} to ${successCount} users!`);
+        }
       } catch (err) {
         console.error("Failed to send gift:", err);
         toast.error("Failed to send some gifts. Please try again.");
       }
     },
-    [stream?.id, user?.id, giftReceiver, stream?.broadcaster_id, broadcastTheme?.id, lastThemeId, refreshProfile, activeViewers]
+    [stream?.id, user?.id, giftReceiver, stream?.broadcaster_id, broadcastTheme?.id, lastThemeId, refreshProfile, activeViewers, profile?.username]
   );
   useEffect(() => {
     if (!streamId) return;
@@ -2584,7 +2810,12 @@ export default function LivePage() {
       {/* Entrance effect for all users */}
       {entranceEffect && (
         <div key={entranceEffectKey} className="fixed inset-0 z-[100] pointer-events-none">
-          <EntranceEffect username={entranceEffect.username} role={entranceEffect.role} profile={entranceEffect.profile} />
+          <EntranceEffect
+            username={entranceEffect.username}
+            role={entranceEffect.role}
+            profile={entranceEffect.profile}
+            userId={entranceEffect.userId}
+          />
         </div>
       )}
 
@@ -2720,6 +2951,13 @@ export default function LivePage() {
                 <button onClick={toggleCamera} className={`p-1.5 rounded-lg border ${cameraOn ? 'bg-purple-600 border-purple-400' : 'bg-red-900/50 border-red-500'}`}>
                   {cameraOn ? <Camera size={18} /> : <CameraOff size={18} />}
                 </button>
+                <button
+                  onClick={switchCameraFacing}
+                  className="p-1.5 rounded-lg border bg-black/40 border-purple-500 text-purple-300"
+                  title={cameraFacing === 'user' ? 'Switch to rear camera' : 'Switch to front camera'}
+                >
+                  <RefreshCw size={18} />
+                </button>
               </>
             )}
          </div>
@@ -2780,9 +3018,7 @@ export default function LivePage() {
               giftBalanceDelta={giftBalanceDelta}
               // Media Controls
               onToggleCamera={toggleCamera}
-              onToggleScreenShare={toggleScreenShare}
               isCameraOn={cameraOn}
-              isScreenShareOn={screenShareOn}
             >
                <GiftEventOverlay gift={lastGift} onProfileClick={(p) => setSelectedProfile(p)} />
             </BroadcastLayout>

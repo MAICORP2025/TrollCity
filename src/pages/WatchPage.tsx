@@ -381,8 +381,17 @@ export default function WatchPage() {
           const msg = payload.new;
           if (msg.message_type === 'entrance') {
             try {
-              const data = JSON.parse(msg.content);
-              setEntranceEffect(data);
+              const rawContent = msg.content;
+              const data = typeof rawContent === 'string'
+                ? JSON.parse(rawContent)
+                : (rawContent || {});
+              const payloadUserId =
+                data.user_id || data.sender_id || msg.user_id || msg.sender_id;
+
+              setEntranceEffect({
+                ...data,
+                userId: payloadUserId || null,
+              });
               setTimeout(() => setEntranceEffect(null), 5000);
             } catch (error) {
               console.error('Failed to parse entrance effect', error);
@@ -648,7 +657,14 @@ export default function WatchPage() {
           </div>
         </div>
       )}
-      {entranceEffect && <EntranceEffect username={entranceEffect.username} role={entranceEffect.role} profile={entranceEffect.profile} />}
+      {entranceEffect && (
+        <EntranceEffect
+          username={entranceEffect.username}
+          role={entranceEffect.role}
+          profile={entranceEffect.profile}
+          userId={entranceEffect.userId}
+        />
+      )}
       
       <div className="flex h-screen flex-col">
         <main className="flex-1 px-6 py-5">

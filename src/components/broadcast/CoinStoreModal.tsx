@@ -1,9 +1,10 @@
-import { X, ShoppingCart, Shield, Zap, Coins as CoinsIcon, Sparkles } from "lucide-react";
+import { X, ShoppingCart, Shield, Zap, Coins as CoinsIcon, Sparkles, Smartphone } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 import { useAuthStore } from "../../lib/store";
 import { ENTRANCE_EFFECTS_CONFIG } from "../../lib/entranceEffects";
+import CashAppPaymentModal from "./CashAppPaymentModal";
 
 interface CoinPackage {
   id: number;
@@ -40,13 +41,18 @@ export default function CoinStoreModal({
   const [insuranceOptions, setInsuranceOptions] = useState<any[]>([]);
   const [ownedEffects, setOwnedEffects] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [cashAppModalOpen, setCashAppModalOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'cashapp'>('stripe');
 
   useEffect(() => {
     const fetchCatalog = async () => {
       const { data: p } = await supabase.from('perks').select('*').eq('is_active', true);
       const { data: i } = await supabase.from('insurance_options').select('*').eq('is_active', true);
       if (p) setPerks(p);
-      if (i) setInsuranceOptions(i);
+      if (i) {
+        const filteredInsurance = i.filter((opt: any) => opt.protection_type !== 'bankrupt');
+        setInsuranceOptions(filteredInsurance);
+      }
 
       if (profile) {
         const { data: effects } = await supabase
@@ -328,21 +334,71 @@ export default function CoinStoreModal({
 
         {/* Footer for Coins Tab */}
         {activeTab === 'coins' && (
-          <div className="mt-4 pt-4 border-t border-gray-700">
-            <button
-              onClick={handleCoinPurchase}
-              disabled={!selectedPackage}
-              className="w-full py-3 bg-gradient-to-r from-purple-600 to-red-600 hover:from-purple-700 hover:to-red-700 disabled:opacity-50 rounded-lg font-bold transition-all"
-            >
-              {selectedPackage
-                ? `Purchase ${selectedPackage.coins} coins for ${selectedPackage.price}`
-                : "Select a Package"}
-            </button>
-            <p className="text-xs text-gray-400 text-center mt-3">
-              This is a demo - no real payment will be processed
+          <div className="mt-4 pt-4 border-t border-gray-700 space-y-3">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPaymentMethod('stripe')}
+                className={`flex-1 py-2 rounded-lg font-bold transition-all ${
+                  paymentMethod === 'stripe'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                💳 Card
+              </button>
+              <button
+                onClick={() => setPaymentMethod('cashapp')}
+                className={`flex-1 py-2 rounded-lg font-bold transition-all ${
+                  paymentMethod === 'cashapp'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                <Smartphone size={16} className="inline mr-1" /> Cash App
+              </button>
+            </div>
+
+            {paymentMethod === 'stripe' ? (
+              <button
+                onClick={handleCoinPurchase}
+                disabled={!selectedPackage}
+                className="w-full py-3 bg-gradient-to-r from-purple-600 to-red-600 hover:from-purple-700 hover:to-red-700 disabled:opacity-50 rounded-lg font-bold transition-all"
+              >
+                {selectedPackage
+                  ? `Purchase ${selectedPackage.coins} coins for ${selectedPackage.price}`
+                  : "Select a Package"}
+              </button>
+            ) : (
+              <button
+                onClick={() => setCashAppModalOpen(true)}
+                disabled={!selectedPackage}
+                className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 rounded-lg font-bold transition-all flex items-center justify-center gap-2"
+              >
+                <Smartphone size={18} />
+                {selectedPackage
+                  ? `Send ${selectedPackage.coins} coins via Cash App (${selectedPackage.price})`
+                  : "Select a Package"}
+              </button>
+            )}
+            
+            <p className="text-xs text-gray-400 text-center">
+              {paymentMethod === 'stripe'
+                ? 'Secure card payment - instant coins'
+                : 'Send to $trollcity95 - coins after verification'}
             </p>
           </div>
         )}
+
+        <CashAppPaymentModal
+          isOpen={cashAppModalOpen && activeTab === 'coins'}
+          onClose={() => setCashAppModalOpen(false)}
+          coins={selectedPackage?.coins || 0}
+          amount={parseFloat(selectedPackage?.price || '0')}
+          onSuccess={(_orderId) => {
+            setCashAppModalOpen(false);
+            toast.success(`Payment request created! We'll verify and grant your coins shortly.`);
+          }}
+        />
       </div>
     </div>
   );

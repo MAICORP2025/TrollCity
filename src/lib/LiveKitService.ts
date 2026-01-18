@@ -619,7 +619,6 @@ export class LiveKitService {
   }
 
   private async captureVideoTrack(deviceId?: string): Promise<LocalVideoTrack | null> {
-    // Try high-res first, then fallback to 480p if device can't provide 720p
     const tryConstraints = async (constraints: any) => {
       try {
         const track = await createLocalVideoTrack(constraints as any)
@@ -651,6 +650,17 @@ export class LiveKitService {
       const base: any = {
         resolution: { width, height },
         frameRate: { ideal: frameRate, max: Math.max(frameRate, 30) },
+      }
+
+      let facingMode: any = (capture as any)?.facingMode
+      if (!facingMode && typeof window !== 'undefined') {
+        const stored = window.localStorage.getItem('tc_camera_facing')
+        if (stored === 'user' || stored === 'environment') {
+          facingMode = stored
+        }
+      }
+      if (facingMode) {
+        base.facingMode = facingMode
       }
       if (deviceId) base.deviceId = { exact: deviceId }
 

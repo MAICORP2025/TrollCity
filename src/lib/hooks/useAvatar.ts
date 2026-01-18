@@ -26,9 +26,36 @@ const defaultConfig: AvatarConfig = {
   useAsProfilePicture: false
 }
 
+function getGenderDefaultConfig(gender?: string | null): AvatarConfig {
+  if (gender === 'male') {
+    return {
+      skinTone: 'medium',
+      hairStyle: 'short',
+      hairColor: 'brown',
+      outfit: 'street',
+      accessory: 'none',
+      useAsProfilePicture: false
+    }
+  }
+
+  if (gender === 'female') {
+    return {
+      skinTone: 'light',
+      hairStyle: 'long',
+      hairColor: 'blonde',
+      outfit: 'casual',
+      accessory: 'none',
+      useAsProfilePicture: false
+    }
+  }
+
+  return defaultConfig
+}
+
 export function useAvatar() {
-  const { user } = useAuthStore()
-  const [config, setConfigState] = useState<AvatarConfig>(defaultConfig)
+  const { user, profile } = useAuthStore()
+  const gender = (profile as any)?.gender as string | null | undefined
+  const [config, setConfigState] = useState<AvatarConfig>(getGenderDefaultConfig(gender))
   const userKey = user?.id ? `trollcity_avatar_${user.id}` : null
 
   useEffect(() => {
@@ -36,7 +63,7 @@ export function useAvatar() {
 
     const loadConfig = async () => {
       if (!userKey || !user?.id) {
-        setConfigState(defaultConfig)
+        setConfigState(getGenderDefaultConfig(gender))
         return
       }
 
@@ -47,7 +74,7 @@ export function useAvatar() {
           const parsed = JSON.parse(raw)
           if (isMounted) {
             setConfigState({
-              ...defaultConfig,
+              ...getGenderDefaultConfig(gender),
               ...parsed
             })
           }
@@ -64,7 +91,7 @@ export function useAvatar() {
 
         if (data?.avatar_config && isMounted) {
           setConfigState({
-            ...defaultConfig,
+            ...getGenderDefaultConfig(gender),
             ...data.avatar_config
           })
         }
@@ -75,7 +102,7 @@ export function useAvatar() {
     return () => {
       isMounted = false
     }
-  }, [userKey])
+  }, [userKey, user?.id, gender])
 
   const setConfig = useCallback(
     (updater: AvatarConfig | ((prev: AvatarConfig) => AvatarConfig)) => {
@@ -95,4 +122,3 @@ export function useAvatar() {
 
   return { config, setConfig }
 }
-

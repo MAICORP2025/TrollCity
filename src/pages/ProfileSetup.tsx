@@ -4,8 +4,12 @@ import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAvatar } from '../lib/hooks/useAvatar'
+import type { AvatarConfig } from '../lib/hooks/useAvatar'
+import { updateUserAvatarConfig } from '../lib/purchases'
 import Avatar3D from '../components/avatar/Avatar3D'
 import PaymentMethodManager from '../components/payments/PaymentMethodManager'
+import { KeyRound } from 'lucide-react'
+import { setResetPin } from '@/services/passwordManager'
 
 const ProfileSetup = () => {
   const navigate = useNavigate()
@@ -32,12 +36,15 @@ const ProfileSetup = () => {
   const [username, setUsername] = React.useState(profile?.username || suggestedUsername)
   const [fullName, setFullName] = React.useState((profile as any)?.full_name || '')
   const [bio, setBio] = React.useState(profile?.bio || '')
+  const [gender, setGender] = React.useState((profile as any)?.gender || '')
   const [loading, setLoading] = React.useState(false)
   const [uploadingAvatar, setUploadingAvatar] = React.useState(false)
   const [uploadingCover, setUploadingCover] = React.useState(false)
   const [usernameError, setUsernameError] = React.useState('')
   const [bannerUrl, setBannerUrl] = React.useState(profile?.banner_url || '')
   const [avatarUrl, setAvatarUrl] = React.useState(profile?.avatar_url || '')
+  const [pin, setPin] = React.useState('')
+  const [savingPin, setSavingPin] = React.useState(false)
 
   const handleUsernameChange = (value: string) => {
     // Allow letters, numbers, and underscores
@@ -85,6 +92,10 @@ const ProfileSetup = () => {
       toast.error('Use 2–20 letters, numbers, or underscores')
       return
     }
+    if (!gender) {
+      toast.error('Gender is required')
+      return
+    }
     setLoading(true)
     try {
       if (profile?.username !== uname) {
@@ -107,6 +118,7 @@ const ProfileSetup = () => {
           username: uname, 
           full_name: fullName.trim(),
           bio: bio || null, 
+          gender,
           updated_at: now 
         })
         .eq('id', user.id)
@@ -136,7 +148,27 @@ const ProfileSetup = () => {
           setProfile(fallback as any)
         }
       }
+
       toast.success('Profile saved')
+
+      if (nextProfile && user) {
+        const g = (nextProfile as any).gender as string | null
+        const isFemale = g === 'female'
+        const baseAvatar: AvatarConfig = {
+          skinTone: isFemale ? 'light' : 'medium',
+          hairStyle: isFemale ? 'long' : 'short',
+          hairColor: isFemale ? 'blonde' : 'brown',
+          outfit: isFemale ? 'casual' : 'street',
+          accessory: 'none',
+          useAsProfilePicture: avatarConfig.useAsProfilePicture
+        }
+
+        setAvatarConfig(baseAvatar)
+
+        await updateUserAvatarConfig(user.id, {
+          avatar_config: baseAvatar
+        })
+      }
 
       if (nextProfile?.is_verified) {
         navigate('/')
@@ -185,7 +217,7 @@ const ProfileSetup = () => {
             uploadedUrl = urlData.publicUrl
             break
           }
-        } catch (err) {
+        } catch {
           console.log(`Failed to upload to ${bucket}, trying next...`)
         }
       }
@@ -227,31 +259,38 @@ const ProfileSetup = () => {
       if (!file.type.startsWith('image/')) throw new Error('File must be an image')
       if (file.size > 5 * 1024 * 1024) throw new Error('Image too large (max 5MB)')
 
-      const ext = file.name.split('.').pop()
+      const ext = file.name.split('.').pop() || 'jpg'
       const name = `${user.id}-${Date.now()}.${ext}`
       const uploadPath = `covers/${name}`
 
-      // Try multiple buckets
-      const uploadBuckets = ['covers', 'troll-city-assets', 'avatars', 'public']
-      let uploadedUrl = null
+      const buckets = ['public', 'covers', 'avatars', 'troll-city-assets']
+      let uploadedUrl: string | null = null
+      let lastErr: any = null
 
-      for (const bucket of uploadBuckets) {
+      for (const bucket of buckets) {
         try {
           const { error: uploadErr } = await supabase.storage
             .from(bucket)
-            .upload(uploadPath, file, { cacheControl: '3600', upsert: false })
-          
-          if (!uploadErr) {
-            const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadPath)
+            .upload(uploadPath, file, { cacheControl: '3600', upsert: true })
+
+          if (uploadErr) {
+            lastErr = uploadErr
+            continue
+          }
+
+          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadPath)
+          if (urlData?.publicUrl) {
             uploadedUrl = urlData.publicUrl
             break
           }
         } catch (err) {
-          console.log(`Failed to upload to ${bucket}, trying next...`)
+          lastErr = err
         }
       }
 
-      if (!uploadedUrl) throw new Error('Failed to upload cover photo to any bucket')
+      if (!uploadedUrl) {
+        throw lastErr || new Error('Failed to upload cover photo (no bucket available)')
+      }
 
       // Set local banner URL immediately for instant UI feedback
       setBannerUrl(uploadedUrl)
@@ -450,6 +489,22 @@ const ProfileSetup = () => {
               </div>
 
               <div>
+                <label htmlFor="gender" className="block text-sm mb-2">Gender</label>
+                <select
+                  id="gender"
+                  name="gender"
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full px-4 py-2 rounded bg-[#23232b] text-white border border-gray-600 focus:outline-none"
+                  required
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+
+              <div>
                 <label htmlFor="bio" className="block text-sm mb-2">Bio</label>
                 <textarea
                   id="bio"
@@ -474,7 +529,6 @@ const ProfileSetup = () => {
 
 
 
-        {/* Payment Methods */}
         <details className="bg-[#1A1A1A] rounded-lg border border-[#2C2C2C] mt-6" open>
           <summary className="cursor-pointer px-6 py-4 flex items-center justify-between">
             <span className="font-semibold">Payment Methods</span>
@@ -489,6 +543,57 @@ const ProfileSetup = () => {
           </div>
         </details>
 
+        <details className="bg-[#1A1A1A] rounded-lg border border-[#2C2C2C] mt-6">
+          <summary className="cursor-pointer px-6 py-4 flex items-center justify-between">
+            <span className="font-semibold flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-emerald-400" />
+              Password Reset PIN
+            </span>
+            <span className="text-xs text-gray-400">Optional</span>
+          </summary>
+
+          <div className="px-6 pb-6 space-y-3">
+            <p className="text-xs text-gray-400">
+              Set a 6-digit PIN you can use later to reset your password.
+            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <input
+                inputMode="numeric"
+                pattern="\\d*"
+                maxLength={6}
+                value={pin}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 6)
+                  setPin(v)
+                }}
+                placeholder="Enter 6-digit PIN"
+                className="px-4 py-2 bg-[#23232b] border border-gray-600 rounded-xl text-white w-48 tracking-widest"
+              />
+              <button
+                type="button"
+                disabled={savingPin || pin.length !== 6}
+                onClick={async () => {
+                  if (pin.length !== 6) {
+                    toast.error('PIN must be exactly 6 digits')
+                    return
+                  }
+                  setSavingPin(true)
+                  const { error } = await setResetPin(pin)
+                  setSavingPin(false)
+                  if (error) {
+                    toast.error('Failed to save PIN')
+                  } else {
+                    toast.success('Password reset PIN saved')
+                    setPin('')
+                  }
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold disabled:opacity-50"
+              >
+                {savingPin ? 'Saving...' : 'Save PIN'}
+              </button>
+            </div>
+          </div>
+        </details>
 
 
           {/* 🆔 ID Verification Section */}

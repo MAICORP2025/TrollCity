@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 
 interface Trollcoins {
   troll_coins: number
+  paid_coins: number
+  trollmonds: number
   total_earned_coins: number
   total_spent_coins: number
 }
@@ -32,11 +34,26 @@ export function useCoins() {
   const [error, setError] = useState<string | null>(null)
   const [balances, setBalances] = useState<Trollcoins>({
     troll_coins: profile?.troll_coins ?? 0,
+    paid_coins: profile?.paid_coins ?? 0,
+    trollmonds: profile?.trollmonds ?? 0,
     total_earned_coins: profile?.total_earned_coins || 0,
     total_spent_coins: profile?.total_spent_coins || 0,
   })
   const [optimisticUntil, setOptimisticUntil] = useState<number | null>(null)
   const [optimisticTroll, setOptimisticTroll] = useState<number | null>(null)
+
+  // Sync balances with profile from AuthStore to ensure UI stays in sync across components
+  useEffect(() => {
+    if (profile) {
+      setBalances({
+        troll_coins: profile.troll_coins ?? 0,
+        paid_coins: profile.paid_coins ?? 0,
+        trollmonds: profile.trollmonds ?? 0,
+        total_earned_coins: profile.total_earned_coins || 0,
+        total_spent_coins: profile.total_spent_coins || 0,
+      })
+    }
+  }, [profile, profile?.troll_coins, profile?.paid_coins, profile?.trollmonds, profile?.total_earned_coins, profile?.total_spent_coins])
 
   /**
    * Refresh coin balances from database
@@ -53,7 +70,7 @@ export function useCoins() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
-        .select('troll_coins, total_earned_coins, total_spent_coins')
+        .select('troll_coins, paid_coins, trollmonds, total_earned_coins, total_spent_coins')
         .eq('id', user.id)
         .maybeSingle()
 
@@ -83,6 +100,8 @@ export function useCoins() {
 
       const nextBalances = {
         troll_coins: mergedPaid,
+        paid_coins: profileData?.paid_coins ?? currentProfile?.paid_coins ?? 0,
+        trollmonds: profileData?.trollmonds ?? currentProfile?.trollmonds ?? 0,
         total_earned_coins: nextTotals.total_earned_coins,
         total_spent_coins: nextTotals.total_spent_coins,
       }
@@ -90,6 +109,8 @@ export function useCoins() {
       setBalances((prev) => {
         const isSame =
           prev.troll_coins === nextBalances.troll_coins &&
+          prev.paid_coins === nextBalances.paid_coins &&
+          prev.trollmonds === nextBalances.trollmonds &&
           prev.total_earned_coins === nextBalances.total_earned_coins &&
           prev.total_spent_coins === nextBalances.total_spent_coins
 
@@ -99,6 +120,7 @@ export function useCoins() {
       if (currentProfile) {
         const profileNeedsUpdate =
           currentProfile.troll_coins !== mergedPaid ||
+          currentProfile.trollmonds !== nextBalances.trollmonds ||
           currentProfile.total_earned_coins !== nextTotals.total_earned_coins ||
           currentProfile.total_spent_coins !== nextTotals.total_spent_coins
 
@@ -106,6 +128,7 @@ export function useCoins() {
             const updatedProfile: UserProfile = {
               ...currentProfile,
               troll_coins: mergedPaid as number,
+              trollmonds: nextBalances.trollmonds,
               total_earned_coins: nextTotals.total_earned_coins,
               total_spent_coins: nextTotals.total_spent_coins,
             }
@@ -255,21 +278,28 @@ export function useCoins() {
               typeof newProfileData.total_spent_coins === 'number'
                 ? newProfileData.total_spent_coins
                 : currentProfile.total_spent_coins
+            const nextTrollmonds =
+              typeof newProfileData.trollmonds === 'number'
+                ? newProfileData.trollmonds
+                : (currentProfile.trollmonds ?? 0)
             const updatedProfile: UserProfile = {
               ...currentProfile,
               troll_coins: shouldKeepOptimistic
                 ? (optimisticTroll ?? balances.troll_coins)
                 : Number(candidate ?? currentProfile.troll_coins),
+              trollmonds: nextTrollmonds,
               total_earned_coins: nextEarned,
               total_spent_coins: nextSpent,
             }
             useAuthStore.getState().setProfile(updatedProfile)
             setBalances((prev) => ({
+              paid_coins: prev.paid_coins,
               troll_coins: shouldKeepOptimistic
                 ? (optimisticTroll ?? prev.troll_coins)
                 : (typeof updatedProfile.troll_coins === 'number'
                     ? updatedProfile.troll_coins
                     : prev.troll_coins),
+              trollmonds: updatedProfile.trollmonds ?? prev.trollmonds,
               total_earned_coins:
                 typeof updatedProfile.total_earned_coins === 'number'
                   ? updatedProfile.total_earned_coins
@@ -321,6 +351,7 @@ export function useCoins() {
     optimisticCredit,
     // Convenience getters
     troll_coins: balances.troll_coins,
+    trollmonds: balances.trollmonds,
     totalEarned: balances.total_earned_coins,
     totalSpent: balances.total_spent_coins,
   }

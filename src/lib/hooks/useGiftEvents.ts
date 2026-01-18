@@ -46,32 +46,35 @@ export function useGiftEvents(streamId?: string | null) {
         // Fetch sender username for display
         let senderUsername = 'Anonymous'
         let senderAvatar = null
-        const senderId = tableType === 'stream_gifts' ? gift.from_user_id : gift.sender_id
+        let senderRole: string | null = null
+        let senderTrollRole: string | null = null
+        const senderId = gift.from_user_id || gift.sender_id
         
         if (senderId) {
           try {
             const { data: senderProfile } = await supabase
               .from('user_profiles')
-              .select('username, avatar_url')
+              .select('username, avatar_url, role, troll_role')
               .eq('id', senderId)
               .single()
               
             if (senderProfile?.username) {
               senderUsername = senderProfile.username
               senderAvatar = senderProfile.avatar_url
+              senderRole = senderProfile.role || null
+              senderTrollRole = senderProfile.troll_role || null
             }
           } catch (e) {
             console.warn('Failed to fetch sender username:', e)
           }
         }
         
-        const amount = tableType === 'stream_gifts' 
-          ? Number(gift.coins_amount || 0) 
-          : Number(gift.coins_spent || 0)
+        const amount = tableType === 'stream_gifts'
+          ? Number((gift.coins_amount ?? gift.coins_spent ?? 0))
+          : Number((gift.coins_spent ?? gift.coins_amount ?? 0))
 
         const tier = getTier(amount)
 
-        // Transform gift data to match GiftEventOverlay expectations
         const transformedGift = {
           id: gift.gift_id || gift.id || 'unknown',
           coinCost: amount,
@@ -79,6 +82,8 @@ export function useGiftEvents(streamId?: string | null) {
           sender_username: senderUsername,
           sender_id: senderId,
           sender_avatar: senderAvatar,
+          sender_role: senderRole,
+          sender_troll_role: senderTrollRole,
           quantity: gift.quantity || 1,
           icon: getGiftIcon(gift.message || gift.gift_type || 'Gift'),
           tier,
@@ -86,7 +91,6 @@ export function useGiftEvents(streamId?: string | null) {
         }
 
         console.log('🎆 Transformed gift for display:', transformedGift)
-        playGiftSound(tier)
 
         const now = Date.now()
         let comboCount = 0
@@ -134,53 +138,6 @@ export function useGiftEvents(streamId?: string | null) {
       if (coins >= 1200) return 'epic'
       if (coins >= 100) return 'rare'
       return 'basic'
-    }
-
-    const playGiftSound = (tier: 'basic' | 'rare' | 'epic' | 'legendary' | 'millionaire') => {
-      const mute = localStorage.getItem('tc_mute_gift_sounds') === 'true'
-      if (mute) return
-      const limitHigh = localStorage.getItem('tc_limit_high_tier_sounds') === 'true'
-      const streamSafe = localStorage.getItem('tc_stream_safe_mode') === 'true'
-
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const gain = ctx.createGain()
-      gain.gain.value = streamSafe ? 0.2 : 0.6
-      gain.connect(ctx.destination)
-
-      const playTone = (freq: number, durationMs: number, type: OscillatorType = 'sine') => {
-        const osc = ctx.createOscillator()
-        osc.type = type
-        osc.frequency.value = freq
-        osc.connect(gain)
-        const now = ctx.currentTime
-        osc.start(now)
-        osc.stop(now + durationMs / 1000)
-      }
-
-      if (tier === 'basic') {
-        playTone(800, 150, 'sine')
-      } else if (tier === 'rare') {
-        playTone(500, 300, 'triangle')
-        playTone(900, 200, 'triangle')
-      } else if (tier === 'epic') {
-        playTone(200, limitHigh ? 600 : 1800, 'sawtooth')
-        playTone(400, limitHigh ? 300 : 900, 'square')
-      } else if (tier === 'legendary') {
-        if (limitHigh) {
-          playTone(300, 800, 'sawtooth')
-        } else {
-          playTone(250, 1500, 'sawtooth')
-          playTone(600, 1200, 'square')
-        }
-      } else {
-        if (limitHigh) {
-          playTone(280, 1000, 'triangle')
-        } else {
-          playTone(300, 800, 'square')
-          setTimeout(() => playTone(600, 800, 'square'), 900)
-          setTimeout(() => playTone(450, 800, 'square'), 1800)
-        }
-      }
     }
 
     return () => {

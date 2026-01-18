@@ -1,22 +1,79 @@
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, CreditCard, Home } from "lucide-react";
+import { useAuthStore } from "../lib/store";
+import { supabase } from "../lib/supabase";
+import { toast } from "sonner";
 
 export default function KickFee() {
   const navigate = useNavigate();
-  const kickCount = localStorage.getItem("kickCount") ? parseInt(localStorage.getItem("kickCount")!) : 0;
-  const reinstatementFee = 500 + kickCount * 500;
+  const { user, profile, refreshProfile } = useAuthStore();
+  const [kickCount, setKickCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [showCashAppInfo, setShowCashAppInfo] = useState(false);
 
-  const handlePayWithCoins = () => {
-    alert(`Paid ${reinstatementFee} coins to rejoin streams!`);
-    localStorage.removeItem("kickCount");
-    navigate("/");
+  const reinstatementFee = 500;
+  const usernamePrefix = String(
+    profile?.username || user?.email?.split("@")[0] || "user"
+  )
+    .slice(0, 6)
+    .toUpperCase();
+  const suggestedNote = `${usernamePrefix}-KICK-REENTRY`;
+
+  useEffect(() => {
+    if (profile?.kick_count != null) {
+      setKickCount(profile.kick_count);
+      return;
+    }
+
+    const localKick = localStorage.getItem("kickCount");
+    if (localKick) {
+      const parsed = parseInt(localKick);
+      if (!Number.isNaN(parsed)) {
+        setKickCount(parsed);
+      }
+    }
+  }, [profile]);
+
+  const handlePayWithCoins = async () => {
+    if (!user || !profile) {
+      toast.error("You must be logged in");
+      navigate("/auth");
+      return;
+    }
+
+    if ((profile.troll_coins || 0) < reinstatementFee) {
+      toast.error("Not enough troll_coins to pay re-entry fee");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("pay_kick_reentry_fee", {
+        p_user_id: user.id,
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success("Re-entry fee paid. Access restored.");
+        localStorage.removeItem("kickCount");
+        refreshProfile?.();
+        navigate("/", { replace: true });
+      } else {
+        toast.error(data?.error || "Failed to pay re-entry fee");
+      }
+    } catch (err: any) {
+      console.error("Error paying re-entry fee:", err);
+      toast.error(err?.message || "Failed to pay re-entry fee");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handlePayWithPayPal = () => {
-    alert("Redirecting to PayPal...");
-    alert(`Paid $${(reinstatementFee / 100).toFixed(2)} to rejoin streams!`);
-    localStorage.removeItem("kickCount");
-    navigate("/");
+  const handlePayWithCashApp = () => {
+    setShowCashAppInfo(true);
+    toast.info("Follow the Cash App instructions below to complete your re-entry fee.");
   };
 
   return (
@@ -45,9 +102,6 @@ export default function KickFee() {
               <span className="text-gray-400">Reinstatement Fee:</span>
               <span className="font-bold text-yellow-400">{reinstatementFee} 🪙</span>
             </div>
-            <p className="text-xs text-gray-500 mt-3">
-              Each additional kick increases fee by 500 coins
-            </p>
           </div>
 
           {kickCount >= 3 && (
@@ -61,18 +115,37 @@ export default function KickFee() {
           <div className="space-y-3">
             <button
               onClick={handlePayWithCoins}
+              disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-700 hover:to-yellow-600 rounded-lg font-bold transition flex items-center justify-center gap-2"
             >
-              💰 Pay {reinstatementFee} Coins
+              💰 {loading ? "Processing..." : `Pay ${reinstatementFee} Coins`}
             </button>
 
             <button
-              onClick={handlePayWithPayPal}
+              onClick={handlePayWithCashApp}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 rounded-lg font-bold transition flex items-center justify-center gap-2"
             >
               <CreditCard size={18} />
-              Pay via PayPal
+              Pay via Cash App (manual)
             </button>
+
+            {showCashAppInfo && (
+              <div className="w-full py-3 px-4 bg-blue-950/60 border border-blue-500/40 rounded-lg text-sm text-blue-100 space-y-2">
+                <div className="font-semibold">Manual Cash App payment</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>
+                    Send payment to <span className="font-mono font-semibold">$trollcity95</span>
+                  </li>
+                  <li>
+                    In the Cash App note include:{" "}
+                    <span className="font-mono">{suggestedNote}</span>
+                  </li>
+                  <li>
+                    Keep your Cash App receipt so support or Troll Court can verify your payment.
+                  </li>
+                </ul>
+              </div>
+            )}
 
             <button
               onClick={() => navigate("/")}

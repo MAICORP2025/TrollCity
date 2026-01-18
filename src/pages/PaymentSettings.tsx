@@ -3,6 +3,7 @@
 import React from 'react'
 import PaymentMethodManager from '../components/payments/PaymentMethodManager'
 
+export default function PaymentSettings() {
   return (
     <div className="min-h-screen bg-[#0D0D1A] text-white">
       <div className="max-w-3xl mx-auto px-6 py-10">

@@ -11,7 +11,9 @@ import {
   DollarSign,
   Settings,
   TrendingUp,
-  Filter
+  Filter,
+  Smartphone,
+  Clock3
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -28,6 +30,19 @@ interface CoinTransaction {
   created_at: string
   platform_profit?: number
   liability?: number
+}
+
+interface ManualOrder {
+  id: string
+  status: 'pending' | 'paid' | 'fulfilled' | 'canceled'
+  coins: number
+  amount_cents: number | null
+  note_suggested: string | null
+  payer_cashtag?: string | null
+  external_tx_id?: string | null
+  created_at: string | null
+  paid_at?: string | null
+  fulfilled_at?: string | null
 }
 
 const TRANSACTION_ICONS: Record<string, any> = {
@@ -60,6 +75,13 @@ const TRANSACTION_COLORS: Record<string, string> = {
   insurance: 'text-blue-500'
 }
 
+const MANUAL_STATUS_STYLES: Record<string, string> = {
+  pending: 'bg-yellow-500/15 text-yellow-200 border border-yellow-500/30',
+  paid: 'bg-blue-500/15 text-blue-200 border border-blue-500/30',
+  fulfilled: 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/30',
+  canceled: 'bg-gray-500/15 text-gray-200 border border-gray-500/30'
+}
+
 export default function TransactionHistory() {
   const user = useAuthStore((s) => s.user)
   const profile = useAuthStore((s) => s.profile)
@@ -79,6 +101,9 @@ export default function TransactionHistory() {
     totalPurchased: 0,
     totalFree: 0
   })
+  const [manualOrders, setManualOrders] = useState<ManualOrder[]>([])
+  const [manualLoading, setManualLoading] = useState(true)
+  const [manualExpanded, setManualExpanded] = useState(false)
 
   useEffect(() => {
     if (isAdmin && queryUserId && queryUserId !== user?.id) {
@@ -147,10 +172,41 @@ export default function TransactionHistory() {
     }
   }, [targetUserId, filter])
 
+  const loadManualOrders = useCallback(async () => {
+    if (!targetUserId) return
+    try {
+      setManualLoading(true)
+      let query = supabase
+        .from('manual_coin_orders')
+        .select('id, status, coins, amount_cents, note_suggested, payer_cashtag, external_tx_id, created_at, paid_at, fulfilled_at')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (targetUserId) {
+        query = query.eq('user_id', targetUserId)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      setManualOrders(data || [])
+    } catch (err) {
+      console.error('Error loading manual orders:', err)
+      toast.error('Failed to load Cash App manual orders')
+    } finally {
+      setManualLoading(false)
+    }
+  }, [targetUserId])
+
   useEffect(() => {
     if (!targetUserId) return
     loadTransactions()
   }, [loadTransactions, targetUserId])
+
+  useEffect(() => {
+    if (!targetUserId) return
+    loadManualOrders()
+  }, [loadManualOrders, targetUserId])
 
   function formatDate(dateStr: string) {
     const date = new Date(dateStr)
@@ -240,6 +296,86 @@ export default function TransactionHistory() {
             </div>
             <p className="text-2xl font-bold text-white">{stats.totalFree.toLocaleString()}</p>
           </div>
+        </div>
+
+        {/* Manual Cash App Orders */}
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="flex items-center gap-2 text-white font-semibold">
+                <Smartphone size={18} className="text-green-400" />
+                <span>Manual Cash App Orders</span>
+                <span className="text-xs text-gray-400">({manualOrders.length})</span>
+              </div>
+              <p className="text-xs text-gray-400">Track Cash App submissions and see if coins were credited.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setManualExpanded((v) => !v)}
+                className="px-3 py-1 rounded bg-gray-700 text-sm font-medium text-white border border-gray-600 hover:bg-gray-600"
+              >
+                {manualExpanded ? 'Hide orders' : 'Show orders'}
+              </button>
+              <button
+                onClick={loadManualOrders}
+                disabled={manualLoading}
+                className="px-3 py-1 rounded bg-gray-700 text-sm font-medium text-white border border-gray-600 hover:bg-gray-600 disabled:opacity-60"
+              >
+                {manualLoading ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {!manualExpanded ? (
+            <div className="text-gray-400 text-sm">Dropdown collapsed — expand to view manual orders.</div>
+          ) : manualLoading ? (
+            <div className="text-gray-400 text-sm">Loading manual orders…</div>
+          ) : manualOrders.length === 0 ? (
+            <div className="text-gray-400 text-sm">No manual Cash App orders yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {manualOrders.map((order) => {
+                const amountUsd = order.amount_cents ? order.amount_cents / 100 : 0
+                return (
+                  <div key={order.id} className="p-3 border border-gray-700 rounded-lg bg-black/30">
+                    <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+                      <span>{order.created_at ? formatDate(order.created_at) : 'Pending timestamp'}</span>
+                      <span className={`px-2 py-1 rounded-full text-[11px] uppercase tracking-wide ${MANUAL_STATUS_STYLES[order.status] || 'bg-gray-700 text-gray-200 border border-gray-600'}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-4 text-sm text-gray-200 mb-2">
+                      <div className="flex items-center gap-1 text-yellow-200">
+                        <ShoppingCart size={14} />
+                        <span>{order.coins.toLocaleString()} coins</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-green-200">
+                        <DollarSign size={14} />
+                        <span>${amountUsd.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-gray-200">
+                        <Clock3 size={14} />
+                        <span>Tag: {order.payer_cashtag ? `$${order.payer_cashtag}` : 'Not provided'}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-300">
+                      <div className="font-semibold">Cash App note</div>
+                      <div className="mt-1 inline-flex items-center gap-2 bg-gray-800 px-2 py-1 rounded border border-gray-700 text-purple-100">
+                        <Sparkles size={12} />
+                        <span>{order.note_suggested || '—'}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-[11px] text-gray-500 mt-2">
+                      <span>Order ID: {order.id}</span>
+                      {order.paid_at && <span>• Marked paid {formatDate(order.paid_at)}</span>}
+                      {order.fulfilled_at && <span>• Credited {formatDate(order.fulfilled_at)}</span>}
+                      {order.external_tx_id && <span>• TX: {order.external_tx_id}</span>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Filter */}

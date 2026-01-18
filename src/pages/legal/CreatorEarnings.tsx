@@ -26,8 +26,8 @@ export default function CreatorEarnings() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Payouts</h2>
             <p className="text-gray-300 leading-relaxed">
-              Creators can request payouts when they reach the minimum threshold (10,000 coins = $100).
-              Payouts are processed manually and subject to platform fees (20% commission).
+              Creators can request payouts when they reach the minimum threshold (12,000 coins ≈ $36).
+              Payouts are processed manually and subject to platform fees (5% commission).
             </p>
           </section>
 
@@ -42,7 +42,7 @@ export default function CreatorEarnings() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Platform Fees</h2>
             <p className="text-gray-300 leading-relaxed">
-              Platform commission: 20% per gift. Payment processing fees: 2.9% + $0.30 per payout transaction.
+              Platform commission: 5% per gift. Payment processing fees: 2.9% + $0.30 per payout transaction.
             </p>
           </section>
         </div>
