@@ -40,6 +40,7 @@ import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTrackin
 import { useSeatRoster } from '../hooks/useSeatRoster';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
 import UserActionsMenu from '../components/broadcast/UserActionsMenu';
+import { useViewerTracking } from '../hooks/useViewerTracking';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -91,6 +92,15 @@ interface GiftBalanceDelta {
   userId: string;
   delta: number;
   key: number;
+}
+
+interface SeatBan {
+  id: string;
+  user_id: string;
+  banned_until: string | null;
+  created_at: string;
+  reason?: string | null;
+  username?: string | null;
 }
 
 const useIsBroadcaster = (profile: any, stream: StreamRow | null) => {
@@ -544,6 +554,8 @@ function OfficerActionBubble({
   onDisableUserChat,
   onKickUser,
   onRemoveSeat,
+  seatBans,
+  onClearSeatBan,
   onClose,
   position,
   onMouseDown
@@ -561,6 +573,8 @@ function OfficerActionBubble({
   onDisableUserChat: (userId: string) => void;
   onKickUser: (userId: string) => void;
   onRemoveSeat: (userId: string) => void;
+  seatBans: SeatBan[];
+  onClearSeatBan: (banId: string) => void;
   onClose: () => void;
   position: { x: number; y: number } | null;
   onMouseDown: (e: React.MouseEvent) => void;
@@ -668,6 +682,45 @@ function OfficerActionBubble({
         >
           <span className="text-lg">📦</span> Remove From Box
         </button>
+        <div className="col-span-2 border-t border-red-500/20 pt-2 mt-1 max-h-40 overflow-y-auto">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-white/50">Guest-box bans</span>
+            <span className="text-[10px] text-white/60">{seatBans.length}</span>
+          </div>
+          {seatBans.length === 0 ? (
+            <p className="text-[11px] text-white/40">No active bans</p>
+          ) : (
+            seatBans.slice(0, 6).map((ban) => {
+              const isPermanent = !ban.banned_until;
+              let untilLabel = 'Permanent';
+              if (!isPermanent) {
+                const date = new Date(ban.banned_until as string);
+                if (!isNaN(date.getTime())) {
+                  untilLabel = `Until ${date.toLocaleTimeString()}`;
+                }
+              }
+              return (
+                <div key={ban.id} className="flex items-center justify-between gap-2 py-1">
+                  <div className="min-w-0">
+                    <div className="text-[11px] text-white truncate">
+                      {ban.username || ban.user_id.slice(0, 8)}
+                    </div>
+                    <div className="text-[10px] text-red-300/80 truncate">
+                      {untilLabel}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onClearSeatBan(ban.id)}
+                    className="px-2 py-1 rounded-md bg-red-600/80 hover:bg-red-500 text-[10px] font-bold text-white whitespace-nowrap"
+                  >
+                    Clear
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
@@ -680,8 +733,11 @@ export default function LivePage() {
   
   const { user, profile, refreshProfile } = useAuthStore();
 
+  useViewerTracking(streamId || null, user?.id || null);
+
   const [joinPrice, setJoinPrice] = useState(0);
   const [boxCount, setBoxCount] = useState(0);
+  const [seatBans, setSeatBans] = useState<SeatBan[]>([]);
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>(() => {
@@ -745,6 +801,38 @@ export default function LivePage() {
   const [privatePasswordInput, setPrivatePasswordInput] = useState('');
   const [privateAuthError, setPrivateAuthError] = useState('');
   const privateAccessStorageKey = streamId ? `private-stream-access:${streamId}` : null;
+
+  const refreshBoxCountFromMessages = useCallback(
+    async (id: string) => {
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('content')
+          .eq('stream_id', id)
+          .eq('message_type', 'system')
+          .like('content', 'BOX_COUNT_UPDATE:%')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error || !data || data.length === 0) return;
+
+        const content = data[0]?.content as string | null;
+        if (!content || typeof content !== 'string') return;
+
+        const parts = content.split(':');
+        if (parts.length < 2) return;
+        const parsed = parseInt(parts[1], 10);
+        if (Number.isNaN(parsed)) return;
+
+        const maxBoxes = 6;
+        const next = Math.max(0, Math.min(maxBoxes, parsed));
+        setBoxCount(next);
+      } catch (err) {
+        console.error('Failed to refresh box count from messages:', err);
+      }
+    },
+    [setBoxCount]
+  );
 
   // Save stream to session storage for persistence
   useEffect(() => {
@@ -895,6 +983,88 @@ export default function LivePage() {
         profile.is_lead_officer ||
         profile.is_troll_officer)
   );
+
+  const loadSeatBans = useCallback(async () => {
+    if (!isOfficerUser || !seatRoomName) return;
+    try {
+      const { data, error } = await supabase
+        .from('broadcast_seat_bans')
+        .select('id,user_id,banned_until,created_at,reason')
+        .eq('room', seatRoomName)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Failed to load seat bans', error);
+        return;
+      }
+
+      const rows = (data as any[]) || [];
+      const userIds = Array.from(
+        new Set(
+          rows
+            .map((row) => row.user_id as string | null)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      const usernameMap = new Map<string, string | null>();
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('id,username')
+          .in('id', userIds);
+        (profiles as any[] | null | undefined)?.forEach((p) => {
+          usernameMap.set(p.id as string, (p.username as string | null) ?? null);
+        });
+      }
+
+      const enriched: SeatBan[] = rows.map((row) => {
+        const userId = row.user_id as string;
+        return {
+          id: row.id as string,
+          user_id: userId,
+          banned_until: (row.banned_until as string | null) ?? null,
+          created_at: row.created_at as string,
+          reason: (row.reason as string | null) ?? null,
+          username: usernameMap.get(userId) ?? null,
+        };
+      });
+
+      setSeatBans(enriched);
+    } catch (err) {
+      console.error('Failed to load seat bans', err);
+    }
+  }, [isOfficerUser, seatRoomName]);
+
+  useEffect(() => {
+    if (!isOfficerUser || !seatRoomName) return;
+    let cancelled = false;
+
+    loadSeatBans();
+
+    const channel = supabase
+      .channel(`broadcast-seat-bans-${seatRoomName}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'broadcast_seat_bans',
+          filter: `room=eq.${seatRoomName}`,
+        },
+        () => {
+          if (!cancelled) {
+            loadSeatBans();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [isOfficerUser, seatRoomName, loadSeatBans]);
 
   const [seatActionTarget, setSeatActionTarget] = useState<{
     userId: string
@@ -1169,9 +1339,14 @@ export default function LivePage() {
 
   const handleSeatKick = async () => {
     if (!seatActionTarget) return;
-    await releaseSeat(seatActionTarget.seatIndex, seatActionTarget.userId, { force: true });
-    toast.success('Guest removed from seat');
-    closeSeatActionMenu();
+    try {
+      await releaseSeat(seatActionTarget.seatIndex, seatActionTarget.userId, { force: true });
+      toast.success('Guest removed from seat');
+      closeSeatActionMenu();
+    } catch (err) {
+      console.error('Failed to remove guest from seat', err);
+      toast.error('Failed to remove guest from seat');
+    }
   };
 
   const handleSeatReport = () => {
@@ -1518,6 +1693,20 @@ export default function LivePage() {
     }
   };
 
+  const handleOfficerClearSeatBan = async (banId: string) => {
+    try {
+      await supabase
+        .from('broadcast_seat_bans')
+        .delete()
+        .eq('id', banId);
+      toast.success('Guest-box ban cleared');
+      await loadSeatBans();
+    } catch (err) {
+      console.error('Failed to clear seat ban', err);
+      toast.error('Failed to clear guest-box ban');
+    }
+  };
+
   const toggleMic = useCallback(async () => {
     if (!micOn && micRestrictionInfo.isMuted) {
       toast.error(micRestrictionInfo.message || 'Microphone is disabled.');
@@ -1736,6 +1925,9 @@ export default function LivePage() {
       setStream(streamDataFromState as StreamRow);
       setViewerCount((streamDataFromState as StreamRow).current_viewers ?? 0);
       setIsLoadingStream(false);
+      if (streamId) {
+        void refreshBoxCountFromMessages(streamId);
+      }
       return;
     }
 
@@ -1748,6 +1940,9 @@ export default function LivePage() {
           setStream(parsedStream);
           setViewerCount(parsedStream.current_viewers ?? 0);
           setIsLoadingStream(false);
+          if (streamId) {
+            void refreshBoxCountFromMessages(streamId);
+          }
           return;
         }
       }
@@ -1772,13 +1967,16 @@ export default function LivePage() {
         }
         setViewerCount(streamRow.current_viewers ?? 0);
         setStream(streamRow as StreamRow);
+        if (streamId) {
+          void refreshBoxCountFromMessages(streamId);
+        }
     } catch (err) {
         console.error("Failed to load stream:", err);
         toast.error("Failed to load stream information.");
     } finally {
         setIsLoadingStream(false);
     }
-  }, [streamId, location]);
+  }, [streamId, location, refreshBoxCountFromMessages]);
 
   useEffect(() => {
     loadStreamData();
@@ -2854,6 +3052,8 @@ export default function LivePage() {
           onDisableUserChat={handleOfficerDisableUserChat}
           onKickUser={handleOfficerKickUser}
           onRemoveSeat={handleOfficerRemoveSeat}
+          seatBans={seatBans}
+          onClearSeatBan={handleOfficerClearSeatBan}
           onClose={() => setIsOfficerBubbleVisible(false)}
           position={officerBubblePos}
           onMouseDown={handleOfficerDragStart}
@@ -3217,7 +3417,7 @@ export default function LivePage() {
         </div>
       )}
       {seatActionTarget && (
-        <UserActionsMenu
+      <UserActionsMenu
           user={{
             name: seatActionTarget.username || 'Seat occupant',
             role: seatActionTarget.role as any,
@@ -3226,6 +3426,34 @@ export default function LivePage() {
           onClose={closeSeatActionMenu}
           onGift={handleSeatGift}
           onKick={handleSeatKick}
+          onKickWithBan={async (duration) => {
+            if (!seatActionTarget) return;
+            let minutes: number | null = null;
+            if (duration === '5m') minutes = 5;
+            if (duration === '30m') minutes = 30;
+            if (duration === '1h') minutes = 60;
+            const banMinutes = duration === 'permanent' ? null : minutes;
+            try {
+              await releaseSeat(seatActionTarget.seatIndex, seatActionTarget.userId, {
+                force: true,
+                banMinutes,
+                banPermanent: duration === 'permanent',
+              });
+              if (duration === 'permanent') {
+                toast.success('Guest removed and permanently blocked from guest box');
+              } else if (banMinutes) {
+                toast.success(
+                  `Guest removed and blocked from guest box for ${banMinutes} minutes`
+                );
+              } else {
+                toast.success('Guest removed from seat');
+              }
+              closeSeatActionMenu();
+            } catch (err) {
+              console.error('Failed to remove guest with timeout', err);
+              toast.error('Failed to remove guest');
+            }
+          }}
           onReport={handleSeatReport}
           onFollow={handleSeatFollow}
           onSummon={handleSeatSummon}

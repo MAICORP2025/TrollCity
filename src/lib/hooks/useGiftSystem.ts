@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 // Removed progressionEngine import - using direct RPC calls instead
 import { processGiftXp } from '../xp'
@@ -24,6 +24,7 @@ export function useGiftSystem(
 ) {
   const { user, profile } = useAuthStore()
   const [isSending, setIsSending] = useState(false)
+  const comboRef = useRef<{ count: number; lastTime: number }>({ count: 0, lastTime: 0 })
   const isUuid = (value?: string | null) =>
     typeof value === 'string' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
@@ -118,7 +119,41 @@ export function useGiftSystem(
       if (updatedProfile) {
         useAuthStore.getState().setProfile(updatedProfile as any)
       }
-      
+
+      const now = Date.now()
+      const withinWindow = now - comboRef.current.lastTime <= 10000
+      const newCount = withinWindow ? comboRef.current.count + 1 : 1
+      comboRef.current = { count: newCount, lastTime: now }
+
+      let comboCashback = 0
+      if (gift.coinCost >= 2000) {
+        comboCashback = Math.floor(gift.coinCost * 0.05)
+      } else if (newCount >= 20) {
+        comboCashback = Math.floor(gift.coinCost * 1.5)
+      }
+
+      if (comboCashback > 0) {
+        try {
+          const { success } = await addCoins({
+            userId: user.id,
+            amount: comboCashback,
+            type: 'reward',
+            coinType: 'troll_coins',
+            description: gift.coinCost >= 2000 ? 'High value gift cashback' : 'Gift combo cashback',
+            metadata: {
+              gift_id: (spendResult as any)?.gift_id || null,
+              combo_count: newCount,
+              gift_value: gift.coinCost
+            }
+          })
+          if (success) {
+            toast.success(`Bonus: +${comboCashback} coins`)
+          }
+        } catch (comboErr) {
+          console.warn('Combo cashback failed', comboErr)
+        }
+      }
+
       // Troll Pass 5% gift bonus (cashback to sender in troll_coins)
       try {
         const tpExpire = (updatedProfile || profile)?.troll_pass_expires_at

@@ -93,7 +93,7 @@ export default function GiftBox({ onSendGift, gifts, loading, loadError }: GiftB
               No Quick Gifts available.
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
+            <div className="grid grid-cols-3 gap-2 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
               {gifts.map((gift) => {
                 const isPremium = gift.category === "Epic" || gift.category === "Legendary";
                 const baseClasses =

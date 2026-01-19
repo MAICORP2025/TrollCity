@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
@@ -36,15 +37,27 @@ type ActionLog = {
   created_at: string
 }
 
+type AutoClockoutSession = {
+  id: string
+  officer_id: string
+  clock_in: string
+  clock_out: string | null
+  hours_worked: number
+  auto_clocked_out: boolean
+  username?: string
+}
+
 
 
 export function LeadOfficerDashboard() {
   const { profile } = useAuthStore()
+  const navigate = useNavigate()
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [officers, setOfficers] = useState<Officer[]>([])
   const [logs, setLogs] = useState<ActionLog[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [empireApplications, setEmpireApplications] = useState<any[]>([])
+  const [autoClockoutSessions, setAutoClockoutSessions] = useState<AutoClockoutSession[]>([])
 
   const [reason, setReason] = useState('')
   const [banReason, setBanReason] = useState('')
@@ -53,6 +66,7 @@ export function LeadOfficerDashboard() {
   const [weeklyReports, setWeeklyReports] = useState<any[]>([])
   const [showReportForm, setShowReportForm] = useState(false)
   const [submittingReport, setSubmittingReport] = useState(false)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'hr' | 'empire' | 'reports'>('dashboard')
 
   // Load weekly reports when user ID is available
   const loadWeeklyReports = async () => {
@@ -82,10 +96,51 @@ export function LeadOfficerDashboard() {
     const init = async () => {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setCurrentUserId(authUser?.id ?? null)
-      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadEmpireApplications()])
+      await Promise.all([loadApplicants(), loadOfficers(), loadLogs(), loadEmpireApplications(), loadAutoClockouts()])
     }
     init()
   }, [])
+
+  const loadAutoClockouts = async () => {
+    try {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+      const { data: sessions, error } = await supabase
+        .from('officer_work_sessions')
+        .select('id, officer_id, clock_in, clock_out, hours_worked, auto_clocked_out')
+        .eq('auto_clocked_out', true)
+        .gte('clock_in', since)
+        .order('clock_out', { ascending: false })
+        .limit(50)
+
+      if (error) throw error
+
+      const rows = sessions || []
+
+      if (rows.length === 0) {
+        setAutoClockoutSessions([])
+        return
+      }
+
+      const officerIds = Array.from(new Set(rows.map((s: any) => s.officer_id).filter(Boolean)))
+
+      const { data: profilesData } = await supabase
+        .from('user_profiles')
+        .select('id, username')
+        .in('id', officerIds)
+
+      const map = new Map((profilesData || []).map((p: any) => [p.id, p.username as string | undefined]))
+
+      const hydrated = rows.map((s: any) => ({
+        ...s,
+        username: map.get(s.officer_id) || s.officer_id
+      })) as AutoClockoutSession[]
+
+      setAutoClockoutSessions(hydrated)
+    } catch (error: any) {
+      console.error('Error loading auto clock-out sessions:', error)
+    }
+  }
 
   const loadApplicants = async () => {
     try {
@@ -530,12 +585,122 @@ export function LeadOfficerDashboard() {
         </p>
       </div>
 
-      <section>
-        <OfficerStreamGrid />
-      </section>
+      {/* Tab Navigation */}
+      <div className="flex gap-4 border-b border-purple-800/50 pb-2 mb-6 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            activeTab === 'dashboard' ? 'bg-purple-600 text-white' : 'text-purple-300 hover:bg-purple-900/20'
+          }`}
+        >
+          <LayoutDashboard size={18} />
+          Dashboard
+        </button>
+        <button
+          onClick={() => setActiveTab('hr')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            activeTab === 'hr' ? 'bg-purple-600 text-white' : 'text-purple-300 hover:bg-purple-900/20'
+          }`}
+        >
+          <User size={18} />
+          HR & Personnel
+        </button>
+        <button
+          onClick={() => setActiveTab('empire')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            activeTab === 'empire' ? 'bg-purple-600 text-white' : 'text-purple-300 hover:bg-purple-900/20'
+          }`}
+        >
+          <Crown size={18} />
+          Empire
+        </button>
+        <button
+          onClick={() => setActiveTab('reports')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            activeTab === 'reports' ? 'bg-purple-600 text-white' : 'text-purple-300 hover:bg-purple-900/20'
+          }`}
+        >
+          <FileText size={18} />
+          Reports
+        </button>
+      </div>
 
-      <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
-        <OfficerShiftCalendar title="All Officer Shifts" />
+      {activeTab === 'dashboard' && (
+        <div className="space-y-8">
+          <section>
+            <OfficerStreamGrid />
+          </section>
+
+          <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
+            <OfficerShiftCalendar title="All Officer Shifts" />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'hr' && (
+        <div className="space-y-8">
+          <section className="rounded-2xl border border-red-800 bg-black/40 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-red-200 flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            HR Alerts – Auto Clock-outs
+          </h2>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={loadAutoClockouts}
+              className="text-sm text-red-300 hover:text-red-100"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/officer/scheduling')}
+              className="text-sm text-purple-300 hover:text-purple-100 underline"
+            >
+              Open Scheduling
+            </button>
+          </div>
+        </div>
+        {autoClockoutSessions.length === 0 ? (
+          <p className="text-sm text-red-400">
+            No recent auto clock-outs in the last 7 days.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-red-200">
+                <tr className="border-b border-red-800">
+                  <th className="text-left py-2">Officer</th>
+                  <th className="text-left py-2">Clock In</th>
+                  <th className="text-left py-2">Clock Out</th>
+                  <th className="text-left py-2">Hours Worked</th>
+                </tr>
+              </thead>
+              <tbody>
+                {autoClockoutSessions.map((s) => (
+                  <tr
+                    key={s.id}
+                    className="border-b border-red-900/50 hover:bg-red-900/10"
+                  >
+                    <td className="py-2">
+                      <ClickableUsername userId={s.officer_id} username={s.username || s.officer_id} />
+                    </td>
+                    <td className="py-2">
+                      {new Date(s.clock_in).toLocaleString()}
+                    </td>
+                    <td className="py-2">
+                      {s.clock_out ? new Date(s.clock_out).toLocaleString() : 'Active'}
+                    </td>
+                    <td className="py-2">
+                      {s.hours_worked.toFixed(2)} hrs
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {/* Applicants */}
@@ -699,7 +864,10 @@ export function LeadOfficerDashboard() {
         )}
       </section>
 
-      {/* Empire Partner Applications */}
+        </div>
+      )}
+
+      {activeTab === 'empire' && (
       <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-purple-200 flex items-center gap-2">
@@ -764,8 +932,12 @@ export function LeadOfficerDashboard() {
         )}
       </section>
 
-      {/* Reason boxes */}
-      <div className="grid md:grid-cols-2 gap-4">
+      )}
+
+      {activeTab === 'hr' && (
+        <div className="space-y-8">
+          {/* Reason boxes */}
+          <div className="grid md:grid-cols-2 gap-4">
         <section className="rounded-2xl border border-purple-800 bg-black/40 p-4">
           <h3 className="text-sm font-semibold text-purple-300 mb-2">
             Action reason (optional but recommended)
@@ -828,12 +1000,13 @@ export function LeadOfficerDashboard() {
         )}
       </section>
 
+        </div>
+      )}
+
       {/* Test viewer modal removed */}
 
-
-
-      {/* Weekly Reports Section */}
-      <section className="rounded-2xl border border-green-800 bg-black/40 p-6 mt-6">
+      {activeTab === 'reports' && (
+      <section className="rounded-2xl border border-green-800 bg-black/40 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-green-200 flex items-center gap-2">
             <Calendar className="w-5 h-5" />
@@ -858,6 +1031,7 @@ export function LeadOfficerDashboard() {
 
         <WeeklyReportsList reports={weeklyReports} />
       </section>
+      )}
     </div>
   )
 }

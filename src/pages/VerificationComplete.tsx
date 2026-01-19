@@ -101,7 +101,7 @@ export default function VerificationComplete() {
             <p className="opacity-80 mb-6">{message}</p>
             <div className="flex gap-3 justify-center">
               <button
-                onClick={() => navigate('/verify')}
+                onClick={() => navigate('/verification')}
                 className="px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
               >
                 Try Again

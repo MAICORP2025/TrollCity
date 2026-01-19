@@ -20310,6 +20310,19 @@ ALTER TABLE ONLY "public"."broadcast_seats" FORCE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."broadcast_seats" OWNER TO "postgres";
 
+CREATE TABLE IF NOT EXISTS "public"."broadcast_seat_bans" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "room" "text" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "banned_until" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid",
+    "reason" "text",
+    CONSTRAINT "broadcast_seat_bans_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "public"."broadcast_seat_bans" OWNER TO "postgres";
+
 
 CREATE TABLE IF NOT EXISTS "public"."broadcast_theme_events" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
@@ -29506,6 +29519,10 @@ CREATE INDEX "broadcast_seats_stream_id_idx" ON "public"."broadcast_seats" USING
 
 
 CREATE INDEX "broadcast_seats_user_id_idx" ON "public"."broadcast_seats" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "broadcast_seat_bans_room_user_id_idx" ON "public"."broadcast_seat_bans" USING "btree" ("room", "user_id");
 
 
 
@@ -47256,6 +47273,11 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE "public"."broadcast_seats" TO "authen
 
 
 
+GRANT ALL ON TABLE "public"."broadcast_seat_bans" TO "service_role";
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE "public"."broadcast_seat_bans" TO "authenticated";
+
+
+
 GRANT ALL ON TABLE "public"."broadcast_theme_events" TO "anon";
 GRANT ALL ON TABLE "public"."broadcast_theme_events" TO "authenticated";
 GRANT ALL ON TABLE "public"."broadcast_theme_events" TO "service_role";
@@ -49219,9 +49241,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
-
-
 
 
 

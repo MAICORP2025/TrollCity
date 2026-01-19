@@ -10,6 +10,7 @@ interface UserActionMenuProps {
   onClose: () => void;
   onGift?: (amount: number) => void;
   onKick?: () => void;
+  onKickWithBan?: (duration: '5m' | '30m' | '1h' | 'permanent') => void;
   onReport?: () => void;
   onFollow?: () => void;
   onSummon?: () => void;
@@ -21,6 +22,7 @@ export default function UserActionsMenu({
   onClose,
   onGift,
   onKick,
+  onKickWithBan,
   onReport,
   onFollow,
   onSummon,
@@ -109,6 +111,40 @@ export default function UserActionsMenu({
                   <Ban size={16} />
                   Kick from Stream
                 </button>
+
+                {onKickWithBan && (
+                  <div className="space-y-1">
+                    <div className="text-[11px] uppercase tracking-wider text-gray-400 px-1">
+                      Guest box rejoin timeout
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        onClick={() => onKickWithBan("5m")}
+                        className="px-2 py-1 bg-red-700/80 hover:bg-red-600 rounded text-[11px] font-semibold"
+                      >
+                        Kick + 5m
+                      </button>
+                      <button
+                        onClick={() => onKickWithBan("30m")}
+                        className="px-2 py-1 bg-red-700/80 hover:bg-red-600 rounded text-[11px] font-semibold"
+                      >
+                        Kick + 30m
+                      </button>
+                      <button
+                        onClick={() => onKickWithBan("1h")}
+                        className="px-2 py-1 bg-red-700/80 hover:bg-red-600 rounded text-[11px] font-semibold"
+                      >
+                        Kick + 1h
+                      </button>
+                      <button
+                        onClick={() => onKickWithBan("permanent")}
+                        className="px-2 py-1 bg-red-900 hover:bg-red-800 rounded text-[11px] font-semibold"
+                      >
+                        Kick + Perm
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <button
                   onClick={onReport}

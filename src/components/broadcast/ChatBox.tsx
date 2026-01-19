@@ -59,19 +59,6 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
   const [showCoinInput, setShowCoinInput] = useState<string | null>(null);
   const [coinAmount, setCoinAmount] = useState(10);
 
-  // Auto-vanish messages after 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-        const now = new Date();
-        setMessages(prev => prev.filter(msg => {
-            const msgTime = new Date(msg.created_at);
-            const ageSeconds = (now.getTime() - msgTime.getTime()) / 1000;
-            return ageSeconds < 30;
-        }));
-    }, 1000); // Check every second
-    return () => clearInterval(interval);
-  }, []);
-
   const fetchUserProfile = useCallback(async (userId: string) => {
     if (userCacheRef.current[userId]) return userCacheRef.current[userId];
 

@@ -350,7 +350,11 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
   )
 
   const releaseSeat = useCallback(
-    async (seatIndex: number, userId?: string, options?: { force?: boolean }) => {
+    async (
+      seatIndex: number,
+      userId?: string,
+      options?: { force?: boolean; banMinutes?: number | null; banPermanent?: boolean }
+    ) => {
       const safeIndex = normalizeSeatIndex(seatIndex)
       const targetUserId = userId ?? stableUserId
       if (!targetUserId) {
@@ -367,6 +371,10 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
             seat_index: safeIndex + 1,
             user_id: targetUserId,
             force: Boolean(options?.force),
+            ...(typeof options?.banMinutes === 'number' && options.banMinutes > 0
+              ? { ban_minutes: options.banMinutes }
+              : {}),
+            ...(options?.banPermanent ? { ban_permanent: true } : {}),
           }),
         })
 

@@ -14,6 +14,8 @@ type SeatPayload = {
   metadata?: Record<string, any>
   user_id?: string
   force?: boolean
+  ban_minutes?: number
+  ban_permanent?: boolean
 }
 
 function normalizeRoom(input: any) {
@@ -134,6 +136,34 @@ async function handleAction(req: any, res: any, room: string, profile: any) {
 
   try {
     if (action === 'claim') {
+      // Check for active seat ban before attempting claim
+      try {
+        const { data: banRow, error: banError } = await supabaseAdmin
+          .from('broadcast_seat_bans')
+          .select('banned_until')
+          .eq('room', room)
+          .eq('user_id', profile.id)
+          .maybeSingle()
+
+        if (banError) {
+          console.warn('[broadcast-seats] ban check error', banError)
+        } else if (banRow) {
+          const bannedUntil = banRow.banned_until ? new Date(banRow.banned_until) : null
+          const now = new Date()
+          if (!bannedUntil || bannedUntil > now) {
+            const server_time = now.toISOString()
+            return res.status(403).json({
+              error: 'You are temporarily restricted from joining the guest box.',
+              banned_until: banRow.banned_until,
+              room,
+              server_time,
+            })
+          }
+        }
+      } catch (banCheckErr) {
+        console.warn('[broadcast-seats] ban check exception', banCheckErr)
+      }
+
       const response = await supabaseAdmin.rpc('claim_broadcast_seat', {
         p_room: room,
         p_seat_index: seatIndexNumber,
@@ -199,6 +229,35 @@ async function handleAction(req: any, res: any, room: string, profile: any) {
 
       const result = (response.data as any)?.[0]
       const server_time = new Date().toISOString()
+
+      // Apply optional timed ban on seat rejoin if requested
+      const banMinutes =
+        typeof payload.ban_minutes === 'number' && payload.ban_minutes > 0
+          ? payload.ban_minutes
+          : null
+      const banPermanent = Boolean(payload.ban_permanent)
+
+      if (banMinutes || banPermanent) {
+        const bannedUntil = banPermanent
+          ? null
+          : new Date(Date.now() + (banMinutes as number) * 60 * 1000).toISOString()
+
+        try {
+          await supabaseAdmin
+            .from('broadcast_seat_bans')
+            .upsert(
+              {
+                room,
+                user_id: userId,
+                banned_until: bannedUntil,
+                created_by: profile.id,
+              },
+              { onConflict: 'room,user_id' }
+            )
+        } catch (banErr) {
+          console.error('[broadcast-seats] failed to record seat ban', banErr)
+        }
+      }
 
       if (!result) {
         console.log(

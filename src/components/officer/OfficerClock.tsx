@@ -96,7 +96,8 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, username')
-        .ilike('username', targetUsername)
+        .ilike('username', `${targetUsername}%`)
+        .limit(1)
         .maybeSingle();
       
       if (error) throw error;

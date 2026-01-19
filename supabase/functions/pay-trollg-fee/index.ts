@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: rpcResult, error: deductError } = await supabaseAdmin.rpc(
+    const { data: _rpcResult, error: deductError } = await supabaseAdmin.rpc(
       "deduct_user_troll_coins",
       {
         p_user_id: userId,

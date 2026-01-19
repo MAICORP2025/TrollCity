@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { OFFICER_BASE_HOURLY_COINS } from '../../lib/officerPay'
 import { toast } from 'sonner'
-import { format12hr } from '../../utils/timeFormat'
+import { format12hr, formatFullDateTime12hr } from '../../utils/timeFormat'
 import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
 import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
@@ -52,21 +52,12 @@ export default function OfficerDashboard() {
     setLoading(true)
     try {
       // Load active assignment
-      const { data: session } = await supabase.auth.getSession()
-      const token = session.session?.access_token
-
-      if (token) {
-        const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
-          'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
-
-        const assignmentRes = await fetch(`${edgeFunctionsUrl}/officer-get-assignment`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-
-        if (assignmentRes.ok) {
-          const assignmentData = await assignmentRes.json()
-          setActiveAssignment(assignmentData.assignment)
-        }
+      const { data: assignmentData, error: assignmentError } = await supabase.functions.invoke('officer-get-assignment')
+      
+      if (!assignmentError && assignmentData) {
+        setActiveAssignment(assignmentData.assignment)
+      } else if (assignmentError) {
+        console.error('Error fetching assignment:', assignmentError)
       }
 
       // Load work sessions
@@ -139,27 +130,11 @@ export default function OfficerDashboard() {
 
     setTogglingGhost(true)
     try {
-      const { data: session } = await supabase.auth.getSession()
-      const token = session.session?.access_token
-
-      if (!token) {
-        toast.error('Not authenticated')
-        return
-      }
-
-      const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 
-        'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
-
-      const response = await fetch(`${edgeFunctionsUrl}/toggle-ghost-mode`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ enabled: !profile.is_ghost_mode })
+      const { error } = await supabase.functions.invoke('toggle-ghost-mode', {
+        body: { enabled: !profile.is_ghost_mode }
       })
 
-      if (!response.ok) throw new Error('Failed to toggle ghost mode')
+      if (error) throw error
 
       if (refreshProfile) await refreshProfile()
       toast.success(profile.is_ghost_mode ? 'Ghost mode disabled' : 'Ghost mode enabled')
@@ -178,6 +153,15 @@ export default function OfficerDashboard() {
     const hours = Math.floor(minutes / 60)
     const mins = minutes % 60
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
+  }
+
+  const formatSessionDuration = (hours: number) => {
+    const totalMinutes = Math.round(hours * 60)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    if (h > 0 && m > 0) return `${h} hrs ${m} min`
+    if (h > 0) return `${h} hrs`
+    return `${m} min`
   }
 
   if (loading) {
@@ -369,8 +353,9 @@ export default function OfficerDashboard() {
             <thead>
               <tr className="border-b border-gray-700">
                 <th className="p-3 text-left text-gray-400">Stream</th>
-                <th className="p-3 text-left text-gray-400">Date</th>
-                <th className="p-3 text-left text-gray-400">Hours</th>
+                <th className="p-3 text-left text-gray-400">Clock In</th>
+                <th className="p-3 text-left text-gray-400">Clock Out</th>
+                <th className="p-3 text-left text-gray-400">Time Worked</th>
                 <th className="p-3 text-left text-gray-400">Coins</th>
                 <th className="p-3 text-left text-gray-400">Status</th>
               </tr>
@@ -387,9 +372,14 @@ export default function OfficerDashboard() {
                   <tr key={session.id} className="border-b border-gray-800 hover:bg-gray-900/50">
                     <td className="p-3">{session.streams?.title || 'N/A'}</td>
                     <td className="p-3 text-sm">
-                      {new Date(session.clock_in).toLocaleDateString()}
+                      {formatFullDateTime12hr(session.clock_in)}
                     </td>
-                    <td className="p-3">{session.hours_worked.toFixed(2)}</td>
+                    <td className="p-3 text-sm">
+                      {session.clock_out ? formatFullDateTime12hr(session.clock_out) : 'Active'}
+                    </td>
+                    <td className="p-3">
+                      {formatSessionDuration(session.hours_worked)}
+                    </td>
                     <td className="p-3 text-green-400">{session.coins_earned}</td>
                     <td className="p-3">
                       {session.auto_clocked_out && (

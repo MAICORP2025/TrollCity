@@ -71,7 +71,7 @@ export default function TrollG() {
         if (gifts) {
           setVoteGifts(gifts as UserGift[]);
         }
-      } catch (_err) {
+      } catch {
         toast.error('Failed to load TrollG data');
       } finally {
         setLoading(false);

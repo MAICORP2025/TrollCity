@@ -95,12 +95,16 @@ export default function BroadcastLayout({
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'gifts',
           filter: `stream_id=eq.${streamId}`,
         },
         async (payload) => {
+          const eventType = (payload as any).eventType;
+          if (eventType && eventType !== 'INSERT' && eventType !== 'UPDATE') {
+            return;
+          }
           const newGift: any = payload.new;
           const receiverId =
             newGift?.receiver_id ||

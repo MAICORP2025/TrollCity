@@ -139,6 +139,37 @@ Deno.serve(async (req) => {
     }
 
     if (action === "claim") {
+      // Check for active guest box ban before claiming
+      try {
+        const { data: banRow, error: banError } = await supabase
+          .from("broadcast_seat_bans")
+          .select("banned_until")
+          .eq("room", room)
+          .eq("user_id", profile.id)
+          .maybeSingle()
+
+        if (banError) {
+          console.warn("[broadcast-seats] ban check error:", banError)
+        } else if (banRow) {
+          const bannedUntil = banRow.banned_until ? new Date(banRow.banned_until) : null
+          const now = new Date()
+          if (!bannedUntil || bannedUntil > now) {
+            return new Response(
+              JSON.stringify({
+                error: "You are temporarily restricted from joining the guest box.",
+                banned_until: banRow.banned_until,
+              }),
+              {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                status: 403,
+              }
+            )
+          }
+        }
+      } catch (banErr) {
+        console.warn("[broadcast-seats] ban check exception:", banErr)
+      }
+
       const { data, error } = await supabase.rpc("claim_broadcast_seat", {
         p_room: room,
         p_seat_index: seatIndex,
@@ -199,6 +230,34 @@ Deno.serve(async (req) => {
             status: 400,
           }
         )
+      }
+
+      const banMinutes =
+        typeof body.ban_minutes === "number" && body.ban_minutes > 0
+          ? body.ban_minutes
+          : null
+      const banPermanent = Boolean(body.ban_permanent)
+
+      if (banMinutes || banPermanent) {
+        const bannedUntil = banPermanent
+          ? null
+          : new Date(Date.now() + (banMinutes as number) * 60 * 1000).toISOString()
+
+        try {
+          await supabase
+            .from("broadcast_seat_bans")
+            .upsert(
+              {
+                room,
+                user_id: profile.id,
+                banned_until: bannedUntil,
+                created_by: profile.id,
+              },
+              { onConflict: "room,user_id" }
+            )
+        } catch (banErr) {
+          console.error("[broadcast-seats] failed to record seat ban:", banErr)
+        }
       }
 
       return new Response(
