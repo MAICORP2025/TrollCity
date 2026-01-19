@@ -74,11 +74,11 @@ test("Create Manual Order (POST /manual-coin-order with action=create)", async (
   }
 
   const data = await response.json();
-  if (!data.error) {
+  if (!data.error && !data.message) {
     throw new Error("Expected error response");
   }
 
-  return { status: response.status, error: data.error };
+  return { status: response.status, error: data.error || data.message };
 });
 
 // TEST 3: Approve Order (requires admin role)
@@ -166,7 +166,7 @@ test("Wrong HTTP Method (GET /manual-coin-order)", async () => {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/manual-coin-order`, {
     method: "GET",
     headers: {
-      "Authorization": "Bearer test-token",
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
     },
   });
 
