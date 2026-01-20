@@ -8,6 +8,7 @@ import {
   Radio,
   Coins,
   Shield,
+  Gavel,
   LayoutDashboard,
   Banknote,
   FileText,
@@ -22,9 +23,9 @@ import {
   Shuffle,
   Star,
   Building2,
-  Settings,
   ShoppingBag,
-  RefreshCw
+  RefreshCw,
+  Vote
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -35,6 +36,7 @@ import { useXPStore } from '@/stores/useXPStore'
 export default function Sidebar() {
   const { profile } = useAuthStore()
   const { xpTotal, level, xpToNext, progress, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
+  const { balances, loading } = useCoins()
   const location = useLocation()
   const isActive = (path: string) => location.pathname === path
 
@@ -67,8 +69,6 @@ export default function Sidebar() {
   }
   const [showCourtModal, setShowCourtModal] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
-
-  const { balances, loading } = useCoins()
 
   // Role logic for Go Live access
   const canGoLive =
@@ -238,12 +238,23 @@ export default function Sidebar() {
 
           {/* Go Live Button */}
           {canGoLive && (
-            <Link
-              to="/broadcast"
-              className="mt-3 w-full py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg shadow-red-900/20 group"
+            <Link 
+              to="/go-live" 
+              className={`
+                mt-4 mx-3 flex items-center justify-center gap-2 
+                bg-gradient-to-r from-red-600 via-orange-600 to-yellow-500 
+                hover:from-red-500 hover:via-orange-500 hover:to-yellow-400 
+                text-white font-bold py-2 px-4 rounded-lg 
+                shadow-[0_0_15px_rgba(220,38,38,0.5)] 
+                hover:shadow-[0_0_25px_rgba(234,179,8,0.6)]
+                border border-yellow-400/30
+                transition-all duration-300 group
+                animate-pulse-slow
+                ${isSidebarCollapsed ? 'px-2' : ''}
+              `}
             >
-              <Radio size={14} className="group-hover:animate-pulse" />
-              GO LIVE
+              <Radio size={14} className="text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.5)] group-hover:animate-pulse" />
+              <span className="drop-shadow-[0_0_2px_rgba(0,0,0,0.5)]">GO LIVE</span>
             </Link>
           )}
         </div>
@@ -258,7 +269,7 @@ export default function Sidebar() {
           <SidebarItem icon={Crown} label="Troll G" to="/trollg" active={isActive('/trollg')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={ShoppingBag} label="Troll Mart" to="/trollmart" active={isActive('/trollmart')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} collapsed={isSidebarCollapsed} />
-          <SidebarItem icon={Settings} label="Profile Settings" to="/profile/settings" active={isActive('/profile/settings')} collapsed={isSidebarCollapsed} />
+          <SidebarItem icon={Vote} label="Troting" to="/troting" active={isActive('/troting')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={FileText} label="The Wall" to="/wall" active={isActive('/wall')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} collapsed={isSidebarCollapsed} />
@@ -296,10 +307,26 @@ export default function Sidebar() {
             {canSeeOfficer && (
               <>
                 <SidebarItem 
-                  icon={Shield} 
-                  label="Officer Lounge" 
+                  icon={LayoutDashboard} 
+                  label="Officer Dashboard" 
                   to="/officer/dashboard" 
                   active={location.pathname.startsWith('/officer/dashboard')} 
+                  collapsed={isSidebarCollapsed}
+                  className="text-emerald-400 hover:text-emerald-300"
+                />
+                <SidebarItem 
+                  icon={Gavel} 
+                  label="Court Dockets" 
+                  to="/admin/court-dockets" 
+                  active={location.pathname.startsWith('/admin/court-dockets')} 
+                  collapsed={isSidebarCollapsed}
+                  className="text-orange-400 hover:text-orange-300"
+                />
+                <SidebarItem 
+                  icon={Shield} 
+                  label="Officer Lounge" 
+                  to="/officer/lounge" 
+                  active={location.pathname.startsWith('/officer/lounge')} 
                   collapsed={isSidebarCollapsed}
                   className="text-purple-400 hover:text-purple-300"
                 />
@@ -355,6 +382,17 @@ export default function Sidebar() {
 
       {/* Footer Actions */}
       <div className="p-4 border-t border-white/10 space-y-2">
+        {/* Balance Display */}
+        <div className={`flex items-center gap-3 w-full p-2 rounded-lg bg-white/5 text-yellow-400 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+          <Coins size={20} />
+          {!isSidebarCollapsed && (
+            <div className="flex flex-col">
+              <span className="text-sm font-bold">{balances.troll_coins.toLocaleString()}</span>
+              <span className="text-[10px] text-gray-400">Troll Coins</span>
+            </div>
+          )}
+        </div>
+
         <Link 
           to="/stats"
           className={`flex items-center gap-3 w-full p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}

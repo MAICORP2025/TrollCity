@@ -44,6 +44,7 @@ import GaragePage from "./pages/game/GaragePage";
 import HospitalPage from "./pages/game/HospitalPage";
 import GeneralStorePage from "./pages/game/GeneralStorePage";
 import AuctionsPage from "./pages/AuctionsPage";
+import TrollBank from "./pages/TrollBank";
 const ChurchPage = lazy(() => import("./pages/ChurchPage"));
 const XPSimulatorPage = lazy(() => import("./pages/dev/XPSimulatorPage"));
 
@@ -57,6 +58,7 @@ const Following = lazy(() => import("./pages/Following"));
 const CoinStore = lazy(() => import("./pages/CoinStore"));
 const Marketplace = lazy(() => import("./pages/Marketplace"));
 const UserInventory = lazy(() => import("./pages/UserInventory"));
+const Troting = lazy(() => import("./pages/Troting"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const AvatarCustomizer = lazy(() => import("./pages/AvatarCustomizer"));
 const TrollMart = lazy(() => import("./pages/TrollMart"));
@@ -70,6 +72,7 @@ const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard
 const Application = lazy(() => import("./pages/Application"));
 const ApplicationPage = lazy(() => import("./pages/ApplicationPage"));
 const TrollsTownPage = lazy(() => import("./pages/TrollsTownPage"));
+const DrivingScene = lazy(() => import("./pages/DrivingScene"));
 const TrollOfficerLounge = lazy(() => import("./pages/TrollOfficerLounge"));
 const OfficerModeration = lazy(() => import("./pages/OfficerModeration"));
 const TrollFamily = lazy(() => import("./pages/TrollFamily"));
@@ -202,6 +205,7 @@ const ExportData = lazy(() => import("./pages/admin/ExportData"));
 const UserSearch = lazy(() => import("./pages/admin/UserSearch"));
 const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
 const StreamMonitorPage = lazy(() => import("./pages/admin/StreamMonitorPage"));
+const TrotingAdminPage = lazy(() => import("./pages/admin/TrotingAdminPage"));
 const PaymentLogs = lazy(() => import("./pages/admin/PaymentLogs"));
 const StorePriceEditor = lazy(() => import("./pages/admin/components/StorePriceEditor"));
 const AdminFinanceDashboard = lazy(() => import("./pages/admin/AdminFinanceDashboard"));
@@ -217,6 +221,7 @@ const UserFormsTab = lazy(() => import("./pages/admin/components/UserFormsTab"))
 const BucketsDashboard = lazy(() => import("./pages/admin/BucketsDashboard"));
 const GrantCoins = lazy(() => import("./pages/admin/GrantCoins"));
 const OfficerOperations = lazy(() => import("./pages/admin/OfficerOperations"));
+const CreatorSwitchApprovals = lazy(() => import("./pages/admin/components/CreatorSwitchApprovals"));
 const TrollG = lazy(() => import("./pages/TrollG"));
 
 const LoadingScreen = () => (
@@ -305,6 +310,34 @@ function AppContent() {
     reconnectMessage,
   } = useGlobalApp();
 
+  // Global unhandled rejection handler for AuthApiError
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      // Check if the error is related to "Invalid Refresh Token" or similar auth errors
+      const reason = event.reason;
+      const message = reason?.message || reason?.error_description || '';
+      
+      if (
+        message.includes('Invalid Refresh Token') ||
+        message.includes('Refresh Token Not Found')
+      ) {
+        console.warn('Caught invalid refresh token error, signing out...');
+        event.preventDefault(); // Prevent default console error
+        
+        // Clear session and redirect to auth
+        useAuthStore.getState().signOut().then(() => {
+           window.location.href = '/auth';
+        });
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const standalone =
@@ -312,6 +345,20 @@ function AppContent() {
       ((window.navigator as any).standalone === true);
     setIsStandalone(standalone);
   }, []);
+
+  // Warrant Access Restriction
+  useEffect(() => {
+    if (profile?.has_active_warrant) {
+       // Allow access to court pages, auth pages, and static assets
+       const allowedPaths = ['/troll-court', '/court', '/auth', '/legal', '/support'];
+       const isAllowed = allowedPaths.some(path => location.pathname.startsWith(path));
+       
+       if (!isAllowed) {
+         toast.error("Active Warrant Issued! You must appear in Troll Court.");
+         navigate('/troll-court');
+       }
+    }
+  }, [profile?.has_active_warrant, location.pathname, navigate]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -345,8 +392,12 @@ function AppContent() {
   // Track route changes for session persistence
   useEffect(() => {
     updateRoute(location.pathname);
-    void autoUnlockPayouts();
   }, [location.pathname]);
+
+  // Check payouts unlock on mount
+  useEffect(() => {
+    void autoUnlockPayouts();
+  }, []);
 
   // 🔹 Auto-routing after approval (only on home page, not on every route change)
   useEffect(() => {
@@ -484,6 +535,15 @@ function AppContent() {
     }
     const onRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason
+      
+      // Handle Invalid Refresh Token error by logging out
+      const reasonMsg = reason?.message || String(reason)
+      if (reasonMsg.includes('Invalid Refresh Token') || reasonMsg.includes('Refresh Token Not Found')) {
+        console.warn('Invalid refresh token detected, logging out...')
+        useAuthStore.getState().logout()
+        return
+      }
+
       void reportError({
         message: (reason?.message || String(reason) || 'unhandledrejection'),
         stack: reason?.stack,
@@ -654,9 +714,11 @@ function AppContent() {
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/shop/:username" element={<ShopView />} />
                   <Route path="/inventory" element={<UserInventory />} />
-                  <Route path="/profile/settings" element={<ProfileSettings />} />
+          <Route path="/troting" element={<Troting />} />
+          <Route path="/profile/settings" element={<ProfileSettings />} />
                   <Route path="/avatar-customizer" element={<AvatarCustomizer />} />
                   <Route path="/trollmart" element={<TrollMart />} />
+                  <Route path="/bank" element={<TrollBank />} />
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/wall" element={<TrollCityWall />} />
@@ -665,6 +727,7 @@ function AppContent() {
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
+                  <Route path="/driving" element={<DrivingScene />} />
                   <Route path="/trollg" element={<TrollG />} />
                   
                   {/* New Game Routes */}
@@ -852,6 +915,16 @@ function AppContent() {
                     element={
                       <RequireRole roles={[UserRole.ADMIN]}>
                         <AdminDashboard />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/admin/creator-approvals"
+                    element={
+                      <RequireRole roles={[UserRole.ADMIN, UserRole.SECRETARY, UserRole.LEAD_TROLL_OFFICER]}>
+                        <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-5">
+                          <CreatorSwitchApprovals />
+                        </div>
                       </RequireRole>
                     }
                   />
@@ -1179,6 +1252,14 @@ function AppContent() {
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <StreamMonitorPage />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/voting"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <TrotingAdminPage />
                         </RequireRole>
                       }
                     />

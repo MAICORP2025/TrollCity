@@ -119,7 +119,7 @@ const Auth = () => {
             }
             
             if (profileData.username) {
-              toast.success('Welcome back!')
+              toast.success('Welcome back!', { duration: 2000 })
               try {
                 const ipRes = await fetch('https://api.ipify.org?format=json')
                 const ipJson = await ipRes.json()
@@ -161,7 +161,7 @@ const Auth = () => {
             if (prof) {
               setProfile(prof)
               if (prof.username) {
-                toast.success('Welcome back!')
+                toast.success('Welcome back!', { duration: 2000 })
                 try {
                   const ipRes = await fetch('https://api.ipify.org?format=json')
                   const ipJson = await ipRes.json()

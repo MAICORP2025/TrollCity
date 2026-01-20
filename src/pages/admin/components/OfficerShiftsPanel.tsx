@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { toast } from 'sonner'
 import { Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
+import { format12hr, formatFullDateTime12hr } from '../../../utils/timeFormat'
 
 interface ShiftLog {
   id: string
@@ -173,14 +174,7 @@ export default function OfficerShiftsPanel() {
 
   const formatTime = (timestamp: string | null) => {
     if (!timestamp) return '—'
-    return new Date(timestamp).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
+    return formatFullDateTime12hr(timestamp)
   }
 
   const formatDuration = (clockIn: string, clockOut: string | null) => {
@@ -203,7 +197,7 @@ export default function OfficerShiftsPanel() {
     })
 
   const formatSlotRange = (slot: ScheduledSlot) =>
-    `${slot.shift_start_time} – ${slot.shift_end_time}`
+    `${format12hr(slot.shift_start_time)} – ${format12hr(slot.shift_end_time)}`
 
   const slotStatusCounts = slots.reduce<Record<string, number>>((acc, slot) => {
     acc[slot.status] = (acc[slot.status] || 0) + 1

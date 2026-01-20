@@ -1,4 +1,5 @@
 -- Manual Clock In RPC
+DROP FUNCTION IF EXISTS "public"."manual_clock_in"("uuid");
 CREATE OR REPLACE FUNCTION "public"."manual_clock_in"("p_officer_id" "uuid" DEFAULT "auth"."uid"()) RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -31,6 +32,7 @@ END;
 $$;
 
 -- Manual Clock Out RPC
+DROP FUNCTION IF EXISTS "public"."manual_clock_out"("uuid");
 CREATE OR REPLACE FUNCTION "public"."manual_clock_out"("p_session_id" "uuid") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$

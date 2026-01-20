@@ -71,8 +71,8 @@ const Cashouts = () => {
   const requestCashout = async (tier: CashoutTier) => {
     if (!profile) return
     // Calculate fee coins per provided schedule
-    const feeCoins = tier.cash_amount <= 70 ? 1896 : 3336
-    const totalCoinsNeeded = tier.coin_amount + feeCoins
+    const feeCoins = 0
+    const totalCoinsNeeded = tier.coin_amount
 
     if (availableEarnedCoins < totalCoinsNeeded) {
       toast.error('Not enough earned coins for this tier')
@@ -82,9 +82,8 @@ const Cashouts = () => {
     try {
       setRequesting(tier.id)
 
-      const feePercent = Number((tier as any).processing_fee_percentage) || 0
-      const fee = Number(tier.cash_amount) * (feePercent / 100)
-      const net = Number(tier.cash_amount) - fee
+      const fee = 0
+      const net = Number(tier.cash_amount)
 
       const { error: insertError } = await supabase
         .from('payout_requests')
@@ -166,16 +165,16 @@ const Cashouts = () => {
                 <DollarSign className="w-6 h-6 text-troll-green" />
               </div>
               <div className="text-sm text-troll-purple-300 mb-4">
-                Processing fee: {(Number(tier.processing_fee_percentage) || 0).toFixed(1)}%
+                Processing fee: None
               </div>
               <div className="text-xs text-troll-purple-300">
-                Fee Coins: {(tier.cash_amount <= 70 ? 1896 : 3336).toLocaleString()} • Total Needed: {(tier.coin_amount + (tier.cash_amount <= 70 ? 1896 : 3336)).toLocaleString()}
+                Total Needed: {tier.coin_amount.toLocaleString()}
               </div>
               <button
                 onClick={() => requestCashout(tier)}
-                disabled={availableEarnedCoins < (tier.coin_amount + (tier.cash_amount <= 70 ? 1896 : 3336)) || requesting === tier.id}
+                disabled={availableEarnedCoins < tier.coin_amount || requesting === tier.id}
                 className={`w-full px-4 py-2 rounded-lg font-semibold ${
-                  availableEarnedCoins < (tier.coin_amount + (tier.cash_amount <= 70 ? 1896 : 3336)) || requesting === tier.id
+                  availableEarnedCoins < tier.coin_amount || requesting === tier.id
                     ? 'bg-gray-700 text-gray-300 cursor-not-allowed'
                     : 'bg-troll-green text-troll-purple-900 hover:bg-troll-green-dark'
                 }`}

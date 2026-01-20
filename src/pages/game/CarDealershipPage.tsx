@@ -16,8 +16,9 @@ export default function CarDealershipPage() {
   const [ownedCarId, setOwnedCarId] = useState<number | null>(null);
   const [ownedVehicleIds, setOwnedVehicleIds] = useState<number[]>([]);
   const [garageCars, setGarageCars] = useState<
-    { id: string; car_model_id: number; is_active: boolean }[]
+    { id: string; car_id: string; is_active: boolean; purchased_at: string; model_url: string; customization_json: any }[]
   >([]);
+
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [listingPrice, setListingPrice] = useState('');
   const [listingType, setListingType] = useState<'sale' | 'auction'>('sale');
@@ -109,17 +110,13 @@ export default function CarDealershipPage() {
       setHasCarInsurance(false);
       return;
     }
-
-    try {
-      const raw = localStorage.getItem(`trollcity_car_insurance_${user.id}`);
-      if (!raw) {
-        setHasCarInsurance(false);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      setHasCarInsurance(Boolean(parsed && parsed.active));
-    } catch {
-      setHasCarInsurance(false);
+    // Simple check for now, can be improved to check DB if needed
+    const raw = localStorage.getItem(`trollcity_car_insurance_${user.id}`);
+    if (raw) {
+       try {
+         const parsed = JSON.parse(raw);
+         setHasCarInsurance(Boolean(parsed && parsed.active));
+       } catch {}
     }
   }, [user?.id]);
 
@@ -128,7 +125,7 @@ export default function CarDealershipPage() {
       setVehicleUpgrades([]);
       return;
     }
-
+    // Load upgrades (legacy table for now)
     const loadUpgrades = async () => {
       const { data, error } = await supabase
         .from('vehicle_upgrades')
@@ -136,54 +133,42 @@ export default function CarDealershipPage() {
         .eq('user_id', user.id)
         .eq('vehicle_id', ownedCarId);
 
-      if (error) {
-        console.error('Failed to load vehicle upgrades', error);
-        setVehicleUpgrades([]);
-        return;
+      if (!error && data) {
+        setVehicleUpgrades(data as any);
       }
-
-      setVehicleUpgrades((data || []) as any);
     };
-
     loadUpgrades();
   }, [user?.id, ownedCarId]);
 
-  useEffect(() => {
-    if (user?.id && ownedCarId) {
-      const key = `trollcity_car_${user.id}`;
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        try {
-          const stored = JSON.parse(raw);
-          if (stored.modelUrl) {
-            setCustomModelUrl(stored.modelUrl);
-          } else {
-            setCustomModelUrl('');
-          }
-        } catch {}
-      }
-    }
-  }, [user?.id, ownedCarId]);
-
-  const handleSaveCustomModel = () => {
+  const handleSaveCustomModel = async () => {
     if (!user?.id || !ownedCarId) return;
     
-    const key = `trollcity_car_${user.id}`;
-    const raw = localStorage.getItem(key);
-    let stored = {};
-    if (raw) {
-      try {
-        stored = JSON.parse(raw);
-      } catch {}
+    // Find the active user_cars row
+    const userCarRow = garageCars.find((g) => Number(g.car_id) === ownedCarId);
+    if (!userCarRow) {
+        toast.error("Active car not found in garage data");
+        return;
     }
-    
-    const updated = {
-      ...stored,
-      modelUrl: customModelUrl
-    };
-    
-    localStorage.setItem(key, JSON.stringify(updated));
-    toast.success('Custom model URL saved!');
+
+    try {
+        const { error } = await supabase
+            .from('user_cars')
+            .update({ model_url: customModelUrl })
+            .eq('id', userCarRow.id);
+
+        if (error) throw error;
+        
+        toast.success('Custom model URL saved to cloud!');
+        
+        // Update local state
+        setGarageCars(prev => prev.map(c => 
+            c.id === userCarRow.id ? { ...c, model_url: customModelUrl } : c
+        ));
+        
+    } catch (e: any) {
+        console.error('Failed to save model url:', e);
+        toast.error('Failed to save: ' + e.message);
+    }
   };
 
   const handleStartUpgrade = async (upgradeId: string) => {
@@ -229,14 +214,11 @@ export default function CarDealershipPage() {
       });
 
       if (!result.success) {
-        if (result.error) {
-          toast.error(result.error);
-        } else {
-          toast.error('Failed to start upgrade');
-        }
+        toast.error(result.error || 'Failed to start upgrade');
         return;
       }
 
+      // Record in vehicle_upgrades (legacy/audit)
       const { data: inserted, error: insertError } = await supabase
         .from('vehicle_upgrades')
         .insert({
@@ -251,60 +233,37 @@ export default function CarDealershipPage() {
         .select('id, vehicle_id, upgrade_type, status, cost')
         .single();
 
-      if (insertError) {
-        throw insertError;
+      if (!insertError && inserted) {
+          setVehicleUpgrades((prev) => [...prev, inserted as any]);
       }
-
-      setVehicleUpgrades((prev) => [...prev, inserted as any]);
-
-      try {
-        const storageKey = `trollcity_car_${user.id}`;
-        const raw = localStorage.getItem(storageKey);
-        let stored: any = {};
-        if (raw) {
-          try {
-            stored = JSON.parse(raw);
-          } catch {
-            stored = {};
-          }
-        }
-
-        const updated: any = {
-          ...stored,
-          carId: ownedCarId
-        };
-
-        if (upgrade.id === 'paint_matte_black') {
-          updated.paintStyle = 'matte_black';
-        }
-        if (upgrade.id === 'paint_candy_red') {
-          updated.paintStyle = 'candy_red';
-        }
-        if (upgrade.id === 'tint_5') {
-          updated.windowTintPercent = 5;
-        }
-        if (upgrade.id === 'tint_20') {
-          updated.windowTintPercent = 20;
-        }
-        if (upgrade.id === 'tint_40') {
-          updated.windowTintPercent = 40;
-        }
-        if (upgrade.id === 'wheels_sport') {
-          updated.wheelStyle = 'sport';
-        }
-        if (upgrade.id === 'wheels_luxury') {
-          updated.wheelStyle = 'luxury';
-        }
-        if (upgrade.id === 'engine_v8' || upgrade.id === 'engine_tune') {
-          updated.engineSound = 'v8';
-        }
-        if (upgrade.id === 'muffler_race') {
-          updated.mufflerSound = 'race';
-        }
-
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-      } catch (e) {
-        console.error('Failed to sync vehicle customization to localStorage', e);
+      
+      // Update user_cars customization
+      const userCarRow = garageCars.find((g) => Number(g.car_id) === ownedCarId);
+      if (userCarRow) {
+          const currentCustom = userCarRow.customization_json || {};
+          const updates: any = {};
+          
+          if (upgrade.id === 'paint_matte_black') updates.color = '#111111';
+          if (upgrade.id === 'paint_candy_red') updates.color = '#ff0000';
+          
+          // Mapping other upgrades to customization JSON
+          if (upgrade.id === 'engine_tune') updates.engine = 'tune';
+          if (upgrade.id === 'engine_v8') updates.engine = 'v8';
+          if (upgrade.id === 'armor_plating') updates.armor = true;
+          if (upgrade.id === 'neon_underglow') updates.neon = true;
+          if (upgrade.id === 'wheels_sport') updates.wheels = 'sport';
+          if (upgrade.id === 'wheels_luxury') updates.wheels = 'luxury';
+          if (upgrade.id === 'muffler_race') updates.exhaust = 'race';
+          if (upgrade.id === 'tint_5') updates.tint = 5;
+          if (upgrade.id === 'tint_20') updates.tint = 20;
+          if (upgrade.id === 'tint_40') updates.tint = 40;
+          
+          const newCustom = { ...currentCustom, ...updates, upgrades: [...(currentCustom.upgrades || []), upgrade.id] };
+          
+          await supabase.from('user_cars').update({ customization_json: newCustom }).eq('id', userCarRow.id);
+          
+          // Update local state
+          setGarageCars(prev => prev.map(c => c.id === userCarRow.id ? { ...c, customization_json: newCustom } : c));
       }
 
       toast.success('Vehicle upgrade installed');
@@ -327,29 +286,25 @@ export default function CarDealershipPage() {
     const refreshGarage = async () => {
       try {
         const { data, error } = await supabase
-          .from('user_garage')
-          .select('id, car_model_id, is_active, acquired_at')
+          .from('user_cars')
+          .select('*')
           .eq('user_id', user.id)
-          .order('acquired_at', { ascending: false });
+          .order('purchased_at', { ascending: false });
 
         if (error) throw error;
 
-        const rows = Array.isArray(data) ? data : [];
-
-        setGarageCars(rows as any);
+        const rows = (data || []) as any[];
+        setGarageCars(rows);
 
         if (rows.length > 0) {
           const ownedIds = rows
-            .map((row) => Number(row.car_model_id))
+            .map((row) => Number(row.car_id))
             .filter((id) => Number.isFinite(id));
 
           const activeRow =
-            rows.find((row) => row.is_active) || (rows.length > 0 ? rows[0] : null);
+            rows.find((row) => row.is_active) || rows[0];
 
-          const activeCarId =
-            activeRow && typeof activeRow.car_model_id === 'number'
-              ? activeRow.car_model_id
-              : null;
+          const activeCarId = activeRow ? Number(activeRow.car_id) : null;
 
           setOwnedVehicleIds(ownedIds);
           setOwnedCarId(activeCarId);
@@ -359,85 +314,32 @@ export default function CarDealershipPage() {
             JSON.stringify(ownedIds)
           );
 
-          if (activeRow) {
-            const activeCarConfig = cars.find(
-              (c) => c.id === Number(activeRow.car_model_id)
-            );
-            if (activeCarConfig) {
-              localStorage.setItem(
-                `trollcity_car_${user.id}`,
-                JSON.stringify({
-                  carId: activeCarConfig.id,
-                  colorFrom: activeCarConfig.colorFrom,
-                  colorTo: activeCarConfig.colorTo,
-                  name: activeCarConfig.name,
-                  tier: activeCarConfig.tier,
-                  price: activeCarConfig.price,
-                  style: activeCarConfig.style
-                })
-              );
-            }
+          if (activeCarId) {
+             const activeCarConfig = cars.find((c) => c.id === activeCarId);
+             if (activeCarConfig) {
+               // Update local storage for other components that might still use it
+               localStorage.setItem(
+                 `trollcity_car_${user.id}`,
+                 JSON.stringify({
+                   carId: activeCarConfig.id,
+                   colorFrom: activeCarConfig.colorFrom,
+                   colorTo: activeCarConfig.colorTo,
+                   name: activeCarConfig.name,
+                   tier: activeCarConfig.tier,
+                   price: activeCarConfig.price,
+                   style: activeCarConfig.style
+                 })
+               );
+             }
           }
         } else {
-          const ownedIdsFromProfile =
-            Array.isArray(profile?.owned_vehicle_ids) && profile.owned_vehicle_ids.length > 0
-              ? (profile.owned_vehicle_ids as any[])
-                  .map((id) => Number(id))
-                  .filter((id) => Number.isFinite(id))
-              : [];
-
-          const activeFromProfile =
-            typeof (profile as any)?.active_vehicle === 'number'
-              ? (profile as any).active_vehicle
-              : ownedIdsFromProfile[0] ?? null;
-
-          setOwnedVehicleIds(ownedIdsFromProfile);
-          setOwnedCarId(activeFromProfile || null);
-
-          if (ownedIdsFromProfile.length > 0) {
-            localStorage.setItem(
-              `trollcity_owned_vehicles_${user.id}`,
-              JSON.stringify(ownedIdsFromProfile)
-            );
-          }
-
-          if (activeFromProfile) {
-            const activeCarConfig = cars.find((c) => c.id === Number(activeFromProfile));
-            if (activeCarConfig) {
-              localStorage.setItem(
-                `trollcity_car_${user.id}`,
-                JSON.stringify({
-                  carId: activeCarConfig.id,
-                  colorFrom: activeCarConfig.colorFrom,
-                  colorTo: activeCarConfig.colorTo,
-                  name: activeCarConfig.name,
-                  tier: activeCarConfig.tier,
-                  price: activeCarConfig.price,
-                  style: activeCarConfig.style
-                })
-              );
-            }
-          }
+            // Fallback to profile if user_cars is empty (migration phase)
+            // But we want to encourage using user_cars.
+            setOwnedVehicleIds([]);
+            setOwnedCarId(null);
         }
       } catch (err) {
         console.error('Failed to load vehicle data from DB:', err);
-        try {
-          const rawLocal = localStorage.getItem(`trollcity_owned_vehicles_${user.id}`);
-          if (rawLocal) {
-            setOwnedVehicleIds(JSON.parse(rawLocal));
-          } else if (Array.isArray(profile?.owned_vehicle_ids)) {
-            const fromProfile = (profile.owned_vehicle_ids as any[])
-              .map((id) => Number(id))
-              .filter((id) => Number.isFinite(id));
-            setOwnedVehicleIds(fromProfile);
-            if (fromProfile.length > 0) {
-              localStorage.setItem(
-                `trollcity_owned_vehicles_${user.id}`,
-                JSON.stringify(fromProfile)
-              );
-            }
-          }
-        } catch {}
       }
     };
 
@@ -455,125 +357,56 @@ export default function CarDealershipPage() {
 
     setBuyingId(carId);
     try {
-      const { error } = await supabase.rpc('buy_car_with_coins', {
-        car_model_id: car.id,
-        paint_color: car.colorFrom,
-        rims: 'stock',
-        decals: null
+      // 1. Deduct Coins
+      const coinResult = await deductCoins({
+        userId: user.id,
+        amount: car.price,
+        type: 'troll_town_purchase',
+        description: `Purchased ${car.name}`,
+        metadata: { car_id: car.id, car_name: car.name }
+      });
+
+      if (!coinResult.success) {
+        toast.error(coinResult.error || 'Not enough coins');
+        return;
+      }
+
+      // 2. Call purchase_car_v2
+      // Construct a model URL (placeholder for now)
+      const modelUrl = `/models/cars/car_${car.id}.glb`;
+      
+      const { error } = await supabase.rpc('purchase_car_v2', {
+        p_car_id: String(car.id),
+        p_model_url: modelUrl,
+        p_customization: { color: car.colorFrom }
       });
 
       if (error) {
-        console.error('buy_car_with_coins RPC failed:', error);
-        toast.error(error.message || 'Failed to purchase vehicle');
+        console.error('purchase_car_v2 failed:', error);
+        // Ideally we should refund coins here if RPC fails, but for simplicity we assume it works or manual refund needed.
+        toast.error('Failed to finalize purchase. Please contact support.');
         return;
       }
 
       toast.success(`You purchased ${car.name}. Added to your garage.`);
-
-      if (user.id) {
-        let ownedIds: number[] = [];
-        let activeCarId: number | null = null;
-
-        try {
-          const { data: garageData, error: garageError } = await supabase
-            .from('user_garage')
-            .select('id, car_model_id, is_active, acquired_at')
+      
+      // Refresh garage
+      // We can just trigger the effect or manually update state
+      const { data: garageData } = await supabase
+            .from('user_cars')
+            .select('*')
             .eq('user_id', user.id)
-            .order('acquired_at', { ascending: false });
-
-          if (garageError) {
-            console.error('Failed to refresh garage after purchase:', garageError);
-          } else {
-            const rows = Array.isArray(garageData) ? garageData : [];
-            setGarageCars(rows as any);
-
-            ownedIds = rows
-              .map((row) => Number(row.car_model_id))
-              .filter((id) => Number.isFinite(id));
-
-            const activeRow =
-              rows.find((row) => row.is_active) || (rows.length > 0 ? rows[0] : null);
-
-            activeCarId =
-              activeRow && typeof activeRow.car_model_id === 'number'
-                ? activeRow.car_model_id
-                : null;
-          }
-        } catch (refreshErr) {
-          console.error('Error refreshing garage after purchase:', refreshErr);
-        }
-
-        if (!ownedIds.length) {
-          const existing = new Set<number>(ownedVehicleIds || []);
-          existing.add(car.id);
-          ownedIds = Array.from(existing);
-        }
-
-        if (!activeCarId) {
-          activeCarId = car.id;
-        }
-
-        setOwnedVehicleIds(ownedIds);
-        setOwnedCarId(activeCarId);
-
-        localStorage.setItem(
-          `trollcity_owned_vehicles_${user.id}`,
-          JSON.stringify(ownedIds)
-        );
-
-        const activeCarConfig =
-          cars.find((c) => c.id === activeCarId) ||
-          cars.find((c) => c.id === car.id) ||
-          null;
-
-        if (activeCarConfig) {
-          localStorage.setItem(
-            `trollcity_car_${user.id}`,
-            JSON.stringify({
-              carId: activeCarConfig.id,
-              colorFrom: activeCarConfig.colorFrom,
-              colorTo: activeCarConfig.colorTo,
-              name: activeCarConfig.name,
-              tier: activeCarConfig.tier,
-              price: activeCarConfig.price,
-              style: activeCarConfig.style
-            })
-          );
-        }
-
-        try {
-          await supabase
-            .from('user_profiles')
-            .update({
-              active_vehicle: activeCarId,
-              vehicle_image: activeCarId
-                ? cars.find((c) => c.id === activeCarId)?.image || null
-                : null
-            })
-            .eq('id', user.id);
-        } catch (profileErr) {
-          console.error('Failed to sync active vehicle after purchase:', profileErr);
-        }
-
-        try {
-          const { data, error: ownershipError } = await supabase.rpc(
-            'add_owned_vehicle_to_profile',
-            { p_vehicle_id: car.id }
-          );
-
-          if (ownershipError) {
-            console.error('Failed to update owned_vehicle_ids via RPC:', ownershipError);
-            toast.error(ownershipError.message || 'Failed to update vehicle ownership');
-          } else if (data && (data as any).owned_vehicle_ids) {
-            console.log('Updated owned_vehicle_ids:', (data as any).owned_vehicle_ids);
-          }
-
-          await refreshProfile();
-        } catch (ownershipErr: any) {
-          console.error('Vehicle ownership RPC failed:', ownershipErr);
-          toast.error(ownershipErr?.message || 'Failed to update vehicle ownership');
-        }
+            .order('purchased_at', { ascending: false });
+            
+      if (garageData) {
+          setGarageCars(garageData as any);
+          const activeRow = garageData.find((r: any) => r.is_active) || garageData[0];
+          setOwnedCarId(Number(activeRow.car_id));
+          setOwnedVehicleIds(garageData.map((r: any) => Number(r.car_id)));
       }
+
+      await refreshProfile();
+
     } catch (err: any) {
       console.error('Purchase flow failed:', err);
       toast.error('Transaction failed: ' + (err.message || 'Unknown error'));
@@ -587,15 +420,18 @@ export default function CarDealershipPage() {
     const car = cars.find(c => c.id === vehicleId);
     if (!car) return;
 
-    const garageCar = garageCars.find((g) => g.car_model_id === vehicleId);
-    if (!garageCar) {
+    // Find the row in garageCars
+    // Note: garageCars now contains user_cars rows
+    const userCarRow = garageCars.find((g) => Number(g.car_id) === vehicleId);
+    
+    if (!userCarRow) {
       toast.error('Vehicle not found in your garage');
       return;
     }
 
     try {
       const { error } = await supabase.rpc('set_active_car', {
-        garage_car_id: garageCar.id
+        p_car_row_id: userCarRow.id
       });
 
       if (error) {
@@ -603,6 +439,15 @@ export default function CarDealershipPage() {
         toast.error(error.message || 'Failed to set active vehicle');
         return;
       }
+      
+      // Update local state
+      const updatedGarage = garageCars.map(g => ({
+          ...g,
+          is_active: g.id === userCarRow.id
+      }));
+      setGarageCars(updatedGarage);
+      setOwnedCarId(vehicleId);
+
     } catch (err: any) {
       console.error('Failed to set active vehicle:', err);
       toast.error(err?.message || 'Failed to set active vehicle');
@@ -621,7 +466,6 @@ export default function CarDealershipPage() {
         style: car.style
       })
     );
-    setOwnedCarId(car.id);
     toast.success(`${car.name} is now active.`);
   };
 

@@ -1,4 +1,4 @@
-import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 import DatabaseBackup from './DatabaseBackup'
 import CityControlCenter from './CityControlCenter'
@@ -10,6 +10,7 @@ import AdminErrors from './AdminErrors'
 import AdminCallsTab from './components/AdminCallsTab'
 import OfficerOperations from './OfficerOperations'
 import AdminSupportTicketsPage from './AdminSupportTicketsPage'
+import CourtDocketsManager from './CourtDocketsManager'
 
 export interface AdminRoute {
   id: string
@@ -156,5 +157,18 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-purple-500/10',
     tileBorderColor: 'border-purple-500/30',
     category: 'support'
+  },
+  {
+    id: 'court-dockets',
+    title: 'Court Dockets',
+    path: '/admin/court-dockets',
+    component: CourtDocketsManager,
+    roles: [UserRole.ADMIN, UserRole.TROLL_OFFICER, UserRole.LEAD_TROLL_OFFICER],
+    description: 'Manage court dockets and cases',
+    icon: <Gavel className="w-5 h-5 text-red-200" />,
+    tileColor: 'text-red-200',
+    tileBgColor: 'bg-red-500/10',
+    tileBorderColor: 'border-red-500/30',
+    category: 'moderation'
   }
 ]

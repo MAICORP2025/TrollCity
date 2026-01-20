@@ -189,29 +189,35 @@ export const handler = async (req: Request): Promise<Response> => {
           return withCors({ error: claimError.message }, 400);
         }
 
-        // Add coins to user
-        const { data: profile } = await supabase
+        // Add coins to user via Troll Bank
+        const { error: bankError } = await supabase.rpc(
+          "troll_bank_credit_coins",
+          {
+            p_user_id: user.id,
+            p_coins: event.coin_reward,
+            p_bucket: "promo",
+            p_source: "troll_event",
+            p_ref_id: event_id,
+            p_metadata: { event_type: event.event_type }
+          }
+        );
+
+        if (bankError) {
+          console.error("Bank credit error:", bankError);
+          return withCors({ error: "Failed to credit coins" }, 400);
+        }
+
+        // Fetch updated balance for response
+        const { data: updatedProfile } = await supabase
           .from("user_profiles")
           .select("troll_coins")
           .eq("id", user.id)
           .single();
 
-        const newBalance = (profile?.troll_coins || 0) + event.coin_reward;
-
-        const { error: updateError } = await supabase
-          .from("user_profiles")
-          .update({ troll_coins: newBalance })
-          .eq("id", user.id);
-
-        if (updateError) {
-          console.error("Balance update error:", updateError);
-          return withCors({ error: "Failed to update balance" }, 400);
-        }
-
         return withCors({
           success: true,
           coins_awarded: event.coin_reward,
-          new_balance: newBalance,
+          new_balance: updatedProfile?.troll_coins || 0,
         }, 200);
       }
 

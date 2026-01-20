@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
-import { CheckCircle, XCircle, Award, User, Clock, FileText, Calendar, Crown } from 'lucide-react'
+import { CheckCircle, XCircle, Award, User, Clock, FileText, Calendar, Crown, LayoutDashboard } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
 import WeeklyReportForm from '../../components/WeeklyReportForm'
 import WeeklyReportsList from '../../components/WeeklyReportsList'
 import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
+import TimeOffRequestsList from './TimeOffRequestsList'
 import '../../styles/LeadOfficerDashboard.css'
 
 type Applicant = {
@@ -639,6 +640,11 @@ export function LeadOfficerDashboard() {
 
       {activeTab === 'hr' && (
         <div className="space-y-8">
+          {/* Time Off Requests */}
+          <section className="rounded-2xl border border-orange-800 bg-black/40 p-6">
+            <TimeOffRequestsList />
+          </section>
+
           <section className="rounded-2xl border border-red-800 bg-black/40 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-red-200 flex items-center gap-2">

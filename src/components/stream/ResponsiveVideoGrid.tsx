@@ -54,6 +54,9 @@ export default function ResponsiveVideoGrid({
     return 'neon';
   });
 
+  const [neonColor, setNeonColor] = React.useState<string>('purple');
+  const neonColors = ['purple', 'blue', 'green', 'red', 'pink', 'yellow', 'cyan', 'orange'];
+
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('troll_frame_mode', frameMode);
@@ -97,9 +100,23 @@ export default function ResponsiveVideoGrid({
     return null;
   }
 
+  const getNeonStyle = (color: string) => {
+    const colorMap: Record<string, string> = {
+      purple: 'border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.7)]',
+      blue: 'border-blue-400 shadow-[0_0_20px_rgba(96,165,250,0.7)]',
+      green: 'border-green-400 shadow-[0_0_20px_rgba(74,222,128,0.7)]',
+      red: 'border-red-400 shadow-[0_0_20px_rgba(248,113,113,0.7)]',
+      pink: 'border-pink-400 shadow-[0_0_20px_rgba(244,114,182,0.7)]',
+      yellow: 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.7)]',
+      cyan: 'border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.7)]',
+      orange: 'border-orange-400 shadow-[0_0_20px_rgba(251,146,60,0.7)]'
+    };
+    return `border-2 ${colorMap[color] || colorMap['purple']} animate-neon-pulse`;
+  };
+
   const hostFrameClass =
     frameMode === 'neon'
-      ? 'border-2 border-purple-400 shadow-[0_0_40px_rgba(168,85,247,0.7)] animate-neon-pulse'
+      ? getNeonStyle(neonColor)
       : frameMode === 'rgb'
         ? 'border-2 border-transparent rgb-frame'
         : 'border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)]';
@@ -108,6 +125,17 @@ export default function ResponsiveVideoGrid({
     <div className="w-full h-full min-h-0 flex flex-col gap-2 sm:gap-4 lg:gap-6 p-2 sm:p-4 lg:p-6">
       {canControlFrames && (
         <div className="flex items-center justify-end gap-2 mb-1 text-[11px] sm:text-xs">
+          {frameMode === 'neon' && (
+            <select
+              value={neonColor}
+              onChange={(e) => setNeonColor(e.target.value)}
+              className="px-2 py-1 rounded-full border text-xs bg-black/50 border-purple-500/50 text-white focus:outline-none"
+            >
+              {neonColors.map(c => (
+                <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+              ))}
+            </select>
+          )}
           <span className="text-gray-400">Frames</span>
           <button
             type="button"
@@ -183,19 +211,19 @@ export default function ResponsiveVideoGrid({
       </div>
 
       {guestSeatCount > 0 && (
-        <div className="shrink-0 h-[clamp(170px,36vh,260px)] sm:h-[clamp(80px,16vw,130px)] lg:h-[210px]">
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 lg:gap-4 h-full">
+        <div className="shrink-0 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 lg:gap-4 auto-rows-fr">
             {guestAssignments.slice(0, 6).map(({ key, seatIndex, participant }) => (
-              <div 
-                key={key}
-                className={`h-full aspect-square sm:aspect-square lg:aspect-auto relative rounded-lg sm:rounded-xl overflow-hidden bg-[#1a0b2e]/50 shadow-inner group transition-all hover:bg-[#1a0b2e]/70 ${
-                  frameMode === 'neon'
-                    ? 'border border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.6)] animate-neon-pulse'
-                    : frameMode === 'rgb'
-                      ? 'border border-transparent rgb-frame-small'
-                      : 'border border-purple-500/20 hover:border-purple-500/40'
-                }`}
-              >
+        <div 
+          key={key}
+          className={`w-full aspect-square relative rounded-lg sm:rounded-xl overflow-hidden bg-[#1a0b2e]/50 shadow-inner group transition-all hover:bg-[#1a0b2e]/70 ${
+            frameMode === 'neon'
+              ? getNeonStyle(neonColor)
+              : frameMode === 'rgb'
+                ? 'border border-transparent rgb-frame-small'
+                : 'border border-purple-500/20 hover:border-purple-500/40'
+          }`}
+        >
                 {participant ? (
                   <VideoTile
                     participant={participant}

@@ -13,6 +13,7 @@ import {
 import { supabase, UserRole } from '../../lib/supabase';
 import { toast } from 'sonner';
 import RequireRole from '../../components/RequireRole';
+import { formatFullDateTime12hr } from '../../utils/timeFormat';
 
 interface OfficerShift {
   id: string;
@@ -501,7 +502,7 @@ export default function OfficerOperations() {
                       <tr key={shift.id} className="border-t border-zinc-700">
                         <td className="px-4 py-3">{shift.officer?.username || 'Unknown'}</td>
                         <td className="px-4 py-3 text-sm">
-                          {new Date(shift.shift_start).toLocaleString()} - {new Date(shift.shift_end).toLocaleString()}
+                          {formatFullDateTime12hr(shift.shift_start)} - {formatFullDateTime12hr(shift.shift_end)}
                         </td>
                         <td className="px-4 py-3 capitalize">{shift.shift_type}</td>
                         <td className="px-4 py-3 capitalize">{shift.patrol_area || 'General'}</td>

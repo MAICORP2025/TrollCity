@@ -9,9 +9,18 @@ interface ModerationMenuProps {
   streamId: string
   onClose: () => void
   onActionComplete: () => void
+  isBroadcaster?: boolean
+  isBroadofficer?: boolean
 }
 
-export default function ModerationMenu({ target, streamId, onClose, onActionComplete }: ModerationMenuProps) {
+export default function ModerationMenu({ 
+  target, 
+  streamId, 
+  onClose, 
+  onActionComplete,
+  isBroadcaster = false,
+  isBroadofficer = false
+}: ModerationMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const [showIPBanModal, setShowIPBanModal] = useState(false)
   const [targetIP, setTargetIP] = useState<string | null>(null)
@@ -35,16 +44,16 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
 
     const isAdmin =
       officerProfile.role === 'admin' || officerProfile.is_admin === true
-    const isOfficer =
+    const isGlobalOfficer =
       officerProfile.is_troll_officer === true ||
       officerProfile.role === 'troll_officer'
 
-    if (!isAdmin && !isOfficer) {
+    if (!isAdmin && !isGlobalOfficer && !isBroadcaster && !isBroadofficer) {
       throw new Error('Officer access required')
     }
 
-    return { currentUser, officerProfile }
-  }, [])
+    return { currentUser, officerProfile, isPrivileged: isAdmin || isGlobalOfficer || isBroadcaster || isBroadofficer }
+  }, [isBroadcaster, isBroadofficer])
 
   const recordOfficerAction = useCallback(
     async (
@@ -114,6 +123,20 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
           await recordOfficerAction(officerProfile.id, 'mute', {
             fee_coins: 25,
             metadata: { mute_until: muteUntil.toISOString(), duration_minutes: muteMinutes },
+          })
+          break
+        }
+        case 'unmute': {
+          await supabase
+            .from('user_profiles')
+            .update({ mic_muted_until: null })
+            .eq('id', target.userId)
+
+          toast.success(`Unmuted ${target.username}'s microphone.`)
+
+          await recordOfficerAction(officerProfile.id, 'unmute', {
+            fee_coins: 0,
+            metadata: {},
           })
           break
         }
@@ -235,38 +258,35 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
 
   const banUser = async () => {
     try {
-      const reason = window.prompt(`Why are you banning ${target.username}?`, 'Policy violation')
+      const reason = window.prompt(`Reason for warrant against ${target.username}?`, 'Violation of rules')
       if (!reason || !reason.trim()) {
-        toast.error('Ban requires a reason')
+        // Cancelled or empty
         return
       }
 
       const { officerProfile } = await fetchOfficerContext()
-      const { data, error } = await supabase.functions.invoke('moderation', {
-        body: {
-          action: 'take_action',
-          action_type: 'ban_user',
-          target_user_id: target.userId,
-          reason: reason.trim(),
-          honesty_message_shown: true,
-        },
+      
+      // Use issue_warrant RPC instead of ban
+      const { data, error } = await supabase.rpc('issue_warrant', {
+        p_user_id: target.userId,
+        p_reason: reason.trim()
       })
 
       if (error) throw error
-      if (!data?.success) {
-        throw new Error(data?.error || 'Ban request failed')
+      if (data && !data.success) {
+        throw new Error(data.error || 'Failed to issue warrant')
       }
 
-      await recordOfficerAction(officerProfile.id, 'ban', {
-        metadata: { reason: reason.trim() },
+      await recordOfficerAction(officerProfile.id, 'ban', { // Keeping action type 'ban' for stats consistency if desired, or change to 'warrant'
+        metadata: { reason: reason.trim(), type: 'warrant' },
       })
 
-      toast.success(`${target.username} has been banned. They must pay 3000 troll_coins to restore.`)
+      toast.success(`Warrant issued for ${target.username}. Access restricted until court appearance.`)
       onActionComplete()
       onClose()
     } catch (err: any) {
-      console.error('Ban action failed:', err)
-      toast.error(err?.message || 'Failed to ban user')
+      console.error('Warrant issuance failed:', err)
+      toast.error(err?.message || 'Failed to issue warrant')
     }
   }
 
@@ -319,6 +339,12 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
             60m
           </button>
         </div>
+        <button
+          onClick={() => handleAction('unmute')}
+          className="w-full text-left px-3 py-2 hover:bg-green-500/20 rounded text-green-400 flex items-center gap-2 transition-colors text-xs"
+        >
+           Unmute Microphone
+        </button>
 
         <div className="text-[11px] uppercase tracking-wider text-gray-400 px-2 pt-2">
           Restrict from going live
@@ -348,7 +374,7 @@ export default function ModerationMenu({ target, streamId, onClose, onActionComp
           onClick={banUser}
           className="w-full text-left px-3 py-2 hover:bg-red-600/20 rounded text-red-300 flex items-center gap-2 transition-colors font-semibold"
         >
-          Ban User (2000 coins restoration)
+          Issue Warrant (Restrict Access)
         </button>
 
         <button

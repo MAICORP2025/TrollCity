@@ -7,6 +7,7 @@ import { withCors, handleCorsPreflight } from '../_shared/cors.ts'
  * Handle saving Square card to user_payment_methods table
  * This is called when frontend POSTs to /payments with userId and nonce
  */
+/*
 async function handleSaveCard(req: Request, supabase: any, requestId: string) {
   try {
     console.log(`[Payments ${requestId}] Handling POST request for card saving`)
@@ -293,6 +294,7 @@ async function handleSetDefaultMethod(req: Request, supabase: any, requestId: st
     return withCors({ success: false, error: e.message }, 500)
   }
 }
+*/
 
 Deno.serve(async (req: Request) => {
   const requestId = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -320,24 +322,18 @@ Deno.serve(async (req: Request) => {
     return withCors({ error: 'Missing Supabase configuration' }, 500)
   }
   
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  // const supabase = createClient(supabaseUrl, supabaseKey)
   
-  console.log(`[Payments ${requestId}] Supabase client created`)
+  // console.log(`[Payments ${requestId}] Supabase client created`)
 
   // Handle POST requests for saving cards or deleting
   if (req.method === 'POST') {
-    // Check if it's a deletion action
-    const clonedReq = req.clone()
-    const body = await clonedReq.json().catch(() => ({}))
-    
-    if (body.action === 'delete-payment-method') {
-      return handleDeleteMethod(req, supabase, requestId)
-    }
-    if (body.action === 'set-default-payment-method') {
-      return handleSetDefaultMethod(req, supabase, requestId)
-    }
-    
-    return handleSaveCard(req, supabase, requestId)
+    // TROLL BANK OVERRIDE: External payments are disabled
+    console.log(`[Payments ${requestId}] ⛔ Blocked POST request - External payments disabled`)
+    return withCors({ 
+      success: false, 
+      error: 'External payments are disabled. Please use Troll Bank Loans.' 
+    }, 403)
   }
 
   // GET requests are for status checks

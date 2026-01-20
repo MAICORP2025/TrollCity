@@ -1,16 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://maitrollcity.com",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Vary": "Origin"
-};
 
 interface NotificationRequest {
   type: string;
@@ -25,28 +18,12 @@ interface UserProfile {
 }
 
 serve(async (req: Request) => {
-  // Handle CORS
-  const origin = req.headers.get("origin");
-  const allowedOrigins = [
-    "https://maitrollcity.com",
-    "https://www.maitrollcity.com",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://localhost:3000",
-    "https://localhost:5173",
-  ];
-  
-  const headers = { ...corsHeaders };
-  if (origin && allowedOrigins.includes(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-  }
-
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: corsHeaders });
   }
 
   try {
@@ -55,7 +32,7 @@ serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "").trim();
     
     if (!token) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401, headers });
+      return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401, headers: corsHeaders });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -63,7 +40,7 @@ serve(async (req: Request) => {
     // Verify user is admin
     const { data: userData, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !userData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
     const { data: profile } = await supabase
@@ -74,14 +51,14 @@ serve(async (req: Request) => {
 
     const isAdmin = profile?.role === "admin" || profile?.is_admin === true;
     if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers });
+      return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: corsHeaders });
     }
 
     const body = await req.json() as NotificationRequest;
     const { type, title, message, metadata = {}, targetUserIds } = body;
 
     if (!type || !title || !message) {
-      return new Response(JSON.stringify({ error: "Missing required fields: type, title, message" }), { status: 400, headers });
+      return new Response(JSON.stringify({ error: "Missing required fields: type, title, message" }), { status: 400, headers: corsHeaders });
     }
 
 

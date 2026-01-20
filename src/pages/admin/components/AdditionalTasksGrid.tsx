@@ -26,7 +26,9 @@ import {
   Zap,
   Gift,
   Home,
-  PieChart
+  PieChart,
+  Shuffle,
+  Vote
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { systemManagementRoutes } from '../adminRoutes'
@@ -199,6 +201,14 @@ export default function AdditionalTasksGrid({
           bgColor: 'bg-red-500/20'
         },
         {
+          icon: <Shuffle className="w-5 h-5" />,
+          label: 'Creator Switch',
+          description: 'Review migration claims',
+          action: () => navigate('/admin/creator-approvals'),
+          color: 'text-green-400',
+          bgColor: 'bg-green-500/20'
+        },
+        {
           icon: <Flag className="w-5 h-5" />,
           label: 'Reports Queue',
           description: 'Handle user reports',
@@ -275,10 +285,20 @@ export default function AdditionalTasksGrid({
         {
           icon: <PieChart className="w-5 h-5" />,
           label: 'Admin Pool',
-          description: 'View admin pool profits',
-          action: onOpenAdminPool,
+          description: 'Manage admin funds',
+          action: onOpenAdminPool || (() => {}),
+          color: 'text-amber-400',
+          bgColor: 'bg-amber-500/10',
+          borderColor: 'border-amber-500/20'
+        },
+        {
+          icon: <Vote className="w-5 h-5" />,
+          label: 'Voting / Troting',
+          description: 'Manage voting & contests',
+          action: pickTab('voting'),
           color: 'text-purple-400',
-          bgColor: 'bg-purple-500/20'
+          bgColor: 'bg-purple-500/10',
+          borderColor: 'border-purple-500/20'
         },
         {
           icon: <BarChart3 className="w-5 h-5" />,

@@ -118,10 +118,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // }
 
     // Determine publish permissions
-    const explicitAllow = parseAllowPublish(payload.allowPublish);
-    const roleParam = String(payload.role || "").toLowerCase();
-    const canPublish =
-      explicitAllow || roleParam === "broadcaster" || roleParam === "admin" || roleParam === "troll_officer" || roleParam === "lead_troll_officer" || roleParam === "officer";
+    let canPublish = false;
+    
+    // Check if this is a tracked stream
+    const { data: stream } = await supabase
+      .from('streams')
+      .select('id, user_id')
+      .or(`id.eq.${roomName},livekit_room.eq.${roomName}`)
+      .maybeSingle();
+
+    if (stream) {
+      // 1. Broadcaster (Host)
+      if (stream.user_id === userData.user.id) {
+        canPublish = true;
+      } 
+      // 2. Guest in Box
+      else {
+        const { data: guest } = await supabase
+          .from('stream_guests')
+          .select('status')
+          .eq('stream_id', stream.id)
+          .eq('user_id', userData.user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        if (guest) {
+          canPublish = true;
+        }
+      }
+    } else {
+      // Legacy/Test fallback (e.g. ad-hoc rooms)
+      // Only allow if role is specifically authorized
+      const roleParam = String(payload.role || "").toLowerCase();
+      const explicitAllow = parseAllowPublish(payload.allowPublish);
+      
+      if (['broadcaster', 'admin', 'troll_officer', 'lead_troll_officer'].includes(roleParam)) {
+        canPublish = true;
+      } else {
+        canPublish = explicitAllow; // Fallback to client request if not a tracked stream
+      }
+    }
 
     // Create LiveKit token
     const token = new AccessToken(apiKey, apiSecret, {

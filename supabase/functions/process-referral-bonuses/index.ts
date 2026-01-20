@@ -116,33 +116,26 @@ Deno.serve(async (req) => {
         if (monthlyCoins >= 40000) {
           const bonusAmount = Math.floor(monthlyCoins * 0.05) // 5% bonus
           
-          // Get current recruiter balance
-          const { data: recruiterProfile, error: balanceError } = await supabase
-            .from('user_profiles')
-            .select('troll_coins')
-            .eq('id', recruiter_id)
-            .single()
-          
-          if (balanceError) {
-            console.error(`[ReferralBonuses ${requestId}] Error getting recruiter balance:`, balanceError)
+          // Credit coins via Troll Bank (handles repayment & ledger)
+          const { data: bankResult, error: bankError } = await supabase.rpc('troll_bank_credit_coins', {
+            p_user_id: recruiter_id,
+            p_coins: bonusAmount,
+            p_bucket: 'paid', // Bonuses are treated as paid/earned
+            p_source: 'referral_bonus',
+            p_ref_id: `${currentMonth}_${referred_user_id}`,
+            p_metadata: {
+              referred_user_id,
+              month: currentMonth,
+              coins_earned: monthlyCoins
+            }
+          })
+
+          if (bankError) {
+            console.error(`[ReferralBonuses ${requestId}] Error crediting bonus via Troll Bank:`, bankError)
             continue
           }
           
-          const currentBalance = recruiterProfile?.troll_coins || 0
-          const newBalance = currentBalance + bonusAmount
-          
-          // Update recruiter's troll_troll_coins
-          const { error: updateError } = await supabase
-            .from('user_profiles')
-            .update({ troll_coins: newBalance })
-            .eq('id', recruiter_id)
-          
-          if (updateError) {
-            console.error(`[ReferralBonuses ${requestId}] Error updating recruiter balance:`, updateError)
-            continue
-          }
-          
-          // Record the bonus payout
+          // Record the bonus payout (keep this for tracking history, though ledger also has it)
           const { error: bonusError } = await supabase
             .from('referral_monthly_bonus')
             .insert({
@@ -154,13 +147,8 @@ Deno.serve(async (req) => {
             })
           
           if (bonusError) {
-            console.error(`[ReferralBonuses ${requestId}] Error recording bonus:`, bonusError)
-            // Rollback balance update if possible
-            await supabase
-              .from('user_profiles')
-              .update({ troll_coins: currentBalance })
-              .eq('id', recruiter_id)
-            continue
+            console.error(`[ReferralBonuses ${requestId}] Error recording bonus history:`, bonusError)
+            // We already credited coins, so we don't rollback. Just log error.
           }
           
           totalBonusPaid += bonusAmount
@@ -171,7 +159,8 @@ Deno.serve(async (req) => {
             referred_user_id,
             monthlyCoins,
             bonusAmount,
-            status: 'paid'
+            status: 'paid',
+            bank_result: bankResult
           })
           
           console.log(`[ReferralBonuses ${requestId}] ✅ Paid ${bonusAmount} coins to recruiter ${recruiter_id} for user ${referred_user_id}`)

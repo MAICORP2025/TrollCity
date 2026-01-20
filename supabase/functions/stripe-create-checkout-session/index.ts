@@ -2,12 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "https://cdn.skypack.dev/stripe@14.25.0?min";
-
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -60,13 +55,13 @@ const getOrCreateCustomer = async (userId: string) => {
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: cors });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -74,7 +69,7 @@ serve(async (req: Request) => {
     if (!STRIPE_SECRET_KEY || !APP_URL) {
       return new Response(JSON.stringify({ error: "Missing Stripe config" }), {
         status: 500,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -84,7 +79,7 @@ serve(async (req: Request) => {
     if (!token) {
       return new Response(JSON.stringify({ error: "Missing auth token" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -92,7 +87,7 @@ serve(async (req: Request) => {
     if (authError || !authData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

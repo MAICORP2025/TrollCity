@@ -15,22 +15,22 @@ export async function recordCoinTransaction(input: {
   source_id?: string
   metadata?: any
 }) {
-  const { data, error } = await adminClient
-    .from('coin_transactions')
-    .insert({
-      user_id: input.user_id,
-      amount: input.amount,
-      coin_type: input.is_paid ? 'paid' : 'free',
-      type: input.source_type,
-      source: input.metadata?.source || 'system',
-      description: input.metadata?.description || `${input.source_type} transaction`,
-      metadata: input.metadata ?? {},
+  const bucket = input.is_paid ? 'paid' : (input.source_type === 'gift' ? 'gifted' : 'promo')
+  
+  // Use Troll Bank RPC to ensure repayment rules are applied
+  const { data, error } = await adminClient.rpc('troll_bank_credit_coins', {
+    p_user_id: input.user_id,
+    p_coins: input.amount,
+    p_bucket: bucket,
+    p_source: input.source_type,
+    p_ref_id: input.source_id || null,
+    p_metadata: {
+      ...(input.metadata || {}),
       platform_profit: input.metadata?.platform_profit ?? 0,
       liability: input.metadata?.liability ?? 0,
-      balance_after: input.metadata?.balance_after
-    })
-    .select()
-    .single()
+      description: input.metadata?.description || `${input.source_type} transaction`
+    }
+  })
 
   if (error) throw error
   return data

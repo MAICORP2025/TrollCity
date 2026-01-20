@@ -1,6 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 /// <reference types="https://deno.land/x/types/index.d.ts" />
 import { createClient } from "@supabase/supabase-js"
+import { corsHeaders } from "../_shared/cors.ts";
+
 declare const Deno: { serve: (handler: (req: Request) => Response | Promise<Response>) => void; env: { get: (key: string) => string | undefined } };
 
 Deno.serve(async (req: Request) => {
@@ -9,12 +11,6 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false, autoRefreshToken: false } }
   );
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  };
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });

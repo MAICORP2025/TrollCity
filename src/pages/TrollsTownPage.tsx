@@ -17,6 +17,7 @@ type PropertyRow = {
   is_listed: boolean | null
   ask_price: number | null
   is_starter: boolean | null
+  is_active_home?: boolean // Added for driving scene persistence
 }
 
 type PropertyUpgradeRow = {
@@ -323,7 +324,8 @@ const TrollsTownPage: React.FC = () => {
 
   const [myProperty, setMyProperty] = useState<PropertyRow | null>(null)
   const [ownedProperties, setOwnedProperties] = useState<PropertyRow[]>([])
-  const [activePropertyId, setActivePropertyId] = useState<string | null>(null)
+  const [viewedPropertyId, setViewedPropertyId] = useState<string | null>(null)
+  const [activeHomeId, setActiveHomeId] = useState<string | null>(null)
   const [myDeed, setMyDeed] = useState<DeedRow | null>(null)
   const [homeNameDraft, setHomeNameDraft] = useState<string>('')
   const [deedHistory, setDeedHistory] = useState<DeedTransferRow[]>([])
@@ -363,7 +365,7 @@ const TrollsTownPage: React.FC = () => {
   const loadPropertyDetails = useCallback(
     async (property: PropertyRow) => {
       setMyProperty(property)
-      setActivePropertyId(property.id)
+      setViewedPropertyId(property.id)
 
       const { data: deed, error: deedError } = await supabase
         .from('deeds')
@@ -425,8 +427,18 @@ const TrollsTownPage: React.FC = () => {
         if (properties && properties.length > 0) {
           const rows = properties as PropertyRow[]
           setOwnedProperties(rows)
+          
+          const active = rows.find(p => p.is_active_home)
+          if (active) {
+            setActiveHomeId(active.id)
+          } else {
+             // If no active home set in DB (legacy), rely on starter or first
+             // But we don't set activeHomeId here implicitly to avoid false state
+             // The user can set it explicitly.
+          }
+
           const starter = rows.find(p => p.is_starter)
-          const selected = starter || rows[0]
+          const selected = active || starter || rows[0]
           await loadPropertyDetails(selected)
         } else {
           setOwnedProperties([])
@@ -490,6 +502,22 @@ const TrollsTownPage: React.FC = () => {
 
       setMyProperty(newProperty as PropertyRow)
 
+      // Auto-set starter home as active
+      try {
+        await supabase.rpc('set_active_property', {
+          p_property_id: newProperty.id
+        })
+        setActiveHomeId(newProperty.id)
+        
+        // Update local list
+        setOwnedProperties(prev => [
+            ...prev, 
+            { ...newProperty, is_active_home: true } as PropertyRow
+        ])
+      } catch (err) {
+        console.error('Failed to set starter home active', err)
+      }
+
       const { data: deed, error: deedError } = await supabase
         .from('deeds')
         .insert({
@@ -507,8 +535,26 @@ const TrollsTownPage: React.FC = () => {
 
       const updatedOwned = [...ownedProperties, newProperty as PropertyRow]
       setOwnedProperties(updatedOwned)
-      await loadPropertyDetails(newProperty as PropertyRow)
-      toast.success('Starter home claimed')
+      
+      // Auto-set as active if it's the first/only home
+      try {
+        await supabase.rpc('set_active_property', {
+            p_property_id: newProperty.id
+        })
+        // Update local state to reflect active status
+        const withActive = updatedOwned.map(p => ({
+            ...p,
+            is_active_home: p.id === newProperty.id
+        }))
+        setOwnedProperties(withActive)
+        await loadPropertyDetails({ ...(newProperty as PropertyRow), is_active_home: true })
+      } catch (err) {
+        console.error('Failed to set active property', err)
+        // Fallback load without active status if RPC fails
+        await loadPropertyDetails(newProperty as PropertyRow)
+      }
+
+      toast.success('Starter home claimed and set as active')
     } catch (error: any) {
       console.error('Failed to claim starter home', error)
       toast.error(error?.message || 'Failed to claim starter home')
@@ -849,12 +895,25 @@ const TrollsTownPage: React.FC = () => {
         setTransactions(prev => [result.transaction, ...prev].slice(0, 20))
       }
 
-      const updatedOwned = [...ownedProperties, newProperty as PropertyRow]
+      // Auto-set as active home
+      try {
+        await supabase.rpc('set_active_property', {
+            p_property_id: newProperty.id
+        })
+        setActiveHomeId(newProperty.id)
+      } catch (err) {
+        console.error('Failed to set new home as active', err)
+      }
+
+      const updatedOwned = [
+          ...ownedProperties.map(p => ({ ...p, is_active_home: false })), 
+          { ...newProperty, is_active_home: true } as PropertyRow
+      ]
       setOwnedProperties(updatedOwned)
-      await loadPropertyDetails(newProperty as PropertyRow)
+      await loadPropertyDetails({ ...newProperty, is_active_home: true } as PropertyRow)
       await refreshCoins()
 
-      toast.success('New home purchased')
+      toast.success('New home purchased and set as active')
     } catch (error: any) {
       console.error('Failed to purchase tiered home', error)
       toast.error(error?.message || 'Failed to purchase home')
@@ -1014,32 +1073,84 @@ const TrollsTownPage: React.FC = () => {
       await refreshCoins()
       await loadListings()
 
-      if (myProperty && myProperty.id === property.id) {
-        setMyProperty({
-          ...myProperty,
+      // Set as active home
+      try {
+        await supabase.rpc('set_active_property', {
+            p_property_id: property.id
+        })
+        setActiveHomeId(property.id)
+        
+        // Update local owned list to reflect new active status
+        // Note: property is the listing, we need to add it to ownedProperties
+        // and mark it active, and others inactive.
+        // Wait, handleBuyProperty logic below handles myProperty update.
+        // I should update ownedProperties here if possible, but loadData might refresh it?
+        // Let's rely on manual update for smoothness.
+      } catch (err) {
+        console.error('Failed to set new home as active', err)
+      }
+
+      const newOwnedProp = {
+          ...property,
           owner_user_id: user.id,
           is_listed: false,
           ask_price: null,
-          is_starter: false
-        })
+          is_starter: false,
+          is_active_home: true
+      } as PropertyRow
+
+      const updatedOwned = [
+          ...ownedProperties.map(p => ({ ...p, is_active_home: false })),
+          newOwnedProp
+      ]
+      setOwnedProperties(updatedOwned)
+      
+      if (myProperty && myProperty.id === property.id) {
+        setMyProperty(newOwnedProp)
       } else {
-        if (property.owner_user_id === user.id) {
-          setMyProperty({
-            ...property,
-            owner_user_id: user.id,
-            is_listed: false,
-            ask_price: null,
-            is_starter: false
-          })
-        }
+         // If we are viewing the purchased property (unlikely if it was a listing?)
+         // If we bought a listing, we might be viewing it.
+         if (property.id === viewedPropertyId) { // Check against viewed
+             setMyProperty(newOwnedProp)
+         }
       }
 
-      toast.success('Home purchased successfully')
+      toast.success('Home purchased and set as active')
     } catch (error: any) {
       console.error('Failed to purchase property', error)
       toast.error(error?.message || 'Failed to purchase property')
     } finally {
       setBuyingId(null)
+    }
+  }
+
+  const handleSetActiveHome = async () => {
+    if (!user || !myProperty) return
+    try {
+      const { error } = await supabase.rpc('set_active_property', {
+        p_property_id: myProperty.id
+      })
+      
+      if (error) throw error
+
+      setActiveHomeId(myProperty.id)
+      
+      // Update local state to reflect change
+      setOwnedProperties(prev => prev.map(p => ({
+        ...p,
+        is_active_home: p.id === myProperty.id
+      })))
+      
+      // Update myProperty if it's the one we just set
+      setMyProperty({
+          ...myProperty,
+          is_active_home: true
+      })
+
+      toast.success('Active home updated for driving scene')
+    } catch (error: any) {
+        console.error('Failed to set active home', error)
+        toast.error(error?.message || 'Failed to set active home')
     }
   }
 
@@ -1326,13 +1437,14 @@ const TrollsTownPage: React.FC = () => {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {ownedProperties.map(p => {
-                      const isActive = p.id === activePropertyId
+                      const isViewed = p.id === viewedPropertyId
+                      const isActiveHome = p.id === activeHomeId
                       return (
                         <button
                           key={p.id}
                           onClick={() => handleSelectProperty(p)}
                           className={`px-3 py-1.5 rounded-full text-xs border flex items-center gap-1.5 ${
-                            isActive
+                            isViewed
                               ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200'
                               : 'border-white/10 bg-black/40 text-gray-300 hover:border-emerald-400'
                           }`}
@@ -1340,10 +1452,17 @@ const TrollsTownPage: React.FC = () => {
                           <div className="w-16">
                             <HomeVisual value={p.base_value} isStarter={p.is_starter} />
                           </div>
-                          <span>
-                            Home {p.id.slice(0, 6).toUpperCase()}
-                            {p.is_starter ? ' • Starter' : ''}
-                          </span>
+                          <div className="flex flex-col items-start text-left">
+                              <span>
+                                Home {p.id.slice(0, 6).toUpperCase()}
+                                {p.is_starter ? ' • Starter' : ''}
+                              </span>
+                              {isActiveHome && (
+                                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                                    Active
+                                </span>
+                              )}
+                          </div>
                         </button>
                       )
                     })}
@@ -1471,6 +1590,34 @@ const TrollsTownPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-5">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                     <div>
+                        <h3 className="text-lg font-bold text-white">
+                           Selected Home
+                        </h3>
+                        {myProperty.id === activeHomeId ? (
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">
+                                    Active Driving Home
+                                </span>
+                            </div>
+                        ) : (
+                            <p className="text-xs text-gray-400 mt-1">
+                                This home is in your portfolio but not currently active.
+                            </p>
+                        )}
+                     </div>
+                     {myProperty.id !== activeHomeId && (
+                         <button
+                           onClick={handleSetActiveHome}
+                           className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-900/20 transition-all transform hover:scale-105"
+                         >
+                            Set as Active Home
+                         </button>
+                     )}
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                       <div className="flex items-center justify-between mb-1">

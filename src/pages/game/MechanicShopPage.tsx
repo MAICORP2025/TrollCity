@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Wrench, Zap, AlertTriangle, Palette } from 'lucide-react';
+import { Wrench, Zap, AlertTriangle, Palette, DollarSign } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
 import { deductCoins } from '../../lib/coinTransactions';
 import { toast } from 'sonner';
 import VehicleRenderer from '../../components/game/VehicleRenderer';
 import { supabase } from '../../lib/supabase';
+import { cars } from '../../data/vehicles';
 
 export default function MechanicShopPage() {
   const { user, profile } = useAuthStore();
@@ -15,6 +16,11 @@ export default function MechanicShopPage() {
   const [vehicleUpgrades, setVehicleUpgrades] = useState<
     { id: string; vehicle_id: number; upgrade_type: string; status: string; cost: number }[]
   >([]);
+  const [startingUpgradeId, setStartingUpgradeId] = useState<string | null>(null);
+
+  const activeCar = activeVehicleId ? cars.find(c => c.id === activeVehicleId) : null;
+  const vehicleTitle = activeCar ? activeCar.name : 'Unknown Vehicle';
+  const vehicleValue = activeCar ? activeCar.price : 0;
 
   const VEHICLE_UPGRADE_CATALOG = [
     {
@@ -177,6 +183,71 @@ export default function MechanicShopPage() {
     loadUpgrades();
   }, [user?.id, activeVehicleId]);
 
+  const handleStartUpgrade = async (upgradeId: string) => {
+    if (!user || !activeVehicleId) {
+      toast.error('You must be logged in and have a vehicle selected');
+      return;
+    }
+
+    const upgrade = VEHICLE_UPGRADE_CATALOG.find(u => u.id === upgradeId);
+    if (!upgrade) return;
+
+    if ((profile?.troll_coins || 0) < upgrade.cost) {
+      toast.error('Not enough troll coins');
+      return;
+    }
+
+    setStartingUpgradeId(upgradeId);
+    try {
+      const result = await deductCoins({
+        userId: user.id,
+        amount: upgrade.cost,
+        type: 'purchase',
+        description: `Purchased upgrade: ${upgrade.name}`,
+        metadata: { source: 'mechanic_shop', upgrade_id: upgradeId, vehicle_id: activeVehicleId }
+      });
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to purchase upgrade');
+        return;
+      }
+
+      const { error: insertError } = await supabase
+        .from('vehicle_upgrades')
+        .insert({
+          user_id: user.id,
+          vehicle_id: activeVehicleId,
+          upgrade_type: upgradeId,
+          status: 'installed',
+          cost: upgrade.cost
+        });
+
+      if (insertError) {
+        console.error('Failed to record upgrade', insertError);
+        toast.error('Payment successful but failed to save upgrade. Please contact support.');
+        return;
+      }
+
+      setVehicleUpgrades(prev => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          vehicle_id: activeVehicleId,
+          upgrade_type: upgradeId,
+          status: 'installed',
+          cost: upgrade.cost
+        }
+      ]);
+
+      toast.success(`Installed ${upgrade.name}`);
+    } catch (err) {
+      console.error('Upgrade error:', err);
+      toast.error('An unexpected error occurred');
+    } finally {
+      setStartingUpgradeId(null);
+    }
+  };
+
   const handleRepair = async (mode: 'quick' | 'full') => {
     if (!user || !profile) {
       toast.error('You must be logged in');
@@ -264,10 +335,18 @@ export default function MechanicShopPage() {
           {/* Active Vehicle Display */}
           <div className="md:col-span-2 bg-zinc-900 rounded-xl p-6 border border-zinc-800 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white mb-2">Vehicle in Shop</h2>
-              <p className="text-gray-400 text-sm">
-                {activeVehicleId ? 'Ready for service' : 'No vehicle selected'}
-              </p>
+              <h2 className="text-xl font-bold text-white mb-2">{vehicleTitle}</h2>
+              <div className="flex flex-col gap-1">
+                <p className="text-gray-400 text-sm">
+                  {activeVehicleId ? 'Ready for service' : 'No vehicle selected'}
+                </p>
+                {activeVehicleId && (
+                  <p className="text-emerald-400 font-bold flex items-center gap-1">
+                    <DollarSign size={16} />
+                    Value: {vehicleValue.toLocaleString()} Coins
+                  </p>
+                )}
+              </div>
             </div>
             {activeVehicleId ? (
                <div className="h-32 w-48 relative">
@@ -398,9 +477,22 @@ export default function MechanicShopPage() {
                         </span>
                       </div>
                       <p className="text-xs text-zinc-400">{upgrade.description}</p>
-                      <p className="text-xs text-yellow-400 font-medium">
-                        {upgrade.cost.toLocaleString()} Coins
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-xs text-yellow-400 font-medium">
+                          {upgrade.cost.toLocaleString()} Coins
+                        </p>
+                        <button
+                          onClick={() => handleStartUpgrade(upgrade.id)}
+                          disabled={installed || startingUpgradeId !== null}
+                          className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
+                            installed 
+                              ? 'bg-zinc-800 text-zinc-500 cursor-default' 
+                              : 'bg-yellow-600 hover:bg-yellow-500 text-black'
+                          }`}
+                        >
+                          {installed ? 'Owned' : startingUpgradeId === upgrade.id ? '...' : 'Install'}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

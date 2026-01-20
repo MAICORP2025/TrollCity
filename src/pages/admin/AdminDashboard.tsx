@@ -98,6 +98,7 @@ type TabId =
   | 'connections'
   | 'payouts'
   | 'payout_queue'
+  | 'voting'
   | 'cashouts'
   | 'purchases'
   | 'declined'
@@ -896,6 +897,7 @@ export default function AdminDashboard() {
         reports_queue: '/admin/reports-queue',
         role_management: '/admin/role-management',
         stream_monitor: '/admin/stream-monitor',
+        voting: '/admin/voting',
         media_library: '/admin/media-library',
         chat_moderation: '/admin/chat-moderation',
         announcements: '/admin/announcements',
@@ -983,7 +985,7 @@ export default function AdminDashboard() {
             bio: 'New troll in the city!',
             role: isAdmin ? 'admin' : 'user',
             tier: 'Bronze',
-            troll_coins: 100,
+            troll_coins: 0,
             total_earned_coins: 100,
             total_spent_coins: 0,
             email: user?.email || null,
@@ -993,6 +995,21 @@ export default function AdminDashboard() {
           .select('*')
           .single()
         if (created) {
+          // Credit 100 starter coins via Troll Bank
+          try {
+              await supabase.functions.invoke('bank-credit', {
+                  body: {
+                      user_id: created.id,
+                      coins: 100,
+                      bucket: 'promo',
+                      source: 'admin_dashboard_init',
+                      ref_id: 'starter_coins_' + created.id
+                  }
+              })
+          } catch (e) {
+              console.error('Failed to credit starter coins:', e)
+          }
+
           setProfile(created as any)
           return
         }

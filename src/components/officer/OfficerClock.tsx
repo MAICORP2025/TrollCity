@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { toast } from 'sonner';
-import { LogIn, LogOut, Clock, User, Search } from 'lucide-react';
+import { LogIn, LogOut, Clock, User, Search, Coffee } from 'lucide-react';
 import { format12hr } from '../../utils/timeFormat';
 
 interface OfficerClockProps {
@@ -30,6 +30,8 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
         .select('*')
         .eq('officer_id', uid)
         .is('clock_out', null)
+        .order('clock_in', { ascending: false })
+        .limit(1)
         .maybeSingle();
       
       if (error) throw error;
@@ -89,6 +91,38 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
     }
   };
 
+  const handleBreakToggle = async (uid?: string) => {
+    const targetId = uid ?? user?.id;
+    if (!targetId) return;
+
+    setActionLoading(true);
+    try {
+      const currentSession = targetId === user?.id ? activeSession : await fetchActiveSession(targetId);
+      if (!currentSession) throw new Error("No active session");
+
+      if (currentSession.status === 'break') {
+        const { error } = await supabase.rpc('manual_end_break', { p_session_id: currentSession.id });
+        if (error) throw error;
+        toast.success("Break ended - Welcome back!");
+      } else {
+        const { error } = await supabase.rpc('manual_start_break', { p_session_id: currentSession.id });
+        if (error) throw error;
+        toast.success("Break started - Enjoy your rest!");
+      }
+
+      if (targetId === user?.id) {
+        const nextSession = await fetchActiveSession(targetId);
+        setActiveSession(nextSession);
+      }
+      onActionComplete?.();
+    } catch (err: any) {
+      console.error('Break toggle error:', err);
+      toast.error(err.message || 'Failed to toggle break status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const searchUser = async () => {
     if (!targetUsername) return;
     setIsSearching(true);
@@ -126,9 +160,15 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
             <h2 className="text-xl font-bold">Officer Duty Terminal</h2>
           </div>
           {activeSession && (
-            <span className="flex items-center gap-1.5 text-xs font-bold text-green-400 bg-green-400/10 px-2 py-1 rounded-full animate-pulse">
-              <span className="w-2 h-2 bg-green-400 rounded-full" />
-              ON DUTY
+            <span className={`flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded-full animate-pulse ${
+              activeSession.status === 'break' 
+                ? 'text-yellow-400 bg-yellow-400/10' 
+                : 'text-green-400 bg-green-400/10'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                activeSession.status === 'break' ? 'bg-yellow-400' : 'bg-green-400'
+              }`} />
+              {activeSession.status === 'break' ? 'ON BREAK' : 'ON DUTY'}
             </span>
           )}
         </div>
@@ -143,12 +183,17 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
             <div className="flex flex-col gap-1 p-3 bg-white/5 rounded-xl border border-white/10">
               <span className="text-xs text-gray-400">Shift Started At</span>
               <span className="text-lg font-medium text-purple-300">{format12hr(activeSession.clock_in)}</span>
+              {activeSession.status === 'break' && (
+                <div className="mt-2 pt-2 border-t border-white/5">
+                  <span className="text-xs text-yellow-400">Break Started: {format12hr(activeSession.last_break_start)}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      <div className="mt-8 space-y-4">
+      <div className="mt-8 space-y-3">
         {/* Personal Clock Button */}
         <button
           onClick={() => handleClockToggle()}
@@ -167,6 +212,22 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
             )
           )}
         </button>
+
+        {/* Break Button */}
+        {activeSession && (
+          <button
+            onClick={() => handleBreakToggle()}
+            disabled={actionLoading}
+            className={`w-full py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 shadow-lg ${
+              activeSession.status === 'break'
+                ? 'bg-yellow-600 hover:bg-yellow-700 text-white shadow-yellow-900/20'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-900/20'
+            }`}
+          >
+            <Coffee size={20} />
+            {activeSession.status === 'break' ? 'END BREAK' : 'START BREAK'}
+          </button>
+        )}
 
         {/* Admin/Lead Manual Clock */}
         {(isAdmin || isLead) && (

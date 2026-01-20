@@ -1,16 +1,27 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { useCoins } from '@/lib/hooks/useCoins';
+import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { toast } from 'sonner';
-import { loadStripe } from '@stripe/stripe-js';
-import { Coins, DollarSign, ShoppingCart, CreditCard, CheckCircle, Loader2 } from 'lucide-react';
-import { formatCoins, formatUSD } from '../lib/coinMath';
-import { addCoins, deductCoins } from '@/lib/coinTransactions';
+import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle } from 'lucide-react';
+import { formatCoins } from '../lib/coinMath';
+import { deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
-import { useStreamMomentum } from '@/lib/hooks/useStreamMomentum';
 import { useCheckOfficerOnboarding } from '@/hooks/useCheckOfficerOnboarding';
+import CashAppPaymentModal from '@/components/broadcast/CashAppPaymentModal';
+import TrollPassBanner from '@/components/ui/TrollPassBanner';
+
+const coinPackages = [
+  { id: 2, coins: 500, price: "$4.99", emoji: "💰", popular: true },
+  { id: 3, coins: 1000, price: "$9.99", emoji: "💎" },
+  { id: 4, coins: 2500, price: "$19.99", emoji: "👑" },
+  { id: 5, coins: 5000, price: "$39.99", emoji: "🚀" },
+  { id: 6, coins: 10000, price: "$69.99", emoji: "⭐", bestValue: true },
+  { id: 7, coins: 13000, price: "$89.99", emoji: "🌟" },
+  { id: 8, coins: 20000, price: "$129.00", emoji: "🏆" },
+];
 
 const SAMPLE_EFFECTS = [
   { id: 'effect_confetti_pop', name: 'Confetti Pop', description: 'Confetti burst', coin_cost: 1000 },
@@ -56,20 +67,30 @@ const isMissingTableError = (error) =>
   );
 
 export default function CoinStore() {
-  const stripeCheckoutUrl = import.meta.env.VITE_API_URL || '/api/stripe';
-  const stripePaymentIntentUrl = import.meta.env.VITE_STRIPE_PI_URL || stripeCheckoutUrl;
-  const STRIPE_ENABLED = String(import.meta.env.VITE_STRIPE_ENABLED || '').trim() === '1';
   const { user, profile, refreshProfile } = useAuthStore();
   const navigate = useNavigate();
   const { troll_coins, refreshCoins } = useCoins();
   const { checkOnboarding } = useCheckOfficerOnboarding();
+  const { loan: activeLoan, ledger, refresh: refreshBank, applyForLoan } = useBankHook(); // useBank hook
+
   const STORE_TAB_KEY = 'tc-store-active-tab';
   const STORE_COMPLETE_KEY = 'tc-store-show-complete';
-  const CASHAPP_TAG_KEY = 'tc-cashapp-tag';
-  const MANUAL_ORDER_KEY_PREFIX = 'tc-manual-order-';
   const [loading, setLoading] = useState(true);
   const [loadingPackage, setLoadingPackage] = useState(null);
   const [tab, setTab] = useState('coins');
+  
+  // Bank State
+  const [bankBalance] = useState(null);
+  const [applying, setApplying] = useState(false);
+  const [requestedAmount, setRequestedAmount] = useState(100);
+  const [eligibility] = useState({
+    canApply: false,
+    reasons: [],
+    maxAmount: 0
+  });
+
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [cashAppModalOpen, setCashAppModalOpen] = useState(false);
   const [durationMultiplier, setDurationMultiplier] = useState(1);
   const [effects, setEffects] = useState([]);
   const [perks, setPerks] = useState([]);
@@ -78,24 +99,15 @@ export default function CoinStore() {
   const [ownedThemeIds, setOwnedThemeIds] = useState(new Set());
   const [themesNote, setThemesNote] = useState(null);
   const [themePurchasing, setThemePurchasing] = useState(null);
-  const [callSounds, setCallSounds] = useState([]);
-  const [ownedCallSoundIds, setOwnedCallSoundIds] = useState(new Set());
-  const [activeCallSounds, setActiveCallSounds] = useState({});
-  const [callSoundPurchasing, setCallSoundPurchasing] = useState(null);
+  // const [callSounds, setCallSounds] = useState([]);
+  // const [ownedCallSoundIds, setOwnedCallSoundIds] = useState(new Set());
+  // const [activeCallSounds, setActiveCallSounds] = useState({});
+  // const [callSoundPurchasing, setCallSoundPurchasing] = useState(null);
   const [streamerEntitlements, setStreamerEntitlements] = useState(null);
   const [effectsNote, setEffectsNote] = useState(null);
   const [perksNote, setPerksNote] = useState(null);
   const [insuranceNote, setInsuranceNote] = useState(null);
-  const [savedMethods, setSavedMethods] = useState([]);
-  const [methodsLoading, setMethodsLoading] = useState(false);
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [pendingPackage, setPendingPackage] = useState(null);
-  const [paymentClientSecret, setPaymentClientSecret] = useState(null);
-  const [paymentProcessing, setPaymentProcessing] = useState(false);
-  const [paymentSetupLoading, setPaymentSetupLoading] = useState(false);
-  const [paymentError, setPaymentError] = useState(null);
   const activeStreamId = useLiveContextStore((s) => s.activeStreamId);
-  const { momentum } = useStreamMomentum(activeStreamId);
   const [liveStreamIsLive, setLiveStreamIsLive] = useState(false);
   const [snackLoading, setSnackLoading] = useState(null);
   const [lastSnackAt, setLastSnackAt] = useState({});
@@ -103,66 +115,10 @@ export default function CoinStore() {
     if (typeof window === 'undefined') return false;
     return Boolean(sessionStorage.getItem('tc-store-show-complete'));
   });
-  const [coinPackages, setCoinPackages] = useState([]);
-
-  const stripeRef = useRef(null);
-  const elementsRef = useRef(null);
-  const paymentElementRef = useRef(null);
-  const paymentAttachedRef = useRef(false);
-  const [manualOrderRefId, setManualOrderRefId] = useState(null);
-  const [cashAppTag, setCashAppTag] = useState(() => {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem(CASHAPP_TAG_KEY) || '';
-  });
-  const [cashAppTagError, setCashAppTagError] = useState(null);
 
   const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
   const isSecretary = profile?.role === 'secretary' || profile?.troll_role === 'secretary';
   const isOfficer = profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.is_lead_officer === true || profile?.troll_role === 'troll_officer' || profile?.troll_role === 'lead_troll_officer';
-
-  useEffect(() => {
-    const loadCoinPackages = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('coin_packages')
-          .select('id, name, coins, price_usd, amount_cents')
-          .eq('is_active', true)
-          .order('coins', { ascending: true });
-
-        if (error) throw error;
-        if (Array.isArray(data)) {
-          setCoinPackages(data);
-        }
-      } catch (err) {
-        console.error('Failed to load coin packages:', err);
-        toast.error('Unable to load coin packages');
-      }
-    };
-
-    loadCoinPackages();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(CASHAPP_TAG_KEY, (cashAppTag || '').trim());
-  }, [cashAppTag]);
-
-  const getThemeStyle = (theme) => {
-    if (!theme) return undefined;
-    const imageUrl = theme.image_url || theme.preview_url || theme.background_asset_url;
-    if (imageUrl) {
-      return {
-        backgroundImage: `url(${imageUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      };
-    }
-    if (theme.background_css) {
-      return { background: theme.background_css };
-    }
-    return undefined;
-  };
 
   const formatCountdown = (targetDate) => {
     if (!targetDate) return null;
@@ -215,6 +171,7 @@ export default function CoinStore() {
     };
   };
 
+  /*
   const getRarityFrame = (rarity) => {
     switch (String(rarity || '').toLowerCase()) {
       case 'rare':
@@ -227,30 +184,7 @@ export default function CoinStore() {
         return 'border-white/10';
     }
   };
-
-  const getManualOrderStorageKey = (pkgId) => `${MANUAL_ORDER_KEY_PREFIX}${pkgId}`;
-
-  const normalizeCashAppTag = useCallback((value) => {
-    const trimmed = String(value || '').trim();
-    const withoutDollar = trimmed.replace(/^\$+/, '');
-    if (!withoutDollar) return { tag: null, error: 'Enter your Cash App tag (no $)' };
-    if (!/^[A-Za-z0-9._-]{2,20}$/.test(withoutDollar)) {
-      return { tag: null, error: 'Cash App tag must be 2-20 letters/numbers (no $).' };
-    }
-    return { tag: withoutDollar, error: null };
-  }, []);
-
-  const ensureCashAppTag = useCallback(() => {
-    const { tag, error } = normalizeCashAppTag(cashAppTag);
-    if (error || !tag) {
-      setCashAppTagError(error || 'Cash App tag is required');
-      toast.error(error || 'Cash App tag is required');
-      return null;
-    }
-    setCashAppTagError(null);
-    setCashAppTag(tag);
-    return tag;
-  }, [cashAppTag, normalizeCashAppTag]);
+  */
 
   const showLiveSnacks = Boolean(activeStreamId && liveStreamIsLive);
   const callPackages = {
@@ -267,30 +201,6 @@ export default function CoinStore() {
       { id: 'video_500', name: 'Ultra Video', minutes: 500, totalCost: 10000 },
     ],
   };
-
-  const trollPassExpiresAt = profile?.troll_pass_expires_at || null;
-  const trollPassLastPurchasedAt = profile?.troll_pass_last_purchased_at || null;
-  const trollPassActive = Boolean(
-    trollPassExpiresAt && new Date(trollPassExpiresAt).getTime() > Date.now(),
-  );
-
-  const trollPassBundle = {
-    id: 'troll_pass_bundle',
-    coins: 1500,
-    price: 4.50,
-  };
-
-  const _isViewerOnly = Boolean(
-    profile &&
-      profile.role !== 'admin' &&
-      profile.role !== 'troll_officer' &&
-      profile.is_admin !== true &&
-      profile.is_troll_officer !== true &&
-      profile.is_lead_officer !== true &&
-      !profile.officer_role &&
-      profile.is_broadcaster !== true &&
-      profile.role !== 'broadcaster',
-  );
 
   const getPerkPrice = (perk) => {
     const base = Number(perk?.cost || 0);
@@ -318,7 +228,7 @@ export default function CoinStore() {
 
       await refreshCoins();
 
-      const [effRes, perkRes, planRes, themeRes, themeOwnedRes, entitlementsRes, callSoundRes, callSoundOwnedRes] = await Promise.all([
+      const [effRes, perkRes, planRes, themeRes, themeOwnedRes, entitlementsRes] = await Promise.all([
         supabase.from('entrance_effects').select('*').order('created_at', { ascending: false }),
         supabase.from('perks').select('*').order('created_at', { ascending: false }),
         supabase.from('insurance_options').select('*').order('created_at', { ascending: false }),
@@ -329,10 +239,10 @@ export default function CoinStore() {
         user?.id
           ? supabase.from('user_streamer_entitlements').select('*').eq('user_id', user.id).maybeSingle()
           : Promise.resolve({ data: null }),
-        supabase.from('call_sound_catalog').select('*').eq('is_active', true).order('sound_type', { ascending: true }),
-        user?.id
-          ? supabase.from('user_call_sounds').select('sound_id,is_active,call_sound_catalog(sound_type)').eq('user_id', user.id)
-          : Promise.resolve({ data: [] })
+        // supabase.from('call_sound_catalog').select('*').eq('is_active', true).order('sound_type', { ascending: true }),
+        // user?.id
+        //   ? supabase.from('user_call_sounds').select('sound_id,is_active,call_sound_catalog(sound_type)').eq('user_id', user.id)
+        //   : Promise.resolve({ data: [] })
       ]);
       const applyCatalogData = (result, fallback = [], setter, noteSetter, label) => {
         if (result.error) {
@@ -399,16 +309,16 @@ export default function CoinStore() {
 
       setOwnedThemeIds(new Set((themeOwnedRes?.data || []).map((row) => row.theme_id)));
       setStreamerEntitlements(entitlementsRes?.data || null);
-      setCallSounds(callSoundRes?.data || []);
-      const ownedSoundIds = new Set((callSoundOwnedRes?.data || []).map((row) => row.sound_id));
-      setOwnedCallSoundIds(ownedSoundIds);
-      const activeMap = {};
-      (callSoundOwnedRes?.data || []).forEach((row) => {
-        if (row.is_active && row.call_sound_catalog?.sound_type) {
-          activeMap[row.call_sound_catalog.sound_type] = row.sound_id;
-        }
-      });
-      setActiveCallSounds(activeMap);
+      // setCallSounds(callSoundRes?.data || []);
+      // const ownedSoundIds = new Set((callSoundOwnedRes?.data || []).map((row) => row.sound_id));
+      // setOwnedCallSoundIds(ownedSoundIds);
+      // const activeMap = {};
+      // (callSoundOwnedRes?.data || []).forEach((row) => {
+      //   if (row.is_active && row.call_sound_catalog?.sound_type) {
+      //     activeMap[row.call_sound_catalog.sound_type] = row.sound_id;
+      //   }
+      // });
+      // setActiveCallSounds(activeMap);
 
       console.log('Effects, perks, plans, themes loaded:', { effects: loadedEffects.length, perks: loadedPerks.length, plans: loadedPlans.length, themes: loadedThemes.length });
 
@@ -421,22 +331,6 @@ export default function CoinStore() {
     }
   }, [user?.id, refreshCoins]);
 
-  const loadPaymentMethods = useCallback(async () => {
-    if (!profile?.id) return;
-    setMethodsLoading(true);
-    const { data, error } = await supabase
-      .from('user_payment_methods')
-      .select('id, provider, display_name, is_default, brand, last4, exp_month, exp_year')
-      .eq('user_id', profile.id)
-      .order('is_default', { ascending: false });
-
-    if (error) {
-      console.error('Failed to load payment methods:', error);
-    }
-    setSavedMethods(data || []);
-    setMethodsLoading(false);
-  }, [profile?.id]);
-
   useEffect(() => {
     if (!user) {
       navigate('/auth', { replace: true });
@@ -445,10 +339,6 @@ export default function CoinStore() {
 
     loadWalletData(true);
   }, [user, navigate, loadWalletData]);
-
-  useEffect(() => {
-    loadPaymentMethods();
-  }, [loadPaymentMethods]);
 
   useEffect(() => {
     let isActive = true;
@@ -476,7 +366,7 @@ export default function CoinStore() {
   }, [activeStreamId]);
 
   useEffect(() => {
-    if (tab === 'live_snacks' && !showLiveSnacks) setTab('coins');
+    if (tab === 'live_snacks' && !showLiveSnacks) setTab('effects');
   }, [tab, showLiveSnacks]);
 
   useEffect(() => {
@@ -495,59 +385,6 @@ export default function CoinStore() {
     return () => clearTimeout(timer);
   }, [showPurchaseComplete]);
 
-  const initPaymentElement = useCallback(async (clientSecret) => {
-    if (paymentAttachedRef.current) return;
-    const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-    if (!publishableKey) {
-      setPaymentError('Stripe publishable key not configured');
-      return;
-    }
-
-    setPaymentSetupLoading(true);
-    try {
-      const stripe = await loadStripe(publishableKey);
-      if (!stripe) throw new Error('Stripe failed to load');
-
-      const elements = stripe.elements({
-        clientSecret,
-        appearance: { theme: 'night' },
-      });
-
-      const container = document.getElementById('stripe-coin-payment-element');
-      if (!container) throw new Error('Payment element container missing');
-
-      container.innerHTML = '';
-      const paymentElement = elements.create('payment');
-      paymentElement.mount('#stripe-coin-payment-element');
-
-      stripeRef.current = stripe;
-      elementsRef.current = elements;
-      paymentElementRef.current = paymentElement;
-      paymentAttachedRef.current = true;
-    } catch (err) {
-      console.error('Stripe payment element error:', err);
-      setPaymentError(err?.message || 'Stripe setup failed');
-    } finally {
-      setPaymentSetupLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!paymentModalOpen || !paymentClientSecret) return;
-    initPaymentElement(paymentClientSecret);
-
-    return () => {
-      if (paymentElementRef.current) {
-        try {
-          paymentElementRef.current.destroy();
-        } catch {}
-        paymentElementRef.current = null;
-      }
-      elementsRef.current = null;
-      stripeRef.current = null;
-      paymentAttachedRef.current = false;
-    };
-  }, [paymentModalOpen, paymentClientSecret, initPaymentElement]);
   const canBuySnack = (key) => {
     const ts = lastSnackAt[key];
     if (!ts) return true;
@@ -860,6 +697,7 @@ export default function CoinStore() {
     }
   };
 
+  /*
   const buyCallSound = async (sound) => {
     const canProceed = await checkOnboarding();
     if (!canProceed) return;
@@ -898,6 +736,7 @@ export default function CoinStore() {
       setCallSoundPurchasing(null);
     }
   };
+  */
 
   const buyCallMinutes = async (pkg) => {
     // Check officer onboarding first
@@ -942,15 +781,6 @@ export default function CoinStore() {
       });
 
       if (error) {
-        await addCoins({
-          userId: user.id,
-          amount: totalCost,
-          type: 'refund',
-          coinType: 'troll_coins',
-          description: `Refund for ${pkg.minutes} ${pkg.type} call minutes`,
-          metadata: { package_id: pkg.id, minutes: pkg.minutes, call_type: pkg.type },
-          supabaseClient: supabase
-        });
         throw error;
       }
 
@@ -965,336 +795,35 @@ export default function CoinStore() {
     }
   };
 
-  const startPaymentIntent = async (pkg, purchaseType) => {
-    const loadingId = pkg?.id || purchaseType || 'stripe-payment';
-    setLoadingPackage(loadingId);
-    setPaymentError(null);
-    if (pkg) setPendingPackage(pkg);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('No authentication token available');
-
-      const res = await fetch(stripePaymentIntentUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(
-          purchaseType
-            ? { purchaseType }
-            : { packageId: pkg.id }
-        )
-      });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        console.error('❌ Backend error:', txt);
-        throw new Error(`Payment start error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      if (!data.clientSecret) throw new Error('Missing payment client secret');
-
-      setPaymentClientSecret(data.clientSecret);
-      setPaymentModalOpen(true);
-    } catch (err) {
-      console.error('❌ Failed to start Stripe payment:', err);
-      toast.error('Unable to start payment.');
-    } finally {
-      setLoadingPackage(null);
-    }
-  };
-
-  const handleBuy = async (pkg) => {
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-    setPendingPackage(pkg);
-    if (!STRIPE_ENABLED) {
-      try {
-        const tag = ensureCashAppTag();
-        if (!tag) return;
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) throw new Error('Not authenticated');
-        const storageKey = getManualOrderStorageKey(pkg.id);
-        let existingOrderId = null;
-        if (typeof window !== 'undefined') {
-          existingOrderId = localStorage.getItem(storageKey);
-        }
-        if (existingOrderId) {
-          const statusRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-            },
-            body: JSON.stringify({
-              action: 'status',
-              order_id: existingOrderId,
-            }),
-          });
-          const statusText = await statusRes.text();
-          let statusJson = null;
-          try { statusJson = JSON.parse(statusText); } catch {}
-          if (statusRes.ok && statusJson?.success && statusJson.order) {
-            if (statusJson.order.status !== 'fulfilled') {
-              setManualOrderRefId(existingOrderId);
-              setPaymentModalOpen(true);
-              toast('You already have a pending manual order for this package.');
-              return;
-            }
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem(storageKey);
-            }
-          }
-        }
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            action: 'create',
-            package_id: pkg.id,
-            coins: pkg.coins || pkg?.coins_amount || 0,
-            amount_usd: pkg.price_usd || Number(String(pkg.price).replace(/[^0-9.]/g, '')) || 0,
-            cashapp_tag: tag,
-          }),
-        });
-        const txt = await res.text();
-        let json = null;
-        try { json = JSON.parse(txt); } catch {}
-        if (!res.ok) throw new Error(json?.error || 'Failed to create manual order');
-        setManualOrderRefId(json?.orderId || null);
-        if (json?.orderId && typeof window !== 'undefined') {
-          localStorage.setItem(storageKey, json.orderId);
-        }
-        setPaymentModalOpen(true);
-        toast.success('Manual order created. Follow Cash App instructions.');
-      } catch (e) {
-        console.error('Manual order error:', e);
-        toast.error(e?.message || 'Failed to create manual order');
-      }
+  const handleApplyLoan = async () => {
+    if (!requestedAmount || requestedAmount < 100) {
+      toast.error('Minimum loan amount is 100 coins');
       return;
     }
-    await startPaymentIntent(pkg);
-  };
-
-  const openAdminManualTab = (orderId, pkg) => {
-    if (!orderId) return;
-    const params = new URLSearchParams({
-      orderId,
-      user: profile?.username || profile?.id || '',
-      coins: String(pkg?.coins || 0),
-      amount: String(pkg?.price_usd || ''),
-    });
-    window.open(`/admin/manual-orders?${params.toString()}`, '_blank', 'noopener');
-  };
-
-  const handleCashApp = async (pkg) => {
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-    const tag = ensureCashAppTag();
-    if (!tag) return;
-    setPendingPackage(pkg);
-    setLoadingPackage(pkg?.id || null);
+    setApplying(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('Not authenticated');
-      const storageKey = getManualOrderStorageKey(pkg.id);
-      let existingOrderId = null;
-      if (typeof window !== 'undefined') {
-        existingOrderId = localStorage.getItem(storageKey);
-      }
-      if (existingOrderId) {
-        const statusRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            action: 'status',
-            order_id: existingOrderId,
-          }),
-        });
-        const statusText = await statusRes.text();
-        let statusJson = null;
-        try { statusJson = JSON.parse(statusText); } catch {}
-        if (statusRes.ok && statusJson?.success && statusJson.order) {
-          if (statusJson.order.status !== 'fulfilled') {
-            setManualOrderRefId(existingOrderId);
-            setPaymentModalOpen(true);
-            toast('You already have a pending manual order for this package.');
-            return;
-          }
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem(storageKey);
-          }
-        }
-      }
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          action: 'create',
-          package_id: pkg.id,
-          coins: pkg.coins || pkg?.coins_amount || 0,
-          amount_usd: pkg.price_usd || Number(String(pkg.price).replace(/[^0-9.]/g, '')) || 0,
-          username: profile?.username,
-          cashapp_tag: tag,
-        }),
-      });
-      const txt = await res.text();
-      let json = null;
-      try { json = JSON.parse(txt); } catch {}
-      if (!res.ok) throw new Error(json?.error || 'Failed to create manual order');
-      setManualOrderRefId(json?.orderId || null);
-      if (json?.orderId && typeof window !== 'undefined') {
-        localStorage.setItem(storageKey, json.orderId);
-      }
-      setPaymentModalOpen(true);
-      openAdminManualTab(json?.orderId, pkg);
-      toast.success('Manual order created. Cash App instructions ready.');
-    } catch (e) {
-      console.error('Manual order error:', e);
-      toast.error(e?.message || 'Failed to create manual order');
-    } finally {
-      setLoadingPackage(null);
-    }
-  };
-
-  const handleBuyTrollPass = async () => {
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-
-    if (trollPassActive) return;
-    setPendingPackage({
-      ...trollPassBundle,
-      name: 'Troll Pass Bundle',
-    });
-    await startPaymentIntent(null, 'troll_pass_bundle');
-  };
-
-  const handleBuyTrollPassCashApp = async () => {
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-    if (trollPassActive) return;
-    const tag = ensureCashAppTag();
-    if (!tag) return;
-    
-    setPendingPackage({
-      ...trollPassBundle,
-      name: 'Troll Pass Bundle',
-    });
-    setLoadingPackage(trollPassBundle.id);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('Not authenticated');
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manual-coin-order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          action: 'create',
-          package_id: trollPassBundle.id,
-          coins: trollPassBundle.coins,
-          amount_usd: trollPassBundle.price,
-          username: profile?.username,
-          cashapp_tag: tag,
-          purchase_type: 'troll_pass',
-        }),
-      });
-      const txt = await res.text();
-      let json = null;
-      try { json = JSON.parse(txt); } catch {}
-      if (!res.ok) throw new Error(json?.error || 'Failed to create manual order');
-      setManualOrderRefId(json?.orderId || null);
-      setPaymentModalOpen(true);
-      openAdminManualTab(json?.orderId, { ...trollPassBundle, name: 'Troll Pass Bundle' });
-      toast.success('Troll Pass manual order created. Cash App instructions ready.');
-    } catch (e) {
-      console.error('Manual order error:', e);
-      toast.error(e?.message || 'Failed to create manual order');
-    } finally {
-      setLoadingPackage(null);
-    }
-  };
-
-  const closePaymentModal = () => {
-    setPaymentModalOpen(false);
-    setPaymentClientSecret(null);
-    setPaymentError(null);
-    setPendingPackage(null);
-  };
-
-  const handleConfirmPayment = async () => {
-    if (!stripeRef.current || !elementsRef.current) {
-      setPaymentError('Stripe is not ready yet');
-      return;
-    }
-
-    try {
-      setPaymentProcessing(true);
-      setPaymentError(null);
-
-      const { error, paymentIntent } = await stripeRef.current.confirmPayment({
-        elements: elementsRef.current,
-        confirmParams: {
-          return_url: `${window.location.origin}/wallet?success=1`,
-        },
-        redirect: 'if_required',
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Payment failed');
-      }
-
-      if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'processing') {
-        toast.success('Payment confirmed');
-        showPurchaseCompleteOverlay();
-        closePaymentModal();
+      const result = await applyForLoan(requestedAmount);
+      if (result.success) {
+        toast.success('Loan approved! Coins added to your wallet.');
+        setRequestedAmount(100);
+        await refreshCoins();
+        refreshBank();
+      } else {
+        toast.error(result.error || 'Loan application failed');
       }
     } catch (err) {
-      console.error('Stripe confirm error:', err);
-      setPaymentError(err?.message || 'Payment failed');
-      toast.error(err?.message || 'Payment failed');
+      console.error('Loan application error:', err);
+      toast.error('An unexpected error occurred');
     } finally {
-      setPaymentProcessing(false);
+      setApplying(false);
     }
   };
-
-  const purchaseCompleteActive =
-    showPurchaseComplete ||
-    (typeof window !== 'undefined' && Boolean(sessionStorage.getItem(STORE_COMPLETE_KEY)));
-
-  useEffect(() => {
-    if (!purchaseCompleteActive || showPurchaseComplete) return;
-    setShowPurchaseComplete(true);
-  }, [purchaseCompleteActive, showPurchaseComplete]);
 
   return (
-      purchaseCompleteActive ? (
+      showPurchaseComplete ? (
         <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center p-6">
           <div className="text-center">
-            <Loader2 className="w-10 h-10 animate-spin text-purple-400 mx-auto mb-4" />
-            <div className="text-xl font-semibold">Your Troll City purchase is complete</div>
+            <div className="text-xl font-semibold">Order submitted</div>
           </div>
         </div>
       ) : loading ? (
@@ -1320,74 +849,25 @@ export default function CoinStore() {
       ) : (
         <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6 overflow-x-hidden">
         <div className="max-w-6xl mx-auto space-y-6 w-full">
-          {/* Warning Banner */}
-          <div className="bg-purple-500/10 border border-purple-500/50 rounded-xl p-4 flex items-start gap-3">
-            <CreditCard className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-            <div className="text-purple-200 text-sm font-medium space-y-1">
+          {/* Bank Info Banner */}
+          <div className="bg-blue-500/10 border border-blue-500/50 rounded-xl p-4 flex items-start gap-3">
+            <Landmark className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="text-blue-200 text-sm font-medium space-y-1">
               <p>
-                {STRIPE_ENABLED
-                  ? 'Secure payments are processed via Stripe.'
-                  : 'Manual Cash App flow is active. Stripe verification is temporarily disabled.'}
-              </p>
-              <p>
-                Link your preferred payment method in your profile for a faster checkout experience.
+                Need more coins? Visit the <button onClick={() => navigate('/bank')} className="underline hover:text-white">Troll Bank</button> to apply for a loan.
               </p>
             </div>
           </div>
-
-          {tab === 'coins' && (
-            <div className="bg-zinc-900/80 border border-[#2C2C2C] rounded-xl p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-purple-300" />
-                  <p className="font-semibold">Saved payment methods</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/profile/setup')}
-                  className="text-xs px-3 py-1 rounded bg-[#1A1A24] border border-gray-700 hover:bg-[#2A2A35]"
-                >
-                  Manage in Edit Profile
-                </button>
-              </div>
-
-              <div className="mt-3">
-                {methodsLoading ? (
-                  <p className="text-sm text-gray-400">Loading payment methods…</p>
-                ) : savedMethods.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {savedMethods.map((method) => (
-                      <div
-                        key={method.id}
-                        className="px-3 py-2 rounded-lg border border-[#2C2C2C] bg-black/40 text-sm"
-                      >
-                        <div className="font-medium">
-                          {method.display_name || method.brand || 'Payment Method'}
-                          {method.is_default ? ' • Default' : ''}
-                        </div>
-                        {method.last4 ? (
-                          <div className="text-xs text-gray-400">•••• {method.last4}</div>
-                        ) : (
-                          <div className="text-xs text-gray-500">Saved method</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400">No saved payment methods yet.</p>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Header */}
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <Coins className="w-8 h-8 text-purple-400" />
-              Troll City Coin Store
+              Troll City Store
             </h1>
             <div className="flex gap-2 hidden md:flex">
-              <button type="button" className={`px-3 py-2 rounded ${tab==='coins'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('coins')}>Coin Packages</button>
+              <button type="button" className={`px-3 py-2 rounded ${tab==='coins'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('coins')}>Coins</button>
+              <button type="button" className={`px-3 py-2 rounded ${tab==='bank'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('bank')}>Bank</button>
               <button type="button" className={`px-3 py-2 rounded ${tab==='effects'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('effects')}>Entrance Effects</button>
               <button type="button" className={`px-3 py-2 rounded ${tab==='perks'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('perks')}>Perks</button>
               <button type="button" className={`px-3 py-2 rounded ${tab==='calls'?'bg-purple-600':'bg-zinc-800'}`} onClick={() => setTab('calls')}>Call Minutes</button>
@@ -1403,7 +883,8 @@ export default function CoinStore() {
                 onChange={(e) => setTab(e.target.value)}
                 className="w-full bg-zinc-900 text-white border border-purple-500/30 rounded-lg p-2 text-sm focus:outline-none focus:border-purple-500"
               >
-                <option value="coins">Coin Packages</option>
+                <option value="coins">Coins</option>
+                <option value="bank">Troll Bank & Loans</option>
                 <option value="effects">Entrance Effects</option>
                 <option value="perks">Perks</option>
                 <option value="calls">Call Minutes</option>
@@ -1430,181 +911,272 @@ export default function CoinStore() {
                 <p className="text-2xl font-bold text-yellow-400">
                   {formatCoins(troll_coins)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">withdrawable balance</p>
-              </div>
-            </div>
-
-            {/* Troll Pass (viewer-only) */}
-              <div className="mt-6 bg-zinc-900 rounded-xl p-4 border border-green-500/20">
-              <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="font-semibold text-white flex items-center gap-2">
-                  <span>🎟️</span> Troll Pass
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  +{trollPassBundle.coins.toLocaleString()} Troll Coins + 30-day Troll Pass perk (chat boost + +5% gift bonus)
-                </div>
-{trollPassActive ? (
-                 <div className="text-xs text-green-400 mt-2">
-                   Active until {trollPassExpiresAt ? new Date(trollPassExpiresAt).toLocaleDateString() : '—'}
-                 </div>
-               ) : (
-                 <div className="text-xs text-gray-500 mt-2">Duration: 30 days</div>
-               )}
-                {trollPassLastPurchasedAt && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    Last purchased {new Date(trollPassLastPurchasedAt).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-
-              <div className="text-right">
-                <div className="text-yellow-400 font-bold">+{trollPassBundle.coins.toLocaleString()} Troll Coins</div>
-                <div className="text-green-400 font-bold">{formatUSD(trollPassBundle.price)}</div>
-                <div className="mt-2 space-y-2">
-                  <button
-                    type="button"
-                    onClick={handleBuyTrollPass}
-                    disabled={!_isViewerOnly || trollPassActive || loadingPackage === trollPassBundle.id}
-                    className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded font-semibold text-sm"
-                  >
-                    {loadingPackage === trollPassBundle.id
-                      ? 'Starting payment...'
-                      : trollPassActive
-                        ? 'Active'
-                        : 'Pay with Stripe'}
-                  </button>
-                  {!STRIPE_ENABLED && !trollPassActive && _isViewerOnly && (
+                <div className="flex gap-2 mt-2">
                     <button
-                      type="button"
-                      onClick={handleBuyTrollPassCashApp}
-                      disabled={loadingPackage === trollPassBundle.id}
-                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded font-semibold text-sm"
+                        onClick={() => setTab('bank')}
+                        className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white"
                     >
-                      {loadingPackage === trollPassBundle.id ? 'Creating order...' : 'Pay with Cash App'}
+                        Request Loan
                     </button>
-                  )}
                 </div>
               </div>
             </div>
-            </div>
-
-            {/* Temporarily disabled
-            <div className="mt-6 bg-zinc-900 rounded-xl p-4 border border-green-500/20">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-semibold text-white flex items-center gap-2">
-                    <span>🎟️</span> Troll Pass
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    One-time monthly purchase (no auto-renew). Slight chat boost + +5% gift value bonus.
-                  </div>
-                  {trollPassActive ? (
-                    <div className="text-xs text-green-400 mt-2">
-                      Active until {trollPassExpiresAt ? new Date(trollPassExpiresAt).toLocaleDateString() : '—'}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-500 mt-2">Duration: 30 days</div>
-                  )}
-                </div>
-
-                <div className="text-right">
-                  <div className="text-yellow-400 font-bold">1,500 troll_coins</div>
-                  <button
-                    type="button"
-                    onClick={buyTrollPass}
-                    disabled={!isViewerOnly || trollPassActive || troll_coins < 1500}
-                    className="mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded font-semibold"
-                  >
-                    {trollPassActive ? 'Active' : (isViewerOnly ? 'Purchase' : 'Viewer only')}
-                  </button>
-                </div>
-              </div>
-              {!isViewerOnly && (
-                <div className="mt-3 text-xs text-gray-500">
-                  Locked: Troll Pass is for viewers only (does not grant streaming or guest access).
-                </div>
-              )}
-            </div>
-            */}
           </div>
 
+          {/* Content Areas */}
           <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl p-6 border border-purple-500/30 shadow-lg">
+            
+            {/* Bank Tab */}
+            {tab === 'bank' && (
+              <div className="space-y-8 animate-fadeIn">
+                 {/* Bank Header Stats */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-black/30 border border-white/5 rounded-xl p-4 relative overflow-hidden group">
+                        <div className="relative z-10">
+                            <p className="text-gray-400 text-sm font-medium mb-1">Bank Reserves</p>
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-2xl font-bold text-emerald-400">
+                                {bankBalance !== null ? bankBalance.toLocaleString() : '---'}
+                                </span>
+                                <span className="text-xs text-emerald-400/70">coins</span>
+                            </div>
+                            <div className="mt-2 flex items-center gap-1 text-[10px] text-gray-500">
+                                <CheckCircle className="w-3 h-3" />
+                                <span>Verified Holdings</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-black/30 border border-white/5 rounded-xl p-4 relative overflow-hidden">
+                        <div className="relative z-10">
+                            <p className="text-gray-400 text-sm font-medium mb-1">Your Active Loan</p>
+                            {activeLoan ? (
+                                <div>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-bold text-red-400">{activeLoan.balance.toLocaleString()}</span>
+                                    <span className="text-xs text-red-400/70">due</span>
+                                </div>
+                                <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] text-red-200">
+                                    Auto-repayment active (50% of purchases)
+                                </div>
+                                </div>
+                            ) : (
+                                <div>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-bold text-green-400">None</span>
+                                </div>
+                                <p className="mt-1 text-xs text-gray-400">You are debt free!</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                 </div>
+
+                 {/* Loan Application / Management */}
+                 <div className="bg-black/20 border border-white/5 rounded-xl p-6">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                        <CreditCard className="w-5 h-5 text-purple-400" />
+                        Loan Services
+                    </h2>
+                    
+                    {activeLoan ? (
+                        <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
+                            <div>
+                                <h3 className="font-semibold text-blue-400 text-sm">Repayment Information</h3>
+                                <p className="text-xs text-gray-300 mt-1">
+                                Loans are repaid automatically when you purchase or receive paid coins. 
+                                There is no interest if paid within 30 days.
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <h3 className="font-semibold text-white mb-2 text-sm">Apply for a Loan</h3>
+                                <p className="text-xs text-gray-400 mb-4">
+                                Get coins instantly and pay them back later automatically.
+                                </p>
+                                
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-gray-400 mb-1">
+                                            Amount (Coins) - Max: {eligibility.maxAmount}
+                                        </label>
+                                        <input 
+                                            type="number"
+                                            value={requestedAmount}
+                                            onChange={(e) => setRequestedAmount(Number(e.target.value))}
+                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                                            min={100}
+                                            max={eligibility.maxAmount || 100}
+                                        />
+                                    </div>
+                                    
+                                    <button
+                                        onClick={handleApplyLoan}
+                                        disabled={!eligibility.canApply || applying}
+                                        className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-sm transition-all"
+                                    >
+                                        {applying ? 'Processing...' : 'Apply for Loan'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-black/20 rounded-xl p-4">
+                                <h3 className="font-semibold text-white mb-2 text-sm">Eligibility Requirements</h3>
+                                <ul className="space-y-2">
+                                    <li className="flex items-center gap-2 text-xs">
+                                        {!activeLoan ? <CheckCircle className="w-3 h-3 text-green-500"/> : <div className="w-3 h-3 border rounded-full border-gray-600"/>}
+                                        <span className={!activeLoan ? 'text-gray-200' : 'text-gray-500'}>No active loans</span>
+                                    </li>
+                                    <li className="flex items-center gap-2 text-xs">
+                                        {eligibility.maxAmount > 0 ? <CheckCircle className="w-3 h-3 text-green-500"/> : <div className="w-3 h-3 border rounded-full border-gray-600"/>}
+                                        <span className={eligibility.maxAmount > 0 ? 'text-gray-200' : 'text-gray-500'}>Account age check {eligibility.maxAmount > 0 && `(Max: ${eligibility.maxAmount})`}</span>
+                                    </li>
+                                </ul>
+                                
+                                {eligibility.reasons.length > 0 && (
+                                    <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded">
+                                        <p className="text-[10px] text-red-300 font-semibold mb-1">Why you can't apply:</p>
+                                        <ul className="list-disc list-inside text-[10px] text-red-200/80">
+                                            {eligibility.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                 </div>
+
+                 {/* Recent Transactions */}
+                 <div>
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                        <History className="w-5 h-5 text-gray-400" />
+                        Recent Transactions
+                    </h2>
+                    <div className="overflow-x-auto bg-black/20 rounded-xl border border-white/5">
+                        <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="text-[10px] text-gray-500 border-b border-white/5 uppercase tracking-wider">
+                            <th className="py-3 px-4">Date</th>
+                            <th className="py-3 px-4">Type</th>
+                            <th className="py-3 px-4">Source</th>
+                            <th className="py-3 px-4 text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody className="text-sm">
+                            {ledger.map((entry) => (
+                            <tr key={entry.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                <td className="py-3 px-4 text-gray-400 text-xs">
+                                {new Date(entry.created_at).toLocaleDateString()}
+                                </td>
+                                <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                    entry.bucket === 'repayment' ? 'bg-red-500/20 text-red-300' :
+                                    entry.bucket === 'loan' ? 'bg-purple-500/20 text-purple-300' :
+                                    'bg-gray-500/20 text-gray-300'
+                                }`}>
+                                    {entry.bucket.toUpperCase()}
+                                </span>
+                                </td>
+                                <td className="py-3 px-4 text-gray-400 text-xs">{entry.source}</td>
+                                <td className={`py-3 px-4 text-right font-mono font-medium ${
+                                entry.amount_delta > 0 ? 'text-green-400' : 'text-red-400'
+                                }`}>
+                                {entry.amount_delta > 0 ? '+' : ''}{entry.amount_delta}
+                                </td>
+                            </tr>
+                            ))}
+                            {ledger.length === 0 && (
+                            <tr>
+                                <td colSpan={4} className="py-8 text-center text-gray-500 text-xs">
+                                No transactions found.
+                                </td>
+                            </tr>
+                            )}
+                        </tbody>
+                        </table>
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            {/* Coins Tab */}
             {tab === 'coins' && (
+              <>
+                 <div className="mb-6">
+                   <TrollPassBanner onPurchase={() => {
+                     setSelectedPackage({
+                       id: 'troll_pass_bundle',
+                       coins: 1500,
+                       price: '$9.99',
+                       name: 'Troll Pass Premium',
+                       purchaseType: 'troll_pass_bundle'
+                     });
+                     setCashAppModalOpen(true);
+                   }} />
+                 </div>
+                 
+                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                   <Coins className="w-5 h-5 text-yellow-400" />
+                   Coin Packages
+                 </h2>
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                   {coinPackages.map((pkg) => (
+                     <div key={pkg.id} className={`bg-black/40 p-4 rounded-lg border ${pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20'} relative overflow-hidden group`}>
+                       {(pkg.popular || pkg.bestValue) && (
+                         <div className="absolute top-3 right-3 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                           {pkg.popular ? 'Popular' : 'Best Value'}
+                         </div>
+                       )}
+                       
+                       <div className="flex flex-col items-center text-center p-2">
+                         <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
+                         <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
+                         <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
+                         
+                         <button
+                           onClick={() => {
+                             setSelectedPackage(pkg);
+                             setCashAppModalOpen(true);
+                           }}
+                           className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                         >
+                           {pkg.price}
+                         </button>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+              </>
+            )}
+
+            {/* Entrance Effects */}
+            {tab === 'effects' && (
               <>
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                   <ShoppingCart className="w-5 h-5 text-purple-400" />
-                  Available Coin Packages
+                  Entrance Effects
                 </h2>
-                {!STRIPE_ENABLED && (
-                  <div className="mb-4 bg-green-500/5 border border-green-500/30 rounded-lg p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold text-green-200">Cash App tag (required for manual payments)</div>
-                      <span className="text-[11px] text-green-300">No $ sign</span>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="px-2 py-2 bg-green-500/10 border border-green-500/30 rounded text-green-200 text-sm">$</span>
-                      <input
-                        value={cashAppTag}
-                        onChange={(e) => setCashAppTag(e.target.value)}
-                        onBlur={() => cashAppTag && ensureCashAppTag()}
-                        placeholder="yourcashtag"
-                        className="w-full bg-black/40 border border-green-500/30 rounded px-3 py-2 text-sm text-white focus:border-green-400 outline-none"
-                      />
-                    </div>
-                    {cashAppTagError && (
-                      <div className="text-xs text-red-300 mt-1">{cashAppTagError}</div>
-                    )}
-                    <p className="text-xs text-gray-400 mt-1">We display your tag to admins/secretaries so they can match your Cash App payment quickly.</p>
-                  </div>
+                {effectsNote && (
+                   <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
+                     {effectsNote}
+                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {coinPackages.map((pkg) => (
-                    <div key={pkg.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20 hover:border-purple-500/40 transition-all">
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-lg font-bold text-purple-300">{pkg.name || 'Coin Package'}</span>
-                        </div>
-                        <p className="text-xs text-gray-400 mb-2">Package</p>
-                      </div>
-                      <div className="mb-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Coins className="w-4 h-4 text-yellow-400" />
-                          <span className="text-sm text-gray-400">Coins</span>
-                        </div>
-                        <p className="text-2xl font-bold text-yellow-400">{formatCoins(pkg.coins)}</p>
-                      </div>
-                      <div className="mb-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <DollarSign className="w-4 h-4 text-green-400" />
-                          <span className="text-sm text-gray-400">Price</span>
-                        </div>
-                        <p className="text-xl font-bold text-green-400">{formatUSD(pkg.price_usd)}</p>
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        {!STRIPE_ENABLED && (
-                          <button
-                            type="button"
-                            onClick={() => handleCashApp(pkg)}
-                            disabled={loadingPackage === pkg.id}
-                            className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded font-semibold"
-                          >
-                            {loadingPackage === pkg.id ? 'Creating manual order...' : 'Pay with Cash App'}
-                          </button>
-                        )}
+                  {effects.map((effect) => (
+                    <div key={effect.id} className="bg-black/40 p-4 rounded-lg border border-purple-500/20">
+                      <div className="font-semibold text-lg">{effect.name}</div>
+                      <div className="text-sm text-gray-400 mb-2">{effect.description}</div>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="text-yellow-400 font-bold">{formatCoins(effect.price_troll_coins || effect.coin_cost)}</span>
                         <button
-                          type="button"
-                          onClick={() => STRIPE_ENABLED && handleBuy(pkg)}
-                          disabled={!STRIPE_ENABLED || loadingPackage === pkg.id}
-                          className={`w-full px-4 py-2 rounded font-semibold border border-purple-500/30 ${STRIPE_ENABLED ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-800 text-gray-400 cursor-not-allowed'}`}
+                          onClick={() => buyEffect(effect)}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm font-semibold"
                         >
-                          {STRIPE_ENABLED ? (loadingPackage === pkg.id ? 'Starting Stripe...' : 'Pay with Stripe') : 'Stripe temporarily disabled'}
+                          Buy
                         </button>
-                        <div className="mt-1 text-[11px] text-gray-400 text-center">
-                          {STRIPE_ENABLED
-                            ? 'Stripe securely processes this purchase.'
-                            : 'Cash App sends a manual request to admins when Stripe is disabled.'}
-                        </div>
                       </div>
                     </div>
                   ))}
@@ -1612,6 +1184,178 @@ export default function CoinStore() {
               </>
             )}
 
+            {/* Perks */}
+            {tab === 'perks' && (
+              <>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-purple-400" />
+                  Perks
+                </h2>
+                {perksNote && (
+                   <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
+                     {perksNote}
+                   </div>
+                )}
+                
+                <div className="mb-6 bg-black/20 p-4 rounded-lg border border-white/10">
+                   <label className="text-sm text-gray-400 mb-2 block">Duration Multiplier</label>
+                   <div className="flex gap-2">
+                     {[1, 2, 5, 10].map(m => (
+                       <button
+                         key={m}
+                         onClick={() => setDurationMultiplier(m)}
+                         className={`px-3 py-1 rounded text-sm ${durationMultiplier === m ? 'bg-purple-600 text-white' : 'bg-zinc-800 text-gray-400'}`}
+                       >
+                         {m}x
+                       </button>
+                     ))}
+                   </div>
+                   <p className="text-xs text-gray-500 mt-2">
+                     Extend perk duration by purchasing multiple units at once.
+                   </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {perks.map((perk) => {
+                    const price = getPerkPrice(perk) * durationMultiplier;
+                    const duration = (perk.duration_minutes || 0) * durationMultiplier;
+                    const isRestricted = perk.role_required === 'officer' && !(isOfficer || isAdmin || isSecretary);
+                    
+                    return (
+                    <div key={perk.id} className={`bg-black/40 p-4 rounded-lg border ${isRestricted ? 'border-red-500/20 opacity-75' : 'border-purple-500/20'}`}>
+                      <div className="flex justify-between items-start">
+                        <div className="font-semibold text-lg">{perk.name}</div>
+                        {perk.role_required === 'officer' && (
+                          <span className="text-[10px] uppercase bg-red-900/50 text-red-200 px-1.5 py-0.5 rounded border border-red-500/30">Officer</span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-400 mb-2">{perk.description}</div>
+                      <div className="text-xs text-purple-300 mb-2">Duration: {duration} mins</div>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="text-yellow-400 font-bold">{formatCoins(price)}</span>
+                        <button
+                          onClick={() => buyPerk(perk)}
+                          disabled={isRestricted}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-semibold"
+                        >
+                          {isRestricted ? 'Locked' : 'Buy'}
+                        </button>
+                      </div>
+                    </div>
+                  )})}
+                </div>
+              </>
+            )}
+
+            {/* Insurance */}
+            {tab === 'insurance' && (
+              <>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-purple-400" />
+                  Insurance Plans
+                </h2>
+                {insuranceNote && (
+                   <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
+                     {insuranceNote}
+                   </div>
+                )}
+                
+                <div className="mb-6 bg-black/20 p-4 rounded-lg border border-white/10">
+                   <label className="text-sm text-gray-400 mb-2 block">Duration Multiplier</label>
+                   <div className="flex gap-2">
+                     {[1, 2, 4].map(m => (
+                       <button
+                         key={m}
+                         onClick={() => setDurationMultiplier(m)}
+                         className={`px-3 py-1 rounded text-sm ${durationMultiplier === m ? 'bg-purple-600 text-white' : 'bg-zinc-800 text-gray-400'}`}
+                       >
+                         {m}x
+                       </button>
+                     ))}
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {plans.map((plan) => {
+                    const price = (plan.cost || 0) * durationMultiplier;
+                    const duration = (plan.duration_hours || 0) * durationMultiplier;
+                    
+                    return (
+                    <div key={plan.id} className="bg-black/40 p-4 rounded-lg border border-purple-500/20">
+                      <div className="font-semibold text-lg">{plan.name}</div>
+                      <div className="text-sm text-gray-400 mb-2">{plan.description}</div>
+                      <div className="text-xs text-purple-300 mb-2">Duration: {duration} hours</div>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="text-yellow-400 font-bold">{formatCoins(price)}</span>
+                        <button
+                          onClick={() => buyInsurance(plan)}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm font-semibold"
+                        >
+                          Buy
+                        </button>
+                      </div>
+                    </div>
+                  )})}
+                </div>
+              </>
+            )}
+
+            {/* Call Minutes */}
+            {tab === 'calls' && (
+              <>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-purple-400" />
+                  Call Minutes
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div>
+                     <h3 className="text-lg font-semibold mb-3 text-blue-300">Audio Calls</h3>
+                     <div className="space-y-3">
+                       {callPackages.audio.map(pkg => (
+                         <div key={pkg.id} className="flex justify-between items-center bg-black/30 p-3 rounded border border-white/10">
+                           <div>
+                             <div className="font-medium">{pkg.name}</div>
+                             <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
+                           </div>
+                           <button
+                             onClick={() => buyCallMinutes({...pkg, type: 'audio'})}
+                             disabled={loadingPackage === pkg.id}
+                             className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs flex items-center gap-2"
+                           >
+                             <span className="text-yellow-400">{formatCoins(pkg.totalCost)}</span>
+                             {loadingPackage === pkg.id ? '...' : 'Buy'}
+                           </button>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                   
+                   <div>
+                     <h3 className="text-lg font-semibold mb-3 text-pink-300">Video Calls</h3>
+                     <div className="space-y-3">
+                       {callPackages.video.map(pkg => (
+                         <div key={pkg.id} className="flex justify-between items-center bg-black/30 p-3 rounded border border-white/10">
+                           <div>
+                             <div className="font-medium">{pkg.name}</div>
+                             <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
+                           </div>
+                           <button
+                             onClick={() => buyCallMinutes({...pkg, type: 'video'})}
+                             disabled={loadingPackage === pkg.id}
+                             className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs flex items-center gap-2"
+                           >
+                             <span className="text-yellow-400">{formatCoins(pkg.totalCost)}</span>
+                             {loadingPackage === pkg.id ? '...' : 'Buy'}
+                           </button>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                </div>
+              </>
+            )}
+
+            {/* Broadcast Themes */}
             {tab === 'broadcast_themes' && (
               <>
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -1619,476 +1363,110 @@ export default function CoinStore() {
                   Broadcast Themes
                 </h2>
                 {themesNote && (
-                  <div className="mb-4 text-xs text-yellow-200 bg-yellow-500/10 border border-yellow-500/40 rounded-lg p-3">
-                    {themesNote}
-                  </div>
+                   <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
+                     {themesNote}
+                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {broadcastThemes.map((theme) => {
                     const owned = ownedThemeIds.has(theme.id);
                     const eligibility = getEligibility(theme);
-                    const rarityFrame = getRarityFrame(theme.rarity);
-                    const isAnimated = theme.asset_type === 'video';
-                    const isLimited = Boolean(theme.is_limited);
-                    const isExclusive = Boolean(theme.is_streamer_exclusive || theme.min_stream_level || theme.min_followers || theme.min_total_hours_streamed);
-                    const purchaseDisabled = !eligibility.isEligible || owned || themePurchasing === theme.id;
+                    
                     return (
-                      <div key={theme.id} className={`bg-zinc-900 rounded-xl p-4 border ${rarityFrame} hover:border-purple-500/40 transition-all`}>
-                        <div
-                          className="h-28 rounded-lg border border-white/10 mb-3 overflow-hidden"
-                          style={getThemeStyle(theme)}
-                        />
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-lg font-bold text-purple-200">{theme.name}</span>
-                          {owned ? (
-                            <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                              Owned
-                            </span>
-                          ) : (
-                            <span className="text-xs text-yellow-300 font-semibold">
-                              {Number(theme.price_coins || 0).toLocaleString()} coins
-                            </span>
-                          )}
+                    <div key={theme.id} className={`bg-black/40 p-4 rounded-lg border ${owned ? 'border-green-500/30' : 'border-purple-500/20'} relative overflow-hidden`}>
+                      {owned && <div className="absolute top-2 right-2 bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded">Owned</div>}
+                      
+                      <div className="h-24 mb-3 rounded bg-zinc-800 w-full overflow-hidden relative">
+                         {theme.image_url ? (
+                           <img src={theme.image_url} alt={theme.name} className="w-full h-full object-cover" />
+                         ) : (
+                           <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">No Preview</div>
+                         )}
+                      </div>
+                      
+                      <div className="font-semibold text-lg">{theme.name}</div>
+                      <div className="text-sm text-gray-400 mb-2 line-clamp-2">{theme.description}</div>
+                      
+                      {!eligibility.isEligible && (
+                        <div className="text-xs text-red-400 mb-2">
+                           {eligibility.seasonalState || 'Requirements not met'}
                         </div>
-                        <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.2em] text-gray-400 mb-3">
-                          <span>{(theme.rarity || 'common').toUpperCase()}</span>
-                          {isAnimated && <span className="text-cyan-200">Animated</span>}
-                          {isLimited && <span className="text-pink-200">Limited</span>}
-                          {isExclusive && <span className="text-amber-200">Exclusive</span>}
-                        </div>
-                        {!eligibility.isEligible && (
-                          <div className="text-xs text-red-200 mb-3 space-y-1">
-                            <div>{eligibility.seasonalState || 'Locked'}</div>
-                            {eligibility.requiresStreamer && !eligibility.meetsStreamer && (
-                              <div className="text-[11px] text-white/60">
-                                Needs
-                                {eligibility.minLevel ? ` Lv ${eligibility.minLevel}` : ''}
-                                {eligibility.minFollowers ? ` • ${eligibility.minFollowers}+ followers` : ''}
-                                {eligibility.minHours ? ` • ${eligibility.minHours}+ hrs` : ''}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {eligibility.isEligible && eligibility.seasonalState && (
-                          <div className="text-xs text-yellow-200 mb-3">{eligibility.seasonalState}</div>
-                        )}
+                      )}
+                      
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="text-yellow-400 font-bold">{formatCoins(theme.price_coins || 0)}</span>
                         <button
-                          type="button"
-                          disabled={purchaseDisabled}
                           onClick={() => buyBroadcastTheme(theme)}
-                          className="w-full py-2 rounded-lg text-sm font-semibold border border-pink-500/50 text-pink-100 hover:text-white hover:border-pink-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={owned || !eligibility.isEligible || themePurchasing === theme.id}
+                          className={`px-3 py-1 rounded text-sm font-semibold ${owned ? 'bg-zinc-700 text-gray-400 cursor-default' : 'bg-purple-600 hover:bg-purple-700'}`}
                         >
-                          {owned
-                            ? 'Owned'
-                            : themePurchasing === theme.id
-                              ? 'Purchasing...'
-                              : Number(theme.price_coins || 0) === 0
-                                ? 'Claim Free'
-                                : eligibility.isEligible
-                                  ? 'Buy Theme'
-                                  : 'Locked'}
+                          {owned ? 'Owned' : themePurchasing === theme.id ? '...' : 'Buy'}
                         </button>
                       </div>
-                    );
-                  })}
-                  {broadcastThemes.length === 0 && !themesNote && (
-                    <div className="text-sm text-gray-400">No broadcast themes available yet.</div>
-                  )}
+                    </div>
+                  )})}
                 </div>
               </>
             )}
 
-            {tab === 'effects' && (
-              <>
-                <h2 className="text-xl font-bold mb-4">Entrance Effects</h2>
-                {effectsNote && (
-                  <div className="text-xs text-yellow-300 mb-3">{effectsNote}</div>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {effects.map((e) => (
-                    <div key={e.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
-                      <div className="font-semibold mb-2">{e.name}</div>
-                      <div className="text-sm text-gray-400 mb-3">{e.description}</div>
-                      <div className="flex items-center justify-between">
-                        <div className="text-yellow-400 font-bold">{(e.price_troll_coins || e.coin_cost || 0).toLocaleString()} Troll Coins</div>
-                        <button type="button" onClick={() => buyEffect(e)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
-                      </div>
-                    </div>
-                  ))}
-                  {effects.length === 0 && <div className="text-gray-400">No effects available</div>}
-                </div>
-              </>
-            )}
-
-            {tab === 'perks' && (
-              <>
-                <h2 className="text-xl font-bold mb-4">Perks</h2>
-                {perksNote && (
-                  <div className="text-xs text-yellow-300 mb-3">{perksNote}</div>
-                )}
-                
-                <div className="flex items-center gap-2 mb-4 bg-zinc-900/50 p-3 rounded-lg border border-purple-500/20 overflow-x-auto">
-                  <span className="text-sm text-gray-400 whitespace-nowrap">Duration Multiplier:</span>
-                  <div className="flex gap-2">
-                    {[1, 2, 4, 6, 8].map(m => (
-                      <button
-                        key={m}
-                        onClick={() => setDurationMultiplier(m)}
-                        className={`px-3 py-1 rounded text-sm font-bold transition-all ${
-                          durationMultiplier === m 
-                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50 scale-105' 
-                            : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
-                        }`}
-                      >
-                        {m}x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {perks.map((p) => (
-                    <div key={p.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
-                      <div className="font-semibold mb-2">{p.name}</div>
-                      <div className="text-sm text-gray-400 mb-3">{p.description}</div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-yellow-400 font-bold">{(getPerkPrice(p) * durationMultiplier).toLocaleString()} Troll Coins</div>
-                          {durationMultiplier > 1 && (
-                            <div className="text-xs text-purple-300">
-                              {durationMultiplier}x duration ({(p.duration_minutes * durationMultiplier).toLocaleString()} mins)
-                            </div>
-                          )}
-                        </div>
-                        <button type="button" onClick={() => buyPerk(p)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
-                      </div>
-                    </div>
-                  ))}
-                  {perks.length === 0 && <div className="text-gray-400">No perks available</div>}
-                </div>
-              </>
-            )}
-
-            {tab === 'calls' && (
-              <>
-                <h2 className="text-xl font-bold mb-4">Call Minutes</h2>
-                <p className="text-sm text-gray-400 mb-6">
-                  Call minutes are priced in Troll Coins only.
-                </p>
-
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-purple-300 mb-3">Call Sounds</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {callSounds.map((sound) => {
-                        const owned = ownedCallSoundIds.has(sound.id);
-                        const isActive = activeCallSounds[sound.sound_type] === sound.id;
-                        return (
-                          <div key={sound.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
-                            <div className="font-semibold mb-1">{sound.name}</div>
-                            <div className="text-xs text-gray-400 mb-2">{sound.sound_type}</div>
-                            <div className="text-sm text-gray-300">
-                              {formatCoins(sound.price_coins)} Troll Coins
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => buyCallSound(sound)}
-                              disabled={owned || callSoundPurchasing === sound.id}
-                              className="mt-4 w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded font-semibold"
-                            >
-                              {owned ? (isActive ? 'Owned • Active' : 'Owned') : callSoundPurchasing === sound.id ? 'Processing...' : 'Purchase'}
-                            </button>
-                          </div>
-                        );
-                      })}
-                      {callSounds.length === 0 && (
-                        <div className="text-gray-400">No call sounds available</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-semibold text-purple-300 mb-3">Audio Call Packages</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {callPackages.audio.map((pkg) => (
-                        <div key={pkg.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
-                          <div className="font-semibold mb-1">{pkg.name}</div>
-                          <div className="text-sm text-gray-400 mb-3">{pkg.minutes.toLocaleString()} minutes</div>
-                          <div className="text-sm text-gray-300">
-                            {formatCoins(pkg.totalCost)} Troll Coins
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => buyCallMinutes({ ...pkg, type: 'audio' })}
-                            disabled={loadingPackage === pkg.id}
-                            className="mt-4 w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded font-semibold"
-                          >
-                            {loadingPackage === pkg.id ? 'Processing...' : 'Purchase'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-semibold text-purple-300 mb-3">Video Call Packages</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {callPackages.video.map((pkg) => (
-                        <div key={pkg.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
-                          <div className="font-semibold mb-1">{pkg.name}</div>
-                          <div className="text-sm text-gray-400 mb-3">{pkg.minutes.toLocaleString()} minutes</div>
-                          <div className="text-sm text-gray-300">
-                            {formatCoins(pkg.totalCost)} Troll Coins
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => buyCallMinutes({ ...pkg, type: 'video' })}
-                            disabled={loadingPackage === pkg.id}
-                            className="mt-4 w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded font-semibold"
-                          >
-                            {loadingPackage === pkg.id ? 'Processing...' : 'Purchase'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {tab === 'insurance' && (
-              <>
-                <h2 className="text-xl font-bold mb-4">Insurance Plans</h2>
-                {insuranceNote && (
-                  <div className="text-xs text-yellow-300 mb-3">{insuranceNote}</div>
-                )}
-                
-                <div className="flex items-center gap-2 mb-4 bg-zinc-900/50 p-3 rounded-lg border border-purple-500/20 overflow-x-auto">
-                  <span className="text-sm text-gray-400 whitespace-nowrap">Duration Multiplier:</span>
-                  <div className="flex gap-2">
-                    {[1, 2, 4, 6, 8].map(m => (
-                      <button
-                        key={m}
-                        onClick={() => setDurationMultiplier(m)}
-                        className={`px-3 py-1 rounded text-sm font-bold transition-all ${
-                          durationMultiplier === m 
-                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50 scale-105' 
-                            : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
-                        }`}
-                      >
-                        {m}x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {plans.map((p) => (
-                    <div key={p.id} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
-                      <div className="font-semibold mb-2">{p.name}</div>
-                      <div className="text-sm text-gray-400 mb-2">{p.protection_type} protection</div>
-                      <div className="text-xs text-gray-500 mb-3">{p.description}</div>
-                      <div className="text-xs text-gray-500 mb-3">
-                        Base Duration: {p.duration_hours} hours
-                        {durationMultiplier > 1 && <span className="text-purple-400 ml-2">({p.duration_hours * durationMultiplier} hours total)</span>}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-yellow-400 font-bold">{((p.cost || 0) * durationMultiplier).toLocaleString()} Troll Coins</div>
-                        </div>
-                        <button type="button" onClick={() => buyInsurance(p)} className="px-3 py-2 bg-purple-600 rounded">Purchase</button>
-                      </div>
-                    </div>
-                  ))}
-                  {plans.length === 0 && <div className="text-gray-400">No insurance plans available</div>}
-                </div>
-              </>
-            )}
-
+            {/* Live Snacks */}
             {tab === 'live_snacks' && showLiveSnacks && (
               <>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold">LIVE SNACKS</h2>
-                  <div className="text-sm text-gray-400">
-                    Stream momentum: <span className="text-green-400 font-semibold">{Math.round(momentum ?? 0)}%</span>
-                  </div>
-                </div>
-
-                <div className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20 mb-4">
-                  <div className="h-2 rounded bg-zinc-800 overflow-hidden">
-                    <div
-                      className="h-2 bg-gradient-to-r from-red-500 via-yellow-400 to-green-400"
-                      style={{ width: `${Math.max(0, Math.min(100, momentum ?? 0))}%` }}
-                    />
-                  </div>
-                  {(momentum ?? 100) <= 40 && (
-                    <div className="mt-3 text-sm text-yellow-300">
-                      Crowd energy is low — a snack can bring the room back to life.
-                    </div>
-                  )}
-                  <div className="mt-2 text-xs text-gray-500">
-                    Momentum decays every 10 minutes without gifting. Snacks boost momentum but don’t affect payouts or gambling.
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { key: 'small', name: 'Small Snack', desc: 'Small momentum boost', icon: '🍿', cost: 50 },
-                    { key: 'medium', name: 'Medium Snack', desc: 'Medium momentum boost', icon: '🍔', cost: 120 },
-                    { key: 'large', name: 'Large Snack', desc: 'Full momentum restore', icon: '🍕', cost: 250 },
-                    { key: 'mystery', name: 'Mystery Snack', desc: 'Random fun effect + boost', icon: '🎁', cost: 150 },
-                  ].map((s) => (
-                    <div key={s.key} className="bg-zinc-900 rounded-xl p-4 border border-purple-500/20">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="font-semibold flex items-center gap-2">
-                          <span className="text-2xl">{s.icon}</span> {s.name}
-                        </div>
-                        <div className="text-yellow-400 font-bold">{s.cost} Troll Coins</div>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-purple-400" />
+                  Live Snacks
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                   <div className="bg-black/40 p-4 rounded-lg border border-purple-500/20">
+                      <div className="font-semibold text-lg">🍿 Popcorn</div>
+                      <div className="text-sm text-gray-400 mb-2">Boost momentum slightly</div>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="text-yellow-400 font-bold">50</span>
+                        <button
+                          onClick={() => buySnack('popcorn')}
+                          disabled={snackLoading === 'popcorn' || !canBuySnack('popcorn')}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm font-semibold disabled:opacity-50"
+                        >
+                          {snackLoading === 'popcorn' ? '...' : 'Buy'}
+                        </button>
                       </div>
-                      <div className="text-sm text-gray-400 mb-3">{s.desc}</div>
-                      <button
-                        type="button"
-                        onClick={() => buySnack(s.key)}
-                        disabled={snackLoading === s.key || !canBuySnack(s.key)}
-                        className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded font-semibold"
-                      >
-                        {snackLoading === s.key ? 'Activating…' : (canBuySnack(s.key) ? 'Purchase' : 'Cooldown')}
-                      </button>
-                      <div className="mt-2 text-xs text-gray-500">Viewers boost more. Broadcasters pay more.</div>
-                    </div>
-                  ))}
+                   </div>
+                   <div className="bg-black/40 p-4 rounded-lg border border-purple-500/20">
+                      <div className="font-semibold text-lg">🍕 Pizza</div>
+                      <div className="text-sm text-gray-400 mb-2">Boost momentum moderate</div>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="text-yellow-400 font-bold">150</span>
+                        <button
+                          onClick={() => buySnack('pizza')}
+                          disabled={snackLoading === 'pizza' || !canBuySnack('pizza')}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm font-semibold disabled:opacity-50"
+                        >
+                          {snackLoading === 'pizza' ? '...' : 'Buy'}
+                        </button>
+                      </div>
+                   </div>
                 </div>
               </>
             )}
+
           </div>
-
-          {/* Purchase Information */}
-          <div className="bg-zinc-900 rounded-xl p-6 border border-[#2C2C2C]">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-purple-400" />
-              How It Works
-            </h2>
-
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-white text-sm">1</span>
-                </div>
-                <div>
-                  <p className="font-semibold">Select a Package</p>
-                  <p className="text-sm text-gray-400">Choose from 6 coin packages based on your needs</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-white text-sm">2</span>
-                </div>
-                <div>
-                  <p className="font-semibold">{STRIPE_ENABLED ? 'Pay with Stripe' : 'Pay via Cash App'}</p>
-                  <p className="text-sm text-gray-400">
-                    {STRIPE_ENABLED ? 'Secure payment processing through Stripe' : 'Send to $trollcity95 with note: PREFIX-COINS (first 6 chars of username and coin amount)'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-white text-sm">3</span>
-                </div>
-                <div>
-                  <p className="font-semibold">Coins Added After Payment</p>
-                  <p className="text-sm text-gray-400">Coins are only added after successful Stripe payment completion</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {paymentModalOpen && pendingPackage && (
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-              <div className="bg-[#0D0D1A] border border-[#2C2C2C] rounded-xl p-6 w-full max-w-lg max-h-[100dvh] overflow-y-auto">
-                <h3 className="text-lg font-semibold mb-2">Complete payment</h3>
-                {STRIPE_ENABLED ? (
-                  <>
-                    <p className="text-sm text-gray-400 mb-4">Confirm your Stripe payment to finish this purchase.</p>
-                    {savedMethods.length > 0 && (
-                      <div className="space-y-2 mb-4">
-                        {savedMethods.map((method) => (
-                          <div key={method.id} className="flex items-center justify-between px-3 py-2 rounded border border-[#2C2C2C]">
-                            <div>
-                              <div className="text-sm font-medium">
-                                {method.display_name || method.brand || 'Payment Method'}{method.is_default ? ' • Default' : ''}
-                              </div>
-                              {method.last4 ? (
-                                <div className="text-xs text-gray-400">•••• {method.last4}</div>
-                              ) : (
-                                <div className="text-xs text-gray-500">Saved method</div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div id="stripe-coin-payment-element" className="p-3 rounded border border-[#2C2C2C] bg-black mb-3" />
-                    {paymentSetupLoading && (<div className="text-xs text-gray-400 mb-3">Loading payment options…</div>)}
-                    {paymentError && (<div className="text-xs text-red-400 mb-3">{paymentError}</div>)}
-                    <div className="text-xs text-gray-500 mb-4">Stripe verifies methods automatically (you may see a $0.00 authorization).</div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-yellow-200 mb-4">Send payment to <span className="font-semibold">$trollcity95</span>. In the Cash App note, include: <span className="font-mono">PREFIX-COINS</span> (first 6 characters of your username and coin amount).</p>
-                    {manualOrderRefId && (
-                      <div className="text-xs text-yellow-300 mb-3">Reference ID: {manualOrderRefId}. Keep this for support.</div>
-                    )}
-                    <div className="text-xs text-gray-400 mb-4">Coins are granted after manual verification.</div>
-                    {(isAdmin || isSecretary) && (
-                      <div className="flex items-center justify-between bg-emerald-900/30 border border-emerald-500/30 rounded p-2 mb-3 text-xs text-emerald-100">
-                        <span>Staff: manage manual payments</span>
-                        <a
-                          href="/admin/manual-orders"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-white text-xs font-semibold"
-                        >
-                          Open dashboard
-                        </a>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <div className="flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={closePaymentModal}
-                    className="px-4 py-2 rounded bg-gray-700"
-                  >
-                    Cancel
-                  </button>
-                  {STRIPE_ENABLED ? (
-                    <button
-                      type="button"
-                      onClick={handleConfirmPayment}
-                      disabled={paymentProcessing || paymentSetupLoading}
-                      className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-                    >
-                      {paymentProcessing ? 'Processing…' : 'Confirm Payment'}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={closePaymentModal}
-                      className="px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-700"
-                    >
-                      Done
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-      </div>
+        
+        <CashAppPaymentModal
+          isOpen={cashAppModalOpen}
+          onClose={() => setCashAppModalOpen(false)}
+          amount={selectedPackage?.price ? parseFloat(selectedPackage.price.replace('$','')) : 0}
+          packageId={selectedPackage?.id}
+          coins={selectedPackage?.coins}
+          purchaseType={selectedPackage?.purchaseType || 'coin_package'}
+          onSuccess={() => {
+            setCashAppModalOpen(false);
+            showPurchaseCompleteOverlay();
+            refreshCoins();
+            // Duplicate toast removed
+          }}
+        />
+        </div>
       )
   );
 }

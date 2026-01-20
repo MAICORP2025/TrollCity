@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Calendar, Clock, Plus, Trash2, CheckCircle } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
 import { useAuthStore } from '../../../lib/store'
+import { format12hr } from '../../../utils/timeFormat'
 
 interface Officer {
   id: string
@@ -38,10 +39,30 @@ export default function CreateSchedulePanel() {
   const canViewEmails = profile?.role === 'admin' || profile?.is_admin === true
 
   // Auto-generate state
+  const [bulkMode, setBulkMode] = useState<'add' | 'delete'>('add')
+  const [bulkTarget, setBulkTarget] = useState<'all' | 'specific'>('all')
+  const [bulkSpecificOfficer, setBulkSpecificOfficer] = useState<string>('')
   const [autoStartDate, setAutoStartDate] = useState('')
   const [autoDays, setAutoDays] = useState(7)
   const [autoStartTime, setAutoStartTime] = useState('09:00')
   const [autoEndTime, setAutoEndTime] = useState('17:00')
+
+  const sendPushNotification = async (userId: string, message: string) => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          message: message,
+          type: 'shift_update',
+          is_read: false
+        })
+      
+      if (error) throw error
+    } catch (err) {
+      console.error('Error sending push notification:', err)
+    }
+  }
 
   // Load all troll officers (exclude admins - they don't need shifts)
   const loadOfficers = React.useCallback(async () => {
@@ -135,13 +156,25 @@ export default function CreateSchedulePanel() {
     }
   }, [autoStartDate])
 
-  const handleAutoGenerate = async () => {
-    if (!autoStartDate || !autoStartTime || !autoEndTime) {
-      toast.error('Please fill in auto-generate fields')
+  const handleBulkAction = async () => {
+    if (!autoStartDate) {
+      toast.error('Please select a start date')
       return
     }
-    if (autoStartTime >= autoEndTime) {
-      toast.error('End time must be after start time')
+
+    if (bulkMode === 'add') {
+      if (!autoStartTime || !autoEndTime) {
+        toast.error('Please select start and end times')
+        return
+      }
+      if (autoStartTime >= autoEndTime) {
+        toast.error('End time must be after start time')
+        return
+      }
+    }
+
+    if (bulkTarget === 'specific' && !bulkSpecificOfficer) {
+      toast.error('Please select an officer')
       return
     }
 
@@ -157,36 +190,90 @@ export default function CreateSchedulePanel() {
         dateStrings.push(d.toISOString().split('T')[0])
       }
 
-      const officerIds = officers.map((o) => o.id).filter(Boolean)
+      let officerIds: string[] = []
+      if (bulkTarget === 'specific') {
+        officerIds = [bulkSpecificOfficer]
+      } else {
+        officerIds = officers.map((o) => o.id).filter(Boolean)
+      }
+
       if (!officerIds.length) {
-        toast.error('No officers found to schedule')
+        toast.error('No officers found')
         return
       }
 
-      const rows = officerIds.flatMap((officerId) =>
-        dateStrings.map((shift_date) => ({
-          officer_id: officerId,
-          shift_date,
-          shift_start_time: autoStartTime,
-          shift_end_time: autoEndTime,
-          status: 'scheduled',
-        })),
-      )
+      if (bulkMode === 'add') {
+        const rows = officerIds.flatMap((officerId) =>
+          dateStrings.map((shift_date) => ({
+            officer_id: officerId,
+            shift_date,
+            shift_start_time: autoStartTime,
+            shift_end_time: autoEndTime,
+            status: 'scheduled',
+          })),
+        )
 
-      const { error } = await supabase
-        .from('officer_shift_slots')
-        .upsert(rows as any, {
-          onConflict: 'officer_id,shift_date,shift_start_time',
-          ignoreDuplicates: true,
-        })
+        const { error } = await supabase
+          .from('officer_shift_slots')
+          .upsert(rows as any, {
+            onConflict: 'officer_id,shift_date,shift_start_time,shift_end_time',
+            ignoreDuplicates: true,
+          })
 
-      if (error) throw error
+        if (error) throw error
 
-      toast.success(`Auto-generated schedules for ${officerIds.length} officers (${days} days)`) 
+        toast.success(`Generated schedules for ${officerIds.length} officers (${days} days)`) 
+      } else {
+        // Bulk Delete
+        const { data: shiftsToDelete, error: fetchError } = await supabase
+          .from('officer_shift_slots')
+          .select('id, officer_id, shift_date')
+          .in('officer_id', officerIds)
+          .in('shift_date', dateStrings)
+          .eq('status', 'scheduled')
+        
+        if (fetchError) throw fetchError
+
+        if (!shiftsToDelete || shiftsToDelete.length === 0) {
+          toast.info('No scheduled shifts found to delete in this range')
+          setLoading(false)
+          return
+        }
+
+        if (!confirm(`Are you sure you want to delete ${shiftsToDelete.length} shifts?`)) {
+          setLoading(false)
+          return
+        }
+
+        const idsToDelete = shiftsToDelete.map(s => s.id)
+        
+        const { error: deleteError } = await supabase
+          .from('officer_shift_slots')
+          .delete()
+          .in('id', idsToDelete)
+        
+        if (deleteError) throw deleteError
+
+        // Send notifications grouped by officer
+        const shiftsByOfficer = shiftsToDelete.reduce((acc, shift) => {
+          acc[shift.officer_id] = (acc[shift.officer_id] || 0) + 1
+          return acc
+        }, {} as Record<string, number>)
+
+        for (const [officerId, count] of Object.entries(shiftsByOfficer)) {
+          await sendPushNotification(
+            officerId,
+            `${count} of your scheduled shifts between ${dateStrings[0]} and ${dateStrings[dateStrings.length - 1]} have been deleted by admin.`
+          )
+        }
+
+        toast.success(`Deleted ${shiftsToDelete.length} shifts`)
+      }
+
       await loadSchedules()
     } catch (err: any) {
-      console.error('Error auto-generating schedules:', err)
-      toast.error(err?.message || 'Failed to auto-generate schedules')
+      console.error('Error in bulk action:', err)
+      toast.error(err?.message || 'Failed to perform bulk action')
     } finally {
       setLoading(false)
     }
@@ -244,6 +331,9 @@ export default function CreateSchedulePanel() {
       return
     }
 
+    const schedule = schedules.find(s => s.id === scheduleId)
+    if (!schedule) return
+
     if (!confirm('Are you sure you want to delete this schedule?')) return
 
     setLoading(true)
@@ -254,6 +344,12 @@ export default function CreateSchedulePanel() {
         .eq('id', scheduleId)
 
       if (error) throw error
+
+      // Notify officer
+      await sendPushNotification(
+        schedule.officer_id,
+        `Your shift on ${schedule.shift_date} (${format12hr(schedule.shift_start_time)} - ${format12hr(schedule.shift_end_time)}) has been deleted.`
+      )
 
       toast.success('Schedule deleted successfully')
       await loadSchedules()
@@ -287,10 +383,73 @@ export default function CreateSchedulePanel() {
         </h2>
       </div>
 
-      {/* Auto Generate */}
+      {/* Bulk Actions */}
       <div className="bg-[#1A1A1A] border border-purple-500/30 rounded-xl p-6">
-        <h3 className="text-xl font-bold mb-4 text-white">Auto-generate Schedules (All Officers)</h3>
+        <h3 className="text-xl font-bold mb-4 text-white">Bulk Schedule Actions</h3>
+        
+        {/* Mode Selection */}
+        <div className="flex gap-4 mb-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              checked={bulkMode === 'add'}
+              onChange={() => setBulkMode('add')}
+              className="text-purple-600 focus:ring-purple-600"
+            />
+            <span className="text-white">Add Shifts</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              checked={bulkMode === 'delete'}
+              onChange={() => setBulkMode('delete')}
+              className="text-red-600 focus:ring-red-600"
+            />
+            <span className="text-white">Delete Shifts</span>
+          </label>
+        </div>
+
+        {/* Target Selection */}
+        <div className="flex gap-4 mb-6">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              checked={bulkTarget === 'all'}
+              onChange={() => setBulkTarget('all')}
+              className="text-purple-600 focus:ring-purple-600"
+            />
+            <span className="text-gray-300">All Officers</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              checked={bulkTarget === 'specific'}
+              onChange={() => setBulkTarget('specific')}
+              className="text-purple-600 focus:ring-purple-600"
+            />
+            <span className="text-gray-300">Specific Officer</span>
+          </label>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {bulkTarget === 'specific' && (
+            <div className="md:col-span-4">
+              <label className="block text-sm text-gray-400 mb-2">Select Officer</label>
+              <select
+                value={bulkSpecificOfficer}
+                onChange={(e) => setBulkSpecificOfficer(e.target.value)}
+                className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+              >
+                <option value="">Select Officer</option>
+                {officers.map((officer) => (
+                  <option key={officer.id} value={officer.id}>
+                    {canViewEmails && officer.email ? `${officer.username} (${officer.email})` : officer.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm text-gray-400 mb-2">Start Date</label>
             <input
@@ -302,7 +461,7 @@ export default function CreateSchedulePanel() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Days</label>
+            <label className="block text-sm text-gray-400 mb-2">Number of Days</label>
             <input
               type="number"
               min={1}
@@ -312,36 +471,51 @@ export default function CreateSchedulePanel() {
               className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
             />
           </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">Start Time</label>
-            <input
-              type="time"
-              value={autoStartTime}
-              onChange={(e) => setAutoStartTime(e.target.value)}
-              className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">End Time</label>
-            <input
-              type="time"
-              value={autoEndTime}
-              onChange={(e) => setAutoEndTime(e.target.value)}
-              className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
-            />
-          </div>
+          
+          {bulkMode === 'add' && (
+            <>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Start Time</label>
+                <input
+                  type="time"
+                  value={autoStartTime}
+                  onChange={(e) => setAutoStartTime(e.target.value)}
+                  className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">End Time</label>
+                <input
+                  type="time"
+                  value={autoEndTime}
+                  onChange={(e) => setAutoEndTime(e.target.value)}
+                  className="w-full bg-[#0D0D0D] border border-purple-500/40 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                />
+              </div>
+            </>
+          )}
         </div>
 
         <button
-          onClick={handleAutoGenerate}
-          disabled={loading || officers.length === 0}
-          className="mt-4 px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          onClick={handleBulkAction}
+          disabled={loading || officers.length === 0 || (bulkTarget === 'specific' && !bulkSpecificOfficer)}
+          className={`mt-4 px-6 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 ${
+            bulkMode === 'add' 
+              ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+              : 'bg-red-600 hover:bg-red-700 text-white'
+          }`}
         >
-          <CheckCircle className="w-4 h-4" />
-          {loading ? 'Generating...' : 'Generate for All Officers'}
+          {bulkMode === 'add' ? <CheckCircle className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+          {loading 
+            ? 'Processing...' 
+            : `${bulkMode === 'add' ? 'Generate' : 'Delete'} for ${bulkTarget === 'all' ? 'All Officers' : 'Selected Officer'}`
+          }
         </button>
         <p className="text-xs text-gray-500 mt-2">
-          Excludes admins. Includes troll officers and lead officers. Duplicates are ignored.
+          {bulkMode === 'add' 
+            ? 'Adds shifts for selected duration. Duplicates are ignored.' 
+            : 'Deletes scheduled shifts in the selected date range.'
+          }
         </p>
       </div>
 
@@ -440,13 +614,13 @@ export default function CreateSchedulePanel() {
                           <div>
                             <div className="font-semibold text-white">
                               {schedule.officer ? (
-                                <ClickableUsername username={schedule.officer.username} />
+                              <ClickableUsername username={schedule.officer.username} />
                               ) : (
-                                <span className="text-gray-400">Unknown Officer</span>
+                              <span className="text-gray-400">Unknown Officer</span>
                               )}
                             </div>
                             <div className="text-sm text-gray-400">
-                              {schedule.shift_start_time} - {schedule.shift_end_time}
+                              {format12hr(schedule.shift_start_time)} - {format12hr(schedule.shift_end_time)}
                             </div>
                             <div className="text-xs text-gray-500 capitalize mt-1">
                               Status: {schedule.status}

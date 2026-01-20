@@ -145,29 +145,28 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (!existingCharge) {
-          const currentCoins = Number(profile.troll_coins || 0);
-          if (currentCoins < cost) {
+          const { data: spendResult, error: spendError } = await supabaseAdmin.rpc(
+            "troll_bank_spend_coins_secure",
+            {
+              p_user_id: user.id,
+              p_amount: cost,
+              p_source: "go_live",
+              p_reason: "HD Boost session purchase",
+              p_ref_id: sessionId,
+              p_metadata: { requested_quality: requestedQuality }
+            }
+          );
+
+          if (spendError || !spendResult) {
+            console.error("Spend error:", spendError);
             return new Response(JSON.stringify({ error: "INSUFFICIENT_COINS" }), {
               status: 402,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }
 
-          const { data: updated } = await supabaseAdmin
-            .from("user_profiles")
-            .update({ troll_coins: currentCoins - cost })
-            .eq("id", user.id)
-            .gte("troll_coins", cost)
-            .select("id")
-            .maybeSingle();
-
-          if (!updated?.id) {
-            return new Response(JSON.stringify({ error: "INSUFFICIENT_COINS" }), {
-              status: 402,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-
+          // Legacy transaction logging removed - Troll Bank coin_ledger is now the source of truth.
+          /* 
           const { error: txError } = await supabaseAdmin
             .from("wallet_transactions")
             .insert({
@@ -183,8 +182,9 @@ Deno.serve(async (req) => {
             });
 
           if (txError) {
-            throw new Error(txError.message);
+             console.error("Wallet transaction insert error:", txError);
           }
+          */
         }
 
         await supabaseAdmin

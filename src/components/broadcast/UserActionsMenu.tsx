@@ -14,6 +14,11 @@ interface UserActionMenuProps {
   onReport?: () => void;
   onFollow?: () => void;
   onSummon?: () => void;
+  onAssignOfficer?: () => void;
+  onRemoveOfficer?: () => void;
+  isBroadofficer?: boolean;
+  isBroadcaster?: boolean;
+  isCurrentUserBroadofficer?: boolean;
 }
 
 export default function UserActionsMenu({
@@ -26,13 +31,28 @@ export default function UserActionsMenu({
   onReport,
   onFollow,
   onSummon,
+  onAssignOfficer,
+  onRemoveOfficer,
+  isBroadofficer,
+  isBroadcaster,
+  isCurrentUserBroadofficer,
 }: UserActionMenuProps) {
   const [showGiftAmount, setShowGiftAmount] = useState(false);
   const [giftAmount, setGiftAmount] = useState(100);
   const [hideRoles, setHideRoles] = useState(false);
 
-  const isOfficer = ["admin", "lead_troll_officer", "troll_officer"].includes((user.role || "").toString());
-  const isCurrentUserOfficer = ["admin", "lead_troll_officer", "troll_officer"].includes((userRole || "user").toString());
+  const isTargetOfficer = ["admin", "lead_troll_officer", "troll_officer"].includes((user.role || "").toString());
+  // Broadcaster is also an officer in their own stream context
+  const isCurrentUserPrivileged = isBroadcaster || isCurrentUserBroadofficer || ["admin", "lead_troll_officer", "troll_officer"].includes((userRole || "user").toString());
+
+  const canKick = (() => {
+    // Cannot kick admins/officers
+    if (isTargetOfficer) return false;
+    // If target is Broadofficer, only Broadcaster can kick
+    if (isBroadofficer) return isBroadcaster;
+    // Otherwise everyone can kick (paid or free)
+    return true;
+  })();
 
   const handleGiftSend = () => {
     onGift?.(giftAmount);
@@ -102,17 +122,17 @@ export default function UserActionsMenu({
               Follow
             </button>
 
-            {isCurrentUserOfficer && !isOfficer && (
+            {canKick && (
               <>
                 <button
                   onClick={onKick}
                   className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 rounded font-bold transition flex items-center justify-center gap-2 text-sm"
                 >
                   <Ban size={16} />
-                  Kick from Stream
+                  Kick from Stream {!isCurrentUserPrivileged && '(500 Coins)'}
                 </button>
 
-                {onKickWithBan && (
+                {onKickWithBan && isCurrentUserPrivileged && (
                   <div className="space-y-1">
                     <div className="text-[11px] uppercase tracking-wider text-gray-400 px-1">
                       Guest box rejoin timeout
@@ -154,17 +174,19 @@ export default function UserActionsMenu({
                   Report User
                 </button>
 
-                <button
-                  onClick={onSummon}
-                  className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded font-bold transition flex items-center justify-center gap-2 text-sm"
-                >
-                  <Gavel size={16} />
-                  Summon to Troll Court
-                </button>
+                {isCurrentUserPrivileged && (
+                    <button
+                    onClick={onSummon}
+                    className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded font-bold transition flex items-center justify-center gap-2 text-sm"
+                    >
+                    <Gavel size={16} />
+                    Summon to Troll Court
+                    </button>
+                )}
               </>
             )}
 
-            {isCurrentUserOfficer && (
+            {isCurrentUserPrivileged && (
               <button
                 onClick={() => setHideRoles(!hideRoles)}
                 className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded font-bold transition flex items-center justify-center gap-2 text-sm"
@@ -172,6 +194,28 @@ export default function UserActionsMenu({
                 {hideRoles ? <Eye size={16} /> : <EyeOff size={16} />}
                 {hideRoles ? "Show Roles" : "Hide Roles"}
               </button>
+            )}
+
+            {isBroadcaster && (
+              <>
+                {isBroadofficer ? (
+                  <button
+                    onClick={onRemoveOfficer}
+                    className="w-full px-3 py-2 bg-red-900/50 hover:bg-red-900 rounded font-bold transition flex items-center justify-center gap-2 text-sm border border-red-700"
+                  >
+                    <UserPlus size={16} className="rotate-45" />
+                    Remove Broadofficer
+                  </button>
+                ) : (
+                  <button
+                    onClick={onAssignOfficer}
+                    className="w-full px-3 py-2 bg-purple-900/50 hover:bg-purple-900 rounded font-bold transition flex items-center justify-center gap-2 text-sm border border-purple-700"
+                  >
+                    <UserPlus size={16} />
+                    Assign Broadofficer
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

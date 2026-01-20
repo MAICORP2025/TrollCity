@@ -202,13 +202,13 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     return 0;
   };
 
-  const FIXED_FEE_USD = 3;
+  const FIXED_FEE_USD = 0;
 
   const calculateFees = (coins: number) => {
     const rate = tierRate(coins);
     const gross = coins * rate;
     const fee = FIXED_FEE_USD;
-    const netAmount = Math.max(gross - fee, 0);
+    const netAmount = gross; // No fees
     return {
       gross,
       fee,

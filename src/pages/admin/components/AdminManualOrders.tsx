@@ -62,6 +62,7 @@ export default function AdminManualOrders() {
       const { data, error } = await supabase
         .from('manual_coin_orders')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(200)
 

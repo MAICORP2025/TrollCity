@@ -38,11 +38,12 @@ export default function GaragePage() {
     if (!user) return;
     setLoading(true);
     try {
+      // Switched to user_cars table for persistence
       const { data: garageData, error: garageError } = await supabase
-        .from('user_garage')
-        .select('id, car_model_id, is_active, acquired_at')
+        .from('user_cars')
+        .select('id, car_id, is_active, purchased_at')
         .eq('user_id', user.id)
-        .order('acquired_at', { ascending: false });
+        .order('purchased_at', { ascending: false });
 
       if (garageError) {
         console.error('Failed to load garage vehicles', garageError);
@@ -63,8 +64,14 @@ export default function GaragePage() {
         setOwnedVehicleIds(ownedFromProfile);
         setActiveVehicleId(activeFromProfile);
       } else {
-        const rows = Array.isArray(garageData) ? garageData : [];
-        setGarageCars(rows as any);
+        // Map user_cars format to local state
+        const rows = (garageData || []).map((row: any) => ({
+            id: row.id,
+            car_model_id: Number(row.car_id),
+            is_active: row.is_active,
+            acquired_at: row.purchased_at
+        }));
+        setGarageCars(rows);
 
         let ownedIds = rows
           .map((row) => Number(row.car_model_id))
@@ -206,7 +213,7 @@ export default function GaragePage() {
 
     try {
       const { error } = await supabase.rpc('set_active_car', {
-        garage_car_id: garageCar.id
+        p_car_row_id: garageCar.id
       });
 
       if (error) {

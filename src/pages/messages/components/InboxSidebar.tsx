@@ -98,32 +98,30 @@ export default function InboxSidebar({
             .eq('conversation_id', cid)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single()
+            .maybeSingle()
         )
 
         const messagesResults = await Promise.all(messagesPromises)
         const validMessages = messagesResults
           .map((res) => res.data)
-          .filter((msg): msg is { conversation_id: string; body: string; created_at: string; sender_id: string } => !!msg)
-
+          // Filter out nulls only if we strictly require a message, but we want to show empty conversations too
+          // So we'll handle nulls in the loop below
+          
         const newConversations: Conversation[] = []
 
         for (const cid of conversationIds) {
           const partner = partners?.find((p) => p.conversation_id === cid)
-          const lastMsg = validMessages.find((m) => m.conversation_id === cid)
+          const lastMsg = validMessages.find((m) => m?.conversation_id === cid)
 
-          if (partner && lastMsg) {
+          if (partner) {
             const profileData = partner.user_profiles as any
-            // Calculate unread: simplistic check for now. 
-            // If last message is NOT from me, assume it might be unread if we don't track read status accurately here yet.
-            // For now, we'll set unread_count to 0 or 1 based on local state if we want, but let's stick to 0 until we have read receipts fully integrated.
             
             newConversations.push({
               other_user_id: partner.user_id,
               other_username: profileData?.username || 'Unknown',
               other_avatar_url: profileData?.avatar_url || null,
-              last_message: lastMsg.body,
-              last_timestamp: lastMsg.created_at,
+              last_message: lastMsg?.body || 'Start a conversation',
+              last_timestamp: lastMsg?.created_at || new Date().toISOString(), // Fallback to now if no messages
               unread_count: 0, // To be implemented with message_receipts
               rgb_username_expires_at: profileData?.rgb_username_expires_at
             })

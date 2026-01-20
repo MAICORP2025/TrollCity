@@ -51,11 +51,24 @@ export default function OfficerDashboard() {
     if (!user) return
     setLoading(true)
     try {
-      // Load active assignment
-      const { data: assignmentData, error: assignmentError } = await supabase.functions.invoke('officer-get-assignment')
+      // Load active assignment via direct DB query
+      const { data: assignmentData, error: assignmentError } = await supabase
+        .from('officer_live_assignments')
+        .select(`
+          id,
+          stream_id,
+          joined_at,
+          last_activity,
+          streams(title)
+        `)
+        .eq('officer_id', user.id)
+        .eq('status', 'active')
+        .order('joined_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
       
       if (!assignmentError && assignmentData) {
-        setActiveAssignment(assignmentData.assignment)
+        setActiveAssignment(assignmentData as any)
       } else if (assignmentError) {
         console.error('Error fetching assignment:', assignmentError)
       }

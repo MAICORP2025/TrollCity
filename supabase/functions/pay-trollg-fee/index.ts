@@ -16,6 +16,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const TROLLG_FEE = 10000;
 const MIN_LEVEL = 200;
+const ADMIN_POOL_COINS_PER_DOLLAR = 222.3;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: _rpcResult, error: deductError } = await supabaseAdmin.rpc(
+    const { error: deductError } = await supabaseAdmin.rpc(
       "deduct_user_troll_coins",
       {
         p_user_id: userId,
@@ -122,6 +123,28 @@ Deno.serve(async (req) => {
 
     if (adminLedgerError) {
       console.error("Failed to write admin_pool_ledger", adminLedgerError);
+    }
+
+    const usdValue = Number((TROLLG_FEE / ADMIN_POOL_COINS_PER_DOLLAR).toFixed(2));
+
+    const { error: adminPoolTxError } = await supabaseAdmin
+      .from("admin_pool_transactions")
+      .insert({
+        transaction_id: null,
+        user_id: userId,
+        cashout_amount: usdValue,
+        admin_fee: 0,
+        admin_profit: usdValue,
+        transaction_type: "other_fee",
+        source_details: {
+          kind: "trollg_fee",
+          coins: TROLLG_FEE,
+          usd_value: usdValue,
+        },
+      });
+
+    if (adminPoolTxError) {
+      console.error("Failed to write admin_pool_transactions for TrollG fee", adminPoolTxError);
     }
 
     const { error: appError } = await supabaseAdmin
@@ -166,4 +189,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-

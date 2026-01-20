@@ -1,6 +1,21 @@
 
 // See docs/UNREAL_ASSET_PIPELINE.md for instructions on adding Unreal Engine car renders.
-export const cars = [
+
+export interface Car {
+  id: number;
+  name: string;
+  tier: string;
+  style: string;
+  price: number;
+  speed: number;
+  armor: number;
+  colorFrom: string;
+  colorTo: string;
+  image: string;
+  modelUrl?: string;
+}
+
+export const cars: Car[] = [
   {
     id: 1,
     name: 'Troll Compact S1',

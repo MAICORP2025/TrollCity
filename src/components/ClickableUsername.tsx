@@ -8,6 +8,7 @@ import { applyGlowingUsername } from '../lib/perkEffects'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
+import SummonModal from './SummonModal'
 
 interface ClickableUsernameProps {
   username: string
@@ -51,6 +52,7 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   const usernameRef = useRef<HTMLSpanElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [showMenu, setShowMenu] = useState(false)
+  const [showSummonModal, setShowSummonModal] = useState(false)
   const { user: currentUser, profile: currentUserProfile } = useAuthStore()
   
   const targetUserId = userId || profile?.id
@@ -118,6 +120,13 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     3: 'Supreme Troll',
   }
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isStaff && targetUserId && targetUserId !== currentUser?.id) {
+      setShowSummonModal(true)
+    }
+  }
+
   const handleAction = async (action: string) => {
     setShowMenu(false)
     
@@ -136,30 +145,25 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             break
             
         case 'ban': {
-            const reason = window.prompt('Reason for ban (optional):', 'Violation of rules')
+            const reason = window.prompt('Reason for warrant/ban:', 'Violation of rules')
             if (reason === null) return // Cancelled
             
-            const durationStr = window.prompt('Ban duration in minutes (0 for permanent):', '1440') // Default 24h
-            if (durationStr === null) return
-            
-            const minutes = parseInt(durationStr)
-            if (isNaN(minutes)) {
-                toast.error('Invalid duration')
-                return
-            }
-
+            // Replaced Ban with Issue Warrant as requested
             try {
-                const { error } = await supabase.rpc('ban_user', {
-                    target: targetUserId,
-                    minutes: minutes,
-                    reason: reason || 'No reason provided'
+                const { data, error } = await supabase.rpc('issue_warrant', {
+                    p_user_id: targetUserId,
+                    p_reason: reason || 'No reason provided'
                 })
 
                 if (error) throw error
-                toast.success(`User ${username} has been banned`)
+                if (data && data.success) {
+                   toast.success(`Warrant issued for ${username}. Access restricted until court appearance.`)
+                } else {
+                   toast.error(data?.error || 'Failed to issue warrant')
+                }
             } catch (err: any) {
-                console.error('Error banning user:', err)
-                toast.error(err.message || 'Failed to ban user')
+                console.error('Error issuing warrant:', err)
+                toast.error(err.message || 'Failed to issue warrant')
             }
             break
         }
@@ -287,9 +291,11 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   }
 
   return (
+    <>
     <span className="relative inline-block z-10">
         <span
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         ref={usernameRef}
         className={`cursor-pointer hover:text-troll-gold transition-colors username ${isAdmin ? 'admin-user' : isOfficer ? 'officer-user' : isTroller ? 'troller-user' : ''} ${className}`}
         title={`View ${username}'s profile`}
@@ -420,6 +426,15 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             </div>
         )}
     </span>
+    {targetUserId && (
+        <SummonModal
+            isOpen={showSummonModal}
+            onClose={() => setShowSummonModal(false)}
+            userId={targetUserId}
+            username={username}
+        />
+    )}
+    </>
   )
 }
 

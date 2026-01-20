@@ -27,12 +27,13 @@ serve(async (req) => {
     // Verify user is authorized (Officer, Admin, or Secretary)
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("role, is_troll_officer")
+      .select("role, is_troll_officer, is_lead_officer")
       .eq("id", officerId)
       .single();
 
     const role = profile?.role || "";
-    const isOfficer = profile?.is_troll_officer === true || role === "troll_officer";
+    const isLeadOfficer = profile?.is_lead_officer === true;
+    const isOfficer = isLeadOfficer || profile?.is_troll_officer === true || role === "troll_officer";
     const isAdmin = role === "admin";
     const isSecretary = role === "secretary";
 

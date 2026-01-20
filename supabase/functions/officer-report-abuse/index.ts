@@ -1,45 +1,39 @@
 /// <reference lib="deno.ns" />
 // @ts-expect-error - Deno runtime handles URL imports
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const FRONTEND_URL = Deno.env.get("FRONTEND_URL") || "https://trollcity.app";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-const cors = {
-  "Access-Control-Allow-Origin": FRONTEND_URL,
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       status: 200,
-      headers: cors,
+      headers: corsHeaders,
     });
   }
 
   if (req.method !== "POST") {
     return new Response("Method not allowed", { 
       status: 405,
-      headers: { ...cors, "Content-Type": "application/json" }
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "");
     if (!token) {
-      return new Response("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
     }
 
     const { data: authUser, error: authError } = await supabase.auth.getUser(token);
     if (authError || !authUser?.user) {
       console.error("Auth error:", authError);
-      return new Response("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
     }
 
     const officerId = authUser.user.id;

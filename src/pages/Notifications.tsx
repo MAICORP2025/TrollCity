@@ -35,6 +35,14 @@ export default function Notifications() {
     if (!profile) return
     setLoading(true)
     try {
+      // Auto-delete notifications older than 30 days
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', profile.id)
+        .lt('created_at', thirtyDaysAgo)
+
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
@@ -45,7 +53,12 @@ export default function Notifications() {
       if (error) {
         setNotifications([])
       } else {
-        setNotifications((data || []) as Notification[])
+        const rows = (data || []) as any[]
+        const mapped = rows.map(row => ({
+          ...row,
+          read: row.read ?? row.is_read ?? false
+        })) as Notification[]
+        setNotifications(mapped)
       }
     } catch {
       setNotifications([])
@@ -72,9 +85,16 @@ export default function Notifications() {
         { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
         (payload) => {
           const updatedNotif = payload.new as any
-          setNotifications((prev) => 
-            prev.map(n => n.id === updatedNotif.id ? { ...n, read: updatedNotif.read } : n)
-          )
+          if (updatedNotif.is_dismissed) {
+            setNotifications((prev) => prev.filter(n => n.id !== updatedNotif.id))
+          } else {
+            setNotifications((prev) => 
+              prev.map(n => n.id === updatedNotif.id ? { 
+                ...n, 
+                read: updatedNotif.read ?? updatedNotif.is_read ?? n.read 
+              } : n)
+            )
+          }
         }
       )
       .on(
@@ -88,10 +108,12 @@ export default function Notifications() {
 
   const markAllAsRead = async () => {
     try {
-      await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('user_id', profile?.id)
+      if (!profile?.id) return
+
+      const { error } = await supabase
+        .rpc('mark_all_notifications_read', { p_user_id: profile.id })
+
+      if (error) throw error
 
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       toast.success('All notifications marked as read')
@@ -104,7 +126,7 @@ export default function Notifications() {
     try {
       await supabase
         .from('notifications')
-        .update({ read: true })
+        .update({ is_read: true })
         .eq('id', id)
       
       setNotifications(prev => 
@@ -203,10 +225,16 @@ export default function Notifications() {
               <p className="text-gray-400">Stay updated with the latest activity</p>
               <p className="text-gray-500 text-sm mt-1">Times shown in America/Denver</p>
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex gap-2">
+              <button 
+                onClick={deleteAllNotifications}
+                className="px-4 py-2 border border-red-500 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-colors text-sm font-medium"
+              >
+                Delete All
+              </button>
               <button 
                 onClick={markAllAsRead}
-                className="px-4 py-2 border border-purple-500 text-purple-400 rounded-lg hover:bg-purple-500 hover:text-white transition-colors"
+                className="px-4 py-2 border border-purple-500 text-purple-400 rounded-lg hover:bg-purple-500 hover:text-white transition-colors text-sm font-medium"
               >
                 Mark all read
               </button>

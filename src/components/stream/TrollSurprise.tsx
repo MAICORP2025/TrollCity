@@ -9,7 +9,7 @@ interface TrollSurpriseProps {
 export default function TrollSurprise({ streamId }: TrollSurpriseProps) {
   const [visible, setVisible] = useState(false)
   const [canClick, setCanClick] = useState(false)
-  const { user, profile, setProfile } = useAuthStore()
+  const { user, profile } = useAuthStore()
 
   // Track when user joined this stream
   useEffect(() => {
@@ -69,24 +69,11 @@ export default function TrollSurprise({ streamId }: TrollSurpriseProps) {
 
       if (rpcError) {
         console.error('Error awarding troll coins:', rpcError)
-        // Fallback: Direct coin update if RPC doesn't work
-        const { data: currentProfile } = await supabase
-          .from('user_profiles')
-          .select('troll_coins')
-          .eq('id', user.id)
-          .single()
-
-        if (currentProfile) {
-          await supabase
-            .from('user_profiles')
-            .update({
-              troll_coins: (currentProfile.troll_coins || 0) + 10,
-            })
-            .eq('id', user.id)
-        }
+        toast.error('Failed to award coins')
+        return
       }
 
-      // Refresh profile from database to get accurate balance
+      // Refresh profile to update UI
       const { data: updatedProfile } = await supabase
         .from('user_profiles')
         .select('*')
@@ -95,15 +82,6 @@ export default function TrollSurprise({ streamId }: TrollSurpriseProps) {
 
       if (updatedProfile) {
         useAuthStore.getState().setProfile(updatedProfile as any)
-      } else {
-        // Fallback: Instantly update local profile balance if refresh fails
-        if (profile) {
-          const newBalance = (profile.troll_coins || 0) + 10
-          setProfile({
-            ...profile,
-            troll_coins: newBalance,
-          })
-        }
       }
 
       // Send a message to chat

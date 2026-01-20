@@ -3,13 +3,15 @@ import { LiveKitRoom, ParticipantTile, useTracks } from '@livekit/components-rea
 import '@livekit/components-styles';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Video, Users, Play, X } from 'lucide-react';
+import { useCoins } from '../lib/hooks/useCoins';
+import { Video, Users, Play, X, Coins } from 'lucide-react';
 import { Track } from 'livekit-client';
 
 type Status = 'IDLE' | 'SEARCHING' | 'MATCHED' | 'RESULTS' | 'EXITED';
 
 const TromodyShowBroadcast = () => {
    const { user, profile } = useAuthStore();
+   const { balances } = useCoins();
    const [status, setStatus] = useState<Status>('IDLE');
    const [token, setToken] = useState<string | null>(null);
    const [serverUrl, setServerUrl] = useState<string | null>(null);
@@ -226,7 +228,11 @@ TromodyVideoGrid.displayName = 'TromodyVideoGrid';
     <div className="min-h-screen bg-gradient-to-b from-purple-900 to-black text-white p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="text-center">
+        <div className="text-center relative">
+          <div className="absolute top-0 right-0 flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-yellow-500/30">
+            <Coins className="w-4 h-4 text-yellow-400" />
+            <span className="font-bold text-yellow-400">{balances.troll_coins.toLocaleString()}</span>
+          </div>
           <h1 className="text-4xl font-bold mb-2 flex items-center justify-center gap-3">
             <Video className="w-10 h-10 text-purple-400" />
             TROMODY SHOW — BROADCAST

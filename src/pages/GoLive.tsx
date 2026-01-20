@@ -7,7 +7,7 @@ import { useCoins } from '../lib/hooks/useCoins';
 import { Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveKit } from '../hooks/useLiveKit';
-import type { LiveKitServiceConfig } from '../lib/LiveKitService';
+import { LIVEKIT_URL } from '../lib/LiveKitConfig';
 import { deductCoins } from '../lib/coinTransactions';
 import { sendNotification } from '../lib/sendNotification';
 
@@ -24,6 +24,8 @@ const GoLive: React.FC = () => {
   const [category, setCategory] = useState<string>('Chat');
   const [isPrivateStream, setIsPrivateStream] = useState<boolean>(false);
   const [privateStreamPassword, setPrivateStreamPassword] = useState<string>('');
+  const [boxPriceAmount, setBoxPriceAmount] = useState<number>(0);
+  const [boxPriceType, setBoxPriceType] = useState<'per_minute' | 'flat'>('per_minute');
   const [themes, setThemes] = useState<any[]>([]);
   const [ownedThemeIds, setOwnedThemeIds] = useState<Set<string>>(new Set());
   const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
@@ -221,8 +223,15 @@ const GoLive: React.FC = () => {
   // -------------------------------
   // START STREAM
   // -------------------------------
-  const handleStartStream = async () => {
+  const handleStartStream = async (manualBattleData?: { battleId: string, opponent: any }) => {
     const { profile, user } = useAuthStore.getState();
+    // Battle data is now handled within the broadcast view
+    const effectiveBattleData = manualBattleData; 
+
+    if (category === 'Troll Battles' && !effectiveBattleData) {
+      toast.error('You must find an opponent first!');
+      return;
+    }
 
     if (!user || !profile) {
       toast.error('You must be logged in.');
@@ -411,6 +420,8 @@ const GoLive: React.FC = () => {
         is_live: false, // Hidden initially
         status: 'preparing', // Status preparing
         is_private: isPrivateStream,
+        box_price_amount: boxPriceAmount,
+        box_price_type: boxPriceType,
         start_time: new Date().toISOString(),
         thumbnail_url: null,
         current_viewers: 0,
@@ -541,51 +552,82 @@ const GoLive: React.FC = () => {
       
       console.log('[GoLive] Stream created successfully:', createdId);
 
-      // Connect to LiveKit and publish both tracks before navigation
-      const identity = user.id;
-      const service = await liveKit.connect(roomName, { id: identity }, {
-        allowPublish: true,
-        autoPublish: true,
-        preflightStream,
-        tokenOverride: livekitToken || undefined,
-        publishConfig,
-      } as Partial<LiveKitServiceConfig>);
+      // OPTIMIZATION: Connect immediately so user is live when they land on the page
+      console.log('[GoLive] 🚀 Starting LiveKit connection (pre-navigation)...');
+      let isConnectedNow = false;
 
-      if (!service) {
-        console.error('[GoLive] LiveKit connect failed');
-        toast.error('Failed to connect to LiveKit. Please try again.');
-        preflightStream?.getTracks().forEach(t => t.stop());
-        // Clean up the stream we just created since we can't broadcast
-        await supabase.from('streams').delete().eq('id', createdId);
-        if (hdPaid && sessionId) {
-          await api.request(API_ENDPOINTS.stream.refundHDBoost, {
-            method: 'POST',
-            body: JSON.stringify({ sessionId, reason: 'livekit_connect_failed' })
-          });
+      try {
+        const tracks = preflightStream ? preflightStream.getTracks() : [];
+        const videoTrack = tracks.find(t => t.kind === 'video');
+        const audioTrack = tracks.find(t => t.kind === 'audio');
+
+        // Connect using the same service instance that LivePage will use
+        const connectedService: any = await liveKit.connect(
+          roomName,
+          {
+            id: user.id,
+            identity: profile.username || user.id,
+            name: profile.full_name || profile.username,
+          },
+          {
+            tokenOverride: livekitToken || undefined,
+            serverUrl: LIVEKIT_URL,
+            allowPublish: true,
+            autoPublish: false, // Manual publish to use existing tracks
+            preflightStream: preflightStream || undefined
+          }
+        );
+
+        if (connectedService) {
+          console.log('[GoLive] Connected. Publishing tracks...');
+          
+          // Publish video
+          if (videoTrack) {
+             if (connectedService.publishVideoTrack) {
+               await connectedService.publishVideoTrack(videoTrack);
+             } else {
+               console.warn('[GoLive] Service missing publishVideoTrack');
+             }
+          }
+
+          // Publish audio
+          if (audioTrack) {
+             if (connectedService.publishAudioTrack) {
+               await connectedService.publishAudioTrack(audioTrack);
+             } else {
+               console.warn('[GoLive] Service missing publishAudioTrack');
+             }
+          }
+          
+          console.log('[GoLive] ✅ Connected and published!');
+          isConnectedNow = true;
         }
-        cleanup();
-        return;
+      } catch (err) {
+        console.error('[GoLive] Pre-connection failed (will retry on LivePage):', err);
+        // Do not return, allow navigation to proceed so LivePage can try
       }
-      console.log('[GoLive] ✅ Connected to LiveKit and publishing');
       
       // Update stream to starting status (not live yet)
       // The LivePage will update it to 'live' once fully connected
-      await supabase
+      // Fire and forget (don't await) to speed up navigation
+      supabase
         .from('streams')
         .update({ 
-          is_live: false, 
-          status: 'starting' 
+          is_live: isConnectedNow, 
+          status: isConnectedNow ? 'live' : 'starting' 
         })
-        .eq('id', createdId);
+        .eq('id', createdId)
+        .then(() => console.log('[GoLive] Stream status updated (background)'));
 
       if (sessionId) {
-        await api.request(API_ENDPOINTS.stream.markLive, {
+        // Fire and forget
+        api.request(API_ENDPOINTS.stream.markLive, {
           method: 'POST',
           body: JSON.stringify({ sessionId, status: 'live', streamId: createdId })
         });
       }
 
-      console.log('[GoLive] ✅ Stream status updated to STARTING');
+      console.log('[GoLive] ✅ preparing navigation');
       
       // ✅ Pass stream data directly via navigation state to avoid database query
       // This eliminates replication delay issues
@@ -594,8 +636,8 @@ const GoLive: React.FC = () => {
         broadcaster_id: insertedStream.broadcaster_id || profile.id,
         title: insertedStream.title || streamTitle,
         category: insertedStream.category || category,
-        status: 'starting',
-        is_live: false,
+        status: isConnectedNow ? 'live' : 'starting',
+        is_live: isConnectedNow,
         start_time: insertedStream.start_time || new Date().toISOString(),
         current_viewers: insertedStream.current_viewers || 0,
         total_gifts_coins: insertedStream.total_gifts_coins || 0,
@@ -608,7 +650,12 @@ const GoLive: React.FC = () => {
       
       try {
         navigate(`/live/${createdId}`, { 
-          state: { streamData: streamDataForNavigation, isBroadcaster: true, roomName } 
+          state: { 
+            streamData: streamDataForNavigation, 
+            isBroadcaster: true, 
+            roomName,
+            battle: effectiveBattleData
+          } 
         });
         console.log('[GoLive] ✅ Navigation called successfully - already publishing');
         toast.success('You are live!');
@@ -738,10 +785,44 @@ const GoLive: React.FC = () => {
                     className="w-full bg-[#0E0A1A] border border-purple-600/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-400"
                   />
                   <p className="text-xs text-gray-500">
-                    Only viewers who know this password can join. Passwords never expire during the stream.
+                    Only users with this password can watch.
                   </p>
                 </div>
               )}
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <label className="text-gray-300">Guest Box Pricing</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">Pricing Type</label>
+                  <select
+                    value={boxPriceType}
+                    onChange={(e) => setBoxPriceType(e.target.value as 'per_minute' | 'flat')}
+                    className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="per_minute">Coins Per Minute</option>
+                    <option value="flat">Flat Fee (One-time)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">Price (Coins)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={boxPriceAmount}
+                    onChange={(e) => setBoxPriceAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-[#171427] border border-purple-500/40 text-white rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                {boxPriceAmount === 0 
+                  ? "Guests can join boxes for free." 
+                  : boxPriceType === 'per_minute' 
+                    ? `Guests pay ${boxPriceAmount} coins every minute they are in a box.`
+                    : `Guests pay ${boxPriceAmount} coins once to join a box.`}
+              </p>
             </div>
           </div>
 
@@ -871,32 +952,30 @@ const GoLive: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <button
-            onClick={handleStartStream}
-            disabled={
-              isConnecting ||
-              !streamTitle.trim() ||
-              liveRestriction.isRestricted
-            }
-              className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isConnecting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <div className="text-left">
-                    <div>Creating Stream...</div>
-                    <div className="text-xs opacity-75">This may take 10-30 seconds</div>
-                  </div>
-                </span>
-              ) : (
-                'Go Live Now!'
-              )}
-            </button>
-
-
+          <div className="flex flex-col gap-4">
+              <button
+                onClick={() => handleStartStream()}
+                disabled={
+                  isConnecting ||
+                  !streamTitle.trim() ||
+                  liveRestriction.isRestricted
+                }
+                className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed w-full"
+              >
+                {isConnecting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <div className="text-left">
+                      <div>Creating Stream...</div>
+                      <div className="text-xs opacity-75">This may take 10-30 seconds</div>
+                    </div>
+                  </span>
+                ) : (
+                  'Go Live Now!'
+                )}
+              </button>
+            </div>
           </div>
-        </div>
       ) : (
         <div className="p-6 text-gray-300">Redirecting to stream…</div>
       )}

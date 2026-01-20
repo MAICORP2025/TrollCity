@@ -10,6 +10,8 @@ interface CashAppPaymentModalProps {
   packageId?: string;
   coins: number;
   amount: number;
+  itemName?: string;
+  purchaseType?: string;
   onSuccess?: (orderId: string) => void;
 }
 
@@ -18,6 +20,9 @@ export default function CashAppPaymentModal({
   onClose,
   coins,
   amount,
+  itemName,
+  packageId,
+  purchaseType,
   onSuccess,
 }: CashAppPaymentModalProps) {
   const { user, profile } = useAuthStore();
@@ -90,6 +95,8 @@ export default function CashAppPaymentModal({
           amount_usd: amount,
           username: profile?.username || user.email?.split('@')[0] || 'user',
           cashapp_tag: tag,
+          package_id: packageId,
+          purchase_type: purchaseType,
         }),
       });
 
@@ -107,7 +114,7 @@ export default function CashAppPaymentModal({
       setNoteSuggested(data.instructions?.note || '');
       setStep('awaiting');
       toast.success('Payment request created! Follow the Cash App instructions below.');
-      onSuccess?.(data.orderId);
+      // Do not call onSuccess immediately - wait for user to complete payment flow
     } catch (err: any) {
       console.error('Failed to create manual order:', err);
       toast.error(err?.message || 'Failed to create payment request');
@@ -143,15 +150,15 @@ export default function CashAppPaymentModal({
         {step === 'confirm' && (
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-green-500/10 to-blue-500/10 border border-green-500/30 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">Coins</span>
-                <span className="text-xl font-bold text-white">{coins.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">Amount</span>
-                <span className="text-xl font-bold text-green-400">${amount.toFixed(2)}</span>
-              </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-300">Item</span>
+              <span className="text-xl font-bold text-white">{itemName || `${coins.toLocaleString()} Coins`}</span>
             </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-300">Amount</span>
+              <span className="text-xl font-bold text-green-400">${amount.toFixed(2)}</span>
+            </div>
+          </div>
 
             <div className="space-y-2">
               <label className="text-xs text-gray-300 font-semibold">Your Cash App tag (no $)</label>
@@ -175,7 +182,6 @@ export default function CashAppPaymentModal({
                 <p className="font-semibold mb-1">How it works:</p>
                 <ol className="space-y-1 text-xs list-decimal list-inside">
                   <li>Send ${amount.toFixed(2)} via Cash App to <span className="font-bold">$trollcity95</span></li>
-                  <li>Include the reference code in your payment note</li>
                   <li>Our team verifies the payment</li>
                   <li>Coins are granted to your account</li>
                 </ol>
@@ -239,7 +245,7 @@ export default function CashAppPaymentModal({
                 </div>
 
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Payment Note (Include with payment)</p>
+                  <p className="text-xs text-gray-400 mb-1">Payment Note</p>
                   <div className="bg-gray-800 rounded px-3 py-2 font-mono text-white flex items-center justify-between gap-2">
                     <span className="font-bold">{noteSuggested}</span>
                     <button
@@ -267,7 +273,10 @@ export default function CashAppPaymentModal({
             </div>
 
             <button
-              onClick={onClose}
+              onClick={() => {
+                if (orderId) onSuccess?.(orderId);
+                onClose();
+              }}
               className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors"
             >
               Done - I'll Complete Payment

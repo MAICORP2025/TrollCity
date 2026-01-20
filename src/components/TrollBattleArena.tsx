@@ -299,20 +299,45 @@ const TrollBattleArena: React.FC<TrollBattleArenaProps> = ({
           <span>Only Troll Coins shape the ruler of this battle</span>
           <Flame className="w-3 h-3" />
         </div>
-        <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden flex">
-          <div
-            className="h-full bg-purple-500/80"
+        
+        {/* Progress Bar */}
+        <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden flex">
+          <div 
+            className="h-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)] transition-all duration-500"
             style={{ width: `${hostPct}%` }}
           />
-          <div
-            className="h-full bg-amber-500/80"
+          <div 
+            className="h-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)] transition-all duration-500"
             style={{ width: `${challengerPct}%` }}
           />
         </div>
-        <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+      </div>
+
+      {/* Gift Box / Battle Controls */}
+      {!isCompleted && (
+        <div className="mt-3 flex justify-center">
+             <button 
+                 onClick={() => {
+                     // Placeholder for gift triggering or battle interaction
+                     // Ideally this opens the gift menu or sends a specific battle gift
+                     // For now it matches the requested UI
+                     const event = new CustomEvent('open-gift-menu');
+                     window.dispatchEvent(event);
+                 }}
+                 className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-900/50 to-pink-900/50 border border-purple-500/30 rounded-xl p-2 px-4 shadow-lg shadow-purple-900/20 animate-pulse-slow hover:bg-purple-800/50 transition-colors cursor-pointer"
+             >
+                 <div className="text-2xl">🎁</div>
+                 <div className="flex flex-col items-start">
+                    <span className="text-xs font-bold text-white">Send Gifts</span>
+                    <span className="text-[9px] text-purple-200">Boost your Troll!</span>
+                 </div>
+             </button>
+        </div>
+      )}
+
+      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
           <span>Host: {hostTotal} Troll Coins</span>
           <span>Challenger: {challengerTotal} Troll Coins</span>
-        </div>
       </div>
 
       {/* Winner banner */}

@@ -88,13 +88,13 @@ const getOrCreateCustomer = async (userId: string) => {
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: cors });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -102,7 +102,7 @@ serve(async (req: Request) => {
     if (!STRIPE_SECRET_KEY) {
       return new Response(JSON.stringify({ error: "Missing STRIPE_SECRET_KEY" }), {
         status: 500,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -112,7 +112,7 @@ serve(async (req: Request) => {
     if (!token) {
       return new Response(JSON.stringify({ error: "Missing auth token" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -120,7 +120,7 @@ serve(async (req: Request) => {
     if (authError || !authData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -130,7 +130,7 @@ serve(async (req: Request) => {
     if (!action) {
       return new Response(JSON.stringify({ error: "Missing action" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -144,7 +144,7 @@ serve(async (req: Request) => {
 
       return new Response(JSON.stringify({ clientSecret: intent.client_secret }), {
         status: 200,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -153,7 +153,7 @@ serve(async (req: Request) => {
       if (!paymentMethodId) {
         return new Response(JSON.stringify({ error: "Missing paymentMethodId" }), {
           status: 400,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -172,7 +172,7 @@ serve(async (req: Request) => {
           details: err.message 
         }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -187,7 +187,7 @@ serve(async (req: Request) => {
           details: err.message 
         }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -208,7 +208,7 @@ serve(async (req: Request) => {
           details: err.message 
         }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -254,13 +254,13 @@ serve(async (req: Request) => {
           code: saveError.code 
         }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       return new Response(JSON.stringify({ success: true, method: savedMethod }), {
         status: 200,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -269,7 +269,7 @@ serve(async (req: Request) => {
       if (!id) {
         return new Response(JSON.stringify({ error: "Missing id" }), {
           status: 400,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -282,14 +282,14 @@ serve(async (req: Request) => {
       if (methodError || !method) {
         return new Response(JSON.stringify({ error: "Payment method not found" }), {
           status: 404,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       if (method.user_id !== authData.user.id) {
         return new Response(JSON.stringify({ error: "Forbidden" }), {
           status: 403,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -306,13 +306,13 @@ serve(async (req: Request) => {
       if (deleteError) {
         return new Response(JSON.stringify({ error: "Failed to delete payment method" }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -321,7 +321,7 @@ serve(async (req: Request) => {
       if (!id) {
         return new Response(JSON.stringify({ error: "Missing id" }), {
           status: 400,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -334,14 +334,14 @@ serve(async (req: Request) => {
       if (methodError || !method) {
         return new Response(JSON.stringify({ error: "Payment method not found" }), {
           status: 404,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       if (method.user_id !== authData.user.id) {
         return new Response(JSON.stringify({ error: "Forbidden" }), {
           status: 403,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -364,25 +364,25 @@ serve(async (req: Request) => {
       if (updateError) {
         return new Response(JSON.stringify({ error: "Failed to set default" }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
     console.error("Stripe payment method error", err);
     return new Response(JSON.stringify({ error: err?.message || "Server error" }), {
       status: 500,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

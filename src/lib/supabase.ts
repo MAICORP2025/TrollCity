@@ -56,6 +56,7 @@ export interface UserProfile {
   mic_muted_until?: string | null
   live_restricted_until?: string | null
   ban_expires_at?: string | null
+  has_active_warrant?: boolean
   terms_accepted?: boolean
   badge?: string | null
   title?: string | null
@@ -96,6 +97,8 @@ export interface UserProfile {
   // Troller fields
   is_troller?: boolean
   troller_level?: number // 1=Basic Troller, 2=Chaos Agent, 3=Supreme Troll
+
+  onboarding_completed?: boolean
 
   // OG User field
   is_og_user?: boolean
@@ -723,11 +726,7 @@ export async function endTrialEarly(): Promise<SystemSettings | null> {
     console.warn('endTrialEarly error', error)
     return null
   }
-  await supabase.rpc('notify_all_users', {
-    p_title: 'Payouts are now open',
-    p_message: 'Payouts are now open!',
-    p_type: 'system_update'
-  })
+  await supabase.rpc('notify_payouts_open_if_needed')
   return (data as any) || null
 }
 
@@ -747,11 +746,7 @@ export async function autoUnlockPayouts(): Promise<SystemSettings | null> {
     return null
   }
   if (data && (data as any)?.payout_lock_enabled === false) {
-    await supabase.rpc('notify_all_users', {
-      p_title: 'Payouts are now open',
-      p_message: 'Payouts are now open!',
-      p_type: 'system_update'
-    })
+    await supabase.rpc('notify_payouts_open_if_needed')
   }
   return (data as any) || null
 }

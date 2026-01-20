@@ -20,7 +20,11 @@ import {
   MicOff,
   Camera,
   CameraOff,
-  RefreshCw
+  RefreshCw,
+  Swords,
+  X,
+  Settings,
+  Plus
 } from 'lucide-react';
 import ChatBox from '../components/broadcast/ChatBox';
 import GiftBox, { GiftItem, RecipientMode } from '../components/broadcast/GiftBox';
@@ -37,10 +41,13 @@ import { processGiftXp } from '../lib/xp';
 
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
+import { updateOfficerActivity } from '../lib/officerActivity';
 import { useSeatRoster } from '../hooks/useSeatRoster';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
 import UserActionsMenu from '../components/broadcast/UserActionsMenu';
 import { useViewerTracking } from '../hooks/useViewerTracking';
+import TrollBattleOverlay from '../components/broadcast/TrollBattleOverlay';
+import TrollBattlesSetup from '../components/broadcast/TrollBattlesSetup';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -148,26 +155,21 @@ function BroadcasterTimer({ startTime, onClick }: { startTime: string; onClick?:
   );
 }
 
-function BroadcasterControlPanel({
+function BroadcasterSettings({
   streamId,
+  broadcasterId: _broadcasterId,
   onAlertOfficers,
-  boxCount,
-  onBoxCountChange,
   joinPrice,
   onSetPrice,
 }: {
   streamId: string;
+  broadcasterId?: string;
   onAlertOfficers: (targetUserId?: string) => Promise<void>;
-  boxCount: number;
-  onBoxCountChange: (count: number) => void;
   joinPrice: number;
   onSetPrice: (price: number) => void;
 }) {
-  const [open, setOpen] = useState(true);
   const [participants, setParticipants] = useState<Array<{ user_id: string; username: string; avatar_url?: string; is_moderator?: boolean; can_chat?: boolean; chat_mute_until?: string; is_active?: boolean }>>([]);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [muting, setMuting] = useState<string | null>(null);
   const [kicking, setKicking] = useState<string | null>(null);
   const [updatingMod, setUpdatingMod] = useState<string | null>(null);
   const [draftPrice, setDraftPrice] = useState(() =>
@@ -177,47 +179,6 @@ function BroadcasterControlPanel({
   useEffect(() => {
     setDraftPrice(joinPrice > 0 ? String(joinPrice) : '');
   }, [joinPrice]);
-
-  const basePrice = joinPrice || 0;
-  const boxPrice = joinPrice || 0;
-  const totalPrice = basePrice + boxCount * boxPrice;
-
-  const handleAddBox = () => {
-    const maxBoxes = 6;
-    const next = Math.min(boxCount + 1, maxBoxes);
-    onBoxCountChange(next);
-    if (!streamId) return;
-    void supabase.from('messages').insert({
-      stream_id: streamId,
-      user_id: (supabase.auth.getUser as any)?.() ? undefined : undefined,
-      message_type: 'system',
-      content: `BOX_COUNT_UPDATE:${next}`
-    });
-  };
-
-  const handleRemoveBox = () => {
-    const next = boxCount > 0 ? boxCount - 1 : 0;
-    onBoxCountChange(next);
-    if (!streamId) return;
-    void supabase.from('messages').insert({
-      stream_id: streamId,
-      user_id: (supabase.auth.getUser as any)?.() ? undefined : undefined,
-      message_type: 'system',
-      content: `BOX_COUNT_UPDATE:${next}`
-    });
-  };
-
-  const handleDeleteAllBoxes = () => {
-    if (boxCount === 0) return;
-    onBoxCountChange(0);
-    if (!streamId) return;
-    void supabase.from('messages').insert({
-      stream_id: streamId,
-      user_id: (supabase.auth.getUser as any)?.() ? undefined : undefined,
-      message_type: 'system',
-      content: 'BOX_COUNT_UPDATE:0'
-    });
-  };
 
   const handleApplyJoinPrice = () => {
     const parsed = parseInt(draftPrice || '0') || 0;
@@ -315,25 +276,6 @@ function BroadcasterControlPanel({
     }
   };
 
-  const muteUser = async (userId: string, minutes: number) => {
-    setMuting(userId);
-    try {
-      const until = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-      await supabase
-        .from('streams_participants')
-        .update({ can_chat: false, chat_mute_until: until })
-        .eq('stream_id', streamId)
-        .eq('user_id', userId);
-      toast.success(`Muted for ${minutes} minutes`);
-      loadParticipants();
-    } catch (err) {
-      console.error('Failed to mute user', err);
-      toast.error('Failed to mute user');
-    } finally {
-      setMuting(null);
-    }
-  };
-
   const reportUser = async (userId: string) => {
     const reason = window.prompt('Reason for report:', 'Violation of rules');
     if (reason === null) return;
@@ -357,185 +299,127 @@ function BroadcasterControlPanel({
   const filtered = participants.filter(p => p.username.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="bg-white/5 rounded-lg border border-white/10 p-3 overflow-y-auto max-h-[70vh] min-h-0 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold">Broadcaster Control Panel</h3>
-        <button onClick={() => setOpen(v => !v)} className="text-xs text-white/60 hover:text-white">
-          {open ? 'Hide' : 'Show'}
-        </button>
+    <div className="bg-[#05010a] rounded-3xl border border-white/10 p-5 overflow-y-auto max-h-[70vh] min-h-0 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold flex items-center gap-2">
+          <Settings size={20} className="text-purple-400" />
+          Broadcast Settings
+        </h3>
       </div>
-      {open && (
-        <div className="mt-3 space-y-3">
-          <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-3 space-y-2">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex flex-col">
-                <span className="text-[11px] uppercase tracking-[0.2em] text-white/40">
-                  Broadcast Boxes
-                </span>
-                <span className="text-xs text-white/70">
-                  Total Price:{' '}
-                  <span className="font-mono text-sm text-amber-300">
-                    {totalPrice}
-                  </span>
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleDeleteAllBoxes}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-red-500/40 bg-red-500/10 text-[11px] font-semibold text-red-200 hover:bg-red-500/20"
-              >
-                Delete All
-              </button>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddBox}
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/50 text-emerald-200"
-                >
-                  <span className="text-sm font-bold">+</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRemoveBox}
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-400/60 text-red-200"
-                >
-                  <span className="text-sm font-bold">−</span>
-                </button>
-                <span className="text-[11px] text-white/60">
-                  Boxes:{' '}
-                  <span className="font-mono text-xs text-white">
-                    {boxCount}
-                  </span>
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[11px] text-white/50 mr-1">
-                  Join Price
-                </span>
-                <input
-                  type="number"
-                  value={draftPrice}
-                  placeholder="Set"
-                  inputMode="numeric"
-                  onChange={(e) =>
-                    setDraftPrice(e.target.value.replace(/[^\d]/g, ''))
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleApplyJoinPrice();
-                    }
-                  }}
-                  className="w-16 bg-white/10 border border-white/20 rounded px-2 text-[11px] text-white py-1"
-                />
-              </div>
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-[0.3em] text-white/60">Moderators</span>
-              <button
-                onClick={() => onAlertOfficers()}
-                className="text-xs px-2 py-1 rounded bg-red-600 hover:bg-red-500 font-bold"
-              >
-                Alert Troll Officers
-              </button>
-            </div>
-            <div className="mt-2">
+      
+      <div className="space-y-4">
+        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm font-semibold text-white/80">
+              Join Price (Coins)
+            </span>
+            <div className="flex items-center gap-2">
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search participants..."
-                className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs"
+                type="number"
+                value={draftPrice}
+                placeholder="0"
+                inputMode="numeric"
+                onChange={(e) =>
+                  setDraftPrice(e.target.value.replace(/[^\d]/g, ''))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleApplyJoinPrice();
+                  }
+                }}
+                className="w-20 bg-black/40 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:border-purple-500 focus:outline-none"
               />
-            </div>
-            <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-              {loading ? (
-                <div className="text-xs text-white/60">Loading participants...</div>
-              ) : filtered.length === 0 ? (
-                <div className="text-xs text-white/60">No participants</div>
-              ) : (
-                filtered.map((p) => (
-                  <div key={p.user_id} className="flex items-center justify-between bg-black/30 rounded px-2 py-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-white/10" />
-                      <div>
-                        <div className="text-xs font-semibold">{p.username}</div>
-                        <div className="text-[10px] text-white/50">
-                          {p.is_active ? 'active' : 'inactive'} • {p.is_moderator ? 'moderator' : 'viewer'}
-                          {p.can_chat === false ? ' • muted' : ''}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {p.is_moderator ? (
-                        <button
-                          disabled={updatingMod === p.user_id}
-                          onClick={() => removeModerator(p.user_id)}
-                          className="text-[10px] px-2 py-1 rounded bg-yellow-600/30 border border-yellow-500/40 hover:bg-yellow-600/50"
-                        >
-                          Remove Mod
-                        </button>
-                      ) : (
-                        <button
-                          disabled={updatingMod === p.user_id}
-                          onClick={() => assignModerator(p.user_id)}
-                          className="text-[10px] px-2 py-1 rounded bg-green-600/30 border border-green-500/40 hover:bg-green-600/50"
-                        >
-                          Make Mod
-                        </button>
-                      )}
-                      <button
-                        disabled={kicking === p.user_id}
-                        onClick={() => kickUser(p.user_id)}
-                        className="text-[10px] px-2 py-1 rounded bg-red-600/40 border border-red-500/50 hover:bg-red-600/60"
-                      >
-                        Kick
-                      </button>
-                      <div className="flex items-center gap-1">
-                        <button
-                          disabled={muting === p.user_id}
-                          onClick={() => muteUser(p.user_id, 5)}
-                          className="text-[10px] px-2 py-1 rounded bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50"
-                        >
-                          Mute 5m
-                        </button>
-                        <button
-                          disabled={muting === p.user_id}
-                          onClick={() => muteUser(p.user_id, 10)}
-                          className="text-[10px] px-2 py-1 rounded bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50"
-                        >
-                          10m
-                        </button>
-                        <button
-                          disabled={muting === p.user_id}
-                          onClick={() => muteUser(p.user_id, 30)}
-                          className="text-[10px] px-2 py-1 rounded bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50"
-                        >
-                          30m
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => reportUser(p.user_id)}
-                        className="text-[10px] px-2 py-1 rounded bg-blue-600/30 border border-blue-500/40 hover:bg-blue-600/50"
-                      >
-                        Report
-                      </button>
-                      <button
-                        onClick={() => onAlertOfficers(p.user_id)}
-                        className="text-[10px] px-2 py-1 rounded bg-red-700/40 border border-red-600/50 hover:bg-red-700/60"
-                      >
-                        Alert
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+              <button 
+                onClick={handleApplyJoinPrice}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg uppercase tracking-wider"
+              >
+                Set
+              </button>
             </div>
           </div>
         </div>
-      )}
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs uppercase tracking-[0.3em] text-white/60">Participants & Mods</span>
+            <button
+              onClick={() => onAlertOfficers()}
+              className="text-xs px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/40 text-red-200 hover:bg-red-600/30 font-bold uppercase tracking-wider transition-colors"
+            >
+              Alert Troll Officers
+            </button>
+          </div>
+          <div className="mb-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search participants..."
+              className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:border-purple-500/50 focus:outline-none"
+            />
+          </div>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {loading ? (
+              <div className="text-xs text-white/60 text-center py-4">Loading participants...</div>
+            ) : filtered.length === 0 ? (
+              <div className="text-xs text-white/60 text-center py-4">No participants found</div>
+            ) : (
+              filtered.map((p) => (
+                <div key={p.user_id} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2 border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-purple-900/30 border border-purple-500/20 flex items-center justify-center overflow-hidden">
+                       {p.avatar_url ? (
+                         <img src={p.avatar_url} className="w-full h-full object-cover" />
+                       ) : (
+                         <span className="text-xs font-bold text-purple-300">{p.username.charAt(0)}</span>
+                       )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-white/90">{p.username}</div>
+                      <div className="text-[10px] text-white/40 flex items-center gap-1">
+                        {p.is_moderator && <span className="text-yellow-400">Moderator</span>}
+                        {!p.is_active && <span>Inactive</span>}
+                        {p.can_chat === false && <span className="text-red-400">Muted</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {p.is_moderator ? (
+                      <button
+                        disabled={updatingMod === p.user_id}
+                        onClick={() => removeModerator(p.user_id)}
+                        className="text-[10px] px-2 py-1 rounded bg-yellow-900/20 border border-yellow-500/30 text-yellow-200 hover:bg-yellow-900/40"
+                      >
+                        Unmod
+                      </button>
+                    ) : (
+                      <button
+                        disabled={updatingMod === p.user_id}
+                        onClick={() => assignModerator(p.user_id)}
+                        className="text-[10px] px-2 py-1 rounded bg-green-900/20 border border-green-500/30 text-green-200 hover:bg-green-900/40"
+                      >
+                        Mod
+                      </button>
+                    )}
+                    <button
+                      disabled={kicking === p.user_id}
+                      onClick={() => kickUser(p.user_id)}
+                      className="text-[10px] px-2 py-1 rounded bg-red-900/20 border border-red-500/30 text-red-200 hover:bg-red-900/40"
+                    >
+                      Kick
+                    </button>
+                    <button
+                      onClick={() => reportUser(p.user_id)}
+                      className="text-[10px] px-2 py-1 rounded bg-blue-900/20 border border-blue-500/30 text-blue-200 hover:bg-blue-900/40"
+                    >
+                      Report
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -736,7 +620,9 @@ export default function LivePage() {
   useViewerTracking(streamId || null, user?.id || null);
 
   const [joinPrice, setJoinPrice] = useState(0);
-  const [boxCount, setBoxCount] = useState(0);
+  const [showTrollBattles, setShowTrollBattles] = useState(false);
+  const [activeBattle, setActiveBattle] = useState<{id: string, player1_id: string, player2_id: string, status: string} | null>(null);
+  const [boxCount, setBoxCount] = useState(6);
   const [seatBans, setSeatBans] = useState<SeatBan[]>([]);
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
@@ -867,7 +753,14 @@ export default function LivePage() {
   const { seats, claimSeat, releaseSeat } = useSeatRoster(seatRoomName);
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
   const canPublish = isBroadcaster || isGuestSeat;
+
+
+  
   const liveKit = useLiveKit();
+
+
+    
+
 
   useEffect(() => {
     const broadcasterId = stream?.broadcaster_id;
@@ -1071,6 +964,7 @@ export default function LivePage() {
     username?: string
     role?: string
     seatIndex: number
+    isOfficer?: boolean
   } | null>(null);
 
   useEffect(() => {
@@ -1156,25 +1050,110 @@ export default function LivePage() {
     if (cameraOn) {
        await liveKit.toggleCamera();
        setCameraOn(false);
+       // Explicitly stop all video tracks to turn off the hardware light
+       if (liveKit.localParticipant?.videoTrack?.track) {
+         liveKit.localParticipant.videoTrack.track.stop();
+       }
     }
     if (micOn) {
        await liveKit.toggleMicrophone();
        setMicOn(false);
+       // Explicitly stop audio tracks too just in case
+       if (liveKit.localParticipant?.audioTrack?.track) {
+         liveKit.localParticipant.audioTrack.track.stop();
+       }
     }
     
     toast.info("You have left the guest box");
   }, [liveKit, cameraOn, micOn, releaseSeat, seats, user?.id]);
 
+  // Ensure camera/mic are stopped when unmounting (e.g. redirecting when broadcast ends)
+  useEffect(() => {
+    return () => {
+      if (liveKit.localParticipant) {
+        liveKit.localParticipant.videoTrack?.track?.stop();
+        liveKit.localParticipant.audioTrack?.track?.stop();
+      }
+    };
+  }, [liveKit]);
+
+  // Billing Heartbeat (Server-Side Billing Implementation)
+  useEffect(() => {
+    if (!streamId || !user?.id || (!isBroadcaster && !isGuestSeat)) return;
+    // Only run if stream is effectively live or we are in a box
+    // Broadcaster pays for being live. Guests pay for being in box.
+
+    const runBilling = async () => {
+      try {
+        const { data, error } = await supabase.rpc('process_stream_billing', {
+          p_stream_id: streamId,
+          p_user_id: user.id,
+          p_is_host: isBroadcaster
+        });
+
+        if (error) {
+          console.error('[Billing] RPC error:', error);
+          return;
+        }
+
+        if (data?.status === 'stop') {
+          console.warn('[Billing] Stopped:', data.reason);
+          toast.error(data.reason || 'Insufficient funds');
+          
+          if (isBroadcaster) {
+             // If broadcaster runs out of funds, stop the stream
+             toast.error('Stream ending due to insufficient funds.');
+             // Trigger end stream flow
+             // We can't easily call onEndBroadcast from here as it's inside OfficerActionBubble
+             // But we can trigger the end stream API
+             // For now, just notify user.
+          } else {
+             // Guest runs out of funds
+             handleLeaveSession();
+          }
+        } else if (data?.remaining !== undefined) {
+          // Optional: update local coin balance if desired
+          // refreshProfile(); // Might be too heavy to call every minute
+        }
+      } catch (err) {
+        console.error('[Billing] execution error:', err);
+      }
+    };
+
+    // Run immediately on mount/state change if condition met? 
+    // No, we charge per minute. 
+    // But we should probably charge "on entry" (handled by join logic) and then "every minute".
+    // For broadcaster, they pay per minute.
+    
+    const interval = setInterval(runBilling, 60000); 
+    return () => clearInterval(interval);
+  }, [streamId, user?.id, isBroadcaster, isGuestSeat, handleLeaveSession]);
+
   const handleSetPrice = async (price: number) => {
-    setJoinPrice(price);
-    // Broadcast price to viewers via system message
-    await supabase.from('messages').insert({
-      stream_id: streamId,
-      user_id: user?.id,
-      message_type: 'system',
-      content: `PRICE_UPDATE:${price}`
-    });
-    toast.success(`Join price set to ${price} coins`);
+    try {
+      // 1. Update DB first so RPC sees correct price
+      const { error } = await supabase
+        .from('streams')
+        .update({ box_price_amount: price })
+        .eq('id', streamId);
+
+      if (error) throw error;
+
+      setJoinPrice(price);
+      
+      // 2. Broadcast price to viewers via system message
+      await supabase.from('messages').insert({
+        stream_id: streamId,
+        user_id: user?.id,
+        message_type: 'system',
+        content: `PRICE_UPDATE:${price}`
+      });
+      
+      toast.success(`Join price set to ${price} coins`);
+    } catch (err) {
+      console.error('Failed to update box price:', err);
+      toast.error('Failed to update price');
+    }
   };
 
   const handleAlertOfficers = useCallback(
@@ -1276,33 +1255,24 @@ export default function LivePage() {
       if (!confirmed) return;
 
       try {
-        const { data: spendResult, error: spendError } = await supabase.rpc('spend_coins', {
-          p_sender_id: user?.id,
-          p_receiver_id: stream?.broadcaster_id,
-          p_coin_amount: joinPrice,
-          p_source: 'seat_join',
-          p_item: 'Join Fee',
+        // Use the new join_stream_box RPC which handles billing and guest tracking atomically
+        const { data: joinResult, error: joinError } = await supabase.rpc('join_stream_box', {
+          p_stream_id: streamId,
+          p_user_id: user?.id
         });
 
-        if (spendError) throw spendError;
-        const giftId = (spendResult as any)?.gift_id;
-        if (giftId) {
-          await supabase
-            .from('gifts')
-            .update({
-              stream_id: streamId,
-              gift_slug: 'join_fee',
-              message: 'Join Fee',
-            })
-            .eq('id', giftId)
-            .limit(1);
+        if (joinError) throw joinError;
+        
+        // Check logical success from RPC JSON response
+        if (joinResult && joinResult.success === false) {
+           throw new Error(joinResult.error || 'Failed to join box');
         }
 
-        joinPriceForClaim = 0;
-        toast.success('Paid join fee!');
-      } catch (err) {
+        joinPriceForClaim = 0; // Already paid via RPC
+        toast.success('Joined guest box!');
+      } catch (err: any) {
         console.error('Join fee failed:', err);
-        toast.error('Transaction failed');
+        toast.error(err?.message || 'Transaction failed');
         return;
       }
     }
@@ -1315,14 +1285,28 @@ export default function LivePage() {
     }
   };
 
-  const handleSeatAction = (params: { seatIndex: number; seat: any; participant?: any }) => {
+  const handleSeatAction = async (params: { seatIndex: number; seat: any; participant?: any }) => {
     const { seatIndex, seat } = params
     if (!isOfficerUser || !seat?.user_id) return;
+
+    let isOfficer = false;
+    if (stream?.broadcaster_id) {
+       const { data } = await supabase.rpc('is_broadofficer', {
+         p_broadcaster_id: stream.broadcaster_id,
+         p_user_id: seat.user_id
+       });
+       isOfficer = !!data;
+    }
+    if (seat.role && ['admin', 'lead_troll_officer', 'troll_officer'].includes(seat.role)) {
+        isOfficer = true;
+    }
+
     setSeatActionTarget({
       userId: seat.user_id,
       username: seat.username,
       role: seat.role,
       seatIndex,
+      isOfficer
     });
   };
 
@@ -1368,6 +1352,12 @@ export default function LivePage() {
     toast.success('Summon request sent');
     closeSeatActionMenu();
   };
+
+  useEffect(() => {
+    const handleOpenGiftMenu = () => setIsGiftModalOpen(true);
+    window.addEventListener('open-gift-menu', handleOpenGiftMenu);
+    return () => window.removeEventListener('open-gift-menu', handleOpenGiftMenu);
+  }, []);
 
   useEffect(() => {
     if (!canPublish) {
@@ -1600,6 +1590,20 @@ export default function LivePage() {
       toast.success('Stage cleared');
   };
   
+  const handleAddBox = () => {
+    const maxBoxes = 6;
+    const next = Math.min(maxBoxes, boxCount + 1);
+    setBoxCount(next);
+    if (streamId) {
+      void supabase.from('messages').insert({
+        stream_id: streamId,
+        message_type: 'system',
+        content: `BOX_COUNT_UPDATE:${next}`
+      });
+    }
+    toast.success('Added box');
+  };
+
   const handleOfficerAddBox = () => {
       const maxBoxes = 6;
       const next = Math.min(maxBoxes, boxCount + 1);
@@ -2671,14 +2675,221 @@ export default function LivePage() {
     profile?.username,
   ]);
 
-  const handleUserClick = useCallback((participant: Participant) => {
-    setGiftReceiver({
-      id: participant.identity,
+  const [generalUserActionTarget, setGeneralUserActionTarget] = useState<{
+    userId: string;
+    username: string;
+    role: string;
+    isOfficer?: boolean;
+  } | null>(null);
+
+  const [isCurrentUserBroadofficer, setIsCurrentUserBroadofficer] = useState(false);
+
+  // Check if current user is broadofficer
+  useEffect(() => {
+    if (!stream?.broadcaster_id || !user?.id) return;
+    if (isBroadcaster) {
+        setIsCurrentUserBroadofficer(true); // Broadcaster is implied officer
+        return;
+    }
+    const checkOfficer = async () => {
+        const { data } = await supabase.rpc('is_broadofficer', {
+            p_broadcaster_id: stream.broadcaster_id,
+            p_user_id: user.id
+        });
+        setIsCurrentUserBroadofficer(!!data);
+    };
+    checkOfficer();
+  }, [stream?.broadcaster_id, user?.id, isBroadcaster]);
+
+  const handleGeneralKick = async () => {
+      if (!generalUserActionTarget || !user) return;
+      
+      const isPrivileged = isBroadcaster || isCurrentUserBroadofficer || isRoleExempt;
+      const fee = isPrivileged ? 0 : 500;
+      
+      if (!isPrivileged) {
+          // Check balance
+          const { data: profile } = await supabase.from('user_profiles').select('troll_coins').eq('id', user.id).single();
+          if ((profile?.troll_coins || 0) < fee) {
+              toast.error(`You need ${fee} troll_coins to kick a user`);
+              return;
+          }
+      }
+
+      try {
+        const { error } = await supabase.rpc('kick_user', {
+            p_target_user_id: generalUserActionTarget.userId,
+            p_kicker_user_id: user.id,
+            p_stream_id: stream?.id || null,
+        });
+        
+        if (error) throw error;
+        
+        // Log action
+        await supabase.from('officer_actions').insert({
+            officer_id: user.id,
+            target_user_id: generalUserActionTarget.userId,
+            action_type: 'kick',
+            related_stream_id: stream?.id || null,
+            fee_coins: fee,
+            metadata: { username: generalUserActionTarget.username }
+        });
+
+        toast.success(`Kicked ${generalUserActionTarget.username}`);
+        setGeneralUserActionTarget(null);
+      } catch (err) {
+          console.error('Kick failed', err);
+          toast.error('Kick failed');
+      }
+  };
+
+  const handleAssignOfficer = async () => {
+    if (!generalUserActionTarget || !isBroadcaster || !user) return;
+    try {
+      const { data, error } = await supabase.rpc('assign_broadofficer', {
+        p_broadcaster_id: user.id,
+        p_officer_id: generalUserActionTarget.userId
+      });
+
+      if (error) throw error;
+      
+      // Handle JSON response if it returns success/error object
+      if (data && typeof data === 'object' && 'success' in data && !data.success) {
+         toast.error(data.error || 'Failed to assign officer');
+         return;
+      }
+
+      toast.success(`${generalUserActionTarget.username} is now a Broadofficer`);
+      setGeneralUserActionTarget(prev => prev ? { ...prev, isOfficer: true } : null);
+    } catch (err) {
+      console.error('Failed to assign officer:', err);
+      toast.error('Failed to assign officer');
+    }
+  };
+
+  const handleRemoveOfficer = async () => {
+    if (!generalUserActionTarget || !isBroadcaster || !user) return;
+    try {
+      const { data, error } = await supabase.rpc('remove_broadofficer', {
+        p_broadcaster_id: user.id,
+        p_officer_id: generalUserActionTarget.userId
+      });
+
+      if (error) throw error;
+
+       if (data && typeof data === 'object' && 'success' in data && !data.success) {
+         toast.error(data.error || 'Failed to remove officer');
+         return;
+      }
+
+      toast.success(`${generalUserActionTarget.username} is no longer a Broadofficer`);
+      setGeneralUserActionTarget(prev => prev ? { ...prev, isOfficer: false } : null);
+    } catch (err) {
+      console.error('Failed to remove officer:', err);
+      toast.error('Failed to remove officer');
+    }
+  };
+
+  const recordAction = async (actionType: string, targetUserId: string, targetUsername: string, fee: number = 0, metadata: any = {}) => {
+      if (!user?.id) return;
+      try {
+        await supabase.from('officer_actions').insert({
+          officer_id: user.id,
+          target_user_id: targetUserId,
+          action_type: actionType,
+          related_stream_id: streamId || null,
+          fee_coins: fee,
+          metadata: {
+            username: targetUsername,
+            ...metadata,
+          },
+        });
+        
+        if (isOfficerUser) {
+           await updateOfficerActivity(user.id);
+        }
+      } catch (err) {
+        console.error('Failed to log action:', err);
+      }
+  };
+
+  const handleMute = async (target: { userId: string; username: string }) => {
+      const isPrivileged = isBroadcaster || isCurrentUserBroadofficer || isOfficerUser;
+      const fee = isPrivileged ? 0 : 25;
+
+      const muteDurationMs = 10 * 60 * 1000;
+      const muteUntil = new Date(Date.now() + muteDurationMs).toISOString();
+      
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ mic_muted_until: muteUntil })
+        .eq('id', target.userId);
+
+      if (error) {
+          toast.error('Failed to mute user');
+          return;
+      }
+
+      toast.success(`Muted ${target.username} for 10 minutes`);
+      await recordAction('mute', target.userId, target.username, fee, { duration_minutes: 10 });
+  };
+
+  const handleUnmute = async (target: { userId: string; username: string }) => {
+       if (!isBroadcaster && !isCurrentUserBroadofficer && !isOfficerUser) {
+           toast.error('You do not have permission to unmute.');
+           return;
+       }
+
+       const { error } = await supabase
+        .from('user_profiles')
+        .update({ mic_muted_until: null })
+        .eq('id', target.userId);
+        
+       if (error) {
+          toast.error('Failed to unmute user');
+          return;
+       }
+       toast.success(`Unmuted ${target.username}`);
+       await recordAction('unmute', target.userId, target.username, 0);
+  };
+  
+  const handleBlock = async (target: { userId: string; username: string }) => {
+       const isPrivileged = isBroadcaster || isCurrentUserBroadofficer || isOfficerUser;
+       const fee = isPrivileged ? 0 : 500;
+
+       const blockUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+       const { error } = await supabase
+         .from('user_profiles')
+         .update({ no_ban_until: blockUntil })
+         .eq('id', target.userId);
+
+       if (error) {
+          toast.error('Failed to block user');
+          return;
+       }
+       toast.success(`Blocked ${target.username} from bans for 24 hours`);
+       await recordAction('block', target.userId, target.username, fee, { block_until: blockUntil });
+  };
+
+  const handleUserClick = useCallback(async (participant: Participant) => {
+    let isOfficer = false;
+    // Check if officer if we are the broadcaster
+    if (stream?.broadcaster_id && participant.identity) {
+       // We can optimize this by keeping a list of officers in state
+       const { data } = await supabase.rpc('is_broadofficer', {
+         p_broadcaster_id: stream.broadcaster_id,
+         p_user_id: participant.identity
+       });
+       isOfficer = !!data;
+    }
+
+    setGeneralUserActionTarget({
+      userId: participant.identity,
       username: participant.name || participant.identity,
-      name: participant.name,
+      role: 'user', // Ideally parse from metadata
+      isOfficer
     });
-    setIsGiftModalOpen(true);
-  }, []);
+  }, [stream]);
 
   const handleGiftSent = useCallback(
     async (gift: GiftItem, targetModeOrSendToAll: RecipientMode | boolean) => {
@@ -2922,6 +3133,52 @@ export default function LivePage() {
     };
   }, []);
 
+  // Sync active battle state for everyone
+  useEffect(() => {
+    if (!stream?.broadcaster_id) return;
+
+    const checkActiveBattle = async () => {
+      const { data } = await supabase
+        .from('troll_battles')
+        .select('*')
+        .or(`player1_id.eq.${stream.broadcaster_id},player2_id.eq.${stream.broadcaster_id}`)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (data) {
+        setActiveBattle(data);
+      }
+    };
+
+    checkActiveBattle();
+    
+    const channel = supabase
+      .channel(`battles-broadcaster-${stream.broadcaster_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'troll_battles',
+          filter: `player1_id=eq.${stream.broadcaster_id}` 
+        },
+        (payload) => {
+             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                 if (payload.new.status === 'active' || payload.new.status === 'matched') {
+                    setActiveBattle(payload.new as any);
+                } else if (payload.new.status === 'completed') {
+                    setActiveBattle(payload.new as any);
+                }
+             }
+        }
+      )
+      .subscribe();
+
+      return () => {
+          supabase.removeChannel(channel);
+      }
+  }, [stream?.broadcaster_id]);
+
   const handleCoinsPurchased = useCallback((_amount: number) => {
     setIsCoinStoreOpen(false);
   }, []);
@@ -2993,6 +3250,7 @@ export default function LivePage() {
 
       <div className="relative z-10 w-full flex flex-col min-h-0 flex-1">
         <GlobalGiftBanner />
+
       {needsPrivateGate && !privateAccessGranted && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/90 px-4">
           <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0c0a16] p-6 shadow-xl">
@@ -3096,12 +3354,29 @@ export default function LivePage() {
             )}
 
             {isBroadcaster && (
-              <button
-                onClick={() => setControlPanelOpen(true)}
-                className="px-2 py-1.5 rounded-xl border border-purple-500/30 bg-purple-900/20 text-[10px] font-bold uppercase tracking-wider text-purple-200 hover:bg-purple-800/40 hover:border-purple-400/50 transition-all shadow-[0_0_10px_rgba(147,51,234,0.2)]"
-              >
-                Control
-              </button>
+              <>
+                <button
+                  onClick={() => setControlPanelOpen(true)}
+                  className="px-2 py-1.5 rounded-xl border border-purple-500/30 bg-purple-900/20 text-[10px] font-bold uppercase tracking-wider text-purple-200 hover:bg-purple-800/40 hover:border-purple-400/50 transition-all shadow-[0_0_10px_rgba(147,51,234,0.2)] flex items-center gap-1"
+                >
+                  <Settings size={14} />
+                  Settings
+                </button>
+                <button
+                  onClick={handleAddBox}
+                  className="px-2 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-900/20 text-[10px] font-bold uppercase tracking-wider text-emerald-200 hover:bg-emerald-800/40 hover:border-emerald-400/50 transition-all shadow-[0_0_10px_rgba(16,185,129,0.2)] flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  Add Box
+                </button>
+                <button
+                  onClick={() => setShowTrollBattles(true)}
+                  className="px-2 py-1.5 rounded-xl border border-red-500/30 bg-red-900/20 text-[10px] font-bold uppercase tracking-wider text-red-200 hover:bg-red-800/40 hover:border-red-400/50 transition-all shadow-[0_0_10px_rgba(220,38,38,0.2)] flex items-center gap-1"
+                >
+                  <Swords size={14} />
+                  Battles
+                </button>
+              </>
             )}
 
             <button
@@ -3183,7 +3458,7 @@ export default function LivePage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 px-[clamp(8px,2.5vw,12px)] pb-2 overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 px-[clamp(8px,2.5vw,12px)] pb-2 overflow-y-auto lg:overflow-hidden">
         {/* Live Stage (Video + Guests) */}
         <div
           className="flex flex-col min-h-0 gap-2 lg:gap-2 flex-1 lg:flex-1 lg:w-[72%] relative z-0 video-cover"
@@ -3241,6 +3516,17 @@ export default function LivePage() {
             >
                <GiftEventOverlay gift={lastGift} onProfileClick={(p) => setSelectedProfile(p)} />
             </BroadcastLayout>
+
+            {activeBattle && stream?.broadcaster_id && (
+               <TrollBattleOverlay
+                 battleId={activeBattle.id}
+                 broadcasterId={stream.broadcaster_id}
+                 initialBattleData={activeBattle}
+                 onBattleEnd={() => {
+                    setTimeout(() => setActiveBattle(null), 15000); 
+                 }}
+               />
+            )}
 
             {useFlyingChats && (
               <div className="absolute inset-0 pointer-events-none lg:hidden">
@@ -3324,6 +3610,44 @@ export default function LivePage() {
       )}
 
       {/* Modals */}
+      {showTrollBattles && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md relative">
+            <button
+              onClick={() => setShowTrollBattles(false)}
+              className="absolute -top-12 right-0 p-2 text-white/50 hover:text-white transition-colors"
+            >
+              <X size={24} />
+            </button>
+            <TrollBattlesSetup
+              streamId={streamId || ''}
+              onOpponentFound={async (opponent, battleId) => {
+                try {
+                  const { error } = await supabase
+                    .from('troll_battles')
+                    .update({ status: 'active', started_at: new Date().toISOString() })
+                    .eq('id', battleId);
+
+                  if (error) throw error;
+
+                  setActiveBattle({ 
+                    id: battleId, 
+                    player1_id: user?.id, 
+                    player2_id: opponent.id, 
+                    status: 'active' 
+                  });
+                  setShowTrollBattleOverlay(true);
+                  setShowTrollBattles(false);
+                } catch (err) {
+                  console.error('Failed to start battle:', err);
+                  toast.error('Failed to start battle');
+                }
+              }}
+              onCancel={() => setShowTrollBattles(false)}
+            />
+          </div>
+        </div>
+      )}
       {isGiftModalOpen && (
         <GiftModal 
           onClose={() => { setIsGiftModalOpen(false); setGiftReceiver(null); }} 
@@ -3457,6 +3781,32 @@ export default function LivePage() {
           onReport={handleSeatReport}
           onFollow={handleSeatFollow}
           onSummon={handleSeatSummon}
+          onMute={() => handleMute({ userId: seatActionTarget.userId, username: seatActionTarget.username || '' })}
+          onUnmute={() => handleUnmute({ userId: seatActionTarget.userId, username: seatActionTarget.username || '' })}
+          onBlock={() => handleBlock({ userId: seatActionTarget.userId, username: seatActionTarget.username || '' })}
+          isCurrentUserBroadofficer={isCurrentUserBroadofficer}
+          isBroadcaster={isBroadcaster}
+          isBroadofficer={seatActionTarget.isOfficer}
+        />
+      )}
+      {generalUserActionTarget && (
+        <UserActionsMenu
+          user={{
+            name: generalUserActionTarget.username,
+            role: generalUserActionTarget.role,
+          }}
+          userRole={profile?.role}
+          onClose={() => setGeneralUserActionTarget(null)}
+          onKick={handleGeneralKick}
+          onAssignOfficer={handleAssignOfficer}
+          onRemoveOfficer={handleRemoveOfficer}
+          isBroadofficer={generalUserActionTarget.isOfficer}
+          isBroadcaster={isBroadcaster}
+          isCurrentUserBroadofficer={isCurrentUserBroadofficer}
+          onGift={(amount) => handleSendCoinsToUser(generalUserActionTarget.userId, amount)}
+          onMute={() => handleMute({ userId: generalUserActionTarget.userId, username: generalUserActionTarget.username })}
+          onUnmute={() => handleUnmute({ userId: generalUserActionTarget.userId, username: generalUserActionTarget.username })}
+          onBlock={() => handleBlock({ userId: generalUserActionTarget.userId, username: generalUserActionTarget.username })}
         />
       )}
       {isCoinStoreOpen && <CoinStoreModal onClose={() => setIsCoinStoreOpen(false)} onPurchase={handleCoinsPurchased} />}
@@ -3494,11 +3844,10 @@ export default function LivePage() {
               Close
             </button>
             <div className="bg-[#05010a] border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
-              <BroadcasterControlPanel
+              <BroadcasterSettings
                 streamId={streamId || ''}
+                broadcasterId={stream?.broadcaster_id}
                 onAlertOfficers={handleAlertOfficers}
-                boxCount={boxCount}
-                onBoxCountChange={setBoxCount}
                 joinPrice={joinPrice}
                 onSetPrice={handleSetPrice}
               />

@@ -15,6 +15,7 @@ import UserSearchDropdown from "../components/UserSearchDropdown";
 import { Scale, Gavel, FileText, Users, CheckCircle, Upload, Bell, Sparkles } from "lucide-react";
 import { Track } from "livekit-client";
 import CourtGeminiModal from "../components/CourtGeminiModal";
+import CourtDocketModal from "../components/CourtDocketModal";
 import { generateSummaryFeedback } from "../lib/courtAi";
 
 const CourtParticipantLabel = ({ trackRef }: { trackRef: any }) => {
@@ -237,6 +238,7 @@ export default function CourtRoom() {
   const [isSubmittingSummary, setIsSubmittingSummary] = useState(false);
   const [defenseCounselEnabled, setDefenseCounselEnabled] = useState(false);
   const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
+  const [showDocketModal, setShowDocketModal] = useState(false);
 
   const summonUser = async (userId: string, username: string) => {
     try {
@@ -1026,11 +1028,12 @@ export default function CourtRoom() {
 
       if (error) throw error;
 
-      // Update defendant's coin balance
-      await supabase.rpc('update_user_coins', {
-        user_id: defendant,
-        amount: -paymentData.amount,
-        reason: `Court payment: ${paymentData.reason}`
+      // Update defendant's coin balance using centralized spend function
+      await supabase.rpc('spend_coins', {
+        p_user_id: defendant,
+        p_amount: paymentData.amount,
+        p_reason: `Court payment: ${paymentData.reason}`,
+        p_metadata: { recipient: paymentData.recipient }
       });
 
       toast.success('Payment processed successfully');
@@ -1522,6 +1525,13 @@ export default function CourtRoom() {
                       <Bell className="w-3 h-3" />
                       Summon
                     </button>
+                    <button
+                      onClick={() => setShowDocketModal(true)}
+                      className="text-xs px-2 py-1 bg-cyan-600 hover:bg-cyan-700 rounded flex items-center gap-1"
+                    >
+                      <FileText className="w-3 h-3" />
+                      Docket
+                    </button>
                   </div>
                 )}
               </div>
@@ -1564,6 +1574,22 @@ export default function CourtRoom() {
             onClose={() => setIsGeminiModalOpen(false)}
             courtId={activeCase?.id || ''}
             isAuthorized={isJudge}
+          />
+
+          <CourtDocketModal
+            isOpen={showDocketModal}
+            onClose={() => setShowDocketModal(false)}
+            isJudge={isJudge}
+            onSelectCase={() => {
+               // If needed, judge can load case from here
+               // For now, we just close the modal, or maybe we want to load it?
+               // The modal handles extensions/pardons. Loading a case into the room is separate.
+               // If the user wants to "call to stand", we might want to do something.
+               // For now, let's just log or toast, or maybe set active case?
+               // The request said "docket system needs to show in court which is a popup with current user incident information...".
+               // The modal does that.
+               setShowDocketModal(false);
+            }}
           />
 
             <MAIAuthorityPanel

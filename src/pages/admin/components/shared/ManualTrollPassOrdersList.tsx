@@ -1,0 +1,321 @@
+import React, { useEffect, useState } from 'react'
+import { supabase } from '../../../../lib/supabase'
+import { toast } from 'sonner'
+import {
+  Check,
+  X,
+  Clock,
+  CreditCard,
+  Crown
+} from 'lucide-react'
+
+interface ManualOrder {
+  id: string
+  user_id: string
+  package_id: string
+  amount: number
+  price: string
+  payment_method: string
+  status: string
+  purchase_type?: string
+  payer_cashtag?: string
+  created_at: string
+  user?: {
+    username: string
+    avatar_url: string
+  }
+}
+
+export default function ManualTrollPassOrdersList() {
+  const [orders, setOrders] = useState<ManualOrder[]>([])
+  const [loading, setLoading] = useState(true)
+  const [processing, setProcessing] = useState<string | null>(null)
+  const [confirmApproval, setConfirmApproval] = useState<ManualOrder | null>(null)
+  const [txId, setTxId] = useState('')
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('manual_coin_orders')
+        .select(`
+          *,
+          user:user_profiles(username, avatar_url)
+        `)
+        .eq('status', 'pending')
+        .eq('purchase_type', 'troll_pass_bundle')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setOrders(data || [])
+    } catch (error) {
+      console.error('Error fetching manual troll pass orders:', error)
+      toast.error('Failed to load manual troll pass orders')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchOrders()
+  }, [])
+
+  const handleApproveClick = (order: ManualOrder) => {
+    setTxId('')
+    setConfirmApproval(order)
+  }
+
+  const handleConfirmApprove = async () => {
+    if (!confirmApproval) return
+
+    // If CashApp, warn if no Tx ID (but allow if admin really wants to)
+    if (confirmApproval.payment_method === 'cashapp' && !txId.trim()) {
+        toast.error('Please enter the CashApp Transaction ID from your phone/app')
+        return
+    }
+
+    try {
+      setProcessing(confirmApproval.id)
+      
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No user')
+
+      // Call the approve_manual_order RPC
+      const { error } = await supabase.rpc('approve_manual_order', {
+        p_order_id: confirmApproval.id,
+        p_admin_id: user.id,
+        p_external_tx_id: txId.trim() || `MANUAL-${Date.now()}`
+      })
+
+      if (error) throw error
+
+      toast.success(`Troll Pass activated for ${confirmApproval.user?.username}`)
+      fetchOrders()
+      setConfirmApproval(null)
+    } catch (error: any) {
+      console.error('Error approving order:', error)
+      toast.error(error.message || 'Failed to approve order')
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  const handleReject = async (order: ManualOrder) => {
+    if (!confirm(`Reject Troll Pass purchase for ${order.user?.username}?`)) return
+
+    try {
+      setProcessing(order.id)
+      
+      const { error } = await supabase
+        .from('manual_coin_orders')
+        .update({ status: 'rejected' })
+        .eq('id', order.id)
+
+      if (error) throw error
+
+      toast.success('Order rejected')
+      fetchOrders()
+    } catch (error: any) {
+      console.error('Error rejecting order:', error)
+      toast.error(error.message || 'Failed to reject order')
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  if (loading) {
+    return <div className="p-8 text-center text-slate-400">Loading orders...</div>
+  }
+
+  return (
+    <div className="space-y-6 relative">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Crown className="w-6 h-6 text-purple-400" />
+            Manual Troll Pass Activations
+          </h2>
+          <p className="text-sm text-slate-400">Review and approve Troll Pass purchases</p>
+        </div>
+        <button 
+          onClick={fetchOrders}
+          className="text-sm text-slate-400 hover:text-white transition-colors"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-12 text-center">
+          <Check className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-slate-300">All Caught Up</h3>
+          <p className="text-slate-500">No pending Troll Pass activations.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {orders.map((order) => (
+            <div 
+              key={order.id}
+              className="bg-slate-900 border border-slate-700 rounded-lg p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between hover:border-slate-600 transition-colors"
+            >
+              {/* User Info */}
+              <div className="flex items-center gap-3 min-w-[200px]">
+                <img 
+                  src={order.user?.avatar_url || 'https://via.placeholder.com/40'} 
+                  alt={order.user?.username}
+                  className="w-10 h-10 rounded-full bg-slate-800"
+                />
+                <div>
+                  <div className="font-bold text-white">{order.user?.username || 'Unknown User'}</div>
+                  <div className="text-xs text-slate-400 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(order.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Details */}
+              <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-xs text-slate-500">Package</div>
+                  <div className="text-sm text-slate-300 font-mono truncate" title={order.package_id}>
+                    {order.package_id.replace(/_/g, ' ')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Includes</div>
+                  <div className="text-sm text-yellow-400 font-bold flex items-center gap-1">
+                    <img src="/assets/icons/coin.png" className="w-3 h-3" alt="coins" onError={(e) => e.currentTarget.style.display = 'none'} />
+                    {(order.amount || 0).toLocaleString()} Coins
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Price</div>
+                  <div className="text-sm text-green-400 font-bold">
+                    {order.price}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Payment</div>
+                  <div className="text-sm text-slate-300 flex items-center gap-1">
+                    {order.payment_method === 'cashapp' ? (
+                      <span className="text-green-400 font-bold">$</span>
+                    ) : (
+                      <CreditCard className="w-3 h-3" />
+                    )}
+                    <span className="capitalize">{order.payment_method}</span>
+                  </div>
+                  {order.payer_cashtag && (
+                    <div className="text-xs text-slate-400 font-mono mt-1">
+                      {order.payer_cashtag}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 w-full md:w-auto mt-4 md:mt-0">
+                <button
+                  onClick={() => handleApproveClick(order)}
+                  disabled={processing === order.id}
+                  className="flex-1 md:flex-none px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {processing === order.id ? (
+                    <span className="animate-spin">⌛</span>
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  Activate
+                </button>
+                <button
+                  onClick={() => handleReject(order)}
+                  disabled={processing === order.id}
+                  className="flex-1 md:flex-none px-4 py-2 bg-red-900/50 hover:bg-red-900 text-red-200 text-sm font-bold rounded-lg border border-red-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <X className="w-4 h-4" />
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {confirmApproval && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6 shadow-2xl">
+                <h3 className="text-xl font-bold text-white mb-4">Confirm Activation</h3>
+                
+                <div className="space-y-4">
+                    <div className="bg-slate-800/50 p-4 rounded-lg space-y-2">
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">User</span>
+                            <span className="text-white font-medium">{confirmApproval.user?.username}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">Package</span>
+                            <span className="text-purple-400 font-bold">{confirmApproval.package_id.replace(/_/g, ' ')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">Includes</span>
+                            <span className="text-yellow-400 font-bold">{(confirmApproval.amount || 0).toLocaleString()} coins</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">Price</span>
+                            <span className="text-green-400 font-bold">{confirmApproval.price}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-400">Method</span>
+                            <span className="capitalize text-white">{confirmApproval.payment_method}</span>
+                        </div>
+                        {confirmApproval.payer_cashtag && (
+                             <div className="flex justify-between">
+                                <span className="text-slate-400">Cashtag</span>
+                                <span className="text-white font-mono">{confirmApproval.payer_cashtag}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-1">
+                            Transaction ID / Reference
+                            {confirmApproval.payment_method === 'cashapp' && <span className="text-red-400 ml-1">*</span>}
+                        </label>
+                        <input 
+                            type="text"
+                            value={txId}
+                            onChange={(e) => setTxId(e.target.value)}
+                            placeholder={confirmApproval.payment_method === 'cashapp' ? "Enter CashApp Transaction ID" : "Optional reference"}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-green-500 outline-none"
+                            autoFocus
+                        />
+                         {confirmApproval.payment_method === 'cashapp' && (
+                            <p className="text-xs text-yellow-500/80 mt-1">
+                                Please verify the payment on your CashApp before activating.
+                            </p>
+                         )}
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <button 
+                          onClick={() => setConfirmApproval(null)}
+                          className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          onClick={handleConfirmApprove}
+                          disabled={!txId && confirmApproval.payment_method === 'cashapp'}
+                          className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Activate Pass
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+    </div>
+  )
+}

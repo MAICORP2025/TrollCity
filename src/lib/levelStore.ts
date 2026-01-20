@@ -125,8 +125,15 @@ export const useLevelStore = create<LevelState>((set, get) => ({
       })
       
       // Note: We should actually add the coins to user_profiles here or via RPC
-      // For now, we'll assume a separate trigger or we do it here:
-      await supabase.rpc('add_troll_coins', { user_id: userId, amount: reward.coins })
+      // Use Troll Bank for centralized coin management
+      await supabase.rpc('troll_bank_credit_coins', { 
+        p_user_id: userId, 
+        p_coins: reward.coins,
+        p_bucket: 'promo', // Level up rewards are earned/promo
+        p_source: 'reward',
+        p_ref_id: null,
+        p_metadata: { type: 'level_up', level: newLevel }
+      })
     }
 
     // Optimistic Update

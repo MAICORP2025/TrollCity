@@ -221,10 +221,12 @@ export async function getUserPurchases(
   const client = supabaseClient || supabase;
 
   try {
+    // Filter out expired items (fallback if cleanup hasn't run)
     let query = client
       .from('user_purchases')
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
 
     if (itemType) {
       query = query.eq('item_type', itemType);
@@ -294,6 +296,7 @@ export async function userOwnsPurchase(
       .eq('user_id', userId)
       .eq('item_type', itemType)
       .eq('item_id', itemId)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .single();
 
     if (error?.code === 'PGRST116') {

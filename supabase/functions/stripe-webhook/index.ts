@@ -114,14 +114,20 @@ serve(async (req: Request) => {
           console.error("Failed to fulfill troll pass order", fulfillError);
         }
       } else {
-        const { error: creditError } = await supabaseAdmin.rpc("credit_coins", {
+        const { error: creditError } = await supabaseAdmin.rpc("troll_bank_credit_coins", {
           p_user_id: order.user_id,
           p_coins: order.coins,
-          p_order_id: order.id,
+          p_bucket: 'paid',
+          p_source: 'stripe_purchase',
+          p_ref_id: order.id,
+          p_metadata: {
+            stripe_session_id: sessionId,
+            amount_cents: order.amount_cents
+          }
         });
 
         if (creditError) {
-          console.error("credit_coins failed", creditError);
+          console.error("troll_bank_credit_coins failed", creditError);
         }
       }
 
@@ -199,14 +205,20 @@ serve(async (req: Request) => {
           console.error("Failed to fulfill troll pass order", fulfillError);
         }
       } else {
-        const { error: creditError } = await supabaseAdmin.rpc("credit_coins", {
+        const { error: creditError } = await supabaseAdmin.rpc("troll_bank_credit_coins", {
           p_user_id: order.user_id,
           p_coins: order.coins,
-          p_order_id: order.id,
+          p_bucket: 'paid',
+          p_source: 'stripe_purchase',
+          p_ref_id: order.id,
+          p_metadata: {
+            stripe_payment_intent_id: paymentIntentId,
+            amount_cents: order.coins // Approximate or fetch from order if needed
+          }
         });
 
         if (creditError) {
-          console.error("credit_coins failed", creditError);
+          console.error("troll_bank_credit_coins failed", creditError);
         }
       }
 

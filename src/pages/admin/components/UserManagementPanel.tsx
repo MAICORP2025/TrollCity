@@ -36,7 +36,7 @@ export default function UserManagementPanel({
   title = 'User Management',
   description
 }: UserManagementPanelProps) {
-  const { profile: adminProfile } = useAuthStore()
+  const { profile: adminProfile, user: currentUser } = useAuthStore()
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -110,10 +110,23 @@ export default function UserManagementPanel({
       return
     }
 
+    // PROTECT OWNER ADMIN ACCOUNT
+    const OWNER_EMAIL = 'trollcity2025@gmail.com'
+    const isTargetOwner = selectedUser.email?.toLowerCase() === OWNER_EMAIL
+    const isCurrentOwner = currentUser?.email?.toLowerCase() === OWNER_EMAIL
+
+    if (isTargetOwner && !isCurrentOwner) {
+      // Prevent removing admin role from owner
+      if (editingRole !== 'admin') {
+        toast.error('CRITICAL: You cannot remove Admin privileges from the Owner account.')
+        return
+      }
+    }
+
     setSaving(true)
     try {
+      // 1. Prepare updates for non-Troll Bank fields
       const updates: Partial<UserProfile> = {
-        troll_coins: editingCoins.paid,
         free_coin_balance: editingCoins.free,
         level: editingLevel,
         role: editingRole,
@@ -139,12 +152,50 @@ export default function UserManagementPanel({
         updates.is_troller = false
       }
 
+      // 2. Execute direct update for non-Troll Bank fields
       const { error } = await supabase
         .from('user_profiles')
         .update(updates)
         .eq('id', selectedUser.id)
 
       if (error) throw error
+
+      // 3. Handle Troll Coins via Troll Bank RPC
+      const currentTrollCoins = selectedUser.troll_coins || 0
+      const newTrollCoins = editingCoins.paid
+      const delta = newTrollCoins - currentTrollCoins
+
+      if (delta !== 0) {
+        if (delta > 0) {
+           // Credit
+           const { error: creditError } = await supabase.rpc('troll_bank_credit_coins', {
+             p_user_id: selectedUser.id,
+             p_coins: delta,
+             p_bucket: 'paid', // Admin adjustment treated as paid/generic
+             p_source: 'admin_grant',
+             p_ref_id: null,
+             p_metadata: { admin_id: adminProfile.id, reason: 'Manual Adjustment' }
+           })
+           if (creditError) {
+             console.error('Error crediting coins:', creditError)
+             toast.error('Failed to update coin balance')
+           }
+        } else {
+           // Debit
+           const { error: spendError } = await supabase.rpc('troll_bank_spend_coins_secure', {
+             p_user_id: selectedUser.id,
+             p_amount: Math.abs(delta),
+             p_bucket: 'paid',
+             p_source: 'admin_deduct',
+             p_ref_id: null,
+             p_metadata: { admin_id: adminProfile.id, reason: 'Manual Adjustment' }
+           })
+           if (spendError) {
+             console.error('Error deducting coins:', spendError)
+             toast.error('Failed to update coin balance')
+           }
+        }
+      }
 
       // Log the admin action
       const { error: logError } = await supabase.from('coin_transactions').insert({

@@ -151,29 +151,20 @@ export default function TrollCatch({ streamId, userId, onCatch }: TrollCatchProp
     const coins = coinsRef.current
 
     try {
-      // Award coins via RPC
-      const { error } = await supabase.rpc('add_free_coins', {
+      // Award coins via RPC (Troll Bank)
+      const { error } = await supabase.rpc('troll_bank_credit_coins', {
         p_user_id: userId,
-        p_amount: coins,
+        p_coins: coins,
+        p_bucket: 'promo',
+        p_source: 'reward',
+        p_ref_id: streamId,
+        p_metadata: { type: 'troll_catch', stream_id: streamId }
       })
 
       if (error) {
         console.error('Error awarding coins:', error)
-        // Fallback: Direct update
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('troll_coins')
-          .eq('id', userId)
-          .single()
-
-        if (profileData) {
-          await supabase
-            .from('user_profiles')
-            .update({
-              troll_coins: (profileData.troll_coins || 0) + coins,
-            })
-            .eq('id', userId)
-        }
+        toast.error('Failed to credit coins')
+        return
       }
 
       // Refresh profile from database to get accurate balance

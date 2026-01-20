@@ -1,4 +1,35 @@
--- Manual Cash App approval: credit wallets, profiles, and transaction logs
+-- Ensure troll_wall_gifts table exists
+create table if not exists public.troll_wall_gifts (
+    id uuid primary key default gen_random_uuid(),
+    post_id uuid not null references public.troll_wall_posts(id) on delete cascade,
+    sender_id uuid not null references auth.users(id) on delete cascade,
+    gift_type text not null,
+    quantity integer not null default 1,
+    coin_cost integer not null default 0,
+    created_at timestamptz not null default now()
+);
+
+alter table public.troll_wall_gifts enable row level security;
+
+create policy "Users can view all wall gifts" on public.troll_wall_gifts
+    for select using (true);
+
+-- Clean up any existing approve_manual_order variants to avoid return type conflicts
+do $$
+declare
+  r record;
+begin
+  for r in
+    select format('%I.%I(%s)', n.nspname, p.proname, pg_get_function_identity_arguments(p.oid)) as signature
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'approve_manual_order'
+  loop
+    execute format('drop function if exists %s;', r.signature);
+  end loop;
+end;
+$$;
 create or replace function public.approve_manual_order(
   p_order_id uuid,
   p_admin_id uuid,

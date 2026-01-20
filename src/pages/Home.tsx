@@ -937,92 +937,60 @@ useEffect(() => {
           <div className="relative rounded-3xl bg-gradient-to-br from-[#1a0f2e]/40 to-[#0d0820]/20 backdrop-blur-xl border border-purple-500/20 p-6 shadow-lg space-y-4 home-live-wrapper home-outline-rgb">
             {isHolidaySeason && <ChristmasOutline rowCount={6} colCount={3} />}
             {loadingLive ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stream-grid" style={{ minHeight: '400px' }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <StreamSkeleton key={i} />
+              <div className="grid grid-cols-2 gap-1 stream-grid" style={{ minHeight: '400px' }}>
+                {Array.from({ length: 40 }).map((_, i) => (
+                  <div key={i} className="flex gap-2 p-1 rounded-lg bg-[#1f1535]/50 animate-pulse border border-purple-500/10 h-12">
+                    <div className="w-16 h-full bg-purple-500/10 rounded" />
+                    <div className="flex-1 space-y-1 py-1">
+                      <div className="h-2 w-3/4 bg-purple-500/10 rounded" />
+                      <div className="h-2 w-1/2 bg-purple-500/10 rounded" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : displayStreams.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stream-grid" style={{ minHeight: '400px' }}>
+              <div className="grid grid-cols-2 gap-2 stream-grid" style={{ minHeight: '400px' }}>
                 {displayStreams.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => navigate(`/live/${s.id}`, { state: { streamData: { ...s, status: 'live' } } })}
-                    className={`relative rounded-2xl overflow-hidden shadow-xl bg-gradient-to-br from-[#1f1535] via-[#16102a] to-[#0f0820] border transition-all duration-300 group home-live-card ${
+                    className={`relative flex items-center rounded-lg overflow-hidden shadow-lg bg-[#1f1535] border transition-all duration-300 group h-12 ${
                       s.user_profiles?.date_of_birth && isBirthdayToday(s.user_profiles.date_of_birth)
-                        ? 'border-yellow-400/60 shadow-[0_0_30px_rgba(255,215,0,0.7)] birthday-stream'
-                        : 'border-purple-500/40 hover:border-purple-400/60 hover:shadow-[0_0_30px_rgba(168,85,247,0.5)]'
+                        ? 'border-yellow-400/60 shadow-[0_0_10px_rgba(255,215,0,0.3)]'
+                        : 'border-purple-500/20 hover:border-purple-400/60'
                     }`}
                   >
-                    <div className="relative overflow-hidden h-32">
+                    <div className="w-16 h-full relative flex-shrink-0">
                       {s.category === 'Officer Stream' ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 border-b border-purple-500/30 p-4">
-                           <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-3 animate-pulse">
-                              <Shield className="w-8 h-8 text-blue-400" />
-                           </div>
-                           <h3 className="text-lg font-bold text-white text-center">Officer Stream</h3>
-                           <p className="text-xs text-blue-300 text-center mt-1">Authorized Personnel Only</p>
-                        </div>
+                         <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+                           <Shield className="w-4 h-4 text-blue-400" />
+                         </div>
                       ) : (
-                        <>
-                          <img
-                            src={s.user_profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.user_profiles?.username || 'troll'}`}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                            alt="Stream preview"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                        </>
+                        <img
+                          src={s.user_profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.user_profiles?.username || 'troll'}`}
+                          className="w-full h-full object-cover"
+                          alt="Stream"
+                        />
                       )}
+                      <div className="absolute top-0.5 left-0.5">
+                         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-sm shadow-red-500/50" />
+                      </div>
                     </div>
 
-                    <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
-                      <div className="relative flex items-center gap-2 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-full border border-red-500/50">
-                        <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
-                        <span className="text-xs font-bold text-red-300 tracking-wide">LIVE</span>
-                      </div>
-                      {s.user_profiles?.date_of_birth && isBirthdayToday(s.user_profiles.date_of_birth) && (
-                        <div className="ml-1 bg-gradient-to-r from-pink-500 via-purple-500 to-yellow-500 rounded-full px-3 py-1 flex items-center gap-1 animate-pulse shadow-lg shadow-pink-500/30">
-                          <PartyPopper className="w-3 h-3 text-white" />
-                          <span className="text-xs font-bold text-white">BIRTHDAY!</span>
-                        </div>
-                      )}
-                    </div>
-                    {canEndLive && (
-                      <div className="absolute top-3 right-3 z-10">
-                        <div
-                          role="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            endLiveStream(s.id);
-                          }}
-                          className="bg-red-600/90 hover:bg-red-700 text-white p-2 rounded-full shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-red-600/50 cursor-pointer"
-                          title="End Live Stream"
-                          tabIndex={0}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); endLiveStream(s.id); } }}
-                        >
-                          <X className="w-4 h-4" />
-                        </div>
-                      </div>
-                    )}
 
-                    <div className="p-4 flex flex-col justify-between h-28 bg-gradient-to-t from-black/90 via-black/70 to-black/40">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-white line-clamp-2">{s.title || 'Untitled Stream'}</p>
+
+                    <div className="flex-1 px-2 min-w-0 flex flex-col justify-center text-left">
+                      <div className="flex items-center gap-1">
+                        <p className="text-[11px] font-bold text-white truncate leading-tight">{s.title || 'Untitled'}</p>
                       </div>
-                      <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <img 
-                            src={s.user_profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.user_profiles?.username || 'troll'}`} 
-                            className="w-6 h-6 rounded-full border border-purple-400/50 object-cover flex-shrink-0" 
-                            alt="Avatar"
-                          />
-                          <span className="text-xs text-gray-300 truncate">{s.user_profiles?.username || 'Unknown'}</span>
-                        </div>
-                        <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                          <span className="text-2xl">👁</span>
-                          <span className="text-xs font-semibold text-cyan-400">{s.current_viewers || 0}</span>
-                        </div>
+                      <div className="flex items-center gap-1">
+                         <span className="text-[10px] text-gray-400 truncate">{s.user_profiles?.username}</span>
                       </div>
+                    </div>
+
+                    <div className="pr-2 flex items-center gap-1 flex-shrink-0">
+                       <span className="text-[10px]">👁</span>
+                       <span className="text-[10px] font-semibold text-cyan-400">{s.current_viewers || 0}</span>
                     </div>
                   </button>
                 ))}

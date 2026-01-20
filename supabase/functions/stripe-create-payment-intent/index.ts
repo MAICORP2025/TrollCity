@@ -2,12 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "https://cdn.skypack.dev/stripe@14.25.0?min";
-
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -61,13 +56,13 @@ const getOrCreateCustomer = async (userId: string) => {
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: cors });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -75,7 +70,7 @@ serve(async (req: Request) => {
     if (!STRIPE_SECRET_KEY || !APP_URL) {
       return new Response(JSON.stringify({ error: "Missing Stripe config" }), {
         status: 500,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -85,7 +80,7 @@ serve(async (req: Request) => {
     if (!token) {
       return new Response(JSON.stringify({ error: "Missing auth token" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -93,7 +88,7 @@ serve(async (req: Request) => {
     if (authError || !authData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -106,7 +101,7 @@ serve(async (req: Request) => {
     if (!packageId && purchaseType !== "troll_pass_bundle") {
       return new Response(JSON.stringify({ error: "Missing packageId" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -116,7 +111,7 @@ serve(async (req: Request) => {
       if (!STRIPE_TROLL_PASS_PRICE_ID) {
         return new Response(JSON.stringify({ error: "Missing STRIPE_TROLL_PASS_PRICE_ID" }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -153,7 +148,7 @@ serve(async (req: Request) => {
         console.error("Failed to insert troll pass order", orderError);
         return new Response(JSON.stringify({ error: "Failed to create order" }), {
           status: 500,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -168,7 +163,7 @@ serve(async (req: Request) => {
         currency: STRIPE_CURRENCY,
       }), {
         status: 200,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -256,14 +251,21 @@ serve(async (req: Request) => {
         fallbackCount,
       }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!pkg.is_active) {
       return new Response(JSON.stringify({ error: "Package inactive" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!pkg.stripe_price_id) {
+      return new Response(JSON.stringify({ error: "Package missing stripe_price_id" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -301,7 +303,7 @@ serve(async (req: Request) => {
       console.error("Failed to insert coin_orders", orderError);
       return new Response(JSON.stringify({ error: "Failed to create order" }), {
         status: 500,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -316,13 +318,13 @@ serve(async (req: Request) => {
       currency: STRIPE_CURRENCY,
     }), {
       status: 200,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
     console.error("Stripe payment intent error", err);
     return new Response(JSON.stringify({ error: err?.message || "Server error" }), {
       status: 500,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

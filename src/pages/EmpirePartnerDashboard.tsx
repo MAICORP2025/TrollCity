@@ -268,38 +268,44 @@ export default function EmpirePartnerDashboard() {
             console.error('Error creating reward record:', rewardError)
             // Don't fail the whole operation if reward creation fails
           } else {
-            // Add coins to referrer's wallet
-            const { data: currentWallet } = await supabase
-              .from('wallets')
-              .select('troll_coins')
-              .eq('user_id', user.id)
-              .single()
+            // Award coins using Troll Bank RPC (Centralized Economy)
+            const { error: rpcError } = await supabase.rpc('troll_bank_credit_coins', {
+              p_user_id: user.id,
+              p_coins: 10000,
+              p_bucket: 'promo',
+              p_source: 'referral_reward',
+              p_ref_id: referralId,
+              p_metadata: { referral_id: referralId, referred_user: referral.referred_user_id }
+            })
 
-            if (currentWallet) {
-              const { error: updateError } = await supabase
-                .from('wallets')
-                .update({
-                  troll_coins: currentWallet.troll_coins + 10000,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('user_id', user.id)
-
-              if (updateError) {
-                console.error('Error updating wallet:', updateError)
-              }
+            if (rpcError) {
+              console.error('Error crediting coins via Troll Bank:', rpcError)
+              toast.error('Failed to credit coins to your balance')
             } else {
-              // Create wallet if it doesn't exist
-              const { error: insertError } = await supabase
-                .from('wallets')
-                .insert({
-                  user_id: user.id,
-                  troll_coins: 10000,
-                  updated_at: new Date().toISOString()
-                })
-
-              if (insertError) {
-                console.error('Error creating wallet:', insertError)
-              }
+               // Update legacy wallets table for dashboard compatibility if needed
+               const { data: currentWallet } = await supabase
+                 .from('wallets')
+                 .select('troll_coins')
+                 .eq('user_id', user.id)
+                 .single()
+   
+               if (currentWallet) {
+                 await supabase
+                   .from('wallets')
+                   .update({
+                     troll_coins: currentWallet.troll_coins + 10000,
+                     updated_at: new Date().toISOString()
+                   })
+                   .eq('user_id', user.id)
+               } else {
+                 await supabase
+                   .from('wallets')
+                   .insert({
+                     user_id: user.id,
+                     troll_coins: 10000,
+                     updated_at: new Date().toISOString()
+                   })
+               }
             }
           }
         }

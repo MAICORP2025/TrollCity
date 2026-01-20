@@ -84,8 +84,11 @@ export default function GameControlPanel() {
   useEffect(() => {
     if (!positionInitializedRef.current) {
       positionInitializedRef.current = true;
-      const initialX = Math.max(8, window.innerWidth - 16 - 56);
-      const initialY = Math.max(8, window.innerHeight - 96 - 56);
+      const sidebarWidth = 64;
+      const bubbleSize = 56;
+      const margin = 16;
+      const initialX = sidebarWidth + margin;
+      const initialY = Math.max(80, window.innerHeight / 2 - bubbleSize / 2);
       setDragOffset({ x: initialX, y: initialY });
     }
     if (!user?.id) {
@@ -171,8 +174,6 @@ export default function GameControlPanel() {
 
   useEffect(() => {
     if ((hasCar || hasHouse) && !autoOpened) {
-      setIsOpen(true);
-      setShowDriveMenu(true);
       setAutoOpened(true);
     }
   }, [hasCar, hasHouse, autoOpened]);

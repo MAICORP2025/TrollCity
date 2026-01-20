@@ -135,7 +135,7 @@ const FamilyLounge = () => {
       // Prefer RPC to handle RLS and schema variations server-side
       const { error: rpcError } = await supabase.rpc('create_family_tasks', { p_family_id: family.id })
       let error = rpcError
-      if (rpcError && rpcError.code === '404') {
+      if (rpcError && (rpcError.code === '404' || rpcError.message?.includes('function not found'))) {
         // Fallback to direct insert if RPC missing
         const { error: insertErr } = await supabase.from('family_tasks').insert(tasks)
         error = insertErr || null
@@ -165,8 +165,9 @@ const FamilyLounge = () => {
         }
       }
       
+      // Force refresh data
+      await loadFamilyData()
       toast.success('Weekly tasks generated!')
-      loadFamilyData()
     } catch (error) {
       console.error('Error generating tasks:', error)
       toast.error(`Failed to generate tasks: ${error.message || 'Unknown error'}`)

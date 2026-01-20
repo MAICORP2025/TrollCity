@@ -107,9 +107,6 @@ export async function runDailyReset() {
         
         if (boost) {
           await applyUserBoost(gifter.user_id, boost.percent, 'Top Gifter Boost')
-          // Grant "Top Gifter" badge for 24h? Or just a flag?
-          // User said: special badge for 24 hours.
-          // We might need to insert into user_badges with an expiry or check logic.
         }
       }
     }
@@ -117,6 +114,59 @@ export async function runDailyReset() {
     console.log('Daily Reset Completed')
   } catch (err) {
     console.error('Daily Reset Failed:', err)
+  }
+}
+
+/**
+ * Get Weekly Top Broadcasters (Top Earners)
+ * Used for Pitch Contest Eligibility
+ */
+export async function getWeeklyTopBroadcasters(limit: number = 5) {
+  const now = new Date()
+  const startDate = new Date()
+  const day = now.getDay()
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1) // Adjust when day is sunday
+  startDate.setDate(diff)
+  startDate.setHours(0, 0, 0, 0)
+
+  try {
+    // We look for 'gift' type transactions where amount is positive (received)
+    // Actually gift transactions are usually: sender (negative), receiver (positive).
+    // Let's assume 'gift' type with positive amount is the receiver.
+    // Or we can query the 'streams' table if it tracks weekly earnings.
+    // The 'streams' table has 'total_gifts_coins', but that's per stream.
+    // We need per user.
+    // Let's use coin_transactions with type 'gift_received' or similar if it exists.
+    // If not, we look for positive amounts with type 'gift'.
+    
+    const { data: transactions, error } = await supabase
+      .from('coin_transactions')
+      .select('user_id, amount, created_at, user_profiles(username, avatar_url)')
+      .in('type', ['gift', 'gift_received', 'stream_gift']) 
+      .gt('amount', 0) // Only positive amounts (received)
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', now.toISOString())
+
+    if (error) throw error
+
+    const leaderboard = new Map<string, any>()
+    transactions?.forEach((tx: any) => {
+      const existing = leaderboard.get(tx.user_id) || {
+        user_id: tx.user_id,
+        username: tx.user_profiles?.username,
+        avatar_url: tx.user_profiles?.avatar_url,
+        total_coins: 0
+      }
+      existing.total_coins += tx.amount
+      leaderboard.set(tx.user_id, existing)
+    })
+
+    return Array.from(leaderboard.values())
+      .sort((a, b) => b.total_coins - a.total_coins)
+      .slice(0, limit)
+  } catch (err) {
+    console.error('Error fetching weekly top broadcasters:', err)
+    return []
   }
 }
 

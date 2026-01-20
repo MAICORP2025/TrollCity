@@ -5,7 +5,11 @@ import { Link } from 'react-router-dom'
 import { Button } from './button' // Assuming standard shadcn button exists
 import { useAuthStore } from '../../lib/store'
 
-export default function TrollPassBanner() {
+interface TrollPassBannerProps {
+  onPurchase?: () => void;
+}
+
+export default function TrollPassBanner({ onPurchase }: TrollPassBannerProps) {
   const { profile } = useAuthStore()
   
   // Check if user has active Troll Pass
@@ -52,21 +56,32 @@ export default function TrollPassBanner() {
               TROLL PASS PREMIUM
             </h3>
             <p className="text-xs text-cyan-100/80 font-medium">
-              Unlock exclusive badges, 2x XP, and gold username!
+              Unlock exclusive badges, 2x XP, gold username, and 1 week Ghost Mode!
             </p>
           </div>
         </div>
 
-        <Link to="/store">
+        {onPurchase ? (
           <Button
             disabled={false}
-            onClick={() => {}}
+            onClick={onPurchase}
             className="rounded-full px-6 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-white font-bold border-none shadow-[0_0_15px_rgba(34,211,238,0.4)] hover:shadow-[0_0_25px_rgba(236,72,153,0.6)] hover:scale-105 transition-all duration-300 flex items-center gap-2"
           >
             <Sparkles className="w-4 h-4 fill-white" />
             Get TrollPass
           </Button>
-        </Link>
+        ) : (
+          <Link to="/store">
+            <Button
+              disabled={false}
+              onClick={() => {}}
+              className="rounded-full px-6 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-white font-bold border-none shadow-[0_0_15px_rgba(34,211,238,0.4)] hover:shadow-[0_0_25px_rgba(236,72,153,0.6)] hover:scale-105 transition-all duration-300 flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4 fill-white" />
+              Get TrollPass
+            </Button>
+          </Link>
+        )}
       </div>
     </div>
   )

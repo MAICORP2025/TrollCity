@@ -4,7 +4,7 @@ import { useAuthStore } from '../lib/store'
 import { declareWar, completeWar } from '../lib/familyWars'
 import { toast } from 'sonner'
 import {
-  Sword, Clock, Target
+  Sword, Clock, Target, Trophy
 } from 'lucide-react'
 
 const FamilyWarsHub = () => {
@@ -15,6 +15,7 @@ const FamilyWarsHub = () => {
   const [warScores, setWarScores] = useState([])
   const [availableFamilies, setAvailableFamilies] = useState([])
   const [warHistory, setWarHistory] = useState([])
+  const [weeklyTasks, setWeeklyTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [creatingWar, setCreatingWar] = useState(false)
 
@@ -85,6 +86,16 @@ const FamilyWarsHub = () => {
 
           setAvailableFamilies(families || [])
 
+          // Load weekly tasks
+          const { data: tasks } = await supabase
+            .from('family_tasks')
+            .select('*')
+            .eq('family_id', familyId)
+            .order('tier', { ascending: true })
+            .order('task_type', { ascending: true })
+
+          setWeeklyTasks(tasks || [])
+
           // Load war history
           const { data: history } = await supabase
             .from('family_wars')
@@ -120,6 +131,70 @@ const FamilyWarsHub = () => {
       loadWarData()
     }
   }, [user, loadWarData])
+
+  const generateTasks = async () => {
+    if (!family || !family.id) return
+    setLoading(true)
+    try {
+      // Use RPC to generate comprehensive tasks including war tasks
+      const { error: rpcError } = await supabase.rpc('create_family_tasks', { p_family_id: family.id })
+      
+      if (rpcError) {
+        console.warn('RPC create_family_tasks failed, falling back to manual insert:', rpcError)
+        
+        // Fallback tasks if RPC fails
+        const tasks = [
+          {
+            family_id: family.id,
+            task_title: 'Declare War',
+            task_description: 'Declare war on a rival family.',
+            reward_family_coins: 300,
+            reward_family_xp: 75,
+            goal_value: 1,
+            current_value: 0,
+            metric: 'wars_declared',
+            status: 'active',
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          },
+          {
+            family_id: family.id,
+            task_title: 'First Blood',
+            task_description: 'Win your first Family War of the week.',
+            reward_family_coins: 1000,
+            reward_family_xp: 300,
+            goal_value: 1,
+            current_value: 0,
+            metric: 'wars_won',
+            status: 'active',
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          },
+          {
+            family_id: family.id,
+            task_title: 'War Machine',
+            task_description: 'Win 3 Family Wars.',
+            reward_family_coins: 3000,
+            reward_family_xp: 1000,
+            goal_value: 3,
+            current_value: 0,
+            metric: 'wars_won',
+            status: 'active',
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          }
+        ]
+
+        const { error: insertErr } = await supabase.from('family_tasks').insert(tasks)
+        if (insertErr) throw insertErr
+      }
+      
+      toast.success('Weekly war tasks generated!')
+      loadWarData() // Refresh data
+    } catch (error) {
+      console.error('Error generating tasks:', error)
+      toast.error(`Failed to generate tasks: ${error.message || 'Unknown error'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const createWar = async (opponentFamilyId, durationHours = 2) => {
     if (!family || memberRole === 'member') {
@@ -290,6 +365,56 @@ const FamilyWarsHub = () => {
             )}
           </div>
         )}
+
+        {/* Weekly Tasks */}
+        <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-700">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-yellow-400" />
+            Weekly War Tasks
+          </h2>
+          <div className="space-y-4">
+             {weeklyTasks.length === 0 ? (
+                <div className="text-center py-4">
+                  <p className="text-gray-400 mb-4">No active tasks. Tasks refresh weekly.</p>
+                  {['leader', 'officer'].includes(memberRole) && (
+                    <button
+                      onClick={generateTasks}
+                      className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-semibold text-white transition-all flex items-center gap-2 mx-auto"
+                    >
+                      <Target className="w-4 h-4" />
+                      Generate Weekly Tasks
+                    </button>
+                  )}
+                </div>
+             ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   {weeklyTasks.map(task => (
+                      <div key={task.id} className={`p-4 rounded-lg border ${task.completed ? 'bg-green-900/20 border-green-500/30' : 'bg-zinc-800 border-zinc-700'}`}>
+                         <div className="flex justify-between items-start mb-2">
+                            <div>
+                               <h3 className="font-bold text-white text-sm">{task.task_type.replace(/_/g, ' ').toUpperCase()} <span className="text-[10px] text-gray-400 bg-zinc-700 px-1.5 py-0.5 rounded ml-2">Tier {task.tier}</span></h3>
+                               <p className="text-xs text-gray-300 mt-1">{task.description}</p>
+                            </div>
+                            {task.completed && <span className="text-green-400 font-bold text-[10px] bg-green-900/40 px-2 py-1 rounded">COMPLETED</span>}
+                         </div>
+                         
+                         {/* Progress Bar */}
+                         <div className="w-full bg-zinc-700 h-1.5 rounded-full overflow-hidden mb-2 mt-2">
+                            <div 
+                              className={`h-full ${task.completed ? 'bg-green-500' : 'bg-purple-500'}`} 
+                              style={{ width: `${Math.min(100, (task.current_count / task.target_count) * 100)}%` }}
+                            />
+                         </div>
+                         <div className="flex justify-between text-[10px] text-gray-400">
+                            <span>Progress: {task.current_count} / {task.target_count}</span>
+                            <span>Reward: {task.reward_xp} XP • {task.reward_coins} Coins</span>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             )}
+          </div>
+        </div>
 
         {/* Declare War */}
         {!currentWar && memberRole !== 'member' && (

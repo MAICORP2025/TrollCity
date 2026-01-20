@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -16,13 +11,13 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: cors });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -33,7 +28,7 @@ Deno.serve(async (req) => {
     if (!token) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -45,7 +40,7 @@ Deno.serve(async (req) => {
     if (authError || !authData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -55,7 +50,7 @@ Deno.serve(async (req) => {
     if (!body || !body.broadcasterId) {
       return new Response(JSON.stringify({ error: "Invalid payload" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -64,7 +59,7 @@ Deno.serve(async (req) => {
     if (broadcasterId === userId) {
       return new Response(JSON.stringify({ error: "You cannot vote for yourself" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -81,7 +76,7 @@ Deno.serve(async (req) => {
     if (cycleError || !cycle) {
       return new Response(JSON.stringify({ error: "No active voting cycle" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -94,7 +89,7 @@ Deno.serve(async (req) => {
     if (broadcasterError || !broadcaster || broadcaster.is_banned || !broadcaster.is_broadcaster) {
       return new Response(JSON.stringify({ error: "Invalid broadcaster" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -109,7 +104,7 @@ Deno.serve(async (req) => {
     if (existingVote) {
       return new Response(JSON.stringify({ success: true, alreadyVoted: true }), {
         status: 200,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -122,19 +117,19 @@ Deno.serve(async (req) => {
     if (voteError) {
       return new Response(JSON.stringify({ error: "Failed to record vote" }), {
         status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("vote_for_officer error", err);
     return new Response(JSON.stringify({ error: "Server error" }), {
       status: 500,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

@@ -38,12 +38,23 @@ create index if not exists idx_officer_assignments_broadcaster
 
 create extension if not exists btree_gist;
 
-alter table officer_assignments
-  add constraint officer_assignments_no_overlap
-  exclude using gist (
-    broadcaster_id with =,
-    tstzrange(starts_at, ends_at, '[)') with &&
-  );
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'officer_assignments_no_overlap'
+      and conrelid = 'officer_assignments'::regclass
+  ) then
+    alter table officer_assignments
+      add constraint officer_assignments_no_overlap
+      exclude using gist (
+        broadcaster_id with =,
+        tstzrange(starts_at, ends_at, '[)') with &&
+      );
+  end if;
+end
+$$;
 
 alter table officer_vote_cycles enable row level security;
 alter table officer_votes enable row level security;
@@ -119,4 +130,3 @@ select
 from officer_assignments oa
 join public.user_profiles up on up.id = oa.broadcaster_id
 where now() between oa.starts_at and oa.ends_at;
-

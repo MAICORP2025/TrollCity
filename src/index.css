@@ -198,38 +198,78 @@
 
 @keyframes rgbGradient {
   0% {
-    box-shadow:
-      0 0 6px rgba(255, 0, 128, 0.4),
-      0 0 10px rgba(0, 255, 200, 0.25);
+    background-position: 0% 50%;
   }
   50% {
-    box-shadow:
-      0 0 14px rgba(255, 0, 128, 0.9),
-      0 0 22px rgba(0, 255, 200, 0.65);
+    background-position: 100% 50%;
   }
   100% {
-    box-shadow:
-      0 0 6px rgba(255, 0, 128, 0.4),
-      0 0 10px rgba(0, 255, 200, 0.25);
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 
 .rgb-frame {
-  border-radius: 18px;
-  border: 2px solid transparent;
-  box-shadow:
-    0 0 6px rgba(255, 0, 128, 0.4),
-    0 0 10px rgba(0, 255, 200, 0.25);
-  animation: rgbGradient 2.4s ease-in-out infinite;
+  position: relative;
+  padding: 4px; /* Border thickness */
+  background: transparent;
+  overflow: hidden !important; /* Force clipping */
+}
+
+.rgb-frame::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00ff00, #0000ff, #4b0082, #ee82ee, #ff0000);
+  animation: spin 4s linear infinite;
+  z-index: 0;
+}
+
+.rgb-frame > * {
+  position: relative;
+  z-index: 1;
+  background: #000;
+  height: 100%;
+  width: 100%;
+  border-radius: 14px;
 }
 
 .rgb-frame-small {
-  border-radius: 14px;
-  border: 2px solid transparent;
-  box-shadow:
-    0 0 5px rgba(255, 0, 128, 0.4),
-    0 0 8px rgba(0, 255, 200, 0.25);
-  animation: rgbGradient 2.4s ease-in-out infinite;
+  position: relative;
+  padding: 3px;
+  overflow: hidden !important;
+}
+
+.rgb-frame-small::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00ff00, #0000ff, #4b0082, #ee82ee, #ff0000);
+  animation: spin 4s linear infinite;
+  z-index: 0;
+}
+
+.rgb-frame-small > * {
+  position: relative;
+  z-index: 1;
+  background: #000;
+  height: 100%;
+  width: 100%;
+  border-radius: 8px;
 }
 
 /* speaking shake with subtle neon-blue glow */

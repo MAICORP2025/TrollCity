@@ -301,21 +301,21 @@ export default function Wallet() {
           <h3 className="text-lg font-semibold mb-3">Cashout Tiers</h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
-              <div className="text-sm text-gray-300">{Number(12000).toLocaleString()} coins</div>
-              <div className="text-sm font-bold text-green-300">$25</div>
+              <div className="text-sm text-gray-300">{Number(12375).toLocaleString()} coins</div>
+              <div className="text-sm font-bold text-green-300">$50</div>
             </div>
             <div className="text-xs text-yellow-300 mt-1">Minimum cashout threshold</div>
             <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded mt-2">
-              <div className="text-sm text-gray-300">{Number(30000).toLocaleString()} coins</div>
+              <div className="text-sm text-gray-300">{Number(30375).toLocaleString()} coins</div>
               <div className="text-sm font-bold text-green-300">$70</div>
             </div>
-            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
-              <div className="text-sm text-gray-300">{Number(60000).toLocaleString()} coins</div>
-              <div className="text-sm font-bold text-green-300">$150</div>
+            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded mt-2">
+              <div className="text-sm text-gray-300">{Number(60375).toLocaleString()} coins</div>
+              <div className="text-sm font-bold text-green-300">$170</div>
             </div>
-            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
-              <div className="text-sm text-gray-300">{Number(120000).toLocaleString()} coins</div>
-              <div className="text-sm font-bold text-green-300">$325</div>
+            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded mt-2">
+              <div className="text-sm text-gray-300">{Number(120375).toLocaleString()} coins</div>
+              <div className="text-sm font-bold text-green-300">$355</div>
             </div>
           </div>
         </div>

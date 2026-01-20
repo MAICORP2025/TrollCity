@@ -186,7 +186,7 @@ const queryClient = new QueryClient({
 
 createRoot(rootElement).render(
   <QueryClientProvider client={queryClient}>
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <LiveKitProvider>
         <AuthProvider>
           <GlobalAppProvider>

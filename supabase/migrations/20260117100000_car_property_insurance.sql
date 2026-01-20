@@ -83,6 +83,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 GRANT SELECT, INSERT, UPDATE ON public.property_insurance_policies TO authenticated;
 
 -- 3. Helper: internal upsert for car insurance
+DROP FUNCTION IF EXISTS public._apply_car_insurance(UUID, UUID, UUID, BIGINT, INTEGER);
 CREATE OR REPLACE FUNCTION public._apply_car_insurance(
   p_user_id UUID,
   p_car_garage_id UUID,
@@ -136,6 +137,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public._apply_car_insurance(UUID, UUID, UUID, BIGINT, INTEGER) TO authenticated;
 
 -- 4. Helper: internal upsert for property insurance
+DROP FUNCTION IF EXISTS public._apply_property_insurance(UUID, UUID, UUID, BIGINT, INTEGER);
 CREATE OR REPLACE FUNCTION public._apply_property_insurance(
   p_user_id UUID,
   p_property_id UUID,
@@ -189,6 +191,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public._apply_property_insurance(UUID, UUID, UUID, BIGINT, INTEGER) TO authenticated;
 
 -- 5. Public RPC: buy_car_insurance
+DROP FUNCTION IF EXISTS public.buy_car_insurance(UUID, UUID);
 CREATE OR REPLACE FUNCTION public.buy_car_insurance(
   car_garage_id UUID,
   plan_id UUID
@@ -242,6 +245,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.buy_car_insurance(UUID, UUID) TO authenticated;
 
 -- 6. Public RPC: buy_property_insurance
+DROP FUNCTION IF EXISTS public.buy_property_insurance(UUID, UUID);
 CREATE OR REPLACE FUNCTION public.buy_property_insurance(
   house_id UUID,
   plan_id UUID

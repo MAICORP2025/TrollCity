@@ -16,7 +16,10 @@ import {
   Download,
   MessageSquare,
   Phone,
-  XCircle
+  XCircle,
+  Calendar,
+  ChevronDown,
+  FileText
 } from 'lucide-react'
 
 type Stream = {
@@ -48,13 +51,69 @@ type OfficerStats = {
 
 export default function TrollOfficerLounge() {
   const { profile, user } = useAuthStore()
+  
+  const [viewingOfficerId, setViewingOfficerId] = useState<string>('')
+  const [officersList, setOfficersList] = useState<any[]>([])
+  const [showCallOffModal, setShowCallOffModal] = useState(false)
+  const [callOffDate, setCallOffDate] = useState('')
+  const [callOffReason, setCallOffReason] = useState('')
+  const [submittingCallOff, setSubmittingCallOff] = useState(false)
+
+  const canManageRequests = profile?.role === 'admin' || profile?.is_admin === true || profile?.role === 'secretary'
+
+  useEffect(() => {
+    if (user?.id && !viewingOfficerId) {
+      setViewingOfficerId(user.id)
+    }
+  }, [user?.id, viewingOfficerId])
+
+  // Fetch officers for dropdown
+  useEffect(() => {
+    if (canManageRequests) {
+      const fetchOfficers = async () => {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .or('is_troll_officer.eq.true,is_lead_officer.eq.true,role.eq.troll_officer,role.eq.lead_troll_officer')
+          .order('username')
+        if (data) setOfficersList(data)
+      }
+      fetchOfficers()
+    }
+  }, [canManageRequests])
+
+  const handleCallOff = async () => {
+    if (!callOffDate) {
+      toast.error('Please select a date')
+      return
+    }
+    setSubmittingCallOff(true)
+    try {
+      const { error } = await supabase.from('officer_time_off_requests').insert({
+        officer_id: user?.id,
+        date: callOffDate,
+        reason: callOffReason,
+        status: 'pending'
+      })
+      if (error) throw error
+      toast.success('Call off request submitted for approval')
+      setShowCallOffModal(false)
+      setCallOffDate('')
+      setCallOffReason('')
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setSubmittingCallOff(false)
+    }
+  }
+
   // const navigate = useNavigate()
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [officerChat, setOfficerChat] = useState<OfficerChatMessage[]>([])
   const [newOfficerMessage, setNewOfficerMessage] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'moderation' | 'families' | 'calls'>('moderation')
+  const [activeTab, setActiveTab] = useState<'moderation' | 'families' | 'calls' | 'requests'>('moderation')
   const [familiesList, setFamiliesList] = useState<any[]>([])
   const [payrollReports, setPayrollReports] = useState<any[]>([])
 
@@ -68,12 +127,70 @@ export default function TrollOfficerLounge() {
   })
 
   const [callsList, setCallsList] = useState<any[]>([])
+  const [requestsList, setRequestsList] = useState<any[]>([])
+
+  // Fetch Requests
+  useEffect(() => {
+    const fetchRequests = async () => {
+      if (activeTab !== 'requests') return
+
+      let query = supabase
+        .from('officer_time_off_requests')
+        .select(`
+          *,
+          officer:user_profiles!officer_time_off_requests_officer_id_fkey(username)
+        `)
+        .order('created_at', { ascending: false })
+
+      if (canManageRequests) {
+        // Admin: show all pending by default, or maybe all? Let's show pending for now as per original code
+        query = query.eq('status', 'pending')
+      } else {
+        // Officer: show my requests
+        query = query.eq('officer_id', user?.id)
+      }
+      
+      const { data, error } = await query
+      
+      if (!error && data) {
+        setRequestsList(data)
+      }
+    }
+    fetchRequests()
+  }, [canManageRequests, activeTab, user?.id])
+
+  // Fetch officer stats when viewingOfficerId changes
+  useEffect(() => {
+    const fetchOfficerStats = async () => {
+      if (!viewingOfficerId) return
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('officer_reputation_score, total_coins_earned, officer_tier_badge')
+        .eq('id', viewingOfficerId)
+        .single()
+
+      if (!error && data) {
+        setOfficerStats(prev => ({
+          ...prev,
+          reputation: data.officer_reputation_score || 0,
+          coinsEarned: data.total_coins_earned || 0,
+          rank: data.officer_tier_badge || getRankFromReputation(data.officer_reputation_score || 0)
+        }))
+      }
+    }
+    fetchOfficerStats()
+  }, [viewingOfficerId])
 
   useEffect(() => {
     const fetchCalls = async () => {
       const { data, error } = await supabase
         .from('call_history')
-        .select('*')
+        .select(`
+          *,
+          caller:user_profiles!caller_id(username),
+          receiver:user_profiles!receiver_id(username)
+        `)
         .order('created_at', { ascending: false })
         .limit(100)
       if (!error && data) {
@@ -84,6 +201,52 @@ export default function TrollOfficerLounge() {
       fetchCalls()
     }
   }, [activeTab])
+
+  const handleApproveRequest = async (request: any) => {
+    try {
+      // 1. Update request status
+      const { error: updateError } = await supabase
+        .from('officer_time_off_requests')
+        .update({ status: 'approved', reviewed_by: user?.id, reviewed_at: new Date().toISOString() })
+        .eq('id', request.id)
+
+      if (updateError) throw updateError
+
+      // 2. Delete scheduled shifts for that date
+      const { error: deleteError } = await supabase
+        .from('officer_shift_slots')
+        .delete()
+        .eq('officer_id', request.officer_id)
+        .eq('shift_date', request.date)
+
+      if (deleteError) {
+        console.error('Error removing shift:', deleteError)
+        toast.error('Request approved but failed to remove shift automatically')
+      } else {
+        toast.success('Request approved and shift removed')
+      }
+
+      // Refresh list
+      setRequestsList(prev => prev.filter(r => r.id !== request.id))
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleDenyRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('officer_time_off_requests')
+        .update({ status: 'rejected', reviewed_by: user?.id, reviewed_at: new Date().toISOString() })
+        .eq('id', requestId)
+
+      if (error) throw error
+      toast.success('Request rejected')
+      setRequestsList(prev => prev.filter(r => r.id !== requestId))
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+  }
 
   // --- Helpers for rank & reputation ---
   const getRankFromReputation = (rep: number) => {
@@ -179,13 +342,13 @@ export default function TrollOfficerLounge() {
   // Fetch Payroll
   useEffect(() => {
     const fetchPayroll = async () => {
-      if (!user) return
+      if (!viewingOfficerId) return
       // This is a mock table or real table 'officer_payroll_logs'
       // If it doesn't exist, we skip.
       const { data, error } = await supabase
         .from('officer_payroll_logs')
         .select('*')
-        .eq('officer_id', user.id)
+        .eq('officer_id', viewingOfficerId)
         .order('created_at', { ascending: false })
       
       if (!error && data) {
@@ -193,7 +356,7 @@ export default function TrollOfficerLounge() {
       }
     }
     fetchPayroll()
-  }, [user])
+  }, [viewingOfficerId])
 
   const sendOfficerMessage = async () => {
     if (!newOfficerMessage.trim() || !user) return
@@ -244,9 +407,27 @@ export default function TrollOfficerLounge() {
       toast.error(`User ${username} not found`)
       return
     }
-    // Mock ban logic or real insert into bans table
-    bumpStats('ban')
-    toast.success(`User ${username} BANNED!`)
+    
+    const reason = window.prompt(`Reason for warrant against ${username}?`)
+    if (!reason) return
+
+    const { data, error } = await supabase.rpc('issue_warrant', {
+      p_user_id: targetUser.id,
+      p_reason: reason
+    })
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    if (data && !data.success) {
+      toast.error(data.error)
+      return
+    }
+
+    bumpStats('ban') // Keeping 'ban' stat for now as it maps to similar severity
+    toast.success(`Warrant issued for ${username}. Access restricted!`)
   }
 
   const muteUser = async (username: string) => {
@@ -283,12 +464,29 @@ export default function TrollOfficerLounge() {
           </div>
         </div>
         <div className="flex items-center gap-6 text-sm">
-          <div className="flex flex-col items-end">
-            <span className="font-bold text-blue-400">{profile?.username}</span>
-            <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded uppercase tracking-wider">
-              {officerStats.rank}
-            </span>
-          </div>
+          {canManageRequests ? (
+            <div className="relative group">
+              <select
+                value={viewingOfficerId}
+                onChange={(e) => setViewingOfficerId(e.target.value)}
+                className="appearance-none bg-[#111] border border-blue-500/30 text-blue-400 text-sm font-bold rounded-lg py-1 pl-3 pr-8 focus:outline-none focus:border-blue-500 cursor-pointer min-w-[150px]"
+              >
+                {officersList.map((officer) => (
+                  <option key={officer.id} value={officer.id}>
+                    {officer.username}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-blue-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          ) : (
+            <div className="flex flex-col items-end">
+              <span className="font-bold text-blue-400">{profile?.username}</span>
+              <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded uppercase tracking-wider">
+                {officerStats.rank}
+              </span>
+            </div>
+          )}
           <div className="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/50">
             <UserIconFallback />
           </div>
@@ -311,6 +509,12 @@ export default function TrollOfficerLounge() {
             className="px-3 py-1 bg-yellow-600/20 text-yellow-400 rounded-lg text-xs border border-yellow-500/30 hover:bg-yellow-600/30 transition-colors"
           >
             Calls
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className="px-3 py-1 bg-red-600/20 text-red-400 rounded-lg text-xs border border-red-500/30 hover:bg-red-600/30 transition-colors"
+          >
+            Requests
           </button>
         </div>
       </header>
@@ -346,6 +550,15 @@ export default function TrollOfficerLounge() {
             >
               <Phone size={18} />
               <span className="font-semibold text-sm">Calls</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('requests')}
+              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition ${
+                activeTab === 'requests' ? 'bg-red-600/20 text-red-400 border border-red-500/30' : 'hover:bg-white/5 text-gray-400'
+              }`}
+            >
+              <FileText size={18} />
+              <span className="font-semibold text-sm">Requests</span>
             </button>
           </div>
 
@@ -396,6 +609,18 @@ export default function TrollOfficerLounge() {
                 className="mt-4 w-full py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 rounded text-xs text-red-300 flex items-center justify-center gap-2 transition"
               >
                 <XCircle size={12} /> Deactivate Bonus
+              </button>
+            </div>
+
+            <div className="bg-[#0f0f0f] rounded-xl p-4 border border-white/5 mt-4">
+              <h3 className="text-xs font-bold uppercase text-gray-500 mb-3 flex items-center gap-2">
+                <Calendar size={12} /> Schedule Actions
+              </h3>
+              <button
+                onClick={() => setShowCallOffModal(true)}
+                className="w-full py-2 bg-yellow-600/20 hover:bg-yellow-600/30 border border-yellow-500/50 rounded text-xs text-yellow-300 flex items-center justify-center gap-2 transition"
+              >
+                <Phone size={12} /> Call Off Shift
               </button>
             </div>
           </div>
@@ -557,8 +782,8 @@ export default function TrollOfficerLounge() {
                     {callsList.map((c) => (
                       <tr key={c.id} className="hover:bg-white/5 transition">
                         <td className="px-6 py-4 text-gray-300">{new Date(c.created_at).toLocaleString()}</td>
-                        <td className="px-6 py-4">{c.caller_id}</td>
-                        <td className="px-6 py-4">{c.receiver_id}</td>
+                        <td className="px-6 py-4 text-blue-400 font-semibold">{c.caller?.username || c.caller_id}</td>
+                        <td className="px-6 py-4 text-purple-400 font-semibold">{c.receiver?.username || c.receiver_id}</td>
                         <td className="px-6 py-4">{c.type}</td>
                         <td className="px-6 py-4">{c.duration_minutes} min</td>
                       </tr>
@@ -569,6 +794,95 @@ export default function TrollOfficerLounge() {
                           No calls found.
                         </td>
                       </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          
+          {activeTab === 'requests' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <FileText className="text-red-400" />
+                  {canManageRequests ? 'Time Off Requests (Admin)' : 'My Time Off Requests'}
+                </h2>
+                <button
+                  onClick={() => setShowCallOffModal(true)}
+                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-bold flex items-center gap-2"
+                >
+                  <Calendar size={16} /> New Request
+                </button>
+              </div>
+              
+              <div className="bg-[#0a0a0a] rounded-xl border border-white/10 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-white/5 text-gray-400">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Date Requested</th>
+                      {canManageRequests && <th className="px-4 py-3 text-left">Officer</th>}
+                      <th className="px-4 py-3 text-left">Shift Date</th>
+                      <th className="px-4 py-3 text-left">Reason</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      {canManageRequests && <th className="px-4 py-3 text-right">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {requestsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={canManageRequests ? 6 : 5} className="px-4 py-8 text-center text-gray-500">
+                          {canManageRequests ? 'No pending requests' : 'No request history'}
+                        </td>
+                      </tr>
+                    ) : (
+                      requestsList.map((req) => (
+                        <tr key={req.id} className="hover:bg-white/5">
+                          <td className="px-4 py-3 text-gray-400">
+                            {new Date(req.created_at).toLocaleDateString()}
+                          </td>
+                          {canManageRequests && (
+                            <td className="px-4 py-3 font-semibold text-white">
+                              {req.officer?.username || 'Unknown'}
+                            </td>
+                          )}
+                          <td className="px-4 py-3 text-blue-400">
+                            {new Date(req.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                          </td>
+                          <td className="px-4 py-3 text-gray-300 max-w-xs truncate" title={req.reason}>
+                            {req.reason}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded text-xs border ${
+                              req.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                              req.status === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                              'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                            }`}>
+                              {req.status?.toUpperCase() || 'PENDING'}
+                            </span>
+                          </td>
+                          {canManageRequests && (
+                            <td className="px-4 py-3 text-right">
+                              {req.status === 'pending' && (
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleApproveRequest(req)}
+                                    className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/50 rounded hover:bg-green-500/30 transition"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleDenyRequest(req.id)}
+                                    className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/50 rounded hover:bg-red-500/30 transition"
+                                  >
+                                    Deny
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -616,6 +930,54 @@ export default function TrollOfficerLounge() {
           </div>
         </aside>
       </div>
+
+      {/* Call Off Modal */}
+      {showCallOffModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100]">
+          <div className="bg-[#111] border border-white/10 rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-yellow-500" />
+              Request Time Off
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={callOffDate}
+                  onChange={(e) => setCallOffDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full bg-black border border-white/20 rounded-lg p-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Reason (Optional)</label>
+                <textarea
+                  value={callOffReason}
+                  onChange={(e) => setCallOffReason(e.target.value)}
+                  className="w-full bg-black border border-white/20 rounded-lg p-2 text-white h-24 resize-none"
+                  placeholder="Why are you calling off?"
+                />
+              </div>
+              <div className="flex gap-3 justify-end mt-6">
+                <button
+                  onClick={() => setShowCallOffModal(false)}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCallOff}
+                  disabled={submittingCallOff || !callOffDate}
+                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+                >
+                  {submittingCallOff ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

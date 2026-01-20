@@ -7,7 +7,7 @@ import { getLiveKitToken, type LiveKitTokenResponse } from '../lib/livekit-utils
 
 export interface StreamConfig {
   title: string
-  category: 'Just Chatting' | 'Family Stream' | 'Music' | 'Other' | 'Officer Stream' | 'Tromody Show'
+  category: 'Just Chatting' | 'Family Stream' | 'Music' | 'Other' | 'Officer Stream' | 'Tromody Show' | 'Troll Battles'
   description?: string
   audience?: 'public' | 'followers' | 'family'
   allowGifts?: boolean
@@ -46,6 +46,7 @@ export const useGoLiveFlow = () => {
           'Other': { guestSlots: 3 },
           'Officer Stream': { guestSlots: 2 },
           'Tromody Show': { guestSlots: 0 },
+          'Troll Battles': { guestSlots: 1 },
         }
 
         const defaults = categoryDefaults[config.category] || { guestSlots: 3 }

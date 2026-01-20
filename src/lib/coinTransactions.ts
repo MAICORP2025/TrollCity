@@ -254,6 +254,50 @@ export async function deductCoins(params: {
       }
     }
 
+    const metadataPayload = sanitizeMetadata(metadata)
+
+    if (coinType === 'troll_coins' || !coinType) {
+      // Use Troll Bank centralized spending
+      const { data: bankResult, error: bankError } = await sb.rpc('troll_bank_spend_coins_secure', {
+        p_user_id: userId,
+        p_amount: normalizedAmount,
+        p_bucket: 'paid', // Spending is usually from 'paid' (or fungible balance)
+        p_source: type,
+        p_ref_id: null,
+        p_metadata: metadataPayload || {}
+      })
+
+      if (bankError) {
+             console.error('deductCoins: Troll Bank error', bankError)
+             return { success: false, newBalance: null, transaction: null, error: bankError.message }
+      } else {
+        // Success
+        if (!bankResult.success) {
+           return { success: false, newBalance: null, transaction: null, error: bankResult.error || 'Failed to spend coins' }
+        }
+
+        const newBalance = bankResult.new_balance
+        
+        // Update global store
+        try {
+          const { profile, setProfile } = useAuthStore.getState()
+          if (profile && profile.id === userId) {
+             setProfile({ ...profile, troll_coins: newBalance })
+          }
+        } catch (e) {
+          console.warn('deductCoins: Failed to update local store', e)
+        }
+
+        return {
+          success: true,
+          newBalance,
+          transaction: null, // Handled by ledger
+          error: null
+        }
+      }
+    }
+
+    // Legacy path for non-Troll Coins (e.g. Trollmonds)
     const amountParam = normalizedAmount.toString()
     const { data: rpcBalance, error: deductError } = await sb.rpc('deduct_user_troll_coins', {
       p_user_id: userId,
@@ -344,8 +388,9 @@ export async function addCoins(params: {
   supabaseClient?: SupabaseClient // Optional supabase client (for backend usage)
   platformProfit?: number
   liability?: number
+  sourceId?: string
 }) {
-  const { userId, amount, type, coinType = 'troll_coins', description, metadata, supabaseClient, platformProfit, liability } = params
+  const { userId, amount, type, coinType = 'troll_coins', description: _description, metadata, supabaseClient, platformProfit: _platformProfit, liability: _liability, sourceId } = params
   const finalCoinType = coinType || 'troll_coins'
 
   const sb = supabaseClient || supabase
@@ -369,51 +414,65 @@ export async function addCoins(params: {
     }
 
     const currentBalance = profile.troll_coins ?? 0
-    const newBalance = currentBalance + amount
+    const metadataPayload = sanitizeMetadata(metadata)
 
-    // Use add_troll_coins RPC for secure addition
-    const { error: updateError } = await sb.rpc('add_troll_coins', {
-      user_id_input: userId,
-      coins_to_add: amount
-    })
-
-    if (updateError) {
-      console.error('addCoins: Failed to update balance via RPC', updateError)
-      return { success: false, newBalance: currentBalance, transaction: null, error: updateError.message }
+    // Use Troll Bank RPC for centralized credit + repayment logic
+    const bucketMap: Record<string, string> = {
+      purchase: 'paid',
+      gift_received: 'gifted',
+      reward: 'promo',
+      admin_grant: 'promo',
+      lucky_gift_win: 'promo',
+      refund: 'paid',
+      cashout: 'paid',
+      insurance_purchase: 'paid',
+      entrance_effect: 'paid',
+      perk_purchase: 'paid',
+      troll_town_sale: 'paid'
     }
 
-    // Record transaction
-    const transaction = await recordCoinTransaction({
-      userId,
-      amount, // Positive for additions
-      type,
-      coinType: finalCoinType,
-      description,
-      metadata,
-      balanceAfter: newBalance,
-      platformProfit,
-      liability,
-      supabaseClient: sb
+    const bucket = bucketMap[type] || 'promo' // Default to promo for safety
+    const transactionRefId = sourceId || null
+
+    const { data: bankResult, error: bankError } = await sb.rpc('troll_bank_credit_coins', {
+      p_user_id: userId,
+      p_coins: amount,
+      p_bucket: bucket,
+      p_source: type,
+      p_ref_id: transactionRefId,
+      p_metadata: metadataPayload || {}
     })
+
+    if (bankError) {
+      console.error('addCoins: Troll Bank credit failed', bankError)
+      return { success: false, newBalance: currentBalance, transaction: null, error: bankError.message }
+    }
+
+    // Parse bank result
+    const actualCredited = bankResult?.user_gets ?? amount
+    // const repaymentAmount = bankResult?.repay ?? 0
+    const finalBalance = currentBalance + actualCredited
 
     // Update global store if the addition was for the current user
     try {
       const { profile, setProfile } = useAuthStore.getState()
-      if (profile && profile.id === userId && newBalance !== null) {
-        const numericBalance = Number(newBalance)
-        if (!isNaN(numericBalance)) {
-          // Update the specific coin balance based on coinType
-          const updatedProfile = { ...profile }
-          
-          if (finalCoinType === 'trollmonds') {
-             updatedProfile.trollmonds = numericBalance
-          } else {
-             // Default to troll_coins for 'paid' or 'troll_coins'
-             updatedProfile.troll_coins = numericBalance
-          }
-          
-          setProfile(updatedProfile)
+      if (profile && profile.id === userId) {
+        const updatedProfile = { ...profile }
+        
+        if (finalCoinType === 'trollmonds') {
+            // Trollmonds logic remains separate for now if needed, 
+            // but addCoins seems to default to troll_coins. 
+            // If coinType is trollmonds, we should probably NOT use Troll Bank RPC 
+            // unless Troll Bank supports trollmonds. 
+            // For now assuming troll_coins.
+            if (finalCoinType === 'troll_coins') {
+                 updatedProfile.troll_coins = finalBalance
+            }
+        } else {
+            updatedProfile.troll_coins = finalBalance
         }
+        
+        setProfile(updatedProfile)
       }
     } catch (e) {
       console.warn('addCoins: Failed to update local store', e)
@@ -468,8 +527,8 @@ export async function addCoins(params: {
 
     return {
       success: true,
-      newBalance,
-      transaction,
+      newBalance: finalBalance,
+      transaction: bankResult, // Return bank result as transaction info
       error: null
     }
   } catch (err: any) {

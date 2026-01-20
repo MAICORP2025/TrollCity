@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-key",
-};
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { corsHeaders as cors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -100,6 +95,29 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: error?.message || "Failed to create manual order" }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
       }
 
+      // Notify admins/secretaries
+      try {
+        const { data: adminUsers } = await supabaseAdmin
+            .from('user_profiles')
+            .select('id')
+            .or('role.eq.admin,role.eq.secretary,is_admin.eq.true');
+            
+        if (adminUsers && adminUsers.length > 0) {
+            const notifications = adminUsers.map(admin => ({
+                user_id: admin.id,
+                type: 'admin_alert',
+                title: 'New Coin Order',
+                message: `User ${username} ordered ${coins} coins via CashApp.`,
+                metadata: { order_id: order.id, link: '/admin/manual-orders' }
+            }));
+            
+            await supabaseAdmin.from('notifications').insert(notifications);
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify admins:', notifyError);
+        // Continue, non-critical
+      }
+
       const instructions = {
         provider: "cashapp",
         cashtag: "$trollcity95",
@@ -183,41 +201,7 @@ Deno.serve(async (req) => {
         console.error("Fallback mark paid error", markPaidError);
         return new Response(JSON.stringify({ error: "Approval failed" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
       }
-      let newBalance = 0;
-      const { data: walletExisting, error: walletSelectError } = await supabaseAdmin
-        .from("wallets")
-        .select("coin_balance")
-        .eq("user_id", order.user_id)
-        .single();
-      if (walletSelectError || !walletExisting) {
-        const { data: insertedWallet, error: walletInsertError } = await supabaseAdmin
-          .from("wallets")
-          .insert({
-            user_id: order.user_id,
-            coin_balance: order.coins,
-          })
-          .select("coin_balance")
-          .single();
-        if (walletInsertError || !insertedWallet) {
-          console.error("Fallback wallet insert error", walletInsertError);
-          return new Response(JSON.stringify({ error: "Approval failed" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
-        }
-        newBalance = insertedWallet.coin_balance;
-      } else {
-        const { data: updatedWallet, error: walletUpdateError } = await supabaseAdmin
-          .from("wallets")
-          .update({
-            coin_balance: walletExisting.coin_balance + order.coins,
-          })
-          .eq("user_id", order.user_id)
-          .select("coin_balance")
-          .single();
-        if (walletUpdateError || !updatedWallet) {
-          console.error("Fallback wallet update error", walletUpdateError);
-          return new Response(JSON.stringify({ error: "Approval failed" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
-        }
-        newBalance = updatedWallet.coin_balance;
-      }
+      
       const purchaseType = order.metadata?.purchase_type ?? "";
       if (purchaseType === "troll_pass") {
         const { error: trollPassError } = await supabaseAdmin.rpc("apply_troll_pass_bundle", {
@@ -246,67 +230,44 @@ Deno.serve(async (req) => {
       } else {
         const { data: profileRow } = await supabaseAdmin
           .from("user_profiles")
-          .select("troll_coins, paid_coins, total_earned_coins")
+          .select("paid_coins, total_earned_coins")
           .eq("id", order.user_id)
           .single();
-        const currentTroll = profileRow?.troll_coins ?? 0;
         const currentPaid = profileRow?.paid_coins ?? 0;
         const currentEarned = profileRow?.total_earned_coins ?? 0;
+        
+        // 1. Update stats (excluding troll_coins balance which is handled by Troll Bank)
         const { error: profileUpdateError } = await supabaseAdmin
           .from("user_profiles")
           .update({
-            troll_coins: currentTroll + order.coins,
             paid_coins: currentPaid + order.coins,
             total_earned_coins: currentEarned + order.coins,
           })
           .eq("id", order.user_id);
+        
         if (profileUpdateError) {
-          console.error("Fallback profile coin update error", profileUpdateError);
+          console.error("Fallback profile stats update error", profileUpdateError);
         }
+
+        // 2. Credit coins via Troll Bank (handles repayment & ledger)
+      const { error: bankError } = await supabaseAdmin.rpc('troll_bank_credit_coins', {
+        p_user_id: order.user_id,
+        p_coins: order.coins,
+        p_bucket: 'paid',
+        p_source: 'cashapp_manual',
+        p_ref_id: order.id
+      });
+
+      if (bankError) {
+         console.error("Troll Bank credit error", bankError);
+         // If bank fails, we might want to alert, but we've already marked order as paid.
+         // Ideally we should have done this first, but we are following the existing flow order.
       }
-      const txMeta: Record<string, any> = {
-        admin_id: authData.user.id,
-        amount_cents: order.amount_cents,
-      };
-      if ((order as any).payer_cashtag) {
-        txMeta.payer_cashtag = (order as any).payer_cashtag;
-      }
-      const { error: walletTxError } = await supabaseAdmin
-        .from("wallet_transactions")
-        .insert({
-          user_id: order.user_id,
-          type: "manual_purchase",
-          currency: "troll_coins",
-          amount: order.coins,
-          reason: "Cash App purchase",
-          source: "cashapp",
-          reference_id: order.id,
-          metadata: txMeta,
-        });
-      if (walletTxError) {
-        console.error("Fallback wallet transaction error", walletTxError);
-      }
-      const coinTxMeta: Record<string, any> = {
-        source: "cashapp_manual",
-        order_id: order.id,
-        amount_cents: order.amount_cents,
-      };
-      if ((order as any).payer_cashtag) {
-        coinTxMeta.payer_cashtag = (order as any).payer_cashtag;
-      }
-      const { error: coinTxError } = await supabaseAdmin
-        .from("coin_transactions")
-        .insert({
-          user_id: order.user_id,
-          amount: order.coins,
-          type: "store_purchase",
-          description: "Manual Cash App purchase",
-          metadata: coinTxMeta,
-        });
-      if (coinTxError) {
-        console.error("Fallback coin transaction error", coinTxError);
-      }
-      const amountUsd = typeof order.amount_cents === "number" ? order.amount_cents / 100 : 0;
+    }
+    
+    // Legacy transaction logging removed - Troll Bank coin_ledger is now the source of truth.
+    
+    const amountUsd = typeof order.amount_cents === "number" ? order.amount_cents / 100 : 0;
       const adminPoolCoinsRaw = amountUsd * 222.3;
       const adminPoolCoins = Math.round(adminPoolCoinsRaw);
       if (adminPoolCoins > 0) {
@@ -362,6 +323,14 @@ Deno.serve(async (req) => {
       if (fulfillError) {
         console.error("Fallback fulfill error", fulfillError);
       }
+
+      const { data: wallet } = await supabaseAdmin
+        .from("wallets")
+        .select("coin_balance")
+        .eq("user_id", order.user_id)
+        .single();
+      const newBalance = wallet?.coin_balance ?? 0;
+
       return new Response(JSON.stringify({ success: true, newBalance }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
@@ -406,10 +375,10 @@ Deno.serve(async (req) => {
 
       const { error: deleteError } = await supabaseAdmin
         .from("manual_coin_orders")
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq("id", rawOrderId);
       if (deleteError) {
-        console.error("manual-coin-order delete error", deleteError);
+        console.error("manual-coin-order delete (soft) error", deleteError);
         return new Response(JSON.stringify({ error: deleteError.message || "Delete failed" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
       }
 

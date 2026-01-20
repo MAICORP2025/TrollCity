@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
 
     const royalty = GIFT_COST * ROYALTY_RATE;
 
-    const { data: rpcBalance, error: deductError } = await supabaseAdmin.rpc(
+    const { error: deductError } = await supabaseAdmin.rpc(
       "deduct_user_troll_coins",
       {
         p_user_id: senderId,
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true, newBalance: rpcBalance }), {
+    return new Response(JSON.stringify({ success: true, newBalance: (spendResult as any)?.new_balance }), {
       status: 200,
       headers: { ...cors, "Content-Type": "application/json" },
     });

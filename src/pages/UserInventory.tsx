@@ -700,7 +700,19 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
                   {entranceEffects.map((effect) => {
                     const isActive = activeItems.has(effect.effect_id)
                     return (
-                      <div key={effect.id} className="bg-zinc-900 rounded-xl p-6 border border-yellow-500/20 hover:border-yellow-500/40 transition-all">
+                      <div key={effect.id} className="relative bg-zinc-900 rounded-xl p-6 border border-yellow-500/20 hover:border-yellow-500/40 transition-all group">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm('Delete this effect?')) {
+                              deleteItem(effect.id, effect.effect_id, 'user_entrance_effects', setEntranceEffects);
+                            }
+                          }}
+                          className="absolute top-4 right-4 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete Effect"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
                         <div className="mb-4">
                           <div className="flex items-center gap-2 mb-2">
                             <Zap className="w-5 h-5 text-yellow-400" />
@@ -818,7 +830,19 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
                     const isDigital = ['effect', 'badge', 'digital'].includes(item.marketplace_item?.type)
 
                     return (
-                      <div key={item.id} className="bg-zinc-900 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-all">
+                      <div key={item.id} className="relative bg-zinc-900 rounded-xl p-6 border border-purple-500/20 hover:border-purple-500/40 transition-all group">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm('Are you sure you want to delete this item?')) {
+                              deleteItem(item.id, item.item_id, 'user_inventory', setInventory);
+                            }
+                          }}
+                          className="absolute top-4 right-4 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete Item"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
                         <div className="mb-4">
                           <div className="flex items-center gap-2 mb-2">
                             {getItemIcon(item.marketplace_item?.type)}

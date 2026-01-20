@@ -66,7 +66,7 @@ Deno.serve(async () => {
       // 1. Worked 6+ hours
       // 2. Inactive for 30+ minutes
       if (hoursWorked >= 6 || inactiveMinutes >= 30) {
-        const coinsEarned = Math.floor(hoursWorked * 10000000) // 10 million free coins per hour
+        const coinsEarned = Math.floor(hoursWorked * 100)
 
         const { error: updateError } = await supabase
           .from('officer_shift_logs')

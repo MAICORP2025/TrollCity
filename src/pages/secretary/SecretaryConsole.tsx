@@ -9,16 +9,19 @@ import {
   FileText, 
   LogOut,
   Shield,
-  Users
+  Users,
+  Crown
 } from 'lucide-react'
 import ExecutiveIntakeList from '../admin/components/shared/ExecutiveIntakeList'
 import CashoutRequestsList from '../admin/components/shared/CashoutRequestsList'
 import GiftCardFulfillmentList from '../admin/components/shared/GiftCardFulfillmentList'
 import CriticalAlertsList from '../admin/components/shared/CriticalAlertsList'
 import ExecutiveReportsList from '../admin/components/shared/ExecutiveReportsList'
+import ManualCoinOrdersList from '../admin/components/shared/ManualCoinOrdersList'
+import ManualTrollPassOrdersList from '../admin/components/shared/ManualTrollPassOrdersList'
 import StaffManagement from '../admin/components/StaffManagement'
 
-type Tab = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'staff'
+type Tab = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'staff' | 'manual_payments' | 'troll_pass'
 
 export default function SecretaryConsole() {
   const { user, profile, logout } = useAuthStore()
@@ -88,6 +91,36 @@ export default function SecretaryConsole() {
               <div className="text-left">
                 <div className="font-medium">Cashouts</div>
                 <div className="text-[10px] opacity-70">Process payments</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('manual_payments')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === 'manual_payments' 
+                  ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <CreditCard className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-medium">Manual Payments</div>
+                <div className="text-[10px] opacity-70">Review coin orders</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('troll_pass')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === 'troll_pass' 
+                  ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <Crown className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-medium">Troll Pass</div>
+                <div className="text-[10px] opacity-70">Activations</div>
               </div>
             </button>
 
@@ -176,6 +209,26 @@ export default function SecretaryConsole() {
               </div>
             )}
 
+            {activeTab === 'manual_payments' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-white mb-2">Manual Payments</h2>
+                  <p className="text-slate-400">Review and approve manual Cash App coin orders.</p>
+                </div>
+                <ManualCoinOrdersList />
+              </div>
+            )}
+
+            {activeTab === 'troll_pass' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-white mb-2">Troll Pass Activations</h2>
+                  <p className="text-slate-400">Review and approve manual Troll Pass purchases.</p>
+                </div>
+                <ManualTrollPassOrdersList />
+              </div>
+            )}
+
             {activeTab === 'giftcards' && (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6">
@@ -222,6 +275,12 @@ export default function SecretaryConsole() {
          </button>
          <button onClick={() => setActiveTab('cashouts')} className={`p-2 rounded-lg ${activeTab === 'cashouts' ? 'text-green-400' : 'text-slate-400'}`}>
            <CreditCard className="w-6 h-6" />
+         </button>
+         <button onClick={() => setActiveTab('manual_payments')} className={`p-2 rounded-lg ${activeTab === 'manual_payments' ? 'text-emerald-400' : 'text-slate-400'}`}>
+           <CreditCard className="w-6 h-6" />
+         </button>
+         <button onClick={() => setActiveTab('troll_pass')} className={`p-2 rounded-lg ${activeTab === 'troll_pass' ? 'text-purple-400' : 'text-slate-400'}`}>
+           <Crown className="w-6 h-6" />
          </button>
          <button onClick={() => setActiveTab('giftcards')} className={`p-2 rounded-lg ${activeTab === 'giftcards' ? 'text-pink-400' : 'text-slate-400'}`}>
            <Gift className="w-6 h-6" />

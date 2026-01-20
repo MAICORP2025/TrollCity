@@ -101,7 +101,7 @@ const AuthCallback = () => {
               }
               
               // Profile is complete - redirect to home
-              toast.success('Welcome back!')
+              toast.success('Welcome back!', { duration: 2000 })
               try {
                 const ipRes = await fetch('https://api.ipify.org?format=json')
                 const ipJson = await ipRes.json()

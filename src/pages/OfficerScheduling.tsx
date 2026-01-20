@@ -501,9 +501,6 @@ export default function OfficerScheduling() {
           <p className="text-gray-400">
             Schedule your work shifts in advance. Each slot must be filled by you.
           </p>
-          <p className="text-sm text-yellow-400 mt-2">
-            💰 Earn 10 million free coins per hour worked
-          </p>
         </div>
 
         {/* Add Slot Button */}

@@ -178,6 +178,24 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
     };
   }, [streamId, fetchUserProfile]);
 
+  // Auto-remove messages older than 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessages((prev) => {
+        const now = Date.now();
+        const hasOld = prev.some(m => now - new Date(m.created_at).getTime() > 30000);
+        if (!hasOld) return prev;
+        
+        return prev.filter((msg) => {
+          const age = now - new Date(msg.created_at).getTime();
+          return age <= 30000;
+        });
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Check stream-level mute status for current user
   useEffect(() => {
     let mounted = true;

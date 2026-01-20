@@ -44,10 +44,14 @@ export default function TrollWalking({ streamId, userId, onCaught }: TrollWalkin
     setVisible(false)
 
     try {
-      // Award coins via RPC
-      const { error } = await supabase.rpc('add_free_coins', {
+      // Award coins via RPC (Troll Bank)
+      const { error } = await supabase.rpc('troll_bank_credit_coins', {
         p_user_id: userId,
-        p_amount: coins,
+        p_coins: coins,
+        p_bucket: 'promo',
+        p_source: 'reward',
+        p_ref_id: streamId,
+        p_metadata: { type: 'troll_walking', stream_id: streamId }
       })
 
       if (error) throw error

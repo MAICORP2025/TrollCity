@@ -37,7 +37,7 @@ const Announcements: React.FC = () => {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [scheduledMessage, setScheduledMessage] = useState('');
   const [scheduledDateTime, setScheduledDateTime] = useState('');
-  const [targetAudience, setTargetAudience] = useState<'all' | 'broadcasters' | 'officers'>('all');
+  const [targetAudience, setTargetAudience] = useState<'all' | 'broadcasters' | 'officers' | 'officers_secretary'>('all');
   
   // Loading states
   const [sending, setSending] = useState(false);
@@ -116,26 +116,51 @@ const Announcements: React.FC = () => {
 
     setSending(true);
     try {
-      // Get all user IDs based on target audience
-      let query = supabase.from('user_profiles').select('id');
-      
-      if (targetAudience === 'broadcasters') {
-        query = query.eq('role', 'broadcaster');
-      } else if (targetAudience === 'officers') {
-        query = query.in('role', ['troll_officer', 'lead_troll_officer']);
-      }
-      // For 'all', we don't filter
+      let userIds: string[] = [];
 
-      const { data: users, error: userError } = await query;
-      
-      if (userError) throw userError;
-      
-      if (!users || users.length === 0) {
-        toast.error('No users found for the selected audience');
-        return;
-      }
+      if (targetAudience === 'officers_secretary') {
+        // Fetch officers and secretaries combined
+        const { data: officers } = await supabase
+            .from('user_profiles')
+            .select('id')
+            .in('role', ['troll_officer', 'lead_troll_officer', 'secretary']);
+            
+        const { data: assignments } = await supabase
+            .from('secretary_assignments')
+            .select('secretary_id');
 
-      const userIds = users.map(user => user.id);
+        const officerIds = officers?.map(u => u.id) || [];
+        const secretaryIds = assignments?.map(a => a.secretary_id) || [];
+        userIds = Array.from(new Set([...officerIds, ...secretaryIds]));
+        
+        if (userIds.length === 0) {
+            toast.error('No officers or secretaries found');
+            setSending(false);
+            return;
+        }
+      } else {
+        // Get all user IDs based on target audience
+        let query = supabase.from('user_profiles').select('id');
+        
+        if (targetAudience === 'broadcasters') {
+            query = query.eq('role', 'broadcaster');
+        } else if (targetAudience === 'officers') {
+            query = query.in('role', ['troll_officer', 'lead_troll_officer']);
+        }
+        // For 'all', we don't filter
+
+        const { data: users, error: userError } = await query;
+        
+        if (userError) throw userError;
+        
+        if (!users || users.length === 0) {
+            toast.error('No users found for the selected audience');
+            setSending(false);
+            return;
+        }
+
+        userIds = users.map(user => user.id);
+      }
 
       // Call the edge function to send the announcement
       const { data: sessionData } = await supabase.auth.getSession();
@@ -428,6 +453,7 @@ const Announcements: React.FC = () => {
                   <option value="all">All Users</option>
                   <option value="broadcasters">Broadcasters Only</option>
                   <option value="officers">Officers Only</option>
+                  <option value="officers_secretary">Officers & Secretary</option>
                 </select>
               </div>
 

@@ -91,12 +91,6 @@ export default function AdminPoliciesDocsPage() {
             logged in <code className="text-purple-300">officer_shift_logs</code>.
           </p>
           <p>
-            • Pay bands (free coins per hour): 
-            <strong className="text-blue-400"> Junior 500</strong>, 
-            <strong className="text-orange-400"> Senior 800</strong>, 
-            <strong className="text-red-400"> Commander 1200</strong>.
-          </p>
-          <p>
             • Auto clock-out when inactive for more than 20 minutes.
           </p>
           <p>
@@ -132,15 +126,6 @@ export default function AdminPoliciesDocsPage() {
         </DocSection>
 
         <DocSection title="Officer Tiers">
-          <p>
-            • <strong className="text-blue-400">🟦 Junior (Level 1):</strong> 500 free coins/hour, basic moderation duties
-          </p>
-          <p>
-            • <strong className="text-orange-400">🟧 Senior (Level 2):</strong> 800 free coins/hour, report management
-          </p>
-          <p>
-            • <strong className="text-red-400">🟥 Commander (Level 3):</strong> 1200 free coins/hour, training team lead
-          </p>
           <p>
             • Shift rules: Manual clock-in required, auto clock-out after 20 mins inactivity
           </p>

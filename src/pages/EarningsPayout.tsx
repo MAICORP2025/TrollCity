@@ -17,10 +17,10 @@ interface CashoutTier {
 }
 
 const CASHOUT_TIERS: CashoutTier[] = [
-  { id: 'tier1', coins: 12000, usd: 25, label: '12,000 Troll Coins → $25' },
-  { id: 'tier2', coins: 30000, usd: 70, label: '30,000 Troll Coins → $70' },
-  { id: 'tier3', coins: 60000, usd: 150, label: '60,000 Troll Coins → $150' },
-  { id: 'tier4', coins: 120000, usd: 325, label: '120,000 Troll Coins → $325' },
+  { id: 'tier1', coins: 12375, usd: 50, label: '12,375 Troll Coins → $50' },
+  { id: 'tier2', coins: 30375, usd: 70, label: '30,375 Troll Coins → $70' },
+  { id: 'tier3', coins: 60375, usd: 170, label: '60,375 Troll Coins → $170' },
+  { id: 'tier4', coins: 120375, usd: 355, label: '120,375 Troll Coins → $355' },
 ]
 
 export default function EarningsPayout() {

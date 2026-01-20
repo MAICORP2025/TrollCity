@@ -55,6 +55,14 @@ const Header = () => {
 
     const loadNotifications = async () => {
       try {
+        // Auto-delete notifications older than 30 seconds
+        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString()
+        await supabase
+          .from('notifications')
+          .delete()
+          .eq('user_id', user.id)
+          .lt('created_at', thirtySecondsAgo)
+
         // Try RPC function first, but fallback to direct query if it doesn't exist
         try {
           const { data: count, error: rpcError } = await supabase
