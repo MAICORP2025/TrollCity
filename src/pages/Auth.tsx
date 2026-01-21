@@ -4,13 +4,10 @@ import { toast } from 'sonner'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { Mail, Lock, User, Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import InstallButton from '../components/InstallButton'
 
 const Auth = () => {
   const [loading, setLoading] = useState(false)
-  const [installPrompt, setInstallPrompt] = useState<any>(null)
-  const [installed, setInstalled] = useState<boolean>(() => {
-    try { return localStorage.getItem('pwa-installed') === 'true' } catch { return false }
-  })
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
