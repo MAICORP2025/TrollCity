@@ -3,6 +3,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { getGiftEmoji } from "../../lib/giftIcons";
 
+type GiftModalProps = {
+  onClose: () => void;
+  onSendGift: (gift: any, sendToAll?: boolean) => Promise<void> | void;
+  recipientName?: string;
+  profile?: any;
+  variant?: "modal" | "sheet";
+};
+
 const fallbackGifts = [
   { id: 0, name: "Troll Clap", emoji: "👏", coins: 5, rarity: 'common', color: 'from-green-500 to-emerald-700' },
   { id: 1, name: "Glow Heart", emoji: "💖", coins: 10, rarity: 'common', color: 'from-pink-500 to-fuchsia-700' },
@@ -18,12 +26,13 @@ const fallbackGifts = [
   { id: 11, name: "Fireworks", emoji: "🎆", coins: 2000, rarity: 'legendary', color: 'from-purple-500 to-violet-700' },
 ];
 
-export default function GiftModal({ onClose, onSendGift, recipientName, profile }) {
+export default function GiftModal({ onClose, onSendGift, recipientName, profile, variant = "modal" }: GiftModalProps) {
   const [gifts, setGifts] = useState(fallbackGifts);
   const [selectedGift, setSelectedGift] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [sendToAll, setSendToAll] = useState(false);
   const [sending, setSending] = useState(false);
+  const isSheet = variant === "sheet";
   
   const toGiftSlug = (value) => {
     if (!value) return 'gift';
@@ -85,8 +94,18 @@ export default function GiftModal({ onClose, onSendGift, recipientName, profile 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[100] p-0 sm:p-4 animate-fadeIn">
-      <div className="bg-[#0b091f] sm:rounded-3xl rounded-t-3xl border border-purple-500/20 w-full max-w-md flex flex-col max-h-[85vh] shadow-[0_0_50px_rgba(139,92,246,0.3)] pointer-events-auto">
+    <div
+      className={`${isSheet ? "absolute" : "fixed"} inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[100] p-0 ${isSheet ? "" : "sm:p-4"} animate-fadeIn`}
+      style={isSheet ? { paddingBottom: "env(safe-area-inset-bottom, 0px)" } : undefined}
+    >
+      <div
+        className={`bg-[#0b091f] border border-purple-500/20 w-full max-w-md flex flex-col shadow-[0_0_50px_rgba(139,92,246,0.3)] pointer-events-auto ${
+          isSheet
+            ? "rounded-t-3xl max-h-full h-full"
+            : "sm:rounded-3xl rounded-t-3xl max-h-[85vh]"
+        }`}
+        style={isSheet ? { maxHeight: "calc(100% - 24px - env(safe-area-inset-bottom, 0px))" } : undefined}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-white/5 bg-gradient-to-r from-[#120f24] to-[#0b091f]">
           <div>

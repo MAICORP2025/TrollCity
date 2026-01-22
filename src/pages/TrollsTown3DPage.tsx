@@ -89,15 +89,6 @@ interface TownLocation {
 const TOWN_LOCATIONS: TownLocation[] = [
   // NORTH ZONE (Z > 150)
   {
-    id: 'trollmart',
-    name: 'TrollMart Superstore',
-    route: '/trollmart',
-    position_x: 120,
-    position_z: 200,
-    type: 'store',
-    metadata: { color: '#0055aa', label: 'TrollMart' }
-  },
-  {
     id: 'trollgers',
     name: 'Trollgers Grocery',
     route: '/trollgers',

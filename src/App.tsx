@@ -35,6 +35,7 @@ import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import TermsAgreement from "./pages/TermsAgreement";
+import ExitPage from "./pages/ExitPage";
 
 import { GameProvider } from "./components/game/GameContext";
 import GameControlPanel from "./components/game/GameControlPanel";
@@ -55,13 +56,12 @@ const Messages = lazy(() => import("./pages/Messages"));
 
 // Lazy-loaded pages
 const Following = lazy(() => import("./pages/Following"));
+const ExploreFeed = lazy(() => import("./pages/ExploreFeed"));
 const CoinStore = lazy(() => import("./pages/CoinStore"));
 const Marketplace = lazy(() => import("./pages/Marketplace"));
 const UserInventory = lazy(() => import("./pages/UserInventory"));
 const Troting = lazy(() => import("./pages/Troting"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
-const AvatarCustomizer = lazy(() => import("./pages/AvatarCustomizer"));
-const TrollMart = lazy(() => import("./pages/TrollMart"));
 const SellOnTrollCity = lazy(() => import("./pages/SellOnTrollCity"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const TrollCityWall = lazy(() => import("./pages/TrollCityWall"));
@@ -72,7 +72,6 @@ const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard
 const Application = lazy(() => import("./pages/Application"));
 const ApplicationPage = lazy(() => import("./pages/ApplicationPage"));
 const TrollsTownPage = lazy(() => import("./pages/TrollsTownPage"));
-const DrivingScene = lazy(() => import("./pages/DrivingScene"));
 const TrollOfficerLounge = lazy(() => import("./pages/TrollOfficerLounge"));
 const OfficerModeration = lazy(() => import("./pages/OfficerModeration"));
 const TrollFamily = lazy(() => import("./pages/TrollFamily"));
@@ -155,6 +154,7 @@ const PayoutSetupPage = lazy(() => import("./pages/PayoutSetupPage"));
 const Withdraw = lazy(() => import("./pages/Withdraw"));
 const Profile = lazy(() => import("./pages/Profile"));
 const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
+const BadgesPage = lazy(() => import("./pages/BadgesPage"));
 const Stats = lazy(() => import("./pages/Stats"));
 const EmpirePartnerApply = lazy(() => import("./pages/EmpirePartnerApply"));
 const EarningsDashboard = lazy(() => import("./pages/EarningsDashboard"));
@@ -193,6 +193,7 @@ const ShopView = lazy(() => import("./pages/ShopView"));
 const CourtRoom = lazy(() => import("./pages/CourtRoom"));
 const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
+const CreditScorePage = lazy(() => import("./pages/CreditScorePage"));
 
 // Admin pages
 const BanManagement = lazy(() => import("./pages/admin/BanManagement"));
@@ -698,6 +699,7 @@ function AppContent() {
                 <Route path="/" element={user ? <Home /> : <LandingPage />} />
                 <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/exit" element={<ExitPage />} />
                 <Route path="/terms" element={<TermsAgreement />} />
                 <Route path="/access-denied" element={<AccessDenied />} />
                 <Route path="/terms-of-service" element={<TermsOfService />} />
@@ -724,6 +726,9 @@ function AppContent() {
                 <Route path="/legal/gambling-disclosure" element={<GamblingDisclosure />} />
                 <Route path="/legal/partner-program" element={<PartnerProgram />} />
                  
+                <Route path="/badges" element={<BadgesPage />} />
+                <Route path="/badges/:userId" element={<BadgesPage />} />
+
                 {/* Safety Page (standalone) */}
                 <Route path="/safety" element={<Safety />} />
 
@@ -735,16 +740,16 @@ function AppContent() {
                   <Route path="/call/:roomId/:type/:userId" element={<Call />} />
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/following" element={<Following />} />
+                <Route path="/explore" element={<ExploreFeed />} />
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/shop/:username" element={<ShopView />} />
                   <Route path="/inventory" element={<UserInventory />} />
           <Route path="/troting" element={<Troting />} />
           <Route path="/profile/settings" element={<ProfileSettings />} />
-                  <Route path="/avatar-customizer" element={<AvatarCustomizer />} />
-                  <Route path="/trollmart" element={<TrollMart />} />
                   <Route path="/bank" element={<TrollBank />} />
                   <Route path="/leaderboard" element={<Leaderboard />} />
+                  <Route path="/credit-scores" element={<CreditScorePage />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/wall" element={<TrollCityWall />} />
                   <Route path="/wall/:postId" element={<WallPostPage />} />
@@ -752,7 +757,6 @@ function AppContent() {
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
-                  <Route path="/driving" element={<DrivingScene />} />
                   <Route path="/trollg" element={<TrollG />} />
                   
                   {/* New Game Routes */}

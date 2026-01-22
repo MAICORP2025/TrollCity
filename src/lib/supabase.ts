@@ -37,6 +37,8 @@ export interface UserProfile {
   tier: UserTier
   xp: number // Total XP points
   level: number // Calculated from XP
+  total_xp?: number // Synced from user_levels table
+  next_level_xp?: number // Synced from user_levels table
   prestige_level?: number
   perk_tokens?: number
   xp_multiplier?: number
@@ -177,7 +179,8 @@ export interface UserProfile {
   password_reset_pin_set_at?: string | null
 
   // Vehicle fields
-  active_vehicle?: number | null // Car ID
+  // DB may store UUID of user_cars row; UI may use numeric model id
+  active_vehicle?: string | number | null
   vehicle_image?: string | null // Static image URL
   owned_vehicle_ids?: number[] | null
   gender?: string | null

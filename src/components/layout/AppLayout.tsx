@@ -2,7 +2,6 @@ import React, { useEffect } from 'react'
 import BottomNavigation from '../BottomNavigation'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
-import DrivingScene from '../DrivingScene'
 import { useLocation } from 'react-router-dom'
 import PWAInstallPrompt from '../PWAInstallPrompt'
 import UserCompliancePrompt from '../UserCompliancePrompt'
@@ -52,7 +51,6 @@ export default function AppLayout({
 
   return (
     <div className="app-viewport w-screen overflow-hidden text-white flex relative">
-      <DrivingScene />
       <PurchaseRequiredModal />
       <PWAInstallPrompt />
       {/* Desktop Sidebar - Hidden on Mobile */}

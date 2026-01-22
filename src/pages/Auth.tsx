@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { Mail, Lock, User, Eye, EyeOff, AlertTriangle } from 'lucide-react'
-import InstallButton from '../components/InstallButton'
 
 const Auth = () => {
   const [loading, setLoading] = useState(false)
@@ -20,6 +19,10 @@ const Auth = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, profile, setAuth, setProfile } = useAuthStore()
+  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const [installed, setInstalled] = useState(() => {
+    try { return localStorage.getItem('pwa-installed') === 'true' } catch { return false }
+  })
   
   // Get referral code from URL
   const referralCode = searchParams.get('ref') || ''
@@ -408,96 +411,135 @@ const Auth = () => {
   }
 
   return (
-    <div className="auth-container flex items-center justify-center min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
-      <div className="bg-[#18181b] p-8 rounded-xl shadow-lg w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <span className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-[#FFC93C] via-[#FFD700] to-[#FFB300] bg-clip-text text-transparent drop-shadow-lg select-none tracking-wide">
-            Troll City
-          </span>
-          <span className="block text-troll-gold text-lg font-semibold mt-1 tracking-widest">Welcome</span>
-        </div>
+    <>
+    <div className="auth-container flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-x-hidden relative font-sans">
+      {/* Animated Background Gradients */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(147,51,234,0.15),transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(236,72,153,0.12),transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(56,189,248,0.1),transparent)]" />
+      </div>
 
-        <div className="flex justify-center mb-6">
-          <div className="flex bg-[#23232b] rounded-lg p-1">
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`px-4 py-2 rounded-md transition-colors ${
-                isLogin ? 'bg-[#FFC93C] text-black' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`px-4 py-2 rounded-md transition-colors ${
-                !isLogin ? 'bg-[#FFC93C] text-black' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
-        </div>
+      {/* Floating Particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {Array.from({ length: 15 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 bg-cyan-400/20 rounded-full"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animation: `float-particle ${5 + Math.random() * 10}s ease-in-out infinite`,
+              animationDelay: `${Math.random() * 5}s`,
+            }}
+          />
+        ))}
+      </div>
 
-        <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-[#23232b] border border-gray-600 rounded-lg text-white focus:outline-none focus:border-[#FFC93C] transition-colors"
-            placeholder="Email address"
-            autoComplete="email"
-            required
-          />
+      {/* Auth Card */}
+      <div className="relative z-10 w-full max-w-md px-4 py-8">
+        <div className="backdrop-blur-xl bg-slate-900/60 border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] p-8">
+          {/* Header */}
+          <div className="flex flex-col items-center mb-8">
+            <h1 className="text-4xl md:text-5xl font-black">
+              <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
+                Troll City
+              </span>
+            </h1>
+            <p className="text-slate-400 text-sm mt-2 font-semibold tracking-widest">
+              {isLogin ? 'Welcome Back' : 'Join the City'}
+            </p>
           </div>
-          
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full pl-10 pr-12 py-3 bg-[#23232b] border border-gray-600 rounded-lg text-white focus:outline-none focus:border-[#FFC93C] transition-colors"
-            placeholder="Password"
-            autoComplete={isLogin ? 'current-password' : 'new-password'}
-            required
-            minLength={6}
-          />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-            >
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
+
+          {/* Tab Navigation */}
+          <div className="flex justify-center mb-8">
+            <div className="flex bg-slate-800/50 border border-white/5 rounded-xl p-1">
+              <button
+                onClick={() => setIsLogin(true)}
+                className={`px-6 py-2 rounded-lg font-semibold transition-all duration-300 ${
+                  isLogin 
+                    ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-lg' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => setIsLogin(false)}
+                className={`px-6 py-2 rounded-lg font-semibold transition-all duration-300 ${
+                  !isLogin 
+                    ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-lg' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
           </div>
-          
-          {!isLogin && (
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+
+          {/* Form */}
+          <form onSubmit={handleEmailAuth} className="space-y-5 mb-6">
+            {/* Email Input */}
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-[#23232b] border border-gray-600 rounded-lg text-white focus:outline-none focus:border-[#FFC93C] transition-colors"
-                placeholder="Username"
-                autoComplete="username"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                placeholder="Email address"
+                autoComplete="email"
                 required
               />
             </div>
-          )}
 
-          
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-gradient-to-r from-[#FFC93C] to-[#FFD700] text-black font-semibold rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+            {/* Password Input */}
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-12 pr-12 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                placeholder="Password"
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
+                required
+                minLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-cyan-400 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {/* Username Input (Sign Up Only) */}
+            {!isLogin && (
+              <div className="relative group">
+                <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                  placeholder="Username"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-500 text-white font-semibold rounded-xl hover:shadow-[0_15px_40px_rgba(147,51,234,0.3)] transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
             {loading ? (
               <span className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-black mr-2"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-2"></div>
                 Processing...
               </span>
             ) : (
@@ -506,44 +548,46 @@ const Auth = () => {
           </button>
         </form>
 
-        <div className="flex justify-between items-center mb-6 text-sm">
-          <div className="text-gray-400">
-            Forgot your password?{' '}
+        {/* Helper Links */}
+        <div className="space-y-3 mb-6">
+          <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
             <Link
               to={email ? `/reset-password?email=${encodeURIComponent(email)}` : "/reset-password"}
-              className="text-[#FFC93C] hover:underline"
+              className="text-cyan-400/80 hover:text-cyan-300 transition-colors"
             >
-              Reset via TrollCity Password Manager
+              Forgot password?
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAlertAdmin(true)
+                if (!alertEmail && email) {
+                  setAlertEmail(email)
+                }
+              }}
+              className="text-cyan-400/80 hover:text-cyan-300 transition-colors flex items-center gap-1"
+            >
+              <AlertTriangle className="w-3 h-3" />
+              Need help?
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setShowAlertAdmin(true)
-              if (!alertEmail && email) {
-                setAlertEmail(email)
-              }
-            }}
-            className="ml-4 text-[#FFC93C] hover:underline flex items-center gap-1"
-          >
-            <AlertTriangle className="w-4 h-4" />
-            <span>Alert admin</span>
-          </button>
         </div>
 
+        {/* Divider */}
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-600"></div>
+            <div className="w-full border-t border-white/10"></div>
           </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-[#18181b] text-gray-400">Or continue with</span>
+          <div className="relative flex justify-center text-xs">
+            <span className="px-3 bg-slate-900/60 text-slate-400">Or continue with</span>
           </div>
         </div>
 
+        {/* Google Button */}
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-[#23232b] border border-gray-600 rounded-lg text-white hover:bg-[#23232b]/80 transition disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white hover:bg-slate-800/70 hover:border-cyan-400/30 transition-all duration-300 disabled:opacity-50"
           type="button"
         >
           <span className="text-lg font-bold">G</span>
@@ -551,10 +595,10 @@ const Auth = () => {
         </button>
 
         {installPrompt && !installed && (
-          <div className="mt-6">
-            <div className="text-xs text-gray-400 mb-2 text-center">Install the app now. You’ll use the same login on web and app.</div>
+          <div className="mt-6 p-4 bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl">
+            <div className="text-xs text-slate-300 mb-3 text-center">Install the app now. Use the same login on web and app.</div>
             <button
-              className="w-full py-3 bg-[#22c55e] text-black font-semibold rounded-lg hover:shadow-lg transition-all"
+              className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-xl hover:shadow-[0_10px_30px_rgba(34,197,94,0.3)] transition-all duration-300"
               type="button"
               onClick={async () => {
                 try {
@@ -573,58 +617,70 @@ const Auth = () => {
           </div>
         )}
       </div>
+      </div>
+      {/* Alert Admin Modal */}
       {showAlertAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-md rounded-xl bg-[#18181b] border border-gray-700 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-[#FFC93C]" />
-                <h2 className="text-lg font-semibold">Trouble signing in?</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-4">
+          <div className="w-full max-w-md rounded-2xl backdrop-blur-xl bg-slate-900/60 border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.4)] p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-500/20 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-orange-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-white">Need help?</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAlertAdmin(false)}
-                className="text-gray-400 hover:text-white text-sm"
+                className="text-slate-400 hover:text-white text-2xl leading-none"
               >
-                Close
+                ×
               </button>
             </div>
-            <p className="text-xs text-gray-400 mb-4">
-              This will notify the Troll City technical team so they can contact you and help fix the issue.
+            <p className="text-xs text-slate-400 mb-4">
+              Tell our team about the issue and we'll help you fix it.
             </p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Email we should contact</label>
+                <label className="block text-xs text-slate-400 mb-2">Email</label>
                 <input
                   type="email"
                   value={alertEmail}
                   onChange={(e) => setAlertEmail(e.target.value)}
-                  className="w-full rounded-lg border border-gray-600 bg-[#23232b] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FFC93C]"
+                  className="w-full rounded-xl border border-white/10 bg-slate-800/50 px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all"
                   placeholder="you@example.com"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Describe what is happening</label>
+                <label className="block text-xs text-slate-400 mb-2">Describe the issue</label>
                 <textarea
                   value={alertDetails}
                   onChange={(e) => setAlertDetails(e.target.value)}
-                  className="w-full rounded-lg border border-gray-600 bg-[#23232b] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FFC93C] resize-none h-24"
-                  placeholder="Example: I reset my password but still get an error, or the code does not work."
+                  className="w-full rounded-xl border border-white/10 bg-slate-800/50 px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all resize-none h-24"
+                  placeholder="Example: Password reset not working..."
                 />
               </div>
               <button
                 type="button"
                 onClick={handleAlertAdminSubmit}
                 disabled={alertSubmitting}
-                className="w-full py-3 bg-gradient-to-r from-[#FFC93C] to-[#FFD700] text-black font-semibold rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-500 text-white font-semibold rounded-xl hover:shadow-[0_15px_40px_rgba(147,51,234,0.3)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {alertSubmitting ? 'Sending alert...' : 'Send alert to admin'}
+                {alertSubmitting ? 'Sending...' : 'Send help request'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {React.createElement('style', { dangerouslySetInnerHTML: { __html: `
+        @keyframes float-particle {
+          0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0; }
+          50% { transform: translateY(-30px) translateX(10px); opacity: 0.6; }
+        }
+      ` } })}
     </div>
+  </>
   )
 }
 

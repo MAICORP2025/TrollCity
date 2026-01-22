@@ -102,7 +102,7 @@ const ProfileSetupPage: React.FC = () => {
       }
 
       // Update existing profile
-      const { data: updatedProfile, error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('user_profiles')
         .update({
           username: username.trim(),
@@ -111,8 +111,7 @@ const ProfileSetupPage: React.FC = () => {
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
-        .select('*')
-        .single();
+        .select('*');
 
       if (error) {
         console.error('Profile update error:', error);
@@ -123,20 +122,15 @@ const ProfileSetupPage: React.FC = () => {
           code: error?.code
         });
 
-        // Handle specific error cases
-        if (error.code === 'PGRST116') {
-          toast.error('Profile not found. Please refresh the page and try again.');
-        } else if (error.message) {
-          toast.error(`Failed to save profile: ${error.message}`);
-        } else {
-          toast.error('Failed to save profile. Please try again.');
-        }
+        toast.error(error.message || 'Failed to save profile. Please try again.');
         return;
       }
 
+      const updatedProfile = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
+
       if (!updatedProfile) {
         console.error('No profile data returned from update');
-        toast.error('Profile saved but failed to refresh. Please refresh the page.');
+        toast.error('Profile not found or not updated. Please refresh and try again.');
         return;
       }
 

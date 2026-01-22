@@ -4,6 +4,7 @@ import { useAuthStore } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
 import { deductCoins, addCoins } from '../../lib/coinTransactions';
 import { notifySystemAnnouncement } from '../../lib/notifications';
+import { syncCarPurchase, subscribeToUserCars, listenForPurchaseBroadcasts } from '../../lib/purchaseSync';
 import { toast } from 'sonner';
 import { cars } from '../../data/vehicles';
 
@@ -106,18 +107,74 @@ export default function CarDealershipPage() {
   ];
 
   useEffect(() => {
-    if (!user?.id) {
-      setHasCarInsurance(false);
-      return;
-    }
-    // Simple check for now, can be improved to check DB if needed
-    const raw = localStorage.getItem(`trollcity_car_insurance_${user.id}`);
-    if (raw) {
-       try {
-         const parsed = JSON.parse(raw);
-         setHasCarInsurance(Boolean(parsed && parsed.active));
-       } catch {}
-    }
+    let isMounted = true;
+
+    const loadCarInsurance = async () => {
+      if (!user?.id) {
+        if (isMounted) setHasCarInsurance(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('car_insurance_policies')
+          .select('id, expires_at, is_active')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .limit(1);
+
+        if (error) {
+          console.error('Failed to load car insurance status:', error);
+        }
+
+        const active = Array.isArray(data) && data.length > 0;
+
+        if (isMounted) {
+          setHasCarInsurance(active);
+          if (active) {
+            localStorage.setItem(`trollcity_car_insurance_${user.id}`, JSON.stringify({ active: true }));
+          } else {
+            localStorage.removeItem(`trollcity_car_insurance_${user?.id}`);
+          }
+        }
+      } catch (err) {
+        console.error('Car insurance status lookup failed:', err);
+        // Fall back to cached flag if the DB call fails
+        if (isMounted) {
+          try {
+            const raw = user?.id ? localStorage.getItem(`trollcity_car_insurance_${user.id}`) : null;
+            const parsed = raw ? JSON.parse(raw) : null;
+            setHasCarInsurance(Boolean(parsed && parsed.active));
+          } catch {
+            setHasCarInsurance(false);
+          }
+        }
+      }
+    };
+
+    loadCarInsurance();
+
+    if (!user?.id) return () => { isMounted = false; };
+
+    const channel = supabase
+      .channel(`car_insurance_policies:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'car_insurance_policies',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => loadCarInsurance()
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      channel.unsubscribe();
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -343,7 +400,37 @@ export default function CarDealershipPage() {
       }
     };
 
+    // Initial load
     refreshGarage();
+
+    // Set up real-time subscription to user_cars table
+    const subscription = subscribeToUserCars(user.id, (rows) => {
+      setGarageCars(rows);
+      if (rows.length > 0) {
+        const ownedIds = rows
+          .map((row: any) => Number(row.car_id))
+          .filter((id) => Number.isFinite(id));
+        const activeRow = rows.find((row: any) => row.is_active) || rows[0];
+        const activeCarId = activeRow ? Number(activeRow.car_id) : null;
+        setOwnedVehicleIds(ownedIds);
+        setOwnedCarId(activeCarId);
+        localStorage.setItem(`trollcity_owned_vehicles_${user.id}`, JSON.stringify(ownedIds));
+      }
+    });
+
+    // Listen for purchase broadcasts from other tabs/windows
+    const unsubscribeBroadcast = listenForPurchaseBroadcasts((data) => {
+      if (data.type === 'car_purchased' && data.userId === user.id) {
+        console.log('Car purchase detected from another tab:', data);
+        refreshGarage();
+      }
+    });
+
+    return () => {
+      // Cleanup subscriptions
+      subscription.unsubscribe();
+      unsubscribeBroadcast();
+    };
   }, [user, profile]);
 
   const handlePurchase = async (carId: number) => {
@@ -371,41 +458,213 @@ export default function CarDealershipPage() {
         return;
       }
 
-      // 2. Call purchase_car_v2
-      // Construct a model URL (placeholder for now)
-      const modelUrl = `/models/cars/car_${car.id}.glb`;
-      
-      const { error } = await supabase.rpc('purchase_car_v2', {
-        p_car_id: String(car.id),
-        p_model_url: modelUrl,
-        p_customization: { color: car.colorFrom }
-      });
+      // 2. Resolve vehicles_catalog.id and call purchase_car_v2 using p_vehicle_id
+      const modelUrl = car.modelUrl || `/models/cars/car_${car.id}.glb`;
 
-      if (error) {
-        console.error('purchase_car_v2 failed:', error);
-        // Ideally we should refund coins here if RPC fails, but for simplicity we assume it works or manual refund needed.
-        toast.error('Failed to finalize purchase. Please contact support.');
+      // Look up vehicles_catalog row by model_url first, then by name
+      let vehicleCatalogId: string | null = null;
+      try {
+        const byModel = await supabase
+          .from('vehicles_catalog')
+          .select('id, model_url, name')
+          .eq('model_url', modelUrl)
+          .maybeSingle();
+        if (!byModel.error && byModel.data?.id) {
+          vehicleCatalogId = byModel.data.id as string;
+        } else {
+          const byName = await supabase
+            .from('vehicles_catalog')
+            .select('id, name')
+            .eq('name', car.name)
+            .maybeSingle();
+          if (!byName.error && byName.data?.id) {
+            vehicleCatalogId = byName.data.id as string;
+          }
+        }
+      } catch {
+        vehicleCatalogId = null;
+      }
+
+      if (!vehicleCatalogId) {
+        toast.error('Catalog vehicle not found for purchase');
+        // Refund coins since we cannot proceed
+        try {
+          await addCoins({
+            userId: user.id,
+            amount: car.price,
+            type: 'refund',
+            description: `Refund for failed ${car.name} purchase (catalog lookup failed)`,
+            metadata: { car_id: car.id, reason: 'catalog_not_found' }
+          });
+        } catch {}
         return;
       }
 
+      let usedLegacyVehicles = false;
+      // Preferred call: use p_vehicle_id (vehicles_catalog.id)
+      let { data: purchaseResult, error } = await supabase.rpc('purchase_car_v2', {
+        p_vehicle_id: vehicleCatalogId,
+        p_model_url: modelUrl,
+        p_customization: { color: car.colorFrom, car_model_id: car.id }
+      });
+
+      // Fallbacks
+      const msgLower = (error?.message || '').toLowerCase();
+      // If RPC rejects p_vehicle_id argument name, fall back to p_car_id using the catalog UUID
+      if (error && (msgLower.includes('invalid named argument') || msgLower.includes('missing required argument'))) {
+        console.warn('purchase_car_v2 named argument mismatch; retrying with p_car_id using catalog UUID');
+        const retry = await supabase.rpc('purchase_car_v2', {
+          p_car_id: vehicleCatalogId,
+          p_model_url: modelUrl,
+          p_customization: { color: car.colorFrom, car_model_id: car.id }
+        });
+        purchaseResult = retry.data as any;
+        error = retry.error as any;
+      }
+
+      // If DB expects UUID for car_id and rejects numeric (legacy flow), we already pass catalog UUID above.
+      // Keep an extra guard for explicit uuid syntax errors.
+      if (error && (error.code === '22P02' || msgLower.includes('invalid input syntax for type uuid'))) {
+        console.warn('purchase_car_v2 UUID type mismatch detected; retrying with a generated UUID and embedding model id in customization');
+        const uuidId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+          ? crypto.randomUUID()
+          : `${Date.now()}-fallback-uuid`;
+        const retry = await supabase.rpc('purchase_car_v2', {
+          p_car_id: uuidId,
+          p_model_url: modelUrl,
+          p_customization: { color: car.colorFrom, car_model_id: car.id }
+        });
+        purchaseResult = retry.data as any;
+        error = retry.error as any;
+      }
+
+      if (error) {
+        console.error('purchase_car_v2 failed:', error);
+        console.error('Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+
+        // If the error references user_vehicles missing car_id, fallback to inserting into user_vehicles
+        const msg = (error.message || '').toLowerCase();
+        if (msg.includes('user_vehicles') && msg.includes('car_id')) {
+          console.warn('Falling back to user_vehicles insert (using vehicle_id)');
+          try {
+            const { data: vehRow, error: vehErr } = await supabase
+              .from('user_vehicles')
+              .insert({
+                user_id: user.id,
+                vehicle_id: String(car.id),
+                is_equipped: false
+              })
+              .select('id')
+              .single();
+
+            if (!vehErr && vehRow?.id) {
+              purchaseResult = vehRow.id as any;
+              usedLegacyVehicles = true;
+            } else {
+              throw vehErr || new Error('Fallback insert to user_vehicles failed');
+            }
+          } catch (fallbackErr: any) {
+            console.error('user_vehicles fallback failed:', fallbackErr);
+            // Refund coins since purchase failed
+            try {
+              await addCoins({
+                userId: user.id,
+                amount: car.price,
+                type: 'refund',
+                description: `Refund for failed ${car.name} purchase`,
+                metadata: { car_id: car.id, original_transaction: 'purchase_car_failed' }
+              });
+              toast.error(`Purchase failed: ${error.message || 'Database error'}. Coins refunded.`);
+            } catch (refundErr) {
+              console.error('Refund failed:', refundErr);
+              toast.error(`Purchase failed and refund error. Please contact support with car: ${car.name}`);
+            }
+            return;
+          }
+        } else {
+          // Refund coins since purchase failed
+          try {
+            await addCoins({
+              userId: user.id,
+              amount: car.price,
+              type: 'refund',
+              description: `Refund for failed ${car.name} purchase`,
+              metadata: { car_id: car.id, original_transaction: 'purchase_car_failed' }
+            });
+            toast.error(`Purchase failed: ${error.message || 'Database error'}. Coins refunded.`);
+          } catch (refundErr) {
+            console.error('Refund failed:', refundErr);
+            toast.error(`Purchase failed and refund error. Please contact support with car: ${car.name}`);
+          }
+          return;
+        }
+      }
+
+      console.log('Purchase successful, car added with ID:', purchaseResult);
+
       toast.success(`You purchased ${car.name}. Added to your garage.`);
       
-      // Refresh garage
-      // We can just trigger the effect or manually update state
-      const { data: garageData } = await supabase
+      // Cross-platform sync: clear caches, update profile, broadcast to other tabs
+      try {
+        await syncCarPurchase(user.id);
+        // If legacy user_vehicles was used, ensure one equipped and sync profile.active_vehicle
+        if (usedLegacyVehicles && purchaseResult) {
+          try {
+            const { data: eq, error: eqErr } = await supabase
+              .from('user_vehicles')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('is_equipped', true)
+              .limit(1);
+            if (eqErr) {
+              console.warn('Failed to check equipped vehicle state:', eqErr);
+            }
+            const hasEquipped = Array.isArray(eq) && eq.length > 0;
+            if (!hasEquipped) {
+              await supabase
+                .from('user_vehicles')
+                .update({ is_equipped: true })
+                .eq('id', purchaseResult as any);
+            }
+            await supabase
+              .from('user_profiles')
+              .update({ active_vehicle: purchaseResult as any })
+              .eq('id', user.id);
+          } catch (legacySyncErr) {
+            console.warn('Legacy user_vehicles sync failed:', legacySyncErr);
+          }
+        }
+
+        // Immediately refresh garage to ensure UI buttons are enabled
+        try {
+          const { data: refreshedCars } = await supabase
             .from('user_cars')
             .select('*')
             .eq('user_id', user.id)
             .order('purchased_at', { ascending: false });
-            
-      if (garageData) {
-          setGarageCars(garageData as any);
-          const activeRow = garageData.find((r: any) => r.is_active) || garageData[0];
-          setOwnedCarId(Number(activeRow.car_id));
-          setOwnedVehicleIds(garageData.map((r: any) => Number(r.car_id)));
+          
+          if (Array.isArray(refreshedCars) && refreshedCars.length > 0) {
+            setGarageCars(refreshedCars);
+            const ownedIds = refreshedCars
+              .map((row: any) => Number(row.car_id))
+              .filter((id: number) => Number.isFinite(id));
+            const activeRow = refreshedCars.find((row: any) => row.is_active) || refreshedCars[0];
+            const activeCarId = activeRow ? Number(activeRow.car_id) : null;
+            setOwnedVehicleIds(ownedIds);
+            setOwnedCarId(activeCarId);
+          }
+        } catch (refreshErr) {
+          console.warn('Failed to refresh garage after purchase:', refreshErr);
+        }
+      } catch (syncErr) {
+        console.error('Sync after purchase failed:', syncErr);
+        // Still proceed - sync errors shouldn't block user
       }
-
-      await refreshProfile();
 
     } catch (err: any) {
       console.error('Purchase flow failed:', err);
@@ -448,6 +707,17 @@ export default function CarDealershipPage() {
       setGarageCars(updatedGarage);
       setOwnedCarId(vehicleId);
 
+      // Keep profile in sync with active vehicle using the user_cars UUID
+      // This avoids UUID type errors and makes cross-page resolution reliable
+      try {
+        await supabase
+          .from('user_profiles')
+          .update({ active_vehicle: userCarRow.id })
+          .eq('id', user.id);
+      } catch (syncErr) {
+        console.warn('Failed to sync profile.active_vehicle:', syncErr);
+      }
+
     } catch (err: any) {
       console.error('Failed to set active vehicle:', err);
       toast.error(err?.message || 'Failed to set active vehicle');
@@ -475,16 +745,35 @@ export default function CarDealershipPage() {
       return;
     }
 
-    if (!garageCars.length) {
-      toast.error('You must own a vehicle before buying insurance');
-      return;
+    let activeGarageCar = garageCars.find((g) => g.is_active) || (garageCars.length > 0 ? garageCars[0] : null);
+
+    // Fallback: if no cars in user_cars, check user_vehicles
+    if (!activeGarageCar) {
+      try {
+        const { data: userVehicles } = await supabase
+          .from('user_vehicles')
+          .select('id, is_equipped')
+          .eq('user_id', user.id)
+          .limit(1);
+
+        if (Array.isArray(userVehicles) && userVehicles.length > 0) {
+          const vehRow = userVehicles.find((v: any) => v.is_equipped) || userVehicles[0];
+          activeGarageCar = {
+            id: vehRow.id,
+            car_id: vehRow.id,
+            is_active: true,
+            purchased_at: new Date().toISOString(),
+            model_url: '',
+            customization_json: null
+          };
+        }
+      } catch (err) {
+        console.warn('Fallback user_vehicles check failed:', err);
+      }
     }
 
-    const activeGarageCar =
-      garageCars.find((g) => g.is_active) || (garageCars.length > 0 ? garageCars[0] : null);
-
     if (!activeGarageCar) {
-      toast.error('No active vehicle found in your garage');
+      toast.error('You must own a vehicle before buying insurance');
       return;
     }
 
@@ -501,9 +790,26 @@ export default function CarDealershipPage() {
         return;
       }
 
+      // Immediately update UI to show insurance is active
       setHasCarInsurance(true);
-      toast.success('Vehicle insurance activated');
+      toast.success('Vehicle insurance activated for all your cars');
       localStorage.setItem(`trollcity_car_insurance_${user.id}`, JSON.stringify({ active: true }));
+
+      // Reload insurance status from DB to ensure accuracy
+      try {
+        const { data } = await supabase
+          .from('car_insurance_policies')
+          .select('id, expires_at, is_active')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .limit(1);
+        if (Array.isArray(data) && data.length > 0) {
+          setHasCarInsurance(true);
+        }
+      } catch (verifyErr) {
+        console.warn('Failed to verify insurance purchase:', verifyErr);
+      }
     } finally {
       setInsuring(false);
     }

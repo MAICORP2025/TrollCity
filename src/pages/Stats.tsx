@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react'
 import { useAuthStore } from '../lib/store'
 import { useCoins } from '../lib/hooks/useCoins'
 import { supabase } from '../lib/supabase'
-import { getLevelProfile } from '../lib/progressionEngine'
 import { getFamilySeasonStats } from '../lib/familySeasons'
-import { Crown, Sword, Trophy, Coins, Star } from 'lucide-react'
+import { useXPStore } from '../stores/useXPStore'
+import { useCreditScore } from '../lib/hooks/useCreditScore'
+import CreditScoreBadge from '../components/CreditScoreBadge'
+import { Crown, Sword, Trophy, Coins, Star, TrendingUp, Shield } from 'lucide-react'
 
 interface UserStats {
   level: number
@@ -26,8 +28,10 @@ interface UserStats {
 }
 
 export default function Stats() {
-  const { user } = useAuthStore()
-  const { balances } = useCoins()
+  const { user, profile } = useAuthStore()
+  const { balances, loading: coinsLoading } = useCoins()
+  const { xpTotal, level, xpToNext, progress, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
+  const { data: creditData, loading: creditLoading } = useCreditScore()
   const [stats, setStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -38,8 +42,9 @@ export default function Stats() {
       try {
         setLoading(true)
 
-        // Load level and XP data
-        const levelData = await getLevelProfile(user.id)
+        // Fetch XP from store and subscribe to real-time updates
+        await fetchXP(user.id)
+        subscribeToXP(user.id)
 
         // Load family data
         let familyData = null
@@ -51,17 +56,23 @@ export default function Stats() {
 
         if (familyMember?.family_id) {
           const familyStats = await getFamilySeasonStats(familyMember.family_id)
-          const { data: family } = await supabase
+          const { data: family, error: familyError2 } = await supabase
             .from('troll_families')
             .select('name')
             .eq('id', familyMember.family_id)
             .maybeSingle()
 
-          familyData = {
-            familyName: family?.name,
-            familyLevel: familyStats.seasonRank || 1,
-            familyXp: familyStats.weeklyCoins || 0,
-            seasonScore: familyStats.seasonCoins || 0
+          if (familyError2) {
+            console.error('Error fetching family:', familyError2)
+          }
+
+          if (family) {
+            familyData = {
+              familyName: family.name,
+              familyLevel: familyStats.seasonRank || 1,
+              familyXp: familyStats.weeklyCoins || 0,
+              seasonScore: familyStats.seasonCoins || 0
+            }
           }
         }
 
@@ -75,15 +86,17 @@ export default function Stats() {
 
         // Calculate badges
         const badges = []
-        if (user?.email?.includes('admin')) badges.push('🛡️ Admin')
+        if (profile?.role === 'admin' || profile?.troll_role === 'admin') badges.push('🛡️ Admin')
         if (familyMember) badges.push('⚔️ Family War')
-        if (levelData.level >= 10) badges.push('👑 Top Rank')
+        if (level >= 10) badges.push('👑 Top Rank')
+        if (balances.paid_coins > 1000) badges.push('💰 Big Spender')
+        if (balances.trollmonds > 100) badges.push('💎 Diamond Holder')
 
         setStats({
-          level: levelData.level,
-          xp: levelData.xp,
-          totalXp: levelData.total_xp,
-          nextLevelXp: levelData.next_level_xp,
+          level: level,
+          xp: xpTotal,
+          totalXp: xpTotal,
+          nextLevelXp: xpToNext + xpTotal,
           troll_coins: balances.troll_coins || 0,
           paid_coins: balances.paid_coins || 0,
           trollmonds: balances.trollmonds || 0,
@@ -99,9 +112,20 @@ export default function Stats() {
     }
 
     loadStats()
-  }, [user?.id, user?.email, balances.troll_coins, balances.paid_coins, balances.trollmonds])
 
-  const xpProgress = stats ? (stats.xp / stats.nextLevelXp) * 100 : 0
+    return () => {
+      unsubscribe()
+    }
+  }, [user?.id, level, xpTotal, xpToNext, profile?.role, profile?.troll_role, balances.troll_coins, balances.paid_coins, balances.trollmonds, fetchXP, subscribeToXP, unsubscribe])
+
+  const computedProgress =
+    progress === 0 || progress
+      ? (progress ?? 0) * 100
+      : stats
+        ? (stats.level / (stats.level + 1)) * 100
+        : 0
+
+  const levelProgress = Math.min(computedProgress, 100)
   const familyXpProgress = stats?.familyXp ? Math.min((stats.familyXp / 1000) * 100, 100) : 0
 
   return (
@@ -115,7 +139,7 @@ export default function Stats() {
           <p className="text-gray-400">View your comprehensive game statistics and achievements</p>
         </div>
 
-        {loading ? (
+        {loading || coinsLoading ? (
           <div className="text-center py-12 text-gray-400">Loading stats...</div>
         ) : stats ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -129,22 +153,46 @@ export default function Stats() {
                 <div className="flex justify-between items-center">
                   <span className="text-white font-bold text-2xl">Level {stats.level}</span>
                   <span className="text-gray-300 text-sm">
-                    {stats.xp.toLocaleString()} / {stats.nextLevelXp.toLocaleString()} XP
+                    {stats.level} → {stats.level + 1}
                   </span>
                 </div>
                 <div className="w-full bg-[#2A2A34] rounded-full h-4 overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-300"
-                    style={{ width: `${xpProgress}%` }}
+                    style={{ width: `${levelProgress}%` }}
                   />
                 </div>
                 <div className="text-center text-sm text-gray-400">
-                  {Math.round(xpProgress)}% to next level
+                  {Math.round(levelProgress)}% to next level
                 </div>
-                <div className="pt-4 border-t border-[#2C2C2C] text-sm text-gray-300">
-                  <p>Total XP: <span className="text-purple-400 font-semibold">{stats.totalXp.toLocaleString()}</span></p>
+                <div className="pt-4 border-t border-[#2C2C2C] space-y-2">
+                  <div className="flex justify-between items-center text-sm text-gray-300">
+                    <span>Current Level</span>
+                    <span className="text-purple-400 font-semibold">{stats.level} / 2000</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-green-400">
+                    <TrendingUp className="w-3 h-3" />
+                    <span>Real-time sync enabled</span>
+                  </div>
                 </div>
               </div>
+            </div>
+
+            {/* CREDIT SCORE */}
+            <div className="bg-[#0F172A] border border-emerald-500/30 rounded-2xl p-6 hover:border-emerald-500/60 transition-colors">
+              <h3 className="text-emerald-300 font-semibold mb-4 flex items-center gap-2 text-lg">
+                <Shield className="w-5 h-5" />
+                CREDIT SCORE
+              </h3>
+              <CreditScoreBadge
+                score={creditData?.score}
+                tier={creditData?.tier}
+                trend7d={creditData?.trend_7d}
+                loading={creditLoading}
+              />
+              <p className="text-xs text-gray-400 mt-3">
+                Public credit score (0-800) reflecting reliability, loans, and community behavior.
+              </p>
             </div>
 
             {/* FAMILY STATUS */}
@@ -217,10 +265,10 @@ export default function Stats() {
               <div className="space-y-3">
                 <div className="bg-[#2A2A34] rounded-lg p-4 flex justify-between items-center">
                   <span className="text-white flex items-center gap-2">
-                    <span className="text-2xl">�️</span>
-                    Admin Coins
+                    <span className="text-2xl">🎫</span>
+                    Troll Coins
                   </span>
-                  <span className="font-bold text-gray-400 text-xl">
+                  <span className="font-bold text-yellow-400 text-xl">
                     {stats.troll_coins.toLocaleString()}
                   </span>
                 </div>
@@ -233,7 +281,7 @@ export default function Stats() {
                     {stats.paid_coins.toLocaleString()}
                   </span>
                   <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    Actual Value Coins
+                    Purchased/Gifted Coins
                   </div>
                 </div>
                 <div className="bg-[#2A2A34] rounded-lg p-4 flex justify-between items-center">
@@ -245,11 +293,16 @@ export default function Stats() {
                     {stats.trollmonds.toLocaleString()}
                   </span>
                 </div>
-                <div className="bg-[#1A1A24] border border-white/10 rounded-lg p-4 flex justify-between items-center">
-                  <span className="text-gray-300">Estimated Cashout Value</span>
-                  <span className="font-bold text-yellow-400 text-lg">
-                    ${(stats.paid_coins * 0.0001 * 0.8).toFixed(2)}
-                  </span>
+                <div className="bg-[#1A1A24] border border-white/10 rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-300">Total Coins Value</span>
+                    <span className="font-bold text-yellow-400 text-lg">
+                      ${((stats.troll_coins * 0.0001) + (stats.paid_coins * 0.0001)).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Estimated value based on current rates
+                  </div>
                 </div>
               </div>
             </div>

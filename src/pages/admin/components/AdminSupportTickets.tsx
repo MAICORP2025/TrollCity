@@ -104,18 +104,30 @@ const AdminSupportTickets: React.FC = () => {
   const deleteTicket = useCallback(async (ticketId: string) => {
     try {
       if (!confirm("Delete this support ticket? This cannot be undone.")) return;
+      
+      // Optimistically remove from state first
+      setTickets((prev) => prev.filter((t) => t.id !== ticketId));
+      
       const { error } = await supabase
         .from("support_tickets")
         .delete()
         .eq("id", ticketId);
-      if (error) throw error;
-      toast.success("Ticket deleted");
-      setTickets((prev) => prev.filter((t) => t.id !== ticketId));
+        
+      if (error) {
+        console.error("Delete ticket failed", error);
+        toast.error("Failed to delete ticket");
+        // Reload to restore state on error
+        loadTickets();
+      } else {
+        toast.success("Ticket deleted");
+      }
     } catch (e) {
       console.error("Delete ticket failed", e);
       toast.error("Failed to delete ticket");
+      // Reload to restore state on error  
+      loadTickets();
     }
-  }, []);
+  }, [loadTickets]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { user_id: string; username: string; email: string; tickets: SupportTicket[] }>();

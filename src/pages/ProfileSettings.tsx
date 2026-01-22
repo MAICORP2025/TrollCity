@@ -193,7 +193,7 @@ export default function ProfileSettings() {
           <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-pink-400" />
             <div>
-              <h2 className="text-lg font-semibold">Avatar Customizer</h2>
+              <h2 className="text-lg font-semibold">Profile Picture Customizer</h2>
               <p className="text-xs text-gray-400">Equip clothing and update your look.</p>
             </div>
           </div>

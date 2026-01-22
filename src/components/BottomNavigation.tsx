@@ -64,7 +64,7 @@ export default function BottomNavigation() {
 
       toast.success('Logged out successfully')
       setIsMenuOpen(false)
-      navigate('/auth')
+      navigate('/exit')
     } catch (error) {
       console.error('Logout error:', error)
       toast.error('Error logging out')

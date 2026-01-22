@@ -2,8 +2,11 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useInRouterContext } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import LiveAvatar from '../components/LiveAvatar';
-import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home } from 'lucide-react';
+import CreditScoreBadge from '../components/CreditScoreBadge';
+import BadgesGrid from '../components/badges/BadgesGrid';
+import { useCreditScore } from '../lib/hooks/useCreditScore';
+import { getLevelName } from '../lib/xp';
+import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home, Mars, Venus } from 'lucide-react';
 import { toast } from 'sonner';
 import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
@@ -35,6 +38,7 @@ function ProfileInner() {
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [isTabDropdownOpen, setIsTabDropdownOpen] = useState(false);
   const tabDropdownRef = useRef<HTMLDivElement | null>(null);
+  const { data: creditData, loading: creditLoading } = useCreditScore(profile?.id);
 
   const handleClearCacheReload = () => {
     try {
@@ -266,8 +270,19 @@ function ProfileInner() {
   const [isFollowing, setIsFollowing] = useState(false);
 
   useEffect(() => {
+    // Auto-scroll to top on page load
+    window.scrollTo(0, 0);
+
     const fetchProfile = async () => {
       setLoading(true);
+      
+      // Clear any cached profile data for fresh load
+      if (currentUser?.id && userId === currentUser.id) {
+        try {
+          localStorage.removeItem(`tc-profile-${currentUser.id}`);
+        } catch {}
+      }
+      
       let query = supabase.from('user_profiles').select('*');
       
       if (userId) {
@@ -284,6 +299,16 @@ function ProfileInner() {
       if (error || !data) {
         console.error('Profile not found', error);
       } else {
+        console.log('Loaded profile data:', data); // Debug log
+        console.log('Gender:', data.gender); // Debug log
+        console.log('Banner URL:', data.banner_url); // Debug log
+        console.log('Updated at:', data.updated_at); // Debug log
+        
+        // If banner_url exists, test if it's accessible
+        if (data.banner_url) {
+          console.log('Full banner URL with cache bust:', `${data.banner_url}${data.banner_url.includes('?') ? '&' : '?'}cb=${data.updated_at || Date.now()}`)
+        }
+        
         setProfile(data);
         if (currentUser?.id === data.id) {
           fetchInventory(data.id);
@@ -311,6 +336,31 @@ function ProfileInner() {
     };
 
     fetchProfile();
+    
+    // Set up real-time subscription for profile updates
+    if (userId || username) {
+      const channel = supabase
+        .channel(`profile-updates-${userId || username}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'user_profiles',
+            filter: userId ? `id=eq.${userId}` : `username=eq.${username}`
+          },
+          (payload) => {
+            console.log('Profile updated in real-time:', payload.new)
+            // Refetch profile to get latest data
+            fetchProfile()
+          }
+        )
+        .subscribe()
+      
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }
   }, [username, userId, currentUser?.id]);
 
   // Live status check
@@ -653,34 +703,43 @@ function ProfileInner() {
 
   return (
     <div className="min-h-screen bg-[#0A0814] text-white pb-20">
-      {/* Banner */}
-      <div className="h-48 md:h-64 bg-gradient-to-r from-purple-900 via-indigo-900 to-blue-900 relative">
-        {profile.banner_url && (
+      {/* Banner / Cover Photo */}
+      <div className="h-48 md:h-64 bg-gradient-to-r from-purple-900 via-indigo-900 to-blue-900 relative overflow-hidden">
+        {profile.banner_url ? (
           <img 
-            src={profile.banner_url} 
-            alt="Banner" 
-            className="w-full h-full object-cover"
+            src={`${profile.banner_url}${profile.banner_url.includes('?') ? '&' : '?'}cb=${profile.updated_at || Date.now()}`}
+            alt="Cover Photo" 
+            className="w-full h-full object-contain bg-gradient-to-r from-purple-900 via-indigo-900 to-blue-900"
+            style={{ objectFit: 'contain', objectPosition: 'center' }}
             onError={(e) => {
+              console.error('Failed to load cover photo:', profile.banner_url)
               e.currentTarget.style.display = 'none'
             }}
           />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-white/20 text-sm">
+            No cover photo
+          </div>
         )}
       </div>
       
       {/* Profile Info */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div className="-mt-16 mb-4 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-           <div className="flex items-end">
-             <LiveAvatar 
-                userId={profile.id}
-                username={profile.username}
-                avatarUrl={profile.avatar_url}
-                isLive={isProfileLive}
-                size="2xl"
-                className="border-4 border-[#0A0814] rounded-full bg-[#0A0814]"
-                borderColor="border-[#0A0814]"
-                showLiveBadge={true}
+           <div className="flex items-end relative">
+             <img 
+                src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`}
+                alt={profile.username}
+                className="w-32 h-32 rounded-full border-4 border-[#0A0814] bg-[#0A0814] object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`
+                }}
              />
+             {isProfileLive && (
+               <div className="absolute bottom-0 right-0 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full border-2 border-[#0A0814]">
+                 LIVE
+               </div>
+             )}
            </div>
            
            {/* Actions */}
@@ -717,6 +776,14 @@ function ProfileInner() {
         <div className="mt-2">
           <h1 className={`text-2xl font-bold flex items-center gap-2 ${profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>
             {profile.display_name || profile.username}
+            {(profile as any).gender === 'male' && (
+              <Mars className="text-blue-400" size={16} title="Male" />
+            )}
+
+            {(profile as any).gender === 'female' && (
+              <Venus className="text-pink-400" size={16} title="Female" />
+            )}
+
             {profile.is_verified && (
               <span className="bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded-full" title="Verified">✓</span>
             )}
@@ -732,10 +799,25 @@ function ProfileInner() {
             )}
           </h1>
           <p className={`text-gray-400 ${profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date() ? 'rgb-username font-bold' : ''}`}>@{profile.username}</p>
+          {profile.level !== undefined && (
+            <p className="text-sm text-purple-400 font-semibold mt-1">
+              Level {profile.level} · {getLevelName(profile.level)}
+            </p>
+          )}
         </div>
         
-        <div className="mt-4 max-w-2xl prose prose-invert prose-sm">
-          <p>{profile.bio || "No bio provided."}</p>
+        <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-2xl prose prose-invert prose-sm">
+            <p>{profile.bio || "No bio provided."}</p>
+          </div>
+          <div className="w-full max-w-sm md:max-w-xs">
+            <CreditScoreBadge
+              score={creditData?.score}
+              tier={creditData?.tier}
+              trend7d={creditData?.trend_7d}
+              loading={creditLoading}
+            />
+          </div>
         </div>
         
         <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-400">
@@ -779,6 +861,10 @@ function ProfileInner() {
              <span className="font-bold text-white">{posts.length}</span>
              <span className="text-gray-400">Posts</span>
            </div>
+        </div>
+
+        <div className="mt-6">
+          <BadgesGrid userId={profile.id} limit={6} showViewAllLink />
         </div>
         
         {/* Tabs */}

@@ -280,6 +280,20 @@ export default function TrollBank() {
                       met={eligibility.maxAmount > 0} 
                       note={`(Limit: ${eligibility.maxAmount})`}
                     />
+                    {profile?.credit_score !== undefined && (
+                      <li className="flex items-center gap-2 text-sm">
+                        <span className="text-cyan-400">Credit Score:</span>
+                        <span className="font-semibold">{profile.credit_score}</span>
+                      </li>
+                    )}
+                    {profile?.created_at && (
+                      <li className="flex items-center gap-2 text-sm">
+                        <span className="text-cyan-400">Account Age:</span>
+                        <span className="font-semibold">
+                          {Math.ceil(Math.abs(Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))} days
+                        </span>
+                      </li>
+                    )}
                     {/* Removed explicit spend check from UI as it's now implicit or removed */}
                   </ul>
                   

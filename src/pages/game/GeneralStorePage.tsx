@@ -10,22 +10,73 @@ export default function GeneralStorePage() {
   const [hasHomeInsurance, setHasHomeInsurance] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) {
-      setHasHomeInsurance(false);
-      return;
-    }
+    let isMounted = true;
 
-    try {
-      const raw = localStorage.getItem(`trollcity_home_insurance_${user.id}`);
-      if (!raw) {
-        setHasHomeInsurance(false);
+    const loadHomeInsurance = async () => {
+      if (!user?.id) {
+        if (isMounted) setHasHomeInsurance(false);
         return;
       }
-      const parsed = JSON.parse(raw);
-      setHasHomeInsurance(Boolean(parsed && parsed.active));
-    } catch {
-      setHasHomeInsurance(false);
-    }
+
+      try {
+        const { data, error } = await supabase
+          .from('property_insurance_policies')
+          .select('id, expires_at, is_active')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .limit(1);
+
+        if (error) {
+          console.error('Failed to load property insurance status:', error);
+        }
+
+        const active = Array.isArray(data) && data.length > 0;
+
+        if (isMounted) {
+          setHasHomeInsurance(active);
+          if (active) {
+            localStorage.setItem(`trollcity_home_insurance_${user.id}`, JSON.stringify({ active: true }));
+          } else {
+            localStorage.removeItem(`trollcity_home_insurance_${user?.id}`);
+          }
+        }
+      } catch (err) {
+        console.error('Property insurance status lookup failed:', err);
+        if (isMounted) {
+          try {
+            const raw = user?.id ? localStorage.getItem(`trollcity_home_insurance_${user.id}`) : null;
+            const parsed = raw ? JSON.parse(raw) : null;
+            setHasHomeInsurance(Boolean(parsed && parsed.active));
+          } catch {
+            setHasHomeInsurance(false);
+          }
+        }
+      }
+    };
+
+    loadHomeInsurance();
+
+    if (!user?.id) return () => { isMounted = false; };
+
+    const channel = supabase
+      .channel(`property_insurance_policies:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'property_insurance_policies',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => loadHomeInsurance()
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      channel.unsubscribe();
+    };
   }, [user?.id]);
 
   const handleBuyPolicy = async () => {
@@ -69,9 +120,26 @@ export default function GeneralStorePage() {
         return;
       }
 
+      // Immediately update UI to show insurance is active
       setHasHomeInsurance(true);
       toast.success('Home insurance activated for 7 days');
       localStorage.setItem(`trollcity_home_insurance_${user.id}`, JSON.stringify({ active: true }));
+
+      // Reload insurance status from DB to ensure accuracy
+      try {
+        const { data } = await supabase
+          .from('property_insurance_policies')
+          .select('id, expires_at, is_active')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .limit(1);
+        if (Array.isArray(data) && data.length > 0) {
+          setHasHomeInsurance(true);
+        }
+      } catch (verifyErr) {
+        console.warn('Failed to verify insurance purchase:', verifyErr);
+      }
     } finally {
       setBuyingPolicy(false);
     }

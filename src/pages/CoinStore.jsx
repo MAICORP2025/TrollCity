@@ -1,17 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { useCoins } from '@/lib/hooks/useCoins';
 import { useBank as useBankHook } from '../lib/hooks/useBank';
-import { toast } from 'sonner';
+// import { toast } from 'sonner';
 import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle } from 'lucide-react';
 import { formatCoins } from '../lib/coinMath';
 import { deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
 import { useCheckOfficerOnboarding } from '@/hooks/useCheckOfficerOnboarding';
+
 import CashAppPaymentModal from '@/components/broadcast/CashAppPaymentModal';
 import TrollPassBanner from '@/components/ui/TrollPassBanner';
+import { paymentProviders } from '../lib/payments';
+import { toast } from 'sonner';
 
 const coinPackages = [
   { id: 2, coins: 500, price: "$4.99", emoji: "💰", popular: true },
@@ -91,6 +95,9 @@ export default function CoinStore() {
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [cashAppModalOpen, setCashAppModalOpen] = useState(false);
+  // Default to PayPal as the payment provider
+  const [selectedProviderId, setSelectedProviderId] = useState('paypal');
+  const [loadingPay, setLoadingPay] = useState(false);
   const [durationMultiplier, setDurationMultiplier] = useState(1);
   const [effects, setEffects] = useState([]);
   const [perks, setPerks] = useState([]);
@@ -336,6 +343,9 @@ export default function CoinStore() {
       navigate('/auth', { replace: true });
       return;
     }
+
+    // Auto-scroll to top on page load
+    window.scrollTo(0, 0);
 
     loadWalletData(true);
   }, [user, navigate, loadWalletData]);
@@ -1014,11 +1024,11 @@ export default function CoinStore() {
                                     </div>
                                     
                                     <button
-                                        onClick={handleApplyLoan}
-                                        disabled={!eligibility.canApply || applying}
-                                        className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-sm transition-all"
+                                      onClick={handleApplyLoan}
+                                      disabled={(!eligibility.canApply && !isAdmin) || applying}
+                                      className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-sm transition-all"
                                     >
-                                        {applying ? 'Processing...' : 'Apply for Loan'}
+                                      {applying ? 'Processing...' : 'Apply for Loan'}
                                     </button>
                                 </div>
                             </div>
@@ -1105,50 +1115,177 @@ export default function CoinStore() {
             {/* Coins Tab */}
             {tab === 'coins' && (
               <>
-                 <div className="mb-6">
-                   <TrollPassBanner onPurchase={() => {
-                     setSelectedPackage({
-                       id: 'troll_pass_bundle',
-                       coins: 1500,
-                       price: '$9.99',
-                       name: 'Troll Pass Premium',
-                       purchaseType: 'troll_pass_bundle'
-                     });
-                     setCashAppModalOpen(true);
-                   }} />
-                 </div>
+                <div className="mb-6">
+                  <TrollPassBanner onPurchase={async () => {
+                    const trollPassPkg = {
+                      id: 'troll_pass_bundle',
+                      coins: 1500,
+                      price: 9.99,
+                      name: 'Troll Pass Premium',
+                      purchaseType: 'troll_pass_bundle'
+                    };
+                    setSelectedPackage(trollPassPkg);
+                    const provider = paymentProviders.find(p => p.id === selectedProviderId);
+                    if (!provider) return toast.error('No payment provider selected');
+                    setLoadingPay(true);
+                    try {
+                      const paymentSession = await provider.createPayment({
+                        userId: user.id,
+                        amount: trollPassPkg.price,
+                        currency: 'USD',
+                        productType: 'troll_pass',
+                        packageId: trollPassPkg.id,
+                        metadata: { coins: trollPassPkg.coins }
+                      });
+                      if (provider.id === 'paypal' && paymentSession.approvalUrl) {
+                        window.location.href = paymentSession.approvalUrl;
+                      } else if (provider.id === 'cashapp') {
+                        setCashAppModalOpen(true);
+                      } else {
+                        toast.error('Unknown provider or missing approval URL');
+                      }
+                    } catch (err) {
+                      toast.error(err.message || 'Failed to start payment');
+                    } finally {
+                      setLoadingPay(false);
+                    }
+                  }} />
+                </div>
                  
-                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                   <Coins className="w-5 h-5 text-yellow-400" />
-                   Coin Packages
-                 </h2>
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                   {coinPackages.map((pkg) => (
-                     <div key={pkg.id} className={`bg-black/40 p-4 rounded-lg border ${pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20'} relative overflow-hidden group`}>
-                       {(pkg.popular || pkg.bestValue) && (
-                         <div className="absolute top-3 right-3 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                           {pkg.popular ? 'Popular' : 'Best Value'}
-                         </div>
-                       )}
-                       
-                       <div className="flex flex-col items-center text-center p-2">
-                         <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
-                         <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
-                         <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
-                         
-                         <button
-                           onClick={() => {
-                             setSelectedPackage(pkg);
-                             setCashAppModalOpen(true);
-                           }}
-                           className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
-                         >
-                           {pkg.price}
-                         </button>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-yellow-400" />
+                  Coin Packages
+                </h2>
+                {/* Payment Provider Selector */}
+                <div className="mb-4 flex gap-2">
+                  {paymentProviders.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedProviderId(p.id)}
+                      className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 border transition-colors ${selectedProviderId === p.id ? 'bg-purple-600 text-white border-purple-400' : 'bg-[#181825] text-gray-300 border-[#2C2C2C] hover:bg-[#232336]'}`}
+                    >
+                      {p.logoUrl && <img src={p.logoUrl} alt={p.displayName} className="h-5 w-5" />}
+                      {p.displayName}
+                    </button>
+                  ))}
+                </div>
+                <PayPalScriptProvider options={{ "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID || "test" }}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {coinPackages.map((pkg) => (
+                      <div key={pkg.id} className={`bg-black/40 p-4 rounded-lg border ${pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20'} relative overflow-hidden group`}>
+                        {(pkg.popular || pkg.bestValue) && (
+                          <div className="absolute top-3 right-3 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            {pkg.popular ? 'Popular' : 'Best Value'}
+                          </div>
+                        )}
+                        <div className="flex flex-col items-center text-center p-2">
+                          <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
+                          <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
+                          <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
+                          {selectedProviderId === 'paypal' ? (
+                            <PayPalButtons
+                              style={{ layout: 'vertical', color: 'blue', shape: 'rect', label: 'paypal' }}
+                              disabled={loadingPay}
+                              forceReRender={[pkg.price, pkg.id, user?.id]}
+                              createOrder={async (_data, _actions) => {
+                                setSelectedPackage(pkg);
+                                setLoadingPay(true);
+                                try {
+                                  // Call your backend or edge function to create the order
+                                  const res = await fetch('https://yjxpwfalenorzrqxwmtr.functions.supabase.co/paypal-create-order', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+                                    },
+                                    body: JSON.stringify({
+                                      amount: parseFloat(pkg.price.replace('$','')),
+                                      currency: 'USD',
+                                      userId: user.id,
+                                      productType: 'coins',
+                                      packageId: pkg.id,
+                                      metadata: { coins: pkg.coins }
+                                    })
+                                  });
+                                  const _data = await res.json();
+                                  if (!res.ok || !_data.orderId) throw new Error(_data.error || 'Failed to create PayPal order');
+                                  return _data.orderId;
+                                } catch (err) {
+                                  toast.error(err.message || 'Failed to create PayPal order');
+                                  throw err;
+                                } finally {
+                                  setLoadingPay(false);
+                                }
+                              }}
+                              onApprove={async (_data, _actions) => {
+                                setLoadingPay(true);
+                                try {
+                                  // Call your edge function to fulfill the purchase
+                                  const res = await fetch('https://yjxpwfalenorzrqxwmtr.functions.supabase.co/fulfill-paypal-purchase', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+                                    },
+                                    body: JSON.stringify({
+                                      orderId: _data.orderID,
+                                      userId: user.id,
+                                      packageId: pkg.id
+                                    })
+                                  });
+                                  const result = await res.json();
+                                  if (!result.success) throw new Error(result.error || 'Failed to fulfill PayPal purchase');
+                                  toast.success('Coins credited!');
+                                  refreshCoins();
+                                  showPurchaseCompleteOverlay();
+                                } catch (err) {
+                                  toast.error(err.message || 'Failed to complete PayPal purchase');
+                                } finally {
+                                  setLoadingPay(false);
+                                }
+                              }}
+                              onError={(_err) => {
+                                toast.error('PayPal error');
+                              }}
+                            />
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                setSelectedPackage(pkg);
+                                const provider = paymentProviders.find(p => p.id === selectedProviderId);
+                                if (!provider) return toast.error('No payment provider selected');
+                                setLoadingPay(true);
+                                try {
+                                  const _paymentSession = await provider.createPayment({
+                                    userId: user.id,
+                                    amount: parseFloat(pkg.price.replace('$','')),
+                                    currency: 'USD',
+                                    productType: 'coins',
+                                    packageId: pkg.id,
+                                    metadata: { coins: pkg.coins }
+                                  });
+                                  if (provider.id === 'cashapp') {
+                                    setCashAppModalOpen(true);
+                                  } else {
+                                    toast.error('Unknown provider or missing approval URL');
+                                  }
+                                } catch (err) {
+                                  toast.error(err.message || 'Failed to start payment');
+                                } finally {
+                                  setLoadingPay(false);
+                                }
+                              }}
+                              className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                              disabled={loadingPay}
+                            >
+                              {loadingPay && selectedPackage?.id === pkg.id ? 'Processing...' : pkg.price}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </PayPalScriptProvider>
               </>
             )}
 

@@ -5,7 +5,6 @@ import SidebarGroup from './ui/SidebarGroup'
 import {
   Home,
   MessageSquare,
-  Radio,
   Coins,
   Shield,
   Gavel,
@@ -23,9 +22,11 @@ import {
   Shuffle,
   Star,
   Building2,
-  ShoppingBag,
   RefreshCw,
-  Vote
+  Vote,
+  TrendingUp,
+  Mars,
+  Venus
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -35,7 +36,7 @@ import { useXPStore } from '@/stores/useXPStore'
 
 export default function Sidebar() {
   const { profile } = useAuthStore()
-  const { xpTotal, level, xpToNext, progress, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
+  const { level, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
   const { balances, loading } = useCoins()
   const location = useLocation()
   const isActive = (path: string) => location.pathname === path
@@ -69,14 +70,6 @@ export default function Sidebar() {
   }
   const [showCourtModal, setShowCourtModal] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
-
-  // Role logic for Go Live access
-  const canGoLive =
-    profile?.role === UserRole.ADMIN ||
-    profile?.role === UserRole.LEAD_TROLL_OFFICER ||
-    profile?.role === UserRole.TROLL_OFFICER ||
-    profile?.is_broadcaster ||
-    profile?.is_lead_officer;
 
   // Role definitions
   const isAdmin = profile?.role === UserRole.ADMIN || profile?.troll_role === UserRole.ADMIN || profile?.role === UserRole.HR_ADMIN;
@@ -153,23 +146,23 @@ export default function Sidebar() {
   if (!profile) return null
 
   return (
-    <div className={`flex flex-col h-screen bg-[#0A0814] border-r border-white/10 transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} fixed left-0 top-0 z-50`}>
+    <div className={`flex flex-col h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 backdrop-blur-xl border-r border-white/10 shadow-[10px_0_40px_rgba(0,0,0,0.35)] transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} fixed left-0 top-0 z-50`}>
 
       {/* Header */}
-      <div className="p-4 flex items-center justify-between border-b border-white/10">
+      <div className="p-4 flex items-center justify-between border-b border-white/5 bg-white/5/10">
         {!isSidebarCollapsed && (
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-9 h-9 bg-gradient-to-tr from-purple-600 via-pink-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-[0_10px_30px_rgba(99,102,241,0.35)]">
               <span className="text-xl font-bold text-white">T</span>
             </div>
-            <span className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+            <span className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
               TrollCity
             </span>
           </Link>
         )}
         <button 
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className={`p-1.5 hover:bg-white/5 rounded-lg text-gray-400 transition-colors ${isSidebarCollapsed ? 'mx-auto' : ''}`}
+          className={`p-1.5 hover:bg-white/10 rounded-lg text-gray-300 transition-colors ${isSidebarCollapsed ? 'mx-auto' : ''}`}
         >
           {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
@@ -177,24 +170,30 @@ export default function Sidebar() {
 
       {/* User Profile Summary (Level & XP) */}
       {!isSidebarCollapsed && (
-        <div className="p-4 border-b border-white/10 bg-white/5 mx-4 mt-4 rounded-xl">
+        <div className="p-4 border-b border-white/5 bg-white/5 mx-4 mt-4 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.35)]">
           <div className="flex items-center gap-3 mb-3">
             <div className="relative">
               <img 
                 src={profile.avatar_url || `https://ui-avatars.com/api/?name=${profile.username}&background=random`} 
                 alt={profile.username}
-                className="w-10 h-10 rounded-full border border-purple-500/50"
+                className="w-12 h-12 rounded-xl border border-white/15 shadow-[0_10px_30px_rgba(99,102,241,0.3)] object-cover"
               />
-              <div className="absolute -bottom-1 -right-1 bg-purple-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-[#0A0814]">
+              <div className="absolute -bottom-1.5 -right-1.5 bg-gradient-to-r from-purple-600 to-cyan-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-slate-900 shadow-[0_0_10px_rgba(59,130,246,0.35)]">
                 {level}
               </div>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className={`font-semibold text-sm truncate ${hasRgb ? 'rgb-username' : ''}`}>{profile.username}</h3>
+                <h3 className={`font-semibold text-sm truncate text-slate-50 ${hasRgb ? 'rgb-username' : ''}`}>{profile.username}</h3>
+                {(profile as any).gender === 'male' && (
+                  <Mars size={14} className="text-blue-400" title="Male" />
+                )}
+                {(profile as any).gender === 'female' && (
+                  <Venus size={14} className="text-pink-400" title="Female" />
+                )}
                 <button
                   onClick={handleClearCacheReload}
-                  className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-300"
+                  className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-gray-200"
                   aria-label="Clear cache and reload"
                   title="Clear cache and reload"
                 >
@@ -202,61 +201,39 @@ export default function Sidebar() {
                 </button>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-400">
-                <span className="text-purple-400">{profile.role === 'admin' ? 'Admin' : (profile.title || 'Citizen')}</span>
+                <span className="px-2 py-0.5 rounded-full bg-white/5 text-purple-200 border border-white/10">{profile.role === 'admin' ? 'Admin' : (profile.title || 'Citizen')}</span>
               </div>
             </div>
           </div>
           
-          {/* XP Bar */}
+          {/* Level Progress Bar */}
           <div className="space-y-1">
             <div className="flex justify-between text-[10px] text-gray-400">
-              <span>XP</span>
-              <span>{xpTotal.toLocaleString()}</span>
+              <span>Level Progress</span>
+              <span>{level} → {level + 1}</span>
             </div>
-            <div className="h-1.5 bg-black/50 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-900/70 rounded-full overflow-hidden border border-white/10">
               <div 
-                className="h-full bg-gradient-to-r from-purple-600 to-blue-600 rounded-full"
-                style={{ width: `${Math.min(progress * 100, 100)}%` }}
+                className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-400 rounded-full shadow-[0_0_20px_rgba(59,130,246,0.45)]"
+                style={{ width: `${Math.min((level / (level + 1)) * 100, 100)}%` }}
               ></div>
             </div>
             <div className="text-[9px] text-gray-500 text-right">
-                Next Level: {xpToNext.toLocaleString()}
+                {Math.round((level / (level + 1)) * 100)}% to next level
             </div>
           </div>
 
           {/* Currency */}
           <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/10">
-            <div className="flex items-center gap-1.5 text-xs text-yellow-400">
-              <Coins size={14} />
-              <span>{loading ? '...' : balances.troll_coins.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-blue-400">
-              <Crown size={14} />
-              <span>{profile.perk_tokens || 0}</span>
-            </div>
+            <div className="flex items-center gap-1.5 text-xs text-yellow-300 bg-white/5 px-2 py-1 rounded-lg border border-white/10">
+                <Coins size={14} />
+                <span>{loading ? '...' : balances.troll_coins.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-blue-200 bg-white/5 px-2 py-1 rounded-lg border border-white/10">
+                <Crown size={14} />
+                <span>{profile.perk_tokens || 0}</span>
+              </div>
           </div>
-
-          {/* Go Live Button */}
-          {canGoLive && (
-            <Link 
-              to="/go-live" 
-              className={`
-                mt-4 mx-3 flex items-center justify-center gap-2 
-                bg-gradient-to-r from-red-600 via-orange-600 to-yellow-500 
-                hover:from-red-500 hover:via-orange-500 hover:to-yellow-400 
-                text-white font-bold py-2 px-4 rounded-lg 
-                shadow-[0_0_15px_rgba(220,38,38,0.5)] 
-                hover:shadow-[0_0_25px_rgba(234,179,8,0.6)]
-                border border-yellow-400/30
-                transition-all duration-300 group
-                animate-pulse-slow
-                ${isSidebarCollapsed ? 'px-2' : ''}
-              `}
-            >
-              <Radio size={14} className="text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.5)] group-hover:animate-pulse" />
-              <span className="drop-shadow-[0_0_2px_rgba(0,0,0,0.5)]">GO LIVE</span>
-            </Link>
-          )}
         </div>
       )}
 
@@ -267,12 +244,12 @@ export default function Sidebar() {
           <SidebarItem icon={Home} label="Home" to="/" active={isActive('/')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Building2} label="Troll Town" to="/trollstown" active={isActive('/trollstown')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Crown} label="Troll G" to="/trollg" active={isActive('/trollg')} collapsed={isSidebarCollapsed} />
-          <SidebarItem icon={ShoppingBag} label="Troll Mart" to="/trollmart" active={isActive('/trollmart')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Vote} label="Troting" to="/troting" active={isActive('/troting')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={FileText} label="The Wall" to="/wall" active={isActive('/wall')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} collapsed={isSidebarCollapsed} />
+          <SidebarItem icon={TrendingUp} label="Credit Scores" to="/credit-scores" active={isActive('/credit-scores')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Coins} label="Coin Store" to="/store" active={isActive('/store')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Shuffle} label="Creator Switch" to="/creator-switch" active={isActive('/creator-switch')} collapsed={isSidebarCollapsed} />
           <SidebarItem icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} collapsed={isSidebarCollapsed} />
@@ -382,17 +359,6 @@ export default function Sidebar() {
 
       {/* Footer Actions */}
       <div className="p-4 border-t border-white/10 space-y-2">
-        {/* Balance Display */}
-        <div className={`flex items-center gap-3 w-full p-2 rounded-lg bg-white/5 text-yellow-400 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
-          <Coins size={20} />
-          {!isSidebarCollapsed && (
-            <div className="flex flex-col">
-              <span className="text-sm font-bold">{balances.troll_coins.toLocaleString()}</span>
-              <span className="text-[10px] text-gray-400">Troll Coins</span>
-            </div>
-          )}
-        </div>
-
         <Link 
           to="/stats"
           className={`flex items-center gap-3 w-full p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}
@@ -430,18 +396,19 @@ function SidebarItem({
     <Link
       to={to}
       className={`
-        relative z-0 rgb-outline-card bg-[#0A0814]
-        flex items-center gap-3 px-4 py-2 mx-2 rounded-lg transition-all duration-200 group
+        relative z-0 bg-transparent
+        flex items-center gap-3 px-4 py-2 mx-2 rounded-xl transition-all duration-200 group
         ${active 
-          ? 'bg-purple-600/20 text-purple-400' 
-          : 'text-gray-400 hover:bg-white/5 hover:text-white'
+          ? 'text-white bg-white/5 border border-white/10 shadow-[0_10px_30px_rgba(109,40,217,0.35)]' 
+          : 'text-gray-300 hover:bg-white/5 hover:text-white border border-transparent'
         }
         ${collapsed ? 'justify-center px-2' : ''}
         ${className}
       `}
       title={collapsed ? label : undefined}
     >
-      <Icon size={20} className={`min-w-[20px] ${active ? 'text-purple-400' : 'group-hover:text-white'}`} />
+      <span className={`absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 rounded-full bg-gradient-to-b from-purple-500 to-cyan-400 ${active ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`} />
+      <Icon size={20} className={`min-w-[20px] ${active ? 'text-purple-200' : 'group-hover:text-white'}`} />
       
       {!collapsed && (
         <div className="flex items-center justify-between flex-1 min-w-0">

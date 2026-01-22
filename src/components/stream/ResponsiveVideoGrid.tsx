@@ -54,8 +54,16 @@ export default function ResponsiveVideoGrid({
     return 'neon';
   });
 
-  const [neonColor, setNeonColor] = React.useState<string>('purple');
+  const [neonColor, setNeonColor] = React.useState<string>(() => {
+    if (typeof window === 'undefined') return 'purple';
+    return window.localStorage.getItem('troll_neon_color') || 'purple';
+  });
   const neonColors = ['purple', 'blue', 'green', 'red', 'pink', 'yellow', 'cyan', 'orange'];
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('troll_neon_color', neonColor);
+  }, [neonColor]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -65,33 +73,40 @@ export default function ResponsiveVideoGrid({
   const isLocalBroadcaster =
     !!(localParticipant && broadcaster && broadcaster.identity === localParticipant.identity);
 
+  // Fixed 6 guest slots - always show all positions
   const maxGuestSeats = 6;
-  const guestSeatCount = Math.max(0, Math.min(maxGuestSeats, boxCount || 0));
-  const guestAssignments = Array.from({ length: guestSeatCount }, (_, index) => {
-    // Seats are 0-indexed in the UI request (#1-#6)
-    const seatIndex = index; 
+  const activeGuestCount = Math.max(0, Math.min(maxGuestSeats, boxCount || 0));
+  
+  // Create fixed 6 guest slots (L1, L2, L3, R1, R2, R3)
+  const guestSlots = Array.from({ length: maxGuestSeats }, (_, index) => {
+    const seatIndex = index;
+    const isActive = index < activeGuestCount;
     const seat = Array.isArray(seats) && seats.length > seatIndex ? seats[seatIndex] : null;
     let participant: Participant | undefined;
 
-    if (seat && (seat as any).user_id) {
+    if (isActive && seat && (seat as any).user_id) {
       participant = participants.find((p) => p.identity === (seat as any).user_id);
     }
 
-    if (!participant) {
-       const guests = broadcaster
+    if (isActive && !participant) {
+      const guests = broadcaster
         ? participants.filter((p) => p.identity !== broadcaster.identity)
         : participants;
-       if (index < guests.length) {
-       }
+      if (index < guests.length) {
+        participant = guests[index];
+      }
     }
 
     return {
-      key: `seat-${index}`,
+      key: `slot-${index}`,
       seatIndex: index,
+      position: ['L1', 'L2', 'L3', 'R1', 'R2', 'R3'][index],
       participant: participant || null,
-      seat
+      seat,
+      isActive
     };
   });
+
   const canControlFrames = !!isLocalBroadcaster || !!isHost;
 
   if (!broadcaster) {
@@ -112,6 +127,17 @@ export default function ResponsiveVideoGrid({
     return `border-2 ${colorMap[color] || colorMap['purple']} animate-neon-pulse`;
   };
 
+  const neonColorSwatch: Record<string, string> = {
+    purple: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+    blue: 'linear-gradient(135deg, #60a5fa, #2563eb)',
+    green: 'linear-gradient(135deg, #4ade80, #16a34a)',
+    red: 'linear-gradient(135deg, #f87171, #ef4444)',
+    pink: 'linear-gradient(135deg, #f472b6, #db2777)',
+    yellow: 'linear-gradient(135deg, #facc15, #f59e0b)',
+    cyan: 'linear-gradient(135deg, #22d3ee, #0ea5e9)',
+    orange: 'linear-gradient(135deg, #fb923c, #f97316)'
+  };
+
   const hostFrameClass =
     frameMode === 'neon'
       ? getNeonStyle(neonColor)
@@ -119,20 +145,40 @@ export default function ResponsiveVideoGrid({
         ? 'border-2 border-transparent rgb-frame'
         : 'border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)]';
 
+  const guestFrameClass = (position: string) => {
+    const baseClass =
+      frameMode === 'neon'
+        ? getNeonStyle(neonColor)
+        : frameMode === 'rgb'
+          ? 'border border-transparent rgb-frame-small'
+          : 'border border-purple-500/20 hover:border-purple-500/40';
+
+    // Keep positional class for testing/debugging and potential layout tweaks
+    const safePosition = position?.toString().replace(/[^a-z0-9-_]/gi, '').toLowerCase() || 'slot';
+    return `${baseClass} guest-${safePosition}`.trim();
+  };
+
   return (
-    <div className="w-full h-full min-h-0 flex flex-col gap-2 sm:gap-4 lg:gap-6 p-2 sm:p-4 lg:p-6">
+    <div className="w-full h-auto min-h-0 flex flex-col gap-3 p-2 md:p-4">
       {canControlFrames && (
         <div className="flex items-center justify-end gap-2 mb-1 text-[11px] sm:text-xs">
           {frameMode === 'neon' && (
-            <select
-              value={neonColor}
-              onChange={(e) => setNeonColor(e.target.value)}
-              className="px-2 py-1 rounded-full border text-xs bg-black/50 border-purple-500/50 text-white focus:outline-none"
-            >
-              {neonColors.map(c => (
-                <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+            <div className="flex items-center gap-1 pr-1">
+              {neonColors.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setNeonColor(c)}
+                  className={`h-7 w-10 rounded-full border transition shadow-sm ${
+                    neonColor === c
+                      ? 'ring-2 ring-white/70 ring-offset-2 ring-offset-black'
+                      : 'border-white/20 opacity-80 hover:opacity-100'
+                  }`}
+                  style={{ background: neonColorSwatch[c] || neonColorSwatch.purple }}
+                  aria-label={`Set neon color ${c}`}
+                />
               ))}
-            </select>
+            </div>
           )}
           <span className="text-gray-400">Frames</span>
           <button
@@ -170,82 +216,120 @@ export default function ResponsiveVideoGrid({
           </button>
         </div>
       )}
-      <div className={`flex-none relative rounded-2xl sm:rounded-3xl overflow-hidden bg-black/40 group ${hostFrameClass}`} style={{ width: '60px', height: '60px' }}>
-        <VideoTile
-          participant={broadcaster}
-          isBroadcaster
-          isLocal={!!isLocalBroadcaster}
-          isHost={isHost}
-          onLeave={isLocalBroadcaster && !isHost ? onLeaveSession : undefined}
-          onDisableGuestMedia={onDisableGuestMedia}
-          price={joinPrice}
-          coinBalance={broadcaster.identity ? coinBalances?.[broadcaster.identity] : undefined}
-          compact={false}
-          className="w-full h-full object-cover"
-          style={{ width: '100%', height: '100%' }}
-          onClick={() => onUserClick?.(broadcaster)}
-        />
-        
-        {/* Broadcaster Controls Overlay (Start Camera) */}
-        {isLocalBroadcaster && !isCameraOn && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-20">
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
-              <button 
-                onClick={onToggleCamera}
-                className="group flex flex-col items-center gap-3 p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-purple-600/20 border border-purple-500/50 hover:bg-purple-600/40 hover:border-purple-400 hover:scale-105 transition-all duration-300"
-              >
-                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(147,51,234,0.5)] group-hover:shadow-[0_0_30px_rgba(147,51,234,0.7)]">
-                  <Camera size={24} className="sm:w-8 sm:h-8 text-white" />
-                </div>
-                <span className="text-base sm:text-lg font-bold text-white tracking-wide">Start Camera</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {guestSeatCount > 0 && (
-        <div className="shrink-0 flex flex-wrap gap-2">
-            {guestAssignments.slice(0, 6).map(({ key, seatIndex, participant }) => (
-        <div 
-          key={key}
-          className={`relative rounded-lg overflow-hidden bg-[#1a0b2e]/50 shadow-inner group transition-all hover:bg-[#1a0b2e]/70 ${
-            frameMode === 'neon'
-              ? getNeonStyle(neonColor)
-              : frameMode === 'rgb'
-                ? 'border border-transparent rgb-frame-small'
-                : 'border border-purple-500/20 hover:border-purple-500/40'
-          }`}
-          style={{ width: '40px', height: '40px' }}
-        >
-
-                {participant ? (
-                  <VideoTile
-                    participant={participant}
-                    isLocal={!!(localParticipant && participant.identity === localParticipant.identity)}
-                    isHost={isHost}
-                    onDisableGuestMedia={onDisableGuestMedia}
-                    price={joinPrice}
-                    coinBalance={participant.identity ? coinBalances?.[participant.identity] : undefined}
-                    compact
-                    className="w-full h-full"
-                    style={{ width: '100%', height: '100%' }}
-                    onClick={() => onUserClick?.(participant)}
-                  />
-                ) : (
-                  <div 
-                    className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors"
-                    onClick={() => onJoinRequest?.(seatIndex)}
-                  >
-                    <div className="text-xs font-bold text-purple-300/30 group-hover:text-purple-300/50 transition-colors">
-                      +
-                    </div>
+      
+      {/* Fixed Grid Layout: Left Column | Center Broadcaster | Right Column */}
+      <div className="broadcast-fixed-grid">
+        {/* Left Column - 3 Guest Slots (L1, L2, L3) */}
+        <div className="broadcast-left-column">
+          {guestSlots.slice(0, 3).map((slot) => (
+            <div 
+              key={slot.key}
+              className={`broadcast-guest-slot ${guestFrameClass(slot.position)}`}
+              onClick={() => !slot.participant && slot.isActive && onJoinRequest?.(slot.seatIndex)}
+            >
+              {slot.participant && slot.isActive ? (
+                <VideoTile
+                  participant={slot.participant}
+                  isLocal={!!(localParticipant && slot.participant.identity === localParticipant.identity)}
+                  isHost={isHost}
+                  onDisableGuestMedia={onDisableGuestMedia}
+                  price={joinPrice}
+                  coinBalance={slot.participant.identity ? coinBalances?.[slot.participant.identity] : undefined}
+                  compact
+                  className="w-full h-full"
+                  style={{ width: '100%', height: '100%' }}
+                  onClick={() => onUserClick?.(slot.participant!)}
+                />
+              ) : slot.isActive ? (
+                <div className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors">
+                  <div className="text-4xl font-bold text-purple-300/30 group-hover:text-purple-300/50 transition-colors">
+                    +
                   </div>
-                )}
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-black/20">
+                  <div className="text-2xl font-bold text-purple-300/10">
+                    +
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Center - Broadcaster (Large, spans 3 rows) */}
+        <div className={`broadcast-center-slot ${hostFrameClass}`}>
+          <VideoTile
+            participant={broadcaster}
+            isBroadcaster
+            isLocal={!!isLocalBroadcaster}
+            isHost={isHost}
+            onLeave={isLocalBroadcaster && !isHost ? onLeaveSession : undefined}
+            onDisableGuestMedia={onDisableGuestMedia}
+            price={joinPrice}
+            coinBalance={broadcaster.identity ? coinBalances?.[broadcaster.identity] : undefined}
+            compact={false}
+            className="w-full h-full object-cover"
+            style={{ width: '100%', height: '100%' }}
+            onClick={() => onUserClick?.(broadcaster)}
+          />
+          
+          {/* Broadcaster Controls Overlay (Start Camera) */}
+          {isLocalBroadcaster && !isCameraOn && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-20">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
+                <button 
+                  onClick={onToggleCamera}
+                  className="group flex flex-col items-center gap-3 p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-purple-600/20 border border-purple-500/50 hover:bg-purple-600/40 hover:border-purple-400 hover:scale-105 transition-all duration-300"
+                >
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(147,51,234,0.5)] group-hover:shadow-[0_0_30px_rgba(147,51,234,0.7)]">
+                    <Camera size={24} className="sm:w-8 sm:h-8 text-white" />
+                  </div>
+                  <span className="text-base sm:text-lg font-bold text-white tracking-wide">Start Camera</span>
+                </button>
               </div>
-            ))}
-          </div>
-      )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column - 3 Guest Slots (R1, R2, R3) */}
+        <div className="broadcast-right-column">
+          {guestSlots.slice(3, 6).map((slot) => (
+            <div 
+              key={slot.key}
+              className={`broadcast-guest-slot ${guestFrameClass(slot.position)}`}
+              onClick={() => !slot.participant && slot.isActive && onJoinRequest?.(slot.seatIndex)}
+            >
+              {slot.participant && slot.isActive ? (
+                <VideoTile
+                  participant={slot.participant}
+                  isLocal={!!(localParticipant && slot.participant.identity === localParticipant.identity)}
+                  isHost={isHost}
+                  onDisableGuestMedia={onDisableGuestMedia}
+                  price={joinPrice}
+                  coinBalance={slot.participant.identity ? coinBalances?.[slot.participant.identity] : undefined}
+                  compact
+                  className="w-full h-full"
+                  style={{ width: '100%', height: '100%' }}
+                  onClick={() => onUserClick?.(slot.participant!)}
+                />
+              ) : slot.isActive ? (
+                <div className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors">
+                  <div className="text-4xl font-bold text-purple-300/30 group-hover:text-purple-300/50 transition-colors">
+                    +
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-black/20">
+                  <div className="text-2xl font-bold text-purple-300/10">
+                    +
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

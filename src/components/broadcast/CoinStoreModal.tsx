@@ -96,11 +96,13 @@ export default function CoinStoreModal({
   useEffect(() => {
     const fetchCatalog = async () => {
       const { data: p } = await supabase.from('perks').select('*').eq('is_active', true).order('cost', { ascending: true });
-      const { data: i } = await supabase.from('insurance_options').select('*').eq('is_active', true).order('cost', { ascending: true });
+      const { data: i, error: insuranceError } = await supabase.from('insurance_options').select('*').eq('is_active', true).order('cost', { ascending: true });
       if (p) setPerks(p);
       if (i) {
         const filteredInsurance = i.filter((opt: any) => opt.protection_type !== 'bankrupt');
         setInsuranceOptions(filteredInsurance);
+      } else if (insuranceError) {
+        console.error('Failed to fetch insurance options:', insuranceError);
       }
 
       if (profile) {
@@ -154,6 +156,18 @@ export default function CoinStoreModal({
         if (error) throw error;
         toast.success(`Purchased perk: ${item.name}`);
       } else if (type === 'insurance') {
+        // Validate insurance_id exists in database before inserting
+        const { data: insuranceExists } = await supabase
+          .from('insurance_options')
+          .select('id')
+          .eq('id', item.id)
+          .single();
+
+        if (!insuranceExists) {
+          toast.error(`Insurance option "${item.id}" not found in database`);
+          return;
+        }
+
         const { error } = await supabase.from('user_insurances').insert({
           user_id: user.id,
           insurance_id: item.id,

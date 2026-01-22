@@ -119,14 +119,25 @@ export async function currentIdentity(userId: string) {
 
 export async function getLevelProfile(userId: string) {
   try {
-    const { data, error } = await supabase.from('user_levels').select('*').eq('user_id', userId).maybeSingle()
+    const { data, error } = await supabase.from('user_levels').select('level, xp, updated_at').eq('user_id', userId).maybeSingle()
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching level profile:', error)
     }
-    return data || { level: 1, xp: 0, total_xp: 0, next_level_xp: 100, buyer_xp: 0, buyer_level: 1, stream_xp: 0, stream_level: 1, updated_at: new Date().toISOString() }
+    if (data) {
+      // Calculate derived fields from actual level and xp
+      const nextLevelXp = (data.level + 1) * 100
+      return {
+        level: data.level || 1,
+        xp: data.xp || 0,
+        total_xp: data.xp || 0,
+        next_level_xp: nextLevelXp,
+        updated_at: data.updated_at || new Date().toISOString()
+      }
+    }
+    return { level: 1, xp: 0, total_xp: 0, next_level_xp: 100, updated_at: new Date().toISOString() }
   } catch (err) {
     console.error('Exception in getLevelProfile:', err)
-    return { level: 1, xp: 0, total_xp: 0, next_level_xp: 100, buyer_xp: 0, buyer_level: 1, stream_xp: 0, stream_level: 1, updated_at: new Date().toISOString() }
+    return { level: 1, xp: 0, total_xp: 0, next_level_xp: 100, updated_at: new Date().toISOString() }
   }
 }
 

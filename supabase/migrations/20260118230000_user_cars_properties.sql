@@ -19,7 +19,7 @@ END $$;
 -- 1. Create user_cars table
 CREATE TABLE IF NOT EXISTS public.user_cars (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     car_id TEXT NOT NULL, -- ID from the game config/catalog
     model_url TEXT NOT NULL, -- URL to the GLB/GLTF model
     purchased_at TIMESTAMPTZ DEFAULT now(),

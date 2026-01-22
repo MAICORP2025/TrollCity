@@ -18,36 +18,49 @@ const Header = () => {
 
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [searchResults, setSearchResults] = useState<any[]>([])
+  const [allUsers, setAllUsers] = useState<any[]>([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
 
+  // Load all users on component mount
+  useEffect(() => {
+    const loadAllUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .order('username', { ascending: true })
+          .limit(1000)
+        
+        if (error) throw error
+        setAllUsers(data || [])
+      } catch (err) {
+        console.error('Error loading all users:', err)
+      }
+    }
+    loadAllUsers()
+  }, [])
+
+  // Search/filter logic
   useEffect(() => {
     const runSearch = async () => {
-      if (!searchQuery.trim()) {
-        setSearchResults([])
-        setShowUserDropdown(false)
+      const query = searchQuery.trim().replace('@', '').toLowerCase()
+
+      // If no search query, show all users
+      if (!query) {
+        setSearchResults(allUsers)
         return
       }
 
-      const query = searchQuery.trim().replace('@', '')
-
-      try {
-        if (query.length < 2) {
-          setSearchResults([])
-          setShowUserDropdown(false)
-          return
-        }
-        const data = await searchUsers({ query, limit: 20 })
-        setSearchResults(data || [])
-        setShowUserDropdown(isSearchFocused)
-      } catch (err) {
-        console.error('Search error:', err)
-        setSearchResults([])
-      }
+      // Filter from all users locally for instant results
+      const filtered = allUsers.filter(user => 
+        user.username.toLowerCase().includes(query) ||
+        user.id.toLowerCase().includes(query)
+      )
+      setSearchResults(filtered)
     }
 
-    const timeoutId = setTimeout(runSearch, 300)
-    return () => clearTimeout(timeoutId)
-  }, [searchQuery, isSearchFocused])
+    runSearch()
+  }, [searchQuery, allUsers])
 
   // Load notifications
   useEffect(() => {
@@ -229,7 +242,7 @@ const Header = () => {
       console.error('Logout error:', error)
       toast.error(error?.message || 'Error logging out')
     } finally {
-      navigate('/auth', { replace: true })
+      navigate('/exit', { replace: true })
     }
   }
 
@@ -287,9 +300,7 @@ const Header = () => {
             }}
             onFocus={() => {
               setIsSearchFocused(true)
-              if (searchQuery.trim().length >= 2) {
-                setShowUserDropdown(true)
-              }
+              setShowUserDropdown(true)
             }}
             onBlur={() => {
               setIsSearchFocused(false)
@@ -300,8 +311,12 @@ const Header = () => {
             autoComplete="off"
             className="w-full pl-12 pr-6 py-3 bg-troll-dark-card/50 border border-troll-neon-pink/30 rounded-xl text-white placeholder-troll-neon-blue/50 focus:outline-none focus:ring-2 focus:ring-troll-neon-pink focus:border-troll-neon-pink transition-all duration-300 shadow-lg focus:shadow-troll-neon-pink/30"
           />
-          {isSearchFocused && showUserDropdown && searchResults.length > 0 && (
-            <div className="absolute top-full mt-2 w-full bg-[#1A1A1A] border border-purple-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+          {isSearchFocused && showUserDropdown && (
+            <div className="absolute top-full mt-2 w-full bg-[#1A1A1A] border border-purple-600 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+              {searchResults.length === 0 ? (
+                <div className="p-4 text-gray-400 text-center">No users found</div>
+              ) : (
+                <div>
                   {searchResults.map((user) => (
                     <div
                       key={user.id}
@@ -312,19 +327,21 @@ const Header = () => {
                       }}
                       className="p-3 hover:bg-purple-600/20 cursor-pointer flex items-center gap-3 border-b border-[#2C2C2C] last:border-b-0"
                     >
-                  <img
-                    src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
-                    alt={user.username}
-                    className="w-10 h-10 rounded-full border border-purple-500"
-                  />
-                  <ClickableUsername
-                    username={user.username}
-                    userId={user.id}
-                    profile={user}
-                    className="text-white hover:text-purple-400"
-                  />
+                      <img
+                        src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
+                        alt={user.username}
+                        className="w-10 h-10 rounded-full border border-purple-500"
+                      />
+                      <ClickableUsername
+                        username={user.username}
+                        userId={user.id}
+                        profile={user}
+                        className="text-white hover:text-purple-400"
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

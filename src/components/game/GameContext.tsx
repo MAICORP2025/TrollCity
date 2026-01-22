@@ -1,61 +1,35 @@
-import React, { createContext, useState, useCallback, ReactNode } from 'react';
-import DrivingAnimation from './DrivingAnimation';
-import { useAuthStore } from '../../lib/store';
-import { cars } from '../../data/vehicles';
+import React, { createContext, useCallback, ReactNode } from 'react';
 
 export interface GameContextType {
   isDriving: boolean;
   destination: string | null;
   startDriving: (to: string, onArrive?: () => void) => void;
   isRaidActive: boolean;
+  handleArrival: () => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [isDriving, setIsDriving] = useState(false);
-  const [destination, setDestination] = useState<string | null>(null);
-  const [isRaidActive, setIsRaidActive] = useState(false);
-  const [arrivalCallback, setArrivalCallback] = useState<(() => void) | null>(null);
-  const { profile } = useAuthStore();
-
   const startDriving = useCallback((to: string, onArrive?: () => void) => {
-    setDestination(to);
-    setIsDriving(true);
-    setArrivalCallback(() => onArrive || null);
-    
-    const activeId = profile?.active_vehicle ?? null;
-    const activeVehicle = cars.find(car => car.id === activeId);
-    const armor = activeVehicle?.armor ?? 0;
-    const baseChance = 0.1;
-    const armorReduction = Math.min(0.07, armor / 1500);
-    const raidChance = Math.max(0.02, baseChance - armorReduction);
-    const triggerRaid = Math.random() < raidChance;
-    setIsRaidActive(triggerRaid);
-  }, [profile?.active_vehicle]);
+    onArrive?.();
+  }, []);
 
   const handleArrival = useCallback(() => {
-    setIsDriving(false);
-    setDestination(null);
-    setIsRaidActive(false);
-    if (arrivalCallback) {
-      arrivalCallback();
-      setArrivalCallback(null);
-    }
-  }, [arrivalCallback]);
+    /* no-op: driving disabled */
+  }, []);
 
   return (
-    <GameContext.Provider value={{ isDriving, destination, startDriving, isRaidActive }}>
-      <div className={isDriving ? 'hidden' : 'contents'}>
-        {children}
-      </div>
-      {isDriving && destination && (
-        <DrivingAnimation 
-          destination={destination} 
-          onComplete={handleArrival} 
-          isRaid={isRaidActive}
-        />
-      )}
+    <GameContext.Provider
+      value={{
+        isDriving: false,
+        destination: null,
+        startDriving,
+        isRaidActive: false,
+        handleArrival,
+      }}
+    >
+      {children}
     </GameContext.Provider>
   );
 }

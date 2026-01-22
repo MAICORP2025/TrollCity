@@ -1429,8 +1429,8 @@ export class LiveKitService {
   }
 
   async disableGuestMedia(participantId: string, disableVideo: boolean, disableAudio: boolean): Promise<boolean> {
-    if (!this.room || !this.canPublish()) {
-      this.log('❌ Cannot disable guest media: not connected or not a broadcaster')
+    if (!this.room) {
+      this.log('❌ Cannot disable guest media: not connected')
       return false
     }
 
@@ -1445,6 +1445,13 @@ export class LiveKitService {
       if (disableVideo) {
         const videoPub = participant.getTrackPublication(Track.Source.Camera)
         if (videoPub) {
+          try {
+            videoPub.setSubscribed(false)
+            const vTrack: any = (videoPub as any).videoTrack
+            if (vTrack?.stop) vTrack.stop()
+          } catch (e) {
+            this.log('⚠️ Failed to stop remote video track', e)
+          }
           // Mark as disabled in our participant tracking
           const existing = this.participants.get(participantId)
           if (existing) {
@@ -1459,6 +1466,13 @@ export class LiveKitService {
       if (disableAudio) {
         const audioPub = participant.getTrackPublication(Track.Source.Microphone)
         if (audioPub) {
+          try {
+            audioPub.setSubscribed(false)
+            const aTrack: any = (audioPub as any).audioTrack
+            if (aTrack?.stop) aTrack.stop()
+          } catch (e) {
+            this.log('⚠️ Failed to stop remote audio track', e)
+          }
           // Mark as disabled in our participant tracking
           const existing = this.participants.get(participantId)
           if (existing) {

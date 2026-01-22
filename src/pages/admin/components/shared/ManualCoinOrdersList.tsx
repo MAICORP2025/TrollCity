@@ -38,16 +38,36 @@ export default function ManualCoinOrdersList() {
       setLoading(true)
       const { data, error } = await supabase
         .from('manual_coin_orders')
-        .select(`
-          *,
-          user:user_profiles(username, avatar_url)
-        `)
+        .select('*')
         .eq('status', 'pending')
-        .neq('purchase_type', 'troll_pass_bundle') // Exclude Troll Pass orders
+        .neq('purchase_type', 'troll_pass_bundle')
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setOrders(data || [])
+      
+      if (data && data.length > 0) {
+        const userIds = Array.from(new Set(data.map((o: any) => o.user_id).filter(Boolean)))
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('user_profiles')
+            .select('id, username, avatar_url')
+            .in('id', userIds)
+          
+          const userMap: Record<string, any> = {}
+          profiles?.forEach((p) => { userMap[p.id] = p })
+          
+          const ordersWithUsers = data.map((order: any) => ({
+            ...order,
+            user: userMap[order.user_id]
+          }))
+          
+          setOrders(ordersWithUsers)
+        } else {
+          setOrders(data)
+        }
+      } else {
+        setOrders([])
+      }
     } catch (error) {
       console.error('Error fetching manual orders:', error)
       toast.error('Failed to load manual orders')

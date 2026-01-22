@@ -35449,6 +35449,11 @@ ALTER TABLE ONLY "public"."troll_court_cases"
 
 
 
+ALTER TABLE ONLY "public"."troll_court_cases"
+    ADD CONSTRAINT "troll_court_cases_plaintiff_id_fkey" FOREIGN KEY ("plaintiff_id") REFERENCES "public"."user_profiles"("id");
+
+
+
 ALTER TABLE ONLY "public"."troll_dna_events"
     ADD CONSTRAINT "troll_dna_events_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."user_profiles"("id") ON DELETE CASCADE;
 

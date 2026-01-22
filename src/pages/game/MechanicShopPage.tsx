@@ -120,14 +120,39 @@ export default function MechanicShopPage() {
       return;
     }
 
-    const activeFromProfile =
+    const activeFromProfileNum =
       typeof (profile as any)?.active_vehicle === 'number'
         ? ((profile as any).active_vehicle as number)
         : null;
 
-    if (activeFromProfile) {
-      setActiveVehicleId(activeFromProfile);
+    if (activeFromProfileNum) {
+      setActiveVehicleId(activeFromProfileNum);
       return;
+    }
+
+    // If profile.active_vehicle is a UUID string, resolve to model id via user_cars
+    const activeFromProfileStr =
+      typeof (profile as any)?.active_vehicle === 'string'
+        ? ((profile as any).active_vehicle as string)
+        : null;
+
+    const looksLikeUuid = (val: string | null) => !!val && val.length >= 30 && val.includes('-');
+    if (activeFromProfileStr && looksLikeUuid(activeFromProfileStr)) {
+      (async () => {
+        try {
+          const { data: row, error } = await supabase
+            .from('user_cars')
+            .select('car_id')
+            .eq('user_id', user.id)
+            .eq('id', activeFromProfileStr)
+            .single();
+
+          if (!error && row && typeof row.car_id === 'number') {
+            setActiveVehicleId(Number(row.car_id));
+            return;
+          }
+        } catch {}
+      })();
     }
 
     const key = `trollcity_car_${user.id}`;

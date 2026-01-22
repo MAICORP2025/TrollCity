@@ -8,7 +8,6 @@ import { useLocation } from 'react-router-dom';
 export default function GameControlPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [showDriveMenu, setShowDriveMenu] = useState(false);
-  const [autoOpened, setAutoOpened] = useState(false);
   const gameNavigate = useGameNavigate();
   const { isDriving } = useGame();
   const { user } = useAuthStore();
@@ -80,6 +79,17 @@ export default function GameControlPanel() {
     event.preventDefault();
     startDrag(event.clientX, event.clientY);
   };
+
+  // Panel no longer auto-reopens after driving (driving removed)
+  // useEffect(() => {
+  //   // Reopen panel when driving finishes
+  //   if (!isDriving && !isOpen) {
+  //     const timer = setTimeout(() => {
+  //       setIsOpen(true);
+  //     }, 500); // Small delay to let driving scene fade out
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [isDriving]);
 
   useEffect(() => {
     if (!positionInitializedRef.current) {
@@ -172,11 +182,7 @@ export default function GameControlPanel() {
     }
   }, [user?.id]);
 
-  useEffect(() => {
-    if ((hasCar || hasHouse) && !autoOpened) {
-      setAutoOpened(true);
-    }
-  }, [hasCar, hasHouse, autoOpened]);
+  // Auto-open disabled - panel only opens when user explicitly clicks it
 
   const canBuyInsurance =
     (hasCar && !hasCarInsurance) || (hasHouse && !hasHomeInsurance);
@@ -202,7 +208,6 @@ export default function GameControlPanel() {
     { label: 'Drive to Hospital', path: '/hospital', visible: true },
     { label: 'Drive to Coin Store', path: '/store', visible: true },
     { label: 'Drive to Marketplace', path: '/marketplace', visible: true },
-    { label: 'Drive to Troll Mart', path: '/trollmart', visible: true },
     { label: 'Drive to Vehicle Auctions', path: '/auctions', visible: true },
     { label: 'Drive to Inventory', path: '/inventory', visible: true },
     { label: 'Drive to The Wall', path: '/wall', visible: true },

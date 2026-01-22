@@ -164,6 +164,29 @@ export const useAuthStore = create<AuthState>()(
 
           if (data) {
             let profileData = data as any
+
+            // Sync authoritative level/xp from user_profiles
+            try {
+              const { data: levelRow, error: levelError } = await supabase
+                .from('user_profiles')
+                .select('level, xp')
+                .eq('id', u.id)
+                .single()
+
+              if (levelError) {
+                console.warn('refreshProfile level sync error:', levelError)
+              } else if (levelRow) {
+                profileData = {
+                  ...profileData,
+                  level: levelRow.level ?? profileData.level ?? 1,
+                  xp: levelRow.xp ?? profileData.xp ?? 0,
+                  total_xp: levelRow.total_xp ?? profileData.total_xp,
+                  next_level_xp: levelRow.next_level_xp ?? profileData.next_level_xp,
+                }
+              }
+            } catch (err) {
+              console.error('Level sync failed:', err)
+            }
             try {
               const nowIso = new Date().toISOString()
               const { data: rgbPerk } = await supabase

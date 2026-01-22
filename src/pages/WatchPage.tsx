@@ -14,7 +14,10 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import {
   Users,
-  Heart
+  Heart,
+  Gift,
+  MessageCircle,
+  Tv
 } from 'lucide-react';
 import ChatBox from '../components/broadcast/ChatBox';
 import GiftModal from '../components/broadcast/GiftModal';
@@ -29,6 +32,7 @@ import VideoFeed from '../components/stream/VideoFeed';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
+const MOBILE_NAV_HEIGHT = 76;
 
 // Types
 interface StreamRow {
@@ -67,6 +71,8 @@ export default function WatchPage() {
   const [broadcastThemeStyle, setBroadcastThemeStyle] = useState<React.CSSProperties | undefined>(undefined);
   const [lastThemeId, setLastThemeId] = useState<string | null>(null);
   const [reactiveEvent, setReactiveEvent] = useState<{ key: number; style: string; intensity: number } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [activeMobilePanel, setActiveMobilePanel] = useState<'seats' | 'gifts' | 'chat'>('seats');
 
   const liveKit = useLiveKit();
   const roomName = useMemo(() => String(streamId || ''), [streamId]);
@@ -175,6 +181,21 @@ export default function WatchPage() {
   useEffect(() => {
     loadStreamData();
   }, [loadStreamData]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(max-width: 767px)');
+    const handleChange = () => setIsMobile(media.matches);
+    handleChange();
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setActiveMobilePanel('seats');
+    }
+  }, [isMobile]);
 
   useEffect(() => {
     if (!streamId || !stream) {
@@ -519,7 +540,26 @@ export default function WatchPage() {
       setGiftRecipient(profile);
       setIsGiftModalOpen(true);
       setSelectedProfile(null);
+      if (isMobile) {
+        setActiveMobilePanel('gifts');
+      }
+  }, [isMobile]);
+
+  const handleMobilePanelChange = useCallback((panel: 'seats' | 'gifts' | 'chat') => {
+    setActiveMobilePanel(panel);
+    if (panel !== 'gifts') {
+      setIsGiftModalOpen(false);
+    } else {
+      setIsGiftModalOpen(true);
+    }
   }, []);
+
+  const closeGiftPanel = useCallback(() => {
+    setIsGiftModalOpen(false);
+    if (isMobile) {
+      setActiveMobilePanel('seats');
+    }
+  }, [isMobile]);
 
   const toGiftSlug = (value?: string) => {
     if (!value) return 'gift';
@@ -548,6 +588,9 @@ export default function WatchPage() {
     }
 
     setIsGiftModalOpen(false);
+    if (isMobile) {
+      setActiveMobilePanel('seats');
+    }
 
     const receiverId = giftRecipient?.id || null;
     setGiftRecipient(null);
@@ -600,7 +643,7 @@ export default function WatchPage() {
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }
-  }, [stream?.id, stream?.broadcaster_id, user?.id, giftRecipient?.id, broadcastTheme?.id, lastThemeId]);
+  }, [stream?.id, stream?.broadcaster_id, user?.id, giftRecipient?.id, broadcastTheme?.id, lastThemeId, isMobile]);
 
   const handleCoinsPurchased = useCallback(() => {
     setIsCoinStoreOpen(false);
@@ -611,6 +654,31 @@ export default function WatchPage() {
     console.log('Sending coins:', amount);
     toast.info(`Sent ${amount} coins!`);
   }, []);
+
+  const videoStage = (
+    <div className="relative h-full w-full rounded-2xl overflow-hidden bg-black border border-white/10 shadow-inner">
+      {broadcastTheme?.asset_type === 'video' && (broadcastTheme?.video_webm_url || broadcastTheme?.video_mp4_url) ? (
+        <video className="absolute inset-0 w-full h-full object-cover" muted loop autoPlay playsInline>
+          {broadcastTheme?.video_webm_url && (
+            <source src={broadcastTheme.video_webm_url} type="video/webm" />
+          )}
+          {broadcastTheme?.video_mp4_url && (
+            <source src={broadcastTheme.video_mp4_url} type="video/mp4" />
+          )}
+        </video>
+      ) : (
+        <div className="absolute inset-0" style={broadcastThemeStyle} />
+      )}
+      <div className="absolute inset-0 bg-black/35" />
+      <div
+        className={`absolute inset-0 pointer-events-none ${
+          reactiveEvent ? `theme-reactive-${reactiveEvent.style} theme-reactive-intensity-${reactiveEvent.intensity}` : ''
+        }`}
+      />
+      <VideoFeed room={liveKit.getRoom()} isHost={false} />
+      {lastGift && <GiftEventOverlay gift={lastGift} onProfileClick={setSelectedProfile} />}
+    </div>
+  );
 
   // Layout
   if (!profile) {
@@ -665,17 +733,116 @@ export default function WatchPage() {
           userId={entranceEffect.userId}
         />
       )}
-      
-      <div className="flex h-screen flex-col">
-        <main className="flex-1 px-6 py-5">
-          <section className="h-full rounded-[32px] border border-white/10 bg-gradient-to-b from-[#050113] to-[#0b091f] p-6 shadow-2xl flex flex-col">
-            {/* Header */}
-            <div className="mb-5 flex items-center justify-between shrink-0">
-               <div>
+
+      {isMobile ? (
+        <div className="flex min-h-[100dvh] flex-col">
+          <main
+            className="flex-1 flex flex-col min-h-0 px-3 py-3"
+            style={{ paddingBottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px))` }}
+          >
+            <section className="flex h-full min-h-0 flex-col gap-3 rounded-[24px] border border-white/10 bg-gradient-to-b from-[#050113] to-[#0b091f] p-4 shadow-2xl">
+              <div className="flex items-center justify-between gap-3 shrink-0">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">Live Stream</p>
+                  <p className="text-sm text-white/80">{stream?.title || 'Loading Stream...'}</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
+                    <Users size={14} className="text-green-400" />
+                    <span className="font-bold">{(stream?.current_viewers || 0).toLocaleString()}</span>
+                  </div>
+                  {stream?.is_live && <div className="px-2 py-1 bg-red-600 rounded-full text-[11px] font-bold animate-pulse">LIVE</div>}
+                </div>
+              </div>
+
+              <div className="relative flex-1 min-h-0 rounded-2xl border border-white/5 bg-black/30 backdrop-blur-sm overflow-visible">
+                {activeMobilePanel === 'seats' && (
+                  <div className="absolute inset-0 flex flex-col">{videoStage}</div>
+                )}
+                {activeMobilePanel === 'chat' && (
+                  <div
+                    className="absolute inset-0 flex flex-col rounded-2xl bg-[#050113] border border-white/5 overflow-hidden"
+                    style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                  >
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/30">
+                      <span className="text-sm font-semibold">Live Chat</span>
+                      <button
+                        className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20"
+                        onClick={() => handleMobilePanelChange('seats')}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      {hasValidStreamId && (
+                        <ChatBox
+                          streamId={streamId!}
+                          onProfileClick={setSelectedProfile}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+                {activeMobilePanel === 'gifts' && isGiftModalOpen && (
+                  <div className="absolute inset-0 flex flex-col">
+                    <GiftModal
+                      variant="sheet"
+                      onClose={closeGiftPanel}
+                      onSendGift={handleGiftSent}
+                      recipientName={giftRecipient?.username || giftRecipient?.name || 'Broadcaster'}
+                      profile={profile}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="sticky bottom-0 z-20">
+                <div
+                  className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 p-2 backdrop-blur-md shadow-lg"
+                  style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom, 0px))' }}
+                >
+                  <button
+                    className={`flex-1 inline-flex items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
+                      activeMobilePanel === 'seats' ? 'bg-purple-600/80 text-white shadow-lg' : 'bg-white/5 text-white/70'
+                    }`}
+                    aria-pressed={activeMobilePanel === 'seats'}
+                    onClick={() => handleMobilePanelChange('seats')}
+                  >
+                    <Tv size={16} /> Seats
+                  </button>
+                  <button
+                    className={`flex-1 inline-flex items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
+                      activeMobilePanel === 'gifts' ? 'bg-purple-600/80 text-white shadow-lg' : 'bg-white/5 text-white/70'
+                    }`}
+                    aria-pressed={activeMobilePanel === 'gifts'}
+                    onClick={() => handleMobilePanelChange('gifts')}
+                  >
+                    <Gift size={16} /> Gifts
+                  </button>
+                  <button
+                    className={`flex-1 inline-flex items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
+                      activeMobilePanel === 'chat' ? 'bg-purple-600/80 text-white shadow-lg' : 'bg-white/5 text-white/70'
+                    }`}
+                    aria-pressed={activeMobilePanel === 'chat'}
+                    onClick={() => handleMobilePanelChange('chat')}
+                  >
+                    <MessageCircle size={16} /> Chat
+                  </button>
+                </div>
+              </div>
+            </section>
+          </main>
+        </div>
+      ) : (
+        <div className="flex h-screen flex-col">
+          <main className="flex-1 px-6 py-5">
+            <section className="h-full rounded-[32px] border border-white/10 bg-gradient-to-b from-[#050113] to-[#0b091f] p-6 shadow-2xl flex flex-col">
+              <div className="mb-5 flex items-center justify-between shrink-0">
+                <div>
                   <p className="text-xs uppercase tracking-[0.4em] text-white/50">Live Stream</p>
                   <p className="text-sm text-white/70">{stream?.title || 'Loading Stream...'}</p>
-               </div>
-               <div className="flex items-center gap-4">
+                </div>
+                <div className="flex items-center gap-4">
                   <div className="px-4 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
                     <Heart size={16} className="text-purple-400" /> <span className="font-bold">{stream?.total_likes || 0}</span>
                   </div>
@@ -687,63 +854,38 @@ export default function WatchPage() {
                     <span className="font-bold text-yellow-400">{(stream?.total_gifts_coins || 0).toLocaleString()}</span>
                   </div>
                   {stream?.is_live && <div className="px-3 py-1 bg-red-600 rounded-full text-xs font-bold animate-pulse">LIVE</div>}
-               </div>
-            </div>
+                </div>
+              </div>
 
-            {/* Content Grid */}
-            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 gap-6">
-               {/* Main Video Area */}
-               <div className="lg:col-span-3 relative rounded-2xl overflow-hidden bg-black border border-white/10 shadow-inner">
-                  {broadcastTheme?.asset_type === 'video' && (broadcastTheme?.video_webm_url || broadcastTheme?.video_mp4_url) ? (
-                    <video className="absolute inset-0 w-full h-full object-cover" muted loop autoPlay playsInline>
-                      {broadcastTheme?.video_webm_url && (
-                        <source src={broadcastTheme.video_webm_url} type="video/webm" />
-                      )}
-                      {broadcastTheme?.video_mp4_url && (
-                        <source src={broadcastTheme.video_mp4_url} type="video/mp4" />
-                      )}
-                    </video>
-                  ) : (
-                    <div className="absolute inset-0" style={broadcastThemeStyle} />
-                  )}
-                  <div className="absolute inset-0 bg-black/35" />
-                  <div
-                    className={`absolute inset-0 pointer-events-none ${
-                      reactiveEvent ? `theme-reactive-${reactiveEvent.style} theme-reactive-intensity-${reactiveEvent.intensity}` : ''
-                    }`}
-                  />
-                  <VideoFeed room={liveKit.getRoom()} isHost={false} />
-          {lastGift && <GiftEventOverlay gift={lastGift} onProfileClick={setSelectedProfile} />}
-        </div>
-
-               {/* Right Panel */}
-               <div className="lg:col-span-1 h-full flex flex-col gap-4 min-h-0">
+              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-3 h-full">{videoStage}</div>
+                <div className="lg:col-span-1 h-full flex flex-col gap-4 min-h-0">
                   {hasValidStreamId && (
-                    <ChatBox 
+                    <ChatBox
                       streamId={streamId!}
                       onProfileClick={setSelectedProfile}
                     />
                   )}
-               </div>
-            </div>
-          </section>
-        </main>
-      </div>
+                </div>
+              </div>
+            </section>
+          </main>
+        </div>
+      )}
 
-      {/* Modals */}
-      {isGiftModalOpen && (
-        <GiftModal 
-          onClose={() => setIsGiftModalOpen(false)} 
-          onSendGift={handleGiftSent} 
+      {isGiftModalOpen && !isMobile && (
+        <GiftModal
+          onClose={() => setIsGiftModalOpen(false)}
+          onSendGift={handleGiftSent}
           recipientName={giftRecipient?.username || giftRecipient?.name || 'Broadcaster'}
           profile={profile}
         />
       )}
       {selectedProfile && (
-        <ProfileModal 
-          profile={selectedProfile} 
-          onClose={() => setSelectedProfile(null)} 
-          onSendCoins={handleSendCoins} 
+        <ProfileModal
+          profile={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+          onSendCoins={handleSendCoins}
           currentUser={user}
           onGift={handleGiftFromProfile}
         />

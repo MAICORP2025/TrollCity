@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { X, Crown, Sword, Trophy, Coins, Star } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { getLevelProfile } from '../lib/progressionEngine'
 import { getFamilySeasonStats } from '../lib/familySeasons'
+import { useXPStore } from '../stores/useXPStore'
 
 interface ExpandedStatsPanelProps {
   isOpen: boolean
@@ -31,6 +31,7 @@ interface UserStats {
 
 export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPanelProps) {
   const { user, profile } = useAuthStore()
+  const { level } = useXPStore()
   const [stats, setStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -40,12 +41,6 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
     const loadStats = async () => {
       try {
         setLoading(true)
-
-        // Load level and XP data
-        const levelData = await getLevelProfile(user.id)
-        // const dnaData = await getDnaProfile(user.id)
-
-        // Use profile balances
 
         // Load family data
         let familyData = null
@@ -61,17 +56,23 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
 
         if (familyMember?.family_id) {
           const familyStats = await getFamilySeasonStats(familyMember.family_id)
-          const { data: family } = await supabase
+          const { data: family, error: familyError2 } = await supabase
             .from('troll_families')
             .select('name')
             .eq('id', familyMember.family_id)
-            .single()
+            .maybeSingle()
 
-          familyData = {
-            familyName: family?.name,
-            familyLevel: familyStats.seasonRank || 1,
-            familyXp: familyStats.weeklyCoins || 0,
-            seasonScore: familyStats.seasonCoins || 0
+          if (familyError2) {
+            console.error('Error fetching family:', familyError2)
+          }
+
+          if (family) {
+            familyData = {
+              familyName: family.name,
+              familyLevel: familyStats.seasonRank || 1,
+              familyXp: familyStats.weeklyCoins || 0,
+              seasonScore: familyStats.seasonCoins || 0
+            }
           }
         }
 
@@ -87,13 +88,13 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
         const badges = []
         if (profile?.role === 'admin') badges.push('🛡️ Admin')
         if (familyMember) badges.push('⚔️ Family War')
-        if (levelData.level >= 10) badges.push('👑 Top Rank')
+        if (level >= 10) badges.push('👑 Top Rank')
 
         setStats({
-          level: levelData.level,
-          xp: levelData.xp,
-          totalXp: levelData.total_xp,
-          nextLevelXp: levelData.next_level_xp,
+          level: level,
+          xp: level,
+          totalXp: level,
+          nextLevelXp: 2000,
           troll_coins: profile?.troll_coins || 0,
           paid_coins: profile?.paid_coins || 0,
           trollmonds: profile?.trollmonds || 0,
@@ -109,11 +110,11 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
     }
 
     loadStats()
-  }, [isOpen, user?.id, profile])
+  }, [isOpen, user?.id, profile, level])
 
   if (!isOpen) return null
 
-  const xpProgress = stats ? (stats.xp / stats.nextLevelXp) * 100 : 0
+  const levelProgress = stats ? Math.min((stats.level / (stats.level + 1)) * 100, 100) : 0
   const familyXpProgress = stats?.familyXp ? Math.min((stats.familyXp / 1000) * 100, 100) : 0 // Example calculation
 
   return (
@@ -146,17 +147,17 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
                   <div className="flex justify-between items-center">
                     <span className="text-white font-bold text-lg">Level {stats.level}</span>
                     <span className="text-gray-300 text-sm">
-                      {stats.xp.toLocaleString()} / {stats.nextLevelXp.toLocaleString()} XP
+                      {stats.level} → {stats.level + 1}
                     </span>
                   </div>
                   <div className="w-full bg-[#2A2A34] rounded-full h-3 overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-300"
-                      style={{ width: `${xpProgress}%` }}
+                      style={{ width: `${levelProgress}%` }}
                     />
                   </div>
                   <div className="text-center text-xs text-gray-400">
-                    {Math.round(xpProgress)}% to next level
+                    {Math.round(levelProgress)}% to next level
                   </div>
                 </div>
               </div>
@@ -220,7 +221,7 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-white flex items-center gap-2">
-                      <span className="text-lg">�️</span>
+                      <span className="text-lg">🪙</span>
                       Admin Coins
                     </span>
                     <span className="font-bold text-gray-400">

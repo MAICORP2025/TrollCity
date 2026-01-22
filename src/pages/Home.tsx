@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
+import { useEffect } from 'react';
 import { 
   Gamepad2, 
   Users, 
   ShoppingCart, 
   Video, 
-  Coins, 
-  TrendingUp,
+  Coins,
   Shield,
   Zap,
   Star,
@@ -14,23 +14,26 @@ import {
   Play,
   Sparkles
 } from 'lucide-react';
+import TopBroadcastersGrid from '@/components/TopBroadcastersGrid';
 
 // Animated gradient background
 const AnimatedGradient = () => {
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-slate-900 to-cyan-900 animate-gradient-shift" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-600/20 via-transparent to-transparent" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-cyan-600/20 via-transparent to-transparent" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-pink-600/20 via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 animate-gradient-shift" />
+      <div className="absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.18),transparent)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.14),transparent)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(140%_140%_at_90%_90%,rgba(236,72,153,0.12),transparent)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.08)_0%,rgba(14,165,233,0.06)_40%,rgba(236,72,153,0.08)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.06),transparent_35%)] mix-blend-screen" />
       <style>
         {`
           @keyframes gradient-shift {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.8; }
+            50% { opacity: 0.85; }
           }
           .animate-gradient-shift {
-            animation: gradient-shift 10s ease-in-out infinite;
+            animation: gradient-shift 12s ease-in-out infinite;
           }
         `}
       </style>
@@ -45,7 +48,7 @@ const FloatingParticles = () => {
       {Array.from({ length: 20 }).map((_, i) => (
         <div
           key={i}
-          className="absolute w-1 h-1 bg-cyan-400/40 rounded-full"
+          className="absolute w-1 h-1 bg-cyan-400/40 rounded-full shadow-[0_0_12px_rgba(34,211,238,0.35)]"
           style={{
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
@@ -99,41 +102,19 @@ const FeatureCard = ({ icon, title, description, gradient, delay }: FeatureCardP
   );
 };
 
-// Stats component
-const StatsSection = () => {
-  const stats = [
-    { icon: <Users className="w-6 h-6" />, value: "10K+", label: "Active Users" },
-    { icon: <Video className="w-6 h-6" />, value: "500+", label: "Live Streams Daily" },
-    { icon: <Coins className="w-6 h-6" />, value: "1M+", label: "Troll Coins Earned" },
-    { icon: <TrendingUp className="w-6 h-6" />, value: "24/7", label: "Entertainment" },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
-      {stats.map((stat, index) => (
-        <div 
-          key={index}
-          className="text-center p-6 bg-slate-900/30 backdrop-blur-sm rounded-xl border border-purple-500/10 hover:border-cyan-400/30 transition-all duration-300 animate-fade-in-up"
-          style={{ animationDelay: `${index * 100}ms` }}
-        >
-          <div className="flex justify-center mb-3 text-cyan-400">
-            {stat.icon}
-          </div>
-          <div className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent mb-1">
-            {stat.value}
-          </div>
-          <div className="text-sm text-slate-400">
-            {stat.label}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+// Stats component - Replaced by TopBroadcasters component with real-time database data
+const _StatsSection = () => {
+  return null;
 };
 
 export default function Home() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+
+  // Auto-scroll to top on page load
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const features = [
     {
@@ -162,9 +143,9 @@ export default function Home() {
     },
     {
       icon: <Coins className="w-8 h-8 text-yellow-400" />,
-      title: "Earn Troll Coins",
-      description: "Complete tasks, stream, and engage with the community to earn Troll Coins and unlock rewards.",
-      gradient: "from-yellow-600/20 to-orange-600/20",
+      title: "Daily Login Posts",
+      description: "Post once daily to the Troll City Wall and earn 0-100 random Troll Coins. Come back every day for rewards!",
+      gradient: "from-yellow-600/20 to-cyan-600/20",
     },
     {
       icon: <Shield className="w-8 h-8 text-cyan-400" />,
@@ -184,83 +165,92 @@ export default function Home() {
       <div className="relative z-10 min-h-dvh flex flex-col">
         
         {/* Hero Section */}
-        <section className="flex-1 flex items-center justify-center px-4 py-20 safe-top">
-          <div className="max-w-6xl mx-auto text-center">
-            
+        <section className="flex-1 flex items-center px-4 py-20 safe-top">
+          <div className="max-w-7xl mx-auto w-full grid lg:grid-cols-1 gap-10 items-center">
             {/* Main Heading */}
-            <div className="mb-8 animate-fade-in">
-              <h1 className="text-5xl md:text-7xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent animate-gradient-text">
-                Welcome to Troll City
-              </h1>
-              <p className="text-xl md:text-2xl text-slate-300 mb-6">
-                Stream, Play, Connect & Earn in the Ultimate Online Community
-              </p>
-              <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-                Join thousands of creators and viewers in Troll City - where live streaming meets gaming, shopping, and social connection.
-              </p>
+            <div className="space-y-8 text-center animate-fade-in">
+              <div className="space-y-4">
+                <h1 className="text-5xl md:text-6xl xl:text-7xl font-black leading-tight bg-gradient-to-r from-purple-300 via-pink-300 to-cyan-300 bg-clip-text text-transparent animate-gradient-text drop-shadow-[0_10px_40px_rgba(124,58,237,0.35)]">
+                  Welcome to Troll City
+                </h1>
+                <p className="text-xl md:text-2xl text-slate-200">
+                  Stream, Play, Connect & Earn in the Ultimate Online Community
+                </p>
+                <p className="text-lg text-slate-400">
+                  Join thousands of creators and viewers in Troll City - where live streaming meets gaming, shopping, and social connection.
+                </p>
+              </div>
+
+              {/* CTA Buttons */}
+              <div className="flex flex-wrap gap-4 items-center animate-fade-in-up" style={{ animationDelay: '180ms' }}>
+                {!user ? (
+                  <>
+                    <button
+                      onClick={() => navigate('/signup')}
+                      className="group relative px-8 py-4 rounded-2xl font-semibold text-lg text-white bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-500 shadow-[0_10px_40px_rgba(124,58,237,0.35)] hover:shadow-[0_15px_50px_rgba(56,189,248,0.35)] transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-2"
+                    >
+                      <Sparkles className="w-5 h-5" />
+                      Join Troll City
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-600/0 via-white/6 to-cyan-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    <button
+                      onClick={() => navigate('/login')}
+                      className="px-8 py-4 rounded-2xl font-semibold text-lg text-slate-50 bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-0.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                    >
+                      Sign In
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => navigate('/go-live')}
+                      className="group relative px-8 py-4 rounded-2xl font-semibold text-lg text-white bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 shadow-[0_10px_40px_rgba(236,72,153,0.4)] hover:shadow-[0_15px_50px_rgba(251,146,60,0.35)] transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-2"
+                    >
+                      <Play className="w-5 h-5" />
+                      Go Live Now
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-600/0 via-white/8 to-orange-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    <button
+                      onClick={() => navigate('/explore')}
+                      className="px-8 py-4 rounded-2xl font-semibold text-lg text-slate-50 bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-0.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                    >
+                      Explore Feed
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Quick Features Preview */}
+              <div className="flex flex-wrap gap-3 text-sm text-slate-300 animate-fade-in-up" style={{ animationDelay: '320ms' }}>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm rounded-full border border-white/10 shadow-[0_8px_25px_rgba(59,130,246,0.15)]">
+                  <Zap className="w-4 h-4 text-yellow-300" />
+                  Free to Join
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm rounded-full border border-white/10 shadow-[0_8px_25px_rgba(56,189,248,0.15)]">
+                  <Star className="w-4 h-4 text-cyan-300" />
+                  Earn Rewards
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm rounded-full border border-white/10 shadow-[0_8px_25px_rgba(168,85,247,0.15)]">
+                  <Shield className="w-4 h-4 text-purple-300" />
+                  Safe & Moderated
+                </div>
+              </div>
             </div>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
-              {!user ? (
-                <>
-                  <button
-                    onClick={() => navigate('/signup')}
-                    className="group relative px-8 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-xl font-semibold text-lg shadow-lg shadow-purple-500/50 hover:shadow-cyan-500/50 transition-all duration-300 hover:scale-105 flex items-center gap-2"
-                  >
-                    <Sparkles className="w-5 h-5" />
-                    Join Troll City
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                  <button
-                    onClick={() => navigate('/login')}
-                    className="px-8 py-4 bg-slate-900/50 backdrop-blur-md border-2 border-purple-500/50 rounded-xl font-semibold text-lg hover:border-cyan-400/50 hover:bg-slate-800/50 transition-all duration-300 hover:scale-105"
-                  >
-                    Sign In
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => navigate('/go-live')}
-                    className="group relative px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl font-semibold text-lg shadow-lg shadow-purple-500/50 hover:shadow-pink-500/50 transition-all duration-300 hover:scale-105 flex items-center gap-2"
-                  >
-                    <Play className="w-5 h-5" />
-                    Go Live Now
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                  <button
-                    onClick={() => navigate('/feed')}
-                    className="px-8 py-4 bg-slate-900/50 backdrop-blur-md border-2 border-cyan-500/50 rounded-xl font-semibold text-lg hover:border-cyan-400/70 hover:bg-slate-800/50 transition-all duration-300 hover:scale-105"
-                  >
-                    Explore Feed
-                  </button>
-                </>
-              )}
+            {/* Top 4 Broadcasters Grid */}
+            <div className="w-full animate-fade-in-up" style={{ animationDelay: '240ms' }}>
+              <div className="text-center mb-8">
+                <h2 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-amber-400 via-orange-400 to-red-400 bg-clip-text text-transparent">
+                  🔥 Top Broadcasters
+                </h2>
+                <p className="text-slate-400">
+                  Most gifted creators in the last 24 hours
+                </p>
+              </div>
+              <TopBroadcastersGrid />
             </div>
-
-            {/* Quick Features Preview */}
-            <div className="flex flex-wrap justify-center gap-4 text-sm text-slate-400 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
-              <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/30 backdrop-blur-sm rounded-full border border-purple-500/20">
-                <Zap className="w-4 h-4 text-yellow-400" />
-                Free to Join
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/30 backdrop-blur-sm rounded-full border border-purple-500/20">
-                <Star className="w-4 h-4 text-cyan-400" />
-                Earn Rewards
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/30 backdrop-blur-sm rounded-full border border-purple-500/20">
-                <Shield className="w-4 h-4 text-purple-400" />
-                Safe & Moderated
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Stats Section */}
-        <section className="px-4 py-16 bg-slate-950/50 backdrop-blur-md border-y border-purple-500/10">
-          <div className="max-w-6xl mx-auto">
-            <StatsSection />
           </div>
         </section>
 
@@ -285,26 +275,6 @@ export default function Home() {
                 />
               ))}
             </div>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="px-4 py-20 bg-gradient-to-br from-purple-900/30 via-slate-900/30 to-cyan-900/30 backdrop-blur-md border-t border-purple-500/10">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
-              Ready to Join the City?
-            </h2>
-            <p className="text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
-              Start streaming, playing games, earning coins, and connecting with an amazing community today.
-            </p>
-            <button
-              onClick={() => navigate(user ? '/feed' : '/signup')}
-              className="group relative px-10 py-5 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-600 rounded-xl font-semibold text-xl shadow-2xl shadow-purple-500/50 hover:shadow-cyan-500/50 transition-all duration-300 hover:scale-105 flex items-center gap-3 mx-auto"
-            >
-              <Sparkles className="w-6 h-6" />
-              {user ? 'Enter Troll City' : 'Join Free Now'}
-              <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
-            </button>
           </div>
         </section>
 

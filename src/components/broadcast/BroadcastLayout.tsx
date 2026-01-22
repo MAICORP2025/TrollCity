@@ -16,7 +16,7 @@ interface BroadcastLayoutProps {
   lastGift?: any
   onJoinRequest?: (seatIndex: number) => void
   onLeaveSession?: () => void
-  onDisableGuestMedia?: (participantId: string) => void
+  onDisableGuestMedia?: (participantId: string, disableVideo?: boolean, disableAudio?: boolean) => void
   giftBalanceDelta?: { userId: string; delta: number; key: number } | null
   backgroundStyle?: React.CSSProperties
   children?: React.ReactNode
@@ -215,7 +215,7 @@ export default function BroadcastLayout({
   if (!room) return null;
 
   return (
-    <div className={`relative w-full min-h-0 overflow-hidden ${className || ''}`} style={backgroundStyle}>
+    <div className={`relative w-full min-h-0 overflow-visible ${className || ''}`} style={backgroundStyle}>
       <div className="relative z-10">
         <ResponsiveVideoGrid
           participants={participants}

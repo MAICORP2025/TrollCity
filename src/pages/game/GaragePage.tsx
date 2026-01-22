@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Car, Gavel, Coins } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
+import { subscribeToUserCars, listenForPurchaseBroadcasts } from '../../lib/purchaseSync';
 import { cars } from '../../data/vehicles';
 import { toast } from 'sonner';
 
@@ -47,27 +48,59 @@ export default function GaragePage() {
 
       if (garageError) {
         console.error('Failed to load garage vehicles', garageError);
-        setGarageCars([]);
+        // Fallback: try legacy user_vehicles
+        try {
+          const { data: userVehicles } = await supabase
+            .from('user_vehicles')
+            .select('id, vehicle_id, is_equipped, created_at')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
 
-        const ownedFromProfile =
-          Array.isArray(profile?.owned_vehicle_ids) && profile.owned_vehicle_ids.length > 0
-            ? (profile.owned_vehicle_ids as any[])
-                .map((id) => Number(id))
-                .filter((id) => Number.isFinite(id))
-            : [];
+          const rows = (userVehicles || []).map((row: any) => ({
+            id: row.id,
+            car_model_id: Number(row.vehicle_id),
+            is_active: !!row.is_equipped,
+            acquired_at: row.created_at
+          }));
+          setGarageCars(rows);
 
-        const activeFromProfile =
-          typeof (profile as any)?.active_vehicle === 'number'
-            ? (profile as any).active_vehicle
-            : ownedFromProfile[0] ?? null;
+          const ownedIds = rows
+            .map((row) => Number(row.car_model_id))
+            .filter((id) => Number.isFinite(id));
+          const activeRow = rows.find((r) => r.is_active) || rows[0] || null;
+          const activeId = activeRow?.car_model_id ?? (ownedIds[0] ?? null);
+          setOwnedVehicleIds(ownedIds);
+          setActiveVehicleId(activeId);
+        } catch (fallbackErr) {
+          console.warn('Fallback to user_vehicles failed:', fallbackErr);
+          setGarageCars([]);
 
-        setOwnedVehicleIds(ownedFromProfile);
-        setActiveVehicleId(activeFromProfile);
+          const ownedFromProfile =
+            Array.isArray(profile?.owned_vehicle_ids) && profile.owned_vehicle_ids.length > 0
+              ? (profile.owned_vehicle_ids as any[])
+                  .map((id) => Number(id))
+                  .filter((id) => Number.isFinite(id))
+              : [];
+
+          const activeFromProfile =
+            typeof (profile as any)?.active_vehicle === 'number'
+              ? (profile as any).active_vehicle
+              : ownedFromProfile[0] ?? null;
+
+          setOwnedVehicleIds(ownedFromProfile);
+          setActiveVehicleId(activeFromProfile);
+        }
       } else {
         // Map user_cars format to local state
         const rows = (garageData || []).map((row: any) => ({
             id: row.id,
-            car_model_id: Number(row.car_id),
+            car_model_id: ((): number | null => {
+              const direct = Number(row.car_id);
+              if (Number.isFinite(direct)) return direct;
+              const fromCustomize = row?.customization_json?.car_model_id;
+              const asNum = Number(fromCustomize);
+              return Number.isFinite(asNum) ? asNum : null;
+            })(),
             is_active: row.is_active,
             acquired_at: row.purchased_at
         }));
@@ -97,6 +130,13 @@ export default function GaragePage() {
         if (!activeId) {
           if (typeof (profile as any)?.active_vehicle === 'number') {
             activeId = (profile as any).active_vehicle;
+          } else if (typeof (profile as any)?.active_vehicle === 'string') {
+            // Resolve UUID to model id if present
+            const activeUuid = (profile as any).active_vehicle as string;
+            const candidate = rows.find(r => r.id === activeUuid);
+            if (candidate && typeof candidate.car_model_id === 'number') {
+              activeId = candidate.car_model_id;
+            }
           } else if (ownedIds.length > 0) {
             activeId = ownedIds[0];
           }
@@ -166,6 +206,19 @@ export default function GaragePage() {
     }
     loadGarageData();
 
+    // Subscribe to real-time user_cars updates
+    const carsSubscription = subscribeToUserCars(user.id, () => {
+      loadGarageData();
+    });
+
+    // Listen for purchase broadcasts from other tabs/windows
+    const unsubscribeBroadcast = listenForPurchaseBroadcasts((data) => {
+      if (data.type === 'car_purchased' && data.userId === user.id) {
+        console.log('Car purchase detected from another tab, refreshing garage');
+        loadGarageData();
+      }
+    });
+
     const listingsChannel = supabase
       .channel(`garage-listings-${user.id}`)
       .on(
@@ -198,6 +251,8 @@ export default function GaragePage() {
       .subscribe();
 
     return () => {
+      carsSubscription.unsubscribe();
+      unsubscribeBroadcast();
       supabase.removeChannel(listingsChannel);
       supabase.removeChannel(bidsChannel);
     };

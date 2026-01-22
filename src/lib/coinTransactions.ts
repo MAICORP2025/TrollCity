@@ -269,6 +269,48 @@ export async function deductCoins(params: {
 
       if (bankError) {
              console.error('deductCoins: Troll Bank error', bankError)
+             // Fallback: use legacy RPC if bank fails due to schema drift (e.g., missing columns)
+             const msg = (bankError.message || '').toLowerCase()
+             if (msg.includes('column') && msg.includes('coins') && msg.includes('does not exist')) {
+               try {
+                 const amountParam = normalizedAmount.toString()
+                 const { data: rpcBalance, error: legacyErr } = await sb.rpc('deduct_user_troll_coins', {
+                   p_user_id: userId,
+                   p_amount: amountParam,
+                   p_coin_type: 'troll_coins'
+                 })
+
+                 if (legacyErr) {
+                   console.error('deductCoins legacy fallback failed:', legacyErr)
+                   return { success: false, newBalance: null, transaction: null, error: legacyErr.message }
+                 }
+
+                 const parsedBalance = safeNumber(rpcBalance)
+                 let newBalance: number | string | null = parsedBalance
+                 if (newBalance === null && rpcBalance !== null && rpcBalance !== undefined) {
+                   newBalance = typeof rpcBalance === 'string' ? rpcBalance : String(rpcBalance)
+                 }
+
+                 // Update store
+                 try {
+                   const { profile, setProfile } = useAuthStore.getState()
+                   if (profile && profile.id === userId && newBalance !== null) {
+                     const numericBalance = Number(newBalance)
+                     if (!isNaN(numericBalance)) {
+                       setProfile({ ...profile, troll_coins: numericBalance })
+                     }
+                   }
+                 } catch (e) {
+                   console.warn('deductCoins fallback: Failed to update local store', e)
+                 }
+
+                 return { success: true, newBalance, transaction: null, error: null }
+               } catch (fallbackErr: any) {
+                 console.error('deductCoins fallback exception:', fallbackErr)
+                 return { success: false, newBalance: null, transaction: null, error: fallbackErr.message }
+               }
+             }
+
              return { success: false, newBalance: null, transaction: null, error: bankError.message }
       } else {
         // Success
@@ -445,6 +487,39 @@ export async function addCoins(params: {
 
     if (bankError) {
       console.error('addCoins: Troll Bank credit failed', bankError)
+      const msg = (bankError.message || '').toLowerCase()
+      // Fallback to legacy credit if schema drift occurs
+      if (msg.includes('column') && msg.includes('coins') && msg.includes('does not exist')) {
+        try {
+          const { data: updated, error: legacyErr } = await sb
+            .from('user_profiles')
+            .update({ troll_coins: (currentBalance || 0) + amount })
+            .eq('id', userId)
+            .select('troll_coins')
+            .single()
+
+          if (legacyErr) {
+            console.error('addCoins legacy fallback failed:', legacyErr)
+            return { success: false, newBalance: currentBalance, transaction: null, error: legacyErr.message }
+          }
+
+          const finalBalance = updated?.troll_coins ?? (currentBalance + amount)
+          try {
+            const { profile, setProfile } = useAuthStore.getState()
+            if (profile && profile.id === userId) {
+              setProfile({ ...profile, troll_coins: finalBalance })
+            }
+          } catch (e) {
+            console.warn('addCoins fallback: Failed to update local store', e)
+          }
+
+          return { success: true, newBalance: finalBalance, transaction: null, error: null }
+        } catch (fallbackErr: any) {
+          console.error('addCoins fallback exception:', fallbackErr)
+          return { success: false, newBalance: currentBalance, transaction: null, error: fallbackErr.message }
+        }
+      }
+
       return { success: false, newBalance: currentBalance, transaction: null, error: bankError.message }
     }
 

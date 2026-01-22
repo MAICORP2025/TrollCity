@@ -70,9 +70,11 @@ export default function AdminManualOrders() {
       const rows = data || []
       setOrders(rows)
 
-      const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)))
-      const pkgIds = Array.from(new Set(rows.map((r) => r.package_id).filter(Boolean))) as string[]
+      const userIds = Array.from(new Set(rows.map((r: any) => r.user_id).filter(Boolean)))
+      const pkgIds = Array.from(new Set(rows.map((r: any) => r.package_id).filter(Boolean))) as string[]
 
+      // Note: Cannot use embedded relationship 'user:user_profiles' due to multiple FKs
+      // to user_profiles (user_id, processed_by). Must fetch separately.
       if (userIds.length) {
         const { data: userData, error: userError } = await supabase
           .from('user_profiles')

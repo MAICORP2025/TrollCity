@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, MessageCircle } from 'lucide-react'
+import { Search, MessageCircle, Trash2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
+import { toast } from 'sonner'
 
 interface Conversation {
   other_user_id: string
@@ -52,6 +53,57 @@ export default function InboxSidebar({
     if (!profile?.id) return
     setUnreadCounts({})
   }, [profile?.id])
+
+  const deleteAllMessages = useCallback(async () => {
+    if (!profile?.id) return
+    
+    if (!confirm('Delete ALL your conversations and messages? This cannot be undone.')) return
+    
+    try {
+      // Get all conversation IDs where user is a member
+      const { data: memberships } = await supabase
+        .from('conversation_members')
+        .select('conversation_id')
+        .eq('user_id', profile.id)
+      
+      const conversationIds = memberships?.map(m => m.conversation_id) || []
+      
+      if (conversationIds.length === 0) {
+        toast.info('No conversations to delete')
+        return
+      }
+      
+      // Delete all messages in those conversations
+      const { error: messagesError } = await supabase
+        .from('conversation_messages')
+        .delete()
+        .in('conversation_id', conversationIds)
+      
+      if (messagesError) throw messagesError
+      
+      // Delete conversation memberships
+      const { error: membershipsError } = await supabase
+        .from('conversation_members')
+        .delete()
+        .eq('user_id', profile.id)
+      
+      if (membershipsError) throw membershipsError
+      
+      // Delete conversations themselves (if no other members)
+      // This might fail if others are still members, which is okay
+      await supabase
+        .from('conversations')
+        .delete()
+        .in('id', conversationIds)
+      
+      setConversations([])
+      onConversationsLoaded?.([])
+      toast.success('All conversations deleted')
+    } catch (err) {
+      console.error('Delete all messages error:', err)
+      toast.error('Failed to delete all messages')
+    }
+  }, [profile?.id, onConversationsLoaded])
 
   const loadConversations = useCallback(async (options?: { background?: boolean }) => {
     const background = options?.background ?? false
@@ -214,37 +266,51 @@ export default function InboxSidebar({
   )
 
   return (
-    <div className="w-full md:w-80 h-full flex flex-col bg-[#060011] border-r border-[#8a2be2]">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#8a2be2]/30 bg-[rgba(10,0,30,0.6)]">
-        <div className="text-sm font-semibold text-white">Messages</div>
+    <div className="w-full md:w-80 flex flex-col border-r border-[#8a2be2]/30 bg-[rgba(10,0,30,0.6)] h-full">
+      {/* Tabs + Delete All Button */}
+      <div className="border-b border-[#8a2be2]/30 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-white">Messages</h2>
+          {conversations.length > 0 && (
+            <button
+              onClick={deleteAllMessages}
+              className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition flex items-center gap-1"
+              title="Delete all conversations"
+            >
+              <Trash2 size={16} />
+              <span className="text-xs">Delete All</span>
+            </button>
+          )}
+        </div>
+        
+        {/* Tabs */}
+        <div className="flex gap-2 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              className={`
+                flex-none px-3 py-2 text-xs font-semibold rounded-full transition whitespace-nowrap
+                ${activeTab === tab.id
+                  ? 'bg-gradient-to-r from-[#9b32ff] to-[#00ffcc] text-black shadow-lg'
+                  : 'text-gray-300 hover:text-white hover:bg-[rgba(155,50,255,0.1)]'
+                }
+              `}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        
+        {/* New Message Button */}
         <button
           type="button"
           onClick={onNewMessage}
-          className="px-3 py-1 rounded-lg bg-gradient-to-r from-[#9b32ff] to-[#00ffcc] text-black text-xs font-bold"
+          className="w-full px-3 py-2 rounded-lg bg-gradient-to-r from-[#9b32ff] to-[#00ffcc] text-black text-sm font-bold"
         >
           New Message
         </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 overflow-x-auto border-b border-[#8a2be2]/30 bg-[rgba(10,0,30,0.6)] px-3 py-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onTabChange(tab.id)}
-            className={`
-              flex-none px-3 py-2 text-xs font-semibold rounded-full transition whitespace-nowrap
-              ${activeTab === tab.id
-                ? 'bg-gradient-to-r from-[#9b32ff] to-[#00ffcc] text-black shadow-lg'
-                : 'text-gray-300 hover:text-white hover:bg-[rgba(155,50,255,0.1)]'
-              }
-            `}
-          >
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* Search Bar */}
@@ -263,8 +329,19 @@ export default function InboxSidebar({
 
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="p-4 text-center text-gray-400">Loading...</div>
+        {loading && conversations.length === 0 ? (
+          // Show skeleton only on initial load, not during background refreshes
+          <div className="divide-y divide-[#8a2be2]/20">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="p-3 flex items-center gap-3 animate-pulse">
+                <div className="w-12 h-12 rounded-full bg-[#8a2be2]/20 flex-shrink-0"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-[#8a2be2]/20 rounded w-24"></div>
+                  <div className="h-3 bg-[#8a2be2]/20 rounded w-32"></div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : filteredConversations.length === 0 ? (
           <div className="p-6 text-center text-gray-400">
             <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />

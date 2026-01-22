@@ -6,8 +6,8 @@ import { toast } from 'sonner'
 import { useAvatar } from '../lib/hooks/useAvatar'
 import type { AvatarConfig } from '../lib/hooks/useAvatar'
 import { updateUserAvatarConfig } from '../lib/purchases'
-import Avatar3D from '../components/avatar/Avatar3D'
 import PaymentMethodManager from '../components/payments/PaymentMethodManager'
+import CropPhotoModal from '../components/CropPhotoModal'
 import { KeyRound } from 'lucide-react'
 import { setResetPin } from '@/services/passwordManager'
 
@@ -45,6 +45,8 @@ const ProfileSetup = () => {
   const [avatarUrl, setAvatarUrl] = React.useState(profile?.avatar_url || '')
   const [pin, setPin] = React.useState('')
   const [savingPin, setSavingPin] = React.useState(false)
+  const [coverCropModalOpen, setCoverCropModalOpen] = React.useState(false)
+  const [coverCropFile, setCoverCropFile] = React.useState<File | null>(null)
 
   const handleUsernameChange = (value: string) => {
     // Allow letters, numbers, and underscores
@@ -64,17 +66,26 @@ const ProfileSetup = () => {
     }
   }, [suggestedUsername, username])
 
+  // Load initial banner and profile picture from profile on mount
   React.useEffect(() => {
     if (profile?.banner_url) {
+      console.log('Initial banner URL:', profile.banner_url)
       setBannerUrl(profile.banner_url)
     }
-  }, [profile?.banner_url])
-
-  React.useEffect(() => {
     if (profile?.avatar_url) {
       setAvatarUrl(profile.avatar_url)
     }
-  }, [profile?.avatar_url])
+    if ((profile as any)?.gender) {
+      console.log('Initial gender:', (profile as any).gender)
+      setGender((profile as any).gender)
+    }
+    if ((profile as any)?.full_name) {
+      setFullName((profile as any).full_name)
+    }
+    if (profile?.bio) {
+      setBio(profile.bio)
+    }
+  }, [profile])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -116,7 +127,7 @@ const ProfileSetup = () => {
         }
       }
       const now = new Date().toISOString()
-      const { data: updated, error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('user_profiles')
         .update({ 
           username: uname, 
@@ -127,19 +138,19 @@ const ProfileSetup = () => {
         })
         .eq('id', user.id)
         .select('*')
-        .maybeSingle()
       
-      if (error && error.code !== 'PGRST116') throw error
+      if (error) throw error
       
-      let nextProfile = updated as any
+      const updatedProfile = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows
+      let nextProfile = updatedProfile as any
 
-      if (updated) {
-        setProfile(updated as any)
+      if (updatedProfile) {
+        setProfile(updatedProfile as any)
         try {
           localStorage.setItem(
             `tc-profile-${user.id}`,
-            JSON.stringify({ data: updated, timestamp: Date.now() })
-                        )
+            JSON.stringify({ data: updatedProfile, timestamp: Date.now() })
+          )
         } catch {}
       } else {
         const { data: fallback } = await supabase
@@ -152,6 +163,9 @@ const ProfileSetup = () => {
           setProfile(fallback as any)
         }
       }
+
+      // Explicitly refresh the profile in the auth store
+      await useAuthStore.getState().refreshProfile?.()
 
       toast.success('Profile saved')
 
@@ -174,7 +188,8 @@ const ProfileSetup = () => {
         })
       }
 
-      navigate('/')
+      // Navigate to profile page to see changes
+      navigate(`/profile/${nextProfile?.username || uname}`)
     } catch (err: any) {
       console.error('Profile save error:', err)
       toast.error(err?.message || 'Failed to save profile')
@@ -222,28 +237,37 @@ const ProfileSetup = () => {
         }
       }
 
-      if (!uploadedUrl) throw new Error('Failed to upload avatar to any bucket')
+      if (!uploadedUrl) throw new Error('Failed to upload profile picture to any bucket')
 
       // Set local avatar URL immediately for instant UI feedback
       setAvatarUrl(uploadedUrl)
 
       // Update database
-      const { data: updated, error: updateErr } = await supabase
+      const { data: updatedRows, error: updateErr } = await supabase
         .from('user_profiles')
         .update({ avatar_url: uploadedUrl, updated_at: new Date().toISOString() })
         .eq('id', user.id)
         .select('*')
-        .maybeSingle()
       
-      if (updateErr && updateErr.code !== 'PGRST116') throw updateErr
-      if (updated) {
-        setProfile(updated as any)
+      if (updateErr) throw updateErr
+      const updatedProfile = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows
+      if (updatedProfile) {
+        setProfile(updatedProfile as any)
+        try {
+          localStorage.setItem(
+            `tc-profile-${user.id}`,
+            JSON.stringify({ data: updatedProfile, timestamp: Date.now() })
+          )
+        } catch (err) {
+          console.warn('Failed to update localStorage:', err)
+        }
+        useAuthStore.getState().refreshProfile?.()
       }
       
-      toast.success('Avatar uploaded successfully')
+      toast.success('Profile picture uploaded successfully')
     } catch (err: any) {
-      console.error('Avatar upload error:', err)
-      toast.error(err?.message || 'Failed to upload avatar')
+      console.error('Profile picture upload error:', err)
+      toast.error(err?.message || 'Failed to upload profile picture')
     } finally {
       setUploadingAvatar(false)
       if (avatarInputRef.current) avatarInputRef.current.value = ''
@@ -255,35 +279,63 @@ const ProfileSetup = () => {
     if (!file || !user) return
 
     try {
-      setUploadingCover(true)
       if (!file.type.startsWith('image/')) throw new Error('File must be an image')
       if (file.size > 5 * 1024 * 1024) throw new Error('Image too large (max 5MB)')
 
-      const ext = file.name.split('.').pop() || 'jpg'
-      const name = `${user.id}-${Date.now()}.${ext}`
-      const uploadPath = `covers/${name}`
+      // Open crop modal instead of uploading directly
+      setCoverCropFile(file)
+      setCoverCropModalOpen(true)
+    } catch (err: any) {
+      console.error('Cover upload error:', err)
+      toast.error(err?.message || 'Failed to upload cover photo')
+    } finally {
+      if (coverInputRef.current) coverInputRef.current.value = ''
+    }
+  }
 
-      const buckets = ['public', 'covers', 'avatars', 'troll-city-assets']
+  const handleCoverCrop = async (croppedFile: File) => {
+    if (!user) return
+
+    try {
+      setUploadingCover(true)
+      setCoverCropModalOpen(false)
+
+      const ext = croppedFile.name.split('.').pop() || 'jpg'
+      const name = `${user.id}-${Date.now()}.${ext}`
+
+      // Try different bucket and path combinations
+      const uploadAttempts = [
+        { bucket: 'covers', path: name },
+        { bucket: 'troll-city-assets', path: `covers/${name}` },
+        { bucket: 'avatars', path: name },
+        { bucket: 'public', path: name }
+      ]
+      
       let uploadedUrl: string | null = null
       let lastErr: any = null
 
-      for (const bucket of buckets) {
+      for (const attempt of uploadAttempts) {
         try {
+          console.log(`Trying bucket: ${attempt.bucket}, path: ${attempt.path}`)
+          
           const { error: uploadErr } = await supabase.storage
-            .from(bucket)
-            .upload(uploadPath, file, { cacheControl: '3600', upsert: true })
+            .from(attempt.bucket)
+            .upload(attempt.path, croppedFile, { cacheControl: '3600', upsert: true })
 
           if (uploadErr) {
+            console.log(`Failed with ${attempt.bucket}:`, uploadErr.message)
             lastErr = uploadErr
             continue
           }
 
-          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadPath)
+          const { data: urlData } = supabase.storage.from(attempt.bucket).getPublicUrl(attempt.path)
           if (urlData?.publicUrl) {
             uploadedUrl = urlData.publicUrl
+            console.log(`Success with bucket ${attempt.bucket}:`, uploadedUrl)
             break
           }
         } catch (err) {
+          console.log(`Error with ${attempt.bucket}:`, err)
           lastErr = err
         }
       }
@@ -292,43 +344,100 @@ const ProfileSetup = () => {
         throw lastErr || new Error('Failed to upload cover photo (no bucket available)')
       }
 
-      // Set local banner URL immediately for instant UI feedback
-      setBannerUrl(uploadedUrl)
+      console.log('Uploaded URL:', uploadedUrl)
+      console.log('User ID:', user.id)
 
-      // Update database
-      const { data: updated, error: updateErr } = await supabase
+      // Update database with clean URL (without checking profile first to avoid RLS issues)
+      const { error: updateErr } = await supabase
         .from('user_profiles')
         .update({ banner_url: uploadedUrl, updated_at: new Date().toISOString() })
         .eq('id', user.id)
-        .select('*')
-        .maybeSingle()
 
-      if (updateErr && updateErr.code !== 'PGRST116') throw updateErr
-      if (updated) {
-        setProfile(updated as any)
+      if (updateErr) {
+        console.error('Database update error:', updateErr)
+        throw new Error(`Failed to save cover photo: ${updateErr.message}`)
       }
+      
+      console.log('Banner URL update completed successfully for user:', user.id)
+      console.log('Updated banner_url:', uploadedUrl)
+      
+      // Add cache-busting parameter to force reload
+      const cacheBustedUrl = `${uploadedUrl}?t=${Date.now()}`
+      
+      console.log('Setting banner URL with cache buster:', cacheBustedUrl)
+      
+      // Set local banner URL with cache-buster for instant UI feedback
+      setBannerUrl(cacheBustedUrl)
+      
+      // Create updated profile object manually since fetch might fail due to RLS
+      const updatedProfile = { 
+        ...profile, 
+        banner_url: uploadedUrl, 
+        updated_at: new Date().toISOString() 
+      }
+      
+      // Update global store with new profile data
+      setProfile(updatedProfile as any)
+        
+      // Update localStorage cache
+      try {
+        localStorage.setItem(
+          `tc-profile-${user.id}`,
+          JSON.stringify({ data: updatedProfile, timestamp: Date.now() })
+        )
+      } catch (err) {
+        console.warn('Failed to update localStorage:', err)
+      }
+      
+      // Refresh the auth store profile
+      await useAuthStore.getState().refreshProfile?.()
 
+      // Force a small delay to ensure state updates
+      setTimeout(() => {
+        console.log('Current bannerUrl state:', cacheBustedUrl)
+      }, 100)
+      
       toast.success('Cover photo updated successfully')
     } catch (err: any) {
       console.error('Cover upload error:', err)
       toast.error(err?.message || 'Failed to upload cover photo')
     } finally {
       setUploadingCover(false)
+      setCoverCropFile(null)
       if (coverInputRef.current) coverInputRef.current.value = ''
     }
   }
 
   return (
     <div className="min-h-screen bg-[#0f0f17] text-white p-6">
+      {/* Crop Photo Modal */}
+      <CropPhotoModal
+        isOpen={coverCropModalOpen}
+        imageFile={coverCropFile}
+        onCrop={handleCoverCrop}
+        onCancel={() => {
+          setCoverCropModalOpen(false)
+          setCoverCropFile(null)
+          if (coverInputRef.current) coverInputRef.current.value = ''
+        }}
+        aspectRatio={16 / 9}
+        title="Crop Cover Photo"
+      />
+
       <div className="max-w-2xl mx-auto">
         {/* Cover Photo */}
         <div className="relative h-48 rounded-2xl overflow-hidden mb-6 bg-gradient-to-r from-purple-900 via-indigo-900 to-blue-900">
-          {bannerUrl ? (
+          {bannerUrl && bannerUrl.trim() !== '' ? (
             <img
               src={bannerUrl}
               alt="Cover"
-              className="w-full h-full object-cover"
-              onError={() => setBannerUrl('')}
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ objectFit: 'contain', objectPosition: 'center' }}
+              onLoad={() => console.log('Cover loaded:', bannerUrl)}
+              onError={(e) => {
+                console.error('Cover image load error:', bannerUrl)
+                e.currentTarget.style.display = 'none'
+              }}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-300 text-sm uppercase tracking-[0.4em]">
@@ -352,103 +461,33 @@ const ProfileSetup = () => {
           />
         </div>
 
-        {/* Avatar & Display */}
+        {/* Profile Picture */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-24 h-24 rounded-full border border-[#2C2C2C] bg-[#14141c] flex items-center justify-center overflow-hidden">
-              <Avatar3D config={avatarConfig} size="lg" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs rounded border border-[#3C3C4C] hover:bg-[#2A2A35]"
-                  onClick={() =>
-                    setAvatarConfig(prev => ({
-                      ...prev,
-                      skinTone: prev.skinTone === 'light' ? 'medium' : prev.skinTone === 'medium' ? 'dark' : 'light'
-                    }))
-                  }
-                >
-                  Cycle Skin Tone
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs rounded border border-[#3C3C4C] hover:bg-[#2A2A35]"
-                  onClick={() =>
-                    setAvatarConfig(prev => ({
-                      ...prev,
-                      hairStyle:
-                        prev.hairStyle === 'short'
-                          ? 'long'
-                          : prev.hairStyle === 'long'
-                          ? 'buzz'
-                          : prev.hairStyle === 'buzz'
-                          ? 'none'
-                          : 'short'
-                    }))
-                  }
-                >
-                  Cycle Hair
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs rounded border border-[#3C3C4C] hover:bg-[#2A2A35]"
-                  onClick={() =>
-                    setAvatarConfig(prev => ({
-                      ...prev,
-                      accessory:
-                        prev.accessory === 'none'
-                          ? 'glasses'
-                          : prev.accessory === 'glasses'
-                          ? 'hat'
-                          : prev.accessory === 'hat'
-                          ? 'mask'
-                          : 'none'
-                    }))
-                  }
-                >
-                  Cycle Accessory
-                </button>
-              </div>
-              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none mt-1">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-500 bg-[#23232b]"
-                  checked={avatarConfig.useAsProfilePicture}
-                  onChange={e =>
-                    setAvatarConfig(prev => ({
-                      ...prev,
-                      useAsProfilePicture: e.target.checked
-                    }))
-                  }
-                />
-                Use 3D avatar in game loading screens and some profile displays
-              </label>
-            </div>
-          </div>
           <div className="flex items-center gap-4">
             <img
               src={avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`}
-              alt="avatar"
+              alt="profile picture"
               className="w-20 h-20 rounded-full border border-[#2C2C2C] object-cover"
             />
-            <button
-              type="button"
-              onClick={() => avatarInputRef.current?.click()}
-              disabled={uploadingAvatar}
-              className="px-4 py-2 bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] text-white rounded"
-            >
-              {uploadingAvatar ? 'Uploading…' : 'Change Avatar Image'}
-            </button>
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarUpload}
-              className="hidden"
-            />
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                className="px-3 py-1 text-sm font-semibold rounded-md bg-[#7C3AED] text-white hover:bg-[#6B21A8] disabled:opacity-60"
+              >
+                {uploadingAvatar ? 'Updating Profile Picture...' : 'Update Profile Picture'}
+              </button>
+              <p className="text-xs text-gray-400">JPG/PNG up to 5MB.</p>
+            </div>
           </div>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleAvatarUpload}
+          />
         </div>
 
         {/* Profile Info */}

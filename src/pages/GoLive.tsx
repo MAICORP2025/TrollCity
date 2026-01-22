@@ -4,6 +4,7 @@ import api, { API_ENDPOINTS } from '../lib/api';
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { useCoins } from '../lib/hooks/useCoins';
+import { useBroadcastLockdown } from '../lib/hooks/useBroadcastLockdown';
 import { Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveKit } from '../hooks/useLiveKit';
@@ -17,6 +18,7 @@ type StreamQuality = 'STANDARD' | 'HD_BOOST' | 'HIGHEST';
 const GoLive: React.FC = () => {
   const { profile, refreshProfile } = useAuthStore(); // Using getState() instead for async operations
   const { refreshCoins } = useCoins();
+  const { settings: lockdownSettings } = useBroadcastLockdown();
 
   const [streamTitle, setStreamTitle] = useState('');
   const [isStreaming] = useState(false);
@@ -51,6 +53,10 @@ const GoLive: React.FC = () => {
       message: `You cannot go live until ${new Date(until).toLocaleString()}`,
     };
   }, [profile?.live_restricted_until]);
+
+  const isAdmin = useMemo(() => {
+    return profile?.is_admin || profile?.role === 'admin';
+  }, [profile?.is_admin, profile?.role]);
 
   const isPrivileged = useMemo(() => {
     const role = String(profile?.role || '').toLowerCase();
@@ -245,6 +251,12 @@ const GoLive: React.FC = () => {
 
     if (liveRestriction.isRestricted) {
       toast.error(liveRestriction.message);
+      return;
+    }
+
+    // Check broadcast lockdown - only admin can broadcast when enabled
+    if (lockdownSettings.enabled && !isAdmin) {
+      toast.error('🔴 Broadcasts are currently locked. Only the admin can broadcast right now. Try again later or join the admin\'s broadcast!');
       return;
     }
 
@@ -726,6 +738,18 @@ const GoLive: React.FC = () => {
         <Video className="text-troll-gold w-8 h-8" />
         Go Live
       </h1>
+      
+      {/* Broadcast Lockdown Alert */}
+      {lockdownSettings.enabled && (
+        <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-red-200 flex items-start gap-3">
+          <span className="text-lg">🔴</span>
+          <div>
+            <p className="font-semibold">Broadcast Lockdown Active</p>
+            <p className="text-sm mt-1">Only the admin can create new broadcasts right now. You can still join and participate in the admin's broadcast!</p>
+          </div>
+        </div>
+      )}
+
       {liveRestriction.isRestricted && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm text-red-200">
           {liveRestriction.message}

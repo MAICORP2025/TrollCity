@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Home, Hammer, TrendingUp, Coins, ShoppingBag, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { syncPropertyPurchase, subscribeToProperties, listenForPurchaseBroadcasts } from '../lib/purchaseSync'
 import { toast } from 'sonner'
 import { useCoins } from '../lib/hooks/useCoins'
 import { recordCoinTransaction, deductCoins } from '../lib/coinTransactions'
@@ -389,7 +390,40 @@ const TrollsTownPage: React.FC = () => {
         .limit(10)
 
       if (!historyError && historyRows) {
-        setDeedHistory(historyRows as DeedTransferRow[])
+        // Fetch usernames for sellers and buyers to display in deed history
+        const enrichedHistory = await Promise.all(
+          (historyRows as DeedTransferRow[]).map(async (transfer) => {
+            let sellerUsername = transfer.seller_username;
+            let buyerUsername = transfer.buyer_username;
+
+            // Fetch seller username if not cached
+            if (!sellerUsername && transfer.seller_user_id) {
+              const { data: sellerProfile } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('id', transfer.seller_user_id)
+                .maybeSingle();
+              sellerUsername = sellerProfile?.username || 'Unknown';
+            }
+
+            // Fetch buyer username if not cached
+            if (!buyerUsername && transfer.buyer_user_id) {
+              const { data: buyerProfile } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('id', transfer.buyer_user_id)
+                .maybeSingle();
+              buyerUsername = buyerProfile?.username || 'Unknown';
+            }
+
+            return {
+              ...transfer,
+              seller_username: sellerUsername || 'Unknown',
+              buyer_username: buyerUsername || 'Unknown'
+            };
+          })
+        );
+        setDeedHistory(enrichedHistory as DeedTransferRow[])
       } else {
         setDeedHistory([])
       }
@@ -468,6 +502,33 @@ const TrollsTownPage: React.FC = () => {
     }
 
     loadData()
+
+    // Set up real-time subscription to user's properties
+    const propsSubscription = subscribeToProperties(user.id, (rows) => {
+      setOwnedProperties(rows);
+      const active = rows.find((p: any) => p.is_active_home);
+      if (active) {
+        setActiveHomeId(active.id);
+      }
+      const starter = rows.find((p: any) => p.is_starter);
+      const selected = active || starter || rows[0];
+      if (selected) {
+        loadPropertyDetails(selected as PropertyRow);
+      }
+    });
+
+    // Listen for property purchase broadcasts from other tabs
+    const unsubscribeBroadcast = listenForPurchaseBroadcasts((data) => {
+      if (data.type === 'property_purchased' && data.userId === user.id) {
+        console.log('Property purchase detected from another tab:', data);
+        loadData();
+      }
+    });
+
+    return () => {
+      propsSubscription.unsubscribe();
+      unsubscribeBroadcast();
+    };
   }, [user, loadPropertyDetails])
 
   const handleClaimStarterHome = async () => {
@@ -1116,6 +1177,14 @@ const TrollsTownPage: React.FC = () => {
       }
 
       toast.success('Home purchased and set as active')
+
+      // Cross-platform sync: clear caches, update profile, broadcast to other tabs
+      try {
+        await syncPropertyPurchase(user.id)
+      } catch (syncErr) {
+        console.error('Sync after property purchase failed:', syncErr)
+        // Still proceed - sync errors shouldn't block user
+      }
     } catch (error: any) {
       console.error('Failed to purchase property', error)
       toast.error(error?.message || 'Failed to purchase property')
@@ -1506,25 +1575,46 @@ const TrollsTownPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={async () => {
-                              if (!user || !myDeed) return
+                              if (!user || !myDeed || !myProperty) return
                               const trimmed = homeNameDraft.trim()
                               try {
-                                const { data, error } = await supabase
-                                  .from('deeds')
-                                  .update({
-                                    property_name: trimmed || null
-                                  })
-                                  .eq('id', myDeed.id)
-                                  .select('*')
-                                  .maybeSingle()
-                                if (error) {
-                                  throw error
+                                // Update both deeds and properties tables to sync across all users
+                                const [deedRes, propRes] = await Promise.all([
+                                  supabase
+                                    .from('deeds')
+                                    .update({
+                                      property_name: trimmed || null
+                                    })
+                                    .eq('id', myDeed.id)
+                                    .select('*')
+                                    .maybeSingle(),
+                                  supabase
+                                    .from('properties')
+                                    .update({
+                                      name: trimmed || null
+                                    })
+                                    .eq('id', myProperty.id)
+                                    .select('*')
+                                    .maybeSingle()
+                                ])
+
+                                if (deedRes.error) {
+                                  throw deedRes.error
                                 }
-                                if (data) {
-                                  setMyDeed(data as DeedRow)
-                                  setHomeNameDraft((data as DeedRow).property_name || '')
+                                if (propRes.error) {
+                                  throw propRes.error
                                 }
-                                toast.success('Home name updated')
+
+                                if (deedRes.data) {
+                                  setMyDeed(deedRes.data as DeedRow)
+                                  setHomeNameDraft((deedRes.data as DeedRow).property_name || '')
+                                }
+                                
+                                if (propRes.data) {
+                                  setMyProperty(propRes.data as PropertyRow)
+                                }
+
+                                toast.success('Home name updated for all users')
                               } catch (err: any) {
                                 console.error('Failed to update home name', err)
                                 toast.error(err?.message || 'Failed to update home name')
@@ -1546,19 +1636,30 @@ const TrollsTownPage: React.FC = () => {
                             <p className="text-yellow-600 uppercase text-[10px] mb-1">
                               Recent Deed Transfers
                             </p>
-                            <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                               {deedHistory.map(row => (
                                 <div
                                   key={row.id}
-                                  className="flex items-center justify-between text-[11px] text-yellow-100/90"
+                                  className="text-[11px] text-yellow-100/90 space-y-0.5"
                                 >
-                                  <span>
-                                    {new Date(row.created_at).toLocaleDateString()} • Sold for{' '}
-                                    {row.sale_price.toLocaleString()} TC
-                                  </span>
-                                  <span className="text-yellow-400/80">
-                                    Fee {row.deed_fee.toLocaleString()} • Net {row.seller_net.toLocaleString()}
-                                  </span>
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-medium">
+                                      {row.property_name ? `"${row.property_name}"` : 'Unnamed Property'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-yellow-600">
+                                      {row.seller_username || 'Previous Owner'} → {row.buyer_username || 'Buyer'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span>
+                                      {new Date(row.created_at).toLocaleDateString()} • {row.sale_price.toLocaleString()} TC
+                                    </span>
+                                    <span className="text-yellow-400/80">
+                                      Fee {row.deed_fee.toLocaleString()} • Net {row.seller_net.toLocaleString()}
+                                    </span>
+                                  </div>
                                 </div>
                               ))}
                             </div>

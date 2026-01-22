@@ -62,10 +62,17 @@ Deno.serve(async (req) => {
         throw new Error('Failed to create PayPal order')
     }
 
+
     const orderData = await orderRes.json()
+    // Find approval URL from PayPal response
+    let approvalUrl = null;
+    if (orderData && orderData.links && Array.isArray(orderData.links)) {
+      const approve = orderData.links.find((l) => l.rel === 'approve');
+      if (approve) approvalUrl = approve.href;
+    }
 
     return new Response(
-      JSON.stringify({ orderId: orderData.id }),
+      JSON.stringify({ orderId: orderData.id, approvalUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

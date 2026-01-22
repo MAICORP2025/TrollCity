@@ -6,6 +6,9 @@
 /* Mobile Fullscreen & Safe Area Support */
 @import './styles/mobile-fullscreen.css';
 
+/* Mobile Broadcast Layout */
+@import './styles/mobile-broadcast.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

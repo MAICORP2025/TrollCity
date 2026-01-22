@@ -40,9 +40,9 @@ export default function SidebarGroup({
     >
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-gray-300 transition-colors group"
+        className="w-full flex items-center justify-between px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-gray-100 transition-colors group"
       >
-        <span>{title}</span>
+        <span className="flex-1 text-left">{title}</span>
         <motion.div
           animate={{ rotate: shouldShow ? 0 : -90 }}
           transition={{ duration: 0.2 }}

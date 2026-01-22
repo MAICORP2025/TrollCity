@@ -88,10 +88,10 @@ export default function AvatarCustomizer() {
         return
       }
 
-      toast.success('Avatar updated')
+      toast.success('Profile picture updated')
       loadInventory()
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to save avatar')
+      toast.error(err?.message || 'Failed to save profile picture')
     } finally {
       setSaving(false)
     }
@@ -107,7 +107,7 @@ export default function AvatarCustomizer() {
             <Sparkles className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Avatar Customizer</h1>
+            <h1 className="text-3xl font-bold">Profile Picture Customizer</h1>
             <p className="text-sm text-gray-400">Style your character and equip owned clothing.</p>
           </div>
         </div>
@@ -121,7 +121,7 @@ export default function AvatarCustomizer() {
               className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-sm font-semibold flex items-center gap-2 disabled:opacity-60"
             >
               <Save className="w-4 h-4" />
-              {saving ? 'Saving…' : 'Save Avatar'}
+              {saving ? 'Saving…' : 'Save Profile Picture'}
             </button>
           </div>
 

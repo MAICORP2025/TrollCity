@@ -24,7 +24,8 @@ import {
   Swords,
   X,
   Settings,
-  Plus
+  Plus,
+  Minus
 } from 'lucide-react';
 import ChatBox from '../components/broadcast/ChatBox';
 import GiftBox, { GiftItem, RecipientMode } from '../components/broadcast/GiftBox';
@@ -65,6 +66,31 @@ const DEFAULT_GIFTS: GiftItem[] = [
   { id: "rose", name: "Rose", icon: "🌹", value: 20, category: "Basic" },
   { id: "sparkles", name: "Sparkles", icon: "✨", value: 75, category: "Rare" },
   { id: "fireworks", name: "Fireworks", icon: "🎆", value: 2000, category: "Legendary" },
+  { id: "neon_wave", name: "Neon Wave", icon: "🌊", value: 300, category: "Rare" },
+  { id: "royal_scepter", name: "Royal Scepter", icon: "⚜️", value: 4500, category: "Epic" },
+  { id: "neon_dragon", name: "Neon Dragon", icon: "🐉", value: 8000, category: "Legendary" },
+  { id: "galaxy_portal", name: "Galaxy Portal", icon: "🌀", value: 20000, category: "Legendary" },
+  { id: "cosmic_comet", name: "Cosmic Comet", icon: "☄️", value: 35000, category: "Legendary" },
+  { id: "rainbow_unicorn", name: "Rainbow Unicorn", icon: "🦄", value: 150, category: "Rare" },
+  { id: "golden_trophy", name: "Golden Trophy", icon: "🏆", value: 500, category: "Rare" },
+  { id: "magic_wand", name: "Magic Wand", icon: "🪄", value: 250, category: "Rare" },
+  { id: "shooting_star", name: "Shooting Star", icon: "⭐", value: 600, category: "Epic" },
+  { id: "phoenix_fire", name: "Phoenix Fire", icon: "🔥", value: 3000, category: "Epic" },
+  { id: "crystal_heart", name: "Crystal Heart", icon: "💎", value: 5000, category: "Epic" },
+  { id: "thunder_bolt", name: "Thunder Bolt", icon: "⚡", value: 400, category: "Rare" },
+  { id: "ice_blast", name: "Ice Blast", icon: "❄️", value: 350, category: "Rare" },
+  { id: "golden_rose", name: "Golden Rose", icon: "🌹", value: 800, category: "Epic" },
+  { id: "party_popper", name: "Party Popper", icon: "🎊", value: 200, category: "Basic" },
+  { id: "rocket_ship", name: "Rocket Ship", icon: "🚀", value: 1500, category: "Epic" },
+  { id: "lucky_clover", name: "Lucky Clover", icon: "🍀", value: 450, category: "Rare" },
+  { id: "golden_star", name: "Golden Star", icon: "🌟", value: 900, category: "Epic" },
+  { id: "royal_castle", name: "Royal Castle", icon: "🏰", value: 6000, category: "Epic" },
+  { id: "celestial_moon", name: "Celestial Moon", icon: "🌙", value: 1800, category: "Epic" },
+  { id: "super_nova", name: "Super Nova", icon: "💫", value: 12000, category: "Legendary" },
+  { id: "angel_wings", name: "Angel Wings", icon: "👼", value: 2500, category: "Epic" },
+  { id: "demon_horns", name: "Demon Horns", icon: "😈", value: 2800, category: "Epic" },
+  { id: "infinity_gem", name: "Infinity Gem", icon: "💠", value: 50000, category: "Legendary" },
+  { id: "divine_halo", name: "Divine Halo", icon: "😇", value: 10000, category: "Legendary" },
 ];
 
 // Types
@@ -428,6 +454,7 @@ function BroadcasterSettings({
 function OfficerActionBubble({
   streamId: _streamId,
   onAddBox,
+  onDeductBox,
   onEndBroadcast,
   onMuteAll,
   onKickAll,
@@ -447,6 +474,7 @@ function OfficerActionBubble({
 }: {
   streamId: string;
   onAddBox: () => void;
+  onDeductBox: () => void;
   onEndBroadcast: () => void;
   onMuteAll: () => void;
   onKickAll: () => void;
@@ -499,12 +527,18 @@ function OfficerActionBubble({
             ))}
           </select>
         </div>
-        <button
-          onClick={onAddBox}
-          className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
-        >
-          <span className="text-lg">📺</span> Add Box
-        </button>
+          <button
+            onClick={onAddBox}
+            className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
+          >
+            <span className="text-lg">📺</span> Add Box
+          </button>
+          <button
+            onClick={onDeductBox}
+            className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
+          >
+            <span className="text-lg">➖</span> Deduct Box
+          </button>
         <button
           onClick={onKickAll}
           className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
@@ -688,6 +722,7 @@ export default function LivePage() {
   const [privatePasswordInput, setPrivatePasswordInput] = useState('');
   const [privateAuthError, setPrivateAuthError] = useState('');
   const privateAccessStorageKey = streamId ? `private-stream-access:${streamId}` : null;
+  const [isCurrentUserBroadofficer, setIsCurrentUserBroadofficer] = useState(false);
 
   const refreshBoxCountFromMessages = useCallback(
     async (id: string) => {
@@ -754,6 +789,7 @@ export default function LivePage() {
   const { seats, claimSeat, releaseSeat } = useSeatRoster(seatRoomName);
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
   const canPublish = isBroadcaster || isGuestSeat;
+  const canModerateGuests = isBroadcaster || isCurrentUserBroadofficer;
 
 
   
@@ -1038,6 +1074,14 @@ export default function LivePage() {
     connect: canConnect,
     identity: tokenIdentity || livekitIdentity
   });
+
+  const handleDisableGuestMedia = useCallback(
+    async (participantId: string, disableVideo = true, disableAudio = true) => {
+      if (!canModerateGuests) return;
+      await liveKit.disableGuestMedia(participantId, disableVideo, disableAudio);
+    },
+    [canModerateGuests, liveKit]
+  );
 
   const publishUpgradeRef = useRef(false);
 
@@ -1597,33 +1641,54 @@ export default function LivePage() {
       toast.success('Stage cleared');
   };
   
-  const handleAddBox = () => {
+  const syncBoxCount = useCallback((next: number) => {
     const maxBoxes = 6;
-    const next = Math.min(maxBoxes, boxCount + 1);
-    setBoxCount(next);
+    const clamped = Math.max(0, Math.min(maxBoxes, next));
+    setBoxCount(clamped);
     if (streamId) {
       void supabase.from('messages').insert({
         stream_id: streamId,
         message_type: 'system',
-        content: `BOX_COUNT_UPDATE:${next}`
+        content: `BOX_COUNT_UPDATE:${clamped}`
       });
     }
-    toast.success('Added box');
-  };
+    if (clamped < seats.length) {
+      seats.forEach((seat, index) => {
+        if (index >= clamped && seat?.user_id) {
+          void releaseSeat(index, seat.user_id, { force: true });
+        }
+      });
+    }
+    return clamped;
+  }, [streamId, seats, releaseSeat]);
+  
+  const handleAddBox = useCallback(() => {
+    const next = syncBoxCount(boxCount + 1);
+    toast.success(`Added box (${next})`);
+  }, [boxCount, syncBoxCount]);
 
-  const handleOfficerAddBox = () => {
-      const maxBoxes = 6;
-      const next = Math.min(maxBoxes, boxCount + 1);
-      setBoxCount(next);
-      if (streamId) {
-        void supabase.from('messages').insert({
-          stream_id: streamId,
-          message_type: 'system',
-          content: `BOX_COUNT_UPDATE:${next}`
-        });
+  const handleDeductBox = useCallback(() => {
+    if (boxCount <= 0) {
+      toast.info('No boxes left to remove');
+      return;
+    }
+    const next = syncBoxCount(boxCount - 1);
+    toast.success(`Removed box (${next})`);
+  }, [boxCount, syncBoxCount]);
+
+  const handleOfficerAddBox = useCallback(() => {
+      const next = syncBoxCount(boxCount + 1);
+      toast.success(`Added box (${next})`);
+  }, [boxCount, syncBoxCount]);
+
+  const handleOfficerDeductBox = useCallback(() => {
+      if (boxCount <= 0) {
+        toast.info('No boxes left to remove');
+        return;
       }
-      toast.success('Added box');
-  };
+      const next = syncBoxCount(boxCount - 1);
+      toast.success(`Removed box (${next})`);
+  }, [boxCount, syncBoxCount]);
 
   const officerTargets = useMemo(() => {
     const map = new Map<string, { id: string; username: string; seatIndex?: number | null }>();
@@ -2695,8 +2760,6 @@ export default function LivePage() {
     isOfficer?: boolean;
   } | null>(null);
 
-  const [isCurrentUserBroadofficer, setIsCurrentUserBroadofficer] = useState(false);
-
   // Check if current user is broadofficer
   useEffect(() => {
     if (!stream?.broadcaster_id || !user?.id) return;
@@ -3130,11 +3193,16 @@ export default function LivePage() {
           value: item.value,
           category: item.category || "Common",
         }));
-        if (payload.length === 0) {
-          setQuickGifts(DEFAULT_GIFTS);
-        } else {
-          setQuickGifts(payload);
-        }
+
+        const merged = [...payload, ...DEFAULT_GIFTS];
+        const seen = new Set<string>();
+        const deduped = merged.filter((g) => {
+          if (seen.has(g.id)) return false;
+          seen.add(g.id);
+          return true;
+        });
+
+        setQuickGifts(deduped);
       } catch (err) {
         if (!active) return;
         console.error("[LivePage] Failed to load quick gifts:", err);
@@ -3318,6 +3386,7 @@ export default function LivePage() {
         <OfficerActionBubble
           streamId={streamId || ''}
           onAddBox={handleOfficerAddBox}
+          onDeductBox={handleOfficerDeductBox}
           onEndBroadcast={handleOfficerEndBroadcast}
           onMuteAll={handleOfficerMuteAll}
           onKickAll={handleOfficerKickAll}
@@ -3387,6 +3456,13 @@ export default function LivePage() {
                 >
                   <Plus size={14} />
                   Add Box
+                </button>
+                <button
+                  onClick={handleDeductBox}
+                  className="px-2 py-1.5 rounded-xl border border-amber-500/30 bg-amber-900/20 text-[10px] font-bold uppercase tracking-wider text-amber-200 hover:bg-amber-800/40 hover:border-amber-400/50 transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)] flex items-center gap-1"
+                >
+                  <Minus size={14} />
+                  Deduct Box
                 </button>
                 <button
                   onClick={() => setShowTrollBattles(true)}
@@ -3497,13 +3573,13 @@ export default function LivePage() {
             }
           }}
         >
-          <div className="shrink-0 min-h-0 flex flex-col relative">
+          <div className="shrink-0 min-h-0 flex flex-col relative w-full">
             <BroadcastLayout 
-              className="h-auto lg:h-full"
+              className="h-auto"
               streamId={streamId || ''}
               room={liveKit.getRoom()} 
               broadcasterId={stream.broadcaster_id}
-              isHost={isBroadcaster}
+              isHost={canModerateGuests}
               boxCount={boxCount}
               seats={seats}
               onUserClick={handleUserClick}
@@ -3526,7 +3602,7 @@ export default function LivePage() {
               onSetPrice={handleSetPrice}
               onJoinRequest={handleJoinRequest}
               onLeaveSession={handleLeaveSession}
-              onDisableGuestMedia={liveKit.disableGuestMediaByClick}
+              onDisableGuestMedia={canModerateGuests ? handleDisableGuestMedia : undefined}
               onSeatAction={handleSeatAction}
               giftBalanceDelta={giftBalanceDelta}
               // Media Controls
@@ -3583,7 +3659,7 @@ export default function LivePage() {
 
         {/* Desktop Right Panel (Chat/Gifts) */}
         {showLivePanels && (
-          <div className="hidden lg:flex lg:w-[28%] flex-1 lg:h-full min-h-0 flex-col gap-2 overflow-hidden relative z-0">
+          <div className="hidden lg:flex lg:w-[32%] xl:w-[34%] flex-1 lg:h-full min-h-0 flex-col gap-3 overflow-hidden relative z-0">
             <div className="flex flex-col flex-[1] min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-white/10 bg-black/40">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10">Gifts</div>

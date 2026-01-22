@@ -10,6 +10,7 @@ import {
   AlertTriangle
 } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
+import BroadcastLockdownToggle from '../../../components/admin/BroadcastLockdownToggle'
 
 export default function AdminControlPanel() {
   const { user, profile, refreshProfile } = useAuthStore()
@@ -253,6 +254,10 @@ export default function AdminControlPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Broadcast Lockdown Control - Top Priority */}
+      <BroadcastLockdownToggle />
+
+      {/* Rest of Admin Controls */}
       <div className="bg-black/60 border border-purple-600/30 rounded-xl p-6">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
           <Award className="w-6 h-6 text-purple-400" />

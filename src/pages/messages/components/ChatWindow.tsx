@@ -530,8 +530,17 @@ export default function ChatWindow({
         }}
         className="flex-1 overflow-y-auto p-4 space-y-4"
       >
-        {loading ? (
-          <div className="text-center text-gray-400 py-8">Loading messages...</div>
+        {loading && messages.length === 0 ? (
+          // Show skeleton only on initial load
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-pulse`}>
+                <div className={`max-w-[70%] p-3 rounded-lg ${i % 2 === 0 ? 'bg-purple-900/30' : 'bg-[#8a2be2]/20'}`}>
+                  <div className="h-4 bg-gray-600/30 rounded w-32"></div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : messages.length === 0 ? (
           <div className="text-center text-gray-400 py-8">
             <p>No messages yet. Start the conversation!</p>

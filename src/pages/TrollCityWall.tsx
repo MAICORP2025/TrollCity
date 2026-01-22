@@ -10,6 +10,7 @@ import {
 import { WallPost, WallPostType } from '../types/trollWall'
 import CreatePostModal from '../components/trollWall/CreatePostModal'
 import GiftModal from '../components/trollWall/GiftModal'
+import DailyLoginWall from '../components/trollWall/DailyLoginWall'
 import ClickableUsername from '../components/ClickableUsername'
 
 // Available reactions
@@ -505,6 +506,9 @@ export default function TrollCityWall() {
             </button>
           )}
         </div>
+
+        {/* Daily Login Wall Section */}
+        <DailyLoginWall onPostCreated={() => loadPosts()} />
 
         {/* Posts Feed */}
         <div className="space-y-4">
