@@ -657,7 +657,6 @@ export default function LivePage() {
 
   const [joinPrice, setJoinPrice] = useState(0);
   const [showTrollBattles, setShowTrollBattles] = useState(false);
-  const [showTrollBattleOverlay, setShowTrollBattleOverlay] = useState(false);
   const [activeBattle, setActiveBattle] = useState<{id: string, player1_id: string, player2_id: string, status: string} | null>(null);
   const [boxCount, setBoxCount] = useState(6);
   const [seatBans, setSeatBans] = useState<SeatBan[]>([]);
@@ -3743,7 +3742,6 @@ export default function LivePage() {
                     player2_id: opponent.id, 
                     status: 'active' 
                   });
-                  setShowTrollBattleOverlay(true);
                   setShowTrollBattles(false);
                 } catch (err) {
                   console.error('Failed to start battle:', err);

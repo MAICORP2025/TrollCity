@@ -17,7 +17,7 @@ export default function TrollBattlesSetup({ streamId, onOpponentFound, onCancel:
   const [battleId, setBattleId] = useState<string | null>(null);
   const [skipsUsed, setSkipsUsed] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [_error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const assignTopGuests = useCallback(async (battleId: string, isPlayer1: boolean) => {
     if (!streamId) return;

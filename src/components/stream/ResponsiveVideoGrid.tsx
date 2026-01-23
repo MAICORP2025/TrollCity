@@ -127,17 +127,6 @@ export default function ResponsiveVideoGrid({
     return `border-2 ${colorMap[color] || colorMap['purple']} animate-neon-pulse`;
   };
 
-  const neonColorSwatch: Record<string, string> = {
-    purple: 'linear-gradient(135deg, #a855f7, #7c3aed)',
-    blue: 'linear-gradient(135deg, #60a5fa, #2563eb)',
-    green: 'linear-gradient(135deg, #4ade80, #16a34a)',
-    red: 'linear-gradient(135deg, #f87171, #ef4444)',
-    pink: 'linear-gradient(135deg, #f472b6, #db2777)',
-    yellow: 'linear-gradient(135deg, #facc15, #f59e0b)',
-    cyan: 'linear-gradient(135deg, #22d3ee, #0ea5e9)',
-    orange: 'linear-gradient(135deg, #fb923c, #f97316)'
-  };
-
   const hostFrameClass =
     frameMode === 'neon'
       ? getNeonStyle(neonColor)
@@ -164,20 +153,18 @@ export default function ResponsiveVideoGrid({
         <div className="flex items-center justify-end gap-2 mb-1 text-[11px] sm:text-xs">
           {frameMode === 'neon' && (
             <div className="flex items-center gap-1 pr-1">
-              {neonColors.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setNeonColor(c)}
-                  className={`h-7 w-10 rounded-full border transition shadow-sm ${
-                    neonColor === c
-                      ? 'ring-2 ring-white/70 ring-offset-2 ring-offset-black'
-                      : 'border-white/20 opacity-80 hover:opacity-100'
-                  }`}
-                  style={{ background: neonColorSwatch[c] || neonColorSwatch.purple }}
-                  aria-label={`Set neon color ${c}`}
-                />
-              ))}
+              <select
+                value={neonColor}
+                onChange={(e) => setNeonColor(e.target.value)}
+                className="bg-zinc-800 text-white text-xs border border-zinc-600 rounded px-2 py-1 outline-none focus:border-purple-500"
+                aria-label="Select neon color"
+              >
+                {neonColors.map((c) => (
+                  <option key={c} value={c}>
+                    {c.charAt(0).toUpperCase() + c.slice(1)}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
           <span className="text-gray-400">Frames</span>

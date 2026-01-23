@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 
 interface Broadcast {
   id: string;
-  user_id: string;
+  broadcaster_id: string;
   title: string;
   category: string;
   viewer_count: number;
@@ -37,7 +37,7 @@ export default function ExploreFeed() {
         .from('broadcasts')
         .select(`
           *,
-          user_profiles:user_id (
+          user_profiles:broadcaster_id (
             username,
             avatar_url,
             level
@@ -86,7 +86,7 @@ export default function ExploreFeed() {
   };
 
   const handleBroadcastClick = (broadcast: Broadcast) => {
-    navigate(`/watch/${broadcast.user_id}`);
+    navigate(`/watch/${broadcast.broadcaster_id}`);
   };
 
   return (

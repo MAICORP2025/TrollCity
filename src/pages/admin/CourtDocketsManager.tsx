@@ -138,7 +138,7 @@ export default function CourtDocketsManager() {
     setIsSubmitting(true)
     try {
       // Use the RPC to create case and notify
-      const { data, error } = await supabase.rpc('manage_court_case_safe', {
+      const { error } = await supabase.rpc('manage_court_case_safe', {
         p_defendant_id: selectedDefendant.id,
         p_reason: caseReason,
         p_court_date: selectedDocket.court_date

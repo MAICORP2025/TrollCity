@@ -1,30 +1,3 @@
-[{
-	"resource": "/e:/troll/trollcity-1/supabase/functions/send-push-notification/index.ts",
-	"owner": "typescript",
-	"code": "2307",
-	"severity": 8,
-	"message": "Cannot find module 'https://esm.sh/@supabase/supabase-js@2.39.3' or its corresponding type declarations.",
-	"source": "ts",
-	"startLineNumber": 2,
-	"startColumn": 30,
-	"endLineNumber": 2,
-	"endColumn": 75,
-	"origin": "extHost1",
-	"extensionID": "vscode.typescript-language-features"
-},{
-	"resource": "/e:/troll/trollcity-1/supabase/functions/send-push-notification/index.ts",
-	"owner": "typescript",
-	"code": "5097",
-	"severity": 8,
-	"message": "An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.",
-	"source": "ts",
-	"startLineNumber": 4,
-	"startColumn": 29,
-	"endLineNumber": 4,
-	"endColumn": 49,
-	"origin": "extHost1",
-	"extensionID": "vscode.typescript-language-features"
-}]
 import { supabase } from "./supabase";
 import { NotificationType } from "../types/notifications";
 
