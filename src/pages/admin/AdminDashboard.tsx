@@ -14,9 +14,7 @@ import FinanceEconomyCenter from './components/FinanceEconomyCenter'
 import OperationsControlDeck from './components/OperationsControlDeck'
 import AdditionalTasksGrid from './components/AdditionalTasksGrid'
 import QuickActionsBar from './components/QuickActionsBar'
-// import MAIAuthorityPanel from '../../components/mai/MAIAuthorityPanel'
-
-
+import ErrorBoundary from '../../components/ErrorBoundary'
 
 type StatState = {
   totalUsers: number
@@ -1172,76 +1170,82 @@ export default function AdminDashboard() {
         </div>
 
         {/* City Summary Bar */}
-        <CitySummaryBar
-          stats={stats}
-          liveStreamsCount={liveStreams.length}
-        />
-
-        {/* <MAIAuthorityPanel mode="admin" location="admin_dashboard" /> */}
+        <ErrorBoundary>
+          <CitySummaryBar
+            stats={stats}
+            liveStreamsCount={liveStreams.length}
+          />
+        </ErrorBoundary>
 
         {/* City Controls & Health Section */}
-        <CityControlsHealth
-          paypalStatus={paypalStatus}
-          supabaseStatus={supabaseStatus}
-          liveKitStatus={liveKitStatus}
-          liveStreams={liveStreams}
-          onTestPayPal={testPayPal}
-          onTestSupabase={testSupabase}
-          onTestLiveKit={testLiveKitStreaming}
-          onLoadLiveStreams={loadLiveStreams}
-          onCreateTrollDrop={createTrollDrop}
-          trollDropAmount={trollDropAmount}
-          setTrollDropAmount={setTrollDropAmount}
-          trollDropDuration={trollDropDuration}
-          setTrollDropDuration={setTrollDropDuration}
-          paypalTesting={paypalTesting}
-        />
+        <ErrorBoundary>
+          <CityControlsHealth
+            paypalStatus={paypalStatus}
+            supabaseStatus={supabaseStatus}
+            liveKitStatus={liveKitStatus}
+            liveStreams={liveStreams}
+            onTestPayPal={testPayPal}
+            onTestSupabase={testSupabase}
+            onTestLiveKit={testLiveKitStreaming}
+            onLoadLiveStreams={loadLiveStreams}
+            onCreateTrollDrop={createTrollDrop}
+            trollDropAmount={trollDropAmount}
+            setTrollDropAmount={setTrollDropAmount}
+            trollDropDuration={trollDropDuration}
+            setTrollDropDuration={setTrollDropDuration}
+            paypalTesting={paypalTesting}
+          />
+        </ErrorBoundary>
 
         {/* Finance & Economy Center */}
-        <FinanceEconomyCenter
-          stats={stats}
-          economySummary={economySummary}
-          economyLoading={economyLoading}
-          onLoadEconomySummary={loadEconomySummary}
-        />
+        <ErrorBoundary>
+          <FinanceEconomyCenter
+            stats={stats}
+            economySummary={economySummary}
+            economyLoading={economyLoading}
+            onLoadEconomySummary={loadEconomySummary}
+          />
+        </ErrorBoundary>
 
         {/* Operations & Control Deck */}
-        <OperationsControlDeck
-          liveStreams={liveStreams}
-          streamsLoading={streamsLoading}
-          onLoadLiveStreams={loadLiveStreams}
-          onEndStreamById={endStreamById}
-          onDeleteStreamById={deleteStreamById}
-          onViewStream={viewStream}
-          stats={stats}
-        />
-
-
+        <ErrorBoundary>
+          <OperationsControlDeck
+            liveStreams={liveStreams}
+            streamsLoading={streamsLoading}
+            onLoadLiveStreams={loadLiveStreams}
+            onEndStreamById={endStreamById}
+            onDeleteStreamById={deleteStreamById}
+            onViewStream={viewStream}
+            stats={stats}
+          />
+        </ErrorBoundary>
 
         {/* Additional Tasks Grid */}
-        <AdditionalTasksGrid 
-          onNavigateToEconomy={handleNavigateToEconomy}
-          onNavigateToTaxReviews={handleNavigateToTaxReviews}
-          onOpenTestDiagnostics={handleOpenTestDiagnostics}
-          onOpenControlPanel={handleOpenControlPanel}
-          onOpenGrantCoins={handleOpenGrantCoins}
-          onOpenAdminPool={handleOpenAdminPool}
-          onOpenFinanceDashboard={handleOpenFinanceDashboard}
-          onOpenCreateSchedule={handleOpenCreateSchedule}
-          onOpenOfficerShifts={handleOpenOfficerShifts}
-          onOpenResetPanel={handleOpenResetPanel}
-          onOpenEmpireApplications={handleOpenEmpireApplications}
-          onOpenReferralBonuses={handleOpenReferralBonuses}
-          onSelectTab={_handleSelectTab} 
-          counts={{
-            empire_apps: stats.pendingApps,
-            cashouts: stats.pendingPayouts,
-            reports: stats.aiFlags,
-            alerts: taskCounts.alerts,
-            tax_reviews: taskCounts.taxReviews,
-            support: taskCounts.supportTickets
-          }}
-        />
+        <ErrorBoundary>
+          <AdditionalTasksGrid 
+            onNavigateToEconomy={handleNavigateToEconomy}
+            onNavigateToTaxReviews={handleNavigateToTaxReviews}
+            onOpenTestDiagnostics={handleOpenTestDiagnostics}
+            onOpenControlPanel={handleOpenControlPanel}
+            onOpenGrantCoins={handleOpenGrantCoins}
+            onOpenAdminPool={handleOpenAdminPool}
+            onOpenFinanceDashboard={handleOpenFinanceDashboard}
+            onOpenCreateSchedule={handleOpenCreateSchedule}
+            onOpenOfficerShifts={handleOpenOfficerShifts}
+            onOpenResetPanel={handleOpenResetPanel}
+            onOpenEmpireApplications={handleOpenEmpireApplications}
+            onOpenReferralBonuses={handleOpenReferralBonuses}
+            onSelectTab={_handleSelectTab} 
+            counts={{
+              empire_apps: stats.pendingApps,
+              cashouts: stats.pendingPayouts,
+              reports: stats.aiFlags,
+              alerts: taskCounts.alerts,
+              tax_reviews: taskCounts.taxReviews,
+              support: taskCounts.supportTickets
+            }}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   )
