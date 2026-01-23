@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
-import { PieChart, Users, Wallet, Lock, Search, AlertCircle, CheckCircle, ArrowRightLeft, DollarSign, Settings, Save, Gift, Building, Plus, Trash } from 'lucide-react'
+import { PieChart, Users, Wallet, Lock, Search, AlertCircle, CheckCircle, XCircle, RefreshCw, ArrowRightLeft, DollarSign, Settings, Save, Gift, Building, Plus, Trash, ChevronUp, ChevronDown } from 'lucide-react'
 
 const ADMIN_POOL_COINS_PER_DOLLAR = 222.3
 

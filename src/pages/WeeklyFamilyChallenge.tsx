@@ -28,22 +28,14 @@ export default function WeeklyFamilyChallenge() {
 
   const distributeRewards = async (winnerFamilyId: string) => {
     try {
-      const { data: members } = await supabase
-        .from('troll_family_members')
-        .select('user_id')
-        .eq('family_id', winnerFamilyId)
+      const { error: statsError } = await supabase.rpc('increment_family_stats', {
+        p_family_id: winnerFamilyId,
+        p_coin_bonus: rewardPool,
+        p_xp_bonus: 0,
+      })
 
-      if (!members || members.length === 0) return toast.error('No family members found')
+      if (statsError) throw statsError
 
-      const splitAmount = Math.floor(rewardPool / members.length)
-
-      const updates = members.map((m) =>
-        supabase.rpc('add_free_coins', {
-          p_user_id: m.user_id,
-          p_amount: splitAmount,
-        })
-      )
-      await Promise.all(updates)
       await supabase.rpc('grant_family_crown', {
         p_family_id: winnerFamilyId,
       })
@@ -63,8 +55,8 @@ export default function WeeklyFamilyChallenge() {
 
       <p className="text-sm text-gray-300 mb-4">
         Every Sunday at midnight, the family with the **most completed tasks** wins
-        <span className="text-green-400 font-bold"> 10,000 free coins </span>
-        split equally between all members.
+        <span className="text-green-400 font-bold"> 10,000 Family Tokens </span>
+        added to the family vault.
       </p>
 
       {loading ? (

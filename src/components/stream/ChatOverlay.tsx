@@ -44,7 +44,7 @@ export default function ChatOverlay({ streamId, isBroadcaster }: ChatOverlayProp
     // Load initial messages
     const loadMessages = async () => {
       const { data } = await supabase
-        .from('stream_messages')
+        .from('messages')
         .select(`
           *,
           user_profiles:user_id ( username, avatar_url, is_troll_officer, is_admin, is_troller, is_og_user, officer_level, troller_level, role, troll_pass_expires_at )
@@ -70,13 +70,12 @@ export default function ChatOverlay({ streamId, isBroadcaster }: ChatOverlayProp
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'stream_messages',
+          table: 'messages',
           filter: `stream_id=eq.${streamId}`,
         },
         async (payload) => {
-          // Fetch the new message with user profile
           const { data: newMsg } = await supabase
-            .from('stream_messages')
+            .from('messages')
             .select(`
               *,
               user_profiles:user_id ( username, avatar_url, is_troll_officer, is_admin, is_troller, is_og_user, officer_level, troller_level, role, troll_pass_expires_at )

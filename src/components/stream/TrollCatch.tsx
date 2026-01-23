@@ -187,8 +187,7 @@ export default function TrollCatch({ streamId, userId, onCatch }: TrollCatchProp
         }
       }
 
-      // Send chat notification
-      await supabase.from('stream_messages').insert({
+      await supabase.from('messages').insert({
         stream_id: streamId,
         user_id: userId,
         content: `🎉 Caught the Troll and earned ${coins} coins!`,

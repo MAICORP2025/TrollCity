@@ -529,6 +529,7 @@ function MobileApplications({ onStatsUpdate }: { onStatsUpdate: () => void }) {
       const { data, error } = await supabase
         .from('applications')
         .select('*')
+        .neq('status', 'deleted')
         .order('created_at', { ascending: false })
         .limit(50)
 

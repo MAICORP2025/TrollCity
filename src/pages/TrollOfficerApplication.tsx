@@ -60,8 +60,8 @@ export default function TrollFamilyCity() {
       <p className="text-sm text-gray-300 mb-4">
         Complete weekly tasks with your Troll Family. The family with the most
         completed tasks earns{' '}
-        <span className="text-green-400 font-bold">10,000 free coins</span> split
-        across members + the 👑 Crown badge & Royal Entrance for the week.
+        <span className="text-green-400 font-bold">10,000 Family Tokens</span> added
+        to the Family Vault + the 👑 Crown badge & Royal Entrance for the week.
       </p>
 
       {/* Quick Nav */}

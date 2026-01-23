@@ -481,6 +481,7 @@ export default function UserManagementPanel({
                   className="w-full px-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="user">User</option>
+                  <option value="secretary">Secretary</option>
                   <option value="troll_officer">Troll Officer</option>
                   <option value="troller">Troller</option>
                   <option value="admin">Admin</option>

@@ -126,6 +126,24 @@ ALTER TABLE IF EXISTS public.admin_app_settings ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
   CREATE POLICY "Public read admin settings" ON public.admin_app_settings FOR SELECT USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Admins manage admin settings" ON public.admin_app_settings
+    FOR ALL
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.user_profiles
+        WHERE id = auth.uid()
+        AND (role = 'admin' OR is_admin = true OR role = 'secretary')
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM public.user_profiles
+        WHERE id = auth.uid()
+        AND (role = 'admin' OR is_admin = true OR role = 'secretary')
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Table: stream_viewers
 ALTER TABLE IF EXISTS public.stream_viewers ENABLE ROW LEVEL SECURITY;

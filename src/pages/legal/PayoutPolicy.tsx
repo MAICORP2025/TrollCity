@@ -30,18 +30,10 @@ export default function PayoutPolicy() {
 
         <h2>2. Payout Process</h2>
         <p>
-          Payouts are processed as follows:
+          Payouts and cashouts are currently disabled. You may continue to earn and
+          use troll_coins inside Troll City, but you cannot convert them to cash or
+          gift cards at this time.
         </p>
-        <ol>
-          <li><strong>Request Submission:</strong> Submit a payout request through
-            your account dashboard with the amount of troll_coins you wish to cash out</li>
-          <li><strong>Review Period:</strong> All requests are reviewed by our admin
-            team, typically within 3-5 business days</li>
-          <li><strong>Approval:</strong> Approved payouts are processed manually via
-            PayPal Payouts API</li>
-          <li><strong>Payment:</strong> Funds are sent to your verified PayPal email
-            address within 5-10 business days of approval</li>
-        </ol>
 
         <h2>3. Conversion Rate</h2>
         <p>
@@ -54,13 +46,11 @@ export default function PayoutPolicy() {
         </p>
 
         <h2>4. Minimum and Maximum Payouts</h2>
-        <ul>
-          <li><strong>Minimum:</strong> 12,000 troll_coins ($120 USD)</li>
-          <li><strong>Maximum per request:</strong> No maximum, but large payouts
-            may require additional verification</li>
-          <li><strong>Frequency:</strong> You may submit one payout request at a time.
-            After a payout is processed, you may submit another request</li>
-        </ul>
+        <p>
+          Because payouts are disabled, minimums, maximums, and payout frequencies
+          are not currently applicable. If payouts are re-enabled in the future,
+          updated limits and requirements will be published here.
+        </p>
 
         <h2>5. Tax Obligations</h2>
         <p>
@@ -98,27 +88,22 @@ export default function PayoutPolicy() {
 
         <h2>7. Processing Fees</h2>
         <p>
-          Troll City does not charge processing fees for payouts. However, the Gift Card provider
-          may charge fees or have expiration dates. These are your responsibility.
+          Because payouts are disabled, no payout processing fees are charged. If
+          payouts return in the future, details about any applicable fees will be
+          updated in this section.
         </p>
 
         <h2>8. Payment Method</h2>
         <p>
-          Currently, all payouts are processed via Gift Card only. You must provide a
-          valid email address that matches your verified identity. We do not
-          support bank transfers, checks, or other payment methods at this time.
+          Payouts, including gift card payouts, are currently unavailable. If payout
+          methods are reintroduced, the supported options and requirements will be
+          documented here.
         </p>
 
         <h2>9. Payout Timeline</h2>
-        <ul>
-          <li><strong>Request Review:</strong> 3-5 business days</li>
-          <li><strong>Payment Processing:</strong> 5-10 business days after approval</li>
-          <li><strong>Total Timeline:</strong> Typically 8-15 business days from
-            request to payment</li>
-        </ul>
         <p>
-          Delays may occur during holidays, high-volume periods, or if additional
-          verification is required.
+          There is no payout processing timeline while payouts are disabled. Any
+          future payout program will include updated processing expectations.
         </p>
 
         <h2>10. Disputes and Appeals</h2>

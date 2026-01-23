@@ -264,9 +264,9 @@ const FamilyLeaderboard = () => {
                           </span>
                         </div>
                         <div className="text-xs text-gray-500">
-                          {activeTab === 'total' ? 'Total Coins' :
-                           activeTab === 'weekly' ? 'Weekly Coins' :
-                           'Season Coins'}
+                          {activeTab === 'total' ? 'Total Family Tokens' :
+                           activeTab === 'weekly' ? 'Weekly Family Tokens' :
+                           'Season Family Tokens'}
                         </div>
                       </div>
                     </div>
@@ -290,7 +290,7 @@ const FamilyLeaderboard = () => {
             <p className="text-2xl font-bold text-green-400">
               {formatCoins(leaderboard.reduce((sum, f) => sum + f.total_coins, 0))}
             </p>
-            <p className="text-sm text-gray-400">Total Coins in Circulation</p>
+            <p className="text-sm text-gray-400">Total Family Tokens in Circulation</p>
           </div>
 
           <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-700 text-center">
@@ -307,7 +307,7 @@ const FamilyLeaderboard = () => {
           <Crown className="w-12 h-12 mx-auto mb-4 text-purple-400" />
           <h3 className="text-xl font-bold mb-2">Ready to Climb the Ranks?</h3>
           <p className="text-gray-300 mb-4">
-            Join a family or create your own to start earning family coins and competing for glory!
+            Join a family or create your own to start earning family tokens and competing for glory!
           </p>
           <button
             onClick={() => window.location.href = '/family/browse'}

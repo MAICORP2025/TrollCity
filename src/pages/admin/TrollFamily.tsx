@@ -229,7 +229,7 @@ export default function TrollFamily() {
                     </h3>
                     <p className="text-white font-semibold">@{familyStatus.current_wife.username}</p>
                     <p className="text-sm text-gray-400">
-                      {familyStatus.current_wife.total_coins?.toLocaleString()} coins gifted
+                      {familyStatus.current_wife.total_coins?.toLocaleString()} family tokens gifted
                     </p>
                     <p className="text-xs text-gray-500">
                       {familyStatus.current_wife.duration_days || 0} days holding title
@@ -253,7 +253,7 @@ export default function TrollFamily() {
                     </h3>
                     <p className="text-white font-semibold">@{familyStatus.current_husband.username}</p>
                     <p className="text-sm text-gray-400">
-                      {familyStatus.current_husband.total_coins?.toLocaleString()} coins gifted
+                      {familyStatus.current_husband.total_coins?.toLocaleString()} family tokens gifted
                     </p>
                     <p className="text-xs text-gray-500">
                       {familyStatus.current_husband.duration_days || 0} days holding title
@@ -265,7 +265,7 @@ export default function TrollFamily() {
               <div className="text-center py-8 text-gray-500">
                 <Crown className="w-12 h-12 mx-auto mb-2 opacity-20" />
                 <p>No royal consort currently</p>
-                <p className="text-sm">First to gift 50,000+ coins becomes the consort</p>
+                <p className="text-sm">First to gift 50,000+ family tokens becomes the consort</p>
               </div>
             )}
           </div>
@@ -303,7 +303,7 @@ export default function TrollFamily() {
                           )}
                         </div>
                         <span className="text-sm text-gray-400">
-                          {entry.total_coins.toLocaleString()} coins
+                          {entry.total_coins.toLocaleString()} family tokens
                         </span>
                       </div>
 
@@ -316,7 +316,7 @@ export default function TrollFamily() {
                             />
                           </div>
                           <p className="text-xs text-gray-400">
-                            {remaining.toLocaleString()} coins to qualify
+                            {remaining.toLocaleString()} family tokens to qualify
                           </p>
                         </div>
                       )}
@@ -361,7 +361,7 @@ export default function TrollFamily() {
                         {isConsort && <Crown className="w-4 h-4 text-yellow-400" />}
                       </div>
                       <div className="text-sm text-gray-400">
-                        {entry.total_coins.toLocaleString()} coins • {entry.gender}
+                        {entry.total_coins.toLocaleString()} family tokens • {entry.gender}
                       </div>
                     </div>
                   </div>

@@ -258,13 +258,6 @@ export default function Wallet() {
               <div className="text-xs text-gray-400">Purchase more coins</div>
             </button>
             <button
-              onClick={() => navigate("/payouts/request")}
-              className="w-full text-left px-3 py-2 bg-green-600/20 hover:bg-green-600/30 rounded-lg border border-green-500/30 transition-colors"
-            >
-              <div className="font-semibold">Request Payout</div>
-              <div className="text-xs text-gray-400">Cash out your earnings</div>
-            </button>
-            <button
               onClick={() => navigate("/transactions")}
               className="w-full text-left px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 rounded-lg border border-blue-500/30 transition-colors"
             >
@@ -286,38 +279,19 @@ export default function Wallet() {
             >
               View All
             </button>
-            <button
-              onClick={() => navigate("/payouts/request")}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition-colors"
-            >
-              Request Payout
-            </button>
           </div>
         </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl bg-black/40 border border-gray-600 p-4">
-          <h3 className="text-lg font-semibold mb-3">Cashout Tiers</h3>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded">
-              <div className="text-sm text-gray-300">{Number(12375).toLocaleString()} coins</div>
-              <div className="text-sm font-bold text-green-300">$50</div>
-            </div>
-            <div className="text-xs text-yellow-300 mt-1">Minimum cashout threshold</div>
-            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded mt-2">
-              <div className="text-sm text-gray-300">{Number(30375).toLocaleString()} coins</div>
-              <div className="text-sm font-bold text-green-300">$70</div>
-            </div>
-            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded mt-2">
-              <div className="text-sm text-gray-300">{Number(60375).toLocaleString()} coins</div>
-              <div className="text-sm font-bold text-green-300">$170</div>
-            </div>
-            <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded mt-2">
-              <div className="text-sm text-gray-300">{Number(120375).toLocaleString()} coins</div>
-              <div className="text-sm font-bold text-green-300">$355</div>
-            </div>
-          </div>
+          <h3 className="text-lg font-semibold mb-3">PayPal Payouts</h3>
+          <p className="text-sm text-gray-300">
+            When you qualify, payouts are sent directly to your PayPal account using your payout email.
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            Update your PayPal payout email in Payout Settings and use the Request Payout page to cash out.
+          </p>
         </div>
       </div>
 

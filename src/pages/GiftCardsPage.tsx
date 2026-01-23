@@ -85,11 +85,13 @@ export default function GiftCardsPage() {
         ) : giftCards.length === 0 ? (
           <div className="text-center py-12 bg-[#0B0B12] rounded-2xl border border-gray-800">
             <Gift className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-300 mb-2">No Gift Cards Yet</h3>
-            <p className="text-gray-500 mb-6">Request a cashout to receive Visa gift cards.</p>
-            <Link to="/wallet/cashout" className="px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold">
-              Request Cashout
-            </Link>
+            <h3 className="text-xl font-bold text-gray-300 mb-2">No Gift Cards Found</h3>
+            <p className="text-gray-500 mb-2">
+              There are currently no gift card payouts associated with your account.
+            </p>
+            <p className="text-xs text-gray-500">
+              Gift card cashouts are no longer supported.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

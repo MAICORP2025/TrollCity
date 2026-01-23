@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { subscribeToNtfyGlobal } from '../lib/ntfySubscribe';
 import { 
   Gamepad2, 
@@ -15,6 +15,7 @@ import {
   Play,
   Sparkles
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import TopBroadcastersGrid from '@/components/TopBroadcastersGrid';
 
 // Animated gradient background
@@ -111,11 +112,79 @@ const _StatsSection = () => {
 export default function Home() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const [adminStream, setAdminStream] = useState<{ id: string; title: string | null; username: string | null } | null>(null);
 
   // Auto-scroll to top and subscribe to push notifications on page load
   useEffect(() => {
     window.scrollTo(0, 0);
     subscribeToNtfyGlobal();
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAdminBroadcast = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('streams')
+          .select('id, title, is_live, status, user_profiles!broadcaster_id ( username, role, is_admin )')
+          .eq('is_live', true)
+          .eq('status', 'live')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (error || !isMounted) {
+          return;
+        }
+
+        const rows = (data || []) as any[];
+        let selected: { id: string; title: string | null; username: string | null } | null = null;
+
+        for (const row of rows) {
+          const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+          if (!profile) continue;
+          const role = profile.role || '';
+          const isAdmin = !!profile.is_admin || role === 'admin';
+          if (isAdmin) {
+            selected = {
+              id: row.id,
+              title: row.title || null,
+              username: profile.username || null,
+            };
+            break;
+          }
+        }
+
+        if (!isMounted) {
+          return;
+        }
+
+        setAdminStream(selected);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+        setAdminStream(null);
+      }
+    };
+
+    loadAdminBroadcast();
+
+    const channel = supabase
+      .channel('home-admin-streams')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'streams' },
+        () => {
+          loadAdminBroadcast();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const features = [
@@ -239,6 +308,33 @@ export default function Home() {
                   Safe & Moderated
                 </div>
               </div>
+
+              {adminStream && (
+                <div className="mt-6 max-w-xl mx-auto animate-fade-in-up" style={{ animationDelay: '380ms' }}>
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-black/50 px-5 py-4 shadow-[0_12px_40px_rgba(251,191,36,0.25)] backdrop-blur-md">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-amber-300">
+                        Admin Broadcast
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-white truncate">
+                        {adminStream.title || 'Live now'}
+                      </div>
+                      {adminStream.username && (
+                        <div className="mt-0.5 text-xs text-slate-300 truncate">
+                          @{adminStream.username}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => navigate(`/live/${adminStream.id}`)}
+                      className="inline-flex items-center gap-2 rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-black shadow-lg hover:bg-amber-300 transition-colors"
+                    >
+                      <Play className="w-4 h-4" />
+                      Watch
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Top 4 Broadcasters Grid */}

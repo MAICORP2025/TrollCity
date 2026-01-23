@@ -90,11 +90,13 @@ export default function PayoutSetupPage() {
         <div className="bg-[#1A1A1A] border-2 border-purple-500/30 rounded-xl p-8">
           <div className="flex items-center gap-3 mb-6">
             <CreditCard className="w-8 h-8 text-purple-400" />
-            <h1 className="text-3xl font-bold text-purple-300">Payout Setup</h1>
+            <h1 className="text-3xl font-bold text-purple-300">Payout Email</h1>
           </div>
 
           <p className="text-gray-400 mb-6">
-            Connect your email to receive Gift Card payouts. Your email will be used to send your Gift Card code when you request a withdrawal.
+            Connect an email address that can be used for future payout notifications.
+            Payouts and cashouts are currently disabled, but this email will be used
+            if payout options return in the future.
           </p>
 
           {/* Balance Display */}
@@ -119,7 +121,6 @@ export default function PayoutSetupPage() {
             </div>
           </div>
 
-          {/* Gift Card Email Input */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-300 mb-2">
               Payout Email Address *
@@ -135,18 +136,16 @@ export default function PayoutSetupPage() {
               />
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              This email will be used to send your Gift Card.
+              This email will be used for payout-related communication if payouts are re-enabled.
             </p>
           </div>
 
-          {/* Info Box */}
           <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-6">
             <h3 className="font-semibold text-blue-300 mb-2">Payout Information</h3>
             <ul className="text-sm text-gray-300 space-y-1">
-              <li>• Minimum payout: 7,000 coins ($21)</li>
-              <li>• Conversion rate: 100 coins = $1 USD</li>
-              <li>• Payouts are processed manually by admin</li>
-              <li>• You'll receive a Gift Card code via email</li>
+              <li>• Payouts and gift card cashouts are currently disabled.</li>
+              <li>• If payouts return, this email will be used for notifications.</li>
+              <li>• Keep your email secure and up to date.</li>
             </ul>
           </div>
 

@@ -248,49 +248,49 @@ $$;
 -- Update troll_bank_spend_coins_secure to credit Treasury
 CREATE OR REPLACE FUNCTION public.troll_bank_spend_coins_secure(
     p_user_id uuid,
-    p_amount bigint,
-    p_source text,
-    p_reason text,
+    p_amount int,
+    p_bucket text DEFAULT 'paid',
+    p_source text DEFAULT 'purchase',
     p_ref_id text DEFAULT NULL::text,
-    p_metadata jsonb DEFAULT NULL::jsonb
+    p_metadata jsonb DEFAULT '{}'::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    v_user_balance bigint;
-    v_escrow_balance bigint;
-    v_available_balance bigint;
-    v_bucket text := 'paid'; -- Default spend bucket
+    v_result jsonb;
+    v_target_bucket text := 'Treasury';
 BEGIN
-    -- 1. Check Available Balance (Total - Escrow)
-    SELECT 
-        COALESCE(SUM(delta), 0),
-        COALESCE(SUM(CASE WHEN bucket = 'escrow' THEN delta ELSE 0 END), 0)
-    INTO v_user_balance, v_escrow_balance
-    FROM public.coin_ledger
-    WHERE user_id = p_user_id;
-
-    v_available_balance := v_user_balance - v_escrow_balance;
-
-    IF v_available_balance < p_amount THEN
-        RAISE EXCEPTION 'Insufficient funds';
+    IF auth.uid() != p_user_id AND auth.role() <> 'service_role' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized');
     END IF;
 
-    -- 2. Deduct from User (Ledger)
-    INSERT INTO public.coin_ledger (user_id, delta, bucket, source, ref_id, reason, metadata)
-    VALUES (p_user_id, -p_amount, v_bucket, p_source, p_ref_id, p_reason, p_metadata);
+    v_result := troll_bank_spend_coins(p_user_id, p_amount, p_bucket, p_source, p_ref_id, p_metadata);
 
-    -- 3. Credit Admin Pool Allocations (Treasury)
-    -- Initialize if not exists (safety)
-    INSERT INTO public.admin_pool_buckets (bucket_name) VALUES ('Treasury') ON CONFLICT DO NOTHING;
-    
+    IF COALESCE((v_result->>'success')::boolean, false) = false THEN
+        RETURN v_result;
+    END IF;
+
+    IF p_source IN ('perk_purchase', 'insurance_purchase', 'entrance_effect', 'call_minutes', 'broadcast_theme_purchase') THEN
+        v_target_bucket := 'Officer Pay';
+    ELSIF p_source = 'store_purchase' THEN
+        IF p_metadata ? 'item_type' THEN
+            IF p_metadata->>'item_type' IN ('perk', 'insurance', 'effect') THEN
+                v_target_bucket := 'Officer Pay';
+            END IF;
+        END IF;
+    ELSE
+        v_target_bucket := 'Treasury';
+    END IF;
+
+    INSERT INTO public.admin_pool_buckets (bucket_name) VALUES (v_target_bucket) ON CONFLICT (bucket_name) DO NOTHING;
+
     UPDATE public.admin_pool_buckets
-    SET balance_coins = balance_coins + p_amount
-    WHERE bucket_name = 'Treasury';
+    SET balance_coins = balance_coins + p_amount,
+        updated_at = NOW()
+    WHERE bucket_name = v_target_bucket;
 
-    -- Return result
-    RETURN jsonb_build_object('success', true, 'new_balance', v_available_balance - p_amount);
+    RETURN v_result;
 END;
 $$;

@@ -3060,19 +3060,9 @@ export default function LivePage() {
                   console.warn('Could not update gift with stream context:', giftUpdateError);
                 }
               }
-
-              await supabase.from('stream_gifts').insert({
-                stream_id: streamIdValue,
-                sender_id: senderId,
-                sender_name: profile?.username || null,
-                gift_type: 'paid',
-                coins_spent: totalCoins,
-                coins_amount: totalCoins,
-                message: canonicalGiftName,
-              });
             }
           } catch (streamGiftErr) {
-            console.warn('Failed to insert stream gift event', streamGiftErr);
+            console.warn('Failed to update gift stream context', streamGiftErr);
           }
 
           try {

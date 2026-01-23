@@ -42,6 +42,7 @@ export async function getAllApplications() {
   const { data, error } = await supabase
     .from('applications')
     .select('*')
+    .neq('status', 'deleted')
     .or('status.eq.pending,status.is.null')
     .order('created_at', { ascending: false });
 

@@ -553,7 +553,7 @@ export async function addCoins(params: {
       console.warn('addCoins: Failed to update local store', e)
     }
 
-    // Family coin earning hook: Allocate 10% of troll_coins to family stats
+    // Family token earning hook: Allocate 10% of earned coins to family stats
     if (finalCoinType === 'troll_coins' && amount > 0) {
       try {
         // Check if user is in a family
@@ -564,7 +564,7 @@ export async function addCoins(params: {
           .single()
 
         if (familyMember?.family_id) {
-          const familyBonus = Math.floor(amount * 0.10) // 10% of earned troll_coins
+          const familyBonus = Math.floor(amount * 0.10) // 10% of earned coins
           if (familyBonus > 0) {
             // Use RPC function to atomically update family stats
             const { data: _familyResult, error: familyError } = await sb.rpc('increment_family_stats', {
@@ -576,7 +576,7 @@ export async function addCoins(params: {
             if (familyError) {
               console.warn('Failed to update family stats for coin earning:', familyError)
             } else {
-              console.log(`Allocated ${familyBonus} family coins to family ${familyMember.family_id}`)
+              console.log(`Allocated ${familyBonus} family tokens to family ${familyMember.family_id}`)
             }
           }
 

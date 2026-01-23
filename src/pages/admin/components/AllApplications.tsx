@@ -37,7 +37,7 @@ export default function AllApplications() {
       const { data: filled } = await supabase.rpc('is_lead_officer_position_filled')
       setPositionFilled(filled || false)
 
-      // Load regular applications
+      // Load regular applications (exclude hard-deleted/archived)
       const { data, error } = await supabase
         .from('applications')
         .select(`
@@ -47,6 +47,7 @@ export default function AllApplications() {
             email
           )
         `)
+        .neq('status', 'deleted')
         .order('created_at', { ascending: false })
 
       if (error) throw error

@@ -43,8 +43,7 @@ BEGIN
 
   -- 3. Deduct coins if cost > 0
   IF v_cost > 0 THEN
-    -- Use troll_bank_spend_coins (which now handles direction correctly)
-    v_spend_result := public.troll_bank_spend_coins(
+    v_spend_result := public.troll_bank_spend_coins_secure(
       p_user_id,
       v_cost,
       'paid',

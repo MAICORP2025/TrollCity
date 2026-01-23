@@ -60,7 +60,7 @@ export default function StreamDiagnostics({ streamId, isHost }: StreamDiagnostic
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
-            table: 'stream_messages',
+            table: 'messages',
             filter: `stream_id=eq.${streamId}`
           }, () => {
             console.log('✅ Messages subscription working')
@@ -74,7 +74,7 @@ export default function StreamDiagnostics({ streamId, isHost }: StreamDiagnostic
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
-            table: 'stream_gifts',
+            table: 'gifts',
             filter: `stream_id=eq.${streamId}`
           }, () => {
             console.log('✅ Gifts subscription working')

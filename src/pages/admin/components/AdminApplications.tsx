@@ -76,7 +76,8 @@ export default function AdminApplications() {
             email
           )
         `)
-        // Show ALL applications; UI splits into Pending/Approved/Rejected
+        // Show ALL non-deleted applications; UI splits into Pending/Approved/Rejected
+        .neq('status', 'deleted')
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -235,6 +236,49 @@ export default function AdminApplications() {
 
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to deny application"
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [user, loadApplications, refreshProfile])
+
+  const handleApproveOverride = useCallback(async (app: Application) => {
+    if (!user) return toast.error("You must be logged in")
+
+    const confirmed = window.confirm('Approve this application even though it was previously rejected?')
+    if (!confirmed) return
+
+    await handleApprove(app)
+  }, [user, handleApprove])
+
+  const handleDelete = useCallback(async (app: Application) => {
+    if (!user) return toast.error("You must be logged in")
+
+    const confirmed = window.confirm('Permanently delete this application? This cannot be undone.')
+    if (!confirmed) return
+
+    try {
+      setLoading(true)
+
+      const { error } = await supabase
+        .from('applications')
+        .update({
+          status: 'deleted',
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', app.id)
+
+      if (error) throw error
+
+      toast.success("Application deleted.")
+
+      const scrollY = window.scrollY
+      await loadApplications()
+      if (refreshProfile) await refreshProfile()
+      requestAnimationFrame(() => window.scrollTo(0, scrollY))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete application"
       toast.error(message)
     } finally {
       setLoading(false)
@@ -426,16 +470,46 @@ export default function AdminApplications() {
                       )}
                     </div>
 
-                    <div className="ml-4">
-                      {app.status === "pending" && activeTab === 'pending' && !disable ? (
+                    <div className="ml-4 flex flex-col items-end gap-2">
+                      {app.status === "pending" && activeTab === 'pending' && !disable && (
                         <div className="flex gap-2">
                           <button onClick={() => handleApprove(app)} className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg">APPROVE</button>
                           <button onClick={() => handleReject(app)} className="px-3 py-2 bg-red-600 text-white text-xs rounded-lg">DENY</button>
                         </div>
-                      ) : app.status === "approved" ? (
-                        <div className="text-green-400 text-sm flex items-center gap-1"><Check className="w-4" /> Approved</div>
-                      ) : (
-                        <div className="text-red-400 text-sm flex items-center gap-1"><X className="w-4" /> Denied</div>
+                      )}
+                      {app.status === "approved" && (
+                        <div className="text-green-400 text-sm flex items-center gap-1">
+                          <Check className="w-4" /> Approved
+                        </div>
+                      )}
+                      {app.status === "rejected" && (
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-red-400 text-sm flex items-center gap-1">
+                            <X className="w-4" /> Denied
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleApproveOverride(app)}
+                              className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg"
+                            >
+                              APPROVE ANYWAY
+                            </button>
+                            <button
+                              onClick={() => handleDelete(app)}
+                              className="px-3 py-2 bg-gray-700 text-white text-xs rounded-lg"
+                            >
+                              DELETE
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {app.status !== "rejected" && (
+                        <button
+                          onClick={() => handleDelete(app)}
+                          className="px-3 py-1 bg-gray-800 text-gray-200 text-[11px] rounded-lg mt-1"
+                        >
+                          Delete
+                        </button>
                       )}
                     </div>
                   </div>

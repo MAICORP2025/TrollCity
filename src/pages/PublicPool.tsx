@@ -23,6 +23,7 @@ export default function PublicPool() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const hasPoolRealtimeRef = useRef<boolean>(false)
   
   // Visualizer State
   const particlesRef = useRef<any[]>([])
@@ -37,10 +38,6 @@ export default function PublicPool() {
         .select('trollcoins_balance')
         .limit(1)
         .single()
-      
-      if (poolData) {
-        setPoolBalance(Number(poolData.trollcoins_balance))
-      }
 
       // 2. Get Recent Donations
       const { data: donationData } = await supabase
@@ -55,6 +52,7 @@ export default function PublicPool() {
         .order('created_at', { ascending: false })
         .limit(50)
       
+      let donationsTotal = 0
       if (donationData) {
         // Manually fetch user profiles since the relationship is tricky with auth.users
         const userIds = Array.from(new Set(donationData.map((d: any) => d.user_id)))
@@ -70,13 +68,26 @@ export default function PublicPool() {
             profileMap.set(p.id, p)
           })
         }
-
-        setDonations(donationData.map((d: any) => ({
+        const mappedDonations = donationData.map((d: any) => ({
           ...d,
           username: profileMap.get(d.user_id)?.username,
           avatar_url: profileMap.get(d.user_id)?.avatar_url
-        })))
+        }))
+        donationsTotal = mappedDonations.reduce(
+          (sum, d) => sum + Number(d.amount || 0),
+          0
+        )
+        setDonations(mappedDonations)
       }
+
+      let nextBalance = 0
+      if (poolData && poolData.trollcoins_balance != null) {
+        nextBalance = Number(poolData.trollcoins_balance) || 0
+      }
+      if (nextBalance === 0 && donationsTotal > 0) {
+        nextBalance = donationsTotal
+      }
+      setPoolBalance(nextBalance)
     }
 
     loadData()
@@ -88,6 +99,7 @@ export default function PublicPool() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'admin_pool' },
         (payload) => {
+          hasPoolRealtimeRef.current = true
           setPoolBalance(Number(payload.new.trollcoins_balance))
         }
       )
@@ -110,6 +122,9 @@ export default function PublicPool() {
 
           setDonations(prev => [newDonation, ...prev].slice(0, 50))
           spawnCoins(payload.new.amount)
+          if (!hasPoolRealtimeRef.current) {
+            setPoolBalance(prev => (prev || 0) + Number(payload.new.amount || 0))
+          }
         }
       )
       .subscribe()

@@ -24,17 +24,17 @@ export default function TrollBattlesSetup({ streamId, onOpponentFound, onCancel:
     
     try {
         const { data: gifts } = await supabase
-            .from('stream_gifts')
-            .select('recipient_id, coins_amount')
+            .from('gifts')
+            .select('receiver_id, coins_spent')
             .eq('stream_id', streamId);
 
         if (!gifts) return;
 
         const totals: Record<string, number> = {};
         gifts.forEach(g => {
-            if (g.recipient_id === user?.id) return;
-            if (g.recipient_id) {
-                totals[g.recipient_id] = (totals[g.recipient_id] || 0) + (g.coins_amount || 0);
+            if (g.receiver_id === user?.id) return;
+            if (g.receiver_id) {
+                totals[g.receiver_id] = (totals[g.receiver_id] || 0) + (g.coins_spent || 0);
             }
         });
 

@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 import { useAvatar } from '../lib/hooks/useAvatar'
 import type { AvatarConfig } from '../lib/hooks/useAvatar'
 import { updateUserAvatarConfig } from '../lib/purchases'
-import PaymentMethodManager from '../components/payments/PaymentMethodManager'
 import CropPhotoModal from '../components/CropPhotoModal'
 import { KeyRound } from 'lucide-react'
 import { setResetPin } from '@/services/passwordManager'
@@ -570,15 +569,24 @@ const ProfileSetup = () => {
 
         <details className="bg-[#1A1A1A] rounded-lg border border-[#2C2C2C] mt-6" open>
           <summary className="cursor-pointer px-6 py-4 flex items-center justify-between">
-            <span className="font-semibold">Payment Methods</span>
-            <span className="text-sm bg-[#7C3AED] text-white px-3 py-1 rounded">Manage</span>
+            <span className="font-semibold">Payout Settings</span>
+            <span className="text-sm bg-[#7C3AED] text-white px-3 py-1 rounded">PayPal</span>
           </summary>
 
-          <div className="px-6 pb-6">
-            <PaymentMethodManager
-              title="Add Payment Method"
-              description="Add a Stripe-supported payment method for faster coin purchases."
-            />
+          <div className="px-6 pb-6 space-y-3">
+            <p className="text-sm text-gray-400">
+              Set the PayPal email where you want to receive your Troll City payouts.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/payouts/setup')}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold text-sm"
+            >
+              Open Payout Settings
+            </button>
+            <p className="text-xs text-gray-500">
+              Payouts are sent only to your PayPal payout email. Make sure it matches your PayPal account.
+            </p>
           </div>
         </details>
 

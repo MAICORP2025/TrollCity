@@ -1,11 +1,11 @@
 {
   "appId": "com.trollcity.app",
-  "appName": "Troll City",
+  "appName": "trollcity",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
     "androidScheme": "https",
-    "hostname": "trollcity.app",
+    "hostname": "maitrollcity.com",
     "iosScheme": "https"
   },
   "android": {

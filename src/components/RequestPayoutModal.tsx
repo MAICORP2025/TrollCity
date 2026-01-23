@@ -21,6 +21,7 @@ export default function RequestPayoutModal({
   const [coinsToRedeem, setCoinsToRedeem] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const payoutWindowOpen = isPayoutWindowOpen()
+  const payoutsDisabled = true
 
   const MINIMUM_COINS = 7000 // $21 minimum
   // Conversion rate varies by tier: $21/7k = $0.003, $49.50/14k = $0.0035357, $90/27k = $0.00333, $150/47k = $0.00319
@@ -76,6 +77,31 @@ export default function RequestPayoutModal({
     } finally {
       setLoading(false)
     }
+  }
+
+  if (payoutsDisabled) {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-zinc-900 rounded-xl border border-purple-500/30 max-w-md w-full p-6 relative">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-white transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="mb-4">
+            <h2 className="text-2xl font-bold text-white">Payouts Unavailable</h2>
+            <p className="text-sm text-gray-300 mt-2">
+              Cash payouts and gift card cashouts are currently disabled.
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              You can still earn and spend coins inside Troll City while payouts are paused.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

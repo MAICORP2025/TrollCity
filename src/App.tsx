@@ -48,6 +48,7 @@ import AuctionsPage from "./pages/AuctionsPage";
 import TrollBank from "./pages/TrollBank";
 const ChurchPage = lazy(() => import("./pages/ChurchPage"));
 const XPSimulatorPage = lazy(() => import("./pages/dev/XPSimulatorPage"));
+const BadgePopup = lazy(() => import("./components/BadgePopup"));
 
 
 
@@ -327,9 +328,8 @@ function AppContent() {
         event.preventDefault(); // Prevent default console error
         
         // Clear session and redirect to auth
-        useAuthStore.getState().signOut().then(() => {
-           window.location.href = '/auth';
-        });
+        useAuthStore.getState().logout()
+        window.location.href = '/auth';
       }
     };
 

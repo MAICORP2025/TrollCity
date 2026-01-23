@@ -44,6 +44,25 @@ export default function PayoutRequest() {
   const grossUsd = parsed > 0 ? parsed * rate : 0;
   const netUsd = Math.max(grossUsd - FIXED_FEE_USD, 0);
 
+  const payoutsDisabled = true;
+
+  if (payoutsDisabled) {
+    return (
+      <div className="p-6 max-w-xl mx-auto text-white min-h-screen flex items-center">
+        <div className="space-y-4">
+          <h1 className="text-2xl font-bold">Payouts Unavailable</h1>
+          <p className="text-sm text-gray-300">
+            Gift card payouts and cashouts are no longer supported.
+          </p>
+          <p className="text-xs text-gray-500">
+            You can continue to earn and spend coins inside Troll City. Check back
+            later for updated payout options.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const submit = async () => {
     try {
       setLoading(true);

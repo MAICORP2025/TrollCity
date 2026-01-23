@@ -65,7 +65,7 @@ export default function OfficerManagementTab() {
     const { data: logData } = await supabase
       .from('role_change_log')
       .select('*')
-      .eq('target_user_id', userId)
+      .eq('target_user', userId)
       .order('created_at', { ascending: false })
     
     setLogs(logData || [])
@@ -80,7 +80,7 @@ export default function OfficerManagementTab() {
 
     try {
       const { error } = await supabase.rpc('set_user_role', {
-        target_user_id: selectedUser.id,
+        target_user: selectedUser.id,
         new_role: newRole,
         reason: actionReason
       })

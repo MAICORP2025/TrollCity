@@ -69,7 +69,7 @@ export interface CriticalAlert {
 
 export interface RoleChangeLog {
   id: string
-  target_user_id: string
+  target_user: string
   changed_by: string
   old_role: string
   new_role: string

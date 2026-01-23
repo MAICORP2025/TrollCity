@@ -14,7 +14,7 @@ export default function ChatInput({ streamId }: ChatInputProps) {
   async function sendMessage() {
     if (!message.trim() || !streamId || !user) return
 
-    const { error } = await supabase.from('stream_messages').insert({
+    const { error } = await supabase.from('messages').insert({
       stream_id: streamId,
       user_id: user.id,
       content: message.trim(),
