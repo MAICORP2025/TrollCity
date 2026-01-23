@@ -220,6 +220,42 @@ export default async function handler(req: Request) {
       });
     if (updateResp.error) throw updateResp.error;
 
+    // 🏆 Trigger Badge Evaluation
+    try {
+        const { data: stats } = await supabase.rpc('get_loan_stats', { p_user_id: user_id });
+        
+        if (stats) {
+            // Determine badge event type based on credit event
+            let badgeEventType = 'credit_score'; // Default
+            if (event_type === 'loan_full_payoff') badgeEventType = 'loan_repaid';
+            if (event_type === 'loan_on_time_payment') badgeEventType = 'loan_repaid'; // Mapped for 'on-time-payer' rule check
+            
+            // Add score to metadata for 'trusted-borrower' check
+            const metadataWithScore = { 
+                ...stats, 
+                score: nextScore,
+                // approximate streak based on trend or reliability if not tracked explicitly
+                // For now, we rely on stats from get_loan_stats for loan badges
+            };
+
+            const functionsUrl = Deno.env.get("SUPABASE_URL")!.replace('.co', '.co/functions/v1');
+            fetch(`${functionsUrl}/evaluate-badges-for-event`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    event_type: badgeEventType,
+                    user_id: user_id,
+                    metadata: metadataWithScore
+                })
+            }).catch(e => console.error('Badge eval failed', e));
+        }
+    } catch (badgeErr) {
+        console.error('Badge trigger error', badgeErr);
+    }
+
     return new Response(
       JSON.stringify({ success: true, delta, score: nextScore, tier: nextTier, trend_7d: trend7d }),
       { status: 200, headers: { ...cors, "Content-Type": "application/json" } }

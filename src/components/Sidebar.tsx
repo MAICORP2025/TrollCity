@@ -26,7 +26,8 @@ import {
   Vote,
   TrendingUp,
   Mars,
-  Venus
+  Venus,
+  Waves
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -267,6 +268,14 @@ export default function Sidebar() {
         {/* Social */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "Social"} isCollapsed={isSidebarCollapsed}>
           <SidebarItem icon={MessageSquare} label="Messages" to="/messages" active={isActive('/messages')} collapsed={isSidebarCollapsed} />
+          <SidebarItem 
+            icon={Waves} 
+            label="Public Pool" 
+            to="/pool" 
+            active={isActive('/pool')} 
+            collapsed={isSidebarCollapsed}
+            className="text-cyan-400 hover:text-cyan-300"
+          />
           {canSeeFamilyLounge && (
             <SidebarItem 
               icon={Crown} 

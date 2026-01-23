@@ -106,6 +106,21 @@ export default function CarDealershipPage() {
     }
   ];
 
+  // Helper to resolve the numeric car model ID from a user_cars row
+  const getCarModelId = (row: any): number | null => {
+    // 1. Try direct parsing if car_id is numeric
+    const directId = Number(row.car_id);
+    if (Number.isFinite(directId)) return directId;
+
+    // 2. Try customization_json.car_model_id (fallback for UUID car_ids)
+    if (row.customization_json && typeof row.customization_json.car_model_id === 'number') {
+      return row.customization_json.car_model_id;
+    }
+
+    // 3. Last resort: Try to match by name if we have to (unreliable, skipped for now)
+    return null;
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -116,12 +131,13 @@ export default function CarDealershipPage() {
       }
 
       try {
+        // Relaxed query: Check for any policy that hasn't expired yet
         const { data, error } = await supabase
           .from('car_insurance_policies')
           .select('id, expires_at, is_active')
           .eq('user_id', user.id)
-          .eq('is_active', true)
           .gt('expires_at', new Date().toISOString())
+          .order('expires_at', { ascending: false })
           .limit(1);
 
         if (error) {
@@ -201,7 +217,7 @@ export default function CarDealershipPage() {
     if (!user?.id || !ownedCarId) return;
     
     // Find the active user_cars row
-    const userCarRow = garageCars.find((g) => Number(g.car_id) === ownedCarId);
+    const userCarRow = garageCars.find((g) => getCarModelId(g) === ownedCarId);
     if (!userCarRow) {
         toast.error("Active car not found in garage data");
         return;
@@ -295,7 +311,7 @@ export default function CarDealershipPage() {
       }
       
       // Update user_cars customization
-      const userCarRow = garageCars.find((g) => Number(g.car_id) === ownedCarId);
+      const userCarRow = garageCars.find((g) => getCarModelId(g) === ownedCarId);
       if (userCarRow) {
           const currentCustom = userCarRow.customization_json || {};
           const updates: any = {};
@@ -355,13 +371,13 @@ export default function CarDealershipPage() {
 
         if (rows.length > 0) {
           const ownedIds = rows
-            .map((row) => Number(row.car_id))
-            .filter((id) => Number.isFinite(id));
+            .map((row) => getCarModelId(row))
+            .filter((id): id is number => id !== null);
 
           const activeRow =
             rows.find((row) => row.is_active) || rows[0];
 
-          const activeCarId = activeRow ? Number(activeRow.car_id) : null;
+          const activeCarId = activeRow ? getCarModelId(activeRow) : null;
 
           setOwnedVehicleIds(ownedIds);
           setOwnedCarId(activeCarId);
@@ -408,10 +424,10 @@ export default function CarDealershipPage() {
       setGarageCars(rows);
       if (rows.length > 0) {
         const ownedIds = rows
-          .map((row: any) => Number(row.car_id))
-          .filter((id) => Number.isFinite(id));
+          .map((row: any) => getCarModelId(row))
+          .filter((id: number | null): id is number => id !== null);
         const activeRow = rows.find((row: any) => row.is_active) || rows[0];
-        const activeCarId = activeRow ? Number(activeRow.car_id) : null;
+        const activeCarId = activeRow ? getCarModelId(activeRow) : null;
         setOwnedVehicleIds(ownedIds);
         setOwnedCarId(activeCarId);
         localStorage.setItem(`trollcity_owned_vehicles_${user.id}`, JSON.stringify(ownedIds));
@@ -651,10 +667,10 @@ export default function CarDealershipPage() {
           if (Array.isArray(refreshedCars) && refreshedCars.length > 0) {
             setGarageCars(refreshedCars);
             const ownedIds = refreshedCars
-              .map((row: any) => Number(row.car_id))
-              .filter((id: number) => Number.isFinite(id));
+              .map((row: any) => getCarModelId(row))
+              .filter((id: number | null): id is number => id !== null);
             const activeRow = refreshedCars.find((row: any) => row.is_active) || refreshedCars[0];
-            const activeCarId = activeRow ? Number(activeRow.car_id) : null;
+            const activeCarId = activeRow ? getCarModelId(activeRow) : null;
             setOwnedVehicleIds(ownedIds);
             setOwnedCarId(activeCarId);
           }
@@ -679,9 +695,8 @@ export default function CarDealershipPage() {
     const car = cars.find(c => c.id === vehicleId);
     if (!car) return;
 
-    // Find the row in garageCars
-    // Note: garageCars now contains user_cars rows
-    const userCarRow = garageCars.find((g) => Number(g.car_id) === vehicleId);
+    // Find the row in garageCars using the helper
+    const userCarRow = garageCars.find((g) => getCarModelId(g) === vehicleId);
     
     if (!userCarRow) {
       toast.error('Vehicle not found in your garage');
@@ -708,7 +723,6 @@ export default function CarDealershipPage() {
       setOwnedCarId(vehicleId);
 
       // Keep profile in sync with active vehicle using the user_cars UUID
-      // This avoids UUID type errors and makes cross-page resolution reliable
       try {
         await supabase
           .from('user_profiles')
@@ -821,26 +835,18 @@ export default function CarDealershipPage() {
       return;
     }
 
-    const key = `trollcity_car_${user.id}`;
-    const raw = localStorage.getItem(key);
-    if (!raw) {
+    if (!ownedCarId) {
       toast.error('You do not own a vehicle to sell');
       return;
     }
 
-    let storedCar: any = null;
-    try {
-      storedCar = JSON.parse(raw);
-    } catch {
-      storedCar = null;
+    const userCarRow = garageCars.find((g) => getCarModelId(g) === ownedCarId);
+    if (!userCarRow) {
+        toast.error('Active car not found in garage');
+        return;
     }
 
-    if (!storedCar || typeof storedCar.carId !== 'number') {
-      toast.error('Unable to read vehicle data');
-      return;
-    }
-
-    const car = cars.find((c) => c.id === storedCar.carId);
+    const car = cars.find((c) => c.id === ownedCarId);
     if (!car) {
       toast.error('Vehicle configuration not found');
       return;
@@ -854,7 +860,7 @@ export default function CarDealershipPage() {
 
     setSelling(true);
     try {
-      const result = await addCoins({
+      const addResult = await addCoins({
         userId: user.id,
         amount: refundAmount,
         type: 'refund',
@@ -866,42 +872,52 @@ export default function CarDealershipPage() {
         }
       });
 
-      if (!result.success) {
-        toast.error(result.error || 'Failed to process sale');
+      if (!addResult.success) {
+        toast.error(addResult.error || 'Failed to process sale');
         return;
+      }
+      
+      // Delete from user_cars
+      const { error: deleteError } = await supabase
+        .from('user_cars')
+        .delete()
+        .eq('id', userCarRow.id);
+
+      if (deleteError) {
+          console.error('Failed to delete user_cars row:', deleteError);
+          // Don't revert coins, but warn user
+          toast.error('Vehicle sold but garage update failed. Please refresh.');
       }
 
       localStorage.removeItem(`trollcity_car_${user.id}`);
       localStorage.removeItem(`trollcity_car_insurance_${user.id}`);
       localStorage.removeItem(`trollcity_vehicle_condition_${user.id}`);
 
-      // Update owned vehicles list
-      const ownedKey = `trollcity_owned_vehicles_${user.id}`;
-      let ownedList: number[] = [];
-      try {
-        const raw = localStorage.getItem(ownedKey);
-        ownedList = raw ? JSON.parse(raw) : [];
-      } catch {
-        ownedList = [];
-      }
-      ownedList = ownedList.filter(id => id !== car.id);
-      localStorage.setItem(ownedKey, JSON.stringify(ownedList));
+      // Update owned vehicles list local state
+      const nextCars = garageCars.filter(c => c.id !== userCarRow.id);
+      setGarageCars(nextCars);
+      
+      const nextOwnedIds = nextCars.map(c => getCarModelId(c)).filter((id): id is number => id !== null);
+      setOwnedVehicleIds(nextOwnedIds);
+      
+      const nextActiveRow = nextCars[0] || null;
+      const nextActiveId = nextActiveRow ? getCarModelId(nextActiveRow) : null;
+      setOwnedCarId(nextActiveId);
 
-      // Update active vehicle to next owned, or clear
-      const nextActive = ownedList[0] ?? null;
+      // Sync active vehicle to profile
       await supabase
         .from('user_profiles')
         .update({
-          active_vehicle: nextActive,
-          vehicle_image: nextActive
-            ? cars.find(c => c.id === nextActive)?.image || null
+          active_vehicle: nextActiveRow ? nextActiveRow.id : null,
+          vehicle_image: nextActiveId
+            ? cars.find(c => c.id === nextActiveId)?.image || null
             : null,
-          owned_vehicle_ids: ownedList
+          owned_vehicle_ids: nextOwnedIds // Update legacy array too
         })
         .eq('id', user.id);
 
-      if (nextActive) {
-        const nextCar = cars.find(c => c.id === nextActive);
+      if (nextActiveId) {
+        const nextCar = cars.find(c => c.id === nextActiveId);
         if (nextCar) {
           localStorage.setItem(
             `trollcity_car_${user.id}`,
@@ -919,10 +935,8 @@ export default function CarDealershipPage() {
       }
       
       refreshProfile();
-
       toast.success(`Sold ${car.name} for ${refundAmount.toLocaleString()} coins`);
-      setOwnedCarId(nextActive);
-      setOwnedVehicleIds(ownedList);
+
     } catch (error: any) {
       console.error('Failed to sell vehicle', error);
       toast.error(error?.message || 'Failed to sell vehicle');
@@ -949,6 +963,17 @@ export default function CarDealershipPage() {
     const vehicle = cars.find(c => c.id === ownedCarId);
     if (!vehicle) {
       toast.error('Vehicle configuration not found');
+      return;
+    }
+
+    const userCarRow = garageCars.find((g) => getCarModelId(g) === ownedCarId);
+    if (!userCarRow) {
+      toast.error('Vehicle data not found');
+      return;
+    }
+
+    if (userCarRow.title_status !== 'notarized') {
+      toast.error('You must get your title notarized by a Secretary before selling.');
       return;
     }
 
@@ -989,6 +1014,7 @@ export default function CarDealershipPage() {
         .insert({
           seller_id: user.id,
           vehicle_id: ownedCarId,
+          user_car_id: userCarRow.id,
           listing_type: listingType,
           price: Math.round(priceValue),
           status: 'active',
@@ -1322,10 +1348,37 @@ export default function CarDealershipPage() {
                   <p className="text-xs text-zinc-400">
                     User ID: {user?.id}
                   </p>
+                  {(() => {
+                    const userCarRow = garageCars.find((g) => Number(g.car_id) === ownedCarId);
+                    const status = userCarRow?.title_status || 'draft';
+                    
+                    return (
+                        <div className="mt-2">
+                            <p className="text-xs uppercase tracking-widest text-zinc-500 mb-1">Title Status</p>
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider border ${
+                                status === 'notarized' ? 'bg-emerald-900/30 text-emerald-400 border-emerald-500/50' :
+                                status === 'pending_notarization' ? 'bg-amber-900/30 text-amber-400 border-amber-500/50' :
+                                'bg-zinc-800 text-zinc-400 border-zinc-700'
+                            }`}>
+                                {status === 'notarized' ? <BadgeCheck size={14} /> : <FileText size={14} />}
+                                {status.replace('_', ' ')}
+                            </div>
+                            {status === 'notarized' && userCarRow?.notarized_at && (
+                                <p className="text-[10px] text-zinc-500 mt-1">
+                                    Signed: {new Date(userCarRow.notarized_at).toLocaleDateString()}
+                                </p>
+                            )}
+                        </div>
+                    );
+                  })()}
                 </div>
                 {(() => {
                   const vehicle = cars.find(c => c.id === ownedCarId);
                   if (!vehicle) return null;
+                  
+                  const upgradeTotal = vehicleUpgrades.reduce((sum, u) => sum + (u.status === 'installed' ? u.cost : 0), 0);
+                  const totalValue = vehicle.price + upgradeTotal;
+                  
                   return (
                     <div className="flex items-center gap-3">
                       <div className="w-16 h-10 rounded-lg border border-zinc-700 overflow-hidden flex items-center justify-center bg-zinc-900">
@@ -1350,14 +1403,58 @@ export default function CarDealershipPage() {
                             ? `• ${(vehicle as any).tier}`
                             : ''}
                         </p>
-                        <p className="text-xs text-emerald-400">
-                          Value: {vehicle.price.toLocaleString()} TrollCoins
-                        </p>
+                        <div className="text-xs text-emerald-400 font-mono mt-1">
+                          <div className="flex justify-between gap-4">
+                            <span className="text-zinc-500">Base:</span>
+                            <span>{vehicle.price.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-zinc-500">Upgrades:</span>
+                            <span>+{upgradeTotal.toLocaleString()}</span>
+                          </div>
+                          <div className="border-t border-zinc-800 mt-1 pt-1 flex justify-between gap-4 font-bold">
+                            <span className="text-zinc-300">Total:</span>
+                            <span>{totalValue.toLocaleString()} TC</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
                 })()}
               </div>
+              
+              {/* Notarization Action */}
+              {(() => {
+                  const userCarRow = garageCars.find((g) => Number(g.car_id) === ownedCarId);
+                  const status = userCarRow?.title_status || 'draft';
+                  
+                  if (status === 'draft') {
+                      return (
+                          <div className="bg-blue-900/10 border border-blue-500/20 p-3 rounded-lg flex items-center justify-between">
+                              <div>
+                                  <p className="text-sm text-blue-200 font-semibold">Official Notarization Required</p>
+                                  <p className="text-xs text-blue-300/60">Title must be notarized by a Secretary before selling.</p>
+                              </div>
+                              <button
+                                onClick={handleRequestNotarization}
+                                disabled={requestingNotary}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-md disabled:opacity-50"
+                              >
+                                {requestingNotary ? 'Requesting...' : 'Request Notary'}
+                              </button>
+                          </div>
+                      );
+                  }
+                  if (status === 'pending_notarization') {
+                      return (
+                          <div className="bg-amber-900/10 border border-amber-500/20 p-3 rounded-lg text-center">
+                              <p className="text-sm text-amber-200 font-semibold">Waiting for Secretary Approval</p>
+                              <p className="text-xs text-amber-300/60">Your title is currently under review.</p>
+                          </div>
+                      );
+                  }
+                  return null;
+              })()}
 
               <div className="border-t border-zinc-800 pt-4 space-y-3">
                 <p className="text-xs uppercase tracking-widest text-zinc-500">Create Listing</p>

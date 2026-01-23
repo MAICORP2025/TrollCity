@@ -146,6 +146,30 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 🏆 Trigger Badge Evaluation
+    try {
+      const { data: stats } = await supabaseAdmin.rpc('get_gift_stats', { p_user_id: senderId });
+      
+      if (stats) {
+        // Fire and forget - don't await to avoid blocking response
+        const functionsUrl = SUPABASE_URL.replace('.co', '.co/functions/v1');
+        fetch(`${functionsUrl}/evaluate-badges-for-event`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            event_type: 'gift_sent',
+            user_id: senderId,
+            metadata: stats
+          })
+        }).catch(e => console.error('Badge eval failed', e));
+      }
+    } catch (badgeErr) {
+      console.error('Badge trigger error', badgeErr);
+    }
+
     return new Response(JSON.stringify({ success: true, newBalance: (spendResult as any)?.new_balance }), {
       status: 200,
       headers: { ...cors, "Content-Type": "application/json" },

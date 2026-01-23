@@ -286,16 +286,30 @@ export default function AuctionsPage() {
         }
         localStorage.setItem(ownedKey, JSON.stringify(ownedList));
 
-        const { data, error: ownershipError } = await supabase.rpc(
-          'add_owned_vehicle_to_profile',
-          { p_vehicle_id: listing.vehicle_id }
-        );
+        if (listing.user_car_id) {
+            const { data, error: transferError } = await supabase.rpc('transfer_user_car', {
+                p_listing_id: listing.id,
+                p_buyer_id: user.id
+            });
 
-        if (ownershipError) {
-          console.error('Failed to update buyer vehicle ownership via RPC', ownershipError);
-          toast.error(ownershipError.message || 'Failed to update vehicle ownership');
-        } else if (data && (data as any).owned_vehicle_ids) {
-          console.log('Updated owned_vehicle_ids after auction:', (data as any).owned_vehicle_ids);
+            if (transferError) {
+                console.error('Transfer failed', transferError);
+                toast.error('Vehicle transfer failed, please contact admin.');
+            } else if (data && !data.success) {
+                 toast.error('Transfer logic error: ' + data.message);
+            }
+        } else {
+            const { data, error: ownershipError } = await supabase.rpc(
+              'add_owned_vehicle_to_profile',
+              { p_vehicle_id: listing.vehicle_id }
+            );
+
+            if (ownershipError) {
+              console.error('Failed to update buyer vehicle ownership via RPC', ownershipError);
+              toast.error(ownershipError.message || 'Failed to update vehicle ownership');
+            } else if (data && (data as any).owned_vehicle_ids) {
+              console.log('Updated owned_vehicle_ids after auction:', (data as any).owned_vehicle_ids);
+            }
         }
       } catch (e: any) {
         console.error('Failed to update buyer vehicle ownership', e);

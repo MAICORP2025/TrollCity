@@ -59,6 +59,7 @@ const Following = lazy(() => import("./pages/Following"));
 const ExploreFeed = lazy(() => import("./pages/ExploreFeed"));
 const CoinStore = lazy(() => import("./pages/CoinStore"));
 const Marketplace = lazy(() => import("./pages/Marketplace"));
+const PublicPool = lazy(() => import("./pages/PublicPool"));
 const UserInventory = lazy(() => import("./pages/UserInventory"));
 const Troting = lazy(() => import("./pages/Troting"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
@@ -691,6 +692,7 @@ function AppContent() {
       <AppLayout showSidebar={!!user} showHeader={!!user} showBottomNav={!!user}>
         {user && <AdminOfficerQuickMenu />}
         {user && <GameControlPanel />}
+        {user && <BadgePopup />}
 
         <ErrorBoundary>
           <Suspense fallback={<LoadingScreen />}>
@@ -743,6 +745,7 @@ function AppContent() {
                 <Route path="/explore" element={<ExploreFeed />} />
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/marketplace" element={<Marketplace />} />
+                  <Route path="/pool" element={<PublicPool />} />
                   <Route path="/shop/:username" element={<ShopView />} />
                   <Route path="/inventory" element={<UserInventory />} />
           <Route path="/troting" element={<Troting />} />

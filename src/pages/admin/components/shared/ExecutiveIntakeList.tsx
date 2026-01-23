@@ -258,15 +258,24 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
                   )}
 
                   {item.status !== 'resolved' && (
-                    <button 
-                      onClick={() => handleUpdateStatus(item.id, 'resolved')}
-                      className="px-3 py-1 bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-600/50 text-xs rounded transition-colors flex items-center justify-center gap-1"
-                    >
-                      <CheckCircle className="w-3 h-3" /> Resolve
-                    </button>
+                    item.type === 'vehicle_title' && item.metadata?.car_id ? (
+                        <button 
+                            onClick={() => handleSignTitle(item.id, item.metadata.car_id)}
+                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded transition-colors flex items-center justify-center gap-1"
+                        >
+                            <BadgeCheck className="w-3 h-3" /> Notarize Title
+                        </button>
+                    ) : (
+                        <button 
+                        onClick={() => handleUpdateStatus(item.id, 'resolved')}
+                        className="px-3 py-1 bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-600/50 text-xs rounded transition-colors flex items-center justify-center gap-1"
+                        >
+                        <CheckCircle className="w-3 h-3" /> Resolve
+                        </button>
+                    )
                   )}
 
-                  {item.status !== 'escalated' && !item.escalated_to_admin && (
+                  {item.status !== 'escalated' && !item.escalated_to_admin && item.type !== 'vehicle_title' && (
                     <button 
                       onClick={() => handleEscalate(item.id)}
                       className="px-3 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-600/50 text-xs rounded transition-colors flex items-center justify-center gap-1"

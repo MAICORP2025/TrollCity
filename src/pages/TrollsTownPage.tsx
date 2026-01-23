@@ -897,6 +897,28 @@ const TrollsTownPage: React.FC = () => {
         return
       }
 
+      // NEW: Add purchase amount to Admin Pool (System Wallet)
+      try {
+        const { data: poolRow } = await supabase
+          .from('admin_pool')
+          .select('id, trollcoins_balance')
+          .maybeSingle()
+        
+        if (poolRow) {
+           await supabase
+              .from('admin_pool')
+              .update({ trollcoins_balance: (poolRow.trollcoins_balance || 0) + tier.price })
+              .eq('id', poolRow.id)
+        } else {
+           await supabase
+              .from('admin_pool')
+              .insert({ trollcoins_balance: tier.price })
+        }
+      } catch (poolErr) {
+        console.error('Failed to credit admin pool', poolErr)
+        // Non-critical: User still gets house, but pool is out of sync.
+      }
+
       // 2. Create the property
       const { data: newProperty, error: createError } = await supabase
         .from('properties')

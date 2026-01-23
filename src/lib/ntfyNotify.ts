@@ -1,8 +1,6 @@
 // ntfy notification utility
 // Sends a push notification to all users via ntfy public server
 
-import fetch from 'node-fetch';
-
 const NTFY_TOPIC = 'trollcity-global'; // All users subscribe to this topic
 const NTFY_URL = 'https://ntfy.sh';
 
