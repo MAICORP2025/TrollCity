@@ -536,13 +536,22 @@ export default function AdminPoolTab() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <PieChart className="w-6 h-6 text-troll-green" />
-            Admin Pool
-          </h1>
+        <div className="flex flex-col gap-6 mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <h1 className="text-2xl font-bold flex items-center gap-3">
+              <PieChart className="w-6 h-6 text-troll-green" />
+              Admin Pool
+            </h1>
+
+            <div className="text-right">
+               <p className="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total Pool Value</p>
+               <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 drop-shadow-sm font-mono">
+                 {poolCoins === null ? '—' : poolCoins.toLocaleString()}
+                </div>
+            </div>
+          </div>
           
-          <div className="flex bg-[#1A1A24] p-1 rounded-lg border border-[#2C2C2C] overflow-x-auto">
+          <div className="flex bg-[#1A1A24] p-1 rounded-lg border border-[#2C2C2C] overflow-x-auto self-start md:self-auto w-full md:w-auto">
             <button
               onClick={() => setActiveTab('allocations')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
@@ -625,7 +634,7 @@ export default function AdminPoolTab() {
               </div>
               <div className="bg-[#121212] border border-emerald-500/30 rounded-xl p-6">
                 <h3 className="text-gray-400 text-sm mb-1">Admin Pool Coins</h3>
-                <div className="text-3xl font-bold text-emerald-300">
+                <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 drop-shadow-sm font-mono">
                   {poolCoins === null ? '—' : poolCoins.toLocaleString()}
                 </div>
               </div>
