@@ -717,6 +717,9 @@ const TrollsTownPage: React.FC = () => {
 
       await refreshCoins()
 
+      // Wait a moment for DB propagation to ensure the sold property is removed
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
       const { data: properties, error: propError } = await supabase
         .from('properties')
         .select('*')
