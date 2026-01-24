@@ -88,14 +88,8 @@ export default function ResponsiveVideoGrid({
       participant = participants.find((p) => p.identity === (seat as any).user_id);
     }
 
-    if (isActive && !participant) {
-      const guests = broadcaster
-        ? participants.filter((p) => p.identity !== broadcaster.identity)
-        : participants;
-      if (index < guests.length) {
-        participant = guests[index];
-      }
-    }
+    // Removed fallback logic that auto-filled slots with random participants.
+    // Slots should only be filled if there is an explicit seat assignment.
 
     return {
       key: `slot-${index}`,

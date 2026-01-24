@@ -1123,6 +1123,37 @@ export default function LivePage() {
     };
   }, [liveKit]);
 
+  // Ref tracking for cleanup
+  const seatsRef = useRef(seats);
+  const userRef = useRef(user);
+  const releaseSeatRef = useRef(releaseSeat);
+  const isBroadcasterRef = useRef(isBroadcaster);
+
+  useEffect(() => {
+    seatsRef.current = seats;
+    userRef.current = user;
+    releaseSeatRef.current = releaseSeat;
+    isBroadcasterRef.current = isBroadcaster;
+  }, [seats, user, releaseSeat, isBroadcaster]);
+
+  // Cleanup seat on unmount to prevent auto-joining on return
+  useEffect(() => {
+    return () => {
+      const currentSeats = seatsRef.current;
+      const currentUser = userRef.current;
+      const release = releaseSeatRef.current;
+      const isBroadcasterVal = isBroadcasterRef.current;
+
+      if (!isBroadcasterVal && currentUser?.id) {
+        const index = currentSeats.findIndex(s => s?.user_id === currentUser.id);
+        if (index >= 0) {
+          console.log('[LivePage] Cleaning up seat on unmount');
+          release(index).catch(err => console.error('Failed to release seat on unmount', err));
+        }
+      }
+    };
+  }, []);
+
   // Billing Heartbeat (Server-Side Billing Implementation)
   useEffect(() => {
     if (!streamId || !user?.id || (!isBroadcaster && !isGuestSeat)) return;
