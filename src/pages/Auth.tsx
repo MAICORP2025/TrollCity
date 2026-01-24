@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { AuthApiError } from '@supabase/supabase-js'
 import { supabase, isAdminEmail } from '../lib/supabase'
+import { post, API_ENDPOINTS } from '../lib/api'
 import { toast } from 'sonner'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
@@ -28,6 +29,170 @@ const Auth = () => {
   // Get referral code from URL
   const referralCode = searchParams.get('ref') || ''
 
+  const executeLogin = async (loginEmail: string, loginPassword: string) => {
+    console.log('Attempting email login...')
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: loginPassword,
+    })
+    
+    if (error) {
+      console.error('Login error:', error)
+      // Handle specific auth errors
+      if (error.message.includes('Email not confirmed')) {
+        throw new Error('Login failed. Please try again or contact support if the issue persists.')
+      }
+      if (error.message.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password.')
+      }
+      throw error
+    }
+    
+    if (data.user && data.session) {
+      console.log('Email login successful:', data.user.email)
+      
+      const sessionId = crypto.randomUUID()
+      // Register this session
+      try {
+        const deviceInfo = {
+          browser: navigator.userAgent,
+          platform: navigator.platform,
+          screen: { width: window.screen.width, height: window.screen.height }
+        }
+        
+        if (sessionId) {
+          await supabase
+            .rpc('register_session', {
+              p_user_id: data.user.id,
+              p_session_id: sessionId,
+              p_device_info: JSON.stringify(deviceInfo),
+              p_ip_address: null,
+              p_user_agent: navigator.userAgent
+            })
+        } else {
+          console.warn('[Auth] Skipping register_session because session access_token is missing')
+        }
+      } catch (sessionError) {
+        console.error('Error registering session:', sessionError)
+        // Continue with login even if session registration fails
+      }
+      
+      setAuth(data.user, data.session)
+      
+      // Check if profile exists
+      let profileData = null
+      const { data: fetchedProfile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .maybeSingle()
+      
+      if (profileError) {
+         console.error('Error fetching profile:', profileError)
+         // Don't throw here, try to recover or redirect to setup
+      }
+      profileData = fetchedProfile
+
+      if (profileData) {
+        // Check if admin BEFORE setting profile
+        if (isAdminEmail(data.user.email) && profileData.role !== 'admin') {
+          try {
+            const now = new Date().toISOString()
+            const { data: updated } = await supabase
+              .from('user_profiles')
+              .update({ role: 'admin', updated_at: now })
+              .eq('id', data.user.id)
+              .select('*')
+              .single()
+            setProfile(updated || profileData)
+          } catch (err) {
+            console.error('Failed to update admin role:', err)
+            setProfile(profileData)
+          }
+        } else {
+          setProfile(profileData)
+        }
+        
+        if (profileData.username) {
+          toast.success('Welcome back!', { duration: 2000 })
+          try {
+            const ipRes = await fetch('https://api.ipify.org?format=json')
+            const ipJson = await ipRes.json()
+            const userIP = ipJson.ip
+            const { data: current } = await supabase
+              .from('user_profiles')
+              .select('ip_address_history')
+              .eq('id', data.user.id)
+              .single()
+            const history = current?.ip_address_history || []
+            const entry = { ip: userIP, timestamp: new Date().toISOString() }
+            const updated = [...history, entry].slice(-10)
+            await supabase
+              .from('user_profiles')
+              .update({ last_known_ip: userIP, ip_address_history: updated })
+              .eq('id', data.user.id)
+          } catch {}
+          navigate('/')
+        } else {
+          toast.success('Login successful! Please complete your profile.')
+          navigate('/profile/setup')
+        }
+      } else {
+        // Profile doesn't exist, try polling for it
+        let tries = 0
+        let prof: any = null
+        while (tries < 3 && !prof) {
+          const { data: p } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .maybeSingle()
+          if (p) prof = p
+          else {
+            await new Promise(r => setTimeout(r, 500))
+            tries++
+          }
+        }
+        if (prof) {
+          setProfile(prof)
+          if (prof.username) {
+            toast.success('Welcome back!', { duration: 2000 })
+            try {
+              const ipRes = await fetch('https://api.ipify.org?format=json')
+              const ipJson = await ipRes.json()
+              const userIP = ipJson.ip
+              const { data: current } = await supabase
+                .from('user_profiles')
+                .select('ip_address_history')
+              .eq('id', data.user.id)
+                .single()
+              const history = current?.ip_address_history || []
+              const entry = { ip: userIP, timestamp: new Date().toISOString() }
+              const updated = [...history, entry].slice(-10)
+              await supabase
+                .from('user_profiles')
+                .update({ last_known_ip: userIP, ip_address_history: updated })
+                .eq('id', data.user.id)
+            } catch {}
+            navigate('/')
+          } else {
+            toast.success('Login successful! Please complete your profile.')
+            navigate('/profile/setup')
+          }
+        } else {
+          // Still no profile found - redirect to setup to let it handle creation/fetching
+          console.log('No profile found after polling, redirecting to setup')
+          toast.success('Login successful! Please complete your profile.')
+          navigate('/profile/setup')
+        }
+      }
+    } else if (data.user && !data.session) {
+      throw new Error('Login failed. Please try again or contact support if the issue persists.')
+    } else {
+      throw new Error('Login failed - no user data returned')
+    }
+  }
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loading) return // Prevent double submission
@@ -35,168 +200,7 @@ const Auth = () => {
     
     try {
       if (isLogin) {
-        // Sign in with email/password
-        console.log('Attempting email login...')
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-        
-        if (error) {
-          console.error('Login error:', error)
-          // Handle specific auth errors
-          if (error.message.includes('Email not confirmed')) {
-            throw new Error('Login failed. Please try again or contact support if the issue persists.')
-          }
-          if (error.message.includes('Invalid login credentials')) {
-            throw new Error('Invalid email or password.')
-          }
-          throw error
-        }
-        
-        if (data.user && data.session) {
-          console.log('Email login successful:', data.user.email)
-          
-          const sessionId = crypto.randomUUID()
-          // Register this session
-          try {
-            const deviceInfo = {
-              browser: navigator.userAgent,
-              platform: navigator.platform,
-              screen: { width: window.screen.width, height: window.screen.height }
-            }
-            
-            if (sessionId) {
-              await supabase
-                .rpc('register_session', {
-                  p_user_id: data.user.id,
-                  p_session_id: sessionId,
-                  p_device_info: JSON.stringify(deviceInfo),
-                  p_ip_address: null,
-                  p_user_agent: navigator.userAgent
-                })
-            } else {
-              console.warn('[Auth] Skipping register_session because session access_token is missing')
-            }
-          } catch (sessionError) {
-            console.error('Error registering session:', sessionError)
-            // Continue with login even if session registration fails
-          }
-          
-          setAuth(data.user, data.session)
-          
-          // Check if profile exists
-          let profileData = null
-          const { data: fetchedProfile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .maybeSingle()
-          
-          if (profileError) {
-             console.error('Error fetching profile:', profileError)
-             // Don't throw here, try to recover or redirect to setup
-          }
-          profileData = fetchedProfile
-
-          if (profileData) {
-            // Check if admin BEFORE setting profile
-            if (isAdminEmail(data.user.email) && profileData.role !== 'admin') {
-              try {
-                const now = new Date().toISOString()
-                const { data: updated } = await supabase
-                  .from('user_profiles')
-                  .update({ role: 'admin', updated_at: now })
-                  .eq('id', data.user.id)
-                  .select('*')
-                  .single()
-                setProfile(updated || profileData)
-              } catch (err) {
-                console.error('Failed to update admin role:', err)
-                setProfile(profileData)
-              }
-            } else {
-              setProfile(profileData)
-            }
-            
-            if (profileData.username) {
-              toast.success('Welcome back!', { duration: 2000 })
-              try {
-                const ipRes = await fetch('https://api.ipify.org?format=json')
-                const ipJson = await ipRes.json()
-                const userIP = ipJson.ip
-                const { data: current } = await supabase
-                  .from('user_profiles')
-                  .select('ip_address_history')
-                  .eq('id', data.user.id)
-                  .single()
-                const history = current?.ip_address_history || []
-                const entry = { ip: userIP, timestamp: new Date().toISOString() }
-                const updated = [...history, entry].slice(-10)
-                await supabase
-                  .from('user_profiles')
-                  .update({ last_known_ip: userIP, ip_address_history: updated })
-                  .eq('id', data.user.id)
-              } catch {}
-              navigate('/')
-            } else {
-              toast.success('Login successful! Please complete your profile.')
-              navigate('/profile/setup')
-            }
-          } else {
-            // Profile doesn't exist, try polling for it
-            let tries = 0
-            let prof: any = null
-            while (tries < 3 && !prof) {
-              const { data: p } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('id', data.user.id)
-                .maybeSingle()
-              if (p) prof = p
-              else {
-                await new Promise(r => setTimeout(r, 500))
-                tries++
-              }
-            }
-            if (prof) {
-              setProfile(prof)
-              if (prof.username) {
-                toast.success('Welcome back!', { duration: 2000 })
-                try {
-                  const ipRes = await fetch('https://api.ipify.org?format=json')
-                  const ipJson = await ipRes.json()
-                  const userIP = ipJson.ip
-                  const { data: current } = await supabase
-                    .from('user_profiles')
-                    .select('ip_address_history')
-                  .eq('id', data.user.id)
-                    .single()
-                  const history = current?.ip_address_history || []
-                  const entry = { ip: userIP, timestamp: new Date().toISOString() }
-                  const updated = [...history, entry].slice(-10)
-                  await supabase
-                    .from('user_profiles')
-                    .update({ last_known_ip: userIP, ip_address_history: updated })
-                    .eq('id', data.user.id)
-                } catch {}
-                navigate('/')
-              } else {
-                toast.success('Login successful! Please complete your profile.')
-                navigate('/profile/setup')
-              }
-            } else {
-              // Still no profile found - redirect to setup to let it handle creation/fetching
-              console.log('No profile found after polling, redirecting to setup')
-              toast.success('Login successful! Please complete your profile.')
-              navigate('/profile/setup')
-            }
-          }
-        } else if (data.user && !data.session) {
-          throw new Error('Login failed. Please try again or contact support if the issue persists.')
-        } else {
-          throw new Error('Login failed - no user data returned')
-        }
+        await executeLogin(email, password)
       } else {
         if (!username.trim()) {
           toast.error('Username is required for sign up')
@@ -207,7 +211,7 @@ const Auth = () => {
         // Use Edge Function for signup
         console.log('Creating new user account...')
         
-        const { success, error: signUpError } = await api.post(API_ENDPOINTS.auth.signup, {
+        const { success, error: signUpError } = await post(API_ENDPOINTS.auth.signup, {
           email,
           password,
           username: username.trim(),
@@ -221,10 +225,8 @@ const Auth = () => {
           return
         }
         
-        toast.success('Account created! Please check your email to confirm, then log in.')
-        navigate('/auth')
-        setLoading(false)
-        return
+        toast.success('Account created! Logging you in...')
+        await executeLogin(email, password)
       }
     } catch (err: any) {
       console.error('Email auth error:', err)

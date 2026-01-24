@@ -48,7 +48,7 @@ export default function TermsAgreement() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen bg-[#0A0814] text-white flex items-center justify-center">
+      <div className="fixed inset-0 z-[100000] bg-[#0A0814] text-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-lg text-gray-300">Checking authentication...</p>
         </div>
@@ -158,8 +158,8 @@ export default function TermsAgreement() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
-      <div className="max-w-5xl mx-auto p-6">
+    <div className="fixed inset-0 z-[100000] overflow-y-auto bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white pointer-events-auto">
+      <div className="max-w-5xl mx-auto p-6 pb-20">
         {/* Header */}
         <div className="text-center mb-8">
           <FileText className="w-16 h-16 mx-auto mb-4 text-troll-neon-blue" />
@@ -226,57 +226,78 @@ export default function TermsAgreement() {
         </div>
 
         {/* Agreement Checkboxes */}
-        <div className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] p-6 mb-6 space-y-4">
-          <label className="flex items-start gap-3 cursor-pointer">
+        <div className="relative z-[9999] bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] p-6 mb-6 space-y-4 pointer-events-auto" style={{ zIndex: 99999 }}>
+          <div className="flex items-start gap-3 relative z-[10000]">
             <input
+              id="agreed-checkbox"
               type="checkbox"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-1 w-5 h-5 accent-troll-purple"
+              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
             />
-            <span className="text-gray-300">
-              I have read and agree to the <Link to="/terms-of-service" target="_blank" className="text-troll-purple underline">Terms of Service</Link>.
-              I understand that violating these terms may result in permanent ban with complete account reset.
-              I am at least 18 years old.
-            </span>
-          </label>
+            <div className="text-gray-300">
+              <label htmlFor="agreed-checkbox" className="cursor-pointer hover:text-white transition-colors">
+                I have read and agree to the{' '}
+              </label>
+              <Link to="/terms-of-service" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Terms of Service</Link>
+              <label htmlFor="agreed-checkbox" className="cursor-pointer hover:text-white transition-colors">
+                {' '}and{' '}
+              </label>
+              <Link to="/privacy-policy" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Privacy Policy</Link>
+              <label htmlFor="agreed-checkbox" className="cursor-pointer hover:text-white transition-colors">.</label>
+            </div>
+          </div>
 
-          <label className="flex items-start gap-3 cursor-pointer">
+          <div className="flex items-start gap-3 relative z-[10000]">
             <input
+              id="privacy-checkbox"
               type="checkbox"
               checked={privacyAgreed}
               onChange={(e) => setPrivacyAgreed(e.target.checked)}
-              className="mt-1 w-5 h-5 accent-troll-purple"
+              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
             />
-            <span className="text-gray-300">
-              I have read and agree to the <Link to="/privacy-policy" target="_blank" className="text-troll-purple underline">Privacy Policy</Link>.
-            </span>
-          </label>
+            <label htmlFor="privacy-checkbox" className="text-gray-300 cursor-pointer hover:text-white transition-colors">
+              I consent to the collection and processing of my personal data as described in the Privacy Policy.
+            </label>
+          </div>
 
-          <label className="flex items-start gap-3 cursor-pointer">
+          <div className="flex items-start gap-3 relative z-[10000]">
             <input
+              id="payment-checkbox"
               type="checkbox"
               checked={paymentAgreed}
               onChange={(e) => setPaymentAgreed(e.target.checked)}
-              className="mt-1 w-5 h-5 accent-troll-purple"
+              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
             />
-            <span className="text-gray-300">
-              I have read and agree to the <Link to="/payment-terms" target="_blank" className="text-troll-purple underline">Payment Terms</Link>.
-            </span>
-          </label>
+            <div className="text-gray-300">
+              <label htmlFor="payment-checkbox" className="cursor-pointer hover:text-white transition-colors">
+                I agree to the{' '}
+              </label>
+              <Link to="/payment-terms" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Payment Terms</Link>
+              <label htmlFor="payment-checkbox" className="cursor-pointer hover:text-white transition-colors">
+                {' '}and understand that all purchases are final and non-refundable.
+              </label>
+            </div>
+          </div>
 
-          <label className="flex items-start gap-3 cursor-pointer">
+          <div className="flex items-start gap-3 relative z-[10000]">
             <input
+              id="creator-checkbox"
               type="checkbox"
               checked={creatorAgreed}
               onChange={(e) => setCreatorAgreed(e.target.checked)}
-              className="mt-1 w-5 h-5 accent-troll-purple"
+              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
             />
-            <span className="text-gray-300">
-              I have read and agree to the <Link to="/creator-agreement" target="_blank" className="text-troll-purple underline">Creator Earning / Cashout Agreement</Link>,
-              including 1099 tax reporting requirements.
-            </span>
-          </label>
+            <div className="text-gray-300">
+              <label htmlFor="creator-checkbox" className="cursor-pointer hover:text-white transition-colors">
+                I have read and agree to the{' '}
+              </label>
+              <Link to="/creator-agreement" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Creator Earning / Cashout Agreement</Link>
+              <label htmlFor="creator-checkbox" className="cursor-pointer hover:text-white transition-colors">
+                , including 1099 tax reporting requirements.
+              </label>
+            </div>
+          </div>
         </div>
 
         {/* Action Buttons */}

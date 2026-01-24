@@ -695,7 +695,11 @@ function AppContent() {
       <AppLayout showSidebar={!!user} showHeader={!!user} showBottomNav={!!user}>
         {user && <AdminOfficerQuickMenu />}
         {user && <GameControlPanel />}
-        {user && <BadgePopup />}
+        {user && (
+          <Suspense fallback={null}>
+            <BadgePopup />
+          </Suspense>
+        )}
 
         <ErrorBoundary>
           <Suspense fallback={<LoadingScreen />}>
