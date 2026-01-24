@@ -12,7 +12,7 @@ export default function LevelUpModal({ type, oldLevel, newLevel, onClose }) {
           Level Up!
         </h2>
         <p className="text-gray-300 text-sm mb-4">
-          Your {type === "buyer" ? "Supporter" : "Broadcast"} level just increased!
+          Your {type === "buyer" ? "Supporter" : type === "stream" ? "Broadcast" : "Troll"} level just increased!
         </p>
 
         <div className="flex flex-col items-center gap-3 mb-4">

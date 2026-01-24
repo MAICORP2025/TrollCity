@@ -854,11 +854,11 @@ function ProfileInner() {
         
         {/* Stats */}
         <div className="flex gap-6 mt-6 border-b border-gray-800 pb-4 text-sm">
-           <div className="flex gap-1 cursor-pointer hover:text-purple-400 transition" onClick={() => navigate('/following')}>
+           <div className="flex gap-1 cursor-pointer hover:text-purple-400 transition" onClick={() => navigate(`/following/${profile.id}`)}>
              <span className="font-bold text-white">{followingCount}</span>
              <span className="text-gray-400">Following</span>
            </div>
-           <div className="flex gap-1 cursor-pointer hover:text-purple-400 transition" onClick={() => navigate('/following')}>
+           <div className="flex gap-1 cursor-pointer hover:text-purple-400 transition" onClick={() => navigate(`/following/${profile.id}`)}>
              <span className="font-bold text-white">{followersCount}</span>
              <span className="text-gray-400">Followers</span>
            </div>

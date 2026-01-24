@@ -57,7 +57,7 @@ export const ENGAGEMENT_XP = {
 export const STREAMING_XP = {
   GO_LIVE_BASE: 200,         // +200 XP for going live (10+ min)
   VIEWER_MINUTE: 1,          // +1 XP per viewer per minute
-  // Gift bonus % is calculated based on amount received
+  GIFT_RECEIVED_MULTIPLIER: 1.0, // +1 XP per coin received
 }
 
 // Troll Court Actions
@@ -95,11 +95,28 @@ export const XP_RATES = {
 /**
  * Calculate level based on XP (Client-side estimation)
  * Note: Real level is determined by Database RPC
+ * Matches the logic in calculate_level_details SQL function
  */
-export function calculateLevel(_xp: number): number {
-    // Simplified linear approximation matching DB for now, or just return 1
-    // The DB uses a progressive curve.
-    return 1; 
+export function calculateLevel(xp: number): number {
+  let curr_lvl = 1;
+  let xp_accum = 0;
+  let xp_needed = 100;
+  
+  while (true) {
+    if (curr_lvl < 50) {
+      xp_needed = Math.floor(100 * Math.pow(1.1, curr_lvl - 1));
+    } else {
+      xp_needed = 10000;
+    }
+
+    if (xp < (xp_accum + xp_needed)) {
+      return curr_lvl;
+    }
+
+    xp_accum += xp_needed;
+    curr_lvl++;
+    if (curr_lvl >= 10000) return curr_lvl; // Safety break
+  }
 }
 
 // ===========================

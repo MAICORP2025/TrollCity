@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Search, MessageCircle, Trash2 } from 'lucide-react'
-import { supabase } from '../../../lib/supabase'
+import { supabase, UserRole } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
 
@@ -40,10 +40,18 @@ export default function InboxSidebar({
   const [loading, setLoading] = useState(true)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
 
+  const isOfficer = profile && (
+    profile.role === UserRole.TROLL_OFFICER ||
+    profile.role === UserRole.LEAD_TROLL_OFFICER ||
+    profile.role === UserRole.ADMIN ||
+    profile.is_troll_officer ||
+    profile.is_admin
+  )
+
   const tabs = [
     { id: 'inbox', label: 'Inbox' },
     { id: 'requests', label: 'Requests' },
-    { id: 'officer', label: 'Officer Messages' },
+    ...(isOfficer ? [{ id: 'officer', label: 'Officer Messages' }] : []),
     { id: 'broadcast', label: 'Broadcasts' },
     { id: 'system', label: 'System Alerts' }
   ]

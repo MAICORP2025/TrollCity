@@ -749,6 +749,7 @@ function AppContent() {
                   <Route path="/call/:roomId/:type/:userId" element={<Call />} />
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/following" element={<Following />} />
+                  <Route path="/following/:userId" element={<Following />} />
                 <Route path="/explore" element={<ExploreFeed />} />
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/marketplace" element={<Marketplace />} />

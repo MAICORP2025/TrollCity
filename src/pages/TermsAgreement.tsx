@@ -8,10 +8,6 @@ import { CheckCircle, XCircle, FileText } from 'lucide-react'
 export default function TermsAgreement() {
   const { profile, session, refreshProfile, setProfile } = useAuthStore()
   const navigate = useNavigate()
-  const [agreed, setAgreed] = useState(false)
-  const [privacyAgreed, setPrivacyAgreed] = useState(false)
-  const [paymentAgreed, setPaymentAgreed] = useState(false)
-  const [creatorAgreed, setCreatorAgreed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
   const [authRequired, setAuthRequired] = useState(false)
@@ -57,10 +53,6 @@ export default function TermsAgreement() {
   }
 
   const handleAgree = async () => {
-    if (!agreed || !privacyAgreed || !paymentAgreed || !creatorAgreed) {
-      toast.error('You must agree to all terms to continue')
-      return
-    }
     if (!authChecked || authRequired) {
       toast.error('You need to be logged in to accept the terms.')
       return
@@ -225,78 +217,25 @@ export default function TermsAgreement() {
           </p>
         </div>
 
-        {/* Agreement Checkboxes */}
+        {/* Agreement Text */}
         <div className="relative z-[9999] bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] p-6 mb-6 space-y-4 pointer-events-auto" style={{ zIndex: 99999 }}>
-          <div className="flex items-start gap-3 relative z-[10000]">
-            <input
-              id="agreed-checkbox"
-              type="checkbox"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
-            />
-            <div className="text-gray-300">
-              <label htmlFor="agreed-checkbox" className="cursor-pointer hover:text-white transition-colors">
-                I have read and agree to the{' '}
-              </label>
-              <Link to="/terms-of-service" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Terms of Service</Link>
-              <label htmlFor="agreed-checkbox" className="cursor-pointer hover:text-white transition-colors">
-                {' '}and{' '}
-              </label>
-              <Link to="/privacy-policy" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Privacy Policy</Link>
-              <label htmlFor="agreed-checkbox" className="cursor-pointer hover:text-white transition-colors">.</label>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 relative z-[10000]">
-            <input
-              id="privacy-checkbox"
-              type="checkbox"
-              checked={privacyAgreed}
-              onChange={(e) => setPrivacyAgreed(e.target.checked)}
-              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
-            />
-            <label htmlFor="privacy-checkbox" className="text-gray-300 cursor-pointer hover:text-white transition-colors">
-              I consent to the collection and processing of my personal data as described in the Privacy Policy.
-            </label>
-          </div>
-
-          <div className="flex items-start gap-3 relative z-[10000]">
-            <input
-              id="payment-checkbox"
-              type="checkbox"
-              checked={paymentAgreed}
-              onChange={(e) => setPaymentAgreed(e.target.checked)}
-              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
-            />
-            <div className="text-gray-300">
-              <label htmlFor="payment-checkbox" className="cursor-pointer hover:text-white transition-colors">
-                I agree to the{' '}
-              </label>
-              <Link to="/payment-terms" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Payment Terms</Link>
-              <label htmlFor="payment-checkbox" className="cursor-pointer hover:text-white transition-colors">
-                {' '}and understand that all purchases are final and non-refundable.
-              </label>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 relative z-[10000]">
-            <input
-              id="creator-checkbox"
-              type="checkbox"
-              checked={creatorAgreed}
-              onChange={(e) => setCreatorAgreed(e.target.checked)}
-              className="mt-1 w-6 h-6 accent-troll-purple cursor-pointer relative z-[10000] pointer-events-auto"
-            />
-            <div className="text-gray-300">
-              <label htmlFor="creator-checkbox" className="cursor-pointer hover:text-white transition-colors">
-                I have read and agree to the{' '}
-              </label>
-              <Link to="/creator-agreement" target="_blank" className="text-troll-purple underline relative z-[10000] hover:text-troll-neon-blue">Creator Earning / Cashout Agreement</Link>
-              <label htmlFor="creator-checkbox" className="cursor-pointer hover:text-white transition-colors">
-                , including 1099 tax reporting requirements.
-              </label>
-            </div>
+          <div className="space-y-4 text-gray-300">
+            <p className="font-semibold text-white">By clicking "Agree & Continue" below, you acknowledge and agree to the following:</p>
+            
+            <ul className="list-disc list-inside space-y-2 ml-2">
+              <li>
+                I have read and agree to the <Link to="/terms-of-service" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Terms of Service</Link> and <Link to="/privacy-policy" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Privacy Policy</Link>.
+              </li>
+              <li>
+                I consent to the collection and processing of my personal data as described in the Privacy Policy.
+              </li>
+              <li>
+                I agree to the <Link to="/payment-terms" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Payment Terms</Link> and understand that all purchases are final and non-refundable.
+              </li>
+              <li>
+                I have read and agree to the <Link to="/creator-agreement" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Creator Earning / Cashout Agreement</Link>, including 1099 tax reporting requirements.
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -327,7 +266,7 @@ export default function TermsAgreement() {
           </button>
           <button
             onClick={handleAgree}
-            disabled={!agreed || !privacyAgreed || !paymentAgreed || !creatorAgreed || submitting}
+            disabled={submitting}
             className="px-8 py-3 rounded-lg bg-gradient-to-r from-troll-purple to-troll-neon-blue
                      disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition font-bold"
           >

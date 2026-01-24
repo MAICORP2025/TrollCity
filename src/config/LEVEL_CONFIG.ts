@@ -44,9 +44,18 @@ export const TIER_LEVELS: TierConfig[] = [
   { level: 80, minXP: 90000,   maxXP: 99999,    title: "Troll Sovereign",       perks: ["Master streamer status", "revenue sharing", "exclusive perks"] },
   { level: 90, minXP: 100000,  maxXP: 109999,   title: "Chaos Deity",           perks: ["Legendary badge", "ultra-rare effects", "founder status"] },
   { level: 100, minXP: 110000, maxXP: 110999,   title: "TROLL CITY IMMORTAL",   perks: ["God-mode effects", "legacy status", "eternal rewards"] },
+
+  // Tier 6: Mythic Tier (101-2000+)
+  { level: 101, minXP: 111000, maxXP: 249999,   title: "Ascended Troll",        perks: ["Mythic aura", "custom command"] },
+  { level: 250, minXP: 250000, maxXP: 499999,   title: "Veteran Warrior",       perks: ["Veteran badge", "gold name"] },
+  { level: 500, minXP: 500000, maxXP: 749999,   title: "Elite Commander",       perks: ["Commander badge", "platinum name"] },
+  { level: 750, minXP: 750000, maxXP: 999999,   title: "Epic Warlord",          perks: ["Warlord badge", "diamond name"] },
+  { level: 1000, minXP: 1000000, maxXP: 1499999, title: "Legendary Champion",    perks: ["Champion badge", "rainbow name"] },
+  { level: 1500, minXP: 1500000, maxXP: 1999999, title: "Divine Master",         perks: ["Master badge", "glowing name"] },
+  { level: 2000, minXP: 2000000, maxXP: 999999999, title: "Mythic Legend",       perks: ["Mythic badge", "animated name"] },
   
   // Admin only
-  { level: 101, minXP: 111000, maxXP: 999999,   title: "SYSTEM OVERLORD",       perks: ["All perks", "admin controls", "developer access"] },
+  { level: 9999, minXP: 9999999999, maxXP: 99999999999, title: "SYSTEM OVERLORD", perks: ["All perks", "admin controls", "developer access"] },
 ];
 
 // ============================================================
@@ -219,7 +228,7 @@ export const LEVEL_32_REFERENCE = {
 // ============================================================
 
 export const ADMIN_LEVEL_FEATURES = {
-  maxLevel: 101,
+  maxLevel: 2500,
   canBypassLevelRequirements: true,
   canAccessAllPerks: true,
   canEditLevels: true,

@@ -44,7 +44,7 @@ export default function AppLayout({
     if (typeof window === 'undefined') return;
   }, []);
 
-  const effectiveShowSidebar = showSidebar && isStaff && showLegacySidebar && !isAuthPage && !isLivePage;
+  const effectiveShowSidebar = showSidebar && showLegacySidebar && !isAuthPage && !isLivePage;
   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage;
   const effectiveShowBottomNav = showBottomNav && !isAuthPage;
   const mainPaddingClass = effectiveShowBottomNav ? 'app-content app-content--with-nav' : 'app-content app-content--no-nav';

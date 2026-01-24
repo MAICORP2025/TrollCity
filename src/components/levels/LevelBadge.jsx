@@ -1,9 +1,16 @@
 // src/components/levels/LevelBadge.jsx
 import React from "react";
-import { getBuyerMeta, getStreamMeta } from "@/lib/levelsConfig";
+import { getBuyerMeta, getStreamMeta, getMainLevelMeta } from "@/lib/levelsConfig";
 
 export default function LevelBadge({ type, level }) {
-  const meta = type === "buyer" ? getBuyerMeta(level) : getStreamMeta(level);
+  let meta;
+  if (type === "buyer") {
+    meta = getBuyerMeta(level);
+  } else if (type === "stream") {
+    meta = getStreamMeta(level);
+  } else {
+    meta = getMainLevelMeta(level);
+  }
 
   return (
     <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${meta.color}`}>
