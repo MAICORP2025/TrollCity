@@ -11,6 +11,7 @@ const API_BASE_URL = import.meta.env.VITE_EDGE_FUNCTIONS_URL || '/api';
 export const API_ENDPOINTS = {
   auth: {
     fixAdminRole: '/auth/fix-admin-role',
+    signup: '/auth/signup',
   },
   payments: {
     status: '/payments-status',

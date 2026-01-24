@@ -204,103 +204,27 @@ const Auth = () => {
           return
         }
         
-        // Use Supabase Auth directly
+        // Use Edge Function for signup
         console.log('Creating new user account...')
         
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        const { success, error: signUpError } = await api.post(API_ENDPOINTS.auth.signup, {
           email,
           password,
-          options: {
-            data: {
-              username: username.trim(),
-              referral_code: referralCode || undefined,
-              recruited_by: localStorage.getItem('recruited_by') || undefined
-            }
-          }
+          username: username.trim(),
+          referral_code: referralCode || localStorage.getItem('recruited_by') || undefined
         })
 
-        if (signUpError) {
+        if (!success || signUpError) {
           console.error('Signup failed:', signUpError)
-          const rawMessage = String(signUpError.message || '')
-          const lower = rawMessage.toLowerCase()
-          if (signUpError.name === 'AbortError' || lower.includes('aborted')) {
-            toast.error('Signup was interrupted. Please check your connection and try again.')
-            setLoading(false)
-            return
-          }
-          toast.error(rawMessage || 'Signup failed')
+          toast.error(signUpError || 'Signup failed')
           setLoading(false)
           return
         }
         
-        console.log('User created and signed in')
-        let session = signUpData.session
-        if (!session) {
-          for (let i = 0; i < 3; i++) {
-            const { data: sessionData } = await supabase.auth.getSession()
-            if (sessionData?.session) {
-              session = sessionData.session
-              break
-            }
-            await new Promise(resolve => setTimeout(resolve, 500))
-          }
-        }
-
-        if (!session) {
-          toast.success('Account created! Please check your email to confirm, then log in.')
-          navigate('/auth')
-          setLoading(false)
-          return
-        }
-
-        // Refresh the session to ensure it's fully established
-        await supabase.auth.refreshSession()
-        
-        // Get the refreshed session
-        const { data: { session: refreshedSession } } = await supabase.auth.getSession()
-        const finalSession = refreshedSession || session
-        
-        setAuth(finalSession?.user ?? null, finalSession ?? null)
-        
-        if (session?.user) {
-          console.log('Session established, loading profile...')
-          let tries = 0
-          let prof: any = null
-          while (tries < 5 && !prof) {
-            const { data: p, error: profErr } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle()
-            
-            if (profErr) {
-              console.error(`Profile load attempt ${tries + 1} error:`, profErr)
-            }
-            
-            if (p) {
-              prof = p
-              console.log('Profile loaded successfully')
-              break
-            } else {
-              console.log(`Profile not found yet, attempt ${tries + 1}/5, waiting...`)
-              await new Promise(r => setTimeout(r, 1000))
-              tries++
-            }
-          }
-          
-            if (prof) {
-            setProfile(prof)
-            toast.success('Account created successfully!')
-            // After signup, require agreement acceptance first
-            navigate('/terms')
-          } else {
-            console.warn('Profile not found after 5 attempts, but user was created')
-            toast.success('Account created successfully!')
-            navigate('/')
-          }
-        } else {
-          throw new Error('Session not established')
-        }
+        toast.success('Account created! Please check your email to confirm, then log in.')
+        navigate('/auth')
+        setLoading(false)
+        return
       }
     } catch (err: any) {
       console.error('Email auth error:', err)
