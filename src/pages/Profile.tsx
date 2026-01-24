@@ -782,11 +782,11 @@ function ProfileInner() {
           <h1 className={`text-2xl font-bold flex items-center gap-2 ${profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>
             {profile.display_name || profile.username}
             {(profile as any).gender === 'male' && (
-              <Mars className="text-blue-400" size={16} title="Male" />
+              <Mars className="text-blue-400" size={16} />
             )}
 
             {(profile as any).gender === 'female' && (
-              <Venus className="text-pink-400" size={16} title="Female" />
+              <Venus className="text-pink-400" size={16} />
             )}
 
             {profile.is_verified && (

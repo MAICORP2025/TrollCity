@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { AuthApiError } from '@supabase/supabase-js'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { toast } from 'sonner'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
@@ -303,6 +304,21 @@ const Auth = () => {
       }
     } catch (err: any) {
       console.error('Email auth error:', err)
+      if (err instanceof AuthApiError) {
+        const msg = String(err.message || '')
+        const lowerMsg = msg.toLowerCase()
+        if (lowerMsg.includes('invalid refresh token') || lowerMsg.includes('refresh token not found')) {
+          try {
+            await supabase.auth.signOut()
+          } catch {}
+          try {
+            useAuthStore.getState().logout()
+          } catch {}
+          toast.error('Your session has expired. Please sign in again.')
+          navigate('/auth')
+          return
+        }
+      }
       const rawMessage = String(err?.message || '')
       const lower = rawMessage.toLowerCase()
       if (err?.name === 'AbortError' || lower.includes('aborted')) {

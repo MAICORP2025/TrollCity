@@ -29,6 +29,7 @@ import EntranceEffect from '../components/broadcast/EntranceEffect';
 import { getUserEntranceEffect } from '../lib/entranceEffects';
 import { attachLiveKitDebug } from '../lib/livekit-debug';
 import VideoFeed from '../components/stream/VideoFeed';
+import { useViewerTracking } from '../hooks/useViewerTracking';
 
 // Constants
 const STREAM_POLL_INTERVAL = 2000;
@@ -83,6 +84,8 @@ export default function WatchPage() {
   const canAccessPrivate = !needsPrivateGate || privateAccessGranted;
   const canJoinStream = sessionReady && hasValidStreamId && canAccessPrivate;
   const effectiveRoomName = canJoinStream ? roomName : '';
+
+  useViewerTracking(canJoinStream ? streamId || null : null, stableIdentity || null);
 
   const livekitIdentity = useMemo(() => {
     const id = stableIdentity;
