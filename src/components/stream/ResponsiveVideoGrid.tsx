@@ -225,7 +225,13 @@ export default function ResponsiveVideoGrid({
                   compact
                   className="w-full h-full"
                   style={{ width: '100%', height: '100%' }}
-                  onClick={() => onUserClick?.(slot.participant!)}
+                  onClick={
+                    !isHost &&
+                    !(localParticipant && slot.participant.identity === localParticipant.identity) &&
+                    onUserClick
+                      ? () => onUserClick(slot.participant!)
+                      : undefined
+                  }
                 />
               ) : slot.isActive ? (
                 <div className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors">
@@ -298,7 +304,13 @@ export default function ResponsiveVideoGrid({
                   compact
                   className="w-full h-full"
                   style={{ width: '100%', height: '100%' }}
-                  onClick={() => onUserClick?.(slot.participant!)}
+                  onClick={
+                    !isHost &&
+                    !(localParticipant && slot.participant.identity === localParticipant.identity) &&
+                    onUserClick
+                      ? () => onUserClick(slot.participant!)
+                      : undefined
+                  }
                 />
               ) : slot.isActive ? (
                 <div className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors">

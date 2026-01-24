@@ -908,7 +908,7 @@ export async function getConversationMessages(
 
 export async function markConversationRead(conversationId: string) {
   const { error } = await supabase.rpc('mark_conversation_read', {
-    conversation_id: conversationId,
+    p_conversation_id: conversationId,
   })
   if (error) {
     throw error

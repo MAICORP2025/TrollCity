@@ -34,7 +34,7 @@ export default function ExploreFeed() {
   const fetchBroadcasts = useCallback(async (filterValue: typeof filter = filter) => {
     try {
       let query = supabase
-        .from('broadcasts')
+        .from('streams')
         .select(`
           *,
           user_profiles:broadcaster_id (
@@ -44,7 +44,7 @@ export default function ExploreFeed() {
           )
         `)
         .eq('is_live', true)
-        .order('viewer_count', { ascending: false });
+        .order('current_viewers', { ascending: false });
 
       if (filterValue !== 'all') {
         query = query.eq('category', filterValue);
@@ -67,8 +67,8 @@ export default function ExploreFeed() {
     fetchBroadcasts(filter);
     
     const channel = supabase
-      .channel('broadcasts-feed')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'broadcasts' }, () => {
+      .channel('streams-feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, () => {
         fetchBroadcasts(filter);
       })
       .subscribe();
@@ -86,7 +86,7 @@ export default function ExploreFeed() {
   };
 
   const handleBroadcastClick = (broadcast: Broadcast) => {
-    navigate(`/watch/${broadcast.broadcaster_id}`);
+    navigate(`/live/${broadcast.id}`);
   };
 
   return (
