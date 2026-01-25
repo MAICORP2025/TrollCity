@@ -147,6 +147,25 @@ export default function Sidebar() {
     checkAccess()
   }, [profile, isOfficer, isAdmin, isSecretary])
 
+  // Define visible paths for each group to calculate highlights correctly
+  const mainPaths = ['/', '/trollstown', '/trollg', '/inventory', '/troting', '/wall', '/marketplace', '/leaderboard', '/credit-scores', '/store', '/creator-switch', '/troll-court']
+  
+  const supportPaths = ['/support', '/safety']
+  
+  const socialPaths = ['/messages', '/pool']
+  if (canSeeFamilyLounge) socialPaths.push('/family/lounge')
+  
+  const specialAccessPaths: string[] = []
+  if (canSeeCourt) specialAccessPaths.push('/admin/court-dockets')
+  if (canSeeOfficer) specialAccessPaths.push('/officer/dashboard', '/officer/lounge', '/officer/moderation')
+  if (isLead) specialAccessPaths.push('/lead-officer')
+  if (canSeeSecretary) specialAccessPaths.push('/secretary')
+  if (isAdmin) specialAccessPaths.push('/admin/applications')
+
+  const systemPaths = ['/application', '/wallet']
+
+  const isAnyUpdated = (paths: string[]) => paths.some(path => isUpdated(path))
+
   if (!profile) return null
 
   return (
@@ -244,7 +263,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 space-y-6 custom-scrollbar min-h-0">
         {/* Main Group */}
-        <SidebarGroup title={isSidebarCollapsed ? '' : "Main"} isCollapsed={isSidebarCollapsed} highlight={isCategoryUpdated('Main')}>
+        <SidebarGroup title={isSidebarCollapsed ? '' : "Main"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(mainPaths)}>
           <SidebarItem icon={Home} label="Home" to="/" active={isActive('/')} collapsed={isSidebarCollapsed} highlight={isUpdated('/')} onClick={() => markAsViewed('/')} />
           <SidebarItem icon={Building2} label="Troll Town" to="/trollstown" active={isActive('/trollstown')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollstown')} onClick={() => markAsViewed('/trollstown')} />
           <SidebarItem icon={Crown} label="Troll G" to="/trollg" active={isActive('/trollg')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollg')} onClick={() => markAsViewed('/trollg')} />
@@ -262,13 +281,13 @@ export default function Sidebar() {
 
 
         {/* Support & Safety */}
-        <SidebarGroup title={isSidebarCollapsed ? '' : "Support"} isCollapsed={isSidebarCollapsed} highlight={isCategoryUpdated('Support')}>
+        <SidebarGroup title={isSidebarCollapsed ? '' : "Support"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(supportPaths)}>
           <SidebarItem icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} collapsed={isSidebarCollapsed} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} />
           <SidebarItem icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} collapsed={isSidebarCollapsed} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} />
         </SidebarGroup>
 
         {/* Social */}
-        <SidebarGroup title={isSidebarCollapsed ? '' : "Social"} isCollapsed={isSidebarCollapsed} highlight={isCategoryUpdated('Social')}>
+        <SidebarGroup title={isSidebarCollapsed ? '' : "Social"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(socialPaths)}>
           <SidebarItem icon={MessageSquare} label="Messages" to="/messages" active={isActive('/messages')} collapsed={isSidebarCollapsed} highlight={isUpdated('/messages')} onClick={() => markAsViewed('/messages')} />
           <SidebarItem 
             icon={Waves} 
@@ -294,7 +313,7 @@ export default function Sidebar() {
 
         {/* Special Access */}
         {(canSeeOfficer || canSeeFamilyLounge || canSeeSecretary || canSeeCourt) && (
-          <SidebarGroup title={isSidebarCollapsed ? '' : "Special Access"} isCollapsed={isSidebarCollapsed} highlight={isCategoryUpdated('Special Access')}>
+          <SidebarGroup title={isSidebarCollapsed ? '' : "Special Access"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(specialAccessPaths)}>
             {canSeeCourt && (
               <SidebarItem 
                 icon={Gavel} 
@@ -374,7 +393,7 @@ export default function Sidebar() {
         )}
 
         {/* System */}
-        <SidebarGroup title={isSidebarCollapsed ? '' : "System"} isCollapsed={isSidebarCollapsed} highlight={isCategoryUpdated('System')}>
+        <SidebarGroup title={isSidebarCollapsed ? '' : "System"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(systemPaths)}>
           <SidebarItem icon={FileText} label="Applications" to="/application" active={isActive('/application')} collapsed={isSidebarCollapsed} highlight={isUpdated('/application')} onClick={() => markAsViewed('/application')} />
           <SidebarItem icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} collapsed={isSidebarCollapsed} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} />
         </SidebarGroup>

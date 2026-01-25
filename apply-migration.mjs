@@ -21,7 +21,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
 async function applyMigration() {
   try {
     console.log('📖 Reading migration file...')
-    const migrationPath = join(__dirname, 'supabase', 'migrations', '20251125_fix_user_signup_trigger.sql')
+    const migrationPath = join(__dirname, 'fix_payout_requests_permission.sql')
     const sql = readFileSync(migrationPath, 'utf8')
     
     console.log('🚀 Applying migration to Supabase...')
