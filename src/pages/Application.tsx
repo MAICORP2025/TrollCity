@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { Shield, Users, Skull, Crown, Store, CheckCircle, XCircle } from 'lucide-react'
+import { Shield, Users, Skull, Crown, Store, CheckCircle, XCircle, BookOpen } from 'lucide-react'
 
-type ApplicationType = 'troll_officer' | 'troll_family' | 'troller' | 'lead_officer' | 'seller' | null
+type ApplicationType = 'troll_officer' | 'troll_family' | 'troller' | 'lead_officer' | 'seller' | 'pastor' | null
 
 export default function Application() {
   const { user, profile } = useAuthStore()
@@ -44,6 +44,8 @@ export default function Application() {
       } else if (type === 'lead_officer') {
         // Navigate to lead officer application page (if exists) or show form
         navigate('/apply/lead-officer')
+      } else if (type === 'pastor') {
+        navigate('/apply/pastor')
       } else if (type === 'seller') {
         // Navigate to seller application - go to sell page
         navigate('/sell')
@@ -108,6 +110,15 @@ export default function Application() {
       color: 'yellow',
       disabled: profile?.is_lead_officer,
       disabledText: 'You are already a Lead Officer'
+    },
+    {
+      type: 'pastor' as ApplicationType,
+      title: 'Pastor',
+      icon: BookOpen,
+      description: 'Lead the Troll Church and host Sunday Services',
+      color: 'purple',
+      disabled: profile?.is_pastor,
+      disabledText: 'You are already a Pastor'
     },
     {
       type: 'seller' as ApplicationType,

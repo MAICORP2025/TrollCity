@@ -20,6 +20,8 @@ interface VideoTileProps {
   isHost?: boolean
   onDisableGuestMedia?: (participantId: string, disableVideo: boolean, disableAudio: boolean) => void
   onClick?: (participant: Participant) => void
+  frameMode?: 'none' | 'neon' | 'rgb'
+  neonColor?: string
 }
 
 export default function VideoTile({
@@ -35,7 +37,9 @@ export default function VideoTile({
   compact = false,
   isHost = false,
   onDisableGuestMedia,
-  onClick
+  onClick,
+  frameMode = 'none',
+  neonColor = 'purple'
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -287,10 +291,39 @@ export default function VideoTile({
     }
   };
 
+  // Border Style Logic
+  const getBorderStyle = () => {
+    if (speaking) {
+      return 'border-2 border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.8)] z-20';
+    }
+
+    if (frameMode === 'neon') {
+      const colorMap: Record<string, string> = {
+        purple: 'border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.7)]',
+        blue: 'border-blue-400 shadow-[0_0_20px_rgba(96,165,250,0.7)]',
+        green: 'border-green-400 shadow-[0_0_20px_rgba(74,222,128,0.7)]',
+        red: 'border-red-400 shadow-[0_0_20px_rgba(248,113,113,0.7)]',
+        pink: 'border-pink-400 shadow-[0_0_20px_rgba(244,114,182,0.7)]',
+        yellow: 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.7)]',
+        cyan: 'border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.7)]',
+        orange: 'border-orange-400 shadow-[0_0_20px_rgba(251,146,60,0.7)]'
+      };
+      return `border-2 ${colorMap[neonColor] || colorMap['purple']} animate-neon-pulse`;
+    }
+
+    if (frameMode === 'rgb') {
+      return 'border-2 border-transparent rgb-frame';
+    }
+
+    return 'border border-white/10 hover:border-white/30';
+  };
+
+  const borderClass = getBorderStyle();
+
   return (
-    <div className={`rgb-border ${speaking ? 'speaking' : ''} occupied`} style={style}>
+    <div className={`relative w-full h-full transition-all duration-300 ${speaking ? 'scale-[1.02]' : ''}`} style={style}>
       <div
-        className={`tile-inner relative rounded-2xl overflow-hidden transition-all duration-300 group shadow-lg ${className}`}
+        className={`tile-inner relative w-full h-full rounded-2xl overflow-hidden transition-all duration-300 group shadow-lg ${className} ${borderClass}`}
         onClick={handleBroadcasterClick}
       >
       {/* Video Element */}

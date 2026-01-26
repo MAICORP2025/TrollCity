@@ -1,0 +1,63 @@
+
+/* Sidebar Item RGB Effect */
+.sidebar-item-rgb {
+  position: relative;
+  overflow: hidden !important;
+  border-radius: 0.75rem; /* rounded-xl */
+  /* We want transparent background normally so the RGB layers can show through or be hidden */
+  background: transparent; 
+  /* Reset border to let pseudo-elements handle it */
+  border: 1px solid transparent; 
+}
+
+.sidebar-item-rgb::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, #ff0000, #ff8000, #ffff00, #00ff00, #0000ff, #4b0082, #ee82ee, #ff0000);
+  animation: spin 3s linear infinite;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar-item-rgb::after {
+  content: '';
+  position: absolute;
+  inset: 1px; /* 1px border */
+  background: #0d0d1a; /* Inner dark bg to match theme */
+  border-radius: calc(0.75rem - 1px);
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Hover state */
+.sidebar-item-rgb:hover::before,
+.sidebar-item-rgb:hover::after {
+  opacity: 1;
+}
+
+/* Active state */
+.sidebar-item-rgb.active-rgb::before,
+.sidebar-item-rgb.active-rgb::after {
+  opacity: 1;
+}
+
+/* Content z-index adjustment */
+.sidebar-item-rgb > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure text color is white on hover/active */
+.sidebar-item-rgb:hover span,
+.sidebar-item-rgb:hover svg,
+.sidebar-item-rgb.active-rgb span,
+.sidebar-item-rgb.active-rgb svg {
+  color: white !important;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}

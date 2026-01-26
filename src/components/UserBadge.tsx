@@ -9,6 +9,7 @@ interface UserBadgeProps {
     role?: string
     level?: number
     prestige_level?: number
+    drivers_license_status?: string
   } | null | undefined
 }
 
@@ -20,6 +21,9 @@ export function UserBadge({ profile }: UserBadgeProps) {
   
   // Check for OG status
   const isOG = profile.is_og || profile.is_og_user
+
+  // Check for Driver License
+  const isDriver = profile.drivers_license_status === 'active'
 
   // Check for Prestige
   const prestigeLevel = profile.prestige_level || 0
@@ -57,6 +61,10 @@ export function UserBadge({ profile }: UserBadgeProps) {
       
       {isOG && (
         <span className="text-purple-400 text-xs" title="OG User">👑</span>
+      )}
+
+      {isDriver && (
+        <span className="text-blue-400 text-xs" title="Licensed Driver">🚗</span>
       )}
     </span>
   )

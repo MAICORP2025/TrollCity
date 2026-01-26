@@ -82,83 +82,100 @@ export const useXPStore = create<XPState>((set) => {
       try {
         console.log('Fetching XP for user:', userId)
         const { data, error } = await supabase
-          .from('user_profiles')
-          .select('level, xp')
-          .eq('id', userId)
+          .from('user_stats')
+          .select('*')
+          .eq('user_id', userId)
           .single()
 
-        console.log('user_profiles level query result:', { data, error })
+        console.log('user_stats query result:', { data, error })
         
         if (error && error.code !== 'PGRST116') throw error
         
         if (data) {
-          const { levelValue, totalXp, xpToNext, progressValue, nextLevelAbsolute } = computeXpState(data)
+          const level = data.level || 1
+          const xpTotal = data.xp_total || 0
+          const progress = data.xp_progress || 0
+          const nextLevelTotal = data.xp_to_next_level || 100
+          
+          const xpToNext = Math.max(0, nextLevelTotal - xpTotal)
 
           set({
-            xpTotal: totalXp,
-            level: levelValue,
+            xpTotal,
+            level,
             xpToNext,
-            progress: progressValue,
+            progress,
             isLoading: false
           })
-
-          syncAuthProfile(levelValue, totalXp, nextLevelAbsolute)
+          
+          syncAuthProfile(level, xpTotal, nextLevelTotal)
         } else {
-          // No row exists - create it with defaults
-          console.warn('No user_level data found for user:', userId, '- creating initial row')
-          const { error: insertError } = await supabase
-            .from('user_profiles')
-            .update({ level: 1, xp: 0 })
-            .eq('id', userId)
-            .select('level, xp')
-            .single()
-          
-          if (insertError) {
-            console.error('Error creating user_level row:', insertError)
-          }
-          
-          set({ 
-            xpTotal: 0,
-            level: 1,
-            xpToNext: 100,
-            progress: 0,
-            isLoading: false 
-          })
-
-          syncAuthProfile(1, 0, 100)
+            console.log('No user_stats found, initializing...')
+             const { data: newData, error: insertError } = await supabase
+                .rpc('grant_xp', { 
+                    p_user_id: userId, 
+                    p_amount: 0, 
+                    p_source: 'init', 
+                    p_source_id: `init_${Date.now()}` 
+                })
+            
+            if (!insertError) {
+                 set({
+                    xpTotal: 0,
+                    level: 1,
+                    xpToNext: 100,
+                    progress: 0,
+                    isLoading: false
+                 })
+                 syncAuthProfile(1, 0, 100)
+            } else {
+                set({ isLoading: false })
+            }
         }
-      } catch (err) {
-        console.error('Error fetching XP stats:', err)
+      } catch (error) {
+        console.error('Error fetching XP:', error)
         set({ isLoading: false })
       }
     },
 
     subscribeToXP: (userId: string) => {
-      if (channel) return;
+      if (channel) return
 
       channel = supabase
-        .channel('xp_updates')
+        .channel(`public:user_stats:${userId}`)
         .on(
           'postgres_changes',
           {
-            event: 'UPDATE',
+            event: '*',
             schema: 'public',
-            table: 'user_profiles',
-            filter: `id=eq.${userId}`
+            table: 'user_stats',
+            filter: `user_id=eq.${userId}`
           },
           (payload) => {
-            const newData = payload.new
-            if (newData) {
-              const { levelValue, totalXp, xpToNext, progressValue, nextLevelAbsolute } = computeXpState(newData)
+            console.log('XP Update received:', payload)
+            if (payload.new) {
+               const data = payload.new
+               const level = data.level || 1
+               const xpTotal = data.xp_total || 0
+               const progress = data.xp_progress || 0
+               const nextLevelTotal = data.xp_to_next_level || 100
+               const xpToNext = Math.max(0, nextLevelTotal - xpTotal)
 
-              set({
-                xpTotal: totalXp,
-                level: levelValue,
-                xpToNext,
-                progress: progressValue
-              })
-
-              syncAuthProfile(levelValue, totalXp, nextLevelAbsolute)
+               set({
+                 xpTotal,
+                 level,
+                 xpToNext,
+                 progress
+               })
+               syncAuthProfile(level, xpTotal, nextLevelTotal)
+            } else {
+                set({
+                    xpTotal: 0,
+                    level: 1,
+                    xpToNext: 100,
+                    progress: 0,
+                    isLoading: false
+                 })
+                 syncAuthProfile(1, 0, 100)
             }
           }
         )

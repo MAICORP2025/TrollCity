@@ -10,7 +10,8 @@ import {
   LogOut,
   Shield,
   Users,
-  Crown
+  Crown,
+  BookOpen
 } from 'lucide-react'
 import ExecutiveIntakeList from '../admin/components/shared/ExecutiveIntakeList'
 import CashoutRequestsList from '../admin/components/shared/CashoutRequestsList'
@@ -19,9 +20,10 @@ import CriticalAlertsList from '../admin/components/shared/CriticalAlertsList'
 import ExecutiveReportsList from '../admin/components/shared/ExecutiveReportsList'
 import ManualCoinOrdersList from '../admin/components/shared/ManualCoinOrdersList'
 import ManualTrollPassOrdersList from '../admin/components/shared/ManualTrollPassOrdersList'
+import PastorApplicationsList from '../admin/components/shared/PastorApplicationsList'
 import StaffManagement from '../admin/components/StaffManagement'
 
-type Tab = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'staff' | 'manual_payments' | 'troll_pass'
+type Tab = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'staff' | 'manual_payments' | 'troll_pass' | 'pastor_apps'
 
 export default function SecretaryConsole() {
   const { user, profile, logout } = useAuthStore()
@@ -121,6 +123,21 @@ export default function SecretaryConsole() {
               <div className="text-left">
                 <div className="font-medium">Troll Pass</div>
                 <div className="text-[10px] opacity-70">Activations</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('pastor_apps')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === 'pastor_apps' 
+                  ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-medium">Pastor Apps</div>
+                <div className="text-[10px] opacity-70">Review applications</div>
               </div>
             </button>
 
@@ -281,6 +298,9 @@ export default function SecretaryConsole() {
          </button>
          <button onClick={() => setActiveTab('troll_pass')} className={`p-2 rounded-lg ${activeTab === 'troll_pass' ? 'text-purple-400' : 'text-slate-400'}`}>
            <Crown className="w-6 h-6" />
+         </button>
+         <button onClick={() => setActiveTab('pastor_apps')} className={`p-2 rounded-lg ${activeTab === 'pastor_apps' ? 'text-indigo-400' : 'text-slate-400'}`}>
+           <BookOpen className="w-6 h-6" />
          </button>
          <button onClick={() => setActiveTab('giftcards')} className={`p-2 rounded-lg ${activeTab === 'giftcards' ? 'text-pink-400' : 'text-slate-400'}`}>
            <Gift className="w-6 h-6" />

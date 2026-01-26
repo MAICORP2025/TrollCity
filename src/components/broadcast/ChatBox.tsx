@@ -29,6 +29,7 @@ interface Message {
     is_ghost_mode?: boolean;
     role?: string | null;
     is_admin?: boolean;
+    drivers_license_status?: string;
   };
 }
 
@@ -52,6 +53,7 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
         is_ghost_mode?: boolean;
         role?: string | null;
         is_admin?: boolean;
+        drivers_license_status?: string;
       }
     >
   >({});
@@ -65,7 +67,7 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
     try {
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('id, username, rgb_username_expires_at, avatar_url, is_ghost_mode, role, is_admin')
+        .select('id, username, rgb_username_expires_at, avatar_url, is_ghost_mode, role, is_admin, drivers_license_status')
         .eq('id', userId)
         .single();
         
@@ -93,6 +95,7 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
         is_ghost_mode: profile?.is_ghost_mode,
         role: profile?.role ?? null,
         is_admin: profile?.is_admin ?? false,
+        drivers_license_status: profile?.drivers_license_status
       };
 
       userCacheRef.current[userId] = userData;

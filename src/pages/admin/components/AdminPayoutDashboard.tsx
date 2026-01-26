@@ -70,6 +70,35 @@ export default function AdminPayoutDashboard() {
     };
   }, [user, isAdmin]);
 
+  const payWithPayPal = async (payoutId: string) => {
+    const confirm = window.confirm("Are you sure you want to send this payout via PayPal?");
+    if (!confirm) return;
+
+    const toastId = toast.loading("Processing PayPal payout...");
+    try {
+      const { data, error } = await supabase.functions.invoke('paypal-payout', {
+        body: { 
+            payoutRequestId: payoutId,
+            adminId: user?.id 
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Payout sent successfully!", { id: toastId });
+        setPayouts((prev) =>
+          prev.map((p) => (p.id === payoutId ? { ...p, status: 'paid', processed_at: new Date().toISOString() } : p))
+        );
+      } else {
+         toast.error(data.error || "PayPal payout failed", { id: toastId });
+      }
+    } catch (err: any) {
+      console.error("PayPal Error:", err);
+      toast.error(err.message || "Failed to process PayPal payout", { id: toastId });
+    }
+  };
+
   const updateStatus = useCallback(async (id: string, status: string) => {
     let note = null;
     if (status === "rejected") {
@@ -195,12 +224,20 @@ export default function AdminPayoutDashboard() {
                   </button>
                 )}
                 {(p.status === "pending" || p.status === "approved") && (
-                  <button
-                    className="text-xs px-3 py-2 rounded bg-green-600 hover:bg-green-700 transition-colors"
-                    onClick={() => updateStatus(p.id, "paid")}
-                  >
-                    Mark Paid
-                  </button>
+                  <>
+                    <button
+                      className="text-xs px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center gap-1"
+                      onClick={() => payWithPayPal(p.id)}
+                    >
+                      <span className="font-bold">P</span> Pay with PayPal
+                    </button>
+                    <button
+                      className="text-xs px-3 py-2 rounded bg-green-600 hover:bg-green-700 transition-colors"
+                      onClick={() => updateStatus(p.id, "paid")}
+                    >
+                      Mark Paid
+                    </button>
+                  </>
                 )}
                 {p.status !== "rejected" && (
                   <button

@@ -18,6 +18,7 @@ import { paymentProviders } from '../lib/payments';
 import { toast } from 'sonner';
 
 const coinPackages = [
+  { id: 1, coins: 300, price: "$1.99", emoji: "💰", popular: true },
   { id: 2, coins: 500, price: "$4.99", emoji: "💰", popular: true },
   { id: 3, coins: 1000, price: "$9.99", emoji: "💎" },
   { id: 4, coins: 2500, price: "$19.99", emoji: "👑" },
@@ -837,6 +838,57 @@ export default function CoinStore() {
     }
   };
 
+  const createPayPalOrder = async (pkg) => {
+    try {
+      setLoadingPay(true);
+      const { data, error } = await supabase.functions.invoke('paypal-create-order', {
+        body: {
+          user_id: user.id,
+          package_id: pkg.id,
+          coins: pkg.coins,
+          amount: typeof pkg.price === 'string' ? pkg.price.replace('$', '') : pkg.price
+        }
+      });
+
+      if (error) throw error;
+      if (!data?.orderId) throw new Error('Failed to create order');
+      
+      return data.orderId;
+    } catch (err) {
+      console.error('Create Order Error:', err);
+      toast.error('Failed to initialize PayPal');
+      setLoadingPay(false);
+      throw err;
+    }
+  };
+
+  const onPayPalApprove = async (data, actions, pkg) => {
+    try {
+      const { orderID } = data;
+      const { data: result, error } = await supabase.functions.invoke('paypal-complete-order', {
+        body: {
+          orderId: orderID,
+          userId: user.id,
+          packageId: pkg.id
+        }
+      });
+
+      if (error) throw error;
+      if (!result?.success) throw new Error(result?.error || 'Payment verification failed');
+
+      toast.success(`Successfully purchased ${pkg.coins} coins!`);
+      await refreshCoins();
+      refreshBank(); // Update loan status if any
+      showPurchaseCompleteOverlay();
+
+    } catch (err) {
+      console.error('Capture Error:', err);
+      toast.error(err.message || 'Payment failed');
+    } finally {
+      setLoadingPay(false);
+    }
+  };
+
   const handleApplyLoan = async () => {
     if (!requestedAmount || requestedAmount < 100) {
       toast.error('Minimum loan amount is 100 coins');
@@ -858,6 +910,8 @@ export default function CoinStore() {
       toast.error('An unexpected error occurred');
     } finally {
       setApplying(false);
+      // Ensure we don't get stuck in a global loading state if something weird happens
+      setLoading(false);
     }
   };
 
@@ -1033,15 +1087,6 @@ export default function CoinStore() {
                             </div>
                         </div>
                     ) : (
-                        <div className="p-8 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-center">
-                            <AlertCircle className="w-12 h-12 text-yellow-400 mx-auto mb-3" />
-                            <h3 className="text-xl font-bold text-yellow-400 mb-2">Loan System Maintenance</h3>
-                            <p className="text-gray-300 max-w-md mx-auto">
-                                The Troll Bank loan system is currently undergoing scheduled maintenance. 
-                                Please check back later to apply for a new loan.
-                            </p>
-                        </div>
-                        /*
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div>
                                 <h3 className="font-semibold text-white mb-2 text-sm">Apply for a Loan</h3>
@@ -1097,7 +1142,6 @@ export default function CoinStore() {
                                 )}
                             </div>
                         </div>
-                        */
                     )}
                  </div>
 
@@ -1156,19 +1200,45 @@ export default function CoinStore() {
 
             {/* Coins Tab */}
             {tab === 'coins' && (
-              <>
+              <PayPalScriptProvider options={{ "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID || "test" }}>
                 <div className="mb-6">
-                  <TrollPassBanner onPurchase={async () => {
-                    const trollPassPkg = {
-                      id: 'troll_pass_bundle',
-                      coins: 1500,
-                      price: 9.99,
-                      name: 'Troll Pass Premium',
-                      purchaseType: 'troll_pass_bundle'
-                    };
-                    setSelectedPackage(trollPassPkg);
-                setCashAppModalOpen(true);
-                  }} />
+                  <TrollPassBanner 
+                    onPurchase={async () => {
+                      const trollPassPkg = {
+                        id: 'troll_pass_bundle',
+                        coins: 1500,
+                        price: 9.99,
+                        name: 'Troll Pass Premium',
+                        purchaseType: 'troll_pass_bundle'
+                      };
+                      setSelectedPackage(trollPassPkg);
+                      setCashAppModalOpen(true);
+                    }} 
+                    customActionComponent={selectedProviderId === 'paypal' ? (
+                      <div className="min-w-[150px]">
+                        <PayPalButtons
+                          style={{ layout: "horizontal", height: 45, tagline: false }}
+                          createOrder={(data, actions) => createPayPalOrder({
+                            id: 'troll_pass_bundle',
+                            coins: 1500,
+                            price: 9.99,
+                            name: 'Troll Pass Premium'
+                          })}
+                          onApprove={(data, actions) => onPayPalApprove(data, actions, {
+                            id: 'troll_pass_bundle',
+                            coins: 1500,
+                            price: 9.99,
+                            name: 'Troll Pass Premium'
+                          })}
+                          onError={(err) => {
+                            console.error('PayPal Error:', err);
+                            toast.error('Payment failed. Please try again.');
+                          }}
+                          disabled={loadingPay}
+                        />
+                      </div>
+                    ) : null}
+                  />
                 </div>
                  
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -1188,7 +1258,7 @@ export default function CoinStore() {
                     </button>
                   ))}
                 </div>
-                <PayPalScriptProvider options={{ "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID || "test" }}>
+                
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {coinPackages.map((pkg) => (
                       <div key={pkg.id} className={`bg-black/40 p-4 rounded-lg border ${pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20'} relative overflow-hidden group`}>
@@ -1201,22 +1271,34 @@ export default function CoinStore() {
                           <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
                           <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
                           <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
-                          <button
-                            onClick={() => {
-                              setSelectedPackage(pkg);
-                              setCashAppModalOpen(true);
-                            }}
-                            className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
-                            disabled={loadingPay && selectedPackage?.id === pkg.id}
-                          >
-                            {loadingPay && selectedPackage?.id === pkg.id ? 'Processing...' : pkg.price}
-                          </button>
+                          {selectedProviderId === 'paypal' ? (
+                            <PayPalButtons
+                              style={{ layout: "horizontal", height: 45, tagline: false }}
+                              createOrder={(data, actions) => createPayPalOrder(pkg)}
+                              onApprove={(data, actions) => onPayPalApprove(data, actions, pkg)}
+                              onError={(err) => {
+                                console.error('PayPal Error:', err);
+                                toast.error('Payment failed. Please try again.');
+                              }}
+                              disabled={loadingPay}
+                            />
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setSelectedPackage(pkg);
+                                setCashAppModalOpen(true);
+                              }}
+                              className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                              disabled={loadingPay && selectedPackage?.id === pkg.id}
+                            >
+                              {loadingPay && selectedPackage?.id === pkg.id ? 'Processing...' : pkg.price}
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
-                </PayPalScriptProvider>
-              </>
+              </PayPalScriptProvider>
             )}
 
             {/* Entrance Effects */}

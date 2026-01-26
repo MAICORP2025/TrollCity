@@ -20,7 +20,7 @@ type UserRole = 'viewer' | 'troller' | 'officer' | 'vip' | 'donor'
 
 function determineUserRole(profile: any): UserRole {
   // Check role field
-  if (profile.role === 'troll_officer' || profile.role === 'moderator' || profile.role === 'admin') {
+  if (profile.role === 'troll_officer' || profile.role === 'moderator' || profile.role === 'admin' || profile.is_admin) {
     return 'officer'
   }
   if (profile.role === 'troller' || profile.role === 'troll_family') {

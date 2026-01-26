@@ -8,6 +8,7 @@ import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
 import { useAuthStore } from '../../lib/store'
 import { UserRole } from '../../lib/supabase'
+import GasHUD from '../tmv/GasHUD'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -51,6 +52,7 @@ export default function AppLayout({
 
   return (
     <div className="app-viewport w-screen overflow-hidden text-white flex relative">
+      <GasHUD />
       <PurchaseRequiredModal />
       <PWAInstallPrompt />
       {/* Desktop Sidebar - Hidden on Mobile */}

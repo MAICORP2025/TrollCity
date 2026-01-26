@@ -6,7 +6,6 @@ import { OFFICER_BASE_HOURLY_COINS } from '../../lib/officerPay'
 import { toast } from 'sonner'
 import { format12hr, formatFullDateTime12hr } from '../../utils/timeFormat'
 import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
-import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
 import OfficerClock from '../../components/officer/OfficerClock'
 
@@ -244,11 +243,6 @@ export default function OfficerDashboard() {
           </p>
         </div>
       )}
-
-      {/* Live Streams Grid */}
-      <div className="mb-6">
-        <OfficerStreamGrid />
-      </div>
 
       {/* Stats */}
     <div className="grid md:grid-cols-4 gap-4 mb-6">

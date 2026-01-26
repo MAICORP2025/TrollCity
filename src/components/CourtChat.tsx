@@ -129,7 +129,7 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
       // For simplicity, admins/officers are "Judge" if they want, but let's stick to 'User' unless system explicitly sets it.
       // Actually, let's check profile role.
       
-      const isJudge = profile?.role === 'admin' || profile?.is_lead_officer; // Simplified
+      const isJudge = profile?.role === 'admin' || profile?.is_lead_officer || profile?.is_admin; // Simplified
       
       const { error } = await supabase.from('court_ai_messages').insert({
         case_id: courtId,

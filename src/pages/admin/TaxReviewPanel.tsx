@@ -14,14 +14,14 @@ export default function TaxReviewPanel() {
 
   // Check admin access
   useEffect(() => {
-    if (profile && !['admin', 'troll_officer'].includes(profile.role)) {
+    if (profile && !['admin', 'troll_officer'].includes(profile.role) && !profile.is_admin) {
       toast.error('Access denied')
       navigate('/')
     }
   }, [profile, navigate])
 
   useEffect(() => {
-    if (!profile || !['admin', 'troll_officer'].includes(profile.role)) return
+    if (!profile || (!['admin', 'troll_officer'].includes(profile.role) && !profile.is_admin)) return
     loadReviews()
   }, [profile])
 

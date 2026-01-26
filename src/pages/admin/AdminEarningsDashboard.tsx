@@ -58,7 +58,7 @@ const AdminEarningsDashboard: React.FC = () => {
 
   // Initial Load
   useEffect(() => {
-    if (profile?.role === 'admin') {
+    if (profile?.role === 'admin' || profile?.is_admin) {
       loadCreators()
     } else {
       setLoading(false)

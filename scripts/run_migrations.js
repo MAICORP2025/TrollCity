@@ -2,7 +2,7 @@ import 'dotenv/config'
 import fs from 'fs'
 import { Client } from 'pg'
 
-const sqlPath = './migrations/add_gifts_quantity_and_stream_likes.sql'
+const sqlPath = './fix_admin_broadcasts_permissions.sql'
 
 async function run() {
   const databaseUrl = process.env.DATABASE_URL

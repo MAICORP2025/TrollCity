@@ -852,42 +852,21 @@ export default function CarDealershipPage() {
       return;
     }
 
-    const refundAmount = Math.round(car.price * 0.6);
-    if (refundAmount <= 0) {
-      toast.error('Refund amount is invalid');
-      return;
-    }
-
+    // New Logic: 33.3% split handled by RPC
     setSelling(true);
     try {
-      const addResult = await addCoins({
-        userId: user.id,
-        amount: refundAmount,
-        type: 'refund',
-        description: `Sold vehicle: ${car.name}`,
-        metadata: {
-          source: 'car_dealership',
-          car_id: car.id,
-          action: 'vehicle_sell'
-        }
+      const { data, error } = await supabase.rpc('sell_vehicle_to_dealership', {
+        p_user_car_id: userCarRow.id
       });
 
-      if (!addResult.success) {
-        toast.error(addResult.error || 'Failed to process sale');
-        return;
-      }
-      
-      // Delete from user_cars
-      const { error: deleteError } = await supabase
-        .from('user_cars')
-        .delete()
-        .eq('id', userCarRow.id);
+      if (error) throw error;
 
-      if (deleteError) {
-          console.error('Failed to delete user_cars row:', deleteError);
-          // Don't revert coins, but warn user
-          toast.error('Vehicle sold but garage update failed. Please refresh.');
+      const result = data as any;
+      if (!result.success) {
+         throw new Error(result.message || 'Sale failed');
       }
+
+      const userShare = result.user_share || 0;
 
       localStorage.removeItem(`trollcity_car_${user.id}`);
       localStorage.removeItem(`trollcity_car_insurance_${user.id}`);
@@ -903,39 +882,9 @@ export default function CarDealershipPage() {
       const nextActiveRow = nextCars[0] || null;
       const nextActiveId = nextActiveRow ? getCarModelId(nextActiveRow) : null;
       setOwnedCarId(nextActiveId);
-
-      // Sync active vehicle to profile
-      await supabase
-        .from('user_profiles')
-        .update({
-          active_vehicle: nextActiveRow ? nextActiveRow.id : null,
-          vehicle_image: nextActiveId
-            ? cars.find(c => c.id === nextActiveId)?.image || null
-            : null,
-          owned_vehicle_ids: nextOwnedIds // Update legacy array too
-        })
-        .eq('id', user.id);
-
-      if (nextActiveId) {
-        const nextCar = cars.find(c => c.id === nextActiveId);
-        if (nextCar) {
-          localStorage.setItem(
-            `trollcity_car_${user.id}`,
-            JSON.stringify({
-              carId: nextCar.id,
-              colorFrom: nextCar.colorFrom,
-              colorTo: nextCar.colorTo,
-              name: nextCar.name,
-              tier: nextCar.tier,
-              price: nextCar.price,
-              style: nextCar.style
-            })
-          );
-        }
-      }
       
       refreshProfile();
-      toast.success(`Sold ${car.name} for ${refundAmount.toLocaleString()} coins`);
+      toast.success(`Sold ${car.name} for ${userShare.toLocaleString()} coins (User Share)`);
 
     } catch (error: any) {
       console.error('Failed to sell vehicle', error);

@@ -23,7 +23,7 @@ export default function Support() {
 
   // If user is admin, redirect to admin dashboard support tab
   useEffect(() => {
-    if (profile?.role === 'admin') {
+    if (profile?.role === 'admin' || profile?.is_admin) {
       navigate('/admin/support-tickets', { replace: true })
     }
   }, [profile?.role, navigate])

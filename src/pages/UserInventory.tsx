@@ -27,7 +27,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
     const username = (profile.username || '').toLowerCase();
     const userSpecific = Object.keys(USER_SPECIFIC_ENTRANCE_EFFECTS).find((k) => k.toLowerCase() === username);
     if (userSpecific) return `user_${username}`;
-    if (profile.role === 'admin' || profile.troll_role === 'admin') return 'admin';
+    if (profile.role === 'admin' || profile.troll_role === 'admin' || profile.is_admin) return 'admin';
     if (profile.role === 'secretary' || profile.troll_role === 'secretary') return 'secretary';
     if (profile.role === 'lead_troll_officer' || profile.troll_role === 'lead_troll_officer' || profile.is_lead_officer) return 'lead_troll_officer';
     if (profile.role === 'troll_officer' || profile.troll_role === 'troll_officer') return 'troll_officer';

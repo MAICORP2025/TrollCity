@@ -20,9 +20,6 @@ export default function OfficerModeration() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
 
-  const isAdmin = profile?.is_admin || profile?.role === 'admin' || (user?.email && isAdminEmail(user.email))
-  const isOfficer = profile?.is_troll_officer || profile?.role === 'troll_officer'
-
   const loadReports = useCallback(async () => {
     if (!profile) return
 
@@ -47,11 +44,7 @@ export default function OfficerModeration() {
   }, [profile, statusFilter])
 
   useEffect(() => {
-    if (!profile || (!isOfficer && !isAdmin)) {
-      toast.error('Access denied. Officer access required.')
-      navigate('/', { replace: true })
-      return
-    }
+    if (!profile) return
 
     loadReports()
     
@@ -70,7 +63,7 @@ export default function OfficerModeration() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [profile, navigate, isOfficer, isAdmin, loadReports])
+  }, [profile, loadReports])
 
   const filteredReports = reports.filter(report => {
     if (searchTerm) {
@@ -101,27 +94,6 @@ export default function OfficerModeration() {
         <Icon className="w-3 h-3" />
         {status.replace('_', ' ').toUpperCase()}
       </span>
-    )
-  }
-
-  if (!profile || (!isOfficer && !isAdmin)) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-zinc-900 border border-red-500/30 rounded-xl p-8 text-center">
-          <Shield className="w-16 h-16 text-red-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-red-400 mb-2">Access Denied</h2>
-          <p className="text-gray-300 mb-4">
-            This page is restricted to Troll Officers and Administrators.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/', { replace: true })}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
-          >
-            Return to Home
-          </button>
-        </div>
-      </div>
     )
   }
 

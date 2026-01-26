@@ -330,6 +330,11 @@ export default function AdminDashboard() {
         }
       }
 
+      // Add PayPal revenue
+      for (const p of paypalRevenueData) {
+        coinSalesRevenue += Number(p.total_usd || 0)
+      }
+
       const giftTx = giftTxRes.data || []
       let giftCoins = 0
       for (const g of giftTx as any[]) {
@@ -417,13 +422,13 @@ export default function AdminDashboard() {
         const { data: troll_coinsTx } = await supabase
           .from('coin_transactions')
           .select('user_id, amount, type')
-          .in('type', ['store_purchase', 'cashout'])
+          .in('type', ['store_purchase', 'cashout', 'paypal_purchase'])
 
         const troll_coinsMap: Record<string, { purchased: number; spent: number }> = {};
         ((troll_coinsTx || []) as CoinTransaction[]).forEach((tx) => {
           const userId = tx.user_id || 'unknown';
           const existing = troll_coinsMap[userId] || { purchased: 0, spent: 0 }
-          if (tx.type === 'store_purchase') existing.purchased += Math.abs(Number(tx.amount || 0))
+          if (tx.type === 'store_purchase' || tx.type === 'paypal_purchase') existing.purchased += Math.abs(Number(tx.amount || 0))
           if (tx.type === 'cashout') existing.spent += Math.abs(Number(tx.amount || 0))
           troll_coinsMap[userId] = existing
         })
@@ -540,7 +545,7 @@ export default function AdminDashboard() {
       .channel('admin-global-transactions')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coin_transactions' }, (payload) => {
         const tx = payload.new
-        if (tx?.type === 'store_purchase') {
+        if (tx?.type === 'store_purchase' || tx?.type === 'paypal_purchase') {
           toast.success('New store purchase detected!')
           sendGlobalNotification('New Purchase', 'A new store purchase just occurred.').catch(() => {})
         }

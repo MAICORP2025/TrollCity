@@ -27,7 +27,10 @@ import {
   TrendingUp,
   Mars,
   Venus,
-  Waves
+  Waves,
+  Car,
+  BookOpen,
+  Radio
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -75,13 +78,21 @@ export default function Sidebar() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
   // Role definitions
-  const isAdmin = profile?.role === UserRole.ADMIN || profile?.troll_role === UserRole.ADMIN || profile?.role === UserRole.HR_ADMIN;
+  const isAdmin = profile?.role === UserRole.ADMIN || profile?.troll_role === UserRole.ADMIN || profile?.role === UserRole.HR_ADMIN || profile?.is_admin;
   const isSecretary = profile?.role === UserRole.SECRETARY || profile?.troll_role === UserRole.SECRETARY;
   
   const isLead = profile?.role === UserRole.LEAD_TROLL_OFFICER || profile?.is_lead_officer || profile?.troll_role === UserRole.LEAD_TROLL_OFFICER || isAdmin;
   // Officer check matches the logic in useEffect (isAdmin || isOfficer)
   const isOfficer = profile?.role === UserRole.TROLL_OFFICER || profile?.role === UserRole.LEAD_TROLL_OFFICER || profile?.is_lead_officer || profile?.troll_role === UserRole.TROLL_OFFICER || profile?.troll_role === UserRole.LEAD_TROLL_OFFICER || isAdmin;
   const canSeeCourt = isOfficer || isSecretary;
+  
+  // Check for driver license status
+  const needsLicense = useMemo(() => {
+    if (!profile) return false
+    const status = (profile as any).drivers_license_status
+    return !status || status === 'none'
+  }, [profile])
+
   const hasRgb = useMemo(() => {
     if (!profile?.rgb_username_expires_at) return false
     return new Date(profile.rgb_username_expires_at) > new Date()
@@ -263,7 +274,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 space-y-6 custom-scrollbar min-h-0">
         {/* Main Group */}
-        <SidebarGroup title={isSidebarCollapsed ? '' : "Main"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(mainPaths)}>
+        <SidebarGroup title={isSidebarCollapsed ? '' : "City Center"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(mainPaths)}>
           <SidebarItem icon={Home} label="Home" to="/" active={isActive('/')} collapsed={isSidebarCollapsed} highlight={isUpdated('/')} onClick={() => markAsViewed('/')} />
           <SidebarItem icon={Building2} label="Troll Town" to="/trollstown" active={isActive('/trollstown')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollstown')} onClick={() => markAsViewed('/trollstown')} />
           <SidebarItem icon={Crown} label="Troll G" to="/trollg" active={isActive('/trollg')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollg')} onClick={() => markAsViewed('/trollg')} />
@@ -281,7 +292,20 @@ export default function Sidebar() {
 
 
         {/* Support & Safety */}
-        <SidebarGroup title={isSidebarCollapsed ? '' : "Support"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(supportPaths)}>
+        <SidebarGroup title={isSidebarCollapsed ? '' : "Public Services"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(supportPaths)}>
+          <SidebarItem icon={BookOpen} label="Troll Church" to="/church" active={isActive('/church')} collapsed={isSidebarCollapsed} highlight={isUpdated('/church')} onClick={() => markAsViewed('/church')} />
+          {/* Pastor Dashboard - Visible to Pastors/Admins */}
+          {(profile?.is_pastor || profile?.role === 'admin' || (profile as any)?.is_admin) && (
+            <SidebarItem 
+              icon={LayoutDashboard} 
+              label="Pastor Dashboard" 
+              to="/church/pastor" 
+              active={isActive('/church/pastor')} 
+              collapsed={isSidebarCollapsed} 
+              className="text-purple-400 hover:text-purple-300"
+            />
+          )}
+          <SidebarItem icon={Car} label="TMV" to="/tmv" active={isActive('/tmv')} collapsed={isSidebarCollapsed} highlight={isUpdated('/tmv') || needsLicense} onClick={() => markAsViewed('/tmv')} />
           <SidebarItem icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} collapsed={isSidebarCollapsed} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} />
           <SidebarItem icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} collapsed={isSidebarCollapsed} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} />
         </SidebarGroup>
@@ -313,7 +337,18 @@ export default function Sidebar() {
 
         {/* Special Access */}
         {(canSeeOfficer || canSeeFamilyLounge || canSeeSecretary || canSeeCourt) && (
-          <SidebarGroup title={isSidebarCollapsed ? '' : "Special Access"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(specialAccessPaths)}>
+          <SidebarGroup title={isSidebarCollapsed ? '' : "Government Sector"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(specialAccessPaths)}>
+             {(canSeeOfficer || canSeeSecretary) && (
+              <SidebarItem 
+                icon={Radio} 
+                label="Streams" 
+                to="/government/streams" 
+                active={location.pathname.startsWith('/government/streams')} 
+                collapsed={isSidebarCollapsed}
+                highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')}
+                className="text-red-400 hover:text-red-300"
+              />
+            )}
             {canSeeCourt && (
               <SidebarItem 
                 icon={Gavel} 
@@ -393,7 +428,7 @@ export default function Sidebar() {
         )}
 
         {/* System */}
-        <SidebarGroup title={isSidebarCollapsed ? '' : "System"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(systemPaths)}>
+        <SidebarGroup title={isSidebarCollapsed ? '' : "City Registry"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(systemPaths)}>
           <SidebarItem icon={FileText} label="Applications" to="/application" active={isActive('/application')} collapsed={isSidebarCollapsed} highlight={isUpdated('/application')} onClick={() => markAsViewed('/application')} />
           <SidebarItem icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} collapsed={isSidebarCollapsed} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} />
         </SidebarGroup>
@@ -443,14 +478,12 @@ function SidebarItem({
       to={to}
       onClick={onClick}
       className={`
-        relative z-0 bg-transparent
+        relative z-0 
         flex items-center gap-3 px-4 py-2 mx-2 rounded-xl transition-all duration-200 group
-        ${active 
-          ? 'text-white bg-white/5 border border-white/10 shadow-[0_10px_30px_rgba(109,40,217,0.35)]' 
-          : highlight
-            ? 'text-white bg-gradient-to-r from-red-500/20 via-green-500/20 to-blue-500/20 border border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-pulse'
-            : 'text-gray-300 hover:bg-white/5 hover:text-white border border-transparent'
-        }
+        sidebar-item-rgb
+        ${active ? 'active-rgb' : ''}
+        ${highlight && !active ? 'text-white bg-gradient-to-r from-red-500/20 via-green-500/20 to-blue-500/20 border border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-pulse' : ''}
+        ${!active && !highlight ? 'text-gray-300 border border-transparent' : ''}
         ${collapsed ? 'justify-center px-2' : ''}
         ${className}
       `}

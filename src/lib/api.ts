@@ -213,9 +213,9 @@ async function request<T = any>(
        console.log(`[API ${requestId}] 401 Unauthorized. Attempting token refresh and retry...`);
        try {
          // Add timeout to prevent hanging indefinitely
-         // Increased timeout to 10s as 5s might be too short for slow connections
+         // Increased timeout to 15s to accommodate slower connections
          const refreshPromise = supabase.auth.refreshSession();
-         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 10000));
+         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 15000));
          
          // Check if we already have a new token in memory that differs from the one we sent
          const currentSession = await supabase.auth.getSession();
@@ -227,6 +227,7 @@ async function request<T = any>(
             console.log(`[API ${requestId}] Found fresh token in memory, using it.`);
             newToken = currentToken;
          } else {
+             // Wait for refresh or timeout
              const result: any = await Promise.race([refreshPromise, timeoutPromise]);
              const { error: refreshError } = result;
 
@@ -235,7 +236,8 @@ async function request<T = any>(
                newToken = sessionData?.data?.session?.access_token;
              } else {
                console.warn(`[API ${requestId}] Token refresh failed during retry:`, refreshError.message);
-               // If refresh fails with specific errors, we might want to sign out, but we'll let the 401 pass through for now
+               // If refresh explicitly fails, we can't retry.
+               // We should probably let the 401 propagate so the UI handles it, or trigger logout if it's a fatal auth error.
              }
          }
 
@@ -247,7 +249,7 @@ async function request<T = any>(
              ...fetchOptions,
              headers: requestHeaders,
            });
-           const fetchTimeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Retry fetch timeout')), 10000));
+           const fetchTimeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Retry fetch timeout')), 15000));
            
            response = await Promise.race([fetchPromise, fetchTimeoutPromise]) as Response;
            console.log(`[API ${requestId}] Retry successful (status: ${response.status})`);
@@ -257,6 +259,8 @@ async function request<T = any>(
          // If we timed out or failed to refresh, we should consider if we need to force logout
          if (retryErr.message === 'Refresh timeout' || retryErr.message === 'Retry fetch timeout') {
             console.warn(`[API ${requestId}] Retry timed out. Session may be dead.`);
+            // Don't force logout immediately on timeout, as it might be temporary network issue.
+            // But we should definitely fail this request gracefully.
          }
        }
      }

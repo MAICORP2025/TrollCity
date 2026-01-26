@@ -7,9 +7,10 @@ import { useAuthStore } from '../../lib/store'
 
 interface TrollPassBannerProps {
   onPurchase?: () => void;
+  customActionComponent?: React.ReactNode;
 }
 
-export default function TrollPassBanner({ onPurchase }: TrollPassBannerProps) {
+export default function TrollPassBanner({ onPurchase, customActionComponent }: TrollPassBannerProps) {
   const { profile } = useAuthStore()
   
   // Check if user has active Troll Pass
@@ -61,7 +62,9 @@ export default function TrollPassBanner({ onPurchase }: TrollPassBannerProps) {
           </div>
         </div>
 
-        {onPurchase ? (
+        {customActionComponent ? (
+          customActionComponent
+        ) : onPurchase ? (
           <Button
             disabled={false}
             onClick={onPurchase}

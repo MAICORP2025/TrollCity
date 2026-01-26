@@ -184,6 +184,12 @@ export interface UserProfile {
   vehicle_image?: string | null // Static image URL
   owned_vehicle_ids?: number[] | null
   gender?: string | null
+
+  // TMV System
+  drivers_license_status?: 'none' | 'active' | 'suspended' | 'expired' | string
+  drivers_license_expiry?: string | null
+  gas_balance?: number
+  last_gas_update?: string | null
 }
 
 

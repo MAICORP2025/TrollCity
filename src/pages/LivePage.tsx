@@ -40,6 +40,7 @@ import GlobalGiftBanner from '../components/GlobalGiftBanner';
 import GiftEventOverlay from './GiftEventOverlay';
 import { getUserEntranceEffect, triggerUserEntranceEffect } from '../lib/entranceEffects';
 import { processGiftXp } from '../lib/xp';
+import { evaluateBadgesForUser } from '../services/badgeEvaluationService';
 
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
 import { useOfficerBroadcastTracking } from '../hooks/useOfficerBroadcastTracking';
@@ -784,9 +785,10 @@ export default function LivePage() {
   const seatRoomName = stream?.room_name || stream?.agora_channel || streamId || 'officer-stream';
   const isBroadcaster = useIsBroadcaster(profile, stream);
   const isRoleExempt = useMemo(() => {
+    if (profile?.is_admin) return true;
     const role = (profile?.troll_role || profile?.role || '').toLowerCase();
     return ['admin', 'lead_troll_officer', 'secretary', 'troll_officer'].includes(role);
-  }, [profile?.role, profile?.troll_role]);
+  }, [profile?.role, profile?.troll_role, profile?.is_admin]);
   const { seats, claimSeat, releaseSeat } = useSeatRoster(seatRoomName);
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
   const canPublish = isBroadcaster || isGuestSeat;
@@ -1693,7 +1695,7 @@ export default function LivePage() {
   };
   
   const syncBoxCount = useCallback((next: number) => {
-    const maxBoxes = 6;
+    const maxBoxes = 5;
     const clamped = Math.max(0, Math.min(maxBoxes, next));
     setBoxCount(clamped);
     if (streamId) {
@@ -2253,9 +2255,14 @@ export default function LivePage() {
       is_live: true, 
       start_time: new Date().toISOString(),
       room_name: roomName 
-    }).eq("id", streamId).then(() => {
+    }).eq("id", streamId).then(async () => {
       console.log("[LivePage] ✅ Stream status updated to LIVE");
       toast.success("You are now LIVE!");
+      
+      // Evaluate badges for going live
+      if (profile?.id) {
+        await evaluateBadgesForUser(profile.id);
+      }
     });
 
   }, [isBroadcaster, streamId, isConnected, roomName, stream?.status, stream?.is_live]);
@@ -3592,7 +3599,7 @@ export default function LivePage() {
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 px-[clamp(8px,2.5vw,12px)] pb-2 overflow-y-auto lg:overflow-hidden">
         {/* Live Stage (Video + Guests) */}
         <div
-          className="flex flex-col min-h-0 gap-2 lg:gap-2 flex-1 lg:flex-1 lg:w-[72%] relative z-0 video-cover"
+          className="flex flex-col min-h-0 gap-2 lg:gap-2 flex-1 relative z-0 video-cover"
           onClick={() => {
             if (!showLivePanels) setShowLivePanels(true);
           }}
@@ -3695,7 +3702,7 @@ export default function LivePage() {
 
         {/* Desktop Right Panel (Chat/Gifts) */}
         {showLivePanels && (
-          <div className="hidden lg:flex lg:w-[32%] xl:w-[34%] flex-1 lg:h-full min-h-0 flex-col gap-3 overflow-hidden relative z-0">
+          <div className="hidden lg:flex w-[300px] shrink-0 lg:h-full min-h-0 flex-col gap-3 overflow-hidden relative z-0">
             <div className="flex flex-col flex-[1] min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-white/10 bg-black/40">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 border-b border-white/10">Gifts</div>

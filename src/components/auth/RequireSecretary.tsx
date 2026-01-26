@@ -15,7 +15,7 @@ export default function RequireSecretary({ children }: { children: React.ReactNo
       }
 
       // Admin always has access
-      if (profile.role === 'admin' || profile.troll_role === 'admin') {
+      if (profile.role === 'admin' || profile.troll_role === 'admin' || profile.is_admin) {
         setIsAuthorized(true)
         return
       }

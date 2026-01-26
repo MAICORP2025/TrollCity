@@ -86,7 +86,7 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
 
         // Calculate badges
         const badges = []
-        if (profile?.role === 'admin') badges.push('🛡️ Admin')
+        if (profile?.role === 'admin' || profile?.is_admin) badges.push('🛡️ Admin')
         if (familyMember) badges.push('⚔️ Family War')
         if (level >= 10) badges.push('👑 Top Rank')
 

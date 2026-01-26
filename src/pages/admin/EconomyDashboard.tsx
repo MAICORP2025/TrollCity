@@ -15,7 +15,7 @@ export default function EconomyDashboard() {
 
   // Check admin access
   useEffect(() => {
-    if (profile && !['admin', 'troll_officer'].includes(profile.role)) {
+    if (profile && !['admin', 'troll_officer'].includes(profile.role) && !profile.is_admin) {
       toast.error('Access denied')
       navigate('/')
     }
@@ -29,7 +29,7 @@ export default function EconomyDashboard() {
       try {
         // Load monthly revenue
         const { data: m, error: mError } = await supabase
-          .from('admin_coin_revenue')
+          .from('view_admin_coin_revenue')
           .select('*')
           .order('month', { ascending: false })
           .limit(24) // Last 24 months
@@ -38,7 +38,7 @@ export default function EconomyDashboard() {
 
         // Load top buyers
         const { data: t, error: tError } = await supabase
-          .from('admin_top_buyers')
+          .from('view_admin_top_buyers')
           .select('*')
           .limit(20)
 

@@ -19,6 +19,7 @@ type PropertyRow = {
   ask_price: number | null
   is_starter: boolean | null
   is_active_home?: boolean // Added for driving scene persistence
+  name?: string | null
 }
 
 type PropertyUpgradeRow = {
@@ -377,11 +378,10 @@ const TrollsTownPage: React.FC = () => {
 
       if (!deedError && deed) {
         setMyDeed(deed as DeedRow)
-        setHomeNameDraft((deed as DeedRow).property_name || '')
       } else {
         setMyDeed(null)
-        setHomeNameDraft('')
       }
+      setHomeNameDraft(property.name || '')
 
       const { data: historyRows, error: historyError } = await supabase
         .from('deed_transfers')
@@ -1602,7 +1602,7 @@ const TrollsTownPage: React.FC = () => {
                           </div>
                           <div className="flex flex-col items-start text-left">
                               <span>
-                                Home {p.id.slice(0, 6).toUpperCase()}
+                                {p.name || `Home ${p.id.slice(0, 6).toUpperCase()}`}
                                 {p.is_starter ? ' • Starter' : ''}
                               </span>
                               {isActiveHome && (
@@ -1657,43 +1657,31 @@ const TrollsTownPage: React.FC = () => {
                               if (!user || !myDeed || !myProperty) return
                               const trimmed = homeNameDraft.trim()
                               try {
-                                // Update both deeds and properties tables to sync across all users
-                                const [deedRes, propRes] = await Promise.all([
-                                  supabase
-                                    .from('deeds')
-                                    .update({
-                                      property_name: trimmed || null
-                                    })
-                                    .eq('id', myDeed.id)
-                                    .select('*')
-                                    .maybeSingle(),
-                                  supabase
+                                // Update properties table (Home Tab name) but keep Deed name unchanged
+                                const { data: propRes, error: propError } = await supabase
                                     .from('properties')
                                     .update({
                                       name: trimmed || null
                                     })
                                     .eq('id', myProperty.id)
                                     .select('*')
-                                    .maybeSingle()
-                                ])
+                                    .single()
 
-                                if (deedRes.error) {
-                                  throw deedRes.error
-                                }
-                                if (propRes.error) {
-                                  throw propRes.error
+                                if (propError) {
+                                  throw propError
                                 }
 
-                                if (deedRes.data) {
-                                  setMyDeed(deedRes.data as DeedRow)
-                                  setHomeNameDraft((deedRes.data as DeedRow).property_name || '')
-                                }
-                                
-                                if (propRes.data) {
-                                  setMyProperty(propRes.data as PropertyRow)
+                                if (propRes) {
+                                  const updated = propRes as PropertyRow
+                                  setMyProperty(updated)
+                                  // Update local list immediately for responsiveness
+                                  setOwnedProperties(prev => prev.map(p => 
+                                    p.id === updated.id ? updated : p
+                                  ))
+                                  setHomeNameDraft(updated.name || '')
                                 }
 
-                                toast.success('Home name updated for all users')
+                                toast.success('Home name updated')
                               } catch (err: any) {
                                 console.error('Failed to update home name', err)
                                 toast.error(err?.message || 'Failed to update home name')

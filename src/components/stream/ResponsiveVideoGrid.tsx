@@ -73,11 +73,11 @@ export default function ResponsiveVideoGrid({
   const isLocalBroadcaster =
     !!(localParticipant && broadcaster && broadcaster.identity === localParticipant.identity);
 
-  // Fixed 6 guest slots - always show all positions
-  const maxGuestSeats = 6;
+  // Fixed 8 guest slots max for 3x3 grid
+  const maxGuestSeats = 8;
   const activeGuestCount = Math.max(0, Math.min(maxGuestSeats, boxCount || 0));
   
-  // Create fixed 6 guest slots (L1, L2, L3, R1, R2, R3)
+  // Create fixed guest slots
   const guestSlots = Array.from({ length: maxGuestSeats }, (_, index) => {
     const seatIndex = index;
     const isActive = index < activeGuestCount;
@@ -198,54 +198,17 @@ export default function ResponsiveVideoGrid({
         </div>
       )}
       
-      {/* Fixed Grid Layout: Left Column | Center Broadcaster | Right Column */}
-      <div className="broadcast-fixed-grid">
-        {/* Left Column - 3 Guest Slots (L1, L2, L3) */}
-        <div className="broadcast-left-column">
-          {guestSlots.slice(0, 3).map((slot) => (
-            <div 
-              key={slot.key}
-              className={`broadcast-guest-slot ${guestFrameClass(slot.position)}`}
-              onClick={() => !slot.participant && slot.isActive && onJoinRequest?.(slot.seatIndex)}
-            >
-              {slot.participant && slot.isActive ? (
-                <VideoTile
-                  participant={slot.participant}
-                  isLocal={!!(localParticipant && slot.participant.identity === localParticipant.identity)}
-                  isHost={isHost}
-                  onDisableGuestMedia={onDisableGuestMedia}
-                  price={joinPrice}
-                  coinBalance={slot.participant.identity ? coinBalances?.[slot.participant.identity] : undefined}
-                  compact
-                  className="w-full h-full"
-                  style={{ width: '100%', height: '100%' }}
-                  onClick={
-                    !isHost &&
-                    !(localParticipant && slot.participant.identity === localParticipant.identity) &&
-                    onUserClick
-                      ? () => onUserClick(slot.participant!)
-                      : undefined
-                  }
-                />
-              ) : slot.isActive ? (
-                <div className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors">
-                  <div className="text-4xl font-bold text-purple-300/30 group-hover:text-purple-300/50 transition-colors">
-                    +
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-black/20">
-                  <div className="text-2xl font-bold text-purple-300/10">
-                    +
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Center - Broadcaster (Large, spans 3 rows) */}
-        <div className={`broadcast-center-slot ${hostFrameClass}`}>
+      {/* Fixed Grid Layout: 3x3 Grid with Dynamic Broadcaster Size */}
+      <div className="grid grid-cols-3 grid-rows-3 gap-2 w-full h-full mx-auto">
+        
+        {/* Broadcaster Tile */}
+        <div className={`relative transition-all duration-500 ease-in-out ${
+          activeGuestCount === 0
+            ? 'col-span-3 row-span-3'
+            : activeGuestCount <= 5 
+              ? 'col-span-2 row-span-2' 
+              : 'col-span-1 row-span-1'
+        }`}>
           <VideoTile
             participant={broadcaster}
             isBroadcaster
@@ -259,11 +222,13 @@ export default function ResponsiveVideoGrid({
             className="w-full h-full object-cover"
             style={{ width: '100%', height: '100%' }}
             onClick={() => onUserClick?.(broadcaster)}
+            frameMode={frameMode}
+            neonColor={neonColor}
           />
           
           {/* Broadcaster Controls Overlay (Start Camera) */}
           {isLocalBroadcaster && !isCameraOn && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-20">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-20 rounded-2xl">
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
                 <button 
                   onClick={onToggleCamera}
@@ -279,12 +244,38 @@ export default function ResponsiveVideoGrid({
           )}
         </div>
 
-        {/* Right Column - 3 Guest Slots (R1, R2, R3) */}
-        <div className="broadcast-right-column">
-          {guestSlots.slice(3, 6).map((slot) => (
+        {/* Guest Slots */}
+        {guestSlots.map((slot, index) => {
+           // Calculate grid position for Large Broadcaster mode
+           // Slots 0-1 go to Right Column (Row 1-2)
+           // Slots 2-4 go to Bottom Row (Col 1-3)
+           // If Small Broadcaster mode, they just flow (starting from index 1?)
+           
+           // Actually, we can just let CSS Grid auto-placement handle it if we are careful?
+           // No, because Broadcaster takes 2x2.
+           
+           // If Large Broadcaster (activeGuestCount <= 5):
+           // Index 0 -> Col 3, Row 1
+           // Index 1 -> Col 3, Row 2
+           // Index 2 -> Col 1, Row 3
+           // Index 3 -> Col 2, Row 3
+           // Index 4 -> Col 3, Row 3
+           
+           let gridClass = '';
+           if (index === 0) gridClass = 'col-start-3 row-start-1';
+           else if (index === 1) gridClass = 'col-start-3 row-start-2';
+           else if (index === 2) gridClass = 'col-start-1 row-start-3';
+           else if (index === 3) gridClass = 'col-start-2 row-start-3';
+           else if (index === 4) gridClass = 'col-start-3 row-start-3';
+           
+           // Only render slots up to limit (5)
+           if (activeGuestCount === 0) return null;
+           if (index >= 5) return null;
+ 
+           return (
             <div 
               key={slot.key}
-              className={`broadcast-guest-slot ${guestFrameClass(slot.position)}`}
+              className={`relative rounded-2xl overflow-hidden transition-all duration-300 ${gridClass}`}
               onClick={() => !slot.participant && slot.isActive && onJoinRequest?.(slot.seatIndex)}
             >
               {slot.participant && slot.isActive ? (
@@ -305,24 +296,25 @@ export default function ResponsiveVideoGrid({
                       ? () => onUserClick(slot.participant!)
                       : undefined
                   }
+                  frameMode={frameMode}
+                  neonColor={neonColor}
                 />
               ) : slot.isActive ? (
-                <div className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors">
-                  <div className="text-4xl font-bold text-purple-300/30 group-hover:text-purple-300/50 transition-colors">
+                <div className={`w-full h-full flex items-center justify-center cursor-pointer transition-colors border-2 border-dashed ${frameMode === 'neon' ? 'border-purple-500/30 hover:border-purple-500/60 bg-purple-500/5' : 'border-white/10 hover:border-white/30 bg-white/5'}`}>
+                  <div className={`text-4xl font-bold transition-colors ${frameMode === 'neon' ? 'text-purple-400/50 group-hover:text-purple-400' : 'text-white/20 group-hover:text-white/40'}`}>
                     +
                   </div>
                 </div>
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-black/20">
-                  <div className="text-2xl font-bold text-purple-300/10">
-                    +
-                  </div>
+                <div className="w-full h-full flex items-center justify-center bg-black/40 rounded-2xl border border-white/5">
+                   {/* Empty inactive slot */}
                 </div>
               )}
             </div>
-          ))}
-        </div>
+           );
+        })}
       </div>
+
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Check, Sparkles } from 'lucide-react'
+import { Check, Sparkles, Car } from 'lucide-react'
 import type { MergedBadge } from '@/lib/badges/mergeBadges'
 
 interface BadgeCardProps {
@@ -43,6 +43,8 @@ export function BadgeCard({ badge }: BadgeCardProps) {
         <div className="w-12 h-12 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
           {badge.icon_url ? (
             <img src={badge.icon_url} alt={displayName} className="w-full h-full object-cover" />
+          ) : badge.slug === 'driver-license' ? (
+            <Car className="w-6 h-6 text-blue-400" />
           ) : (
             <Sparkles className="w-6 h-6 text-white/80" />
           )}

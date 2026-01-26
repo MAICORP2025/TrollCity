@@ -9,6 +9,9 @@
 /* Mobile Broadcast Layout */
 @import './styles/mobile-broadcast.css';
 
+/* Sidebar RGB Effect */
+@import './styles/sidebar-rgb.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -225,7 +228,7 @@
 
 .rgb-frame {
   position: relative;
-  padding: 4px; /* Border thickness */
+  padding: 2px; /* Border thickness */
   background: transparent;
   overflow: hidden !important; /* Force clipping */
 }
@@ -253,7 +256,7 @@
 
 .rgb-frame-small {
   position: relative;
-  padding: 3px;
+  padding: 2px;
   overflow: hidden !important;
 }
 
@@ -3375,7 +3378,7 @@ html, body, #root {
 /* The broadcast page wrapper */
 .stream-wrapper {
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr 300px;
   gap: 12px;
   padding: 12px;
   width: 100%;

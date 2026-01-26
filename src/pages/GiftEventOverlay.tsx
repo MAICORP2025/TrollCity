@@ -5,15 +5,17 @@ import ClickableUsername from '../components/ClickableUsername'
 export default function GiftEventOverlay({ gift, onProfileClick }: { gift: any, onProfileClick?: (profile: any) => void }) {
   const [visible, setVisible] = useState(false)
   const megaGift = gift?.coinCost >= 1000
+  const isLargeGift = gift?.coinCost >= 10000
   const tier = gift?.tier || 'basic'
   const combo = gift?.comboCount || 0
 
   useEffect(() => {
     if (!gift) return
     setVisible(true)
-    const timer = setTimeout(() => setVisible(false), 3000)
+    const duration = isLargeGift ? 5000 : 3000
+    const timer = setTimeout(() => setVisible(false), duration)
     return () => clearTimeout(timer)
-  }, [gift])
+  }, [gift, isLargeGift])
 
   if (!gift || !visible) return null
 
@@ -156,10 +158,43 @@ export default function GiftEventOverlay({ gift, onProfileClick }: { gift: any, 
 
         {/* Mega Gift Pop-up (> 1000 coins) */}
         {megaGift && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 bg-purple-700/80 
-                          px-6 py-3 rounded-xl text-lg animate-pulse text-white shadow-xl z-50">
+          <div className={`absolute top-10 left-1/2 -translate-x-1/2 
+                          px-6 py-3 rounded-xl text-lg animate-pulse text-white shadow-xl z-50
+                          ${isLargeGift ? 'bg-gradient-to-r from-yellow-600 to-red-600 scale-125 border-2 border-yellow-400' : 'bg-purple-700/80'}`}>
             🎉 <ClickableUsername username={gift.sender_username} className="text-white font-bold" onClick={() => onProfileClick?.({ name: gift.sender_username, username: gift.sender_username })} /> sent {gift.name}! 🎉
+            {gift.isLucky && <div className="text-center text-yellow-300 font-bold text-sm mt-1">🍀 LUCKY GIFT! COINS RETURNED! 🍀</div>}
           </div>
+        )}
+
+        {/* Large Gift Animations (>= 10000) */}
+        {isLargeGift && (
+           <div className="absolute inset-0 pointer-events-none z-[60]">
+               <div className="absolute inset-0 animate-fireworks"></div>
+               <div className="absolute inset-0 bg-gradient-to-t from-purple-900/20 to-transparent animate-pulse"></div>
+           </div>
+        )}
+
+        {/* Infinity Gem */}
+        {(gift.id === 'infinity_gem' || gift.name === 'Infinity Gem') && (
+           <div className="absolute inset-0 flex items-center justify-center z-[70] animate-spinSlow">
+              <div className="text-9xl filter drop-shadow-[0_0_50px_rgba(59,130,246,0.8)]">💎</div>
+              <div className="absolute inset-0 animate-ping opacity-50 bg-blue-500/20 rounded-full"></div>
+           </div>
+        )}
+        
+        {/* Cosmic Comet */}
+        {(gift.id === 'cosmic_comet' || gift.name === 'Cosmic Comet') && (
+           <div className="absolute top-0 right-0 animate-driveCar text-9xl transform rotate-45">
+              ☄️
+           </div>
+        )}
+
+        {/* Galaxy Portal */}
+        {(gift.id === 'galaxy_portal' || gift.name === 'Galaxy Portal') && (
+           <div className="absolute inset-0 flex items-center justify-center z-[60]">
+              <div className="w-[300px] h-[300px] rounded-full bg-[conic-gradient(at_center,_var(--tw-gradient-stops))] from-indigo-500 via-purple-500 to-pink-500 animate-spinSlow opacity-80 blur-xl"></div>
+              <div className="absolute text-9xl">🌀</div>
+           </div>
         )}
       </div>
 

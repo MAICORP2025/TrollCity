@@ -311,6 +311,15 @@ export async function initAuthAndData() {
   if (session?.user) {
     useAuthStore.getState().setAuth(session.user, session)
     await useAuthStore.getState().refreshProfile()
+  } else {
+    // Clear stale state if Supabase has no session but store does
+    const state = useAuthStore.getState()
+    if (state.user || state.session) {
+      console.log('Clearing stale auth state (no active Supabase session)')
+      state.setAuth(null, null)
+      state.setProfile(null)
+      state.setAdmin(null)
+    }
   }
 
   supabase.auth.onAuthStateChange(async (_event, session) => {

@@ -140,7 +140,7 @@ const CourtDocketDashboard: React.FC = (): JSX.Element => {
     };
   };
 
-  const canManageCases = profile?.role === 'admin' || profile?.is_lead_officer;
+  const canManageCases = profile?.role === 'admin' || profile?.is_lead_officer || profile?.is_admin;
 
   if (loading) {
     return (

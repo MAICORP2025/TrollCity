@@ -41,7 +41,7 @@ export const useLevelStore = create<LevelState>((set, get) => ({
     set({ loading: true })
     try {
       const { data, error } = await supabase
-        .from('user_levels')
+        .from('user_stats')
         .select('*')
         .eq('user_id', userId)
         .single()
@@ -53,14 +53,14 @@ export const useLevelStore = create<LevelState>((set, get) => ({
 
       if (!data) {
         // Initialize if not exists
-        const initialData = {
-          user_id: userId,
-          level: 1,
-          xp: 0,
-          total_xp: 0,
-          next_level_xp: 100
-        }
-        await supabase.from('user_levels').insert(initialData)
+        // Use grant_xp with 0 amount to init
+        await supabase.rpc('grant_xp', {
+            p_user_id: userId,
+            p_amount: 0,
+            p_source: 'init',
+            p_source_id: `init_${Date.now()}`
+        })
+        
         set({
           currentLevel: 1,
           currentXp: 0,
@@ -69,14 +69,14 @@ export const useLevelStore = create<LevelState>((set, get) => ({
         })
       } else {
         set({
-          currentLevel: data.level || data.current_level || 1,
-          currentXp: data.xp || data.current_xp || 0,
-          totalXp: data.total_xp || 0,
-          nextLevelXp: data.next_level_xp || 100,
-          prestigeCount: data.prestige_count || 0,
-          perkTokens: data.perk_tokens || 0,
-          unlockedPerks: data.unlocked_perks || [],
-          dailyLog: (data.daily_xp_log as DailyLog) || { date: new Date().toISOString().split('T')[0], chat_xp: 0, watch_xp: 0 }
+          currentLevel: data.level || 1,
+          currentXp: data.xp_total || 0,
+          totalXp: data.xp_total || 0,
+          nextLevelXp: data.xp_to_next_level || 100,
+          prestigeCount: 0, // Not in user_stats yet
+          perkTokens: 0, // Not in user_stats yet
+          unlockedPerks: [], // Not in user_stats yet
+          dailyLog: { date: new Date().toISOString().split('T')[0], chat_xp: 0, watch_xp: 0 }
         })
       }
     } catch (err) {

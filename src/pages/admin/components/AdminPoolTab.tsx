@@ -471,6 +471,35 @@ export default function AdminPoolTab() {
     }
   }
 
+  const payWithPayPal = async (payoutId: string) => {
+    const confirm = window.confirm("Are you sure you want to send this payout via PayPal?");
+    if (!confirm) return;
+
+    const toastId = toast.loading("Processing PayPal payout...");
+    try {
+      const { data, error } = await supabase.functions.invoke('paypal-payout', {
+        body: { 
+            payoutRequestId: payoutId,
+            adminId: user?.id 
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Payout sent successfully!", { id: toastId });
+        // Reload
+        const { data: newData } = await supabase.from('cashout_requests').select('*, user:user_id(id, username)').order('created_at', { ascending: false })
+        if (newData) setCashoutRequests(newData)
+      } else {
+         toast.error(data.error || "PayPal payout failed", { id: toastId });
+      }
+    } catch (err: any) {
+      console.error("PayPal Error:", err);
+      toast.error(err.message || "Failed to process PayPal payout", { id: toastId });
+    }
+  };
+
   const handleApproveCashout = async (reqId: string) => {
     try {
       if (!confirm('Are you sure you want to mark this request as PAID? Coins will be permanently burned from escrow.')) return
@@ -1000,9 +1029,16 @@ export default function AdminPoolTab() {
                             {req.status === 'pending' && (
                               <div className="flex gap-2 justify-center">
                                 <button
+                                  onClick={() => payWithPayPal(req.id)}
+                                  className="p-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded transition-colors"
+                                  title="Pay with PayPal"
+                                >
+                                  <span className="font-bold px-1 text-xs">PP</span>
+                                </button>
+                                <button
                                   onClick={() => handleApproveCashout(req.id)}
                                   className="p-1 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded transition-colors"
-                                  title="Mark as Paid"
+                                  title="Mark as Paid (Manual)"
                                 >
                                   <CheckCircle className="w-4 h-4" />
                                 </button>

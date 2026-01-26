@@ -19,24 +19,36 @@ export function useUserLevels() {
       }
 
       const { data, error } = await supabase
-        .from("user_levels")
+        .from("user_stats")
         .select("*")
         .eq("user_id", userId)
         .single();
 
-      if (!error && data) setLevels(data);
+      if (!error && data) {
+        // Map user_stats to expected structure
+        setLevels({
+            ...data,
+            buyer_level: data.level,
+            stream_level: data.level, // Unifying levels
+            xp: data.xp_total
+        });
+      }
       setLoading(false);
 
       // Realtime subscription
       subscription = supabase
-        .channel(`user_levels_${userId}`)
+        .channel(`user_stats_${userId}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "user_levels", filter: `user_id=eq.${userId}` },
+          { event: "UPDATE", schema: "public", table: "user_stats", filter: `user_id=eq.${userId}` },
           (payload) => {
+            const newData = payload.new;
             setLevels((prev) => ({
               ...(prev || {}),
-              ...payload.new,
+              ...newData,
+              buyer_level: newData.level,
+              stream_level: newData.level,
+              xp: newData.xp_total
             }));
           }
         )

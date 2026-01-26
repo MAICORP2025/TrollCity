@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { xpService } from '../services/xpService'
+import { evaluateBadgesForUser } from '../services/badgeEvaluationService'
 
 // Level Thresholds (Legacy - Source of Truth is now Database RPC 'calculate_level')
 export const LEVEL_THRESHOLDS = [
@@ -131,13 +132,19 @@ export async function awardPaidCoinXP(userId: string, coinAmount: number, metada
   const xpAmount = Math.floor(coinAmount * ECONOMY_XP.PAID_COIN_SPEND)
   const sourceId = `paid_coin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   
-  return await xpService.grantXP(
+  const result = await xpService.grantXP(
     userId,
     xpAmount,
     'paid_coin_spend',
     sourceId,
     metadata
   )
+  
+  if (result.success) {
+    evaluateBadgesForUser(userId).catch(console.error)
+  }
+  
+  return result
 }
 
 /**
@@ -148,13 +155,19 @@ export async function awardLiveGiftXP(userId: string, coinAmount: number, metada
   const xpAmount = Math.floor(coinAmount * ECONOMY_XP.LIVE_GIFT_BONUS)
   const sourceId = `live_gift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   
-  return await xpService.grantXP(
+  const result = await xpService.grantXP(
     userId,
     xpAmount,
     'live_gift_send',
     sourceId,
     metadata
   )
+
+  if (result.success) {
+    evaluateBadgesForUser(userId, { giftAmount: coinAmount }).catch(console.error)
+  }
+
+  return result
 }
 
 /**
@@ -165,13 +178,19 @@ export async function awardStorePurchaseXP(userId: string, dollarAmount: number,
   const xpAmount = Math.floor(dollarAmount * ECONOMY_XP.STORE_PURCHASE)
   const sourceId = `store_purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   
-  return await xpService.grantXP(
+  const result = await xpService.grantXP(
     userId,
     xpAmount,
     'store_purchase',
     sourceId,
     metadata
   )
+
+  if (result.success) {
+    evaluateBadgesForUser(userId).catch(console.error)
+  }
+
+  return result
 }
 
 // ===========================
@@ -254,13 +273,19 @@ export async function award7DayStreakXP(userId: string, streakCount: number) {
 export async function awardGoLiveXP(userId: string, streamId: string) {
   const sourceId = `go_live_${streamId}`
   
-  return await xpService.grantXP(
+  const result = await xpService.grantXP(
     userId,
     STREAMING_XP.GO_LIVE_BASE,
     'go_live',
     sourceId,
     { stream_id: streamId }
   )
+
+  if (result.success) {
+    evaluateBadgesForUser(userId).catch(console.error)
+  }
+
+  return result
 }
 
 /**
@@ -271,13 +296,19 @@ export async function awardViewerMinuteXP(userId: string, viewerMinutes: number,
   const xpAmount = Math.floor(viewerMinutes * STREAMING_XP.VIEWER_MINUTE)
   const sourceId = `viewer_minute_${streamId}_${Date.now()}`
   
-  return await xpService.grantXP(
+  const result = await xpService.grantXP(
     userId,
     xpAmount,
     'viewer_minute',
     sourceId,
     { stream_id: streamId, viewer_minutes: viewerMinutes }
   )
+
+  if (result.success) {
+    evaluateBadgesForUser(userId).catch(console.error)
+  }
+
+  return result
 }
 
 /**
@@ -288,13 +319,19 @@ export async function awardGiftReceivedXP(userId: string, coinAmount: number, st
   const xpAmount = Math.floor(coinAmount * XP_RATES.STREAMER)
   const sourceId = `gift_received_${streamId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   
-  return await xpService.grantXP(
+  const result = await xpService.grantXP(
     userId,
     xpAmount,
     'gift_received',
     sourceId,
     { stream_id: streamId, coin_amount: coinAmount, ...metadata }
   )
+
+  if (result.success) {
+    evaluateBadgesForUser(userId, { giftAmount: coinAmount }).catch(console.error)
+  }
+
+  return result
 }
 
 // ===========================
@@ -392,6 +429,14 @@ export async function processGiftXp(senderId: string, receiverId: string, coinAm
       leveledUp: false,
       newLevel: receiverResultRaw.data?.level || 1,
       type: 'streamer'
+  }
+
+  // Evaluate Badges for both
+  if (senderResultRaw.success) {
+      evaluateBadgesForUser(senderId, { giftAmount: coinAmount }).catch(console.error)
+  }
+  if (receiverResultRaw.success) {
+      evaluateBadgesForUser(receiverId, { giftAmount: coinAmount }).catch(console.error)
   }
 
   // 5. Check for Millionaire Hall of Fame (Legacy logic preserved)

@@ -45,6 +45,13 @@ const AuthCallback = () => {
             console.log('User authenticated:', u.email)
             
             const sessionId = crypto.randomUUID()
+            // Store session ID for device enforcement
+            try {
+              localStorage.setItem('current_device_session_id', sessionId)
+            } catch (e) {
+              console.error('Failed to store session ID', e)
+            }
+
             // Register this session
             try {
               const deviceInfo = {

@@ -127,6 +127,36 @@ export default function PayoutQueue() {
     loadPayouts()
   }, [loadPayouts])
 
+  const payWithPayPal = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const confirm = window.confirm("Are you sure you want to send this payout via PayPal?");
+    if (!confirm) return;
+
+    const toastId = toast.loading("Processing PayPal payout...");
+    try {
+      const { data, error } = await supabase.functions.invoke('paypal-payout', {
+        body: { 
+            payoutRequestId: id,
+            adminId: profile?.id 
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Payout sent successfully!", { id: toastId });
+        loadPayouts();
+      } else {
+         toast.error(data.error || "PayPal payout failed", { id: toastId });
+      }
+    } catch (err: any) {
+      console.error("PayPal Error:", err);
+      toast.error(err.message || "Failed to process PayPal payout", { id: toastId });
+    }
+  };
+
   const approve = async (e: React.MouseEvent, id: string) => {
     e.preventDefault()
     e.stopPropagation()
@@ -401,6 +431,14 @@ export default function PayoutQueue() {
                     <td className="px-4 py-3 text-right">
                       {payout.status === 'pending' && (
                         <>
+                          <button
+                            type="button"
+                            onClick={(e) => payWithPayPal(e, payout.id)}
+                            className="bg-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-700 mr-2"
+                            title="Pay with PayPal"
+                          >
+                            PayPal
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => approve(e, payout.id)}

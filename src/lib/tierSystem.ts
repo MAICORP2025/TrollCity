@@ -34,51 +34,61 @@ export function getTierFromXP(xp: number): TierInfo {
 }
 
 export function getLevelFromXP(xp: number, isAdmin: boolean = false): number {
-  // Special case for admins - they can reach level 101
-  if (isAdmin && xp >= 101000) {
-    return 101
+  // Use the standard formula matching SQL calculate_level_details
+  // Levels 1-50: 100 * 1.1^(L-1)
+  // Levels 50+: 10000 flat per level
+  
+  let curr_lvl = 1;
+  let xp_accum = 0;
+  let xp_needed = 100;
+  
+  while (true) {
+    if (curr_lvl < 50) {
+      xp_needed = Math.floor(100 * Math.pow(1.1, curr_lvl - 1));
+    } else {
+      xp_needed = 10000;
+    }
+
+    if (xp < (xp_accum + xp_needed)) {
+      return curr_lvl;
+    }
+
+    xp_accum += xp_needed;
+    curr_lvl++;
+    // Safety break for extremely high XP (e.g. level 10000+)
+    if (curr_lvl >= 20000) return curr_lvl;
   }
-
-  const tier = getTierFromXP(xp)
-
-  // Calculate exact level within the tier range
-  const tierIndex = TIER_LEVELS.indexOf(tier)
-  if (tierIndex === -1) return 1
-
-  const nextTier = TIER_LEVELS[tierIndex + 1]
-  if (!nextTier) return isAdmin ? 101 : 100 // Max level
-
-  const tierRange = nextTier.minXP - tier.minXP
-  const xpInTier = xp - tier.minXP
-  const levelsInTier = nextTier.level - tier.level
-  const levelProgress = Math.floor((xpInTier / tierRange) * levelsInTier)
-
-  return tier.level + levelProgress
 }
 
 export function getXPForNextLevel(currentXp: number, isAdmin: boolean = false): { current: number; needed: number; percentage: number } {
-  const currentLevel = getLevelFromXP(currentXp, isAdmin)
-  if (currentLevel >= (isAdmin ? 101 : 100)) {
-    return { current: currentXp, needed: 0, percentage: 100 }
-  }
+  let curr_lvl = 1;
+  let xp_accum = 0;
+  let xp_needed = 100;
   
-  // Find next level threshold
-  let nextLevelXp = (currentLevel + 1) * 1000
-  
-  // For tier boundaries, use exact tier XP
-  const nextTier = TIER_LEVELS.find(t => t.level > currentLevel)
-  if (nextTier && nextTier.minXP < nextLevelXp) {
-    nextLevelXp = nextTier.minXP
-  }
-  
-  const xpNeeded = nextLevelXp - currentXp
-  const xpProgress = currentXp % 1000
-  const percentage = (xpProgress / 1000) * 100
-  
-  return {
-    current: currentXp,
-    needed: xpNeeded,
-    percentage: Math.min(percentage, 100)
+  // Re-run the loop to find current level state
+  while (true) {
+    if (curr_lvl < 50) {
+      xp_needed = Math.floor(100 * Math.pow(1.1, curr_lvl - 1));
+    } else {
+      xp_needed = 10000;
+    }
+
+    if (currentXp < (xp_accum + xp_needed)) {
+      // Found current level
+      const xpInLevel = currentXp - xp_accum;
+      const percentage = (xpInLevel / xp_needed) * 100;
+      return {
+        current: currentXp,
+        needed: xp_needed - xpInLevel,
+        percentage: Math.min(Math.max(percentage, 0), 100)
+      };
+    }
+
+    xp_accum += xp_needed;
+    curr_lvl++;
+    if (curr_lvl >= 20000) {
+        return { current: currentXp, needed: 0, percentage: 100 };
+    }
   }
 }
 

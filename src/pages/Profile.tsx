@@ -4,14 +4,17 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import CreditScoreBadge from '../components/CreditScoreBadge';
 import BadgesGrid from '../components/badges/BadgesGrid';
+import { UserBadge } from '../components/UserBadge';
 import { useCreditScore } from '../lib/hooks/useCreditScore';
 import { getLevelName } from '../lib/xp';
-import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home, Mars, Venus } from 'lucide-react';
+import { ENTRANCE_EFFECTS_MAP } from '../lib/entranceEffects';
+import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home, Mars, Venus, Trash2, CheckCircle, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
 import { canMessageAdmin } from '@/lib/perkEffects';
 import { cars } from '../data/vehicles';
+import TMVTab from '../components/tmv/TMVTab';
 
 function ProfileInner() {
   const { username, userId } = useParams();
@@ -24,7 +27,24 @@ function ProfileInner() {
   const [activeTab, setActiveTab] = useState('posts');
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
-  const [inventory, setInventory] = useState<{perks: any[], effects: any[], insurance: any[], callMinutes: any, homeListings: any[], vehicleListings: any[]}>({perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: []});
+  const [inventory, setInventory] = useState<{
+    perks: any[], 
+    effects: any[], 
+    insurance: any[], 
+    callMinutes: any, 
+    homeListings: any[], 
+    vehicleListings: any[],
+    vehicles: any[]
+  }>({
+    perks: [], 
+    effects: [], 
+    insurance: [], 
+    callMinutes: null, 
+    homeListings: [], 
+    vehicleListings: [],
+    vehicles: []
+  });
+  const [showInsuranceCard, setShowInsuranceCard] = useState<any | null>(null);
   const [earnings, setEarnings] = useState<any[]>([]);
   const [earningsLoading, setEarningsLoading] = useState(false);
   const viewerRole = useAuthStore.getState().profile?.troll_role || useAuthStore.getState().profile?.role || 'user';
@@ -61,18 +81,83 @@ function ProfileInner() {
 
     window.location.reload();
   };
-  
+
+  const handleDeleteAccount = async () => {
+    if (!currentUser) return;
+    
+    if (!window.confirm('Are you sure you want to PERMANENTLY delete your account? This action cannot be undone and you will lose all progress, coins, and items.')) {
+      return;
+    }
+
+    // Double confirmation
+    const confirmUsername = window.prompt(`Please type your username "${currentUser.username}" to confirm deletion:`);
+    if (confirmUsername !== currentUser.username) {
+      toast.error('Username does not match. Deletion cancelled.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase.rpc('delete_own_account');
+      
+      if (error) throw error;
+      
+      toast.success('Account deleted successfully');
+      
+      // Cleanup local state
+      handleClearCacheReload(); // This clears storage and reloads, but we should redirect
+      navigate('/auth');
+      
+    } catch (e: any) {
+      console.error('Delete account error:', e);
+      toast.error(e?.message || 'Failed to delete account');
+      setLoading(false);
+    }
+  };
+
+  const handleSetEntranceEffect = async (effectId: string | null) => {
+    if (!currentUser || currentUser.id !== profile.id) return;
+    
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ active_entrance_effect: effectId })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+
+      // Update local profile state
+      setProfile((prev: any) => ({
+        ...prev,
+        active_entrance_effect: effectId
+      }));
+
+      if (effectId) {
+         const effectName = ENTRANCE_EFFECTS_MAP[effectId]?.name || 'Effect';
+         toast.success(`Equipped ${effectName}`);
+      } else {
+         toast.success('Entrance effect unequipped');
+      }
+
+    } catch (e: any) {
+      console.error('Error setting entrance effect:', e);
+      toast.error('Failed to update entrance effect');
+    }
+  };
 
   const fetchInventory = async (uid: string) => {
     // setInventoryLoading(true);
     try {
-      const [perksRes, effectsRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes] = await Promise.all([
+      const [perksRes, effectsRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes, vehiclesRes, legacyVehiclesRes] = await Promise.all([
         supabase.from('user_perks').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
         supabase.from('user_entrance_effects').select('*').eq('user_id', uid),
         supabase.from('user_insurances').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
         supabase.from('call_minutes').select('*').eq('user_id', uid).single(),
         supabase.from('properties').select('*').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
-        supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false })
+        supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
+        supabase.from('user_cars').select('*').eq('user_id', uid).order('purchased_at', { ascending: false }),
+        supabase.from('user_vehicles').select('*').eq('user_id', uid)
       ]);
 
       let insuranceList = insuranceUserRes.data || [];
@@ -101,13 +186,25 @@ function ProfileInner() {
         }
       } catch {}
 
+      // Map legacy vehicles to common structure
+      const legacyVehicles = (legacyVehiclesRes.data || []).map((v: any) => ({
+        id: v.id,
+        car_id: v.vehicle_id,
+        is_active: v.is_equipped,
+        purchased_at: v.created_at || new Date().toISOString(),
+        customization_json: { car_model_id: Number(v.vehicle_id) },
+        insurance_expiry: null,
+        is_legacy: true
+      }));
+
       setInventory({
         perks: perksRes.data || [],
         effects: effectsRes.data || [],
         insurance: insuranceList || [],
         callMinutes: callRes.data || null,
         homeListings: homesRes.data || [],
-        vehicleListings: vehicleListingsRes.data || []
+        vehicleListings: vehicleListingsRes.data || [],
+        vehicles: [...(vehiclesRes.data || []), ...legacyVehicles]
       });
     } catch (e) {
       console.error('Error fetching inventory', e);
@@ -165,8 +262,9 @@ function ProfileInner() {
     viewerRole === 'lead_troll_officer';
   const [ownedCar, setOwnedCar] = useState<any | null>(null);
   const tabOptions = [
-    { key: 'posts', label: 'Posts', show: true },
+    { key: 'social', label: 'Social', show: true },
     { key: 'inventory', label: 'Inventory & Perks', show: canSeeFullProfile },
+    { key: 'tmv', label: 'TMV Dashboard', show: canSeeFullProfile },
     { key: 'earnings', label: 'Earnings', show: canSeeFullProfile },
     { key: 'purchases', label: 'Purchase History', show: canSeeFullProfile },
     { key: 'admin_titles', label: 'Admin Titles', show: canSeeFullProfile && isAdminViewer },
@@ -313,7 +411,7 @@ function ProfileInner() {
         if (currentUser?.id === data.id) {
           fetchInventory(data.id);
         } else {
-          setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [] });
+          setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [], vehicles: [] });
           setEarnings([]);
           setPurchases([]);
         }
@@ -792,6 +890,9 @@ function ProfileInner() {
             {profile.is_verified && (
               <span className="bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded-full" title="Verified">✓</span>
             )}
+
+            <UserBadge profile={profile} />
+
             {isOwnProfile && (
               <button
                 onClick={handleClearCacheReload}
@@ -867,10 +968,6 @@ function ProfileInner() {
              <span className="text-gray-400">Posts</span>
            </div>
         </div>
-
-        <div className="mt-6">
-          <BadgesGrid userId={profile.id} limit={6} showViewAllLink />
-        </div>
         
         {/* Tabs */}
         <div className="relative mt-6" ref={tabDropdownRef}>
@@ -899,8 +996,31 @@ function ProfileInner() {
         </div>
 
         <div className="mt-6">
-           {activeTab === 'posts' && (
+           {activeTab === 'social' && (
              <div className="space-y-6">
+               
+               {/* Badges Section */}
+               <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4">
+                 <div className="flex items-center justify-between mb-4">
+                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                     <Shield className="w-5 h-5 text-yellow-400"/>
+                     Badges
+                   </h3>
+                   <details className="relative group">
+                     <summary className="list-none cursor-pointer px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-gray-300 flex items-center gap-2">
+                       View All Badges
+                       <ChevronDown size={14} className="group-open:rotate-180 transition-transform"/>
+                     </summary>
+                     <div className="absolute right-0 top-full mt-2 w-[80vw] max-w-2xl bg-[#0A0814] border border-zinc-700 rounded-xl shadow-2xl z-50 p-4 max-h-[60vh] overflow-y-auto">
+                        <BadgesGrid userId={profile.id} showViewAllLink={false} />
+                     </div>
+                   </details>
+                 </div>
+                 
+                 {/* Preview Badges */}
+                 <BadgesGrid userId={profile.id} limit={4} showViewAllLink={false} />
+               </div>
+
                {isOwnProfile && (
                  <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
                    <textarea
@@ -1042,92 +1162,168 @@ function ProfileInner() {
                <div>
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Package className="w-5 h-5 text-blue-400"/> Entrance Effects</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {inventory.effects.map(effect => (
-                       <div key={effect.id} className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 flex justify-between items-center">
-                          <span className="font-medium">{effect.effect_id}</span>
-                          <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">OWNED</span>
-                       </div>
-                    ))}
+                    {inventory.effects.map(effect => {
+                       const effectData = ENTRANCE_EFFECTS_MAP[effect.effect_id] || {};
+                       const isActive = profile.active_entrance_effect === effect.effect_id;
+                       
+                       return (
+                         <div key={effect.id} className={`bg-zinc-900 p-4 rounded-xl border ${isActive ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-800'} flex justify-between items-center`}>
+                            <div className="flex items-center gap-3">
+                              <span className="text-2xl">{effectData.icon || '✨'}</span>
+                              <div className="flex flex-col">
+                                <span className="font-medium text-white">{effectData.name || effect.effect_id}</span>
+                                {effectData.description && <span className="text-xs text-gray-400">{effectData.description}</span>}
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-col items-end gap-2">
+                                <span className={`text-xs px-2 py-1 rounded ${isActive ? 'bg-green-500 text-white' : 'bg-blue-900 text-blue-200'}`}>
+                                    {isActive ? 'ACTIVE' : 'OWNED'}
+                                </span>
+                                
+                                {isOwnProfile && (
+                                    <button
+                                        onClick={() => handleSetEntranceEffect(isActive ? null : effect.effect_id)}
+                                        className={`px-3 py-1 text-xs rounded transition ${
+                                            isActive 
+                                            ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' 
+                                            : 'bg-white/10 text-white hover:bg-white/20'
+                                        }`}
+                                    >
+                                        {isActive ? 'Unequip' : 'Equip'}
+                                    </button>
+                                )}
+                            </div>
+                         </div>
+                       );
+                    })}
                     {inventory.effects.length === 0 && <p className="text-gray-500 text-sm">No effects found.</p>}
                   </div>
                </div>
                
               {/* Insurance */}
               <div>
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-green-400"/> Insurance Plans</h3>
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-green-400"/> Troll Protection</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {inventory.insurance.map(plan => (
                        <div key={plan.id} className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
-                          <h4 className="font-bold">{plan.metadata?.insurance_name || plan.metadata?.plan_name || 'Insurance Plan'}</h4>
+                          <h4 className="font-bold">{plan.metadata?.package_name || plan.metadata?.insurance_name || plan.metadata?.plan_name || 'Protection Plan'}</h4>
                           <p className="text-sm text-gray-400">Expires: {new Date(plan.expires_at).toLocaleString()}</p>
                        </div>
                     ))}
-                    {inventory.insurance.length === 0 && <p className="text-gray-500 text-sm">No insurance found.</p>}
+                    {inventory.insurance.length === 0 && <p className="text-gray-500 text-sm">No protection plans active.</p>}
                </div>
              </div>
 
               <div>
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                   <Car className="w-5 h-5 text-red-400" />
-                  Vehicle
+                  Vehicles
                 </h3>
-                <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 flex items-center justify-between gap-4">
-                  {ownedCar ? (
-                    <>
-                      <div className="flex items-center gap-4">
-                        {ownedCar.image ? (
-                          <div className="w-28 h-16 flex items-center justify-center bg-zinc-950 rounded-xl border border-zinc-700 overflow-hidden p-1">
-                            <img 
-                              src={ownedCar.image} 
-                              alt={ownedCar.name} 
-                              className="w-full h-full object-contain drop-shadow-lg" 
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            className="w-24 h-14 rounded-xl border border-zinc-700 shadow-inner"
-                            style={{
-                              background:
-                                ownedCar.colorFrom && ownedCar.colorTo
-                                  ? `linear-gradient(90deg, ${ownedCar.colorFrom}, ${ownedCar.colorTo})`
-                                  : 'linear-gradient(90deg, #4b5563, #020617)'
-                            }}
-                          />
-                        )}
-                        <div>
-                          <p className="font-semibold text-white">
-                            {ownedCar.name || 'Equipped Vehicle'}
-                          </p>
-                          {ownedCar.tier && (
-                            <p className="text-xs text-gray-400">
-                              Tier: {ownedCar.tier}
-                            </p>
-                          )}
+                <div className="space-y-4">
+                  {inventory.vehicles.length > 0 ? (
+                    inventory.vehicles.map((v: any) => {
+                      // Resolve car details
+                      // user_cars.car_id might be a string (legacy) or uuid.
+                      // If it's a number string "1", we can match it.
+                      // If it's a UUID, we might need to rely on customization_json.car_model_id or similar, 
+                      // OR look it up in the catalog (which we don't have loaded here).
+                      // BUT, the dealership page logic suggests customization_json.car_model_id is a fallback for numeric ID.
+                      
+                      let carConfig = null;
+                      if (v.customization_json?.car_model_id) {
+                         carConfig = cars.find(c => c.id === v.customization_json.car_model_id);
+                      } else if (!isNaN(Number(v.car_id))) {
+                         carConfig = cars.find(c => c.id === Number(v.car_id));
+                      }
+
+                      // If we still can't find it (maybe legacy data), try to match by name if stored? No name stored on user_cars.
+                      // Fallback:
+                      const displayName = carConfig?.name || `Vehicle #${v.car_id.slice(0,8)}`;
+                      const displayImage = carConfig?.image || null;
+                      const displayTier = carConfig?.tier || null;
+
+                      const isInsured = v.insurance_expiry && new Date(v.insurance_expiry) > new Date();
+                      const isActive = String(profile.active_vehicle) === String(v.id) || 
+                                       String(profile.active_vehicle) === String(v.car_id) || 
+                                       (carConfig && String(profile.active_vehicle) === String(carConfig.id));
+
+                      return (
+                        <div key={v.id} className={`bg-zinc-900 p-4 rounded-xl border ${isActive ? 'border-emerald-500/50 bg-emerald-900/10' : 'border-zinc-800'} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
+                           <div className="flex items-center gap-4">
+                             <div className="w-24 h-14 flex-shrink-0 flex items-center justify-center bg-zinc-950 rounded-lg border border-zinc-700 overflow-hidden p-1 relative">
+                                {displayImage ? (
+                                  <img 
+                                    src={displayImage} 
+                                    alt={displayName} 
+                                    className="w-full h-full object-contain" 
+                                  />
+                                ) : (
+                                  <Car className="text-zinc-600" />
+                                )}
+                                {isActive && (
+                                  <div className="absolute top-0 right-0 p-1 bg-emerald-500 rounded-bl-lg">
+                                    <CheckCircle size={10} className="text-white" />
+                                  </div>
+                                )}
+                             </div>
+                             <div>
+                               <div className="flex items-center gap-2">
+                                 <p className="font-bold text-white">{displayName}</p>
+                                 {isActive && <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30">EQUIPPED</span>}
+                               </div>
+                               {displayTier && <p className="text-xs text-gray-400">{displayTier} Class</p>}
+                               <div className="mt-1 flex items-center gap-2">
+                                  {isInsured ? (
+                                    <span className="flex items-center gap-1 text-xs text-green-400 font-medium bg-green-900/20 px-2 py-0.5 rounded border border-green-500/20">
+                                      <Shield size={10} /> Insured
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-zinc-500 flex items-center gap-1">
+                                      <Shield size={10} /> No Insurance
+                                    </span>
+                                  )}
+                               </div>
+                             </div>
+                           </div>
+                           
+                           <div className="flex items-center gap-2 mt-2 md:mt-0">
+                              {isInsured && (
+                                <button
+                                  onClick={() => setShowInsuranceCard({
+                                    user: profile,
+                                    vehicle: v,
+                                    config: carConfig
+                                  })}
+                                  className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors"
+                                >
+                                  <CreditCard size={14} /> View Card
+                                </button>
+                              )}
+                              {isOwnProfile && (
+                                <button
+                                  type="button"
+                                  onClick={() => navigate('/dealership')}
+                                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-medium transition-colors"
+                                >
+                                  Manage
+                                </button>
+                              )}
+                           </div>
                         </div>
-                      </div>
-                      {isOwnProfile && (
-                        <button
-                          type="button"
-                          onClick={() => navigate('/dealership')}
-                          className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium"
-                        >
-                          Manage Vehicle
-                        </button>
-                      )}
-                    </>
+                      );
+                    })
                   ) : (
-                    <div className="flex items-center justify-between w-full">
-                      <p className="text-sm text-gray-400">
-                        No vehicle equipped. Visit the dealership to purchase one.
-                      </p>
+                    <div className="bg-zinc-900 p-8 rounded-xl border border-zinc-800 text-center">
+                      <Car className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
+                      <p className="text-gray-400 mb-4">No vehicles found in garage.</p>
                       {isOwnProfile && (
-                        <button
-                          type="button"
-                          onClick={() => navigate('/dealership')}
-                          className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium"
-                        >
-                          Visit Dealership
-                        </button>
+                         <button
+                           onClick={() => navigate('/dealership')}
+                           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium"
+                         >
+                           Visit Dealership
+                         </button>
                       )}
                     </div>
                   )}
@@ -1226,6 +1422,10 @@ function ProfileInner() {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === 'tmv' && (
+            <TMVTab profile={profile} isOwnProfile={isOwnProfile} />
           )}
 
            {activeTab === 'earnings' && (
@@ -1389,10 +1589,112 @@ function ProfileInner() {
                  </button>
                </div>
              </div>
+
+             {/* Delete Account */}
+             <div className="bg-red-950/20 p-6 rounded-xl border border-red-900/50">
+               <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                   <Trash2 className="w-6 h-6 text-red-500" />
+                   <div>
+                     <h4 className="font-medium text-red-200">Delete Account</h4>
+                     <p className="text-sm text-red-400/70">Permanently delete your account and all data</p>
+                   </div>
+                 </div>
+                 <button
+                   onClick={handleDeleteAccount}
+                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+                 >
+                   Delete Account
+                 </button>
+               </div>
+             </div>
            </div>
           )}
         </div>
       </div>
+
+      {/* Insurance Card Modal */}
+      {showInsuranceCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setShowInsuranceCard(null)}>
+          <div className="w-full max-w-md bg-[#0f172a] border border-blue-500/30 rounded-2xl overflow-hidden shadow-2xl relative transform transition-all scale-100" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-700 to-blue-600 p-4 flex justify-between items-center shadow-md z-10 relative">
+              <div className="flex items-center gap-2">
+                <Shield className="text-white fill-white/20" size={24} />
+                <h2 className="text-lg font-bold text-white uppercase tracking-wider text-shadow-sm">Troll City Insurance</h2>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30">
+                 <Shield size={16} className="text-white" />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 space-y-5 bg-[#0f172a] relative overflow-hidden">
+               <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '20px 20px' }}></div>
+               
+               <div className="flex justify-between items-start relative z-10">
+                  <div>
+                     <p className="text-[10px] uppercase text-blue-400 tracking-widest mb-1 font-semibold">Policy Holder</p>
+                     <p className="text-xl font-bold text-white tracking-tight">{showInsuranceCard.user.display_name || showInsuranceCard.user.username}</p>
+                     <p className="text-xs text-blue-400/80 font-mono mt-0.5">ID: {showInsuranceCard.user.id.slice(0, 8)}</p>
+                  </div>
+                  {showInsuranceCard.user.avatar_url ? (
+                     <img src={showInsuranceCard.user.avatar_url} className="w-16 h-16 rounded-lg border-2 border-blue-500/30 object-cover shadow-lg bg-black" />
+                  ) : (
+                     <div className="w-16 h-16 rounded-lg border-2 border-blue-500/30 bg-blue-900/20 flex items-center justify-center">
+                        <span className="text-2xl">👤</span>
+                     </div>
+                  )}
+               </div>
+
+               <div className="grid grid-cols-2 gap-4 relative z-10 bg-blue-900/10 p-3 rounded-xl border border-blue-500/10">
+                   <div>
+                      <p className="text-[10px] uppercase text-blue-400 tracking-widest mb-1 font-semibold">Vehicle</p>
+                      <p className="text-sm font-bold text-white truncate">{showInsuranceCard.config?.name || 'Unknown Vehicle'}</p>
+                      <p className="text-xs text-gray-400">{showInsuranceCard.config?.tier || 'Standard'} Class</p>
+                   </div>
+                   <div>
+                      <p className="text-[10px] uppercase text-blue-400 tracking-widest mb-1 font-semibold">Status</p>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-bold uppercase shadow-sm">
+                         <CheckCircle size={10} strokeWidth={3} /> Active
+                      </div>
+                   </div>
+               </div>
+               
+               <div className="border-t border-blue-500/20 pt-4 relative z-10">
+                   <div className="flex justify-between items-center">
+                      <div>
+                         <p className="text-[10px] uppercase text-blue-400 tracking-widest mb-1 font-semibold">Expires</p>
+                         <p className="text-sm font-mono text-white font-medium">
+                            {new Date(showInsuranceCard.vehicle.insurance_expiry).toLocaleDateString()}
+                         </p>
+                         <p className="text-[10px] text-gray-500">
+                            {new Date(showInsuranceCard.vehicle.insurance_expiry).toLocaleTimeString()}
+                         </p>
+                      </div>
+                      <div className="text-right">
+                         <p className="text-[10px] uppercase text-blue-400 tracking-widest mb-1 font-semibold">Policy ID</p>
+                         <p className="text-xs font-mono text-gray-500">
+                            {showInsuranceCard.vehicle.id.slice(0, 12)}...
+                         </p>
+                      </div>
+                   </div>
+               </div>
+            </div>
+            
+            {/* Footer */}
+            <div className="bg-[#020617] p-3 text-center border-t border-blue-900/30">
+               <p className="text-[10px] text-slate-500 font-medium">Authorized by Troll City Motor Vehicle Department</p>
+               <button 
+                 className="mt-3 w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-blue-900/20" 
+                 onClick={() => setShowInsuranceCard(null)}
+               >
+                 Close Card
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  const isAdmin = profile?.role === 'admin' || profile?.troll_role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.troll_role === 'admin' || profile?.is_admin;
   const isLead = profile?.role === 'lead_troll_officer' || profile?.is_lead_officer;
 
   const fetchActiveSession = async (uid: string) => {

@@ -176,8 +176,12 @@ const PayoutAdmin: React.FC = () => {
   const processPayout = async (requestId: string) => {
     setProcessing(requestId);
     try {
-      const { data, error } = await supabase.rpc('process_payout', {
-        p_request_id: requestId
+      // Call Edge Function to process PayPal payout
+      const { data, error } = await supabase.functions.invoke('paypal-payout', {
+        body: { 
+          payoutRequestId: requestId,
+          adminId: user?.id 
+        }
       });
 
       if (error) throw error;
@@ -187,10 +191,10 @@ const PayoutAdmin: React.FC = () => {
         await supabase.rpc('log_admin_action', {
           p_action_type: 'process_payout',
           p_target_id: requestId,
-          p_details: { status: 'processing', paypal_batch_id: data.paypal_batch_id }
+          p_details: { status: 'paid', paypal_batch_id: data.batchId }
         });
 
-        toast.success('Payout marked as processed');
+        toast.success('Payout processed successfully via PayPal');
         loadPayoutData();
       } else {
         toast.error(data.error || 'Failed to process payout');

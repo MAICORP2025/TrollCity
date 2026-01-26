@@ -11,6 +11,7 @@ import GlobalErrorBanner from "./components/GlobalErrorBanner";
 import GlobalGiftBanner from "./components/GlobalGiftBanner";
 import GlobalPayoutBanner from "./components/GlobalPayoutBanner";
 import BroadcastAnnouncement from "./components/BroadcastAnnouncement";
+import DailyChurchNotification from "./components/church/DailyChurchNotification";
 import GlobalEventsBanner from "./components/GlobalEventsBanner";
 import { useGlobalApp } from "./contexts/GlobalAppContext";
 import { updateRoute } from "./utils/sessionStorage";
@@ -34,6 +35,7 @@ import AppLayout from "./components/layout/AppLayout";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
+import SessionMonitor from "./components/auth/SessionMonitor";
 import TermsAgreement from "./pages/TermsAgreement";
 import ExitPage from "./pages/ExitPage";
 
@@ -47,6 +49,7 @@ import GeneralStorePage from "./pages/game/GeneralStorePage";
 import AuctionsPage from "./pages/AuctionsPage";
 import TrollBank from "./pages/TrollBank";
 const ChurchPage = lazy(() => import("./pages/ChurchPage"));
+const PastorDashboard = lazy(() => import("./pages/church/PastorDashboard"));
 const XPSimulatorPage = lazy(() => import("./pages/dev/XPSimulatorPage"));
 const BadgePopup = lazy(() => import("./components/BadgePopup"));
 
@@ -132,6 +135,7 @@ const OfficerPayrollDashboard = lazy(() => import("./pages/officer/OfficerPayrol
 const OfficerDashboard = lazy(() => import("./pages/officer/OfficerDashboard"));
 const OfficerOWCDashboard = lazy(() => import("./pages/OfficerOWCDashboard"));
 const OfficerVote = lazy(() => import("./pages/OfficerVote"));
+const GovernmentStreams = lazy(() => import("./pages/government/GovernmentStreams"));
 const ReportDetailsPage = lazy(() => import("./pages/ReportDetailsPage"));
 const TrollFamilyCity = lazy(() => import("./pages/TrollFamilyCity"));
 const FamilyProfilePage = lazy(() => import("./pages/FamilyProfilePage"));
@@ -143,6 +147,7 @@ const FamilyApplication = lazy(() => import("./pages/FamilyApplication"));
 const OfficerApplication = lazy(() => import("./pages/OfficerApplication"));
 const TrollerApplication = lazy(() => import("./pages/TrollerApplication"));
 const LeadOfficerApplication = lazy(() => import("./pages/LeadOfficerApplication"));
+const PastorApplication = lazy(() => import("./pages/PastorApplication"));
 const ShopEarnings = lazy(() => import("./pages/ShopEarnings"));
 const AdminPayoutMobile = lazy(() => import("./pages/admin/AdminPayoutMobile"));
 const MobileAdminDashboard = lazy(() => import("./pages/admin/MobileAdminDashboard"));
@@ -196,6 +201,7 @@ const CourtRoom = lazy(() => import("./pages/CourtRoom"));
 const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const CreditScorePage = lazy(() => import("./pages/CreditScorePage"));
+const TMVPage = lazy(() => import("./pages/TMVPage"));
 
 // Admin pages
 const BanManagement = lazy(() => import("./pages/admin/BanManagement"));
@@ -441,6 +447,14 @@ function AppContent() {
       return;
     }
 
+    // 🚗 Redirect to Driver Test if no license
+    const licenseStatus = (profile as any).drivers_license_status;
+    if (!licenseStatus || licenseStatus === 'none') {
+        // Only redirect if not already there (though the outer check covers /)
+        navigate('/tmv', { replace: true });
+        return;
+    }
+
     if (profile?.role === 'troll_family') {
       navigate('/family', { replace: true });
     }
@@ -642,6 +656,7 @@ function AppContent() {
 
   return (
     <>
+      <SessionMonitor />
       {updateAvailable && (
         <div className="fixed bottom-0 inset-x-0 z-[60] flex items-center justify-between bg-purple-900 text-white px-4 py-3">
           <span className="text-sm">A new version of Troll City is available.</span>
@@ -667,6 +682,7 @@ function AppContent() {
 
               {/* Broadcast Announcement */}
               <BroadcastAnnouncement />
+              <DailyChurchNotification />
 
               {/* Global Loading Overlay */}
       <GlobalLoadingOverlay
@@ -762,6 +778,7 @@ function AppContent() {
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/credit-scores" element={<CreditScorePage />} />
                   <Route path="/support" element={<Support />} />
+                  <Route path="/tmv" element={<TMVPage />} />
                   <Route path="/wall" element={<TrollCityWall />} />
                   <Route path="/wall/:postId" element={<WallPostPage />} />
                   <Route path="/profile/setup" element={<ProfileSetup />} />
@@ -777,6 +794,7 @@ function AppContent() {
                   <Route path="/hospital" element={<HospitalPage />} />
                   <Route path="/auctions" element={<AuctionsPage />} />
                   <Route path="/church" element={<ChurchPage />} />
+                  <Route path="/church/pastor" element={<PastorDashboard />} />
                   <Route path="/dev/xp" element={<XPSimulatorPage />} />
                   <Route path="/general-store" element={<GeneralStorePage />} />
                   
@@ -862,6 +880,7 @@ function AppContent() {
                   <Route path="/apply/officer" element={<OfficerApplication />} />
                   <Route path="/apply/troller" element={<TrollerApplication />} />
                   <Route path="/apply/lead-officer" element={<LeadOfficerApplication />} />
+                  <Route path="/apply/pastor" element={<PastorApplication />} />
 
                   {/* 👮 Officer */}
                   <Route
@@ -948,6 +967,14 @@ function AppContent() {
                     }
                   />
                   <Route path="/officer/vote" element={<OfficerVote />} />
+                  <Route
+                    path="/government/streams"
+                    element={
+                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.LEAD_TROLL_OFFICER, UserRole.ADMIN, UserRole.SECRETARY]}>
+                        <GovernmentStreams />
+                      </RequireRole>
+                    }
+                  />
 
                   {/* 👑 Admin */}
                   <Route

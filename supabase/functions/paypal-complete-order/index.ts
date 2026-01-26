@@ -34,6 +34,21 @@ Deno.serve(async (req) => {
       throw new Error("Missing required fields: orderId and userId");
     }
 
+    // 0. Check if order already processed
+    const { data: existingTx } = await supabase
+      .from("paypal_transactions")
+      .select("*")
+      .eq("paypal_order_id", orderId)
+      .maybeSingle();
+
+    if (existingTx && existingTx.status === "credited") {
+      return new Response(JSON.stringify({
+        success: true,
+        coinsAdded: existingTx.coins,
+        alreadyProcessed: true,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // 1. Verify and capture payment with PayPal
     const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
     const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
@@ -114,7 +129,9 @@ Deno.serve(async (req) => {
     let coinsToCredit = 0;
 
     if (packageId) {
-      if (String(packageId).startsWith("custom_")) {
+      if (String(packageId) === 'troll_pass_bundle') {
+        coinsToCredit = 1500;
+      } else if (String(packageId).startsWith("custom_")) {
         const parts = String(packageId).split("_");
         const raw = parts[1];
         const parsed = raw ? parseInt(raw, 10) : NaN;
@@ -145,6 +162,17 @@ Deno.serve(async (req) => {
       throw new Error("Could not determine coin amount for package");
     }
 
+    // 2.5 Record successful capture
+    await supabase.from("paypal_transactions").upsert({
+      user_id: userId,
+      paypal_order_id: orderId,
+      paypal_capture_id: captureId,
+      amount: verifiedAmount,
+      currency: verifiedCurrency,
+      coins: coinsToCredit,
+      status: "completed"
+    });
+
     // 3. Credit coins using Troll Bank (handles ledger + repayment)
     const refId = captureId || orderId;
 
@@ -163,6 +191,12 @@ Deno.serve(async (req) => {
       console.error("troll_bank_credit_coins error:", bankError);
       throw new Error(bankError.message || "Failed to credit coins");
     }
+
+    // 4. Mark transaction as credited
+    await supabase
+      .from("paypal_transactions")
+      .update({ status: "credited" })
+      .eq("paypal_order_id", orderId);
 
     const userGets =
       bankResult && typeof bankResult.user_gets === "number"

@@ -10,7 +10,7 @@ export default function RolesManager() {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState<string | null>(null)
-  const isAdmin = !!profile && profile.role === 'admin'
+  const isAdmin = !!profile && (profile.role === 'admin' || profile.is_admin)
   const [roleBonuses, setRoleBonuses] = useState<Record<string, boolean>>({})
 
   const loadUsers = async () => {
