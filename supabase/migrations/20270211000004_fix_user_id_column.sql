@@ -1,39 +1,39 @@
--- Fix signup flow issues:
--- 1. Make create_user_credit_on_signup SECURITY DEFINER to fix RLS errors during signup
--- 2. Add missing trigger for handle_user_signup to ensure user_profiles are created
+-- Migration: Fix user_id column in user_profiles trigger functions
+-- This fixes the "operator does not exist: integer = text" error during signup
 
--- 1. Update create_user_credit_on_signup
-CREATE OR REPLACE FUNCTION public.create_user_credit_on_signup()
+-- 1. Update handle_new_user_profile function to include user_id
+CREATE OR REPLACE FUNCTION public.handle_new_user_profile()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+begin
+  insert into public.user_profiles (id, user_id, email)
+  values (new.id, new.id, new.email)
+  on conflict (id) do update set email = excluded.email;
+  return new;
+end;
+$$;
+
+-- 2. Update handle_new_user_troll_coins function to include user_id
+CREATE OR REPLACE FUNCTION public.handle_new_user_troll_coins()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
 BEGIN
-  INSERT INTO public.user_credit (user_id, score, tier, trend_7d, updated_at)
-  VALUES (
-    NEW.id,
-    400, -- Default starting score
-    'Building', -- Default tier
-    0, -- No trend yet
-    NOW()
-  )
-  ON CONFLICT (user_id) DO NOTHING;
-  
+  INSERT INTO public.user_profiles (id, user_id, troll_coins)
+  VALUES (NEW.id, NEW.id, 500)
+  ON CONFLICT (id)
+  DO UPDATE SET troll_coins = COALESCE(user_profiles.troll_coins, 500);
+
   RETURN NEW;
 END;
 $$;
 
--- Ensure the credit trigger is correct
-DROP TRIGGER IF EXISTS on_auth_user_created_credit ON auth.users;
-CREATE TRIGGER on_auth_user_created_credit
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.create_user_credit_on_signup();
-
-
--- 2. Fix and attach handle_user_signup
--- This function had a duplicate column 'troll_coins' in baseline and was missing the trigger
+-- 3. Update handle_user_signup function to include user_id
 CREATE OR REPLACE FUNCTION public.handle_user_signup()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -75,7 +75,7 @@ BEGIN
     bio,
     role,
     tier,
-    paid_coins,       -- Fixed: was duplicate troll_coins
+    paid_coins,
     troll_coins,
     total_earned_coins,
     total_spent_coins,
@@ -91,10 +91,10 @@ BEGIN
     'New troll in the city!',
     v_role,
     'Bronze',
-    0,                -- paid_coins
-    100,              -- troll_coins (Welcome bonus)
-    100,              -- total_earned_coins
-    0,                -- total_spent_coins
+    0,
+    100,
+    100,
+    0,
     v_email,
     false,
     NOW(),
@@ -115,8 +115,31 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
+-- 4. Update existing user_profiles to set user_id where it's NULL
+UPDATE public.user_profiles
+SET user_id = id
+WHERE user_id IS NULL;
+
+-- 5. Ensure triggers are properly attached
+DROP TRIGGER IF EXISTS on_auth_user_created_profile ON auth.users;
+CREATE TRIGGER on_auth_user_created_profile
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user_profile();
+
+DROP TRIGGER IF EXISTS on_auth_user_created_troll_coins ON auth.users;
+CREATE TRIGGER on_auth_user_created_troll_coins
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user_troll_coins();
+
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_user_signup();
+
+-- Grant execute permissions
+GRANT EXECUTE ON FUNCTION public.handle_new_user_profile() TO service_role, authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user_troll_coins() TO service_role, authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_user_signup() TO service_role, authenticated;

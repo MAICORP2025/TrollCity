@@ -78,7 +78,7 @@ export default function RolesManager() {
       const { error } = await supabase
         .from('role_bonuses')
         .upsert({
-          role_id: roleId,
+          role: roleId,
           is_active: isActive,
           bonus_percentage: roleBonusesConfig[roleId as keyof typeof roleBonusesConfig]
         })
@@ -99,12 +99,12 @@ export default function RolesManager() {
     try {
       const { data, error } = await supabase
         .from('role_bonuses')
-        .select('role_id, is_active')
+        .select('role, is_active')
 
       if (error) throw error
 
       const bonusesMap = data?.reduce((acc, item) => {
-        acc[item.role_id] = item.is_active
+        acc[item.role] = item.is_active
         return acc
       }, {} as Record<string, boolean>) || {}
 

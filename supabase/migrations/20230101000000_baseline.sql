@@ -9576,14 +9576,14 @@ ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."handle_new_user_profile"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
-    AS $$
+    AS $
 begin
-  insert into public.user_profiles (user_id, email)
-  values (new.id, new.email)
-  on conflict (user_id) do update set email = excluded.email;
+  insert into public.user_profiles (id, user_id, email)
+  values (new.id, new.id, new.email)
+  on conflict (id) do update set email = excluded.email;
   return new;
 end;
-$$;
+$;
 
 
 ALTER FUNCTION "public"."handle_new_user_profile"() OWNER TO "postgres";
@@ -9592,16 +9592,16 @@ ALTER FUNCTION "public"."handle_new_user_profile"() OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."handle_new_user_troll_coins"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public', 'extensions'
-    AS $$
+    AS $
 BEGIN
-  INSERT INTO public.user_profiles (id, troll_coins)
-  VALUES (NEW.id, 500)
+  INSERT INTO public.user_profiles (id, user_id, troll_coins)
+  VALUES (NEW.id, NEW.id, 500)
   ON CONFLICT (id)
   DO UPDATE SET troll_coins = COALESCE(user_profiles.troll_coins, 500);
 
   RETURN NEW;
 END;
-$$;
+$;
 
 
 ALTER FUNCTION "public"."handle_new_user_troll_coins"() OWNER TO "postgres";

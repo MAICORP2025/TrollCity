@@ -24,6 +24,14 @@ type StatState = {
   trollOfficers: number
   aiFlags: number
   coinSalesRevenue: number
+  totalPayouts: number
+  feesCollected: number
+  platformProfit: number
+  purchasedCoins: number
+  earnedCoins: number
+  freeCoins: number
+  totalCoinsInCirculation: number
+  totalValue: number
   giftCoins: number
   appSponsoredGifts: number
   savPromoCount: number
@@ -356,7 +364,6 @@ export default function AdminDashboard() {
         trollOfficers: officers.length,
         aiFlags: flags.length,
         purchasedCoins,
-        trollmonds,
         earnedCoins: 0,
         freeCoins,
         totalCoinsInCirculation: totalCoins,
@@ -553,13 +560,15 @@ export default function AdminDashboard() {
     const streamsChannel = supabase
       .channel('admin-global-streams')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
-        if (payload.new?.is_live && !payload.old?.is_live) {
+        const newRecord = payload.new as { is_live?: boolean; title?: string } | null
+        const oldRecord = payload.old as { is_live?: boolean; title?: string } | null
+        if (newRecord?.is_live && !oldRecord?.is_live) {
           toast.info('A stream just started!')
-          sendGlobalNotification('Stream Started', `Stream "${payload.new.title}" is now live.`).catch(() => {})
+          sendGlobalNotification('Stream Started', `Stream "${newRecord.title}" is now live.`).catch(() => {})
         }
-        if (!payload.new?.is_live && payload.old?.is_live) {
+        if (!newRecord?.is_live && oldRecord?.is_live) {
           toast.info('A stream just ended.')
-          sendGlobalNotification('Stream Ended', `Stream "${payload.old.title}" has ended.`).catch(() => {})
+          sendGlobalNotification('Stream Ended', `Stream "${oldRecord.title}" has ended.`).catch(() => {})
         }
         loadLiveStreams()
         loadDashboardData()

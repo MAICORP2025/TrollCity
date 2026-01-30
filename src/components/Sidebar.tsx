@@ -32,7 +32,8 @@ import {
   BookOpen,
   Radio,
   Warehouse,
-  Landmark
+  Landmark,
+  Video
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -187,7 +188,7 @@ export default function Sidebar() {
   if (canSeeSecretary) specialAccessPaths.push('/secretary')
   if (isAdmin) specialAccessPaths.push('/admin/applications')
 
-  const systemPaths = ['/application', '/wallet']
+  const systemPaths = ['/application', '/interview-room', '/wallet']
 
   const isAnyUpdated = (paths: string[]) => paths.some(path => isUpdated(path))
 
@@ -329,6 +330,7 @@ export default function Sidebar() {
         {/* Social */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "Social"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(socialPaths)}>
           <SidebarItem icon={MessageSquare} label="TCPS" to="/tcps" active={isActive('/tcps')} collapsed={isSidebarCollapsed} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} />
+          <SidebarItem icon={Star} label="GameTrollz" to="/gametrollz" active={isActive('/gametrollz')} collapsed={isSidebarCollapsed} highlight={isUpdated('/gametrollz')} onClick={() => markAsViewed('/gametrollz')} />
           <SidebarItem 
             icon={Waves} 
             label="Public Pool" 
@@ -445,7 +447,8 @@ export default function Sidebar() {
 
         {/* System */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "City Registry"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(systemPaths)}>
-          <SidebarItem icon={FileText} label="Applications" to="/application" active={isActive('/application')} collapsed={isSidebarCollapsed} highlight={isUpdated('/application')} onClick={() => markAsViewed('/application')} />
+          <SidebarItem icon={FileText} label="Careers" to="/application" active={isActive('/application')} collapsed={isSidebarCollapsed} highlight={isUpdated('/application')} onClick={() => markAsViewed('/application')} />
+          <SidebarItem icon={Video} label="Interview Room" to="/interview-room" active={isActive('/interview-room')} collapsed={isSidebarCollapsed} highlight={isUpdated('/interview-room')} onClick={() => markAsViewed('/interview-room')} />
           <SidebarItem icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} collapsed={isSidebarCollapsed} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} />
         </SidebarGroup>
       </div>

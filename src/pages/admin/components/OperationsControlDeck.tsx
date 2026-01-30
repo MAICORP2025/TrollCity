@@ -95,7 +95,7 @@ export default function OperationsControlDeck({
     },
     {
       id: 'applications',
-      label: 'Applications',
+      label: 'Career',
       icon: <FileText className="w-4 h-4" />,
       color: 'text-orange-400',
       bgColor: 'bg-orange-500/20',

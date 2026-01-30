@@ -208,8 +208,8 @@ export default function Home() {
     },
     {
       icon: <Gamepad2 className="w-8 h-8 text-purple-400" />,
-      title: "Play Games",
-      description: "Enjoy interactive games like Trolls Town and Family Feud. Earn coins and compete with others.",
+      title: "Troll Family Battles",
+      description: "Compete in Troll Family Battles! Join or create a family, challenge others, and climb the leaderboard.",
       gradient: "from-purple-600/20 to-cyan-600/20",
     },
     {

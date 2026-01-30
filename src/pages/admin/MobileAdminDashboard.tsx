@@ -95,7 +95,7 @@ export default function MobileAdminDashboard() {
       label: 'Users & HR',
       icon: Users,
       items: [
-        { id: 'applications', label: 'Applications', icon: FileText, type: 'tab', value: 'applications' },
+        { id: 'applications', label: 'Career', icon: FileText, type: 'tab', value: 'applications' },
         { id: 'user_search', label: 'User Search', type: 'link', value: '/admin/user-search' },
         { id: 'hr_dash', label: 'HR Dashboard', type: 'link', value: '/admin/hr' },
         { id: 'roles', label: 'Role Management', type: 'link', value: '/admin/role-management' }

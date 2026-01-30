@@ -292,8 +292,7 @@ Deno.serve(async (req: Request) => {
     // This endpoint uses service role key internally, so no user auth needed
     if (path === 'signup' && req.method === 'POST') {
       const body = await req.json();
-      const { email, password, username, referral_code } = body;
-      
+      const { email, password, username, referral_code, role } = body;
       if (!email || !password || !username) {
         return new Response(JSON.stringify({ error: 'Missing email, password or username' }), {
           status: 400,
@@ -305,7 +304,6 @@ Deno.serve(async (req: Request) => {
       const testingModeSetting = await fetchAppSettingValue('testing_mode');
       const testingMode = testingModeSetting || { enabled: false, signup_limit: 15, current_signups: 0 };
       const isTestingMode = testingMode.enabled;
-
       if (isTestingMode && testingMode.current_signups >= testingMode.signup_limit) {
         return new Response(JSON.stringify({ error: 'Signups are currently limited. Testing mode is active and the signup limit has been reached. Please contact an administrator.' }), {
           status: 403,
@@ -317,13 +315,16 @@ Deno.serve(async (req: Request) => {
       const benefitsSetting = await fetchAppSettingValue('test_user_benefits');
       const benefits = benefitsSetting || { initial_coins: 5000, bypass_family_fee: true, bypass_admin_message_fee: true };
 
+      // Always resolve role name for user_profiles (text only)
+      const roleName = String(role || 'user').toLowerCase();
+
       const trimmedUsername = username.trim();
       const { data: created, error: createErr } = await supabase.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
-        user_metadata: { username: trimmedUsername, is_test_user: isTestingMode },
-        app_metadata: { username: trimmedUsername, is_test_user: isTestingMode }
+        user_metadata: { username: trimmedUsername, is_test_user: isTestingMode, role: roleName },
+        app_metadata: { username: trimmedUsername, is_test_user: isTestingMode, role: roleName }
       });
 
       if (createErr || !created.user) {
@@ -337,12 +338,14 @@ Deno.serve(async (req: Request) => {
       const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${trimmedUsername}`;
       const initialCoins = isTestingMode ? (benefits.initial_coins ?? benefits.free_coins ?? 0) : 0;
 
-      const profilePayload = {
+      // Insert into user_profiles with role (text)
+      const profilePayload: any = {
         id: uid,
+        user_id: uid,
         username: trimmedUsername,
         avatar_url: avatar,
         email,
-        role: 'user',
+        role: roleName, // keep text for legacy/compat columns if needed
         tier: 'Bronze',
         troll_coins: initialCoins,
         free_troll_coins: 0,
@@ -419,7 +422,20 @@ Deno.serve(async (req: Request) => {
     });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message || 'Server error' }), {
+    let message = 'Unknown error';
+    if (error) {
+      if (typeof error === 'string') {
+        message = error;
+      } else if (error.message) {
+        message = error.message;
+      } else if (error.toString) {
+        message = error.toString();
+      }
+    }
+    return new Response(JSON.stringify({
+      error: message,
+      details: error
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

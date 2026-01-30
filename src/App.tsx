@@ -23,6 +23,9 @@ import { initTelemetry } from "./lib/telemetry";
 // Layout
 import OfficerAlertBanner from "./components/OfficerAlertBanner";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
+
+// Import GameTrollzPage for /gametrollz route
+import GameTrollzPage from "./pages/game";
 import AdminErrors from "./pages/admin/AdminErrors";
 import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
@@ -148,6 +151,7 @@ const CashoutPage = lazy(() => import("./pages/CashoutPage"));
 const FamilyApplication = lazy(() => import("./pages/FamilyApplication"));
 const OfficerApplication = lazy(() => import("./pages/OfficerApplication"));
 const TrollerApplication = lazy(() => import("./pages/TrollerApplication"));
+const Career = lazy(() => import("./pages/Career"));
 const LeadOfficerApplication = lazy(() => import("./pages/LeadOfficerApplication"));
 const PastorApplication = lazy(() => import("./pages/PastorApplication"));
 const ShopEarnings = lazy(() => import("./pages/ShopEarnings"));
@@ -201,6 +205,8 @@ const TrollBattleSetup = lazy(() => import("./pages/TrollBattleSetup"));
 const ShopView = lazy(() => import("./pages/ShopView"));
 const CourtRoom = lazy(() => import("./pages/CourtRoom"));
 const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
+const InterviewRoomPage = lazy(() => import("./pages/InterviewRoomPage"));
+const AdminInterviewDashboard = lazy(() => import("./pages/AdminInterviewDashboard"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const CreditScorePage = lazy(() => import("./pages/CreditScorePage"));
 const TMVPage = lazy(() => import("./pages/TMVPage"));
@@ -794,6 +800,7 @@ function AppContent() {
                   <Route path="/trollg" element={<TrollG />} />
                   
                   {/* New Game Routes */}
+                  <Route path="/gametrollz" element={<GameTrollzPage />} />
                   <Route path="/dealership" element={<CarDealershipPage />} />
                   <Route path="/mechanic" element={<MechanicShopPage />} />
                   <Route path="/garage" element={<GaragePage />} />
@@ -887,6 +894,9 @@ function AppContent() {
                   <Route path="/apply/troller" element={<TrollerApplication />} />
                   <Route path="/apply/lead-officer" element={<LeadOfficerApplication />} />
                   <Route path="/apply/pastor" element={<PastorApplication />} />
+                  <Route path="/career" element={<Career />} />
+                  <Route path="/interview-room" element={<InterviewRoomPage />} />
+                  <Route path="/admin/interview-test" element={<AdminInterviewDashboard />} />
 
                   {/* 👮 Officer */}
                   <Route

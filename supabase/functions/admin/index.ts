@@ -7,7 +7,10 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      db: { prepare: false }
+    }
   );
 
   const corsHeaders = {
@@ -30,6 +33,54 @@ Deno.serve(async (req: Request) => {
       const action = body?.action || '';
       const command = body?.command || '';
 
+      // Centralized role resolution for user creation/updates
+      if (action === 'create-user' && body?.role) {
+        // Whitelist numeric fields from your schema
+        const numericFields = [
+          'level', 'xp', 'paid_coins', 'officer_level', 'troller_level', 'total_violations', 'prestige',
+          // ...add the other 30 numeric fields from your schema here...
+        ];
+
+        // Required fields
+        if (!body.email || !body.username) {
+          return new Response(JSON.stringify({ error: 'Missing email or username' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Build payload using whitelist and forced numeric casting
+        const userPayload: any = {
+          email: body.email,
+          username: body.username,
+          role: String(body.role), // Ensure this is text if column is text
+          updated_at: new Date().toISOString()
+        };
+
+        numericFields.forEach(field => {
+          if (body[field] !== undefined && body[field] !== null) {
+            userPayload[field] = Number(body[field]); // Forced cast to integer/bigint
+          }
+        });
+
+        // Add any other allowed non-numeric fields here as needed
+        // e.g. if (body.avatar_url) userPayload.avatar_url = body.avatar_url;
+
+        const { error: insertErr } = await supabase
+          .from('user_profiles')
+          .insert(userPayload);
+        if (insertErr) {
+          return new Response(JSON.stringify({ error: insertErr.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // ...existing code...
       if (action === 'testing-mode' && command === 'status') {
         try {
           const { data: testingModeSettings, error: settingsError } = await supabase
@@ -522,4 +573,4 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-})
+});

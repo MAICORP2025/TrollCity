@@ -1,6 +1,7 @@
+import GamerzTab from './GamerzTab';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Users, Briefcase, DollarSign, FileText, Activity, Plus, Edit, Trash2, Eye, X, Search, UserPlus, Gift, Shield } from 'lucide-react';
+import { Building2, Users, Briefcase, DollarSign, FileText, Activity, Plus, Edit, Trash2, Eye, X, Search, UserPlus, Gift } from 'lucide-react';
 import BroadcastLockdownControl from './components/BroadcastLockdownControl';
 import { supabase, UserRole } from '../../lib/supabase';
 import RequireRole from '../../components/RequireRole';
@@ -39,7 +40,7 @@ interface Staff {
   id: string;
   user_id: string;
   user?: User;
-  company_role_id?: string;
+  // company_role_id?: string; // Removed, use company_role (object) or role name if needed
   company_role?: Role;
   department_id?: string;
   department?: Department;
@@ -123,15 +124,20 @@ function HireStaffModal({ isOpen, onClose, onHire }: { isOpen: boolean; onClose:
     setLoading(true);
 
     try {
-      const { error } = await supabase.rpc('hire_staff', {
+      // Always pass company_role_id as a number if present and numeric
+      const rpcPayload: any = {
         p_user_id: formData.userId,
-        p_company_role_id: formData.roleId,
+        p_role: roles.find(r => r.id === formData.roleId)?.name || '', // Use role name (text) if required
         p_department_id: formData.departmentId,
         p_pay_model_id: formData.payModelId,
         p_base_salary: parseFloat(formData.baseSalary),
         p_contract_terms: formData.contractTerms,
         p_start_date: formData.startDate
-      });
+      };
+      if (formData.roleId && !isNaN(Number(formData.roleId))) {
+        rpcPayload.p_company_role_id = Number(formData.roleId);
+      }
+      const { error } = await supabase.rpc('hire_staff', rpcPayload);
 
       if (error) throw error;
 
@@ -1943,7 +1949,7 @@ export default function AdminHQ() {
   const tabs = [
     { id: 'staff', name: 'Staff & Roles', icon: <Users className="w-5 h-5" />, component: StaffRolesTab },
     { id: 'teams', name: 'Teams / Departments', icon: <Briefcase className="w-5 h-5" />, component: TeamsDepartmentsTab },
-    { id: 'revenue', name: 'Revenue Share', icon: <DollarSign className="w-5 h-5" />, component: RevenueShareTab },
+    { id: 'gamerz', name: 'Gamerz', icon: <Users className="w-5 h-5 text-pink-400" />, component: GamerzTab },
     { id: 'invoices', name: 'Invoices & Payouts', icon: <FileText className="w-5 h-5" />, component: InvoicesPayoutsTab },
     { id: 'audit', name: 'Audit Log', icon: <Activity className="w-5 h-5" />, component: AuditLogTab },
   ];
