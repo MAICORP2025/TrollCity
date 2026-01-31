@@ -33,7 +33,8 @@ import {
   Radio,
   Warehouse,
   Landmark,
-  Video
+  Video,
+  Mic
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -331,6 +332,15 @@ export default function Sidebar() {
         <SidebarGroup title={isSidebarCollapsed ? '' : "Social"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(socialPaths)}>
           <SidebarItem icon={MessageSquare} label="TCPS" to="/tcps" active={isActive('/tcps')} collapsed={isSidebarCollapsed} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} />
           <SidebarItem icon={Star} label="GameTrollz" to="/gametrollz" active={isActive('/gametrollz')} collapsed={isSidebarCollapsed} highlight={isUpdated('/gametrollz')} onClick={() => markAsViewed('/gametrollz')} />
+          <SidebarItem 
+            icon={Mic} 
+            label="Mai Talent" 
+            to="/social/mai-talent" 
+            active={isActive('/social/mai-talent')} 
+            collapsed={isSidebarCollapsed}
+            highlight={isUpdated('/social/mai-talent')} onClick={() => markAsViewed('/social/mai-talent')}
+            className="text-pink-400 hover:text-pink-300"
+          />
           <SidebarItem 
             icon={Waves} 
             label="Public Pool" 

@@ -10,6 +10,7 @@ interface UserBadgeProps {
     level?: number
     prestige_level?: number
     drivers_license_status?: string
+    is_landlord?: boolean
   } | null | undefined
 }
 
@@ -24,6 +25,9 @@ export function UserBadge({ profile }: UserBadgeProps) {
 
   // Check for Driver License
   const isDriver = profile.drivers_license_status === 'active'
+
+  // Check for Landlord
+  const isLandlord = profile.is_landlord
 
   // Check for Prestige
   const prestigeLevel = profile.prestige_level || 0

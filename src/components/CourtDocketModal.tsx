@@ -19,18 +19,6 @@ export default function CourtDocketModal({ isOpen, onClose, onSelectCase, isJudg
   const [extendingCase, setExtendingCase] = useState<string | null>(null)
   const [newDate, setNewDate] = useState('')
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchDockets()
-    }
-  }, [isOpen, fetchDockets])
-
-  useEffect(() => {
-    if (selectedDocketId) {
-      fetchCases(selectedDocketId)
-    }
-  }, [selectedDocketId, fetchCases])
-
   const fetchDockets = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
@@ -71,6 +59,18 @@ export default function CourtDocketModal({ isOpen, onClose, onSelectCase, isJudg
     }
     setLoading(false)
   }, [])
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchDockets()
+    }
+  }, [isOpen, fetchDockets])
+
+  useEffect(() => {
+    if (selectedDocketId) {
+      fetchCases(selectedDocketId)
+    }
+  }, [selectedDocketId, fetchCases])
 
   const handleExtend = async (caseId: string) => {
     if (!newDate) {

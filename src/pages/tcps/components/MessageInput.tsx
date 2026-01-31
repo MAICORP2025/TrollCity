@@ -10,19 +10,37 @@ interface MessageInputProps {
   conversationId: string | null
   otherUserId: string | null
   onMessageSent: () => void
+  onNewMessage?: (msg: any) => void
+  onTyping?: (isTyping: boolean) => void
 }
 
-export default function MessageInput({ conversationId, otherUserId, onMessageSent }: MessageInputProps) {
+export default function MessageInput({ conversationId, otherUserId, onMessageSent, onNewMessage, onTyping }: MessageInputProps) {
   const { user, profile } = useAuthStore()
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const handleTyping = () => {
+    if (onTyping) {
+      onTyping(true)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        onTyping(false)
+      }, 3000)
+    }
+  }
 
   const sendMessage = async () => {
     if (!message.trim() || !otherUserId || !profile?.id || sending) return
     if (!conversationId) {
       toast.error('Conversation not ready')
       return
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+      if (onTyping) onTyping(false)
     }
 
     setSending(true)
@@ -61,21 +79,24 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
         }
       }
 
-      await sendConversationMessage(conversationId, message)
+      const newMsg = await sendConversationMessage(conversationId, message)
       
       // Notify the user
-      await sendNotification({
-        userId: otherUserId,
-        type: 'message',
-        title: `New message from ${profile.username}`,
-        message: message.length > 50 ? message.substring(0, 50) + '...' : message,
-        metadata: {
+      await sendNotification(
+        otherUserId,
+        'message',
+        `New message from ${profile.username}`,
+        message.length > 50 ? message.substring(0, 50) + '...' : message,
+        {
           conversation_id: conversationId,
           sender_id: profile.id
         }
-      })
+      )
 
       setMessage('')
+      if (onNewMessage) {
+        onNewMessage(newMsg)
+      }
       onMessageSent()
     } catch (error: any) {
       console.error('Error sending message:', error)
@@ -107,7 +128,10 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
             ref={inputRef}
             type="text"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => {
+              setMessage(e.target.value)
+              handleTyping()
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             className="w-full bg-[#0A0A14] border border-purple-500/30 rounded-full px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition-colors"

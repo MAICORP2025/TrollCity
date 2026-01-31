@@ -30,7 +30,7 @@ serve(async (req: Request) => {
   }
 
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers });
+    return new Response("ok", { status: 200, headers });
   }
 
   if (req.method !== "POST") {

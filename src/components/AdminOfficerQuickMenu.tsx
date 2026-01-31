@@ -46,7 +46,7 @@ const AdminOfficerQuickMenu: React.FC = () => {
     },
     ...(isAdmin ? [
       // Core
-      { label: 'Admin HQ', action: () => navigate('/admin/control-panel'), icon: '🎛️' },
+      // Removed: Admin HQ (deprecated)
       { label: 'City Control Center', action: () => navigate('/admin/system/health'), icon: '🏥' },
       
       // Management

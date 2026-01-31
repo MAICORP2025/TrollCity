@@ -81,6 +81,30 @@ export function useBank() {
     }
   }
 
+  const payLoan = async (loanId: string, amount: number) => {
+    if (!user) return { success: false, error: 'User not logged in' }
+    setLoading(true)
+    try {
+        const { data, error } = await supabase.rpc('pay_bank_loan', {
+            p_loan_id: loanId,
+            p_amount: amount
+        })
+
+        if (error) throw error
+        if (data && data.success === false) throw new Error(data.error || 'Payment failed')
+
+        toast.success('Loan payment successful!')
+        fetchBankData()
+        return { success: true, data }
+    } catch (error: any) {
+        console.error('Payment error:', error)
+        toast.error(error.message || 'Failed to pay loan')
+        return { success: false, error: error.message || 'Failed to pay loan' }
+    } finally {
+        setLoading(false)
+    }
+  }
+
   return {
     loading,
     loans,
@@ -88,6 +112,7 @@ export function useBank() {
     tiers,
     applications,
     applyForLoan,
+    payLoan,
     refresh: fetchBankData
   }
 }

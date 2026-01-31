@@ -1,3 +1,4 @@
+import BroadcastLockdownControl from './admin/components/BroadcastLockdownControl';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
 import { useEffect, useState } from 'react';
@@ -309,30 +310,10 @@ export default function Home() {
                 </div>
               </div>
 
-              {adminStream && (
-                <div className="mt-6 max-w-xl mx-auto animate-fade-in-up" style={{ animationDelay: '380ms' }}>
-                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-black/50 px-5 py-4 shadow-[0_12px_40px_rgba(251,191,36,0.25)] backdrop-blur-md">
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-amber-300">
-                        Admin Broadcast
-                      </div>
-                      <div className="mt-1 text-lg font-bold text-white truncate">
-                        {adminStream.title || 'Live now'}
-                      </div>
-                      {adminStream.username && (
-                        <div className="mt-0.5 text-xs text-slate-300 truncate">
-                          @{adminStream.username}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => navigate(`/live/${adminStream.id}`)}
-                      className="inline-flex items-center gap-2 rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-black shadow-lg hover:bg-amber-300 transition-colors"
-                    >
-                      <Play className="w-4 h-4" />
-                      Watch
-                    </button>
-                  </div>
+              {/* Admin-only Broadcast Lockdown Control */}
+              {user?.role === 'admin' && (
+                <div className="mt-8 max-w-xl mx-auto animate-fade-in-up" style={{ animationDelay: '380ms' }}>
+                  <BroadcastLockdownControl />
                 </div>
               )}
             </div>

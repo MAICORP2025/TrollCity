@@ -35,6 +35,21 @@ const buildAppSettingFetcher = (client: ReturnType<typeof createClient>) => asyn
   }
 };
 
+async function waitForProfile(supabase: ReturnType<typeof createClient>, uid: string) {
+  for (let i = 0; i < 10; i++) {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('id', uid)
+      .maybeSingle();
+
+    if (data?.id) return true;
+    // ignore errors briefly; profile may not exist yet
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
 Deno.serve(async (req: Request) => {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -92,46 +107,32 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // 1. Create Auth User
       const { data: created, error: createErr } = await supabase.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
-        user_metadata: { role: r }
+        user_metadata: { role: r, username: username }
       });
 
       if (createErr || !created.user) {
+        // Handle "User already registered" specifically if needed, but generic error is fine
         return new Response(JSON.stringify({ error: createErr?.message || 'Create failed' }), {
-          status: 500,
+          status: (createErr?.message?.includes('registered') ? 409 : 500),
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
       const uid = created.user.id;
-      const uname = String(username).trim().slice(0, 20);
-      const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${uname || email.split('@')[0]}`;
+      // const uname = String(username).trim().slice(0, 20);
+      // const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${uname || email.split('@')[0]}`;
       
-      const { error: upErr } = await supabase
-        .from('user_profiles')
-        .insert({
-          id: uid,
-          username: uname,
-          bio: null,
-          role: r === 'troller' ? 'user' : r,
-          tier: 'Bronze',
-          troll_coins: 0,
-          total_earned_coins: 0,
-          total_spent_coins: 0,
-          avatar_url: avatar,
-          email,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-
-      if (upErr) {
-        return new Response(JSON.stringify({ error: upErr.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      // 2. Wait for trigger to create profile
+      const ok = await waitForProfile(supabase, uid);
+      if (!ok) {
+        return new Response(JSON.stringify({ 
+          error: 'Profile was not created by trigger. Check auth.users triggers / handle_user_signup().' 
+        }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
       }
 
       return new Response(JSON.stringify({ success: true, user_id: uid }), {
@@ -335,39 +336,15 @@ Deno.serve(async (req: Request) => {
       }
 
       const uid = created.user.id;
-      const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${trimmedUsername}`;
-      const initialCoins = isTestingMode ? (benefits.initial_coins ?? benefits.free_coins ?? 0) : 0;
+      // const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${trimmedUsername}`;
+      // const initialCoins = isTestingMode ? (benefits.initial_coins ?? benefits.free_coins ?? 0) : 0;
 
-      // Insert into user_profiles with role (text)
-      const profilePayload: any = {
-        id: uid,
-        user_id: uid,
-        username: trimmedUsername,
-        avatar_url: avatar,
-        email,
-        role: roleName, // keep text for legacy/compat columns if needed
-        tier: 'Bronze',
-        troll_coins: initialCoins,
-        free_troll_coins: 0,
-        total_earned_coins: initialCoins,
-        total_spent_coins: 0,
-        is_test_user: isTestingMode,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error: profileErr } = await supabase
-        .from('user_profiles')
-        .upsert(profilePayload, { onConflict: 'id' });
-
-      if (profileErr) {
-        console.error('Profile creation error:', profileErr);
-        return new Response(JSON.stringify({
-          error: `Database error creating user profile: ${profileErr.message}`,
-          details: profileErr
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      // Wait for trigger to create profile
+      const ok = await waitForProfile(supabase, uid);
+      if (!ok) {
+        return new Response(JSON.stringify({ 
+          error: 'Profile was not created by trigger. Check auth.users triggers / handle_user_signup().' 
+        }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
       }
 
       // Update signup count if testing mode

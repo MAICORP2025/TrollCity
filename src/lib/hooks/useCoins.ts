@@ -14,7 +14,7 @@ interface SpendCoinsParams {
   senderId: string
   receiverId?: string // Optional - if not provided, coins are just deducted (e.g., wheel, effects)
   amount: number
-  source: 'gift' | 'wheel' | 'badge' | 'entrance_effect' | 'boost' | 'purchase' | 'bonus' | 'payroll'
+  source: 'gift' | 'wheel' | 'badge' | 'entrance_effect' | 'boost' | 'purchase' | 'bonus' | 'payroll' | 'mai_talent_vote'
   item?: string // Optional item name (e.g., 'TrollRose', 'Wheel Spin', 'VIP Badge')
 }
 

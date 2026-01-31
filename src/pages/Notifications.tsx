@@ -19,7 +19,7 @@ interface Notification {
   title: string
   message: string
   created_at: string
-  read: boolean
+  is_read: boolean
   is_dismissed: boolean
   metadata?: any
 }
@@ -53,12 +53,8 @@ export default function Notifications() {
       if (error) {
         setNotifications([])
       } else {
-        const rows = (data || []) as any[]
-        const mapped = rows.map(row => ({
-          ...row,
-          read: row.read ?? row.is_read ?? false
-        })) as Notification[]
-        setNotifications(mapped)
+        // Data from DB already has is_read, so we can cast directly if consistent
+        setNotifications((data || []) as Notification[])
       }
     } catch {
       setNotifications([])
@@ -78,21 +74,18 @@ export default function Notifications() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
-        (payload) => setNotifications((prev) => [payload.new as any, ...prev])
+        (payload) => setNotifications((prev) => [payload.new as Notification, ...prev])
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
         (payload) => {
-          const updatedNotif = payload.new as any
+          const updatedNotif = payload.new as Notification
           if (updatedNotif.is_dismissed) {
             setNotifications((prev) => prev.filter(n => n.id !== updatedNotif.id))
           } else {
             setNotifications((prev) => 
-              prev.map(n => n.id === updatedNotif.id ? { 
-                ...n, 
-                read: updatedNotif.read ?? updatedNotif.is_read ?? n.read 
-              } : n)
+              prev.map(n => n.id === updatedNotif.id ? updatedNotif : n)
             )
           }
         }
@@ -115,7 +108,7 @@ export default function Notifications() {
 
       if (error) throw error
 
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
       toast.success('All notifications marked as read')
     } catch {
       toast.error('Error marking all as read')
@@ -130,7 +123,7 @@ export default function Notifications() {
         .eq('id', id)
       
       setNotifications(prev => 
-        prev.map(n => n.id === id ? { ...n, read: true } : n)
+        prev.map(n => n.id === id ? { ...n, is_read: true } : n)
       )
     } catch {
       toast.error('Failed to mark notification as read')
@@ -147,6 +140,26 @@ export default function Notifications() {
       toast.success('Notification dismissed')
     } catch {
       toast.error('Failed to dismiss notification')
+    }
+  }
+  
+  // Helper for delete all button
+  const deleteAllNotifications = async () => {
+    try {
+      if (!profile?.id) return
+      
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_dismissed: true, dismissed_at: new Date().toISOString() })
+        .eq('user_id', profile.id)
+        .eq('is_dismissed', false)
+
+      if (error) throw error
+
+      setNotifications([])
+      toast.success('All notifications cleared')
+    } catch {
+      toast.error('Failed to clear notifications')
     }
   }
 
@@ -166,7 +179,7 @@ export default function Notifications() {
   }
 
   const handleNotificationClick = (notification: Notification) => {
-    if (!notification.read) {
+    if (!notification.is_read) {
       void markAsRead(notification.id)
     }
 
@@ -185,7 +198,7 @@ export default function Notifications() {
 
   const filteredNotifications = notifications.filter(notification => {
     if (filter === 'all') return true
-    if (filter === 'unread') return !notification.read
+    if (filter === 'unread') return !notification.is_read
     return notification.type === filter
   })
 
@@ -272,7 +285,7 @@ export default function Notifications() {
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
                 className={`bg-[#1A1A1A] rounded-xl p-4 border border-[#2C2C2C] relative cursor-pointer ${
-                  !notification.read ? 'border-purple-500/30' : ''
+                  !notification.is_read ? 'border-purple-500/30' : ''
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -284,13 +297,13 @@ export default function Notifications() {
                       <h3 className="text-white font-semibold">
                         {notification.title}
                       </h3>
-                      {!notification.read && <Dot className="w-4 h-4 text-purple-500 fill-current" />}
+                      {!notification.is_read && <Dot className="w-4 h-4 text-purple-500 fill-current" />}
                     </div>
                     <p className="text-gray-300 text-sm mb-2">{notification.message}</p>
                     <p className="text-gray-500 text-xs">{formatDate(notification.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!notification.read && (
+                    {!notification.is_read && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation()

@@ -242,6 +242,7 @@ export interface ConversationMessage {
   sender_id: string
   body: string
   created_at: string
+  read_at?: string | null
 }
 
 export interface MessageReceipt {

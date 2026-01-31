@@ -24,12 +24,14 @@ CREATE INDEX IF NOT EXISTS idx_interview_sessions_scheduled_at ON interview_sess
 ALTER TABLE interview_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can view their own interview sessions
-CREATE POLICY IF NOT EXISTS "Users can view own interview sessions"
+DROP POLICY IF EXISTS "Users can view own interview sessions" ON interview_sessions;
+CREATE POLICY "Users can view own interview sessions"
   ON interview_sessions FOR SELECT
   USING (auth.uid() = user_id OR auth.uid() = interviewer_id);
 
 -- Policy: Admins and lead officers can view all interview sessions
-CREATE POLICY IF NOT EXISTS "Admins can view all interview sessions"
+DROP POLICY IF EXISTS "Admins can view all interview sessions" ON interview_sessions;
+CREATE POLICY "Admins can view all interview sessions"
   ON interview_sessions FOR SELECT
   USING (
     EXISTS (
@@ -40,7 +42,8 @@ CREATE POLICY IF NOT EXISTS "Admins can view all interview sessions"
   );
 
 -- Policy: Admins and lead officers can create interview sessions
-CREATE POLICY IF NOT EXISTS "Admins can create interview sessions"
+DROP POLICY IF EXISTS "Admins can create interview sessions" ON interview_sessions;
+CREATE POLICY "Admins can create interview sessions"
   ON interview_sessions FOR INSERT
   WITH CHECK (
     EXISTS (
@@ -51,7 +54,8 @@ CREATE POLICY IF NOT EXISTS "Admins can create interview sessions"
   );
 
 -- Policy: Admins and lead officers can update interview sessions
-CREATE POLICY IF NOT EXISTS "Admins can update interview sessions"
+DROP POLICY IF EXISTS "Admins can update interview sessions" ON interview_sessions;
+CREATE POLICY "Admins can update interview sessions"
   ON interview_sessions FOR UPDATE
   USING (
     EXISTS (

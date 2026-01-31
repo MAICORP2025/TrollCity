@@ -8,7 +8,7 @@ import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
 import { useAuthStore } from '../../lib/store'
 import { UserRole } from '../../lib/supabase'
-import GasHUD from '../tmv/GasHUD'
+import ChatBubble from '../ChatBubble'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -52,7 +52,6 @@ export default function AppLayout({
 
   return (
     <div className="app-viewport w-screen overflow-hidden text-white flex relative">
-      <GasHUD />
       <PurchaseRequiredModal />
       <PWAInstallPrompt />
       {/* Desktop Sidebar - Hidden on Mobile */}
@@ -84,6 +83,9 @@ export default function AppLayout({
             <BottomNavigation />
           </div>
         )}
+
+        {/* Global Chat Bubble */}
+        <ChatBubble />
       </div>
     </div>
   )

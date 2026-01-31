@@ -10,19 +10,11 @@ UPDATE public.profiles
 SET troll_coins = 750
 WHERE troll_coins != 750;
 
--- Update user_profiles table - reset coin_balance to 750
+-- Update user_profiles table - reset troll_coins to 750
 UPDATE public.user_profiles
-SET coin_balance = 750,
-    free_coin_balance = 0,
-    paid_coins = 0,
-    bonus_coin_balance = 0,
-    troll_coins = 750,
+SET troll_coins = 750,
     total_earned_coins = 0,
-    total_spent_coins = 0,
-    total_coins_earned = 0,
-    total_coins_spent = 0,
-    owc_balance = 0,
-    total_owc_earned = 0;
+    total_spent_coins = 0;
 
 -- =====================================================
 -- STEP 2: Remove all user cars

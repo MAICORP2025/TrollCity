@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Search, MessageCircle, Trash2, Mail, Users, Archive } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, MessageCircle, Trash2, Mail, Users, Archive, MoreVertical, Ban, EyeOff, MessageSquare } from 'lucide-react'
 import { supabase, UserRole } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
+import { useChatStore } from '../../../lib/chatStore'
 import { toast } from 'sonner'
 import ClickableUsername from '../../../components/ClickableUsername'
 
@@ -36,9 +37,45 @@ export default function InboxSidebar({
   onConversationsLoaded
 }: InboxSidebarProps) {
   const { user } = useAuthStore()
+  const { openChatBubble } = useChatStore()
   const [conversations, setConversations] = useState<SidebarConversation[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleBlockUser = async (userId: string) => {
+    if (!user) return
+    try {
+      // Implement block logic here or call a helper
+      // For now just toast
+      toast.success('User blocked (simulation)')
+      setOpenMenuId(null)
+    } catch (error) {
+      toast.error('Failed to block user')
+    }
+  }
+
+  const handleHideChat = async (userId: string) => {
+    // Implement hide chat logic
+    toast.success('Chat hidden (simulation)')
+    setOpenMenuId(null)
+  }
+
+  const handleOpenBubble = (userId: string, username: string, avatarUrl: string | null) => {
+    openChatBubble(userId, username, avatarUrl)
+    setOpenMenuId(null)
+  }
 
   const fetchConversations = useCallback(async () => {
     if (!user?.id) return
@@ -213,14 +250,18 @@ export default function InboxSidebar({
               const isOnline = onlineUsers[conv.other_user_id]
               
               return (
-                <button
+                <div
                   key={conv.other_user_id}
-                  onClick={() => onSelectConversation(conv.other_user_id)}
-                  className={`w-full p-4 flex items-start gap-3 hover:bg-white/5 transition-colors text-left relative ${
+                  className={`relative group w-full p-4 flex items-start gap-3 hover:bg-white/5 transition-colors text-left ${
                     isActive ? 'bg-white/5 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-purple-500' : ''
                   }`}
                 >
-                  <div className="relative flex-shrink-0">
+                  <div 
+                    className="absolute inset-0 cursor-pointer"
+                    onClick={() => onSelectConversation(conv.other_user_id)}
+                  />
+
+                  <div className="relative flex-shrink-0 pointer-events-none">
                     <img 
                       src={conv.other_avatar_url || `https://ui-avatars.com/api/?name=${conv.other_username}&background=random`}
                       alt={conv.other_username}
@@ -231,7 +272,7 @@ export default function InboxSidebar({
                     )}
                   </div>
                   
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 pointer-events-none">
                     <div className="flex items-center justify-between mb-1">
                       <span className={`font-medium truncate ${isActive ? 'text-purple-300' : 'text-gray-200'}`}>
                         {conv.other_username}
@@ -242,17 +283,69 @@ export default function InboxSidebar({
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-400 truncate pr-2">
+                    <p className="text-sm text-gray-400 truncate pr-8">
                       {conv.last_message || 'Start a conversation'}
                     </p>
                   </div>
                   
+                  {/* Menu Button */}
+                  <div className="relative z-10">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setOpenMenuId(openMenuId === conv.other_user_id ? null : conv.other_user_id)
+                      }}
+                      className="p-1 text-gray-400 hover:text-white rounded-full hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {openMenuId === conv.other_user_id && (
+                      <div 
+                        ref={menuRef}
+                        className="absolute right-0 top-full mt-1 w-48 bg-[#1F1F2E] border border-purple-500/20 rounded-lg shadow-xl z-50 overflow-hidden"
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenBubble(conv.other_user_id, conv.other_username, conv.other_avatar_url)
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Open Chat Bubble
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleHideChat(conv.other_user_id)
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-2"
+                        >
+                          <EyeOff className="w-4 h-4" />
+                          Hide Chat
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleBlockUser(conv.other_user_id)
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2"
+                        >
+                          <Ban className="w-4 h-4" />
+                          Block User
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
                   {conv.unread_count > 0 && (
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-lg shadow-purple-600/50">
+                    <div className="absolute right-10 top-1/2 -translate-y-1/2 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-lg shadow-purple-600/50 pointer-events-none">
                       {conv.unread_count}
                     </div>
                   )}
-                </button>
+                </div>
               )
             })}
           </div>

@@ -12,7 +12,8 @@ import { Coins, CreditCard, Landmark, History, AlertCircle, CheckCircle, Lock } 
 export default function TrollBank() {
   const { profile } = useAuthStore()
   const { balances, refreshCoins } = useCoins()
-  const { loan: activeLoan, ledger, tiers, refresh, applyForLoan } = useBank()
+  const { loans, ledger, tiers, refresh, applyForLoan, payLoan } = useBank()
+  const activeLoan = loans && loans.length > 0 ? loans[0] : null
   
   const [bankBalance, setBankBalance] = useState<number | null>(null)
   
@@ -47,6 +48,26 @@ export default function TrollBank() {
 
   const [applying, setApplying] = useState(false)
   const [requestedAmount, setRequestedAmount] = useState(100)
+  const [payAmount, setPayAmount] = useState<string>('')
+  const [paying, setPaying] = useState(false)
+
+  const handlePayLoan = async () => {
+    if (!activeLoan || !payAmount) return
+    const amount = parseInt(payAmount)
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Invalid amount')
+      return
+    }
+    
+    setPaying(true)
+    const result = await payLoan(activeLoan.id, amount)
+    setPaying(false)
+    
+    if (result.success) {
+      setPayAmount('')
+      refreshCoins() // Update user coin balance in UI
+    }
+  }
   
   // Eligibility State
   const [eligibility, setEligibility] = useState<{
@@ -223,6 +244,35 @@ export default function TrollBank() {
           
           {activeLoan ? (
             <div className="space-y-4">
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                <h3 className="font-semibold text-emerald-400 mb-2">Manual Repayment</h3>
+                <p className="text-sm text-gray-300 mb-4">
+                  Pay off your loan manually. Fully paying off a loan increases your credit score by 5% of the loan amount!
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                    placeholder="Amount to pay"
+                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500/50"
+                  />
+                  <button
+                    onClick={handlePayLoan}
+                    disabled={paying || !payAmount}
+                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    {paying ? 'Paying...' : 'Pay'}
+                  </button>
+                  <button
+                    onClick={() => setPayAmount(activeLoan.balance.toString())}
+                    className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Max
+                  </button>
+                </div>
+              </div>
+
               <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
                 <div>
@@ -345,9 +395,9 @@ export default function TrollBank() {
                     </td>
                     <td className="py-3 px-4 text-gray-400">{entry.source}</td>
                     <td className={`py-3 px-4 text-right font-mono font-medium ${
-                      entry.amount_delta > 0 ? 'text-green-400' : 'text-red-400'
+                      entry.delta > 0 ? 'text-green-400' : 'text-red-400'
                     }`}>
-                      {entry.amount_delta > 0 ? '+' : ''}{entry.amount_delta}
+                      {entry.delta > 0 ? '+' : ''}{entry.delta}
                     </td>
                   </tr>
                 ))}

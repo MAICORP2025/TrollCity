@@ -42,6 +42,16 @@ import SessionMonitor from "./components/auth/SessionMonitor";
 import TermsAgreement from "./pages/TermsAgreement";
 import ExitPage from "./pages/ExitPage";
 
+import AuctionsPage from "./pages/AuctionsPage";
+
+// Static pages (fast load)
+import Home from "./pages/Home";
+import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
+import SessionMonitor from "./components/auth/SessionMonitor";
+import TermsAgreement from "./pages/TermsAgreement";
+import ExitPage from "./pages/ExitPage";
+
 import { GameProvider } from "./components/game/GameContext";
 import GameControlPanel from "./components/game/GameControlPanel";
 import CarDealershipPage from "./pages/game/CarDealershipPage";
@@ -98,6 +108,7 @@ const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const ApplicationsPage = lazy(() => import("./pages/admin/Applications"));
 const AdminMarketplace = lazy(() => import("./pages/admin/AdminMarketplace"));
 const AdminOfficerReports = lazy(() => import("./pages/admin/AdminOfficerReports"));
+const MaiTalentPage = lazy(() => import("./pages/MaiTalentPage"));
 const StoreDebug = lazy(() => import("./pages/admin/StoreDebug"));
 const Changelog = lazy(() => import("./pages/Changelog"));
 const AccessDenied = lazy(() => import("./pages/AccessDenied"));
@@ -239,7 +250,9 @@ const BucketsDashboard = lazy(() => import("./pages/admin/BucketsDashboard"));
 const GrantCoins = lazy(() => import("./pages/admin/GrantCoins"));
 const OfficerOperations = lazy(() => import("./pages/admin/OfficerOperations"));
 const CreatorSwitchApprovals = lazy(() => import("./pages/admin/components/CreatorSwitchApprovals"));
-const TrollG = lazy(() => import("./pages/TrollG"));
+
+const TrollPodsListing = lazy(() => import("./pages/pods/TrollPodsListing"));
+const TrollPodRoom = lazy(() => import("./pages/pods/TrollPodRoom"));
 
 const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
@@ -288,6 +301,7 @@ const LoadingScreen = () => (
     return <Outlet />;
   };
 
+import ChatBubble from "./components/ChatBubble";
 import AdminPoolTab from './pages/admin/components/AdminPoolTab'
 
 function AppContent() {
@@ -781,6 +795,7 @@ function AppContent() {
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/pool" element={<PublicPool />} />
+                  <Route path="/social/mai-talent" element={<MaiTalentPage />} />
                   <Route path="/shop/:username" element={<ShopView />} />
                   <Route path="/inventory" element={<UserInventory />} />
           <Route path="/troting" element={<Troting />} />
@@ -1492,6 +1507,7 @@ function AppContent() {
                   </Routes>
                 </Suspense>
               </ErrorBoundary>
+        <ChatBubble />
       </AppLayout>
       </GameProvider>
 

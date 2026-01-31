@@ -221,6 +221,12 @@ export async function getUserPurchases(
   const client = supabaseClient || supabase;
 
   try {
+    // Trigger lazy cleanup of expired items (10s buffer)
+    await client.rpc('cleanup_expired_user_purchases').catch(err => {
+      // Ignore error if RPC doesn't exist yet or fails, to not block fetching
+      console.warn('Cleanup RPC failed:', err);
+    });
+
     // Filter out expired items (fallback if cleanup hasn't run)
     let query = client
       .from('user_purchases')

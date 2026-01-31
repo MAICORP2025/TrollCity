@@ -56,48 +56,9 @@ const ProfileSetupPage: React.FC = () => {
       }
 
       if (!existingProfile) {
-        console.log('Profile does not exist, creating new profile for user:', user.id);
-
-        // Create new profile with welcome bonus
-        const { data: newProfile, error: createError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: user.id,
-            username: username.trim(),
-            bio: bio?.trim() || null,
-            gender: gender,
-            email: user.email,
-            role: 'user',
-            troll_coins: 1000, // Welcome bonus: 1000 Tromonds
-            total_earned_coins: 1000, // Track in total earnings
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select('*')
-          .single();
-
-        if (createError) {
-          console.error('Profile creation error:', createError);
-          toast.error(`Failed to create profile: ${createError.message || 'Unknown error'}`);
-          return;
-        }
-
-        console.log('Profile created successfully:', newProfile);
-
-        // Record the welcome bonus transaction
-        await supabase
-          .from('coin_transactions')
-          .insert({
-            user_id: user.id,
-            type: 'welcome_bonus',
-            amount: 1000,
-            description: 'Welcome to Troll City! 1000 Tromonds bonus.',
-            created_at: new Date().toISOString()
-          });
-
-        setProfile(newProfile);
-        toast.success('Profile setup complete! You received 1000 Tromonds as a welcome bonus!');
-        navigate('/');
+        console.error('Profile missing during setup - trigger should have created it');
+        toast.error('Profile not found. Please try refreshing the page.');
+        setLoading(false);
         return;
       }
 

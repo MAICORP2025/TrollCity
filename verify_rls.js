@@ -74,7 +74,7 @@ async function verifyRls() {
         type: 'message',
         title: 'Test',
         message: 'Test Message',
-        read: false
+        is_read: false
       })
       
     if (notifError) {

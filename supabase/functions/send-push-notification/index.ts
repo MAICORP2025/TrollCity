@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3?target=deno";
 import webpush from "web-push";
-// @ts-expect-error Deno import
 import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -9,16 +8,6 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@trollcity.app";
-
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(
-    VAPID_SUBJECT,
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  );
-} else {
-  console.warn("VAPID keys not set. Push notifications will fail.");
-}
 
 interface PushRequest {
   user_id: string;
@@ -51,10 +40,20 @@ interface WebPushSubscription {
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   try {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("Supabase keys not set");
+      return new Response(JSON.stringify({ error: "Server configuration error: Supabase keys missing" }), { status: 500, headers: corsHeaders });
+    }
+
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      console.error("VAPID keys not set");
+      return new Response(JSON.stringify({ error: "Server configuration error: VAPID keys missing" }), { status: 500, headers: corsHeaders });
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { user_id, user_ids, broadcast_followers_id, conversation_id, sender_id, title, body, url, icon, badge, image, tag, create_db_notification, type } = await req.json() as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string };
 
@@ -107,7 +106,7 @@ serve(async (req: Request) => {
         title,
         message: body,
         metadata: { url }, // Simple metadata
-        read: false,
+        is_read: false,
         created_at: new Date().toISOString()
       }));
 
@@ -147,14 +146,26 @@ serve(async (req: Request) => {
       tag
     });
 
+    webpush.setVapidDetails(
+      VAPID_SUBJECT,
+      VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY
+    );
+
     const results = await Promise.allSettled(
       (subscriptions || []).map(async (sub: WebPushSubscription) => {
         try {
-          const pushSubscription = {
-            endpoint: sub.endpoint,
-            keys: sub.keys
-          };
-          await webpush.sendNotification(pushSubscription, payload);
+          await webpush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: {
+                auth: sub.keys.auth,
+                p256dh: sub.keys.p256dh,
+              },
+            },
+            payload
+          );
+          
           return { status: "fulfilled", endpoint: sub.endpoint };
         } catch (error: any) {
           if (error.statusCode === 410 || error.statusCode === 404) {
@@ -183,8 +194,11 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" } 
     });
 
-  } catch (err: any) {
-    console.error("Push notification error:", err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+  } catch (e) {
+    console.error("send-push-notification fatal:", e);
+    return new Response(JSON.stringify({
+      error: "send_push_failed",
+      message: e instanceof Error ? e.message : String(e),
+    }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

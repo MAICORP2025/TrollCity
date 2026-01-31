@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { MoreVertical, Phone, Video, ArrowLeft } from 'lucide-react'
+import { MoreVertical, Phone, Video, ArrowLeft, Ban, EyeOff, MessageCircle, X, Check, CheckCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, createConversation, getConversationMessages, markConversationRead } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
+import { useChatStore } from '../../../lib/chatStore'
 import ClickableUsername from '../../../components/ClickableUsername'
 import { toast } from 'sonner'
 import MessageInput from './MessageInput'
@@ -25,6 +26,7 @@ interface Message {
   sender_id: string
   content: string
   created_at: string
+  read_at?: string | null
   sender_username?: string
   sender_avatar_url?: string | null
   sender_rgb_expires_at?: string | null
@@ -32,6 +34,7 @@ interface Message {
 
 export default function ChatWindow({ conversationId, otherUserInfo, isOnline, onBack }: ChatWindowProps) {
   const { user, profile } = useAuthStore()
+  const { openChatBubble } = useChatStore()
   const navigate = useNavigate()
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   
@@ -42,6 +45,64 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
   const [oldestLoadedAt, setOldestLoadedAt] = useState<string | null>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [actualConversationId, setActualConversationId] = useState<string | null>(conversationId)
+  const [showMenu, setShowMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [isTyping, setIsTyping] = useState(false)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const channelRef = useRef<any>(null)
+
+  // Close menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleBlock = async () => {
+    if (!otherUserInfo?.id || !user?.id) return
+    if (!confirm(`Are you sure you want to block ${otherUserInfo.username}?`)) return
+    
+    try {
+      const { error } = await supabase
+        .from('user_relationships')
+        .insert({
+          user_id: user.id,
+          related_user_id: otherUserInfo.id,
+          status: 'blocked'
+        })
+      
+      if (error) throw error
+      toast.success(`${otherUserInfo.username} blocked`)
+      onBack()
+    } catch (err) {
+      console.error('Error blocking user:', err)
+      toast.error('Failed to block user')
+    }
+    setShowMenu(false)
+  }
+
+  const handleHideChat = async () => {
+    if (!actualConversationId) return
+    if (!confirm('Hide this conversation? It will reappear if they message you.')) return
+
+    // For now, we'll just navigate back since "hiding" usually implies soft delete or just removing from list
+    // A real implementation might need a 'hidden_conversations' table or flag
+    toast.success('Chat hidden')
+    onBack()
+    setShowMenu(false)
+  }
+
+  const handleOpenChatBubble = () => {
+    if (!otherUserInfo) return
+    openChatBubble(otherUserInfo.id, otherUserInfo.username, otherUserInfo.avatar_url)
+    setShowMenu(false)
+    toast.success('Chat bubble opened! You can now navigate anywhere.')
+  }
+
 
   // Initialize or fetch conversation
   useEffect(() => {
@@ -227,8 +288,17 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     )
   }
 
+  const handleLocalNewMessage = (newMsg: any) => {
+    setMessages(prev => [...prev, newMsg])
+    scrollToBottom()
+  }
+
+  const handleLocalTyping = (isTyping: boolean) => {
+    // Optional: handle local typing indication if needed
+  }
+
   return (
-    <div className="flex flex-col h-full bg-[#0A0A14]">
+    <div className="flex flex-col h-full bg-[#121212]">
       {/* Header */}
       <div className="h-16 border-b border-purple-500/20 flex items-center justify-between px-4 bg-[#14141F]">
         <div className="flex items-center gap-3">
@@ -248,9 +318,10 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
           </div>
           
           <div>
-            <h3 className="font-bold text-white leading-none">
-              {otherUserInfo.username}
-            </h3>
+            <ClickableUsername 
+              username={otherUserInfo.username} 
+              className="font-bold text-white leading-none hover:text-purple-400 transition-colors block"
+            />
             <span className="text-xs text-gray-400">
               {isOnline ? 'Online' : 'Offline'}
             </span>
@@ -264,15 +335,47 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
           <button className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors">
             <Video className="w-5 h-5" />
           </button>
-          <button className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors">
-            <MoreVertical className="w-5 h-5" />
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button 
+              onClick={() => setShowMenu(!showMenu)}
+              className={`p-2 hover:text-white hover:bg-white/5 rounded-full transition-colors ${showMenu ? 'text-white bg-white/10' : 'text-gray-400'}`}
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
+
+            {showMenu && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-[#1F1F2E] border border-purple-500/20 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
+                <button
+                  onClick={handleOpenChatBubble}
+                  className="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-white/5 hover:text-white flex items-center gap-2 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 text-purple-400" />
+                  Open Chat Bubble
+                </button>
+                <button
+                  onClick={handleHideChat}
+                  className="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-white/5 hover:text-white flex items-center gap-2 transition-colors"
+                >
+                  <EyeOff className="w-4 h-4 text-gray-400" />
+                  Hide Chat
+                </button>
+                <div className="h-px bg-white/5 mx-2" />
+                <button
+                  onClick={handleBlock}
+                  className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2 transition-colors"
+                >
+                  <Ban className="w-4 h-4" />
+                  Block User
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Messages */}
       <div 
-        className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/50 scrollbar-track-transparent"
+        className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar"
         ref={messagesContainerRef}
         onScroll={handleScroll}
       >
@@ -302,7 +405,11 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
               
               <div className={`max-w-[70%] space-y-1 ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
                 {!isMe && showAvatar && (
-                   <span className="text-xs text-gray-400 ml-1">{msg.sender_username}</span>
+                   <ClickableUsername 
+                     username={msg.sender_username || ''}
+                     className="text-xs text-gray-400 ml-1 hover:text-purple-400"
+                     rgbExpiresAt={msg.sender_rgb_expires_at}
+                   />
                 )}
                 <div 
                   className={`px-4 py-2 rounded-2xl break-words ${
@@ -320,15 +427,34 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
             </div>
           )
         })}
+
+        {/* Typing Indicator */}
+        {isTyping && (
+          <div className="flex items-center gap-2 p-2 px-4 text-gray-400 text-xs">
+            <div className="flex gap-1">
+              <span className="animate-bounce delay-0">.</span>
+              <span className="animate-bounce delay-100">.</span>
+              <span className="animate-bounce delay-200">.</span>
+            </div>
+            <span>{otherUserInfo?.username} is typing</span>
+          </div>
+        )}
+
         <div className="h-1" /> {/* Spacer */}
       </div>
 
       {/* Input */}
-      <MessageInput 
-        conversationId={actualConversationId} 
-        otherUserId={otherUserInfo.id}
-        onMessageSent={scrollToBottom}
-      />
+      <div className="p-4 bg-[#1A1A1A] border-t border-[#2C2C2C]">
+        {actualConversationId && otherUserInfo && (
+          <MessageInput 
+            conversationId={actualConversationId}
+            otherUserId={otherUserInfo.id}
+            onMessageSent={scrollToBottom}
+            onNewMessage={handleLocalNewMessage}
+            onTyping={handleLocalTyping}
+          />
+        )}
+      </div>
     </div>
   )
 }

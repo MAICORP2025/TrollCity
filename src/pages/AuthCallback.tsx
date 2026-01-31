@@ -130,34 +130,40 @@ const AuthCallback = () => {
               clearTimeout(safetyTimer)
               return
             } else {
-              console.log('No profile found - creating new profile')
-              // Auto-create profile with Google account info
-              const emailUsername = u.email ? u.email.split('@')[0] : 'user'
-              const suggestedUsername = emailUsername.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().slice(0, 20)
-              
-              const { data: inserted } = await supabase
-                .from('user_profiles')
-                .insert({
-                  id: u.id,
-                  username: '', // Keep empty to force profile setup
-                  bio: null,
-                  role: u.email === ADMIN_EMAIL ? 'admin' : 'user',
-                  troll_coins: 0,
-                  avatar_url: u.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${suggestedUsername}`,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                })
-                .select()
-                .maybeSingle()
-                
-              if (inserted) {
-                console.log('Profile created successfully')
-                setProfile(inserted as any)
-                localStorage.setItem(`tc-profile-${u.id}`, JSON.stringify({ data: inserted, timestamp: Date.now() }))
-                setReady(true)
-                clearTimeout(safetyTimer)
-                return
+              console.log('No profile found - waiting for trigger...')
+              // Poll for profile creation (trigger latency)
+              let retries = 0
+              while (retries < 5) {
+                await new Promise(r => setTimeout(r, 1000))
+                const { data: retryProfile } = await supabase
+                  .from('user_profiles')
+                  .select('*')
+                  .eq('id', u.id)
+                  .maybeSingle()
+                  
+                if (retryProfile) {
+                   console.log('Profile found after wait')
+                   setProfile(retryProfile as any)
+                   localStorage.setItem(`tc-profile-${u.id}`, JSON.stringify({ data: retryProfile, timestamp: Date.now() }))
+                   setReady(true)
+                   clearTimeout(safetyTimer)
+                   
+                   if (!retryProfile.username) {
+                     navigate('/profile/setup')
+                   } else {
+                     navigate('/')
+                   }
+                   return
+                }
+                retries++
               }
+              
+              // If still no profile, redirect to setup but DO NOT create
+              console.warn('Profile creation trigger timed out or failed')
+              setReady(true)
+              clearTimeout(safetyTimer)
+              navigate('/profile/setup') 
+              return
             }
           }
         }

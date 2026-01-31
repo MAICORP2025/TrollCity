@@ -31,21 +31,25 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
   // Delete all expired purchases, perks, and insurances
   const deleteAllExpiredPurchases = useCallback(async () => {
     if (!user?.id) return;
+    
+    // 10 second buffer - items expire 10 seconds AFTER their expiration time
+    const cutoffTime = new Date(Date.now() - 10000); // 10 seconds ago
+
     // Expired inventory
-    const expiredInventory = inventory.filter(item => item.expires_at && new Date(item.expires_at) < new Date() && !activeItems.has(item.item_id));
+    const expiredInventory = inventory.filter(item => item.expires_at && new Date(item.expires_at) < cutoffTime && !activeItems.has(item.item_id));
     // Expired perks
-    const expiredPerks = perks.filter(perk => perk.expires_at && new Date(perk.expires_at) < new Date());
+    const expiredPerks = perks.filter(perk => perk.expires_at && new Date(perk.expires_at) < cutoffTime);
     // Expired insurances
-    const expiredInsurances = insurances.filter(ins => ins.expires_at && new Date(ins.expires_at) < new Date());
-    console.log('Expired inventory:', expiredInventory);
-    console.log('Expired perks:', expiredPerks);
-    console.log('Expired insurances:', expiredInsurances);
+    const expiredInsurances = insurances.filter(ins => ins.expires_at && new Date(ins.expires_at) < cutoffTime);
+    console.log('Expired inventory (buffered):', expiredInventory);
+    console.log('Expired perks (buffered):', expiredPerks);
+    console.log('Expired insurances (buffered):', expiredInsurances);
 
     // Always attempt delete on Supabase, even if local state is empty, to ensure server is in sync
     if (expiredInventory.length === 0 && expiredPerks.length === 0 && expiredInsurances.length === 0) {
       // Try to delete any expired items from Supabase in case local state is out of sync
       try {
-        const nowIso = new Date().toISOString();
+        const nowIso = cutoffTime.toISOString();
         const invResp = await supabase.from('user_inventory')
           .delete()
           .not('expires_at', 'is', null)
@@ -66,7 +70,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
       } catch (err) {
         console.error('Delete all expired error:', err);
       }
-      toast.info('No expired purchases, perks, or insurances to delete.');
+      toast.info('No expired items to delete (checked with 10s buffer).');
       return;
     }
     try {
@@ -316,7 +320,26 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
       navigate('/auth', { replace: true })
       return
     }
-    loadInventory()
+    
+    // Initial cleanup
+    const cleanup = async () => {
+      try {
+        await supabase.rpc('cleanup_expired_user_purchases')
+        loadInventory()
+      } catch (err) {
+        console.warn('Auto-cleanup failed:', err)
+        loadInventory()
+      }
+    }
+    
+    cleanup()
+    
+    // Periodic cleanup check (every 10s)
+    const interval = setInterval(() => {
+       cleanup()
+    }, 10000)
+
+    return () => clearInterval(interval)
   }, [user, navigate, loadInventory])
 
   const deleteItem = async (recordId: string, itemId: string, tableName: string, stateSetter: React.Dispatch<React.SetStateAction<any[]>>) => {

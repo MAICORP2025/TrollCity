@@ -17,7 +17,7 @@ export async function sendNotification(
       title,
       message,
       metadata,
-      read: false,
+      is_read: false,
       created_at: new Date().toISOString(),
     },
   ]);

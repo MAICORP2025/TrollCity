@@ -149,7 +149,7 @@ function ProfileInner() {
   const fetchInventory = async (uid: string) => {
     // setInventoryLoading(true);
     try {
-      const [perksRes, effectsRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes, vehiclesRes, legacyVehiclesRes] = await Promise.all([
+      const results = await Promise.all([
         supabase.from('user_perks').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
         supabase.from('user_entrance_effects').select('*').eq('user_id', uid),
         supabase.from('user_insurances').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
@@ -157,8 +157,19 @@ function ProfileInner() {
         supabase.from('properties').select('*').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
         supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
         supabase.from('user_cars').select('*').eq('user_id', uid).order('purchased_at', { ascending: false }),
-        supabase.from('user_vehicles').select('*').eq('user_id', uid)
+        supabase.from('user_vehicles').select('*').eq('user_id', uid),
+        supabase.from('user_inventory').select('*, marketplace_item:marketplace_items(*)').eq('user_id', uid)
       ]);
+
+      const perksRes = results[0];
+      const effectsRes = results[1];
+      const insuranceUserRes = results[2];
+      const callRes = results[3];
+      const homesRes = results[4];
+      const vehicleListingsRes = results[5];
+      const vehiclesRes = results[6];
+      const legacyVehiclesRes = results[7];
+      const titlesDeedsRes = results[8];
 
       let insuranceList = insuranceUserRes.data || [];
 
@@ -412,7 +423,7 @@ function ProfileInner() {
         if (currentUser?.id === data.id) {
           fetchInventory(data.id);
         } else {
-          setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [], vehicles: [] });
+          setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [], vehicles: [], titlesAndDeeds: [] });
           setEarnings([]);
           setPurchases([]);
         }
