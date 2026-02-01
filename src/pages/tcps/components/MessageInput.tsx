@@ -4,6 +4,7 @@ import { supabase, sendConversationMessage } from '../../../lib/supabase'
 import { sendNotification } from '../../../lib/sendNotification'
 import { useAuthStore } from '../../../lib/store'
 import { canMessageAdmin } from '../../../lib/perkEffects'
+import { chargeMessageCost } from '../../../lib/profileViewPayment'
 import { toast } from 'sonner'
 
 interface MessageInputProps {
@@ -49,7 +50,7 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
       // Check if user needs to pay to message
       const { data: toUser } = await supabase
         .from('user_profiles')
-        .select('id, username, profile_view_price, role, is_troll_officer, is_troller')
+        .select('id, username, message_cost, role, is_troll_officer, is_troller')
         .eq('id', otherUserId)
         .single()
 
@@ -65,15 +66,15 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
       const hasMessagePerk = await canMessageAdmin(profile.id)
       const canMessageFree = senderIsAdmin || senderIsOfficer || senderIsTroller || hasMessagePerk
 
-      if (!canMessageFree && toUser.profile_view_price && toUser.profile_view_price > 0) {
-        const { data: paymentResult, error: paymentError } = await supabase.rpc('pay_for_profile_view', {
-          p_viewer_id: profile.id,
-          p_profile_owner_id: toUser.id
-        })
+      if (!canMessageFree && toUser.message_cost && toUser.message_cost > 0) {
+        const { success, error: paymentError } = await chargeMessageCost(
+          profile.id,
+          toUser.id,
+          toUser.message_cost
+        )
 
-        if (paymentError || !paymentResult?.success) {
-          const errorMsg = paymentResult?.error || paymentError?.message || 'Payment required to message this user'
-          toast.error(errorMsg)
+        if (!success) {
+          toast.error(paymentError || 'Payment required to message this user')
           setSending(false)
           return
         }

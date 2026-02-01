@@ -27,35 +27,91 @@ export default function EconomyDashboard() {
 
       setLoading(true)
       try {
-        // Load monthly revenue
-        const { data: m, error: mError } = await supabase
-          .from('view_admin_coin_revenue')
-          .select('*')
-          .order('month', { ascending: false })
-          .limit(24) // Last 24 months
+        // Fetch real data from coin_transactions (Source of Truth)
+        // This ensures we catch all purchases even if the views are outdated
+        const { data: transactions, error: txError } = await supabase
+          .from('coin_transactions')
+          .select('amount, created_at, user_id, type, metadata, platform_profit')
+          .in('type', ['store_purchase', 'paypal_purchase', 'purchase'])
+          .order('created_at', { ascending: false })
 
-        if (mError) throw mError
+        if (txError) throw txError
 
-        // Load top buyers
-        const { data: t, error: tError } = await supabase
-          .from('view_admin_top_buyers')
-          .select('*')
-          .limit(20)
+        // Process transactions for Monthly Revenue
+        const monthlyData: Record<string, { total_usd: number; total_coins: number; purchase_count: number }> = {}
+        const buyersData: Record<string, { username: string; total_spent_usd: number; total_coins_bought: number; transaction_count: number }> = {}
 
-        if (tError) throw tError
+        // Fetch user profiles for buyers to get usernames
+        const userIds = [...new Set((transactions || []).map(t => t.user_id).filter(Boolean))]
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .in('id', userIds)
+        
+        const userMap = new Map(profiles?.map(p => [p.id, p.username]) || [])
 
-        // Load creators over $600 threshold
+        transactions?.forEach(tx => {
+          const date = new Date(tx.created_at)
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01` // YYYY-MM-01 format
+          
+          // Determine USD amount
+          // 1. Check platform_profit (most accurate for revenue)
+          // 2. Check metadata.amount_paid
+          // 3. Check metadata.price
+          let usdAmount = Number(tx.platform_profit || 0)
+          if (usdAmount <= 0) {
+             const meta = tx.metadata as any || {}
+             usdAmount = Number(meta.amount_paid || meta.price || 0)
+          }
+          
+          // If still 0, maybe it's in the amount field (but amount is usually coins)
+          // Store purchases usually have negative coins? No, they grant positive coins.
+          // Let's check coin amount.
+          const coinAmount = Number(tx.amount || 0) // Usually coins granted
+          
+          // Aggregating Monthly
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = { total_usd: 0, total_coins: 0, purchase_count: 0 }
+          }
+          monthlyData[monthKey].total_usd += usdAmount
+          monthlyData[monthKey].total_coins += coinAmount
+          monthlyData[monthKey].purchase_count += 1
+
+          // Aggregating Top Buyers
+          if (tx.user_id) {
+            if (!buyersData[tx.user_id]) {
+              buyersData[tx.user_id] = { 
+                username: userMap.get(tx.user_id) || 'Unknown', 
+                total_spent_usd: 0, 
+                total_coins_bought: 0, 
+                transaction_count: 0 
+              }
+            }
+            buyersData[tx.user_id].total_spent_usd += usdAmount
+            buyersData[tx.user_id].total_coins_bought += coinAmount
+            buyersData[tx.user_id].transaction_count += 1
+          }
+        })
+
+        // Convert to arrays
+        const monthlyArray = Object.entries(monthlyData).map(([month, data]) => ({
+          month,
+          ...data
+        })).sort((a, b) => new Date(b.month).getTime() - new Date(a.month).getTime())
+
+        const buyersArray = Object.values(buyersData).sort((a, b) => b.total_spent_usd - a.total_spent_usd).slice(0, 20)
+
+        // Load creators over $600 threshold (keep existing logic)
         const { data: o600, error: o600Error } = await supabase
           .from('creators_over_600')
           .select('*')
 
         if (o600Error) {
           console.warn('Error loading over 600 view:', o600Error)
-          // View might not exist yet, continue without it
         }
 
-        setMonthly(m || [])
-        setTopBuyers(t || [])
+        setMonthly(monthlyArray)
+        setTopBuyers(buyersArray)
         setOver600(o600 || [])
       } catch (error: any) {
         console.error('Error loading economy data:', error)

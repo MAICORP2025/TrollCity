@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import TopBroadcastersGrid from '@/components/TopBroadcastersGrid';
+import HomeLiveGrid from '@/components/HomeLiveGrid';
 
 // Animated gradient background
 const AnimatedGradient = () => {
@@ -171,20 +172,11 @@ export default function Home() {
 
     loadAdminBroadcast();
 
-    const channel = supabase
-      .channel('home-admin-streams')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'streams' },
-        () => {
-          loadAdminBroadcast();
-        }
-      )
-      .subscribe();
+    const interval = setInterval(loadAdminBroadcast, 60000); // Poll every 60 seconds
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, []);
 
@@ -318,17 +310,17 @@ export default function Home() {
               )}
             </div>
 
-            {/* Top 4 Broadcasters Grid */}
+            {/* Live Broadcasters Grid */}
             <div className="w-full animate-fade-in-up" style={{ animationDelay: '240ms' }}>
               <div className="text-center mb-8">
-                <h2 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-amber-400 via-orange-400 to-red-400 bg-clip-text text-transparent">
-                  🔥 Top Broadcasters
+                <h2 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
+                  🔴 Live Now
                 </h2>
                 <p className="text-slate-400">
-                  Most gifted creators in the last 24 hours
+                  Join the action in Troll City
                 </p>
               </div>
-              <TopBroadcastersGrid />
+              <HomeLiveGrid />
             </div>
           </div>
         </section>

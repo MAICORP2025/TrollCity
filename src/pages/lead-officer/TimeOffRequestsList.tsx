@@ -90,25 +90,10 @@ export default function TimeOffRequestsList() {
   useEffect(() => {
     loadRequests()
     
-    // Subscribe to new requests
-    const channel = supabase
-      .channel('time_off_requests_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'officer_time_off_requests'
-        },
-        () => {
-          loadRequests()
-        }
-      )
-      .subscribe()
+    // Polling every 30s instead of Realtime to save DB resources
+    const interval = setInterval(loadRequests, 30000)
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => clearInterval(interval)
   }, [])
 
   if (loading && requests.length === 0) return <div className="text-gray-400 text-sm animate-pulse">Loading requests...</div>
@@ -136,7 +121,7 @@ export default function TimeOffRequestsList() {
                     <span className="text-orange-200 font-bold bg-orange-500/10 px-2 py-0.5 rounded">{req.date}</span>
                 </div>
                 {req.reason && (
-                    <p className="text-sm text-gray-400 ml-1 border-l-2 border-gray-700 pl-2">"{req.reason}"</p>
+                    <p className="text-sm text-gray-400 ml-1 border-l-2 border-gray-700 pl-2">&quot;{req.reason}&quot;</p>
                 )}
                 <p className="text-xs text-gray-600 mt-2">Requested: {new Date(req.created_at).toLocaleString()}</p>
               </div>

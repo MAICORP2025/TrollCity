@@ -55,38 +55,13 @@ export default function TrollEventOverlay({ streamId, userJoinedAt }: TrollEvent
 
     loadActiveEvent()
 
-    // Subscribe to new events
-    const channel = supabase
-      .channel(`troll-events-${streamId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'troll_events',
-          filter: `stream_id=eq.${streamId}`,
-        },
-        (payload) => {
-          const event = payload.new as TrollEvent
-          const now = new Date()
-          const eventStart = new Date(event.started_at)
-          const eventExpires = new Date(event.expires_at)
-
-          if (now >= eventStart && now <= eventExpires) {
-            setActiveEvent(event)
-            // Check eligibility
-            if (userJoinedAt <= eventStart) {
-              setHasClaimed(false)
-            } else {
-              setHasClaimed(true)
-            }
-          }
-        }
-      )
-      .subscribe()
+    // Poll for new events (every 15 seconds)
+    const eventInterval = setInterval(() => {
+        loadActiveEvent()
+    }, 15000)
 
     // Check expiration every second
-    const interval = setInterval(() => {
+    const checkInterval = setInterval(() => {
       if (activeEvent) {
         const now = new Date()
         const expiresAt = new Date(activeEvent.expires_at)
@@ -98,10 +73,10 @@ export default function TrollEventOverlay({ streamId, userJoinedAt }: TrollEvent
     }, 1000)
 
     return () => {
-      clearInterval(interval)
-      supabase.removeChannel(channel)
+      clearInterval(eventInterval)
+      clearInterval(checkInterval)
     }
-  }, [streamId, activeEvent, userJoinedAt])
+  }, [streamId, userJoinedAt])
 
   const handleTrollClick = async () => {
     if (!activeEvent || !user || hasClaimed || isClaiming) return

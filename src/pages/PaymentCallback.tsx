@@ -100,7 +100,7 @@ const PaymentCallback = () => {
               Go to Profile
             </button>
             <p className="text-xs text-gray-500 mt-4">
-              If you were charged but didn't receive coins, please contact support with your order ID.
+              If you were charged but didn&apos;t receive coins, please contact support with your order ID.
             </p>
           </>
         )}

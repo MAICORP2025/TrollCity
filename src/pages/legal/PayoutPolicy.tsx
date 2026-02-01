@@ -116,7 +116,7 @@ export default function PayoutPolicy() {
         <p>
           Payouts are processed on Mondays and Fridays. Once processed, funds usually
           arrive in your PayPal account within 24 hours, though some transactions
-          may take longer depending on PayPal's processing times.
+          may take longer depending on PayPal&apos;s processing times.
         </p>
 
         <h2>10. Disputes and Appeals</h2>

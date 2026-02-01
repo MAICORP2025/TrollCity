@@ -258,35 +258,12 @@ export default function AdminTrollTownDeeds() {
 
     load()
 
-    // Real-time subscriptions
-    const transferSub = supabase
-      .channel('admin-deed-transfers')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'deed_transfers' },
-        () => {
-            console.log('Deed transfers updated, reloading...')
-            load()
-        }
-      )
-      .subscribe()
+    // Converted to polling to reduce DB load
+    const interval = setInterval(() => {
+        load()
+    }, 30000)
 
-    const deedsSub = supabase
-      .channel('admin-deeds')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'deeds' },
-        () => {
-            console.log('Deeds updated, reloading...')
-            load()
-        }
-      )
-      .subscribe()
-
-    return () => {
-        transferSub.unsubscribe()
-        deedsSub.unsubscribe()
-    }
+    return () => clearInterval(interval)
   }, [])
 
   const filteredUserGroups = useMemo(() => {
@@ -465,7 +442,7 @@ export default function AdminTrollTownDeeds() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
               {filteredUserGroups.length === 0 ? (
                   <div className="col-span-full py-8 text-center text-slate-500">
-                      No users found matching "{userSearch}"
+                      No users found matching &quot;{userSearch}&quot;
                   </div>
               ) : (
                   filteredUserGroups.map(group => (

@@ -119,7 +119,7 @@ export default function EmpirePartnerApply() {
           <div className="bg-yellow-500/20 border border-yellow-500 rounded-xl p-8 text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-yellow-400 mx-auto mb-4"></div>
             <h1 className="text-3xl font-bold mb-2">Application Pending</h1>
-            <p className="text-gray-300 mb-6">Your application is under review. We'll notify you once it's processed.</p>
+            <p className="text-gray-300 mb-6">Your application is under review. We&apos;ll notify you once it&apos;s processed.</p>
             <button
               onClick={() => navigate('/')}
               className="px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg"
@@ -176,7 +176,7 @@ export default function EmpirePartnerApply() {
               <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
               <div>
                 <h3 className="font-semibold mb-1">5% Referral Bonus</h3>
-                <p className="text-sm text-gray-400">Earn 5% of referred users' monthly earnings (troll_coins)</p>
+                <p className="text-sm text-gray-400">Earn 5% of referred users&apos; monthly earnings (troll_coins)</p>
               </div>
             </div>
             <div className="flex items-start gap-3">

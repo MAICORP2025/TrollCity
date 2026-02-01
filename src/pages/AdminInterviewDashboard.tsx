@@ -223,15 +223,15 @@ export default function AdminInterviewDashboard() {
           <ul className="space-y-2 text-gray-400">
             <li className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
-              Click "Create Test Interview" to set up a fake interview
+              Click &quot;Create Test Interview&quot; to set up a fake interview
             </li>
             <li className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
-              Click "Start Interview" to enter the interview room
+              Click &quot;Start Interview&quot; to enter the interview room
             </li>
             <li className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
-              Toggle "Test Mode" to see fake avatars instead of camera feeds
+              Toggle &quot;Test Mode&quot; to see fake avatars instead of camera feeds
             </li>
             <li className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />

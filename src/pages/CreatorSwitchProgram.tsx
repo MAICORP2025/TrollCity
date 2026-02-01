@@ -218,7 +218,7 @@ export default function CreatorSwitchProgram() {
                 </div>
                 <h2 className="text-2xl font-bold text-red-400">Application Rejected</h2>
                 <p className="text-gray-300">
-                  Unfortunately, we couldn't verify your account details.
+                  Unfortunately, we couldn&apos;t verify your account details.
                 </p>
                 {claim.rejection_reason && (
                   <div className="bg-red-500/10 p-4 rounded-lg text-left">

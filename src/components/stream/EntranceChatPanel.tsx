@@ -47,50 +47,35 @@ export default function EntranceChatPanel({ streamId }: EntranceChatPanelProps) 
   useEffect(() => {
     if (!streamId) return
 
-    const handleEntrance = async (entranceData: any) => {
-      try {
-        // Fetch user profile
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('username, role, total_spent_coins, troll_coins, is_troll_officer, is_og_user, officer_level')
-          .eq('id', entranceData.user_id)
-          .single()
-
-        if (!profile) return
-
-        const role = determineUserRole(profile)
-        const entranceId = `${entranceData.id}-${Date.now()}`
-
-        setEntranceEvents((prev) => [
-          ...prev,
-          {
-            id: entranceId,
-            username: profile.username,
-            role,
-            timestamp: Date.now(),
-            profile: {
-              is_troll_officer: profile.is_troll_officer,
-              is_og_user: profile.is_og_user,
-              role: profile.role,
-            },
-          },
-        ])
-      } catch (error) {
-        console.error('Error handling entrance:', error)
-      }
-    }
-
     const channel = supabase
       .channel(`entrance-chat-${streamId}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'stream_entrances',
-          filter: `stream_id=eq.${streamId}`,
-        },
-        (payload) => handleEntrance(payload.new)
+        'broadcast',
+        { event: 'user_joined' },
+        (payload) => {
+           const { user_id, username, profile: rawProfile } = payload.payload;
+           if (!username) return;
+
+           // Use provided profile data or fallbacks
+           const profileData = rawProfile || {};
+           const role = determineUserRole(profileData);
+           const entranceId = `${user_id}-${Date.now()}`;
+           
+           setEntranceEvents((prev) => [
+             ...prev,
+             {
+               id: entranceId,
+               username: username,
+               role,
+               timestamp: Date.now(),
+               profile: {
+                 is_troll_officer: profileData.is_troll_officer,
+                 is_og_user: profileData.is_og_user,
+                 role: profileData.role,
+               },
+             },
+           ])
+        }
       )
       .subscribe()
 

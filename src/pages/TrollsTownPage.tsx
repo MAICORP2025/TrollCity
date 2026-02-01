@@ -50,6 +50,10 @@ type DeedTransferRow = {
   seller_net: number
   system_value_at_sale: number | null
   created_at: string
+  // Optional enriched properties for display
+  seller_username?: string | null
+  buyer_username?: string | null
+  property_name?: string | null
 }
 
 type UpgradeDefinition = {
@@ -346,10 +350,12 @@ const TrollsTownPage: React.FC = () => {
   const [sellingAllToBank, setSellingAllToBank] = useState(false)
 
   const effectiveBalance = useMemo(() => {
+    // Prefer the hook balance as it's more frequently updated
     const hookBalance = typeof trollCoins === 'number' ? trollCoins : 0
     const profileBalance = profile?.troll_coins ?? 0
-    const maxBalance = Math.max(hookBalance, profileBalance)
-    return Number.isFinite(maxBalance) && maxBalance > 0 ? maxBalance : 0
+    // Use the hook balance if it's a finite number, otherwise fall back to profile balance
+    const balance = Number.isFinite(hookBalance) ? hookBalance : profileBalance
+    return balance > 0 ? balance : 0
   }, [trollCoins, profile?.troll_coins])
 
   useEffect(() => {
@@ -834,7 +840,12 @@ const TrollsTownPage: React.FC = () => {
       .channel('troll-town-listings')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'properties' },
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'properties',
+          filter: 'is_listed=eq.true' // Only listen for changes to listed properties
+        },
         () => {
           loadListings()
         }
@@ -1318,6 +1329,7 @@ const TrollsTownPage: React.FC = () => {
     }
 
     setStartingUpgradeId(upgrade.id)
+    console.log('[handleStartUpgrade] Starting upgrade:', upgrade.name, 'cost:', upgrade.cost, 'user balance:', effectiveBalance)
     try {
       const result = await deductCoins({
         userId: user.id,
@@ -1332,7 +1344,10 @@ const TrollsTownPage: React.FC = () => {
         }
       })
 
+      console.log('[handleStartUpgrade] deductCoins result:', result)
+
       if (!result.success) {
+        console.error('[handleStartUpgrade] deductCoins failed:', result.error)
         if (result.error) {
           toast.error(result.error)
         } else {
@@ -1355,7 +1370,8 @@ const TrollsTownPage: React.FC = () => {
           cost: upgrade.cost,
           status: 'pending',
           tasks_required_total: tasksTotal,
-          tasks_completed: 0
+          tasks_completed: 0,
+          owner_user_id: user?.id
         })
         .select('*')
         .single()

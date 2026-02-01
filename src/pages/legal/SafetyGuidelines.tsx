@@ -110,7 +110,7 @@ export default function SafetyGuidelines() {
             financial details) publicly</li>
           <li>Do not request personal information from other users</li>
           <li>Report any attempts to collect or misuse personal information</li>
-          <li>Be cautious when interacting with users you don't know</li>
+          <li>Be cautious when interacting with users you don&apos;t know</li>
         </ul>
 
         <h2>7. Account Security</h2>

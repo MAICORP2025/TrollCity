@@ -162,26 +162,17 @@ export default function OfficerOperations() {
 
   useEffect(() => {
     loadData();
-    // Set up real-time subscriptions
-    const chatChannel = supabase
-      .channel('officer-chat')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'officer_chat_messages' }, () => {
-        loadChatMessages();
-      })
-      .subscribe();
+  }, [activeTab, loadData]);
 
-    const panicChannel = supabase
-      .channel('panic-alerts')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'creator_panic_alerts' }, () => {
-        loadPanicAlerts();
-      })
-      .subscribe();
+  useEffect(() => {
+    // Replaced high-overhead Realtime subscriptions with polling (30s)
+    const interval = setInterval(() => {
+      loadChatMessages();
+      loadPanicAlerts();
+    }, 30000);
 
-    return () => {
-      supabase.removeChannel(chatChannel);
-      supabase.removeChannel(panicChannel);
-    };
-  }, [activeTab, loadData, loadChatMessages, loadPanicAlerts]);
+    return () => clearInterval(interval);
+  }, [loadChatMessages, loadPanicAlerts]);
 
   const syncMessages = async () => {
     if (!window.confirm('Sync legacy direct messages into the new inbox?')) return;

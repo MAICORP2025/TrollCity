@@ -206,7 +206,7 @@ export default function Application() {
             <li>• Complete the application form with required information</li>
             <li>• Pay any required application fees (if applicable)</li>
             <li>• Wait for admin review and approval</li>
-            <li>• You'll receive a notification when your application is reviewed</li>
+            <li>• You&apos;ll receive a notification when your application is reviewed</li>
           </ul>
         </div>
       </div>

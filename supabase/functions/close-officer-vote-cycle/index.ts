@@ -134,16 +134,16 @@ Deno.serve(async (req) => {
       console.error("Failed to mark officer cycle closed", closeError);
     }
 
-    const { error: eventError } = await supabaseAdmin.from("vote_events").insert({
-      event_type: "officer_cycle_winner",
-      user_id: assignment.broadcaster_id,
-      gift_id: null,
-      is_active: true,
-    });
+    // const { error: eventError } = await supabaseAdmin.from("vote_events").insert({
+    //   event_type: "officer_cycle_winner",
+    //   user_id: assignment.broadcaster_id,
+    //   gift_id: null,
+    //   is_active: true,
+    // });
 
-    if (eventError) {
-      console.error("Failed to create officer_cycle_winner event", eventError);
-    }
+    // if (eventError) {
+    //   console.error("Failed to create officer_cycle_winner event", eventError);
+    // }
 
     return new Response(
       JSON.stringify({

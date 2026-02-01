@@ -68,7 +68,7 @@ export default function RoyalCoronationAnimation({
               @{username}
             </p>
             <p className="text-xl text-yellow-200">
-              is now Admin's {titleType === 'wife' ? 'Wife' : 'Husband'}!
+              is now Admin&apos;s {titleType === 'wife' ? 'Wife' : 'Husband'}!
             </p>
           </div>
         )}

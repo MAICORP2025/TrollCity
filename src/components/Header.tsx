@@ -21,23 +21,11 @@ const Header = () => {
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
 
-  // Load all users on component mount
+  // Load all users on component mount - REMOVED for performance
+  // We will search dynamically instead
   useEffect(() => {
-    const loadAllUsers = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, username, avatar_url')
-          .order('username', { ascending: true })
-          .limit(1000)
-        
-        if (error) throw error
-        setAllUsers(data || [])
-      } catch (err) {
-        console.error('Error loading all users:', err)
-      }
-    }
-    loadAllUsers()
+    // Optional: Load top/suggested users if needed, but for now empty is better than 1000 rows
+    setAllUsers([])
   }, [])
 
   // Search/filter logic
@@ -45,22 +33,32 @@ const Header = () => {
     const runSearch = async () => {
       const query = searchQuery.trim().replace('@', '').toLowerCase()
 
-      // If no search query, show all users
+      // If no search query, show nothing or recent
       if (!query) {
-        setSearchResults(allUsers)
+        setSearchResults([])
         return
       }
 
-      // Filter from all users locally for instant results
-      const filtered = allUsers.filter(user => 
-        user.username.toLowerCase().includes(query) ||
-        user.id.toLowerCase().includes(query)
-      )
-      setSearchResults(filtered)
+      if (query.length < 2) return // Wait for 2 chars
+
+      try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url')
+            .ilike('username', `%${query}%`)
+            .limit(10)
+          
+          if (data) {
+              setSearchResults(data)
+          }
+      } catch (err) {
+          console.error('Search error:', err)
+      }
     }
 
-    runSearch()
-  }, [searchQuery, allUsers])
+    const debounce = setTimeout(runSearch, 300)
+    return () => clearTimeout(debounce)
+  }, [searchQuery])
 
   // Load notifications
   useEffect(() => {
@@ -68,13 +66,13 @@ const Header = () => {
 
     const loadNotifications = async () => {
       try {
-        // Auto-delete notifications older than 30 seconds
-        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString()
+        // Auto-delete notifications older than 30 DAYS (not 30 seconds)
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
         await supabase
           .from('notifications')
           .delete()
           .eq('user_id', user.id)
-          .lt('created_at', thirtySecondsAgo)
+          .lt('created_at', thirtyDaysAgo)
 
         // Try RPC function first, but fallback to direct query if it doesn't exist
         try {

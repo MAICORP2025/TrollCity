@@ -509,7 +509,7 @@ export default function Career() {
               <div className="p-12 text-center">
                 <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-white mb-2">No Applications Yet</h3>
-                <p className="text-gray-400 mb-6">You haven't submitted any applications yet.</p>
+                <p className="text-gray-400 mb-6">You haven&apos;t submitted any applications yet.</p>
                 <button
                   onClick={() => setActiveTab('positions')}
                   className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors"

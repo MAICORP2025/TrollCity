@@ -55,7 +55,7 @@ import TrollBattlesSetup from '../components/broadcast/TrollBattlesSetup';
 import BroadcastLevelBar from '../components/broadcast/BroadcastLevelBar';
 
 // Constants
-const STREAM_POLL_INTERVAL = 2000;
+
 
 const DEFAULT_GIFTS: GiftItem[] = [
   { id: "troll_clap", name: "Troll Clap", icon: "👏", value: 5, category: "Basic" },
@@ -115,6 +115,7 @@ interface StreamRow {
   broadcast_level_percent?: number;
   last_level_update_at?: string;
   broadcast_xp?: number;
+  frame_mode?: 'none' | 'rgb';
 }
 
 interface ActiveViewer {
@@ -460,6 +461,7 @@ function BroadcasterSettings({
 
 function OfficerActionBubble({
   streamId: _streamId,
+  canManageBoxes,
   onAddBox,
   onDeductBox,
   onEndBroadcast,
@@ -498,6 +500,7 @@ function OfficerActionBubble({
   onClose: () => void;
   position: { x: number; y: number } | null;
   onMouseDown: (e: React.MouseEvent) => void;
+  canManageBoxes: boolean;
 }) {
   const selectedTarget = targets.find((t) => t.id === selectedTargetId) || null;
   return (
@@ -534,18 +537,22 @@ function OfficerActionBubble({
             ))}
           </select>
         </div>
-          <button
-            onClick={onAddBox}
-            className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
-          >
-            <span className="text-lg">📺</span> Add Box
-          </button>
-          <button
-            onClick={onDeductBox}
-            className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
-          >
-            <span className="text-lg">➖</span> Deduct Box
-          </button>
+        {canManageBoxes && (
+          <>
+            <button
+              onClick={onAddBox}
+              className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
+            >
+              <span className="text-lg">📺</span> Add Box
+            </button>
+            <button
+              onClick={onDeductBox}
+              className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
+            >
+              <span className="text-lg">➖</span> Deduct Box
+            </button>
+          </>
+        )}
         <button
           onClick={onKickAll}
           className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded flex flex-col items-center gap-1"
@@ -684,6 +691,7 @@ export default function LivePage() {
   const noViewerTimerRef = useRef<number | null>(null);
   const noGiftTimerRef = useRef<number | null>(null);
   const autoEndTriggeredRef = useRef(false);
+  const [currentFrameMode, setCurrentFrameMode] = useState<'none' | 'rgb'>('none');
 
   const stableIdentity = useMemo(() => {
     const id = user?.id || profile?.id;
@@ -793,7 +801,7 @@ export default function LivePage() {
   const isRoleExempt = useMemo(() => {
     if (profile?.is_admin) return true;
     const role = (profile?.troll_role || profile?.role || '').toLowerCase();
-    return ['admin', 'lead_troll_officer', 'secretary', 'troll_officer'].includes(role);
+    return ['admin', 'lead_troll_officer', 'secretary', 'pastor', 'troll_officer'].includes(role);
   }, [profile?.role, profile?.troll_role, profile?.is_admin]);
   const { seats, claimSeat, releaseSeat } = useSeatRoster(seatRoomName);
   const isGuestSeat = !isBroadcaster && seats.some(seat => seat?.user_id === user?.id);
@@ -914,7 +922,7 @@ export default function LivePage() {
   const sessionReady = !!user && !!profile && hasValidStreamId && !!roomName;
 
 
-  const officerRoleNames = ['admin', 'lead_troll_officer', 'troll_officer'];
+  const officerRoleNames = ['admin', 'lead_troll_officer', 'troll_officer', 'secretary', 'pastor'];
   const isOfficerUser = Boolean(
     profile &&
       (officerRoleNames.includes(profile.role || '') ||
@@ -922,6 +930,19 @@ export default function LivePage() {
         profile.is_lead_officer ||
         profile.is_troll_officer)
   );
+
+  // Combined check: is staff OR (is broadofficer AND assigned to this broadcast) - used for OfficerActionBubble visibility
+  const canUseOfficerTools = useMemo(() => {
+    if (isBroadcaster) return true;
+    if (isOfficerUser) return true; // Staff always have access
+    if (isCurrentUserBroadofficer) return true; // Broadofficer only if assigned to this broadcast
+    return false;
+  }, [isBroadcaster, isOfficerUser, isCurrentUserBroadofficer]);
+
+  // Can manage boxes: Broadcaster, broadofficer, OR staff (admin/secretary/pastor/officers)
+  const canManageBoxes = useMemo(() => {
+    return isBroadcaster || isCurrentUserBroadofficer || isOfficerUser;
+  }, [isBroadcaster, isCurrentUserBroadofficer, isOfficerUser]);
 
   const loadSeatBans = useCallback(async () => {
     if (!isOfficerUser || !seatRoomName) return;
@@ -1226,7 +1247,20 @@ export default function LivePage() {
 
       setJoinPrice(price);
       
-      // 2. Broadcast price to viewers via system message
+      // 2. Broadcast price to viewers via system message (Ephemeral)
+      const channel = supabase.channel(`live-updates-${streamId}`);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'system_update',
+            payload: { type: 'PRICE_UPDATE', content: String(price) }
+          });
+        }
+      });
+
+      // Optional: Keep DB insert for history if needed, but remove if causing load.
+      // We will keep it for now but clients don't listen to it.
       await supabase.from('messages').insert({
         stream_id: streamId,
         user_id: user?.id,
@@ -1240,6 +1274,17 @@ export default function LivePage() {
       toast.error('Failed to update price');
     }
   };
+
+  const handleFrameModeChange = useCallback(async (mode: 'none' | 'rgb') => {
+    if (!streamId) return;
+    setCurrentFrameMode(mode); // Optimistic update
+    try {
+      await supabase.from('streams').update({ frame_mode: mode }).eq('id', streamId);
+    } catch (err) {
+      console.error('Failed to update frame mode', err);
+      toast.error('Failed to update frame mode');
+    }
+  }, [streamId]);
 
   const handleAlertOfficers = useCallback(
     async (targetUserId?: string) => {
@@ -1686,6 +1731,18 @@ export default function LivePage() {
       if(!confirm('OFFICER ACTION: Clear the stage (remove all boxes)?')) return;
       setBoxCount(0);
       if (streamId) {
+        // Broadcast update
+        const channel = supabase.channel(`live-updates-${streamId}`);
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel.send({
+              type: 'broadcast',
+              event: 'system_update',
+              payload: { type: 'BOX_COUNT_UPDATE', content: '0' }
+            });
+          }
+        });
+
         void supabase.from('messages').insert({
           stream_id: streamId,
           message_type: 'system',
@@ -1705,6 +1762,19 @@ export default function LivePage() {
     const clamped = Math.max(0, Math.min(maxBoxes, next));
     setBoxCount(clamped);
     if (streamId) {
+      // Broadcast update
+      const channel = supabase.channel(`live-updates-${streamId}`);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'system_update',
+            payload: { type: 'BOX_COUNT_UPDATE', content: String(clamped) }
+          });
+        }
+      });
+
+      // Keep persistence for new users
       void supabase.from('messages').insert({
         stream_id: streamId,
         message_type: 'system',
@@ -1949,16 +2019,27 @@ export default function LivePage() {
       const { effectKey, config } = await getUserEntranceEffect(user.id);
 
       if (effectKey) {
-        await supabase.from('messages').insert({
-          stream_id: streamId,
-          user_id: user.id,
-          message_type: 'entrance',
-          content: JSON.stringify({
-            username: profile?.username || user.email,
-            role: profile?.role || 'user',
-            effectKey,
-            effect: config
-          })
+        // Broadcast user_joined event instead of DB insert
+        const channel = supabase.channel(`entrance-chat-${streamId}`);
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel.send({
+              type: 'broadcast',
+              event: 'user_joined',
+              payload: {
+                user_id: user.id,
+                username: profile?.username || user.email,
+                role: profile?.role || 'user',
+                effectKey,
+                effect: config,
+                profile: {
+                  is_troll_officer: profile?.is_troll_officer,
+                  is_og_user: profile?.is_og_user,
+                  role: profile?.role || 'viewer',
+                }
+              }
+            });
+          }
         });
       }
     };
@@ -1971,63 +2052,62 @@ export default function LivePage() {
   useEffect(() => {
     if (!streamId) return;
 
-    const channel = supabase
+    // Listen for broadcast entrance effects
+    const broadcastChannel = supabase
+      .channel(`entrance-chat-${streamId}`)
+      .on(
+        'broadcast',
+        { event: 'user_joined' },
+        (payload) => {
+          const data = payload.payload;
+          const payloadUserId = data.user_id || data.sender_id;
+
+          // Don't show your own entrance effect to yourself (Broadcast doesn't echo back anyway, but for safety)
+          if (payloadUserId && user?.id && payloadUserId === user.id) {
+            return;
+          }
+
+          if (data.effectKey) {
+            setEntranceEffect({
+              username: data.username || 'Viewer',
+              role: data.role || 'viewer',
+              profile: data.profile,
+              effectKey: data.effectKey,
+              effect: data.effect,
+              userId: payloadUserId || null,
+            });
+            setEntranceEffectKey((prev) => prev + 1);
+
+            if (entranceTimeoutRef.current) {
+              window.clearTimeout(entranceTimeoutRef.current);
+            }
+            entranceTimeoutRef.current = window.setTimeout(() => {
+              setEntranceEffect(null);
+              entranceTimeoutRef.current = null;
+            }, 5000);
+
+            if (payloadUserId) {
+              void triggerUserEntranceEffect(payloadUserId);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Listen for system updates via Broadcast (Price, Box Count)
+    const systemChannel = supabase
       .channel(`live-updates-${streamId}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `stream_id=eq.${streamId}`,
-        },
+        'broadcast',
+        { event: 'system_update' },
         (payload) => {
-          const msg = payload.new;
-          if (msg.message_type === 'entrance') {
-            try {
-              const rawContent = msg.content;
-              const data = typeof rawContent === 'string'
-                ? JSON.parse(rawContent)
-                : (rawContent || {});
-              const payloadUserId =
-                data.user_id || data.sender_id || msg.user_id || msg.sender_id;
-
-              // Don't show your own entrance effect to yourself
-              if (payloadUserId && user?.id && payloadUserId === user.id) {
-                return;
-              }
-
-              setEntranceEffect({
-                username: data.username || 'Viewer',
-                role: data.role || 'viewer',
-                profile: data.profile,
-                effectKey: data.effectKey,
-                effect: data.effect,
-                userId: payloadUserId || null,
-              });
-              setEntranceEffectKey((prev) => prev + 1);
-
-              if (entranceTimeoutRef.current) {
-                window.clearTimeout(entranceTimeoutRef.current);
-              }
-              entranceTimeoutRef.current = window.setTimeout(() => {
-                setEntranceEffect(null);
-                entranceTimeoutRef.current = null;
-              }, 5000);
-
-              if (payloadUserId) {
-                void triggerUserEntranceEffect(payloadUserId);
-              }
-            } catch (e) {
-              console.error('Failed to parse entrance effect', e);
-            }
-          } else if (msg.message_type === 'system' && msg.content?.startsWith('PRICE_UPDATE:')) {
-            const price = parseInt(msg.content.split(':')[1]);
+          const { type, content } = payload.payload;
+          
+          if (type === 'PRICE_UPDATE') {
+            const price = parseInt(content);
             if (!isNaN(price)) setJoinPrice(price);
-          } else if (msg.message_type === 'system' && msg.content?.startsWith('BOX_COUNT_UPDATE:')) {
-            const parts = msg.content.split(':');
-            const raw = parts[1];
-            const parsed = parseInt(raw);
+          } else if (type === 'BOX_COUNT_UPDATE') {
+            const parsed = parseInt(content);
             if (!isNaN(parsed)) {
               const maxBoxes = 6;
               const next = Math.max(0, Math.min(maxBoxes, parsed));
@@ -2043,7 +2123,8 @@ export default function LivePage() {
         window.clearTimeout(entranceTimeoutRef.current);
         entranceTimeoutRef.current = null;
       }
-      supabase.removeChannel(channel);
+      supabase.removeChannel(broadcastChannel);
+      supabase.removeChannel(systemChannel);
     };
   }, [streamId, stream?.broadcaster_id, isBroadcaster, user?.id]);
 
@@ -2092,7 +2173,7 @@ export default function LivePage() {
         // Fetch by Stream ID ONLY
         const { data: streamRow, error } = await supabase
           .from("streams")
-        .select("id, broadcaster_id, title, category, status, start_time, end_time, current_viewers, total_gifts_coins, total_unique_gifters, is_live, is_private, thumbnail_url, room_name, created_at, updated_at, broadcast_level_percent, last_level_update_at, broadcast_xp")
+        .select("id, broadcaster_id, title, category, status, start_time, end_time, current_viewers, total_gifts_coins, total_unique_gifters, is_live, is_private, thumbnail_url, room_name, created_at, updated_at, broadcast_level_percent, last_level_update_at, broadcast_xp, frame_mode")
           .eq("id", streamId)
           .maybeSingle();
 
@@ -2103,6 +2184,7 @@ export default function LivePage() {
         }
         setViewerCount(streamRow.current_viewers ?? 0);
         setStream(streamRow as StreamRow);
+        setCurrentFrameMode((streamRow.frame_mode as 'none'|'rgb') || 'none');
         if (streamId) {
           void refreshBoxCountFromMessages(streamId);
         }
@@ -2222,7 +2304,7 @@ export default function LivePage() {
     
     if (stream.category === 'Officer Stream') {
       const isOfficer = profile && (
-        ['admin', 'troll_officer', 'lead_troll_officer'].includes(profile.role || '') || 
+        ['admin', 'troll_officer', 'lead_troll_officer', 'secretary', 'pastor'].includes(profile.role || '') || 
         (profile as any).is_lead_officer || 
         (profile as any).is_admin
       );
@@ -2366,35 +2448,52 @@ export default function LivePage() {
 
   useEffect(() => {
     if (!streamId) return;
-    const interval = setInterval(async () => {
+
+    // Initial fetch
+    const fetchStream = async () => {
       const { data } = await supabase.from("streams").select("status,is_live,current_viewers,total_gifts_coins,total_likes").eq("id", streamId).maybeSingle();
       if (data) {
-        setStream(prev => {
-          if (!prev) return prev;
-          
-          // Check if we're within grace period of a local coin update
-          const withinGrace = Date.now() - lastLocalCoinUpdateRef.current < COIN_UPDATE_GRACE_PERIOD;
-          
-          // Force update if values changed, but preserve local coin updates within grace period
-          const shouldUpdateCoins = !withinGrace || prev.total_gifts_coins === data.total_gifts_coins;
-          
-          if (
-            prev.current_viewers !== data.current_viewers ||
-            prev.total_likes !== data.total_likes ||
-            (shouldUpdateCoins && prev.total_gifts_coins !== data.total_gifts_coins)
-          ) {
-            return {
-              ...prev,
-              ...data,
-              // Don't override coins if we just updated them locally
-              ...(withinGrace && { total_gifts_coins: prev.total_gifts_coins })
-            };
-          }
-          return prev;
-        });
+        setStream(prev => prev ? { ...prev, ...data } : prev);
       }
-    }, STREAM_POLL_INTERVAL); // Polling every 2 seconds
-    return () => clearInterval(interval);
+    };
+    fetchStream();
+
+    const channel = supabase
+      .channel(`live-stream-updates-${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+          filter: `id=eq.${streamId}`,
+        },
+        (payload) => {
+          const newData = payload.new as StreamRow;
+          setStream(prev => {
+             if (!prev) return prev;
+             // Check if we're within grace period of a local coin update
+             const withinGrace = Date.now() - lastLocalCoinUpdateRef.current < COIN_UPDATE_GRACE_PERIOD;
+             
+             // If we recently updated coins locally, ignore the DB update for coins to prevent jitter
+             // But take everything else
+             const nextCoins = (withinGrace && prev.total_gifts_coins !== newData.total_gifts_coins) 
+               ? prev.total_gifts_coins 
+               : newData.total_gifts_coins;
+
+             return {
+               ...prev,
+               ...newData,
+               total_gifts_coins: nextCoins
+             };
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [streamId]);
 
   useStreamEndListener({
@@ -2493,12 +2592,28 @@ export default function LivePage() {
     }
 
     try {
+      // 1. Get total count efficiently
+      const { count, error: countError } = await supabase
+        .from('stream_viewers')
+        .select('*', { count: 'exact', head: true })
+        .eq('stream_id', streamId);
+
+      if (countError) {
+        console.error('Failed to get viewer count:', countError);
+      } else {
+        setViewerCount(count || 0);
+        setStream((prev) => (prev ? { ...prev, current_viewers: count || 0 } : prev));
+      }
+
+      // 2. Get latest 50 viewers for the list
       const { data: viewerRows, error: viewerError } = await supabase
         .from('stream_viewers')
         .select('user_id')
-        .eq('stream_id', streamId);
+        .eq('stream_id', streamId)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-      console.log('[LivePage] Refreshing viewer snapshot. Found:', viewerRows?.length || 0, 'viewers');
+      console.log('[LivePage] Refreshing viewer snapshot. Found:', viewerRows?.length || 0, 'recent viewers');
 
       if (viewerError) {
         console.error('Failed to load active viewers:', viewerError);
@@ -2552,8 +2667,6 @@ export default function LivePage() {
       }
 
       setActiveViewers(mappedViewers);
-      setViewerCount(viewerIds.length);
-      setStream((prev) => (prev ? { ...prev, current_viewers: viewerIds.length } : prev));
     } catch (err) {
       console.error('Failed to refresh viewer snapshot:', err);
     }
@@ -2637,7 +2750,7 @@ export default function LivePage() {
   useEffect(() => {
     if (!lastGift || !isBroadcaster || isRoleExempt || !stream?.is_live) return;
     const senderRole = (lastGift.sender_troll_role || lastGift.sender_role || '').toLowerCase();
-    const senderPrivileged = ['admin', 'lead_troll_officer', 'secretary', 'troll_officer'].includes(senderRole);
+    const senderPrivileged = ['admin', 'lead_troll_officer', 'secretary', 'pastor', 'troll_officer'].includes(senderRole);
     if (!senderPrivileged) {
       setHasViewerGift(true);
       if (noGiftTimerRef.current) {
@@ -3116,8 +3229,9 @@ export default function LivePage() {
             console.warn('Failed to update gift stream context', streamGiftErr);
           }
 
+          let xpResult = null;
           try {
-            await processGiftXp(senderId, receiverId, totalCoins);
+            xpResult = await processGiftXp(senderId, receiverId, totalCoins);
           } catch (xpErr) {
             console.warn('[LivePage] Failed to process gift XP:', xpErr);
           }
@@ -3128,9 +3242,10 @@ export default function LivePage() {
             key: Date.now(),
           });
           successCount++;
+          return { receiverId, xpResult };
         });
 
-        await Promise.all(promises);
+        const results = await Promise.all(promises);
 
         if (streamIdValue && senderId) {
           const senderName = profile?.username || 'Someone';
@@ -3168,6 +3283,11 @@ export default function LivePage() {
           const eventType = totalCoins >= 1000 ? "super_gift" : "gift";
           const themeIdToUse = lastThemeId || broadcastTheme?.id;
 
+          // Find broadcaster XP result if any
+          const broadcasterResult = results.find(r => r.receiverId === broadcasterId);
+          const broadcasterLevel = broadcasterResult?.xpResult?.receiverData?.level;
+          const broadcasterXp = broadcasterResult?.xpResult?.receiverData?.xp; 
+
           if (themeIdToUse) {
             const themeEvents = recipients.map(rid => ({
               room_id: streamIdValue,
@@ -3179,7 +3299,9 @@ export default function LivePage() {
                 gift_slug: canonicalGiftSlug,
                 coins: totalCoins,
                 sender_id: senderId,
-                recipient_id: rid
+                recipient_id: rid,
+                broadcaster_level: (rid === broadcasterId) ? broadcasterLevel : undefined,
+                broadcaster_xp: (rid === broadcasterId) ? broadcasterXp : undefined
               }
             }));
 
@@ -3210,6 +3332,24 @@ export default function LivePage() {
           filter: `room_id=eq.${streamId}`,
         },
         (payload) => {
+          // Handle Level Updates from Gift Events
+          if (payload.new?.payload?.broadcaster_level !== undefined) {
+             const newLevel = payload.new.payload.broadcaster_level;
+             const newXp = payload.new.payload.broadcaster_xp;
+             setStream(prev => {
+                if (!prev) return prev;
+                // Avoid unnecessary updates if unchanged
+                if (prev.broadcast_level_percent === newLevel && prev.broadcast_xp === newXp) return prev;
+                
+                return {
+                   ...prev,
+                   broadcast_level_percent: newLevel,
+                   broadcast_xp: newXp,
+                   last_level_update_at: new Date().toISOString()
+                };
+             });
+          }
+
           if (!broadcastTheme?.reactive_enabled) return;
           const eventType = payload.new?.event_type || 'gift';
           const baseIntensity = Number(broadcastTheme?.reactive_intensity || 2);
@@ -3433,8 +3573,8 @@ export default function LivePage() {
         </div>
       )}
 
-      {/* Officer Action Bubble */}
-      {isOfficerUser && isOfficerBubbleVisible && (
+      {/* Officer Action Bubble - Visible to broadcaster, staff (admin/secretary/pastor/officers), and broadofficers */}
+      {canUseOfficerTools && isOfficerBubbleVisible && (
         <OfficerActionBubble
           streamId={streamId || ''}
           onAddBox={handleOfficerAddBox}
@@ -3455,6 +3595,7 @@ export default function LivePage() {
           onClose={() => setIsOfficerBubbleVisible(false)}
           position={officerBubblePos}
           onMouseDown={handleOfficerDragStart}
+          canManageBoxes={canManageBoxes}
         />
       )}
       
@@ -3669,6 +3810,8 @@ export default function LivePage() {
               // Media Controls
               onToggleCamera={toggleCamera}
               isCameraOn={cameraOn}
+              frameMode={currentFrameMode}
+              onFrameModeChange={isBroadcaster ? handleFrameModeChange : undefined}
             >
                <GiftEventOverlay gift={lastGift} onProfileClick={(p) => setSelectedProfile(p)} />
             </BroadcastLayout>

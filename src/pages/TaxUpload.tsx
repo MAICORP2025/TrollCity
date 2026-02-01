@@ -233,7 +233,7 @@ export default function TaxUploadPage() {
             <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
               <p className="text-green-400 text-sm">
                 ✓ Your W-9 form has been submitted and is pending admin review. 
-                You'll be notified once it's processed.
+                You&apos;ll be notified once it&apos;s processed.
               </p>
             </div>
           )}

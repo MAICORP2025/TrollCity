@@ -565,7 +565,7 @@ export default function OfficerScheduling() {
           <div className="bg-[#1A1A1A] border border-gray-700 rounded-xl p-8 text-center">
             <Calendar className="w-16 h-16 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400">No shift slots scheduled yet</p>
-            <p className="text-sm text-gray-500 mt-2">Click "Schedule New Shift" to get started</p>
+            <p className="text-sm text-gray-500 mt-2">Click &quot;Schedule New Shift&quot; to get started</p>
           </div>
         ) : (
           <div className="space-y-6">

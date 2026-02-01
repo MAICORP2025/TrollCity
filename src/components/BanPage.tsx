@@ -28,7 +28,7 @@ export default function BanPage({ onClose }: BanPageProps) {
             <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-2" />
             <p className="text-red-300 text-lg font-semibold mb-2">Your account has been permanently banned</p>
             <p className="text-gray-300 text-sm">
-              You have violated Troll City's community guidelines. This action cannot be reversed.
+              You have violated Troll City&apos;s community guidelines. This action cannot be reversed.
             </p>
           </div>
         </div>

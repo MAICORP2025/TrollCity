@@ -225,7 +225,7 @@ export default function TrollFamily() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-yellow-400">
-                      Admin's Wife
+                      Admin&apos;s Wife
                     </h3>
                     <p className="text-white font-semibold">@{familyStatus.current_wife.username}</p>
                     <p className="text-sm text-gray-400">
@@ -249,7 +249,7 @@ export default function TrollFamily() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-yellow-400">
-                      Admin's Husband
+                      Admin&apos;s Husband
                     </h3>
                     <p className="text-white font-semibold">@{familyStatus.current_husband.username}</p>
                     <p className="text-sm text-gray-400">

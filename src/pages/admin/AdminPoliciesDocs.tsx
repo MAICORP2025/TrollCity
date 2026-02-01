@@ -73,7 +73,7 @@ export default function AdminPoliciesDocsPage() {
             • Minimum payout threshold: <strong>12,000 troll_coins</strong>.
           </p>
           <p>
-            • Payouts are processed manually via the Admin "Payout Requests"
+            • Payouts are processed manually via the Admin &quot;Payout Requests&quot;
             view, then marked as <code className="text-purple-300">paid_at</code>/<code className="text-purple-300">paid_by</code>.
           </p>
           <p>

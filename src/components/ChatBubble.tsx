@@ -17,6 +17,7 @@ interface Message {
   sender_username?: string
   sender_avatar_url?: string | null
   sender_rgb_expires_at?: string | null
+  isPending?: boolean
 }
 
 export default function ChatBubble() {
@@ -31,6 +32,7 @@ export default function ChatBubble() {
   const [isTyping, setIsTyping] = useState(false)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const channelRef = useRef<any>(null)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Audio ref for message sounds
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -86,6 +88,38 @@ export default function ChatBubble() {
     }
   }, [])
 
+  // Fetch messages and sender info
+  const fetchMessagesWithSenders = useCallback(async (convId: string) => {
+    const messagesData = await getConversationMessages(convId, { limit: 50 })
+    
+    // Enhance with sender info
+    const senderIds = [...new Set(messagesData.map(m => m.sender_id))]
+    const senderMap: Record<string, any> = {}
+    
+    if (senderIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from('user_profiles')
+        .select('id,username,avatar_url,rgb_username_expires_at')
+        .in('id', senderIds)
+      
+      usersData?.forEach(u => {
+        senderMap[u.id] = u
+      })
+    }
+
+    return messagesData.map(m => ({
+      id: m.id,
+      conversation_id: m.conversation_id,
+      sender_id: m.sender_id,
+      content: m.body,
+      created_at: m.created_at,
+      read_at: m.read_at,
+      sender_username: senderMap[m.sender_id]?.username,
+      sender_avatar_url: senderMap[m.sender_id]?.avatar_url,
+      sender_rgb_expires_at: senderMap[m.sender_id]?.rgb_username_expires_at
+    })).reverse()
+  }, [])
+
   // Load messages
   useEffect(() => {
     if (!actualConversationId || !profile?.id || !isOpen) return
@@ -93,34 +127,7 @@ export default function ChatBubble() {
     const loadMessages = async () => {
       setLoading(true)
       try {
-        const messagesData = await getConversationMessages(actualConversationId, { limit: 50 })
-        
-        // Enhance with sender info
-        const senderIds = [...new Set(messagesData.map(m => m.sender_id))]
-        const senderMap: Record<string, any> = {}
-        
-        if (senderIds.length > 0) {
-          const { data: usersData } = await supabase
-            .from('user_profiles')
-            .select('id,username,avatar_url,rgb_username_expires_at')
-            .in('id', senderIds)
-          
-          usersData?.forEach(u => {
-            senderMap[u.id] = u
-          })
-        }
-
-        const mappedMessages = messagesData.map(m => ({
-          id: m.id,
-          conversation_id: m.conversation_id,
-          sender_id: m.sender_id,
-          content: m.body,
-          created_at: m.created_at,
-          sender_username: senderMap[m.sender_id]?.username,
-          sender_avatar_url: senderMap[m.sender_id]?.avatar_url,
-          sender_rgb_expires_at: senderMap[m.sender_id]?.rgb_username_expires_at
-        })).reverse() // Show newest at bottom
-
+        const mappedMessages = await fetchMessagesWithSenders(actualConversationId)
         setMessages(mappedMessages)
         
         // Mark as read
@@ -163,6 +170,16 @@ export default function ChatBubble() {
                avatar_url: profile?.avatar_url || null,
                rgb_username_expires_at: profile?.rgb_username_expires_at || null
              }
+          } else if (newMsgRaw.sender_id === activeUserId) {
+             // Optimization: Use active chat store data if available
+             senderInfo = {
+               username: activeUsername || 'Unknown',
+               avatar_url: activeUserAvatar || null,
+               rgb_username_expires_at: null // Store might not have this, but it's better than a fetch
+             }
+             
+             // Optional: Background refresh if we really need updated data (e.g. RGB)
+             // But for chat bubble speed, this is sufficient.
           } else {
              const { data } = await supabase.from('user_profiles').select('username,avatar_url,rgb_username_expires_at').eq('id', newMsgRaw.sender_id).single()
              if (data) senderInfo = data as any
@@ -174,12 +191,23 @@ export default function ChatBubble() {
             sender_id: newMsgRaw.sender_id,
             content: newMsgRaw.body,
             created_at: newMsgRaw.created_at,
+            read_at: newMsgRaw.read_at,
             sender_username: senderInfo.username,
             sender_avatar_url: senderInfo.avatar_url,
             sender_rgb_expires_at: senderInfo.rgb_username_expires_at
           }
 
-          setMessages(prev => [...prev, newMsg])
+          setMessages(prev => {
+            // Remove any pending message that matches (by comparing content and sender)
+            const withoutPending = prev.filter(msg => {
+              if (msg.isPending && msg.sender_id === user?.id && msg.content === newMsg.content) {
+                return false
+              }
+              return true
+            })
+            return [...withoutPending, newMsg]
+          })
+          
           if (newMsg.sender_id !== user?.id) {
             await markConversationRead(actualConversationId)
             // Play sound
@@ -202,10 +230,70 @@ export default function ChatBubble() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [actualConversationId, profile?.id, isOpen, user?.id, scrollToBottom])
+  }, [actualConversationId, profile?.id, isOpen, user?.id, scrollToBottom, fetchMessagesWithSenders])
+
+  // Poll for new messages and read status updates every second
+  useEffect(() => {
+    if (!actualConversationId || !isOpen) return
+
+    const pollMessages = async () => {
+      try {
+        const mappedMessages = await fetchMessagesWithSenders(actualConversationId)
+        
+        setMessages(prev => {
+          const prevIds = new Set(prev.map(m => m.id))
+          
+          // Check if there are new messages
+          const hasNewMessages = mappedMessages.some(m => !prevIds.has(m.id))
+          if (hasNewMessages) {
+            return mappedMessages
+          }
+          
+          // Check for read status updates on existing messages
+          const hasReadUpdate = mappedMessages.some((m, idx) => {
+            if (idx < prev.length) {
+              return prev[idx].read_at !== m.read_at
+            }
+            return false
+          })
+          if (hasReadUpdate) {
+            return mappedMessages
+          }
+          
+          return prev
+        })
+      } catch (error) {
+        // Silent fail for polling
+      }
+    }
+
+    // Initial poll
+    pollMessages()
+
+    // Poll every second
+    pollIntervalRef.current = setInterval(pollMessages, 1000)
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
+  }, [actualConversationId, isOpen, fetchMessagesWithSenders])
 
   const handleLocalNewMessage = (newMsg: any) => {
-    setMessages(prev => [...prev, newMsg])
+    // Add message as pending with sender info
+    const pendingMsg: Message = {
+      id: `temp-${Date.now()}`,
+      conversation_id: actualConversationId || '',
+      sender_id: user?.id || '',
+      content: newMsg.content || newMsg.body,
+      created_at: new Date().toISOString(),
+      sender_username: profile?.username,
+      sender_avatar_url: profile?.avatar_url,
+      sender_rgb_expires_at: profile?.rgb_username_expires_at,
+      isPending: true
+    }
+    setMessages(prev => [...prev, pendingMsg])
     scrollToBottom()
   }
 
@@ -304,7 +392,7 @@ export default function ChatBubble() {
                    <img 
                     src={msg.sender_avatar_url || `https://ui-avatars.com/api/?name=${msg.sender_username}&background=random`}
                     alt={msg.sender_username}
-                    className="w-8 h-8 rounded-full border border-purple-500/20 flex-shrink-0"
+                    className={`w-8 h-8 rounded-full border border-purple-500/20 flex-shrink-0 ${msg.isPending ? 'opacity-50' : ''}`}
                   />
                 )}
                 
@@ -312,10 +400,10 @@ export default function ChatBubble() {
                   <div className="flex items-center gap-2">
                     {!isMe && msg.sender_username && (
                        <ClickableUsername 
-                        username={msg.sender_username}
-                        className="text-xs font-bold text-gray-400 hover:text-purple-400"
-                        rgbExpiresAt={msg.sender_rgb_expires_at}
-                      />
+                         username={msg.sender_username}
+                         className="text-xs font-bold text-gray-400 hover:text-purple-400"
+                         profile={{ rgb_username_expires_at: msg.sender_rgb_expires_at || undefined }}
+                       />
                     )}
                     <span className="text-[10px] text-gray-600">
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -326,9 +414,20 @@ export default function ChatBubble() {
                     isMe 
                       ? 'bg-purple-600 text-white rounded-tr-none' 
                       : 'bg-[#1F1F2E] text-gray-200 rounded-tl-none border border-purple-500/10'
-                  }`}>
+                  } ${msg.isPending ? 'opacity-70' : ''}`}>
                     {msg.content}
                   </div>
+                  
+                  {/* Read status for own messages */}
+                  {isMe && (
+                    <div className="flex items-center gap-1 justify-end">
+                      {msg.read_at ? (
+                        <CheckCheck className="w-3 h-3 text-purple-400" />
+                      ) : (
+                        <Check className={`w-3 h-3 ${msg.isPending ? 'text-gray-600' : 'text-gray-400'}`} />
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )

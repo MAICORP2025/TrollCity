@@ -351,7 +351,7 @@ export default function EmpirePartnerDashboard() {
               <h3 className="text-lg font-semibold">Total Referrals</h3>
             </div>
             <p className="text-3xl font-bold">{stats?.totalReferrals || 0}</p>
-            <p className="text-sm text-gray-400 mt-2">Users you've recruited</p>
+            <p className="text-sm text-gray-400 mt-2">Users you&apos;ve recruited</p>
           </div>
 
           <div className="bg-[#141414] border border-[#2C2C2C] rounded-xl p-6">
@@ -401,7 +401,7 @@ export default function EmpirePartnerDashboard() {
             </button>
           </div>
           <p className="text-sm text-gray-400 mt-2">
-            Share this link to recruit new users. You'll earn 10,000 coins when they reach 40,000 troll_coins within 21 days.
+            Share this link to recruit new users. You&apos;ll earn 10,000 coins when they reach 40,000 troll_coins within 21 days.
           </p>
         </div>
 

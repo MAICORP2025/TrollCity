@@ -6,6 +6,7 @@ import CreditScoreBadge from '../components/CreditScoreBadge';
 import BadgesGrid from '../components/badges/BadgesGrid';
 import { UserBadge } from '../components/UserBadge';
 import { useCreditScore } from '../lib/hooks/useCreditScore';
+import { useProfileViewPayment } from '../hooks/useProfileViewPayment';
 import { getLevelName } from '../lib/xp';
 import { ENTRANCE_EFFECTS_MAP } from '../lib/entranceEffects';
 import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home, Mars, Venus, Trash2, CheckCircle, CreditCard, FileText } from 'lucide-react';
@@ -15,6 +16,7 @@ import { PERK_CONFIG } from '@/lib/perkSystem';
 import { canMessageAdmin } from '@/lib/perkEffects';
 import { cars } from '../data/vehicles';
 import TMVTab from '../components/tmv/TMVTab';
+import ProfileFeed from '../components/profile/ProfileFeed';
 
 function ProfileInner() {
   const { username, userId } = useParams();
@@ -24,7 +26,7 @@ function ProfileInner() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isProfileLive, setIsProfileLive] = useState(false);
-  const [activeTab, setActiveTab] = useState('posts');
+  const [activeTab, setActiveTab] = useState('social');
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [inventory, setInventory] = useState<{
@@ -48,17 +50,57 @@ function ProfileInner() {
   const [earnings, setEarnings] = useState<any[]>([]);
   const [earningsLoading, setEarningsLoading] = useState(false);
   const viewerRole = useAuthStore.getState().profile?.troll_role || useAuthStore.getState().profile?.role || 'user';
-  const [posts, setPosts] = useState<any[]>([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [postContent, setPostContent] = useState('');
-  const [imageFiles, setImageFiles] = useState<FileList | null>(null);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [creatingPost, setCreatingPost] = useState(false);
+  const [postsCount, setPostsCount] = useState(0);
   const [announcementsEnabled, setAnnouncementsEnabled] = useState(true);
+  const [bannerNotificationsEnabled, setBannerNotificationsEnabled] = useState(true);
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [isTabDropdownOpen, setIsTabDropdownOpen] = useState(false);
   const tabDropdownRef = useRef<HTMLDivElement | null>(null);
   const { data: creditData, loading: creditLoading } = useCreditScore(profile?.id);
+
+  // Profile Costs State
+  const [messageCost, setMessageCost] = useState(0);
+  const [viewCost, setViewCost] = useState(0);
+
+  // Profile View Cost Logic
+  const { checking: paymentChecking, canView } = useProfileViewPayment({
+    profileOwnerId: profile?.id,
+    profileViewPrice: profile?.profile_view_cost || 0,
+    onPaymentComplete: () => {
+      refreshProfile();
+    }
+  });
+
+  const handleUpdateCosts = async () => {
+    if (!currentUser || currentUser.id !== profile.id) return;
+    
+    try {
+      setSavingPreferences(true);
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          message_cost: messageCost,
+          profile_view_cost: viewCost
+        })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+      
+      toast.success('Profile costs updated successfully');
+      
+      // Update local profile state
+      setProfile((prev: any) => ({
+        ...prev,
+        message_cost: messageCost,
+        profile_view_cost: viewCost
+      }));
+    } catch (error) {
+      console.error('Error updating costs:', error);
+      toast.error('Failed to update profile costs');
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
 
   const handleClearCacheReload = () => {
     try {
@@ -421,6 +463,8 @@ function ProfileInner() {
         
         setProfile(data);
         if (currentUser?.id === data.id) {
+          setMessageCost(data.message_cost || 0);
+          setViewCost(data.profile_view_cost || 0);
           fetchInventory(data.id);
         } else {
           setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [], vehicles: [], titlesAndDeeds: [] });
@@ -438,9 +482,15 @@ function ProfileInner() {
           .from('user_follows')
           .select('*', { count: 'exact', head: true })
           .eq('follower_id', data.id);
+
+        const { count: postsC } = await supabase
+          .from('troll_posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', data.id);
           
         setFollowersCount(followers || 0);
         setFollowingCount(following || 0);
+        setPostsCount(postsC || 0);
       }
       setLoading(false);
     };
@@ -583,6 +633,9 @@ function ProfileInner() {
     if (isOwnProfile && profile?.announcements_enabled !== undefined) {
       setAnnouncementsEnabled(profile.announcements_enabled);
     }
+    if (isOwnProfile && profile?.banner_notifications_enabled !== undefined) {
+      setBannerNotificationsEnabled(profile.banner_notifications_enabled);
+    }
   }, [isOwnProfile, profile]);
 
   const toggleAnnouncements = async () => {
@@ -598,6 +651,26 @@ function ProfileInner() {
       if (error) throw error;
       setAnnouncementsEnabled(newValue);
       toast.success(newValue ? 'Announcements enabled' : 'Announcements disabled');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to update preferences');
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
+
+  const toggleBannerNotifications = async () => {
+    if (!currentUser) return;
+    setSavingPreferences(true);
+    try {
+      const newValue = !bannerNotificationsEnabled;
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ banner_notifications_enabled: newValue })
+        .eq('id', currentUser.id);
+      
+      if (error) throw error;
+      setBannerNotificationsEnabled(newValue);
+      toast.success(newValue ? 'Banner notifications enabled' : 'Banner notifications disabled');
     } catch (e: any) {
       toast.error(e?.message || 'Failed to update preferences');
     } finally {
@@ -632,161 +705,13 @@ function ProfileInner() {
     }
   };
 
-  const fetchPosts = useCallback(async () => {
-    if (!profile?.id) return;
-    setPostsLoading(true);
-    try {
-      const { data } = await supabase
-        .from('troll_posts')
-        .select('*')
-        .eq('user_id', profile.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setPosts(data || []);
-    } finally {
-      setPostsLoading(false);
-    }
-  }, [profile?.id]);
 
-  useEffect(() => {
-    fetchPosts();
-  }, [fetchPosts]);
-  useEffect(() => {
-    if (!profile?.id) return;
-    const channel = supabase
-      .channel(`profile-posts-${profile.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'troll_posts', filter: `user_id=eq.${profile.id}` },
-        (payload) => {
-          setPosts((prev) => [payload.new as any, ...prev]);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'troll_posts', filter: `user_id=eq.${profile.id}` },
-        (payload) => {
-          const deletedId = (payload.old as any).id;
-          setPosts((prev) => prev.filter((p) => p.id !== deletedId));
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [profile?.id]);
 
-  const getVideoDuration = (file: File): Promise<number> => {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(file);
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.onloadedmetadata = () => {
-        URL.revokeObjectURL(url);
-        resolve(video.duration || 0);
-      };
-      video.src = url;
-    });
-  };
 
-  const createPost = async () => {
-    if (!currentUser?.id) {
-      toast.error('Please log in');
-      return;
-    }
-    if (!postContent.trim() && !imageFiles && !videoFile) {
-      toast.error('Add content or media');
-      return;
-    }
-    if (postContent.length > 4000) {
-      toast.error('Text exceeds 4000 characters');
-      return;
-    }
-    setCreatingPost(true);
-    try {
-      if (videoFile) {
-        const duration = await getVideoDuration(videoFile);
-        if (duration > 300) {
-          toast.error('Video must be 5 minutes or less');
-          setCreatingPost(false);
-          return;
-        }
-        const path = `${currentUser.id}/${Date.now()}-${videoFile.name}`;
-        const { error: vErr } = await supabase.storage.from('post-images').upload(path, videoFile, {
-          cacheControl: '3600',
-          upsert: false
-        });
-        if (vErr) throw vErr;
-        const { data: vUrl } = supabase.storage.from('post-images').getPublicUrl(path);
-        const { error: insertErr } = await supabase.from('troll_posts').insert({
-          user_id: currentUser.id,
-          content: postContent.trim(),
-          video_url: vUrl.publicUrl
-        });
-        if (insertErr) throw insertErr;
-      }
-      if (imageFiles && imageFiles.length > 0) {
-        for (let i = 0; i < imageFiles.length; i++) {
-          const file = imageFiles.item(i)!;
-          const path = `${currentUser.id}/${Date.now()}-${i}-${file.name}`;
-          const { error: iErr } = await supabase.storage.from('post-images').upload(path, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-          if (iErr) throw iErr;
-          const { data: iUrl } = supabase.storage.from('post-images').getPublicUrl(path);
-          const { error: insertErr } = await supabase.from('troll_posts').insert({
-            user_id: currentUser.id,
-            content: postContent.trim(),
-            image_url: iUrl.publicUrl
-          });
-          if (insertErr) throw insertErr;
-        }
-      }
-      if (!videoFile && !imageFiles) {
-        const { error: tErr } = await supabase.from('troll_posts').insert({
-          user_id: currentUser.id,
-          content: postContent.trim()
-        });
-        if (tErr) throw tErr;
-      }
-      const { error: wallErr } = await supabase.from('troll_wall_posts').insert({
-        user_id: currentUser.id,
-        post_type: 'text',
-        content: postContent.trim(),
-        metadata: {}
-      });
-      if (wallErr) {}
-      setPostContent('');
-      setImageFiles(null);
-      setVideoFile(null);
-      toast.success('Posted');
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to post');
-    } finally {
-      setCreatingPost(false);
-    }
-  };
 
-  const canDeletePost = (post: any) => {
-    if (!currentUser?.id) return false;
-    const r = viewerRole;
-    if (currentUser.id === post.user_id) return true;
-    if (r === 'admin' || r === 'troll_officer' || r === 'lead_troll_officer') return true;
-    return false;
-  };
 
-  const deletePost = async (postId: string) => {
-    try {
-      const { error } = await supabase.from('troll_posts').delete().eq('id', postId);
-      if (error) throw error;
-      toast.success('Deleted');
-    } catch (e: any) {
-      toast.error(e?.message || 'Delete failed');
-    }
-  };
 
-  if (loading) {
+  if (loading || (profile && !isOwnProfile && (paymentChecking || !canView))) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#0A0814]">
         <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
@@ -963,6 +888,12 @@ function ProfileInner() {
             <Calendar size={14} />
             <span>Joined {new Date(profile.created_at || Date.now()).toLocaleDateString()}</span>
           </div>
+          {profile.terms_accepted && (
+            <div className="flex items-center gap-1 text-green-400">
+              <FileText size={14} />
+              <span>Agreement Accepted</span>
+            </div>
+          )}
         </div>
         
         {/* Stats */}
@@ -976,12 +907,13 @@ function ProfileInner() {
              <span className="text-gray-400">Followers</span>
            </div>
            <div className="flex gap-1">
-             <span className="font-bold text-white">{posts.length}</span>
+             <span className="font-bold text-white">{postsCount}</span>
              <span className="text-gray-400">Posts</span>
            </div>
         </div>
         
         {/* Tabs */}
+        {tabOptions.filter(o => o.show).length > 1 && (
         <div className="relative mt-6" ref={tabDropdownRef}>
           <button
             type="button"
@@ -1006,112 +938,27 @@ function ProfileInner() {
             </div>
           )}
         </div>
+        )}
 
         <div className="mt-6">
            {activeTab === 'social' && (
              <div className="space-y-6">
                
-               {/* Badges Section */}
-               <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4">
-                 <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                     <Shield className="w-5 h-5 text-yellow-400"/>
-                     Badges
-                   </h3>
-                   <details className="relative group">
-                     <summary className="list-none cursor-pointer px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-gray-300 flex items-center gap-2">
-                       View All Badges
-                       <ChevronDown size={14} className="group-open:rotate-180 transition-transform"/>
-                     </summary>
-                     <div className="absolute right-0 top-full mt-2 w-[80vw] max-w-2xl bg-[#0A0814] border border-zinc-700 rounded-xl shadow-2xl z-50 p-4 max-h-[60vh] overflow-y-auto">
-                        <BadgesGrid userId={profile.id} showViewAllLink={false} />
-                     </div>
-                   </details>
-                 </div>
-                 
-                 {/* Preview Badges */}
-                 <BadgesGrid userId={profile.id} limit={4} showViewAllLink={false} />
+               {/* Badges Toggle */}
+               <div className="flex justify-end mb-2">
+                 <details className="relative group">
+                   <summary className="list-none cursor-pointer px-4 py-2 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded-xl text-sm font-medium text-white flex items-center gap-2 transition-colors">
+                     <Shield className="w-4 h-4 text-yellow-400"/>
+                     View Badges
+                     <ChevronDown size={16} className="text-gray-400 group-open:rotate-180 transition-transform"/>
+                   </summary>
+                   <div className="absolute right-0 top-full mt-2 w-[90vw] md:w-[600px] bg-[#0A0814] border border-zinc-700 rounded-xl shadow-2xl z-50 p-6 max-h-[60vh] overflow-y-auto backdrop-blur-sm">
+                       <BadgesGrid userId={profile.id} showViewAllLink={false} />
+                    </div>
+                 </details>
                </div>
 
-               {isOwnProfile && (
-                 <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-                   <textarea
-                     value={postContent}
-                     onChange={(e) => setPostContent(e.target.value)}
-                     rows={4}
-                     maxLength={4000}
-                     placeholder="Share text up to 4000 characters"
-                     className="w-full px-4 py-3 bg-zinc-800 border border-gray-700 rounded-lg text-white"
-                   />
-                   <div className="flex gap-3">
-                     <input
-                       type="file"
-                       accept="image/*,video/*"
-                       multiple
-                       onChange={(e) => {
-                         const files = e.target.files;
-                         if (!files || files.length === 0) {
-                           setImageFiles(null);
-                           setVideoFile(null);
-                           return;
-                         }
-                         const allFiles = Array.from(files);
-                         const firstVideo = allFiles.find((f) => f.type.startsWith('video/')) || null;
-                         if (firstVideo) {
-                           setVideoFile(firstVideo);
-                           setImageFiles(null);
-                         } else {
-                           setImageFiles(files);
-                           setVideoFile(null);
-                         }
-                       }}
-                     />
-                   </div>
-                   <div className="flex justify-end">
-                     <button
-                       type="button"
-                       disabled={creatingPost}
-                       onClick={createPost}
-                       className="px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                     >
-                       {creatingPost ? 'Posting...' : 'Post'}
-                     </button>
-                   </div>
-                 </div>
-               )}
-               {postsLoading ? (
-                 <div className="text-center text-gray-500 py-10 bg-[#12121A] rounded-xl border border-dashed border-gray-800">Loading posts...</div>
-               ) : posts.length === 0 ? (
-                 <div className="text-center text-gray-500 py-10 bg-[#12121A] rounded-xl border border-dashed border-gray-800">No posts yet.</div>
-               ) : (
-                 <div className="space-y-4">
-                   {posts.map((post) => (
-                     <div key={post.id} className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
-                       <div className="flex justify-between items-start mb-2">
-                         <div className="text-xs text-gray-400">{new Date(post.created_at).toLocaleString()}</div>
-                         {canDeletePost(post) && (
-                           <button
-                             type="button"
-                             onClick={() => deletePost(post.id)}
-                             className="text-red-400 hover:text-red-300"
-                           >
-                             Delete
-                           </button>
-                       )}
-                      </div>
-                      {post.video_url ? (
-                        <video src={post.video_url} controls className="w-full rounded-lg mb-3" />
-                      ) : null}
-                      {post.image_url ? (
-                        <img src={post.image_url} alt="" className="w-full rounded-lg mb-3" />
-                      ) : null}
-                      {post.content && (
-                        <p className="text-white whitespace-pre-wrap break-words">{post.content}</p>
-                      )}
-                     </div>
-                   ))}
-                 </div>
-               )}
+               <ProfileFeed userId={profile.id} />
              </div>
            )}
 
@@ -1579,36 +1426,110 @@ function ProfileInner() {
            {activeTab === 'settings' && isOwnProfile && (
              <div className="space-y-6">
                <h3 className="text-lg font-bold mb-4">Notification Settings</h3>
+
+               {/* Profile Costs */}
+               <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 space-y-4">
+                 <div className="flex items-center gap-3 mb-2">
+                   <Coins className="w-6 h-6 text-yellow-400" />
+                   <div>
+                     <h4 className="font-medium text-white">Profile Costs</h4>
+                     <p className="text-sm text-gray-400">Set prices for interactions (0 = Free)</p>
+                   </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-xs font-medium text-gray-400 mb-1">Message Cost (TC)</label>
+                     <input 
+                       type="number" 
+                       min="0"
+                       value={messageCost}
+                       onChange={(e) => setMessageCost(Number(e.target.value))}
+                       className="w-full bg-black/50 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500"
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-xs font-medium text-gray-400 mb-1">Profile View Cost (TC)</label>
+                     <input 
+                       type="number" 
+                       min="0"
+                       value={viewCost}
+                       onChange={(e) => setViewCost(Number(e.target.value))}
+                       className="w-full bg-black/50 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500"
+                     />
+                   </div>
+                 </div>
+                 
+                 <div className="flex justify-end">
+                   <button
+                     onClick={handleUpdateCosts}
+                     disabled={savingPreferences}
+                     className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                   >
+                     {savingPreferences ? 'Saving...' : 'Save Costs'}
+                   </button>
+                 </div>
+               </div>
                
                {/* Announcements Toggle */}
-               <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
-                 <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                     {announcementsEnabled ? (
-                       <Bell className="w-6 h-6 text-green-400" />
-                     ) : (
-                       <BellOff className="w-6 h-6 text-gray-400" />
-                     )}
-                     <div>
-                       <h4 className="font-medium text-white">Admin Announcements</h4>
-                       <p className="text-sm text-gray-400">Receive notifications from administrators</p>
-                     </div>
-                   </div>
-                   <button
-                     onClick={toggleAnnouncements}
-                     disabled={savingPreferences}
-                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                       announcementsEnabled ? 'bg-green-500' : 'bg-gray-600'
-                     }`}
-                   >
-                     <span
-                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                         announcementsEnabled ? 'translate-x-6' : 'translate-x-1'
-                       }`}
-                     />
-                 </button>
-               </div>
-             </div>
+              <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {announcementsEnabled ? (
+                      <Bell className="w-6 h-6 text-green-400" />
+                    ) : (
+                      <BellOff className="w-6 h-6 text-gray-400" />
+                    )}
+                    <div>
+                      <h4 className="font-medium text-white">Admin Announcements</h4>
+                      <p className="text-sm text-gray-400">Receive notifications from administrators</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleAnnouncements}
+                    disabled={savingPreferences}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      announcementsEnabled ? 'bg-green-500' : 'bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        announcementsEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Banner Notifications Toggle */}
+              <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {bannerNotificationsEnabled ? (
+                      <Zap className="w-6 h-6 text-green-400" />
+                    ) : (
+                      <Zap className="w-6 h-6 text-gray-400" />
+                    )}
+                    <div>
+                      <h4 className="font-medium text-white">Live Banners</h4>
+                      <p className="text-sm text-gray-400">Receive notifications when pods go live</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleBannerNotifications}
+                    disabled={savingPreferences}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      bannerNotificationsEnabled ? 'bg-green-500' : 'bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        bannerNotificationsEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
              
              <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
                <div className="flex items-center justify-between">

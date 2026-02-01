@@ -133,7 +133,6 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
                      // The logic in RPC handles capping at 100.
                      // But we shouldn't show +100% if we have 90%.
                      
-                     let displayAmount = pct;
                      if (gas + pct > 100) {
                          // Optional: Adjust to exact fill? 
                          // "Fill Up" button might be better.
@@ -206,7 +205,7 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
                      </button>
                    ))
                  ) : (
-                   targetUser && <p className="text-center text-xs text-gray-500 py-2">No friends found matching "{targetUser}"</p>
+                   targetUser && <p className="text-center text-xs text-gray-500 py-2">No friends found matching &quot;{targetUser}&quot;</p>
                  )}
                </div>
 

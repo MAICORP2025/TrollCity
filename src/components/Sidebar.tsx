@@ -43,6 +43,8 @@ import { useCoins } from '@/lib/hooks/useCoins'
 import { useXPStore } from '@/stores/useXPStore'
 import { useSidebarUpdates } from '@/hooks/useSidebarUpdates'
 
+import SidebarTopBroadcasters from './sidebar/SidebarTopBroadcasters'
+
 export default function Sidebar() {
   const { profile } = useAuthStore()
   const { level, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
@@ -175,7 +177,7 @@ export default function Sidebar() {
   }, [profile, isOfficer, isAdmin, isSecretary])
 
   // Define visible paths for each group to calculate highlights correctly
-  const mainPaths = ['/', '/trollstown', '/trollg', '/inventory', '/troting', '/wall', '/marketplace', '/leaderboard', '/credit-scores', '/store', '/creator-switch', '/troll-court']
+  const mainPaths = ['/', '/trollstown', '/inventory', '/troting', '/wall', '/marketplace', '/leaderboard', '/credit-scores', '/store', '/creator-switch', '/troll-court']
   
   const supportPaths = ['/support', '/safety']
   
@@ -289,13 +291,16 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 space-y-6 custom-scrollbar min-h-0">
+        
+        {/* Top Broadcasters */}
+        <SidebarTopBroadcasters isCollapsed={isSidebarCollapsed} />
+
         {/* Main Group */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "City Center"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(mainPaths)}>
           <SidebarItem icon={Home} label="Home" to="/" active={isActive('/')} collapsed={isSidebarCollapsed} highlight={isUpdated('/')} onClick={() => markAsViewed('/')} />
           <SidebarItem icon={Building2} label="Troll Town" to="/trollstown" active={isActive('/trollstown')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollstown')} onClick={() => markAsViewed('/trollstown')} />
           <SidebarItem icon={Landmark} label="City Hall" to="/city-hall" active={isActive('/city-hall')} collapsed={isSidebarCollapsed} highlight={isUpdated('/city-hall')} onClick={() => markAsViewed('/city-hall')} />
           <SidebarItem icon={Warehouse} label="Living" to="/living" active={isActive('/living')} collapsed={isSidebarCollapsed} highlight={isUpdated('/living')} onClick={() => markAsViewed('/living')} />
-          <SidebarItem icon={Crown} label="Troll G" to="/trollg" active={isActive('/trollg')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollg')} onClick={() => markAsViewed('/trollg')} />
           <SidebarItem icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} collapsed={isSidebarCollapsed} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} />
           <SidebarItem icon={Vote} label="Troting" to="/troting" active={isActive('/troting')} collapsed={isSidebarCollapsed} highlight={isUpdated('/troting')} onClick={() => markAsViewed('/troting')} />
           <SidebarItem icon={FileText} label="The Wall" to="/wall" active={isActive('/wall')} collapsed={isSidebarCollapsed} highlight={isUpdated('/wall')} onClick={() => markAsViewed('/wall')} />
@@ -330,8 +335,16 @@ export default function Sidebar() {
 
         {/* Social */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "Social"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(socialPaths)}>
-          <SidebarItem icon={MessageSquare} label="TCPS" to="/tcps" active={isActive('/tcps')} collapsed={isSidebarCollapsed} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} />
-          <SidebarItem icon={Star} label="GameTrollz" to="/gametrollz" active={isActive('/gametrollz')} collapsed={isSidebarCollapsed} highlight={isUpdated('/gametrollz')} onClick={() => markAsViewed('/gametrollz')} />
+          <SidebarItem icon={MessageSquare} label="Troll City Postal Service" to="/tcps" active={isActive('/tcps') || isActive('/messages')} collapsed={isSidebarCollapsed} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} />
+          <SidebarItem 
+            icon={Mic} 
+            label="Troll Pods" 
+            to="/pods" 
+            active={isActive('/pods')} 
+            collapsed={isSidebarCollapsed}
+            highlight={isUpdated('/pods')} onClick={() => markAsViewed('/pods')}
+            className="text-purple-400 hover:text-purple-300"
+          />
           <SidebarItem 
             icon={Mic} 
             label="Mai Talent" 

@@ -155,7 +155,7 @@ export default function LivingPage() {
       return;
     }
     
-    let query = supabase
+    const query = supabase
       .from('properties')
       .select('*')
       .in('owner_id', landlordIds)
@@ -423,7 +423,7 @@ export default function LivingPage() {
                     ) : ownedProperties.length === 0 ? (
                         <div className="text-center py-10 text-gray-500 bg-zinc-900/50 rounded-xl border border-zinc-800">
                             <Building className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                            <p>You don't own any properties yet.</p>
+                            <p>You don&apos;t own any properties yet.</p>
                             <button onClick={() => { setActiveTab('market'); setMarketFilter('sale'); }} className="mt-4 text-purple-400 hover:text-purple-300 text-sm font-bold">
                                 Buy a property
                             </button>
@@ -549,7 +549,7 @@ export default function LivingPage() {
                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-10 text-center">
                         <Tent className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
                         <h2 className="text-xl font-bold text-white mb-2">You are homeless!</h2>
-                        <p className="text-gray-400 mb-6">You currently don't have a place to live. Check the market to find a home.</p>
+                        <p className="text-gray-400 mb-6">You currently don&apos;t have a place to live. Check the market to find a home.</p>
                         <button 
                             onClick={() => setActiveTab('market')}
                             className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-xl font-bold transition-all"

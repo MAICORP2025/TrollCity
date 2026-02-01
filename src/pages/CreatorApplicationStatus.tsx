@@ -68,7 +68,7 @@ export function CreatorApplicationStatus() {
             <XCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-slate-50 mb-2">No Application Found</h2>
             <p className="text-slate-300 mb-4">
-              You haven't submitted a creator application yet.
+              You haven&apos;t submitted a creator application yet.
             </p>
             <Button 
               onClick={() => navigate('/creator-application')}
@@ -289,9 +289,9 @@ export function CreatorApplicationStatus() {
             <CardContent>
               <div className="space-y-3 text-slate-300">
                 <p>• Our team will review your application within 2-3 business days</p>
-                <p>• We'll evaluate your streaming experience and goals</p>
-                <p>• If applying for Empire Partner status, we'll assess your management capabilities</p>
-                <p>• You'll receive an email notification once the review is complete</p>
+                <p>• We&apos;ll evaluate your streaming experience and goals</p>
+                <p>• If applying for Empire Partner status, we&apos;ll assess your management capabilities</p>
+                <p>• You&apos;ll receive an email notification once the review is complete</p>
                 <p>• Approved creators will gain access to TrollTract benefits and earnings</p>
               </div>
             </CardContent>

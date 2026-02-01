@@ -7,6 +7,14 @@ export default function Changelog() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
 
+  // Prevent refresh redirect - only redirect if not admin
+  // This must be called unconditionally before any early returns
+  useEffect(() => {
+    if (profile?.role !== 'admin') {
+      navigate('/', { replace: true })
+    }
+  }, [profile?.role, navigate])
+
   if (!profile) {
     return (
       <div className="min-h-screen bg-[#0A0814] flex items-center justify-center">
@@ -14,13 +22,6 @@ export default function Changelog() {
       </div>
     )
   }
-
-  // Prevent refresh redirect - only redirect if not admin
-  useEffect(() => {
-    if (profile?.role !== 'admin') {
-      navigate('/', { replace: true })
-    }
-  }, [profile?.role, navigate])
 
   // Only admins can view this page
   if (profile?.role !== 'admin') {

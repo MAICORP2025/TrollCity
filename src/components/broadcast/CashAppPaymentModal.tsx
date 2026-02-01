@@ -267,7 +267,7 @@ export default function CashAppPaymentModal({
                   <li>✓ We receive your Cash App notification</li>
                   <li>✓ Admin verifies the payment (usually within 24 hours)</li>
                   <li>✓ {coins.toLocaleString()} coins are added to your account</li>
-                  <li>✓ You'll get a notification when complete</li>
+                  <li>✓ You&apos;ll get a notification when complete</li>
                 </ul>
               </div>
             </div>
@@ -279,7 +279,7 @@ export default function CashAppPaymentModal({
               }}
               className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors"
             >
-              Done - I'll Complete Payment
+              Done - I&apos;ll Complete Payment
             </button>
 
             <p className="text-xs text-gray-500 text-center">

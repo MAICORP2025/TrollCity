@@ -350,7 +350,7 @@ const CommandBattleGoLive = () => {
           <h3 className="text-lg font-semibold mb-3">How to Use:</h3>
           <ul className="space-y-2 text-gray-300">
             <li>• Select the number of streaming boxes (1-6)</li>
-            <li>• Click "Join Box" on any empty box to start broadcasting</li>
+            <li>• Click &quot;Join Box&quot; on any empty box to start broadcasting</li>
             <li>• Viewers can send gifts that appear in real-time</li>
             <li>• Each box represents a different broadcaster position</li>
             <li>• Use LiveKit metadata to route participants to correct boxes</li>

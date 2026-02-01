@@ -76,7 +76,7 @@ export default function ChatModeration() {
         .order('created_at', { ascending: true })
 
       if (error) throw error
-      // @ts-ignore
+      // @ts-expect-error - data type mismatch but runtime is safe
       setChatContext(data || [])
     } catch (error) {
       console.error('Failed to load chat context:', error)

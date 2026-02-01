@@ -8,7 +8,9 @@ export type TrollEventType =
   | 'war_match_end'
   | 'ai_decision_event'
   | 'economy_loss'
-  | 'economy_gain';
+  | 'economy_gain'
+  | 'pod_started'
+  | 'pod_listened';
 
 export type TrollEvent = {
   type: TrollEventType;

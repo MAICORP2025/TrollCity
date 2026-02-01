@@ -34,7 +34,7 @@ export default function PartnerProgram() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Referral Bonus</h2>
             <p className="text-gray-300 leading-relaxed">
-              Partners earn 5% of a referred user's earned coins once that user reaches 40,000 coins in a
+              Partners earn 5% of a referred user&apos;s earned coins once that user reaches 40,000 coins in a
               calendar month. Bonuses are paid in troll_coins (not cash withdrawable).
             </p>
           </section>

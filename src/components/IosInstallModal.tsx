@@ -85,10 +85,10 @@ export default function IosInstallModal({
                 </div>
                 <div className="flex-1 pt-1">
                   <p className="text-white font-medium mb-1">
-                    2. Select "Add to Home Screen"
+                    2. Select &quot;Add to Home Screen&quot;
                   </p>
                   <p className="text-slate-400 text-xs">
-                    Scroll down if you don't see it immediately
+                    Scroll down if you don&apos;t see it immediately
                   </p>
                 </div>
               </div>
@@ -100,7 +100,7 @@ export default function IosInstallModal({
                 </div>
                 <div className="flex-1 pt-1">
                   <p className="text-white font-medium mb-1">
-                    3. Tap "Add"
+                    3. Tap &quot;Add&quot;
                   </p>
                   <p className="text-slate-400 text-xs">
                     The app will appear on your home screen
@@ -119,7 +119,7 @@ export default function IosInstallModal({
                   className="w-5 h-5 rounded border-2 border-purple-500/30 bg-slate-800 checked:bg-purple-600 checked:border-purple-600 cursor-pointer transition-all"
                 />
                 <span className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">
-                  Don't show this again for 7 days
+                  Don&apos;t show this again for 7 days
                 </span>
               </label>
             )}

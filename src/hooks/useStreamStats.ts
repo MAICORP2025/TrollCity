@@ -69,9 +69,33 @@ export function useStreamStats(room: Room | null, streamerId: string | null) {
     }
 
     fetchStreamerStats()
-    const interval = setInterval(fetchStreamerStats, 5000) // every 5 sec
+    
+    // Subscribe to real-time updates instead of polling
+    const channel = supabase
+      .channel(`streamer_stats_${streamerId}`)
+      .on(
+        'postgres_changes',
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'user_profiles', 
+          filter: `id=eq.${streamerId}` 
+        },
+        (payload) => {
+          if (payload.new) {
+            // Merge new data with existing stats
+            setStreamerStats((prev: any) => ({
+              ...prev,
+              ...payload.new
+            }))
+          }
+        }
+      )
+      .subscribe()
 
-    return () => clearInterval(interval)
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [streamerId])
 
   return { viewerCount, duration, streamerStats }

@@ -19,7 +19,7 @@ export default function CreatorEarnings() {
             <h2 className="text-2xl font-semibold mb-4">How Creators Earn</h2>
             <p className="text-gray-300 leading-relaxed">
               Creators earn coins when viewers send gifts during their streams. All gifted coins are added
-              to the creator's paid coin balance.
+              to the creator&apos;s paid coin balance.
             </p>
           </section>
 

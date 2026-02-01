@@ -65,7 +65,7 @@ export default function DriversTest({ onComplete }: { onComplete: () => void }) 
 
   return (
     <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
-       <h2 className="text-xl font-bold mb-6">Driver's License Written Test</h2>
+       <h2 className="text-xl font-bold mb-6">Driver&apos;s License Written Test</h2>
        <div className="space-y-6">
           {QUESTIONS.map((q, i) => (
              <div key={i} className="space-y-2">

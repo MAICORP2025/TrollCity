@@ -247,7 +247,7 @@ export default function OfficerApplication() {
                 Conflict Resolution Scenario <span className="text-red-400">*</span>
               </label>
               <p className="text-xs text-[#E2E2E2]/60 mb-2">
-                A user is repeatedly spamming in chat despite warnings. They claim they're "just having fun" and other users are starting to defend them. How would you handle this situation?
+                A user is repeatedly spamming in chat despite warnings. They claim they&apos;re &quot;just having fun&quot; and other users are starting to defend them. How would you handle this situation?
               </p>
               <textarea
                 name="conflictScenario"

@@ -60,29 +60,13 @@ export default function BroadcastAnnouncement() {
 
     fetchBroadcasts();
 
-    // Set up real-time subscription for new broadcasts
-    const channel = supabase
-      .channel('broadcast-changes')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'admin_broadcasts' },
-        (payload) => {
-          const newBroadcast = payload.new as Broadcast;
-          // Check if not dismissed
-          const dismissedBroadcasts = JSON.parse(localStorage.getItem('dismissedBroadcasts') || '[]');
-          if (!dismissedBroadcasts.includes(newBroadcast.id)) {
-            setBroadcastQueue(prev => {
-                // Add to front if not already there
-                if (prev.find(b => b.id === newBroadcast.id)) return prev;
-                return [newBroadcast, ...prev];
-            });
-          }
-        }
-      )
-      .subscribe();
+    // Poll for new broadcasts (every 2 minutes)
+    const interval = setInterval(() => {
+        fetchBroadcasts();
+    }, 120000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, []);
 

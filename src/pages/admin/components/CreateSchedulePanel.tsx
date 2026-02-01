@@ -127,24 +127,13 @@ export default function CreateSchedulePanel() {
     loadOfficers()
     loadSchedules()
 
-    // Subscribe to real-time updates
-    const channel = supabase
-      .channel('officer_schedules_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'officer_shift_slots'
-        },
-        () => {
-          loadSchedules()
-        }
-      )
-      .subscribe()
+    // Polling every 30s to reduce DB load
+    const interval = setInterval(() => {
+      loadSchedules()
+    }, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [loadOfficers, loadSchedules])
 

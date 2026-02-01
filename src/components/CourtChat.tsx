@@ -73,6 +73,9 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
 
     loadMessages();
 
+    // Profile cache to prevent N+1 queries
+    const profileCache = useRef<Record<string, string>>({});
+
     // Realtime subscription
     const channel = supabase
       .channel(`court_chat_${courtId}`)
@@ -92,9 +95,15 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
           if (m.agent_role === 'User' && m.user_id) {
              if (m.user_id === user?.id) {
                 username = profile?.username || 'Me';
+                profileCache.current[m.user_id] = username;
+             } else if (profileCache.current[m.user_id]) {
+                username = profileCache.current[m.user_id];
              } else {
                 const { data } = await supabase.from('user_profiles').select('username').eq('id', m.user_id).single();
                 username = data?.username || 'User';
+                if (data?.username) {
+                  profileCache.current[m.user_id] = username;
+                }
              }
           }
 

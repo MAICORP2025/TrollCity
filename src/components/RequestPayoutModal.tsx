@@ -193,7 +193,7 @@ export default function RequestPayoutModal({
                   <p>Minimum withdrawal is {MINIMUM_COINS.toLocaleString()} coins</p>
                 )}
                 {coinsNum > availableCoins && (
-                  <p>You don't have enough coins. Available: {availableCoins.toLocaleString()}</p>
+                  <p>You don&apos;t have enough coins. Available: {availableCoins.toLocaleString()}</p>
                 )}
               </div>
             </div>

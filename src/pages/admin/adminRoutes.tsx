@@ -1,10 +1,11 @@
-import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Lock } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 import DatabaseBackup from './DatabaseBackup'
 import CityControlCenter from './CityControlCenter'
 import CacheClear from './CacheClear'
 import SystemConfig from './SystemConfig'
 import LiveKitUsageTab from './components/LiveKitUsageTab'
+import BroadcastLockTab from './components/BroadcastLockTab'
 import UserFormsTab from './components/UserFormsTab'
 import AdminErrors from './AdminErrors'
 import AdminCallsTab from './components/AdminCallsTab'
@@ -117,6 +118,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileColor: 'text-pink-200',
     tileBgColor: 'bg-pink-500/10',
     tileBorderColor: 'border-pink-500/30',
+    category: 'system'
+  },
+  {
+    id: 'broadcast-lock',
+    title: 'Broadcast Lock',
+    path: '/admin/broadcast-lock',
+    component: BroadcastLockTab,
+    roles: [UserRole.ADMIN],
+    description: 'Manage broadcast locks and limits',
+    icon: <Lock className="w-5 h-5 text-red-200" />,
+    tileColor: 'text-red-200',
+    tileBgColor: 'bg-red-500/10',
+    tileBorderColor: 'border-red-500/30',
     category: 'system'
   },
   {

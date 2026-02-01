@@ -21,54 +21,16 @@ export default function GlobalGiftBanner() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Subscribe to coin_transactions for huge gifts
+    // Subscribe to global-gifts broadcast channel
     const channel = supabase
       .channel('global-gifts')
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'gifts',
-          filter: `coins_spent=gt.0`, 
-        },
-        async (payload) => {
-          const newRecord = payload.new;
-          const amount = Number(newRecord.coins_spent);
-
-          if (amount >= HUGE_GIFT_THRESHOLD) {
-            const receiverId = newRecord.receiver_id;
-            const giftName = newRecord.message || 'Gift'; // 'message' column stores gift name in gifts table
-            
-            // Fetch names
-            const { data: senderData } = await supabase
-              .from('user_profiles')
-              .select('username')
-              .eq('id', newRecord.sender_id)
-              .single();
-
-            let receiverName = 'Someone';
-            if (receiverId) {
-              const { data: receiverData } = await supabase
-                .from('user_profiles')
-                .select('username')
-                .eq('id', receiverId)
-                .single();
-              if (receiverData) receiverName = receiverData.username;
-            }
-
-            setCurrentEvent({
-              id: newRecord.id,
-              senderId: newRecord.sender_id,
-              receiverId: receiverId,
-              senderName: senderData?.username || 'Someone',
-              receiverName: receiverName,
-              giftName: giftName,
-              amount: amount,
-              timestamp: Date.now(),
-            });
-            setIsVisible(true);
-          }
+        'broadcast',
+        { event: 'huge_gift' },
+        (payload) => {
+          const eventData = payload.payload as GiftEvent;
+          setCurrentEvent(eventData);
+          setIsVisible(true);
         }
       )
       .subscribe();

@@ -289,7 +289,7 @@ const CourtDocketDashboard: React.FC = (): JSX.Element => {
 
                 {entry.notes && (
                   <div className="mt-3 pt-3 border-t border-gray-700">
-                    <p className="text-sm text-gray-400 italic">"{entry.notes}"</p>
+                    <p className="text-sm text-gray-400 italic">&quot;{entry.notes}&quot;</p>
                   </div>
                 )}
 

@@ -48,24 +48,14 @@ export function useSidebarUpdates() {
     fetchUpdates()
     fetchViews()
 
-    // 3. Subscribe to changes
-    const channel = supabase
-      .channel('sidebar-updates-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sidebar_updates'
-        },
-        () => {
-            fetchUpdates()
-        }
-      )
-      .subscribe()
+    // 3. Poll for changes (every 2 minutes)
+    // Sidebar updates are rare, so we don't need a Realtime connection
+    const interval = setInterval(() => {
+        fetchUpdates()
+    }, 120000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [profile])
 

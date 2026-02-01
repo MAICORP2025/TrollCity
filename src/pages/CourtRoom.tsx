@@ -460,13 +460,13 @@ export default function CourtRoom() {
     };
   }, [activeCase]);
 
-  // Keep box count in sync for all viewers
+  // Keep box count in sync for all viewers using Realtime (Push) instead of Polling (Pull)
   useEffect(() => {
     if (!courtId) return;
     if (courtId === 'active' || !isValidUuid(courtId)) return;
-    let lastBoxCount = boxCount;
     
-    const id = window.setInterval(async () => {
+    // Initial fetch to ensure we have the latest state
+    const fetchInitialState = async () => {
       try {
         const { data } = await supabase
           .from('court_sessions')
@@ -474,27 +474,61 @@ export default function CourtRoom() {
           .eq('id', courtId)
           .maybeSingle();
 
-        if (!data) return;
-        if (data.status && !['active', 'live', 'waiting'].includes(data.status)) {
-          toast.info('Court session ended');
-          navigate('/troll-court');
-          return;
-        }
-        if (typeof data.max_boxes === 'number') {
-          const newBoxCount = Math.min(6, Math.max(2, data.max_boxes));
-          if (newBoxCount !== lastBoxCount) {
-            lastBoxCount = newBoxCount;
-            setBoxCount(newBoxCount);
-            console.log('[CourtRoom] BoxCount updated:', newBoxCount);
+        if (data) {
+          if (data.status && !['active', 'live', 'waiting'].includes(data.status)) {
+            toast.info('Court session ended');
+            navigate('/troll-court');
+            return;
+          }
+          if (typeof data.max_boxes === 'number') {
+             setBoxCount((prev) => {
+               const newCount = Math.min(6, Math.max(2, data.max_boxes));
+               return newCount !== prev ? newCount : prev;
+             });
           }
         }
       } catch (err) {
-        console.error('Court session polling error:', err);
+        console.error('Error fetching initial court state:', err);
       }
-    }, 5000);
+    };
+    
+    fetchInitialState();
 
-    return () => window.clearInterval(id);
-  }, [courtId, navigate, boxCount]);
+    const channel = supabase
+      .channel(`court_session_updates_${courtId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'court_sessions',
+          filter: `id=eq.${courtId}`,
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          if (newData.status && !['active', 'live', 'waiting'].includes(newData.status)) {
+            toast.info('Court session ended');
+            navigate('/troll-court');
+            return;
+          }
+          if (typeof newData.max_boxes === 'number') {
+            const newBoxCount = Math.min(6, Math.max(2, newData.max_boxes));
+            setBoxCount((prev) => {
+              if (prev !== newBoxCount) {
+                console.log('[CourtRoom] BoxCount updated via Realtime:', newBoxCount);
+                return newBoxCount;
+              }
+              return prev;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [courtId, navigate]);
 
   useEffect(() => {
     console.log('[CourtRoom] Component mounted with courtId:', courtId);

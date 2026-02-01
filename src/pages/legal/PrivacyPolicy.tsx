@@ -66,7 +66,7 @@ export default function PrivacyPolicy() {
           You can manage most of your data in your Profile Settings. For other requests, contact support.
         </p>
 
-        <h2>6. Children's Privacy</h2>
+        <h2>6. Children&apos;s Privacy</h2>
         <p>
           Troll City is not intended for children under 13. We do not knowingly collect data from children under 13.
           If we learn we have collected such data, we will delete it. Users must be at least 18 to monetize or use paid features.

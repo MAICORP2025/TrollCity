@@ -18,6 +18,7 @@ export default function ProfileSettings() {
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
   const [bio, setBio] = useState('')
+  const [bannerNotifications, setBannerNotifications] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
 
   useEffect(() => {
@@ -25,6 +26,9 @@ export default function ProfileSettings() {
       setUsername(profile.username || '')
       setFullName((profile as any).full_name || '')
       setBio(profile.bio || '')
+      if ((profile as any).banner_notifications_enabled !== undefined) {
+          setBannerNotifications((profile as any).banner_notifications_enabled)
+      }
     }
   }, [profile])
 
@@ -66,6 +70,7 @@ export default function ProfileSettings() {
           username: newUsername,
           full_name: fullName.trim(),
           bio: bio.trim(),
+          banner_notifications_enabled: bannerNotifications,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
@@ -97,6 +102,23 @@ export default function ProfileSettings() {
           <div>
             <h1 className="text-3xl font-bold">Profile Settings</h1>
             <p className="text-sm text-gray-400">Manage your items and account preferences.</p>
+          </div>
+        </div>
+
+        {/* Profile Details Edit */}
+        <div className="bg-black/40 border border-purple-500/20 rounded-2xl p-6 space-y-4">
+          <h2 className="text-xl font-semibold">Preferences</h2>
+          <div className="flex items-center justify-between p-4 bg-zinc-900/50 rounded-xl border border-zinc-800">
+            <div>
+                <p className="font-medium text-white">Global Pod Notifications</p>
+                <p className="text-xs text-gray-400">Receive a banner when a Pod goes live.</p>
+            </div>
+            <button
+                onClick={() => setBannerNotifications(!bannerNotifications)}
+                className={`w-12 h-6 rounded-full transition-colors relative ${bannerNotifications ? 'bg-purple-600' : 'bg-gray-700'}`}
+            >
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${bannerNotifications ? 'left-7' : 'left-1'}`} />
+            </button>
           </div>
         </div>
 

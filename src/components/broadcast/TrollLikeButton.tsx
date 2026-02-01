@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Heart } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
@@ -17,7 +17,21 @@ export default function TrollLikeButton({ streamId, onLike }: TrollLikeButtonPro
     setTimeout(() => setIsAnimating(false), 1000);
 
     try {
-      // 1. Update stream likes
+      // 1. Broadcast "like" for real-time visibility (Ephemeral, no DB write)
+      const channel = supabase.channel(`stream-reactions-${streamId}`);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'reaction',
+            payload: { reaction_type: 'heart', user_id: (supabase.auth.getUser() as any).data?.user?.id }
+          });
+        }
+      });
+
+      // 2. Update stream likes (Persistent)
+      // We debounce this on the server side ideally, but for now we keep the RPC
+      // However, we REMOVE the chat message insert to prevent DB spam.
       const { error } = await supabase.rpc('increment_stream_likes', { stream_id: streamId });
       
       // If RPC doesn't exist, fallback to direct update (less safe for concurrency but works)
@@ -29,18 +43,10 @@ export default function TrollLikeButton({ streamId, onLike }: TrollLikeButtonPro
         }
       }
 
-      // 2. Send "like" message for real-time visibility
-      await supabase.from('messages').insert({
-        stream_id: streamId,
-        user_id: (await supabase.auth.getUser()).data.user?.id,
-        message_type: 'system', // Use system as 'like' isn't standard
-        content: 'ACTION:LIKE'
-      });
-
       onLike?.();
     } catch (e) {
       console.error('Failed to like stream', e);
-      toast.error('Failed to send like');
+      // toast.error('Failed to send like'); // Suppress error toast for like spam
     }
   };
 

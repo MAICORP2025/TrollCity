@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, AlertTriangle, Shield } from 'lucide-react'
+import { X, AlertTriangle, Shield, FileText } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { isAdmin } from '../lib/adminCoins'
@@ -81,6 +81,12 @@ export default function UserProfilePopup({ userId, username, onClose }: UserProf
                   <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-900 text-purple-300 rounded text-xs font-semibold mt-1">
                     <Shield className="w-3 h-3" />
                     Officer
+                  </span>
+                )}
+                {profile?.terms_accepted && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-semibold mt-1 ml-2">
+                    <FileText className="w-3 h-3" />
+                    Agreement Accepted
                   </span>
                 )}
               </div>

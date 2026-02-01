@@ -114,7 +114,7 @@ export default function TrollerApplication() {
           <div className="bg-gradient-to-br from-green-900/20 to-green-800/10 rounded-xl p-6 border border-green-500/30">
             <div className="flex items-center gap-3 mb-4">
               <CheckCircle className="text-green-400" size={32} />
-              <h2 className="text-2xl font-bold text-green-400">DO's - Best Practices</h2>
+              <h2 className="text-2xl font-bold text-green-400">DO&apos;s - Best Practices</h2>
             </div>
             <ul className="space-y-3 text-sm text-[#E2E2E2]/90">
               <li className="flex items-start gap-2">
@@ -143,7 +143,7 @@ export default function TrollerApplication() {
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle className="text-green-400 mt-0.5 flex-shrink-0" size={16} />
-                <span>Follow Troll City's Terms of Service and Community Guidelines</span>
+                <span>Follow Troll City&apos;s Terms of Service and Community Guidelines</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle className="text-green-400 mt-0.5 flex-shrink-0" size={16} />
@@ -168,7 +168,7 @@ export default function TrollerApplication() {
           <div className="bg-gradient-to-br from-red-900/20 to-red-800/10 rounded-xl p-6 border border-red-500/30">
             <div className="flex items-center gap-3 mb-4">
               <XCircle className="text-red-400" size={32} />
-              <h2 className="text-2xl font-bold text-red-400">DON'Ts - Prohibited Actions</h2>
+              <h2 className="text-2xl font-bold text-red-400">DON&apos;Ts - Prohibited Actions</h2>
             </div>
             <ul className="space-y-3 text-sm text-[#E2E2E2]/90">
               <li className="flex items-start gap-2">
@@ -429,7 +429,7 @@ export default function TrollerApplication() {
                 required
               />
               <label htmlFor="guidelines" className="text-sm text-[#E2E2E2]/80 cursor-pointer">
-                I have read and agree to follow Troll City's Community Guidelines, Terms of Service, and the DO's and DON'Ts listed above. 
+                I have read and agree to follow Troll City&apos;s Community Guidelines, Terms of Service, and the DO&apos;s and DON&apos;Ts listed above. 
                 I understand that violations may result in suspension or permanent ban from the platform.
               </label>
             </div>

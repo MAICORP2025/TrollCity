@@ -561,7 +561,7 @@ export default function TrollCourt() {
                     <span>Plaintiff: {c.plaintiff?.username}</span>
                     <span>Defendant: {c.defendant?.username}</span>
                   </div>
-                  <div className="text-sm text-gray-400 italic">"{c.description}"</div>
+                  <div className="text-sm text-gray-400 italic">&quot;{c.description}&quot;</div>
                   
                   <div className="mt-3 flex gap-2">
                       <button 

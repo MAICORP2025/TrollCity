@@ -139,6 +139,84 @@ export async function chargeProfileView(
 }
 
 /**
+ * Charge user for sending a message
+ * @param senderId - The user sending the message
+ * @param recipientId - The user receiving the message
+ * @param cost - The cost to send the message
+ * @returns success status and transaction ID
+ */
+export async function chargeMessageCost(
+  senderId: string,
+  recipientId: string,
+  cost: number
+): Promise<{ success: boolean; transactionId?: string; error?: string }> {
+  try {
+    // Deduct from sender
+    const { data: senderProfile, error: senderError } = await supabase
+      .from('user_profiles')
+      .select('troll_coins')
+      .eq('id', senderId)
+      .single()
+
+    if (senderError || !senderProfile) {
+      return { success: false, error: 'Failed to load sender balance' }
+    }
+
+    const newBalance = (senderProfile.troll_coins || 0) - cost
+
+    if (newBalance < 0) {
+      return { success: false, error: 'Insufficient balance' }
+    }
+
+    // Update sender balance
+    const { error: updateError } = await supabase
+      .from('user_profiles')
+      .update({ troll_coins: newBalance })
+      .eq('id', senderId)
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    // Add to recipient's earned coins
+    const { error: ownerError } = await supabase.rpc('add_troll_coins', {
+      p_user_id: recipientId,
+      p_amount: cost
+    })
+
+    if (ownerError) {
+      console.error('Error adding coins to recipient:', ownerError)
+    }
+
+    // Record transaction
+    const { data: transaction, error: txError } = await supabase
+      .from('coin_transactions')
+      .insert({
+        user_id: senderId,
+        coins: -cost,
+        type: 'message_cost', 
+        source: 'message_payment',
+        payment_status: 'completed',
+        metadata: {
+          recipient_id: recipientId,
+          message_cost: cost
+        }
+      })
+      .select()
+      .single()
+
+    if (txError) {
+      console.error('Error recording transaction:', txError)
+    }
+
+    return { success: true, transactionId: transaction?.id }
+  } catch (error: any) {
+    console.error('Error charging message cost:', error)
+    return { success: false, error: error.message || 'Unknown error' }
+  }
+}
+
+/**
  * Redirect user to store with message
  */
 export function redirectToStore(

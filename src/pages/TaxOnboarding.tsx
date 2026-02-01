@@ -92,7 +92,7 @@ export default function TaxOnboarding() {
           <div className="mb-6">
             <h2 className="text-xl font-bold text-white mb-2">Why We Need This</h2>
             <p className="text-gray-300 text-sm">
-              Since you've earned $600+ this year, we must collect your tax information for IRS reporting (Form 1099).
+              Since you&apos;ve earned $600+ this year, we must collect your tax information for IRS reporting (Form 1099).
               This information is securely stored and only used for tax compliance.
             </p>
           </div>

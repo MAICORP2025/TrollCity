@@ -35,14 +35,18 @@ const ReportsPanel = () => {
       .order("created_at", { ascending: false })
       .limit(50);
     setReports((reportsData as Report[]) || []);
+  };
 
+  const loadChatLogs = async () => {
     const { data: chatData } = await supabase
       .from("messages")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(100);
     setChatLogs((chatData as ChatMessage[]) || []);
+  };
 
+  const loadBans = async () => {
     const { data: bansData } = await supabase
       .from("user_profiles")
       .select("id, username, email, is_banned")
@@ -53,20 +57,22 @@ const ReportsPanel = () => {
 
   useEffect(() => {
     loadReports();
+    loadChatLogs();
+    loadBans();
 
-    const reportsChannel = supabase
-      .channel("admin-reports")
-      .on("postgres_changes", { event: "*", schema: "public", table: "stream_reports" }, loadReports)
-      .subscribe();
+    // Poll reports every 30s
+    const reportsInterval = setInterval(loadReports, 30000);
+    
+    // Poll chat every 15s (if needed, or 30s)
+    const chatInterval = setInterval(loadChatLogs, 15000);
 
-    const chatChannel = supabase
-      .channel("admin-chat")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "conversation_messages" }, loadReports)
-      .subscribe();
+    // Poll bans every 60s
+    const bansInterval = setInterval(loadBans, 60000);
 
     return () => {
-      supabase.removeChannel(reportsChannel);
-      supabase.removeChannel(chatChannel);
+      clearInterval(reportsInterval);
+      clearInterval(chatInterval);
+      clearInterval(bansInterval);
     };
   }, []);
 

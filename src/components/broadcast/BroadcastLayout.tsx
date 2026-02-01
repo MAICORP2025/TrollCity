@@ -24,10 +24,12 @@ interface BroadcastLayoutProps {
   onSeatAction?: (params: { seatIndex: number; seat: any; participant?: any }) => void
   hostSeatIndex?: number
   onHostSeatChange?: (seatIndex: number) => void
-  onUserClick?: (participant: Participant) => void
-  onToggleCamera?: () => void
-  isCameraOn?: boolean
-  onSetPrice?: (price: number) => void
+  onUserClick?: (participant: Participant) => void;
+  onToggleCamera?: () => void;
+  isCameraOn?: boolean;
+  onSetPrice?: (price: number) => void;
+  frameMode?: 'none' | 'rgb';
+  onFrameModeChange?: (mode: 'none' | 'rgb') => void;
 }
 
 
@@ -53,6 +55,8 @@ export default function BroadcastLayout({
   onToggleCamera,
   isCameraOn,
   onSetPrice: _onSetPrice,
+  frameMode = 'none',
+  onFrameModeChange,
   children
 }: BroadcastLayoutProps) {
   const participants = useRoomParticipants(room);
@@ -238,6 +242,8 @@ export default function BroadcastLayout({
           onUserClick={onUserClick}
           onToggleCamera={onToggleCamera}
           isCameraOn={isCameraOn}
+          frameMode={frameMode}
+          onFrameModeChange={onFrameModeChange}
         />
         {children}
       </div>

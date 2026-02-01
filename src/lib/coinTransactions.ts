@@ -258,6 +258,7 @@ export async function deductCoins(params: {
 
     if (coinType === 'troll_coins' || !coinType) {
       // Use Troll Bank centralized spending
+      console.log('[deductCoins] Calling troll_bank_spend_coins_secure:', { userId, amount: normalizedAmount, type })
       const { data: bankResult, error: bankError } = await sb.rpc('troll_bank_spend_coins_secure', {
         p_user_id: userId,
         p_amount: normalizedAmount,
@@ -266,9 +267,10 @@ export async function deductCoins(params: {
         p_ref_id: null,
         p_metadata: metadataPayload || {}
       })
+      console.log('[deductCoins] RPC result:', { bankResult, bankError })
 
       if (bankError) {
-             console.error('deductCoins: Troll Bank error', bankError)
+             console.error('[deductCoins] Troll Bank error:', bankError)
              // Fallback: use legacy RPC if bank fails due to schema drift (e.g., missing columns)
              const msg = (bankError.message || '').toLowerCase()
              if (msg.includes('column') && msg.includes('coins') && msg.includes('does not exist')) {
@@ -315,10 +317,12 @@ export async function deductCoins(params: {
       } else {
         // Success
         if (!bankResult.success) {
+           console.error('[deductCoins] RPC returned success=false:', bankResult)
            return { success: false, newBalance: null, transaction: null, error: bankResult.error || 'Failed to spend coins' }
         }
 
         const newBalance = bankResult.new_balance
+        console.log('[deductCoins] Coins deducted successfully, new balance:', newBalance)
         
         // Update global store
         try {

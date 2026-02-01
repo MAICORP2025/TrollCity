@@ -131,13 +131,13 @@ export default function KickReentryModal({ isOpen, onClose, onSuccess }: KickRee
         ) : (
           <div className="space-y-4">
             <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-4">
-              <p className="text-yellow-400 font-semibold mb-2">⚠️ You've Been Kicked</p>
+              <p className="text-yellow-400 font-semibold mb-2">⚠️ You&apos;ve Been Kicked</p>
               <p className="text-sm text-gray-300">
                 Kick count: <strong>{kickCount}/3</strong>
               </p>
               <p className="text-sm text-gray-300 mt-2">
                 Pay <strong className="text-yellow-400">500 troll_coins</strong> to re-enter the app.
-                After 3 kicks, you'll be permanently banned.
+                After 3 kicks, you&apos;ll be permanently banned.
               </p>
               <div className="mt-3 p-3 bg-blue-900/20 border border-blue-500/50 rounded-lg">
                 <p className="text-xs text-blue-300">

@@ -444,7 +444,12 @@ export async function processGiftXp(senderId: string, receiverId: string, coinAm
     await addToMillionaireHallOfFame(senderId, receiverId, coinAmount)
   }
 
-  return { senderResult, receiverResult }
+  return { 
+    senderResult, 
+    receiverResult,
+    senderData: senderResultRaw.data,
+    receiverData: receiverResultRaw.data
+  }
 }
 
 /**

@@ -19,14 +19,7 @@ export default function ChurchPage() {
   const [loading, setLoading] = useState(true);
   const [pastorId, setPastorId] = useState<string | null>(null);
 
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
-      </div>
-    )
-  }
-
+  // Hooks must be called unconditionally at the top level
   useEffect(() => {
     checkTime();
     const interval = setInterval(checkTime, 60000); // Check every minute
@@ -38,6 +31,14 @@ export default function ChurchPage() {
        fetchActivePastor();
     }
   }, [isSunday, isOpen]);
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+      </div>
+    )
+  }
 
   const fetchActivePastor = async () => {
       // 1. Check sermon notes for today

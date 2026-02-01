@@ -349,7 +349,7 @@ export default function TrollBank() {
                   
                   {eligibility.reasons.length > 0 && (
                     <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                      <p className="text-xs text-red-300 font-semibold mb-1">Why you can't apply:</p>
+                      <p className="text-xs text-red-300 font-semibold mb-1">Why you can&apos;t apply:</p>
                       <ul className="list-disc list-inside text-xs text-red-200/80">
                         {eligibility.reasons.map((r, i) => <li key={i}>{r}</li>)}
                       </ul>

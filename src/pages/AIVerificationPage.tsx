@@ -27,7 +27,7 @@ export default function AIVerificationPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center">
         <div className="max-w-lg mx-auto bg-[#1A1A1A] border-2 border-green-500/30 rounded-xl p-8 text-center">
           <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">You're Already Verified!</h1>
+          <h1 className="text-2xl font-bold mb-2">You&apos;re Already Verified!</h1>
           <button
             onClick={() => navigate('/')}
             className="px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg mt-4"

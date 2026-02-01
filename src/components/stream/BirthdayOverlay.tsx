@@ -33,7 +33,7 @@ export default function BirthdayOverlay({ username }: BirthdayOverlayProps) {
         <div className="bg-gradient-to-r from-pink-500 via-purple-500 to-yellow-500 rounded-full px-6 py-3 shadow-lg animate-pulse flex items-center gap-3">
           <PartyPopper className="w-6 h-6 text-white animate-bounce" />
           <span className="text-white font-bold text-lg">
-            🎉 {username}'s Birthday! 🎂
+            🎉 {username}&apos;s Birthday! 🎂
           </span>
           <Cake className="w-6 h-6 text-white animate-bounce" style={{ animationDelay: '0.5s' }} />
         </div>

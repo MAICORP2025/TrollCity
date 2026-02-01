@@ -36,10 +36,15 @@ serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
       return new Response(
@@ -77,7 +82,6 @@ serve(async (req) => {
       const { error: rpcError, data } = await supabase.rpc(
         'troll_bank_apply_for_loan',
         {
-          p_user_id: user.id,
           p_requested_coins: coins,
         }
       );

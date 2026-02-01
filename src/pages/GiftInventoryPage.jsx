@@ -49,7 +49,7 @@ export default function GiftInventoryPage() {
           <Gift className="w-16 h-16 mx-auto text-yellow-400" />
           <p className="text-2xl font-bold">Your Troll Gift Vault</p>
           <p className="text-gray-400">
-            Sign in to view the Troll Gift stash you've built with Troll Coins for broadcast moments.
+            Sign in to view the Troll Gift stash you&apos;ve built with Troll Coins for broadcast moments.
           </p>
         </div>
       </div>

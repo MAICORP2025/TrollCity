@@ -109,6 +109,42 @@ export function useGiftSystem(
         }
       }
 
+      // Broadcast gift event to the stream channel for immediate display
+      if (streamId && streamId !== 'null') {
+        // Fire and forget - don't await
+        (async () => {
+          try {
+            const channel = supabase.channel(`stream_events_${streamId}`)
+            channel.subscribe(async (status) => {
+              if (status === 'SUBSCRIBED') {
+                await channel.send({
+                  type: 'broadcast',
+                  event: 'gift_sent',
+                  payload: {
+                    id: (spendResult as any)?.gift_id || crypto.randomUUID(),
+                    sender_id: user.id,
+                    sender_username: profile.username || 'Anonymous',
+                    sender_avatar: profile.avatar_url,
+                    sender_role: profile.role,
+                    sender_troll_role: profile.troll_role,
+                    gift_slug: gift.slug || toGiftSlug(gift.name),
+                    gift_name: gift.name,
+                    amount: gift.coinCost,
+                    quantity: 1,
+                    timestamp: Date.now(),
+                    stream_id: streamId
+                  }
+                })
+                // Short delay to ensure message goes out before cleanup
+                setTimeout(() => supabase.removeChannel(channel), 1000)
+              }
+            })
+          } catch (err) {
+            console.warn('Failed to broadcast gift event:', err)
+          }
+        })()
+      }
+
       // Refresh sender's profile from database to get accurate balance
       const { data: updatedProfile } = await supabase
         .from('user_profiles')
@@ -191,6 +227,48 @@ export function useGiftSystem(
       }
       
       toast.success(`Gift sent: ${gift.name}`)
+
+      // BROADCAST HUGE GIFT (Global Banner)
+      if (gift.coinCost >= 500) {
+        // Fire and forget - don't await this block to block UI
+        (async () => {
+          try {
+            let receiverName = 'Someone';
+            if (targetReceiverId) {
+              const { data: rData } = await supabase
+                .from('user_profiles')
+                .select('username')
+                .eq('id', targetReceiverId)
+                .single();
+              if (rData) receiverName = rData.username;
+            }
+
+            const channel = supabase.channel('global-gifts');
+            channel.subscribe(async (status) => {
+              if (status === 'SUBSCRIBED') {
+                await channel.send({
+                  type: 'broadcast',
+                  event: 'huge_gift',
+                  payload: {
+                    id: (spendResult as any)?.gift_id || crypto.randomUUID(),
+                    senderId: user.id,
+                    receiverId: targetReceiverId,
+                    senderName: profile.username || 'Anonymous',
+                    receiverName: receiverName,
+                    giftName: gift.name,
+                    amount: gift.coinCost,
+                    timestamp: Date.now()
+                  }
+                });
+                // Short delay to ensure message goes out before cleanup
+                setTimeout(() => supabase.removeChannel(channel), 1000);
+              }
+            });
+          } catch (err) {
+            console.error('Failed to broadcast huge gift:', err);
+          }
+        })();
+      }
       
       try {
         if (gift.category === 'Family') {

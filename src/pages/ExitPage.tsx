@@ -48,7 +48,7 @@ export default function ExitPage() {
           Come Back Soon!
         </h1>
         <p className="text-xl md:text-2xl text-slate-300 mb-6">
-          You've successfully logged out
+          You&apos;ve successfully logged out
         </p>
         <p className="text-lg text-slate-400 mb-8">
           Thanks for visiting Troll City

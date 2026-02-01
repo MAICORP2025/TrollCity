@@ -47,7 +47,7 @@ export default function Safety() {
           <div className="space-y-4 text-gray-300">
             <p className="text-sm">If you encounter any violations of our community guidelines, please report them immediately:</p>
             <ul className="list-disc list-inside space-y-2 text-sm ml-4">
-              <li>Click the "Report" button on any user profile or stream</li>
+              <li>Click the &quot;Report&quot; button on any user profile or stream</li>
               <li>Select the appropriate reason for your report</li>
               <li>Provide a detailed description of the violation</li>
               <li>Our Troll Officers will review your report within 24 hours</li>
@@ -91,7 +91,7 @@ export default function Safety() {
           <div className="space-y-4 text-gray-300">
             <div>
               <h3 className="font-semibold text-yellow-400 mb-2">⚠️ Warning</h3>
-              <p className="text-sm">For minor first-time offenses. You'll receive a notification about the violation.</p>
+              <p className="text-sm">For minor first-time offenses. You&apos;ll receive a notification about the violation.</p>
             </div>
             <div>
               <h3 className="font-semibold text-orange-400 mb-2">⏸️ Stream Suspension</h3>

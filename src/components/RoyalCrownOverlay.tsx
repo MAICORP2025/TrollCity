@@ -220,7 +220,7 @@ export default function RoyalCrownOverlay({
           {/* Title indicator */}
           <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2">
             <div className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1 text-xs font-bold text-yellow-300 whitespace-nowrap border border-yellow-500/30">
-              Admin's {royalMember.title_type === 'wife' ? 'Wife' : 'Husband'}
+              Admin&apos;s {royalMember.title_type === 'wife' ? 'Wife' : 'Husband'}
             </div>
           </div>
         </div>

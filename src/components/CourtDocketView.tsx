@@ -186,7 +186,7 @@ const CourtDocketView: React.FC = () => {
 
                       {entry.notes && (
                         <p className="text-sm text-gray-400 italic">
-                          "{entry.notes}"
+                          &quot;{entry.notes}&quot;
                         </p>
                       )}
                     </div>

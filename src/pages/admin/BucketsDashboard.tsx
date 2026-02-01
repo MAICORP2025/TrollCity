@@ -546,7 +546,7 @@ export default function BucketsDashboard() {
                 <li>• Only spend from the <strong>Admin Spendable</strong> bucket</li>
                 <li>• Never touch <strong>Broadcaster Liability</strong> - this money belongs to creators</li>
                 <li>• Payout requests are validated against broadcaster liability before approval</li>
-                <li>• Insufficient funds will mark payouts as "pending_funds" until money is available</li>
+                <li>• Insufficient funds will mark payouts as &quot;pending_funds&quot; until money is available</li>
               </ul>
             </div>
           </div>

@@ -1230,7 +1230,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
             <div className="space-y-3">
               <h3 className="font-semibold text-purple-400">How to Use:</h3>
               <ul className="space-y-2 text-sm text-gray-300">
-                <li>• Click "Activate" on digital items</li>
+                <li>• Click &quot;Activate&quot; on digital items</li>
                 <li>• Effects apply automatically across the app</li>
                 <li>• Multiple effects can be active simultaneously</li>
                 <li>• Deactivate anytime to remove effects</li>

@@ -65,28 +65,10 @@ export default function AdminLiveOfficersTracker() {
 
     loadAssignments();
 
-    // Subscribe to real-time updates
-    const channel = supabase
-      .channel("officer_live_assignments_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "officer_live_assignments",
-          filter: "status=eq.active"
-        },
-        () => {
-          loadAssignments();
-        }
-      )
-      .subscribe();
-
     // Refresh every 30 seconds
     const interval = setInterval(loadAssignments, 30000);
 
     return () => {
-      supabase.removeChannel(channel);
       clearInterval(interval);
     };
   }, [isAdmin]);

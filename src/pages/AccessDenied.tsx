@@ -12,7 +12,7 @@ const AccessDenied: React.FC = () => {
           <Lock className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-3xl font-bold mb-2">Access Denied</h1>
           <p className="text-gray-400">
-            You don't have permission to access this page.
+            You don&apos;t have permission to access this page.
           </p>
         </div>
 

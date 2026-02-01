@@ -109,6 +109,7 @@ type TabId =
   | 'agreements'
   | 'reports'
   | 'send_notifications'
+  | 'broadcast_lock'
 
 interface CoinTransaction {
   amount: number | null;
@@ -276,7 +277,7 @@ export default function AdminDashboard() {
         taxReviewsRes,
         supportRes,
         alertsRes,
-        paypalRevenueRes,
+        // paypalRevenueRes, // Deprecated view
       ] = await Promise.all([
         supabase.from('user_profiles').select('id'),
         supabase.from('user_profiles').select('id').eq('role', 'admin'),
@@ -285,13 +286,13 @@ export default function AdminDashboard() {
         supabase.from('user_profiles').select('id').eq('role', 'troll_officer'),
         supabase.from('stream_reports').select('id').eq('status', 'pending'),
         supabase.from('user_profiles').select('troll_coins, sav_bonus_coins'),
-        supabase.from('coin_transactions').select('metadata, platform_profit').eq('type', 'store_purchase'),
+        supabase.from('coin_transactions').select('metadata, platform_profit, amount').in('type', ['store_purchase', 'paypal_purchase', 'purchase']),
         supabase.from('coin_transactions').select('amount, type').eq('type', 'gift'),
         supabase.from('payout_requests').select('cash_amount, processing_fee'),
         supabase.from('user_tax_info').select('id').eq('status', 'pending'),
         supabase.from('support_tickets').select('id').eq('status', 'open'),
         supabase.from('system_alerts').select('id').eq('status', 'unread'),
-        supabase.from('view_admin_coin_revenue').select('*'),
+        // supabase.from('view_admin_coin_revenue').select('*'), // Deprecated
       ])
 
       const users = usersRes.data || []
@@ -303,7 +304,7 @@ export default function AdminDashboard() {
       const taxReviews = taxReviewsRes.data || []
       const supportTickets = supportRes.data || []
       const alerts = alertsRes.data || []
-      const paypalRevenueData = paypalRevenueRes.data || []
+      // const paypalRevenueData = paypalRevenueRes.data || []
 
       const balances = balancesRes.data || []
       let purchasedCoins = 0
@@ -318,21 +319,29 @@ export default function AdminDashboard() {
 
       const coinTx = coinTxRes.data || []
       let coinSalesRevenue = 0
+      let platformProfit = 0 // Track real profit
+
       for (const t of coinTx as any[]) {
-        const profit = Number(t.platform_profit || 0)
-        if (profit > 0) {
-          coinSalesRevenue += profit
-        } else {
+        let profit = Number(t.platform_profit || 0)
+        let revenue = profit 
+        
+        // Fallback if profit is 0 (e.g. older transactions or direct purchases)
+        if (profit <= 0) {
           const meta = t.metadata || {}
-          const amountPaid = Number(meta.amount_paid || 0)
-          if (!isNaN(amountPaid)) coinSalesRevenue += amountPaid
+          const amountPaid = Number(meta.amount_paid || meta.price || 0)
+          if (!isNaN(amountPaid) && amountPaid > 0) {
+            revenue = amountPaid
+            profit = revenue // Simplified assumption if profit not tracked
+          }
         }
+
+        if (revenue > 0) coinSalesRevenue += revenue
+        if (profit > 0) platformProfit += profit
       }
 
-      // Add PayPal revenue
-      for (const p of paypalRevenueData) {
-        coinSalesRevenue += Number(p.total_usd || 0)
-      }
+      // Add PayPal revenue (if we still need to fetch from view, but we are using coin_transactions now which should include paypal_purchase)
+      // So we can skip paypalRevenueData loop to avoid double counting if coin_transactions has it.
+      // Assuming coin_transactions is the source of truth for all "store_purchase" and "paypal_purchase".
 
       const giftTx = giftTxRes.data || []
       let giftCoins = 0
@@ -353,7 +362,15 @@ export default function AdminDashboard() {
         if (!isNaN(feeAmount)) feesCollected += feeAmount
       }
 
-      const platformProfit = coinSalesRevenue - totalPayouts
+      // const platformProfit = coinSalesRevenue - totalPayouts // Old logic
+      // New logic: platformProfit is summed from transactions (actual profit), minus payouts? 
+      // Usually Platform Profit = (Revenue - Gateway Fees) - Payouts?
+      // But 'platform_profit' in coin_transactions usually means (Revenue - Gateway Fee).
+      // So Net Profit = Platform Profit - Payouts.
+      // Let's display "Platform Profit" as the Gross Profit from Sales, and maybe a "Net Profit" elsewhere.
+      // But the variable name 'platformProfit' matches the state. Let's use the summed profit.
+      // Or if the user wants "Revenue", we use coinSalesRevenue.
+      // Let's keep platformProfit as the summed profit from transactions.
 
       setStats(prev => ({
         ...prev,
@@ -371,12 +388,13 @@ export default function AdminDashboard() {
         coinSalesRevenue,
         totalPayouts,
         feesCollected,
-        platformProfit,
+        platformProfit, // Updated
         giftCoins,
         appSponsoredGifts,
         savPromoCount,
         total_liability_coins: 0,
-        total_platform_profit_usd: platformProfit,
+        total_platform_profit_usd: platformProfit, // Updated
+
         kick_ban_revenue: 0,
       }))
 
@@ -538,6 +556,9 @@ export default function AdminDashboard() {
   }, [loadDashboardData, loadEconomySummary, loadLiveStreams])
 
   // Global monitoring channels with real-time notifications
+  // CRITICAL OPTIMIZATION: Removed global listeners to prevent "reconnect storms" and excessive DB load.
+  // The polling interval above (15s) is sufficient for dashboard freshness.
+  /*
   useEffect(() => {
     const transactionsChannel = supabase
       .channel('admin-global-transactions')
@@ -590,12 +611,13 @@ export default function AdminDashboard() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(transactionsChannel)
+      // supabase.removeChannel(transactionsChannel)
       supabase.removeChannel(streamsChannel)
       supabase.removeChannel(appsChannel)
       supabase.removeChannel(payoutsChannel)
     }
   }, [loadLiveStreams, loadDashboardData, loadEconomySummary])
+  */
 
   const createTrollDrop = async () => {
     try {
@@ -957,6 +979,7 @@ export default function AdminDashboard() {
         export_data: '/admin/export-data',
         support_tickets: '/admin/support-tickets',
         send_notifications: '/admin/send-notifications',
+        broadcast_lock: '/admin/broadcast-lock',
       } as Record<TabId, string>),
     []
   )

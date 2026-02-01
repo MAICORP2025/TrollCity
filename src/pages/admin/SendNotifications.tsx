@@ -287,7 +287,7 @@ export default function SendNotifications() {
           <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
             <h3 className="text-blue-400 font-semibold mb-2">Tips</h3>
             <ul className="text-gray-300 text-sm space-y-1">
-              <li>• Use "Troll Drop" type for coin giveaways (includes coins metadata)</li>
+              <li>• Use &quot;Troll Drop&quot; type for coin giveaways (includes coins metadata)</li>
               <li>• Metadata can include extra data like action URLs, amounts, etc.</li>
               <li>• Notifications are sent immediately to all users</li>
               <li>• Users will see notifications in their bell icon</li>

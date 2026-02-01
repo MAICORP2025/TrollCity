@@ -79,7 +79,7 @@ export default function CoinStore() {
   const navigate = useNavigate();
   const { troll_coins, refreshCoins } = useCoins();
   const { checkOnboarding } = useCheckOfficerOnboarding();
-  const { loans: activeLoans, ledger, refresh: refreshBank, applyForLoan, tiers } = useBankHook(); // useBank hook
+  const { loans: activeLoans, ledger, refresh: refreshBank, applyForLoan, payLoan, tiers } = useBankHook(); // useBank hook
 
   const STORE_TAB_KEY = 'tc-store-active-tab';
   const STORE_COMPLETE_KEY = 'tc-store-show-complete';
@@ -91,12 +91,38 @@ export default function CoinStore() {
   const [bankBalance] = useState(null);
   const [showActiveLoanModal, setShowActiveLoanModal] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [payAmount, setPayAmount] = useState('');
+  const [paying, setPaying] = useState(false);
   const [requestedAmount, setRequestedAmount] = useState(100);
   const [eligibility, setEligibility] = useState({
     canApply: false,
     reasons: [],
     maxAmount: 0
   });
+
+  const handlePayLoan = async () => {
+    const activeLoan = activeLoans && activeLoans.length > 0 ? activeLoans[0] : null;
+    if (!activeLoan || !payAmount) return;
+    const amount = parseInt(payAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Invalid amount');
+      return;
+    }
+    
+    setPaying(true);
+    try {
+      const result = await payLoan(activeLoan.id, amount);
+      if (result.success) {
+        setPayAmount('');
+        refreshCoins(); // Update user coin balance in UI
+      }
+    } catch (err) {
+      console.error('Payment error:', err);
+    } finally {
+      setPaying(false);
+    }
+  };
+
 
   // Calculate Loan Eligibility
   useEffect(() => {
@@ -1211,7 +1237,7 @@ export default function CoinStore() {
                                      Credit Report
                                    </h2>
                                    <div className="bg-black/30 border border-white/5 rounded-xl p-4">
-                                     <div className="mb-4 font-bold text-lg text-yellow-300">All Users' Credit Scores</div>
+                                     <div className="mb-4 font-bold text-lg text-yellow-300">All Users&apos; Credit Scores</div>
                                      {loadingScores ? (
                                        <div className="text-gray-400">Loading...</div>
                                      ) : (
@@ -1295,14 +1321,45 @@ export default function CoinStore() {
                     </h2>
                     
                     {activeLoans && activeLoans.length > 0 ? (
-                        <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
-                            <div>
-                                <h3 className="font-semibold text-blue-400 text-sm">Repayment Information</h3>
-                                <p className="text-xs text-gray-300 mt-1">
-                                Loans are repaid automatically when you purchase or receive paid coins. 
-                                There is no interest if paid within 30 days.
+                        <div className="space-y-4">
+                            <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                                <h3 className="font-semibold text-emerald-400 mb-2 text-sm">Manual Repayment</h3>
+                                <p className="text-xs text-gray-300 mb-4">
+                                Pay off your loan manually. Fully paying off a loan increases your credit score by 5% of the loan amount!
                                 </p>
+                                <div className="flex gap-2">
+                                <input
+                                    type="number"
+                                    value={payAmount}
+                                    onChange={(e) => setPayAmount(e.target.value)}
+                                    placeholder="Amount to pay"
+                                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50"
+                                />
+                                <button
+                                    onClick={handlePayLoan}
+                                    disabled={paying || !payAmount}
+                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors"
+                                >
+                                    {paying ? 'Paying...' : 'Pay'}
+                                </button>
+                                <button
+                                    onClick={() => setPayAmount(activeLoans[0].balance.toString())}
+                                    className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg font-medium text-sm transition-colors"
+                                >
+                                    Max
+                                </button>
+                                </div>
+                            </div>
+
+                            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-start gap-3">
+                                <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
+                                <div>
+                                    <h3 className="font-semibold text-blue-400 text-sm">Repayment Information</h3>
+                                    <p className="text-xs text-gray-300 mt-1">
+                                    Loans are repaid automatically when you purchase or receive paid coins. 
+                                    There is no interest if paid within 30 days.
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     ) : (
@@ -1353,7 +1410,7 @@ export default function CoinStore() {
                                 
                                 {eligibility.reasons.length > 0 && (
                                     <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded">
-                                        <p className="text-[10px] text-red-300 font-semibold mb-1">Why you can't apply:</p>
+                                        <p className="text-[10px] text-red-300 font-semibold mb-1">Why you can&apos;t apply:</p>
                                         <ul className="list-disc list-inside text-[10px] text-red-200/80">
                                             {eligibility.reasons.map((r, i) => <li key={i}>{r}</li>)}
                                         </ul>

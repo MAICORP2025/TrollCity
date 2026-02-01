@@ -209,7 +209,7 @@ export default function AdminRFC() {
               title: "💼 Recruiter Program Rules",
               content: (
                 <>
-                  • Earn 5% of streamer's earned coins once they reach 40,000/month<br />
+                  • Earn 5% of streamer&apos;s earned coins once they reach 40,000/month<br />
                   • Bonus paid in troll_coins (not cash withdrawable)<br />
                   • Referrals must be REAL and unique active users<br />
                   • Abuse = Permanent Recruiter program ban<br />

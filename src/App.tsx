@@ -11,6 +11,7 @@ import GlobalErrorBanner from "./components/GlobalErrorBanner";
 import GlobalGiftBanner from "./components/GlobalGiftBanner";
 import GlobalPayoutBanner from "./components/GlobalPayoutBanner";
 import BroadcastAnnouncement from "./components/BroadcastAnnouncement";
+import GlobalPodBanner from "./components/GlobalPodBanner";
 import DailyChurchNotification from "./components/church/DailyChurchNotification";
 import GlobalEventsBanner from "./components/GlobalEventsBanner";
 import { useGlobalApp } from "./contexts/GlobalAppContext";
@@ -23,9 +24,8 @@ import { initTelemetry } from "./lib/telemetry";
 // Layout
 import OfficerAlertBanner from "./components/OfficerAlertBanner";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
+import TrollsTownControl from "./components/TrollsTownControl";
 
-// Import GameTrollzPage for /gametrollz route
-import GameTrollzPage from "./pages/game";
 import AdminErrors from "./pages/admin/AdminErrors";
 import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
@@ -35,33 +35,16 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import AppLayout from "./components/layout/AppLayout";
 
 // Static pages (fast load)
-import Home from "./pages/Home";
+import LandingHome from "./pages/Home";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import SessionMonitor from "./components/auth/SessionMonitor";
 import TermsAgreement from "./pages/TermsAgreement";
 import ExitPage from "./pages/ExitPage";
 
-import AuctionsPage from "./pages/AuctionsPage";
-
-// Static pages (fast load)
-import Home from "./pages/Home";
-import Auth from "./pages/Auth";
-import AuthCallback from "./pages/AuthCallback";
-import SessionMonitor from "./components/auth/SessionMonitor";
-import TermsAgreement from "./pages/TermsAgreement";
-import ExitPage from "./pages/ExitPage";
-
-import { GameProvider } from "./components/game/GameContext";
-import GameControlPanel from "./components/game/GameControlPanel";
-import CarDealershipPage from "./pages/game/CarDealershipPage";
-import MechanicShopPage from "./pages/game/MechanicShopPage";
-import GaragePage from "./pages/game/GaragePage";
-import HospitalPage from "./pages/game/HospitalPage";
-import GeneralStorePage from "./pages/game/GeneralStorePage";
-import AuctionsPage from "./pages/AuctionsPage";
 import TrollBank from "./pages/TrollBank";
 import CityHall from "./pages/CityHall";
+import AuctionsPage from "./pages/AuctionsPage";
 const LivingPage = lazy(() => import("./pages/LivingPage"));
 const ChurchPage = lazy(() => import("./pages/ChurchPage"));
 const PastorDashboard = lazy(() => import("./pages/church/PastorDashboard"));
@@ -72,6 +55,8 @@ const BadgePopup = lazy(() => import("./components/BadgePopup"));
 
 // Sidebar pages (instant load)
 const TCPS = lazy(() => import("./pages/TCPS"));
+const TrollPodsListing = lazy(() => import("./pages/pods/TrollPodsListing"));
+const TrollPodRoom = lazy(() => import("./pages/pods/TrollPodRoom"));
 
 // Lazy-loaded pages
 const Following = lazy(() => import("./pages/Following"));
@@ -92,6 +77,7 @@ const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard
 const Application = lazy(() => import("./pages/Application"));
 const ApplicationPage = lazy(() => import("./pages/ApplicationPage"));
 const TrollsTownPage = lazy(() => import("./pages/TrollsTownPage"));
+const DistrictTour = lazy(() => import("./pages/DistrictTour"));
 const TrollOfficerLounge = lazy(() => import("./pages/TrollOfficerLounge"));
 const OfficerModeration = lazy(() => import("./pages/OfficerModeration"));
 const TrollFamily = lazy(() => import("./pages/TrollFamily"));
@@ -229,6 +215,7 @@ const MediaLibrary = lazy(() => import("./pages/admin/MediaLibrary"));
 const ChatModeration = lazy(() => import("./pages/admin/ChatModeration"));
 const Announcements = lazy(() => import("./pages/admin/Announcements"));
 const SendNotifications = lazy(() => import("./pages/admin/SendNotifications"));
+const BroadcastLockDashboard = lazy(() => import("./pages/admin/components/BroadcastLockDashboard"));
 const ExportData = lazy(() => import("./pages/admin/ExportData"));
 const UserSearch = lazy(() => import("./pages/admin/UserSearch"));
 const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
@@ -250,9 +237,6 @@ const BucketsDashboard = lazy(() => import("./pages/admin/BucketsDashboard"));
 const GrantCoins = lazy(() => import("./pages/admin/GrantCoins"));
 const OfficerOperations = lazy(() => import("./pages/admin/OfficerOperations"));
 const CreatorSwitchApprovals = lazy(() => import("./pages/admin/components/CreatorSwitchApprovals"));
-
-const TrollPodsListing = lazy(() => import("./pages/pods/TrollPodsListing"));
-const TrollPodRoom = lazy(() => import("./pages/pods/TrollPodRoom"));
 
 const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
@@ -328,6 +312,7 @@ function AppContent() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<ServiceWorker | null>(null);
+  const [trollsTownControlOpen, setTrollsTownControlOpen] = useState(false);
 
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const eligibilityRefresh = useEligibilityStore((s) => s.refresh);
@@ -482,6 +467,28 @@ function AppContent() {
       navigate('/family', { replace: true });
     }
   }, [profile, location.pathname, navigate, user]);
+
+  // Global keyboard shortcut: 'g' opens District Tour
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only trigger if 'g' is pressed and not in an input/textarea
+      if (event.key === 'g' || event.key === 'G') {
+        const target = event.target as HTMLElement
+        if (
+          target.tagName !== 'INPUT' &&
+          target.tagName !== 'TEXTAREA' &&
+          !target.isContentEditable
+        ) {
+          navigate('/district/main_plaza', { replace: true })
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [navigate])
 
   // 🔹 Check if user is kicked or banned and route to fee pages
   useEffect(() => {
@@ -705,6 +712,7 @@ function AppContent() {
 
               {/* Broadcast Announcement */}
               <BroadcastAnnouncement />
+              <GlobalPodBanner />
               <DailyChurchNotification />
 
               {/* Global Loading Overlay */}
@@ -730,22 +738,21 @@ function AppContent() {
       />
 
 
-      <GameProvider>
       <AppLayout showSidebar={!!user} showHeader={!!user} showBottomNav={!!user}>
         {user && <AdminOfficerQuickMenu />}
-        {user && <GameControlPanel />}
         {user && (
           <Suspense fallback={null}>
             <BadgePopup />
           </Suspense>
         )}
+        <TrollsTownControl isOpen={trollsTownControlOpen} onClose={() => setTrollsTownControlOpen(false)} />
 
         <ErrorBoundary>
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
                 {/* 🚪 Public Routes */}
-                <Route path="/" element={user ? <Home /> : <LandingPage />} />
-                <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+                <Route path="/" element={user ? <LandingHome /> : <LandingPage />} />
+              <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/exit" element={<ExitPage />} />
                 <Route path="/terms" element={<TermsAgreement />} />
@@ -783,7 +790,7 @@ function AppContent() {
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
                   <Route path="/mobile" element={<MobileShell />} />
-                  <Route path="/live" element={<Home />} />
+                  <Route path="/live" element={<LandingHome />} />
                   <Route path="/messages" element={<Navigate to="/tcps" replace />} />
                   <Route path="/tcps" element={<TCPS />} />
           <Route path="/city-hall" element={<CityHall />} />
@@ -811,20 +818,16 @@ function AppContent() {
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
+                  <Route path="/district/:districtName" element={<DistrictTour />} />
+                  <Route path="/g" element={<Navigate to="/district/main_plaza" replace />} />
                   <Route path="/living" element={<LivingPage />} />
-                  <Route path="/trollg" element={<TrollG />} />
                   
-                  {/* New Game Routes */}
-                  <Route path="/gametrollz" element={<GameTrollzPage />} />
-                  <Route path="/dealership" element={<CarDealershipPage />} />
-                  <Route path="/mechanic" element={<MechanicShopPage />} />
-                  <Route path="/garage" element={<GaragePage />} />
-                  <Route path="/hospital" element={<HospitalPage />} />
-                  <Route path="/auctions" element={<AuctionsPage />} />
+                  <Route path="/pods" element={<TrollPodsListing />} />
+                  <Route path="/pods/:roomId" element={<TrollPodRoom />} />
+                  
                   <Route path="/church" element={<ChurchPage />} />
                   <Route path="/church/pastor" element={<PastorDashboard />} />
                   <Route path="/dev/xp" element={<XPSimulatorPage />} />
-                  <Route path="/general-store" element={<GeneralStorePage />} />
                   
                   {/* 🎥 Streaming */}
                   <Route path="/go-live" element={<GoLive />} />
@@ -1322,6 +1325,14 @@ function AppContent() {
                       }
                     />
                     <Route
+                      path="/admin/broadcast-lock"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <BroadcastLockDashboard />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
                       path="/admin/export-data"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
@@ -1508,8 +1519,8 @@ function AppContent() {
                 </Suspense>
               </ErrorBoundary>
         <ChatBubble />
+        <GlobalPodBanner />
       </AppLayout>
-      </GameProvider>
 
       {/* Profile setup modal */}
       <ProfileSetupModal

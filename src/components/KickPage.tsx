@@ -29,7 +29,7 @@ export default function KickPage({ onClose, kickCount = 1 }: KickPageProps) {
             </div>
           </div>
           <h1 className={`text-4xl font-bold mb-4 ${isLastWarning ? 'text-orange-400' : 'text-yellow-400'}`}>
-            You've Been Kicked
+            You&apos;ve Been Kicked
           </h1>
           <div className={`border rounded-lg p-4 mb-6 ${
             isLastWarning 

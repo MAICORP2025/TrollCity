@@ -37,8 +37,8 @@ interface EarningsOverview {
   pending_payouts_usd: number;
 }
 
-interface DailyEarnings {
-  day: string;
+interface EarningsHistory {
+  date: string;
   coins: number;
   bonus_coins: number;
   payouts_usd: number;
@@ -65,7 +65,7 @@ interface BattleEventEarnings {
 export default function CreatorDashboard() {
   const { profile, user } = useAuthStore();
   const [overview, setOverview] = useState<EarningsOverview | null>(null);
-  const [dailySeries, setDailySeries] = useState<DailyEarnings[]>([]);
+  const [historySeries, setHistorySeries] = useState<EarningsHistory[]>([]);
   const [hourly, setHourly] = useState<HourlyActivity[]>([]);
   const [topGifters, setTopGifters] = useState<TopGifter[]>([]);
   const [battleEvent, setBattleEvent] = useState<BattleEventEarnings[]>([]);
@@ -78,13 +78,19 @@ export default function CreatorDashboard() {
     setOverview(data?.[0] || null);
   }, []);
 
-  const loadDailyEarningsSeries = useCallback(async () => {
+  const loadEarningsHistorySeries = useCallback(async () => {
     const daysBack = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
     const { data, error } = await supabase.rpc('get_daily_earnings_series', {
       days_back: daysBack
     });
     if (error) throw error;
-    setDailySeries(data || []);
+    // Map 'day' to 'date' to match new interface if needed, or just cast it
+    setHistorySeries((data || []).map((d: any) => ({
+      date: d.day,
+      coins: d.coins,
+      bonus_coins: d.bonus_coins,
+      payouts_usd: d.payouts_usd
+    })));
   }, [timeRange]);
 
   const loadHourlyActivity = useCallback(async () => {
@@ -112,7 +118,7 @@ export default function CreatorDashboard() {
     try {
       await Promise.all([
         loadEarningsOverview(),
-        loadDailyEarningsSeries(),
+        loadEarningsHistorySeries(),
         loadHourlyActivity(),
         loadTopGifters(),
         loadBattleEventEarnings()
@@ -235,9 +241,9 @@ export default function CreatorDashboard() {
           </div>
           <div style={{ width: "100%", height: 260 }}>
             <ResponsiveContainer>
-              <LineChart data={dailySeries || []}>
+              <LineChart data={historySeries || []}>
                 <XAxis 
-                  dataKey="day" 
+                  dataKey="date" 
                   tick={{ fontSize: 11 }}
                   tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 />
@@ -329,7 +335,7 @@ export default function CreatorDashboard() {
               </ResponsiveContainer>
             </div>
             <div style={{ fontSize: "12px", opacity: 0.7, marginTop: 6 }}>
-              "battle" = coins earned in battles, "event" = Troll events, "other" = normal gifts.
+              &quot;battle&quot; = coins earned in battles, &quot;event&quot; = Troll events, &quot;other&quot; = normal gifts.
             </div>
           </section>
         </div>

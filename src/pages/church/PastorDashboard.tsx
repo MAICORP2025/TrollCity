@@ -158,7 +158,7 @@ export default function PastorDashboard() {
                      className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold mb-3 flex items-center justify-center gap-2"
                    >
                       <Mic size={18} />
-                      Send "Live" Alert
+                      Send &quot;Live&quot; Alert
                    </button>
                    <p className="text-xs text-gray-500 text-center">
                       Sends a global notification that Church is live.

@@ -24,13 +24,12 @@ export const useRealtimeStreams = (): Stream[] => {
   useEffect(() => {
     loadStreams();
 
-    const channel = supabase
-      .channel('realtime-streams')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, loadStreams)
-      .subscribe();
+    const interval = setInterval(() => {
+      loadStreams();
+    }, 30000); // Poll every 30 seconds
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, []);
 

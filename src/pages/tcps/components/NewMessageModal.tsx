@@ -135,7 +135,7 @@ export default function NewMessageModal({ isOpen, onClose, onSelectUser }: NewMe
             </div>
           ) : searchQuery ? (
             <div className="text-center p-8 text-gray-500">
-              No users found matching "{searchQuery}"
+              No users found matching &quot;{searchQuery}&quot;
             </div>
           ) : (
             <div className="space-y-1">

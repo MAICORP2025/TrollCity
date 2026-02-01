@@ -24,13 +24,16 @@ export const useRealtimeUsers = (): User[] => {
   useEffect(() => {
     loadUsers();
 
+    /*
+    // CRITICAL: Removed global listener to prevent DB hammering
     const channel = supabase
       .channel('realtime-users')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, loadUsers)
       .subscribe();
+    */
 
     return () => {
-      supabase.removeChannel(channel);
+      // supabase.removeChannel(channel);
     };
   }, []);
 

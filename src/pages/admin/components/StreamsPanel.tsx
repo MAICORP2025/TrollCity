@@ -16,14 +16,11 @@ const StreamsPanel = () => {
   useEffect(() => {
     loadStreams();
 
-    const channel = supabase
-      .channel("admin_live_streams")
-      .on("postgres_changes", { event: "*", schema: "public", table: "streams" }, loadStreams)
-      .subscribe();
+    const interval = setInterval(() => {
+      loadStreams();
+    }, 30000);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => clearInterval(interval);
   }, []);
 
   return (

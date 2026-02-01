@@ -34,7 +34,6 @@ import { useSeatRoster } from '../hooks/useSeatRoster';
 import { useViewerTracking } from '../hooks/useViewerTracking';
 
 // Constants
-const STREAM_POLL_INTERVAL = 2000;
 const MOBILE_NAV_HEIGHT = 76;
 
 // Types
@@ -187,24 +186,16 @@ export default function WatchPage() {
     if (!streamId) return;
 
     const channel = supabase
-      .channel(`box-count-${streamId}`)
+      .channel(`live-updates-${streamId}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `stream_id=eq.${streamId}`,
-        },
+        'broadcast',
+        { event: 'system_update' },
         (payload) => {
-          const newMsg = payload.new;
-          if (newMsg.message_type === 'system' && newMsg.content?.startsWith('BOX_COUNT_UPDATE:')) {
-            const parts = newMsg.content.split(':');
-            if (parts.length >= 2) {
-              const parsed = parseInt(parts[1], 10);
-              if (!isNaN(parsed)) {
-                setBoxCount(parsed);
-              }
+          const { type, content } = payload.payload;
+          if (type === 'BOX_COUNT_UPDATE') {
+            const parsed = parseInt(content, 10);
+            if (!isNaN(parsed)) {
+              setBoxCount(parsed);
             }
           }
         }
@@ -471,17 +462,39 @@ export default function WatchPage() {
     return () => window.clearTimeout(timer);
   }, [reactiveEvent?.key]);
 
-  // Stream polling
+  // Stream polling - Replaced with Realtime Subscription
   useEffect(() => {
     if (!streamId) return;
-    const interval = setInterval(async () => {
-      const { data } = await supabase.from("streams").select("status,is_live,current_viewers,total_gifts_coins").eq("id", streamId).maybeSingle();
-      if (data) {
-        setStream(prev => prev ? { ...prev, ...data } : prev);
-        // if (data.total_gifts_coins !== undefined) setCoinCount(Number(data.total_gifts_coins || 0));
-      }
-    }, STREAM_POLL_INTERVAL);
-    return () => clearInterval(interval);
+
+    // Initial fetch
+    const fetchStream = async () => {
+        const { data } = await supabase.from("streams").select("status,is_live,current_viewers,total_gifts_coins").eq("id", streamId).maybeSingle();
+        if (data) {
+          setStream(prev => prev ? { ...prev, ...data } : prev);
+        }
+    };
+    fetchStream();
+
+    const channel = supabase
+      .channel(`stream-updates-${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+          filter: `id=eq.${streamId}`,
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          setStream(prev => prev ? { ...prev, ...newData } : prev);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [streamId]);
 
   useStreamEndListener({
@@ -494,34 +507,21 @@ export default function WatchPage() {
     if (!stream?.id) return;
 
     const channel = supabase
-      .channel(`live-updates-${stream.id}`)
+      .channel(`entrance-chat-${stream.id}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `stream_id=eq.${stream.id}`,
-        },
+        'broadcast',
+        { event: 'user_joined' },
         (payload) => {
-          const msg = payload.new;
-          if (msg.message_type === 'entrance') {
-            try {
-              const rawContent = msg.content;
-              const data = typeof rawContent === 'string'
-                ? JSON.parse(rawContent)
-                : (rawContent || {});
-              const payloadUserId =
-                data.user_id || data.sender_id || msg.user_id || msg.sender_id;
+          const data = payload.payload;
+          const payloadUserId = data.user_id || data.sender_id;
 
-              setEntranceEffect({
-                ...data,
-                userId: payloadUserId || null,
-              });
-              setTimeout(() => setEntranceEffect(null), 5000);
-            } catch (error) {
-              console.error('Failed to parse entrance effect', error);
-            }
+          // Only show effect if we have valid effect data
+          if (data.effectKey) {
+            setEntranceEffect({
+              ...data,
+              userId: payloadUserId || null,
+            });
+            setTimeout(() => setEntranceEffect(null), 5000);
           }
         }
       )
@@ -619,20 +619,40 @@ export default function WatchPage() {
         if (profile?.is_ghost_mode) {
           return;
         }
+
+        // Check session storage to prevent duplicate entrance effects (e.g. on remount/reconnect)
+        const storageKey = `entrance_sent_${streamId}_${user.id}`;
+        if (sessionStorage.getItem(storageKey)) {
+          return;
+        }
+
         const { effectKey, config } = await getUserEntranceEffect(user.id);
         if (!effectKey) return;
 
-        await supabase.from('messages').insert({
-          stream_id: streamId,
-          user_id: user.id,
-          message_type: 'entrance',
-          content: JSON.stringify({
-            username: profile?.username || user.email,
-            role: profile?.role || 'viewer',
-            effectKey,
-            effect: config,
-          })
-        });
+      // Broadcast user_joined event
+      const channel = supabase.channel(`entrance-chat-${streamId}`);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Mark as sent before sending to prevent race conditions
+          sessionStorage.setItem(storageKey, 'true');
+          
+          channel.send({
+            type: 'broadcast',
+            event: 'user_joined',
+            payload: {
+              user_id: user.id,
+              username: profile?.username || user.email,
+              profile: {
+                is_troll_officer: profile?.is_troll_officer,
+                is_og_user: profile?.is_og_user,
+                role: profile?.role || 'viewer',
+              },
+              effectKey,
+              effect: config,
+            }
+          });
+        }
+      });
       } catch (err) {
         console.error('Failed to send entrance effect message', err);
       }
@@ -745,6 +765,24 @@ export default function WatchPage() {
           });
         }
       }
+
+      // Broadcast gift_sent event to avoid network waterfall
+      const channel = supabase.channel(`gifts_${streamIdValue}`);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'gift_sent',
+            payload: {
+              sender_id: senderId,
+              username: profile?.username || 'Unknown',
+              amount: totalCoins,
+              gift_name: giftName,
+              gift_slug: canonicalGiftSlug
+            }
+          });
+        }
+      });
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }

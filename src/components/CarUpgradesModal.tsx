@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Wrench, ArrowUp, Coins, AlertCircle } from 'lucide-react';
+import { X, Wrench, ArrowUp, Coins, AlertCircle, Settings, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 

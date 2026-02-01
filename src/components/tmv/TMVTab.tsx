@@ -66,7 +66,7 @@ export default function TMVTab({ profile, isOwnProfile }: { profile: any, isOwnP
         <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800">
            <div className="flex justify-between items-start mb-4">
              <h3 className="text-lg font-bold flex items-center gap-2">
-                 <Car className="text-purple-400" /> Driver's License
+                 <Car className="text-purple-400" /> Driver&apos;s License
              </h3>
              {isStaff && !isOwnProfile && (
                  <div className="flex gap-2">
@@ -148,7 +148,7 @@ export default function TMVTab({ profile, isOwnProfile }: { profile: any, isOwnP
            </h3>
            
            <p className="text-gray-400 text-sm mb-4">
-              Insurance covers 30 days. Cost: 2000 Coins. Upgrades increase your vehicle's value.
+              Insurance covers 30 days. Cost: 2000 Coins. Upgrades increase your vehicle&apos;s value.
            </p>
            
            <VehicleList 

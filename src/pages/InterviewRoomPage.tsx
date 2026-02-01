@@ -252,7 +252,7 @@ export default function InterviewRoomPage() {
               <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
               <h1 className="text-2xl font-bold text-white mb-2">Appointed Role</h1>
               <p className="text-gray-400 mb-6">
-                You have an appointed role and don't need to go through the interview process. 
+                You have an appointed role and don&apos;t need to go through the interview process. 
                 You can access your role-specific features directly.
               </p>
               <button

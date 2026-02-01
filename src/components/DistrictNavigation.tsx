@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
-import { useGameNavigate } from './game/GameNavigation'
 import {
   MapPin,
   Home,
@@ -41,7 +40,7 @@ interface DistrictFeature {
 export default function DistrictNavigation() {
   const { user, profile } = useAuthStore()
   const location = useLocation()
-  const gameNavigate = useGameNavigate()
+  const navigate = useNavigate()
   const [districts, setDistricts] = useState<District[]>([])
   const [expandedDistricts, setExpandedDistricts] = useState<Set<string>>(new Set())
   const [currentDistrict, setCurrentDistrict] = useState<string | null>(null)
@@ -56,6 +55,7 @@ export default function DistrictNavigation() {
     const features: { [key: string]: DistrictFeature[] } = {
       main_plaza: [
         { feature_name: 'Live Streams', route_path: '/live', required_role: 'user' },
+        { feature_name: 'Troll Pods', route_path: '/pods', required_role: 'user' },
         { feature_name: 'TCPS', route_path: '/tcps', required_role: 'user' },
         { feature_name: 'Living & Housing', route_path: '/living', required_role: 'user' },
         { feature_name: 'Following', route_path: '/following', required_role: 'user' },
@@ -165,7 +165,7 @@ export default function DistrictNavigation() {
     if (!district.onboarding_completed && district.visit_count === 0) {
       const features = getDistrictFeatures(district.name)
       if (features.length > 0) {
-        gameNavigate(features[0].route_path)
+        navigate(features[0].route_path)
       }
     }
   }
@@ -303,7 +303,7 @@ export default function DistrictNavigation() {
                   {features.map((feature, index) => (
                     <button
                       key={index}
-                      onClick={() => gameNavigate(feature.route_path)}
+                      onClick={() => navigate(feature.route_path)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
                         isFeatureActive(feature.route_path)
                           ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
@@ -320,7 +320,7 @@ export default function DistrictNavigation() {
                   {!district.onboarding_completed && (
                     <button
                       onClick={() => {
-                        gameNavigate(`/districts/${district.name}/tour`)
+                        navigate(`/districts/${district.name}/tour`)
                       }}
                       className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#1F1F2E] text-yellow-400 hover:text-yellow-300 transition-all"
                     >

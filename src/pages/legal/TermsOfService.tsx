@@ -16,9 +16,9 @@ export default function TermsOfService() {
         </p>
 
         <p>
-          These Terms of Service ("Terms") govern your access to and use of the Troll
-          City platform, websites, applications, and related services ("Troll City",
-          "we", "us", or "our"). By creating an account or using Troll City, you agree
+          These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Troll
+          City platform, websites, applications, and related services (&quot;Troll City&quot;,
+          &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;). By creating an account or using Troll City, you agree
           to be bound by these Terms.
         </p>
 
@@ -34,7 +34,7 @@ export default function TermsOfService() {
         <h2>2. Nature of the Service</h2>
         <p>
           Troll City is an interactive entertainment platform that uses virtual
-          currency ("Coins") and digital gifts. It is not a gambling platform and does
+          currency (&quot;Coins&quot;) and digital gifts. It is not a gambling platform and does
           not guarantee any financial returns. Certain users may be eligible to request
           payouts based on Paid Coin balances, subject to these Terms and our review.
         </p>
@@ -85,13 +85,13 @@ export default function TermsOfService() {
         <p>
           Troll City and its logos, artwork, virtual items, and software are protected
           by intellectual property laws. You must not use our marks or assets without
-          prior written permission and must not upload content that infringes others'
+          prior written permission and must not upload content that infringes others&apos;
           rights.
         </p>
 
         <h2>9. Disclaimers and Limitation of Liability</h2>
         <p>
-          Troll City is provided "as is" and "as available" without warranties of any
+          Troll City is provided &quot;as is&quot; and &quot;as available&quot; without warranties of any
           kind. To the maximum extent permitted by law, we are not liable for indirect
           or consequential damages or for any amount greater than the fees you paid to
           us in the six months before the claim, or USD $100, whichever is greater.

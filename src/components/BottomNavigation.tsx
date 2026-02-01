@@ -5,13 +5,11 @@ import { useAuthStore } from '../lib/store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
-import { useGameNavigate } from './game/GameNavigation'
 
 export default function BottomNavigation() {
   const { user, profile, logout } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
-  const gameNavigate = useGameNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLiveMenuOpen, setIsLiveMenuOpen] = useState(false)
 
@@ -149,7 +147,7 @@ export default function BottomNavigation() {
         return [
           { category: 'General', label: 'Go Live', icon: Video, path: '/go-live' },
           { category: 'General', label: 'Buy Coins', icon: Store, path: '/store' },
-          { category: 'Creative', label: 'TrollG Studio', icon: Gift, path: '/trollg' },
+          { category: 'Creative', label: 'Troll Pods', icon: Mic, path: '/pods' },
           { category: 'General', label: 'Support', icon: Heart, path: '/support' }
         ]
     }
@@ -206,7 +204,7 @@ export default function BottomNavigation() {
             return (
               <button
                 key={idx}
-                onClick={() => gameNavigate(item.path!)}
+                onClick={() => navigate(item.path!)}
                 className={`flex flex-col items-center justify-center w-1/5 h-full transition-all active:scale-95 active:opacity-80 ${
                   item.active
                     ? 'text-troll-gold'

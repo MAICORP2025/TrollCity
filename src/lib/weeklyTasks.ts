@@ -54,8 +54,24 @@ const handlers: Record<TrollEventType, InternalTaskHandler[]> = {
   war_match_end: [],
   ai_decision_event: [],
   economy_loss: [],
-  economy_gain: []
+  economy_gain: [],
+  pod_started: [],
+  pod_listened: []
 };
+
+registerTaskHandler('pod_started', (event, task) => {
+  if (task.category !== 'social' || task.progress_type !== 'count' && task.progress_type !== 'time') return null;
+  // Simple count for now, or check metadata for duration if we track that
+  return 1;
+});
+
+registerTaskHandler('pod_listened', (event, task) => {
+  if (task.category !== 'social') return null;
+  // If task is 'listen_pod_1' (Good Listener), track time
+  // Event metadata should have 'minutes'
+  const minutes = event.metadata?.minutes || 1;
+  return minutes;
+});
 
 registerTaskHandler('ai_decision_event', (event, task) => {
   if (task.progress_type !== 'ai_evaluated') return null;

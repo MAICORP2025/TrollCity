@@ -20,25 +20,14 @@ export default function GiftBlast({ streamId, onGiftTrigger }: GiftBlastProps) {
     const channel = supabase
       .channel(`gifts_${streamId}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'gifts',
-          filter: `stream_id=eq.${streamId}`,
-        },
-        async (payload) => {
-          // Fetch username from user_profiles
-          const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('username')
-            .eq('id', payload.new.sender_id)
-            .single()
-
-          if (profile) {
-            const amount = payload.new.coins_spent || 0
+        'broadcast',
+        { event: 'gift_sent' },
+        (payload) => {
+          const { username, amount } = payload.payload;
+          
+          if (username && amount) {
             setBlast({
-              username: profile.username,
+              username: username,
               amount: amount,
             })
 

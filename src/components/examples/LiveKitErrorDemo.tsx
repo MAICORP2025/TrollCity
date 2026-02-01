@@ -72,7 +72,7 @@ export function LiveKitErrorDemo() {
       </div>
       
       <div className="mt-8 p-4 bg-gray-100 rounded">
-        <h3 className="font-bold mb-2">How to Fix the "no room provided" Error:</h3>
+        <h3 className="font-bold mb-2">How to Fix the &quot;no room provided&quot; Error:</h3>
         <ol className="list-decimal list-inside space-y-1">
           <li>Use <code>useSafeLiveKit()</code> instead of <code>useLiveKit()</code> for conditional logic</li>
           <li>Wrap components with <code>LiveKitGuard</code> for automatic protection</li>

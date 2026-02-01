@@ -68,41 +68,19 @@ export default function LandingPage() {
 
     loadStats();
 
-    // Subscribe to real-time changes
-    const usersSubscription = supabase
-      .channel('user_profiles_stats')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_profiles' },
-        () => loadStats()
-      )
-      .subscribe();
+    // Refresh stats every 30 seconds
+    const interval = setInterval(loadStats, 30000);
 
-    const streamsSubscription = supabase
-      .channel('streams_stats')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'streams' },
-        () => loadStats()
-      )
-      .subscribe();
-
-    const payoutSubscription = supabase
-      .channel('payouts_stats')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'payout_requests' },
-        () => loadStats()
-      )
-      .subscribe();
-
-    // Refresh stats every 10 seconds as fallback
-    const interval = setInterval(loadStats, 10000);
+    /*
+    // CRITICAL OPTIMIZATION: Removed Realtime subscriptions on Landing Page.
+    // This page has high traffic and shouldn't subscribe to global DB events.
+    // Polling every 30s is sufficient for these stats.
+    */
 
     return () => {
-      supabase.removeChannel(usersSubscription);
-      supabase.removeChannel(streamsSubscription);
-      supabase.removeChannel(payoutSubscription);
+      // usersSubscription.unsubscribe();
+      // streamsSubscription.unsubscribe();
+      // payoutSubscription.unsubscribe();
       clearInterval(interval);
     };
   }, []);
@@ -111,7 +89,7 @@ export default function LandingPage() {
     {
       icon: Play,
       title: 'Go Live & Get Paid',
-      description: 'Get Paid Daily'
+      description: 'Get Paid 2x a Week'
     },
     {
       icon: Users,
@@ -170,7 +148,7 @@ export default function LandingPage() {
                 <div className="space-y-4">
                   <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-full mb-4">
                     <Sparkles className="w-4 h-4 text-purple-400" />
-                    <span className="text-purple-400 font-semibold text-sm">Get Paid Daily</span>
+                    <span className="text-purple-400 font-semibold text-sm">Get Paid 2x a Week</span>
                   </div>
                   
                   <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black">

@@ -5,6 +5,7 @@ import { useAuthStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { EDGE_URL } from "../lib/config";
+import CoinStoreModal from "../components/broadcast/CoinStoreModal";
 
 export default function KickFee() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export default function KickFee() {
   const [loading, setLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showCashAppInfo, setShowCashAppInfo] = useState(false);
+  const [showCoinStore, setShowCoinStore] = useState(false);
 
   const reinstatementFee = 500;
   const usernamePrefix = String(

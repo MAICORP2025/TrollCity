@@ -57,21 +57,11 @@ const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", desc
   useEffect(() => {
     loadUsers();
 
-    const channel = supabase
-      .channel("admin_users")
-      .on("postgres_changes", { 
-        event: "*", 
-        schema: "public", 
-        table: "user_profiles" 
-      }, () => {
-        console.log('User profiles changed, reloading...');
-        loadUsers();
-      })
-      .subscribe();
+    const interval = setInterval(() => {
+      loadUsers();
+    }, 30000);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => clearInterval(interval);
   }, [loadUsers]);
 
   if (loading) {

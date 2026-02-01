@@ -406,7 +406,7 @@ export default function PublicPool() {
                              <span className="text-yellow-400 font-mono text-sm">+{d.amount.toLocaleString()}</span>
                            </div>
                            {d.message && (
-                             <p className="text-xs text-slate-300 mt-1 break-words">"{d.message}"</p>
+                             <p className="text-xs text-slate-300 mt-1 break-words">&quot;{d.message}&quot;</p>
                            )}
                            <div className="text-[10px] text-slate-500 mt-1 text-right">
                              {new Date(d.created_at).toLocaleTimeString()}

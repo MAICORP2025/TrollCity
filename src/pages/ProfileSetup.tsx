@@ -36,6 +36,8 @@ const ProfileSetup = () => {
   const [fullName, setFullName] = React.useState((profile as any)?.full_name || '')
   const [bio, setBio] = React.useState(profile?.bio || '')
   const [gender, setGender] = React.useState((profile as any)?.gender || '')
+  const [messageCost, setMessageCost] = React.useState((profile as any)?.message_cost || 0)
+  const [viewCost, setViewCost] = React.useState((profile as any)?.profile_view_cost || 0)
   const [loading, setLoading] = React.useState(false)
   const [uploadingAvatar, setUploadingAvatar] = React.useState(false)
   const [uploadingCover, setUploadingCover] = React.useState(false)
@@ -83,6 +85,12 @@ const ProfileSetup = () => {
     }
     if (profile?.bio) {
       setBio(profile.bio)
+    }
+    if ((profile as any)?.message_cost) {
+      setMessageCost((profile as any).message_cost)
+    }
+    if ((profile as any)?.profile_view_cost) {
+      setViewCost((profile as any).profile_view_cost)
     }
   }, [profile])
 
@@ -133,6 +141,8 @@ const ProfileSetup = () => {
           full_name: fullName.trim(),
           bio: bio || null, 
           gender,
+          message_cost: messageCost,
+          profile_view_cost: viewCost,
           updated_at: now 
         })
         .eq('id', user.id)
@@ -554,6 +564,33 @@ const ProfileSetup = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm mb-2 text-yellow-400">Message Cost (TC)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={messageCost}
+                    onChange={(e) => setMessageCost(Number(e.target.value))}
+                    className="w-full px-4 py-2 rounded bg-[#23232b] text-white border border-gray-600 focus:outline-none"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Cost for users to message you (0 = Free)</p>
+                </div>
+                <div>
+                  <label className="block text-sm mb-2 text-yellow-400">View Profile Cost (TC)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={viewCost}
+                    onChange={(e) => setViewCost(Number(e.target.value))}
+                    className="w-full px-4 py-2 rounded bg-[#23232b] text-white border border-gray-600 focus:outline-none"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Cost to view your full profile (0 = Free)</p>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -663,7 +700,7 @@ const ProfileSetup = () => {
 
               <div className="space-y-3">
                 <label className="block text-sm text-gray-300 mb-1">
-                  Upload Government ID (Driver's License, Passport, or State ID)
+                  Upload Government ID (Driver&apos;s License, Passport, or State ID)
                 </label>
                 <div className="bg-[#23232b] border-2 border-dashed border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-purple-400 transition-colors">
                   <input
@@ -765,7 +802,7 @@ const ProfileSetup = () => {
                       Verification Status: <span className="font-semibold">{(profile as any).id_verification_status || 'pending'}</span>
                     </p>
                     <p className="text-xs text-gray-400">
-                      Your account will be reviewed by our team within 24 hours. You'll receive a notification when verified.
+                      Your account will be reviewed by our team within 24 hours. You&apos;ll receive a notification when verified.
                     </p>
                   </div>
                 ) : (

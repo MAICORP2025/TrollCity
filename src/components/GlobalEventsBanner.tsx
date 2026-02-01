@@ -26,30 +26,6 @@ const mapVoteEventToGlobal = (row: VoteEventRow): GlobalEvent => {
   const baseStart = row.created_at ? new Date(row.created_at) : new Date();
   const baseEnd = new Date(baseStart.getTime() + 60 * 60 * 1000);
 
-  if (row.event_type === 'trollg_fee_paid') {
-    return {
-      id: row.id,
-      title: 'New TrollG Creator',
-      description: 'A new TrollG creator has unlocked access. Watch for their gift and vote.',
-      type: 'special_event',
-      startTime: baseStart,
-      endTime: baseEnd,
-      isActive: true,
-    };
-  }
-
-  if (row.event_type === 'gift_submitted') {
-    return {
-      id: row.id,
-      title: 'New TrollG Gift',
-      description: 'A new TrollG gift has been submitted — vote now.',
-      type: 'special_event',
-      startTime: baseStart,
-      endTime: baseEnd,
-      isActive: true,
-    };
-  }
-
   if (row.event_type === 'officer_cycle_started') {
     return {
       id: row.id,
@@ -104,36 +80,45 @@ const GlobalEventsBanner: React.FC = () => {
     let cancelled = false;
 
     const loadEvents = async () => {
-      const { data: events, error } = await supabase
-        .from('vote_events')
-        .select('id, event_type, created_at, is_active')
-        .eq('is_active', true)
+      // Use officer_vote_cycles instead of vote_events
+      const { data: cycles, error } = await supabase
+        .from('officer_vote_cycles')
+        .select('id, starts_at, ends_at, status, created_at')
+        .eq('status', 'active')
         .order('created_at', { ascending: false });
 
-      if (error || !events || events.length === 0 || cancelled) {
+      if (error || !cycles || cycles.length === 0 || cancelled) {
         setCurrentEvent(null);
         setIsVisible(false);
         return;
       }
 
-      const eventIds = events.map((e) => e.id);
-
+      const activeCycle = cycles[0];
+      
+      // Check dismissals
       const { data: dismissals } = await supabase
         .from('user_event_dismissals')
         .select('event_id')
         .eq('user_id', user.id)
-        .in('event_id', eventIds);
+        .eq('event_id', activeCycle.id);
 
-      const dismissedIds = new Set((dismissals || []).map((d: any) => d.event_id));
-      const next = events.find((e) => !dismissedIds.has(e.id));
-
-      if (!next || cancelled) {
-        setCurrentEvent(null);
-        setIsVisible(false);
-        return;
+      if (dismissals && dismissals.length > 0) {
+         setCurrentEvent(null);
+         setIsVisible(false);
+         return;
       }
 
-      setCurrentEvent(mapVoteEventToGlobal(next as VoteEventRow));
+      // Map to GlobalEvent
+      setCurrentEvent({
+          id: activeCycle.id,
+          title: 'Vote: Troll Officer of the Week',
+          description: 'Support your favorite broadcaster and cast your vote.',
+          type: 'special_event',
+          startTime: new Date(activeCycle.starts_at),
+          endTime: new Date(activeCycle.ends_at),
+          isActive: true,
+          linkPath: '/officer/vote',
+      });
     };
 
     void loadEvents();

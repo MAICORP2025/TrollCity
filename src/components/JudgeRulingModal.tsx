@@ -61,7 +61,7 @@ export default function JudgeRulingModal({ isOpen, onClose, caseData, onSuccess 
               <Gavel className="w-6 h-6 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Judge's Chambers</h2>
+              <h2 className="text-xl font-bold text-white">Judge&apos;s Chambers</h2>
               <p className="text-xs text-gray-400">Case #{caseData.case_number} • {caseData.category}</p>
             </div>
           </div>
@@ -178,7 +178,7 @@ export default function JudgeRulingModal({ isOpen, onClose, caseData, onSuccess 
                   <span className="absolute right-4 top-3 text-gray-500 text-sm">MAX: {caseData.claim_amount}</span>
                 </div>
                 <p className="text-xs text-gray-500">
-                  This amount will be automatically transferred from the Defendant's balance to the Plaintiff.
+                  This amount will be automatically transferred from the Defendant&apos;s balance to the Plaintiff.
                   If the Defendant has insufficient funds, the maximum available balance will be transferred.
                 </p>
               </div>

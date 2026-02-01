@@ -89,7 +89,7 @@ export default function DailyPassage() {
           </div>
           
           <blockquote className="text-xl md:text-2xl font-serif text-white italic leading-relaxed mb-4">
-            "{passage.text.trim()}"
+            &quot;{passage.text.trim()}&quot;
           </blockquote>
           
           <cite className="block text-indigo-300 font-bold tracking-wide uppercase text-sm not-italic">

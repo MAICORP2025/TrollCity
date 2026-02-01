@@ -78,16 +78,13 @@ export default function UserManagementPanel({
   useEffect(() => {
     loadUsers()
 
-    const channel = supabase
-      .channel('users_changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'user_profiles' },
-        () => loadUsers()
-      )
-      .subscribe()
+    // Polling every 30s instead of global subscription
+    const interval = setInterval(() => {
+      loadUsers()
+    }, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [loadUsers])
 

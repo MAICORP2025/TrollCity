@@ -32,9 +32,14 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
 
   useEffect(() => {
     fetchPrayers();
-    subscribeToPrayers();
+
+    // Poll every 30 seconds instead of Realtime subscription
+    const interval = setInterval(() => {
+      fetchPrayers();
+    }, 30000);
 
     return () => {
+      clearInterval(interval);
       supabase.channel('church_prayers_channel').unsubscribe();
     };
   }, [profile?.id]);
@@ -75,36 +80,7 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
     }
   };
 
-  const subscribeToPrayers = () => {
-    supabase
-      .channel('church_prayers_channel')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'church_prayers' }, (payload) => {
-        // Fetch full prayer to get user profile
-        fetchNewPrayer(payload.new.id);
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'church_prayers' }, (payload) => {
-        setPrayers(prev => prev.filter(p => p.id !== payload.old.id));
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'church_prayers' }, (payload) => {
-         setPrayers(prev => prev.map(p => p.id === payload.new.id ? { ...p, likes_count: payload.new.likes_count } : p));
-      })
-      .subscribe();
-  };
 
-  const fetchNewPrayer = async (id: string) => {
-    const { data } = await supabase
-      .from('church_prayers')
-      .select(`
-        *,
-        user_profiles:user_id (username, avatar_url, role, is_pastor)
-      `)
-      .eq('id', id)
-      .single();
-    
-    if (data) {
-      setPrayers(prev => [data, ...prev]);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

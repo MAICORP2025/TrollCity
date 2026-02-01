@@ -79,7 +79,7 @@ export default function BroadcastLockdownControl() {
       {settings.enabled && (
         <p className="text-xs text-gray-500 pt-2 border-t border-purple-700/30">
           When enabled, regular users will see a message on the Go Live page and their broadcast button will be disabled.
-          They can still join and participate in the admin's broadcast.
+          They can still join and participate in the admin&apos;s broadcast.
         </p>
       )}
     </div>

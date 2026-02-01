@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { ExecutiveIntake } from '../../../../types/admin'
 import { toast } from 'sonner'
-import { AlertTriangle, CheckCircle, Clock, ArrowUpCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, ArrowUpCircle, BadgeCheck } from 'lucide-react'
 import { useAuthStore } from '../../../../lib/store'
 
 interface ExecutiveIntakeListProps {
@@ -17,6 +17,11 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
   const [filterSeverity, setFilterSeverity] = useState<string>('all')
   const [selectedItem, setSelectedItem] = useState<ExecutiveIntake | null>(null)
   const [notes, setNotes] = useState('')
+
+  const handleSignTitle = async (id: string, carId: string) => {
+      console.log('Signing title for', id, carId)
+      toast.info('Title signing not yet implemented')
+  }
 
   const fetchIntake = useCallback(async () => {
     setLoading(true)
@@ -47,16 +52,12 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
   useEffect(() => {
     fetchIntake()
     
-    const subscription = supabase
-      .channel('executive_intake_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'executive_intake' }, () => {
-        fetchIntake()
-      })
-      .subscribe()
+    // Converted to polling to reduce DB load
+    const interval = setInterval(() => {
+      fetchIntake()
+    }, 30000)
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => clearInterval(interval)
   }, [fetchIntake])
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {

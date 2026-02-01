@@ -346,7 +346,7 @@ export function AssignRecruitPanel() {
               <li>Empire Partners are users who requested Empire Partner status in their application</li>
               <li>Available recruits are contracted users not yet assigned to a partner</li>
               <li>Assignments are permanent and cannot be changed without admin intervention</li>
-              <li>Partners will earn commissions from their assigned recruits' activity</li>
+              <li>Partners will earn commissions from their assigned recruits&apos; activity</li>
             </ul>
           </div>
         </CardContent>

@@ -17,23 +17,12 @@ export default function CriticalAlertsList({ viewMode: _viewMode }: CriticalAler
   useEffect(() => {
     fetchAlerts()
     
-    const subscription = supabase
-      .channel('critical_alerts_changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'critical_alerts' }, (payload) => {
-        const newAlert = payload.new as CriticalAlert
-        setAlerts(prev => [newAlert, ...prev])
-        if (newAlert.severity === 'critical') {
-          toast.error(`CRITICAL ALERT: ${newAlert.message}`, { duration: 10000 })
-        }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'critical_alerts' }, (payload) => {
-        setAlerts(prev => prev.map(a => a.id === payload.new.id ? payload.new as CriticalAlert : a))
-      })
-      .subscribe()
+    // Converted to polling to reduce DB load
+    const interval = setInterval(() => {
+      fetchAlerts()
+    }, 30000)
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => clearInterval(interval)
   }, [])
 
   const fetchAlerts = async () => {

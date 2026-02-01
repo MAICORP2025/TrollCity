@@ -15,6 +15,7 @@ const Auth = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showAlertAdmin, setShowAlertAdmin] = useState(false)
   const [alertEmail, setAlertEmail] = useState('')
@@ -215,6 +216,12 @@ const Auth = () => {
           setLoading(false)
           return
         }
+
+        if (!acceptedTerms) {
+          toast.error('You must accept the terms and agreements to sign up')
+          setLoading(false)
+          return
+        }
         
         // Use Edge Function for signup
         console.log('Creating new user account...')
@@ -223,7 +230,11 @@ const Auth = () => {
           email,
           password,
           username: username.trim(),
-          referral_code: referralCode || localStorage.getItem('recruited_by') || undefined
+          referral_code: referralCode || localStorage.getItem('recruited_by') || undefined,
+          data: {
+            terms_accepted: true,
+            accepted_at: new Date().toISOString()
+          }
         })
 
         if (!success || signUpError) {
@@ -434,6 +445,8 @@ const Auth = () => {
               <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
               <input
                 type="email"
+                id="email"
+                name="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
@@ -448,6 +461,8 @@ const Auth = () => {
               <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
               <input
                 type={showPassword ? "text" : "password"}
+                id="password"
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-12 pr-12 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
@@ -467,18 +482,59 @@ const Auth = () => {
 
             {/* Username Input (Sign Up Only) */}
             {!isLogin && (
-              <div className="relative group">
-                <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                  placeholder="Username"
-                  autoComplete="username"
-                  required
-                />
-              </div>
+              <>
+                <div className="relative group">
+                  <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
+                  <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                    placeholder="Username"
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+
+                {/* Terms Acceptance */}
+                <div className="flex items-start gap-3 px-1">
+                  <div className="relative flex items-center pt-1">
+                    <input
+                      type="checkbox"
+                      id="accept-terms"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      className="peer h-5 w-5 appearance-none rounded border border-purple-500/30 bg-slate-800/50 checked:bg-purple-600 checked:border-purple-600 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all cursor-pointer"
+                    />
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-white opacity-0 peer-checked:opacity-100 transition-opacity">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-3.5 w-3.5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                  <label htmlFor="accept-terms" className="text-sm text-slate-300 cursor-pointer select-none">
+                    I accept the{' '}
+                    <Link to="/terms" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
+                      Terms and Agreements
+                    </Link>
+                    {' '}and acknowledge the{' '}
+                    <Link to="/privacy" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
+                      Privacy Policy
+                    </Link>.
+                  </label>
+                </div>
+              </>
             )}
 
             {/* Submit Button */}
@@ -567,7 +623,7 @@ const Auth = () => {
               </button>
             </div>
             <p className="text-xs text-slate-400 mb-4">
-              Tell our team about the issue and we'll help you fix it.
+              Tell our team about the issue and we&apos;ll help you fix it.
             </p>
             <div className="space-y-3">
               <div>

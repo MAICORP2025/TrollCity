@@ -62,16 +62,10 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
   useEffect(() => {
     fetchRequests()
     
-    const subscription = supabase
-      .channel('cashout_requests_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashout_requests' }, () => {
-        fetchRequests()
-      })
-      .subscribe()
-
-    return () => {
-      subscription.unsubscribe()
-    }
+    // Polling every 30s instead of Realtime to save DB resources
+    const interval = setInterval(fetchRequests, 30000)
+    
+    return () => clearInterval(interval)
   }, [fetchRequests])
 
   const handleUpdateStatus = async (id: string, status: string, notes?: string) => {
@@ -273,7 +267,7 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
                             )}
                              {req.held_reason && (
                                 <span className="text-[10px] text-slate-500 italic max-w-[150px] truncate" title={req.held_reason}>
-                                    "{req.held_reason}"
+                                    &quot;{req.held_reason}&quot;
                                 </span>
                             )}
                         </div>
@@ -386,7 +380,7 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
                 className="w-full bg-[#0D0D16] border border-[#2C2C2C] rounded-lg p-3 text-white focus:outline-none focus:border-purple-500"
               />
               <p className="text-xs text-gray-500">
-                This will be securely sent to the user's Gift Cards page.
+                This will be securely sent to the user&apos;s Gift Cards page.
               </p>
             </div>
 

@@ -348,7 +348,7 @@ export default function OfficerManagementTab() {
                     </div>
                     <p className="text-xs text-slate-500 mt-1">{new Date(log.created_at).toLocaleString()}</p>
                     <div className="mt-2 bg-slate-800 p-2 rounded text-xs text-slate-300 italic">
-                      "{log.reason}"
+                      &quot;{log.reason}&quot;
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
                       By Admin ID: {log.changed_by.slice(0, 8)}

@@ -121,47 +121,18 @@ export default function OfficerShiftsPanel() {
     loadShifts()
     loadSlots()
 
-    // Subscribe to real-time updates
-    const channel = supabase
-      .channel('officer_shifts_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'officer_work_sessions'
-        },
-        () => {
-          loadShifts()
-        }
-      )
-      .subscribe()
+    // Polling every 30s to reduce DB load from global subscription
+    const interval = setInterval(() => {
+      loadShifts()
+      loadSlots()
+    }, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [filter, loadShifts, loadSlots])
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('officer_shift_slots_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'officer_shift_slots'
-        },
-        () => {
-          loadSlots()
-        }
-      )
-      .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [loadSlots])
 
   // Real-time ticking for active shifts
   useEffect(() => {

@@ -1,9 +1,40 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import DistrictOnboardingTour from '../components/DistrictOnboardingTour'
 import { useGameNavigate } from '../components/game/GameNavigation'
+
+// Hardcoded district data for tour - available to all users
+const DISTRICT_DATA: { [key: string]: { display_name: string; description: string } } = {
+  main_plaza: {
+    display_name: 'Main Plaza',
+    description: 'The heart of Troll City where live streams, TCPS, and community features come together.'
+  },
+  entertainment_district: {
+    display_name: 'Entertainment District',
+    description: 'Where the Tromody Show and other entertainment venues are located.'
+  },
+  commerce_district: {
+    display_name: 'Commerce District',
+    description: 'Shop, trade, and sell in Troll City\'s marketplace.'
+  },
+  justice_district: {
+    display_name: 'Justice District',
+    description: 'Troll Court, applications, and city support services.'
+  },
+  officer_quarters: {
+    display_name: 'Officer Quarters',
+    description: 'The headquarters for Troll City officers and moderation.'
+  },
+  family_neighborhood: {
+    display_name: 'Family Neighborhood',
+    description: 'A safe space for families to connect and grow together.'
+  },
+  admin_tower: {
+    display_name: 'Admin Tower',
+    description: 'City administration and management controls.'
+  }
+}
 
 export default function DistrictTour() {
   const { districtName } = useParams<{ districtName: string }>()
@@ -15,23 +46,26 @@ export default function DistrictTour() {
   const [loading, setLoading] = useState(true)
 
   const loadDistrictAndStartTour = useCallback(async () => {
+    if (!user?.id) {
+      // Still show tour for unauthenticated users but redirect on complete
+      setLoading(false)
+      setShowTour(true)
+      return
+    }
+
     try {
       setLoading(true)
 
-      // Get district info
-      const { data: districts } = await supabase.rpc('get_user_accessible_districts', {
-        p_user_id: user!.id
+      // Small delay to show loading state, then show tour
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Use hardcoded district data - available to all users
+      const districtInfo = DISTRICT_DATA[districtName || 'main_plaza'] || DISTRICT_DATA.main_plaza
+      
+      setDistrict({
+        name: districtName || 'main_plaza',
+        ...districtInfo
       })
-
-      const foundDistrict = districts?.find((d: any) => d.name === districtName)
-
-      if (!foundDistrict) {
-        // District not accessible, redirect to home
-        navigate('/live')
-        return
-      }
-
-      setDistrict(foundDistrict)
       setShowTour(true)
     } catch (error) {
       console.error('Error loading district:', error)
@@ -42,10 +76,8 @@ export default function DistrictTour() {
   }, [districtName, user, navigate])
 
   useEffect(() => {
-    if (districtName && user?.id) {
-      loadDistrictAndStartTour()
-    }
-  }, [districtName, user?.id, loadDistrictAndStartTour])
+    loadDistrictAndStartTour()
+  }, [loadDistrictAndStartTour])
 
   const getDistrictFeatures = useCallback((districtName: string) => {
     const features: { [key: string]: { feature_name: string, route_path: string }[] } = {
@@ -99,17 +131,14 @@ export default function DistrictTour() {
 
   const handleTourComplete = useCallback(() => {
     // Redirect back to the district's first feature or home
-    if (district) {
-      const features = getDistrictFeatures(district.name)
-      if (features.length > 0) {
-        gameNavigate(features[0].route_path)
-      } else {
-        gameNavigate('/live')
-      }
+    const districtKey = district?.name || districtName || 'main_plaza'
+    const features = getDistrictFeatures(districtKey)
+    if (features.length > 0) {
+      gameNavigate(features[0].route_path)
     } else {
       gameNavigate('/live')
     }
-  }, [district, gameNavigate, getDistrictFeatures])
+  }, [district, districtName, gameNavigate, getDistrictFeatures])
 
   const handleTourClose = useCallback(() => {
     setShowTour(false)

@@ -685,7 +685,7 @@ export default function SellOnTrollCity() {
                     <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4 mb-4">
                       <Clock className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
                       <p className="text-yellow-400 font-semibold">Application Under Review</p>
-                      <p className="text-gray-400 text-sm">Your application has been submitted and is being reviewed by admins. You'll receive a notification when it's processed.</p>
+                      <p className="text-gray-400 text-sm">Your application has been submitted and is being reviewed by admins. You&apos;ll receive a notification when it&apos;s processed.</p>
                     </div>
                     <p className="text-gray-400 text-sm">Application submitted on {new Date(existingApplication.created_at).toLocaleDateString()}</p>
                   </div>
@@ -829,7 +829,7 @@ export default function SellOnTrollCity() {
               <h3 className="text-xl font-bold mb-4 text-center text-red-400">Delete Shop</h3>
               <div className="text-center mb-6">
                 <p className="text-gray-300 mb-2">
-                  Are you sure you want to delete <span className="text-red-400 font-bold">"{shop?.name}"</span>?
+                  Are you sure you want to delete <span className="text-red-400 font-bold">&quot;{shop?.name}&quot;</span>?
                 </p>
                 <p className="text-sm text-gray-400">
                   This action cannot be undone. Your shop will be removed from the marketplace and all products will be deleted.

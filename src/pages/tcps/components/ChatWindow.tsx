@@ -30,6 +30,7 @@ interface Message {
   sender_username?: string
   sender_avatar_url?: string | null
   sender_rgb_expires_at?: string | null
+  isPending?: boolean
 }
 
 export default function ChatWindow({ conversationId, otherUserInfo, isOnline, onBack }: ChatWindowProps) {
@@ -50,6 +51,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
   const [isTyping, setIsTyping] = useState(false)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const channelRef = useRef<any>(null)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Close menu on click outside
   useEffect(() => {
@@ -161,6 +163,38 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     }
   }, [])
 
+  // Fetch messages and sender info
+  const fetchMessagesWithSenders = useCallback(async (convId: string) => {
+    const messagesData = await getConversationMessages(convId, { limit: 50 })
+    
+    // Enhance with sender info
+    const senderIds = [...new Set(messagesData.map(m => m.sender_id))]
+    const senderMap: Record<string, any> = {}
+    
+    if (senderIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from('user_profiles')
+        .select('id,username,avatar_url,rgb_username_expires_at')
+        .in('id', senderIds)
+      
+      usersData?.forEach(u => {
+        senderMap[u.id] = u
+      })
+    }
+
+    return messagesData.map(m => ({
+      id: m.id,
+      conversation_id: m.conversation_id,
+      sender_id: m.sender_id,
+      content: m.body,
+      created_at: m.created_at,
+      read_at: m.read_at,
+      sender_username: senderMap[m.sender_id]?.username,
+      sender_avatar_url: senderMap[m.sender_id]?.avatar_url,
+      sender_rgb_expires_at: senderMap[m.sender_id]?.rgb_username_expires_at
+    })).reverse()
+  }, [])
+
   // Load messages
   useEffect(() => {
     if (!actualConversationId || !profile?.id) return
@@ -168,37 +202,10 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     const loadMessages = async () => {
       setLoading(true)
       try {
-        const messagesData = await getConversationMessages(actualConversationId, { limit: 50 })
-        
-        // Enhance with sender info
-        const senderIds = [...new Set(messagesData.map(m => m.sender_id))]
-        const senderMap: Record<string, any> = {}
-        
-        if (senderIds.length > 0) {
-          const { data: usersData } = await supabase
-            .from('user_profiles')
-            .select('id,username,avatar_url,rgb_username_expires_at')
-            .in('id', senderIds)
-          
-          usersData?.forEach(u => {
-            senderMap[u.id] = u
-          })
-        }
-
-        const mappedMessages = messagesData.map(m => ({
-          id: m.id,
-          conversation_id: m.conversation_id,
-          sender_id: m.sender_id,
-          content: m.body,
-          created_at: m.created_at,
-          sender_username: senderMap[m.sender_id]?.username,
-          sender_avatar_url: senderMap[m.sender_id]?.avatar_url,
-          sender_rgb_expires_at: senderMap[m.sender_id]?.rgb_username_expires_at
-        })).reverse() // Show newest at bottom
-
+        const mappedMessages = await fetchMessagesWithSenders(actualConversationId)
         setMessages(mappedMessages)
         setOldestLoadedAt(mappedMessages[0]?.created_at || null)
-        setHasMore(messagesData.length === 50)
+        setHasMore(mappedMessages.length === 50)
         
         // Mark as read
         await markConversationRead(actualConversationId)
@@ -251,12 +258,23 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
             sender_id: newMsgRaw.sender_id,
             content: newMsgRaw.body,
             created_at: newMsgRaw.created_at,
+            read_at: newMsgRaw.read_at,
             sender_username: senderInfo.username,
             sender_avatar_url: senderInfo.avatar_url,
             sender_rgb_expires_at: senderInfo.rgb_username_expires_at
           }
 
-          setMessages(prev => [...prev, newMsg])
+          setMessages(prev => {
+            // Remove any pending message that matches
+            const withoutPending = prev.filter(msg => {
+              if (msg.isPending && msg.sender_id === user?.id && msg.content === newMsg.content) {
+                return false
+              }
+              return true
+            })
+            return [...withoutPending, newMsg]
+          })
+          
           if (newMsg.sender_id !== user?.id) {
             await markConversationRead(actualConversationId)
           }
@@ -270,7 +288,55 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [actualConversationId, profile?.id, scrollToBottom, user?.id, isAtBottom])
+  }, [actualConversationId, profile?.id, scrollToBottom, user?.id, isAtBottom, fetchMessagesWithSenders])
+
+  // Poll for new messages and read status updates every second
+  useEffect(() => {
+    if (!actualConversationId) return
+
+    const pollMessages = async () => {
+      try {
+        const mappedMessages = await fetchMessagesWithSenders(actualConversationId)
+        
+        setMessages(prev => {
+          const prevIds = new Set(prev.map(m => m.id))
+          
+          // Check if there are new messages
+          const hasNewMessages = mappedMessages.some(m => !prevIds.has(m.id))
+          if (hasNewMessages) {
+            return mappedMessages
+          }
+          
+          // Check for read status updates on existing messages
+          const hasReadUpdate = mappedMessages.some((m, idx) => {
+            if (idx < prev.length) {
+              return prev[idx].read_at !== m.read_at
+            }
+            return false
+          })
+          if (hasReadUpdate) {
+            return mappedMessages
+          }
+          
+          return prev
+        })
+      } catch (error) {
+        // Silent fail for polling
+      }
+    }
+
+    // Initial poll
+    pollMessages()
+
+    // Poll every second
+    pollIntervalRef.current = setInterval(pollMessages, 1000)
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
+  }, [actualConversationId, fetchMessagesWithSenders])
 
   const handleScroll = () => {
     if (!messagesContainerRef.current) return
@@ -289,7 +355,19 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
   }
 
   const handleLocalNewMessage = (newMsg: any) => {
-    setMessages(prev => [...prev, newMsg])
+    // Add message as pending with sender info
+    const pendingMsg: Message = {
+      id: `temp-${Date.now()}`,
+      conversation_id: actualConversationId || '',
+      sender_id: user?.id || '',
+      content: newMsg.content || newMsg.body,
+      created_at: new Date().toISOString(),
+      sender_username: profile?.username,
+      sender_avatar_url: profile?.avatar_url,
+      sender_rgb_expires_at: profile?.rgb_username_expires_at,
+      isPending: true
+    }
+    setMessages(prev => [...prev, pendingMsg])
     scrollToBottom()
   }
 
@@ -396,7 +474,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
                    {showAvatar ? (
                      <img 
                        src={msg.sender_avatar_url || `https://ui-avatars.com/api/?name=${msg.sender_username}&background=random`}
-                       className="w-8 h-8 rounded-full border border-purple-500/20"
+                       className={`w-8 h-8 rounded-full border border-purple-500/20 ${msg.isPending ? 'opacity-50' : ''}`}
                        alt={msg.sender_username}
                      />
                    ) : <div className="w-8" />}
@@ -408,7 +486,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
                    <ClickableUsername 
                      username={msg.sender_username || ''}
                      className="text-xs text-gray-400 ml-1 hover:text-purple-400"
-                     rgbExpiresAt={msg.sender_rgb_expires_at}
+                     profile={{ rgb_username_expires_at: msg.sender_rgb_expires_at || undefined }}
                    />
                 )}
                 <div 
@@ -416,13 +494,27 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
                     isMe 
                       ? 'bg-purple-600 text-white rounded-tr-none' 
                       : 'bg-[#1F1F2E] text-gray-200 rounded-tl-none border border-purple-500/10'
-                  }`}
+                  } ${msg.isPending ? 'opacity-70' : ''}`}
                 >
                   {msg.content}
                 </div>
-                <span className="text-[10px] text-gray-500 px-1">
-                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-gray-500 px-1">
+                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  
+                  {/* Read status for own messages */}
+                  {isMe && (
+                    <span>
+                      {msg.read_at ? (
+                        <CheckCheck className="w-3 h-3 text-purple-400" />
+                      ) : (
+                        <Check className={`w-3 h-3 ${msg.isPending ? 'text-gray-600' : 'text-gray-400'}`} />
+                      )}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )

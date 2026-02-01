@@ -325,6 +325,8 @@ export default function VideoTile({
           WebkitBackdropFilter: 'none'
         }}
       />
+      {/* @ts-expect-error: React.DOMAttributes doesn't include playsInline by default for audio in some types */}
+      {/* eslint-disable-next-line react/no-unknown-property */}
       <audio ref={audioRef} autoPlay playsInline muted={!!isLocal} className="hidden" />
       
       {/* Fallback Profile Picture */}

@@ -45,17 +45,17 @@
   - Derived from JWT (`supabaseClient.auth.getUser()`)
   - For service role, can be sent in body
 - **Loan Logic:**
-  - Calls RPC: `troll_bank_apply_for_loan(p_user_id, p_requested_coins)`
+  - Calls RPC: `troll_bank_apply_for_loan(p_requested_coins)` (User ID derived from auth context)
   - Returns error if RPC fails
 
 ---
 
 ## 4. Supabase / Database
 
-- **RPC:** `troll_bank_apply_for_loan(p_user_id uuid, p_requested_coins int)`
+- **RPC:** `troll_bank_apply_for_loan(p_requested_coins int)`
 - **Parameter Mapping:**
-  - `p_user_id`: from JWT
   - `p_requested_coins`: from request body
+  - User ID is derived from `auth.uid()` within the function
 - **RLS:** Not shown, but function is called as authenticated user
 - **Function Signature:** Matches request
 

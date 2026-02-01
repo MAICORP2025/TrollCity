@@ -133,7 +133,7 @@ export default function DistrictOnboardingTour({
         <div className="bg-[#0A0A14] rounded-xl p-8 border border-green-500/30 text-center">
           <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Tour Completed!</h2>
-          <p className="text-gray-400">You've successfully explored this district.</p>
+          <p className="text-gray-400">You&apos;ve successfully explored this district.</p>
         </div>
       </div>
     )

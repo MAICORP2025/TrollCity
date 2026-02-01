@@ -160,7 +160,7 @@ export default function AdminResetPanel() {
 
       <div className="mb-4">
         <label className="block text-sm font-semibold mb-2">
-          Type "RESET" to enable buttons:
+          Type &quot;RESET&quot; to enable buttons:
         </label>
         <input
           type="text"

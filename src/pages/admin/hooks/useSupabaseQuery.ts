@@ -51,16 +51,7 @@ export const useSupabaseQuery = <T>(
 
   useEffect(() => {
     loadData();
-
-    const channel = supabase
-      .channel(`query-${table}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table }, loadData)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [loadData, table]);
+  }, [loadData]);
 
   return data;
 };

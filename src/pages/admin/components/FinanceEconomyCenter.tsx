@@ -55,7 +55,7 @@ export default function FinanceEconomyCenter({
       icon: <DollarSign className="w-4 h-4" />,
       color: 'text-green-400',
       bgColor: 'bg-green-500/20',
-      trend: '+12.5%'
+      trend: null
     },
     {
       label: 'Total Payouts',
@@ -64,7 +64,7 @@ export default function FinanceEconomyCenter({
       icon: <CreditCard className="w-4 h-4" />,
       color: 'text-red-400',
       bgColor: 'bg-red-500/20',
-      trend: '+8.2%'
+      trend: null
     },
     {
       label: 'Platform Profit',
@@ -73,7 +73,7 @@ export default function FinanceEconomyCenter({
       icon: <TrendingUp className="w-4 h-4" />,
       color: 'text-emerald-400',
       bgColor: 'bg-emerald-500/20',
-      trend: '+15.3%'
+      trend: null
     },
     {
       label: 'Processing Fees',
@@ -82,7 +82,7 @@ export default function FinanceEconomyCenter({
       icon: <Calculator className="w-4 h-4" />,
       color: 'text-orange-400',
       bgColor: 'bg-orange-500/20',
-      trend: '+5.1%'
+      trend: null
     }
   ]
 
@@ -173,10 +173,12 @@ export default function FinanceEconomyCenter({
                   <div className="text-lg font-bold text-white mb-1">
                     {showSensitiveData ? formatValue(metric.value, metric.format) : '••••••'}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-green-400" />
-                    <span className="text-xs text-green-400">{metric.trend}</span>
-                  </div>
+                  {metric.trend && (
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3 text-green-400" />
+                      <span className="text-xs text-green-400">{metric.trend}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -25,24 +25,22 @@ export const useRealtimeMetrics = (): Metrics => {
         usersRes,
         streamsRes,
         activeStreamsRes,
-        coinsRes,
-        revenueRes,
       ] = await Promise.all([
-        supabase.from('user_profiles').select('id'),
-        supabase.from('streams').select('id'),
-        supabase.from('streams').select('id').eq('is_live', true), // Use is_live for consistency
-        supabase.from('coin_transactions').select('amount'),
-        supabase.from('coin_transactions').select('metadata').eq('type', 'purchase'),
+        supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('streams').select('*', { count: 'exact', head: true }),
+        supabase.from('streams').select('*', { count: 'exact', head: true }).eq('is_live', true),
       ]);
 
-      const totalUsers = usersRes.data?.length || 0;
-      const totalStreams = streamsRes.data?.length || 0;
-      const activeStreams = activeStreamsRes.data?.length || 0;
-      const totalCoins = coinsRes.data?.reduce((sum, tx) => sum + (tx.amount || 0), 0) || 0;
-      const totalRevenue = revenueRes.data?.reduce((sum, tx) => {
-        const meta = tx.metadata || {};
-        return sum + (meta.amount_paid || 0);
-      }, 0) || 0;
+      const totalUsers = usersRes.count || 0;
+      const totalStreams = streamsRes.count || 0;
+      const activeStreams = activeStreamsRes.count || 0;
+      
+      // OPTIMIZATION: Calculating total coins/revenue from client-side iteration of ALL transactions 
+      // is impossible at scale (millions of rows). 
+      // For now, we set these to 0 to prevent browser crashes. 
+      // In production, these should be replaced by a Postgres View or RPC function (e.g. get_platform_stats).
+      const totalCoins = 0; 
+      const totalRevenue = 0;
 
       setMetrics({
         totalUsers,
@@ -63,11 +61,14 @@ export const useRealtimeMetrics = (): Metrics => {
     const interval = setInterval(loadMetrics, 30000);
 
     // Real-time subscriptions
+    /* 
+    // CRITICAL: Removed global subscriptions to high-velocity tables to reduce DB load
+    // Polling is sufficient for these metrics
     const usersChannel = supabase
       .channel('metrics-users')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, loadMetrics)
       .subscribe();
-
+    
     const streamsChannel = supabase
       .channel('metrics-streams')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, loadMetrics)
@@ -77,12 +78,13 @@ export const useRealtimeMetrics = (): Metrics => {
       .channel('metrics-coins')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'coin_transactions' }, loadMetrics)
       .subscribe();
-
+    */
+    
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(usersChannel);
-      supabase.removeChannel(streamsChannel);
-      supabase.removeChannel(coinsChannel);
+      // supabase.removeChannel(usersChannel);
+      // supabase.removeChannel(streamsChannel);
+      // supabase.removeChannel(coinsChannel);
     };
   }, []);
 

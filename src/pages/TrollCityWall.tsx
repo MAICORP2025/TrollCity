@@ -156,52 +156,14 @@ export default function TrollCityWall() {
   useEffect(() => {
     loadPosts()
 
-    const channel = supabase
-      .channel('troll_wall_posts')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'troll_wall_posts' },
-        (payload) => {
-          const newPost = payload.new as any
-          supabase
-            .from('user_profiles')
-            .select('username, avatar_url, is_admin, is_troll_officer, is_og_user')
-            .eq('id', newPost.user_id)
-            .single()
-            .then(({ data: userData }) => {
-              setPosts(prev => [{
-                ...newPost,
-                ...userData,
-                user_liked: false,
-                user_reaction: null,
-                reactions: {},
-                gifts: {},
-              } as WallPost, ...prev])
-            })
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'troll_wall_posts' },
-        (payload) => {
-          const updatedPost = payload.new as any
-          setPosts(prev =>
-            prev.map(p => p.id === updatedPost.id ? { ...p, ...updatedPost } : p)
-          )
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'troll_wall_posts' },
-        (payload) => {
-          const deletedId = (payload.old as any).id
-          setPosts(prev => prev.filter(p => p.id !== deletedId))
-        }
-      )
-      .subscribe()
+    // Replaced high-overhead Realtime subscription with Polling (15s)
+    const interval = setInterval(() => {
+      // Optional: Only poll if tab is active or just blindly poll
+      loadPosts()
+    }, 15000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [loadPosts])
 

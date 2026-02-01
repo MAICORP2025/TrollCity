@@ -67,54 +67,15 @@ const ReelCommentsOverlay: React.FC<ReelCommentsOverlayProps> = ({
   useEffect(() => {
     loadComments();
 
-    // realtime subscription
-    const channel = supabase
-      .channel(`troll_post_comments_${postId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "troll_post_comments",
-          filter: `post_id=eq.${postId}`,
-        },
-        async (payload) => {
-          // fetch the new row with user profile joined
-          const { data, error } = await supabase
-            .from("troll_post_comments")
-            .select(
-              `
-              id,
-              post_id,
-              user_id,
-              content,
-              created_at,
-              user_profiles!user_id (
-                username,
-                avatar_url
-              )
-            `
-            )
-            .eq("id", payload.new.id)
-            .maybeSingle();
-
-          if (!error && data) {
-            setComments((prev) => [...prev, data as TrollComment]);
-            // auto-scroll
-            requestAnimationFrame(() => {
-              if (listRef.current) {
-                listRef.current.scrollTop = listRef.current.scrollHeight;
-              }
-            });
-          }
-        }
-      )
-      .subscribe();
+    // Polling for new comments (every 15 seconds)
+    const interval = setInterval(() => {
+      loadComments();
+    }, 15000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
-  }, [postId, loadComments]);
+  }, [loadComments]);
 
   const sendComment = async () => {
     if (!user || !profile) {

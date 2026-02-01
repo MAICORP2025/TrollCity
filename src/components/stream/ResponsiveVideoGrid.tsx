@@ -21,6 +21,8 @@ interface ResponsiveVideoGridProps {
   onUserClick?: (participant: Participant) => void;
   onToggleCamera?: () => void;
   isCameraOn?: boolean;
+  frameMode?: 'none' | 'rgb';
+  onFrameModeChange?: (mode: 'none' | 'rgb') => void;
 }
 
 export default function ResponsiveVideoGrid({
@@ -40,24 +42,14 @@ export default function ResponsiveVideoGrid({
   boxCount = 0,
   onUserClick,
   onToggleCamera,
-  isCameraOn
+  isCameraOn,
+  frameMode = 'none',
+  onFrameModeChange
 }: ResponsiveVideoGridProps) {
   const broadcaster =
     (broadcasterId && participants.find((p) => p.identity === broadcasterId)) ||
     participants[0] ||
     null;
-
-  const [frameMode, setFrameMode] = React.useState<'none' | 'rgb'>(() => {
-    if (typeof window === 'undefined') return 'none';
-    const stored = window.localStorage.getItem('troll_frame_mode');
-    if (stored === 'none' || stored === 'rgb') return stored;
-    return 'none';
-  });
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('troll_frame_mode', frameMode);
-  }, [frameMode]);
 
   const isLocalBroadcaster =
     !!(localParticipant && broadcaster && broadcaster.identity === localParticipant.identity);
@@ -77,9 +69,6 @@ export default function ResponsiveVideoGrid({
       participant = participants.find((p) => p.identity === (seat as any).user_id);
     }
 
-    // Removed fallback logic that auto-filled slots with random participants.
-    // Slots should only be filled if there is an explicit seat assignment.
-
     return {
       key: `slot-${index}`,
       seatIndex: index,
@@ -92,34 +81,38 @@ export default function ResponsiveVideoGrid({
 
   const canControlFrames = !!isLocalBroadcaster || !!isHost;
 
-  if (!broadcaster) {
-    return null;
-  }
+  const totalTiles = 1 + activeGuestCount; // Broadcaster + Guests
 
-  const hostFrameClass =
-    frameMode === 'rgb'
-      ? 'border-2 border-transparent rgb-frame'
-      : 'border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)]';
+  // Generate Grid Classes based on count
+  const getGridClass = (count: number) => {
+    // Default (Mobile/Portrait)
+    let mobile = 'grid-cols-1 grid-rows-1';
+    if (count === 2) mobile = 'grid-cols-1 grid-rows-2';
+    if (count === 3) mobile = 'grid-cols-2 grid-rows-2';
+    if (count === 4) mobile = 'grid-cols-2 grid-rows-2';
+    if (count >= 5 && count <= 6) mobile = 'grid-cols-2 grid-rows-3';
+    if (count >= 7) mobile = 'grid-cols-3 grid-rows-3';
 
-  const guestFrameClass = (position: string) => {
-    const baseClass =
-      frameMode === 'rgb'
-        ? 'border border-transparent rgb-frame-small'
-        : 'border border-purple-500/20 hover:border-purple-500/40';
+    // Landscape / Tablet / Desktop (md breakpoint)
+    // We assume 'md' is roughly where we can switch to a wider layout
+    let landscape = 'md:grid-cols-1 md:grid-rows-1';
+    if (count === 2) landscape = 'md:grid-cols-2 md:grid-rows-1';
+    if (count === 3) landscape = 'md:grid-cols-3 md:grid-rows-1';
+    if (count === 4) landscape = 'md:grid-cols-2 md:grid-rows-2';
+    if (count >= 5 && count <= 6) landscape = 'md:grid-cols-3 md:grid-rows-2';
+    if (count >= 7 && count <= 8) landscape = 'md:grid-cols-4 md:grid-rows-2';
+    if (count >= 9) landscape = 'md:grid-cols-3 md:grid-rows-3';
 
-    // Keep positional class for testing/debugging and potential layout tweaks
-    const safePosition = position?.toString().replace(/[^a-z0-9-_]/gi, '').toLowerCase() || 'slot';
-    return `${baseClass} guest-${safePosition}`.trim();
+    return `grid ${mobile} ${landscape} gap-2 w-full h-full transition-all duration-500 ease-in-out`;
   };
 
   return (
-    <div className="w-full h-auto min-h-0 flex flex-col gap-3 p-2 md:p-4">
-      {canControlFrames && (
-        <div className="flex items-center justify-end gap-2 mb-1 text-[11px] sm:text-xs">
-          <span className="text-gray-400">Frames</span>
+    <div className="w-full h-full min-h-0 flex flex-col p-2 md:p-4 absolute inset-0">
+      {canControlFrames && onFrameModeChange && (
+        <div className="absolute top-2 right-2 z-50 flex items-center gap-2 mb-1 text-[11px] sm:text-xs bg-black/40 p-1 rounded-full backdrop-blur-sm">
           <button
             type="button"
-            onClick={() => setFrameMode('none')}
+            onClick={() => onFrameModeChange('none')}
             className={`px-2 py-1 rounded-full border text-xs ${
               frameMode === 'none'
                 ? 'bg-zinc-800 border-zinc-500 text-white'
@@ -130,7 +123,7 @@ export default function ResponsiveVideoGrid({
           </button>
           <button
             type="button"
-            onClick={() => setFrameMode('rgb')}
+            onClick={() => onFrameModeChange('rgb')}
             className={`px-2 py-1 rounded-full border text-xs ${
               frameMode === 'rgb'
                 ? 'bg-pink-700 border-pink-400 text-white shadow-[0_0_16px_rgba(244,114,182,0.8)]'
@@ -142,17 +135,11 @@ export default function ResponsiveVideoGrid({
         </div>
       )}
       
-      {/* Fixed Grid Layout: 3x3 Grid with Dynamic Broadcaster Size */}
-      <div className="grid grid-cols-3 grid-rows-3 gap-2 w-full h-full mx-auto">
+      {/* Dynamic Responsive Grid */}
+      <div className={getGridClass(totalTiles)}>
         
         {/* Broadcaster Tile */}
-        <div className={`relative transition-all duration-500 ease-in-out ${
-          activeGuestCount === 0
-            ? 'col-span-3 row-span-3'
-            : activeGuestCount <= 5 
-              ? 'col-span-2 row-span-2' 
-              : 'col-span-1 row-span-1'
-        }`}>
+        <div className="relative w-full h-full overflow-hidden rounded-2xl">
           <VideoTile
             participant={broadcaster}
             isBroadcaster
@@ -161,8 +148,8 @@ export default function ResponsiveVideoGrid({
             onLeave={isLocalBroadcaster && !isHost ? onLeaveSession : undefined}
             onDisableGuestMedia={onDisableGuestMedia}
             price={joinPrice}
-            coinBalance={broadcaster.identity ? coinBalances?.[broadcaster.identity] : undefined}
-            compact={false}
+            coinBalance={broadcaster?.identity ? coinBalances?.[broadcaster.identity] : undefined}
+            compact={totalTiles > 1}
             className="w-full h-full object-cover"
             style={{ width: '100%', height: '100%' }}
             onClick={() => onUserClick?.(broadcaster)}
@@ -188,37 +175,13 @@ export default function ResponsiveVideoGrid({
         </div>
 
         {/* Guest Slots */}
-        {guestSlots.map((slot, index) => {
-           // Calculate grid position for Large Broadcaster mode
-           // Slots 0-1 go to Right Column (Row 1-2)
-           // Slots 2-4 go to Bottom Row (Col 1-3)
-           // If Small Broadcaster mode, they just flow (starting from index 1?)
-           
-           // Actually, we can just let CSS Grid auto-placement handle it if we are careful?
-           // No, because Broadcaster takes 2x2.
-           
-           // If Large Broadcaster (activeGuestCount <= 5):
-           // Index 0 -> Col 3, Row 1
-           // Index 1 -> Col 3, Row 2
-           // Index 2 -> Col 1, Row 3
-           // Index 3 -> Col 2, Row 3
-           // Index 4 -> Col 3, Row 3
-           
-           let gridClass = '';
-           if (index === 0) gridClass = 'col-start-3 row-start-1';
-           else if (index === 1) gridClass = 'col-start-3 row-start-2';
-           else if (index === 2) gridClass = 'col-start-1 row-start-3';
-           else if (index === 3) gridClass = 'col-start-2 row-start-3';
-           else if (index === 4) gridClass = 'col-start-3 row-start-3';
-           
-           // Only render slots up to limit (5)
-           if (activeGuestCount === 0) return null;
-           if (index >= 5) return null;
+        {guestSlots.map((slot) => {
+           if (!slot.isActive) return null;
  
            return (
             <div 
               key={slot.key}
-              className={`relative rounded-2xl overflow-hidden transition-all duration-300 ${gridClass}`}
+              className="relative w-full h-full rounded-2xl overflow-hidden"
               onClick={() => !slot.participant && slot.isActive && onJoinRequest?.(slot.seatIndex)}
             >
               {slot.participant && slot.isActive ? (
@@ -247,11 +210,7 @@ export default function ResponsiveVideoGrid({
                     +
                   </div>
                 </div>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-black/40 rounded-2xl border border-white/5">
-                   {/* Empty inactive slot */}
-                </div>
-              )}
+              ) : null}
             </div>
            );
         })}

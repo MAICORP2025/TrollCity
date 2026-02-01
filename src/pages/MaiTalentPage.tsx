@@ -40,63 +40,9 @@ export default function MaiTalentPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Access Control: Under Construction for non-admins
-  const isAdmin = profile?.role === 'admin' || profile?.is_admin === true || profile?.role === 'super_admin';
+  const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
 
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
-        <div className="bg-purple-900/20 p-8 rounded-3xl border border-purple-500/30 max-w-md w-full backdrop-blur-sm">
-          <div className="w-20 h-20 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Star className="w-10 h-10 text-purple-400 animate-pulse" />
-          </div>
-          <h1 className="text-3xl font-black text-white mb-4">MAI TALENT</h1>
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500/20 text-yellow-200 rounded-full text-sm font-bold mb-6 border border-yellow-500/20">
-            <AlertCircle size={16} />
-            UNDER CONSTRUCTION
-          </div>
-          <p className="text-slate-400 mb-8">
-            We are currently building the ultimate talent showcase platform. 
-            Check back soon to show off your skills!
-          </p>
-          <Button 
-            onClick={() => window.history.back()}
-            variant="outline"
-            className="border-white/10 hover:bg-white/5 text-white w-full"
-          >
-            Go Back
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  useEffect(() => {
-    fetchAuditions();
-    checkJudgeStatus();
-
-    const channel = supabase
-      .channel('mai-talent-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mai_talent_votes' },
-        () => {
-          fetchAuditions();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mai_talent_auditions' },
-        () => {
-          fetchAuditions();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [profile]);
-
+  // Function definitions must come before useEffect
   const fetchAuditions = async () => {
     setLoading(true);
     try {
@@ -154,6 +100,49 @@ export default function MaiTalentPage() {
       
     setIsJudge(!!data);
   };
+
+  // Hooks must be called unconditionally at the top level
+  useEffect(() => {
+    fetchAuditions();
+    checkJudgeStatus();
+
+    // Polling instead of Realtime for leaderboard to reduce DB load
+    const interval = setInterval(() => {
+      fetchAuditions();
+    }, 15000); // 15 seconds
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [profile]);
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+        <div className="bg-purple-900/20 p-8 rounded-3xl border border-purple-500/30 max-w-md w-full backdrop-blur-sm">
+          <div className="w-20 h-20 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Star className="w-10 h-10 text-purple-400 animate-pulse" />
+          </div>
+          <h1 className="text-3xl font-black text-white mb-4">MAI TALENT</h1>
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500/20 text-yellow-200 rounded-full text-sm font-bold mb-6 border border-yellow-500/20">
+            <AlertCircle size={16} />
+            UNDER CONSTRUCTION
+          </div>
+          <p className="text-slate-400 mb-8">
+            We are currently building the ultimate talent showcase platform. 
+            Check back soon to show off your skills!
+          </p>
+          <Button 
+            onClick={() => window.history.back()}
+            variant="outline"
+            className="border-white/10 hover:bg-white/5 text-white w-full"
+          >
+            Go Back
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const handleAuditionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -341,7 +330,7 @@ export default function MaiTalentPage() {
                           title={audition.talent_name}
                         />
                       ) : audition.clip_url ? (
-                         <video src={audition.clip_url} controls className="w-full h-full object-cover" />
+                          <video src={audition.clip_url} controls className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-600 bg-slate-950">
                           <Video size={48} />
@@ -502,48 +491,37 @@ export default function MaiTalentPage() {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {auditions.map((audition, index) => (
-                    <tr key={audition.id} className="hover:bg-white/5 transition-colors">
-                      <td className="p-4 font-mono text-slate-500">#{index + 1}</td>
+                    <tr key={audition.id} className="hover:bg-white/5">
+                      <td className="p-4">
+                        <span className={`font-bold ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-gray-300' : index === 2 ? 'text-amber-600' : 'text-slate-400'}`}>
+                          #{index + 1}
+                        </span>
+                      </td>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden">
-                            <img src={audition.user?.avatar_url || 'https://ui-avatars.com/api/?background=random'} className="w-full h-full object-cover" />
-                          </div>
+                          <img src={audition.user?.avatar_url || 'https://ui-avatars.com/api/?background=random'} className="w-8 h-8 rounded-full" />
                           <div>
                             <div className="font-bold text-white">{audition.talent_name}</div>
-                            <div className="text-xs text-slate-500">by {audition.user?.username}</div>
+                            <div className="text-xs text-slate-500">@{audition.user?.username}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="p-4 text-slate-300">
-                        <span className="px-2 py-1 rounded bg-white/5 text-xs">{audition.category}</span>
+                      <td className="p-4">
+                        <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300 text-xs font-medium">{audition.category}</span>
                       </td>
+                      <td className="p-4 text-right font-bold text-yellow-400">{audition.total_votes?.toLocaleString() || 0}</td>
                       <td className="p-4 text-right">
-                        <span className="font-bold text-yellow-400">{audition.total_votes?.toLocaleString()}</span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="text-pink-400 hover:bg-pink-900/20"
-                          onClick={() => handleVote(audition.id, 10)}
-                        >
-                          Vote
+                        <Button size="sm" onClick={() => handleVote(audition.id, 10)} className="bg-purple-600 hover:bg-purple-700">
+                          Vote 10
                         </Button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {auditions.length === 0 && (
-                <div className="p-10 text-center text-slate-500">
-                  No data yet.
-                </div>
-              )}
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

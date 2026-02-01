@@ -228,7 +228,7 @@ export function CreatorApplication() {
             </div>
             <h2 className="text-xl font-bold text-slate-50 mb-2">Application Pending</h2>
             <p className="text-slate-300 mb-4">
-              Your creator application is under review. You'll be notified once it's processed.
+              Your creator application is under review. You&apos;ll be notified once it&apos;s processed.
             </p>
             <Button
               onClick={() => navigate('/creator-application/status')}

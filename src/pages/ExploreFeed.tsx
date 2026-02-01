@@ -31,8 +31,18 @@ export default function ExploreFeed() {
     window.scrollTo(0, 0);
   }, []);
 
-  const fetchBroadcasts = useCallback(async (filterValue: typeof filter = filter) => {
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const ITEMS_PER_PAGE = 20;
+
+  const fetchBroadcasts = useCallback(async (isLoadMore = false) => {
+    if (!hasMore && isLoadMore) return;
+
     try {
+      const currentPage = isLoadMore ? page + 1 : 0;
+      const from = currentPage * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+
       let query = supabase
         .from('streams')
         .select(`
@@ -42,41 +52,65 @@ export default function ExploreFeed() {
             avatar_url,
             level
           )
-        `)
+        `, { count: 'exact' })
         .eq('is_live', true)
-        .order('current_viewers', { ascending: false });
+        .order('current_viewers', { ascending: false })
+        .range(from, to);
 
-      if (filterValue !== 'all') {
-        query = query.eq('category', filterValue);
+      if (filter !== 'all') {
+        query = query.eq('category', filter);
       }
 
-      const { data, error } = await query;
+      const { data, error, count } = await query;
 
       if (error) throw error;
-      setBroadcasts(data || []);
+
+      if (isLoadMore) {
+        setBroadcasts(prev => [...prev, ...(data || [])]);
+        setPage(currentPage);
+      } else {
+        setBroadcasts(data || []);
+        setPage(0);
+      }
+
+      // Check if we reached the end
+      if (count !== null) {
+        setHasMore(to < count);
+      } else {
+        setHasMore((data?.length || 0) === ITEMS_PER_PAGE);
+      }
+
     } catch (error: any) {
       console.error('Error fetching broadcasts:', error);
       toast.error('Failed to load broadcasts');
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, hasMore, page]);
 
-  // Subscribe to real-time updates
+  // Initial load
   useEffect(() => {
-    fetchBroadcasts(filter);
+    fetchBroadcasts(false);
     
-    const channel = supabase
-      .channel('streams-feed')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, () => {
-        fetchBroadcasts(filter);
-      })
-      .subscribe();
+    // Polling every 30s - resets list to keep "Top" fresh
+    // We only poll page 0 to avoid jittering the user's scroll position if they are deep down
+    const interval = setInterval(() => {
+       // Optional: Only refresh if near top? For now, let's just refresh page 0 logic if needed
+       // or just let the user manually refresh. 
+       // Automated refreshing of a paginated list is UX tricky.
+       // Let's remove auto-refresh of the *entire* list to prevent resetting user context.
+       // Or just refresh the viewer counts of currently visible items?
+       // For simplicity/scalability, we'll rely on manual refresh or "Load More".
+       // But to keep it "Live", maybe just re-fetch page 0 if we are at page 0.
+       if (window.scrollY < 500) {
+         fetchBroadcasts(false);
+       }
+    }, 30000);
 
     return () => {
-      channel.unsubscribe();
+      clearInterval(interval);
     };
-  }, [filter, fetchBroadcasts]);
+  }, [filter]); // Remove fetchBroadcasts from dependency to avoid loop if it changes
 
   const getTimeSince = (timestamp: string) => {
     const minutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000);
@@ -129,7 +163,7 @@ export default function ExploreFeed() {
 
           {/* Filters */}
           <div className="flex flex-wrap gap-3">
-            {['all', 'gaming', 'irl', 'music'].map((cat) => (
+            {['all', 'irl', 'music'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setFilter(cat as typeof filter)}
@@ -269,6 +303,18 @@ export default function ExploreFeed() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Load More Button */}
+        {hasMore && !loading && broadcasts.length > 0 && (
+          <div className="mt-12 flex justify-center">
+            <button
+              onClick={() => fetchBroadcasts(true)}
+              className={`px-8 py-3 rounded-xl font-bold text-white ${trollCityTheme.gradients.primary} ${trollCityTheme.shadows.glow} hover:scale-105 transition-transform duration-300`}
+            >
+              Load More Streams
+            </button>
           </div>
         )}
       </div>

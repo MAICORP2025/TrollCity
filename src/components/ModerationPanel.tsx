@@ -5,6 +5,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import api from "../lib/api";
+import IPBanModal from "./officer/IPBanModal";
 
 interface ModerationPanelProps {
   room: any; // LiveKit Room

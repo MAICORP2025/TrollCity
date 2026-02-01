@@ -19,6 +19,7 @@ interface UseLiveKitTokenProps {
   isHost: boolean;
   userId: string | undefined;
   roomName: string | undefined;
+  canPublish?: boolean;
 }
 
 export function useLiveKitToken({
@@ -26,6 +27,7 @@ export function useLiveKitToken({
   isHost,
   userId,
   roomName,
+  canPublish = false,
 }: UseLiveKitTokenProps) {
   const [token, setToken] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function useLiveKitToken({
 
     let mounted = true;
 
-    const cacheKey = `${roomName}:${userId}:${isHost ? 'host' : 'viewer'}`;
+    const cacheKey = `${roomName}:${userId}:${isHost ? 'host' : 'viewer'}:${canPublish ? 'pub' : 'sub'}`;
 
     const fetchToken = async () => {
       try {
@@ -107,8 +109,8 @@ export function useLiveKitToken({
               roomName,
               identity: userId,
               user_id: userId,
-              role: isHost ? 'broadcaster' : 'viewer',
-              allowPublish: isHost,
+              role: (isHost || canPublish) ? 'broadcaster' : 'viewer',
+              allowPublish: isHost || canPublish,
             }),
           });
 
@@ -168,7 +170,7 @@ export function useLiveKitToken({
     return () => {
       mounted = false;
     };
-  }, [streamId, isHost, userId, roomName]);
+  }, [streamId, isHost, userId, roomName, canPublish]);
 
   return {
     token,

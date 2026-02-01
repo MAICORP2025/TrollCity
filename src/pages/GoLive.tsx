@@ -17,7 +17,7 @@ const PRIVATE_STREAM_COST = 500;
 type StreamQuality = 'STANDARD' | 'HD_BOOST' | 'HIGHEST';
 
 const GoLive: React.FC = () => {
-  const { profile, refreshProfile } = useAuthStore(); // Using getState() instead for async operations
+  const { profile, refreshProfile } = useAuthStore();
   const { refreshCoins } = useCoins();
   const { settings: lockdownSettings } = useBroadcastLockdown();
 
@@ -41,6 +41,7 @@ const GoLive: React.FC = () => {
 
   const navigate = useNavigate();
   const liveKit = useLiveKit();
+  
   const liveRestriction = useMemo(() => {
     if (!profile?.live_restricted_until) {
       return { isRestricted: false, message: '' };
@@ -66,13 +67,6 @@ const GoLive: React.FC = () => {
     return false;
   }, [profile?.role, profile?.is_admin, profile?.is_lead_officer, profile?.is_troll_officer]);
 
-  // Note: Camera/mic permissions will be requested when joining seats in broadcast
-  // No camera preview needed in setup
-
-
-
-  // Note: All camera/mic functionality moved to seat joining in broadcast page
- 
   useEffect(() => {
     const loadThemes = async () => {
       const { user } = useAuthStore.getState();
@@ -226,18 +220,8 @@ const GoLive: React.FC = () => {
     }
   };
 
-  // -------------------------------
-  // START STREAM
-  // -------------------------------
-  const handleStartStream = async (manualBattleData?: { battleId: string, opponent: any }) => {
+  const handleStartStream = async () => {
     const { profile, user } = useAuthStore.getState();
-    // Battle data is now handled within the broadcast view
-    const effectiveBattleData = manualBattleData; 
-
-    if (category === 'Troll Battles' && !effectiveBattleData) {
-      toast.error('You must find an opponent first!');
-      return;
-    }
 
     if (!user || !profile) {
       toast.error('You must be logged in.');
@@ -254,18 +238,15 @@ const GoLive: React.FC = () => {
       return;
     }
 
-    // Check broadcast lockdown - only admin can broadcast when enabled
     if (lockdownSettings.enabled && !isAdmin) {
       toast.error('🔴 Broadcasts are currently locked. Only the admin can broadcast right now. Try again later or join the admin\'s broadcast!');
       return;
     }
 
-    // Backend enforcement: double-check with database RPC
     try {
       const { data: canBroadcast, error: broadcastError } = await supabase.rpc('can_start_broadcast');
       if (broadcastError) {
         console.warn('Could not verify broadcast permission with backend:', broadcastError);
-        // Fall back to frontend check only if RPC fails
       } else if (!canBroadcast) {
         toast.error('🔴 Broadcasts are currently locked by admin. Please try again later.');
         return;
@@ -280,20 +261,11 @@ const GoLive: React.FC = () => {
       return;
     }
 
-    // All users are now approved to broadcast - no restrictions
-    // if (!profile.is_broadcaster) {
-    //   toast.error('🚫 You must be an approved broadcaster to go live.');
-    //   return;
-    // }
-
-    // Immediate Go Live flow requires camera/mic and LiveKit connection before navigation
-
     if (!streamTitle.trim()) {
       toast.error('Enter a stream title.');
       return;
     }
 
-    // Check for Private Stream cost
     if (isPrivateStream) {
       if (!privateStreamPassword.trim()) {
         toast.error('Set a password for the private stream so viewers can join');
@@ -301,7 +273,6 @@ const GoLive: React.FC = () => {
       }
       const userLevel = profile.level || 0;
       if (userLevel < 40) {
-        // Need to pay 1000 coins
         const currentCoins = profile.troll_coins || 0;
         const COST = PRIVATE_STREAM_COST;
         
@@ -310,7 +281,6 @@ const GoLive: React.FC = () => {
            return;
         }
 
-        // Deduct coins
         try {
           const deduction = await deductCoins({
             userId: user.id,
@@ -334,7 +304,6 @@ const GoLive: React.FC = () => {
 
     setIsConnecting(true);
     
-    // Reset connecting state on function exit to prevent getting stuck
     const cleanup = () => {
       try {
         setIsConnecting(false);
@@ -374,15 +343,12 @@ const GoLive: React.FC = () => {
       sessionId = prepareResponse.sessionId;
       publishConfig = prepareResponse.publishConfig;
       livekitToken = prepareResponse.livekitToken;
-      // Support both top-level and nested response shapes
       hdPaid = Boolean((prepareResponse as any).hdPaid ?? (prepareResponse as any)?.data?.hdPaid);
       setRequestedQuality('HIGHEST');
 
       const streamId = sessionId;
-      const roomName = sessionId; // Use sessionId as LiveKit room name
+      const roomName = sessionId;
 
-      // 1. Request camera and microphone access FIRST (preflight stream)
-      // This ensures we don't create a stream entry if the user denies permissions
       let preflightStream: MediaStream | null = null;
       try {
         const capture = publishConfig?.captureConstraints || {
@@ -413,10 +379,8 @@ const GoLive: React.FC = () => {
         return;
       }
 
-      // Optimized stream creation with retry logic and better error handling
       console.log('[GoLive] Starting optimized stream creation...', { streamId, broadcasterId: profile.id });
 
-      // Session verification: prefer cached session from auth store, fall back to Supabase
       let sessionAccessToken: string | null = useAuthStore.getState().session?.access_token ?? null;
       let sessionError: any = null;
 
@@ -435,16 +399,13 @@ const GoLive: React.FC = () => {
       }
       console.log('[GoLive] Session verified');
 
-      // Prepare stream data
-      // IMPORTANT: Set is_live to FALSE initially so it doesn't show up on homepage
-      // until we have successfully connected to LiveKit
       const streamData = {
         id: streamId,
         broadcaster_id: profile.id,
         title: streamTitle,
         category: category,
-        is_live: false, // Hidden initially
-        status: 'preparing', // Status preparing
+        is_live: false,
+        status: 'preparing',
         is_private: isPrivateStream,
         box_price_amount: boxPriceAmount,
         box_price_type: boxPriceType,
@@ -459,7 +420,6 @@ const GoLive: React.FC = () => {
         updated_at: new Date().toISOString()
       };
 
-      // Optimized stream creation with better error handling
       console.log('[GoLive] Attempting stream creation with optimized timeout...');
       
       let insertResult: any = null;
@@ -472,7 +432,6 @@ const GoLive: React.FC = () => {
           .select()
           .single();
 
-        // Use enhanced timeout - increased for database operations
         insertResult = await Promise.race([
           insertOperation,
           new Promise<never>((_, reject) => 
@@ -567,7 +526,7 @@ const GoLive: React.FC = () => {
             console.error('[GoLive] Failed to send private stream notifications:', notifyErr);
           }
         } catch (passwordErr: any) {
-          console.error('[GoLive] Failed to set private stream password:', passwordErr);
+          console.error('[GoLive] Failed to set stream password:', passwordErr);
           toast.error('Failed to enable the private password. Please try again.');
           preflightStream?.getTracks().forEach(t => t.stop());
           await supabase.from('streams').delete().eq('id', createdId);
@@ -578,7 +537,6 @@ const GoLive: React.FC = () => {
       
       console.log('[GoLive] Stream created successfully:', createdId);
 
-      // OPTIMIZATION: Connect immediately so user is live when they land on the page
       console.log('[GoLive] 🚀 Starting LiveKit connection (pre-navigation)...');
       let isConnectedNow = false;
 
@@ -587,7 +545,6 @@ const GoLive: React.FC = () => {
         const videoTrack = tracks.find(t => t.kind === 'video');
         const audioTrack = tracks.find(t => t.kind === 'audio');
 
-        // Connect using the same service instance that LivePage will use
         const connectedService: any = await liveKit.connect(
           roomName,
           {
@@ -599,7 +556,7 @@ const GoLive: React.FC = () => {
             tokenOverride: livekitToken || undefined,
             url: LIVEKIT_URL,
             allowPublish: true,
-            autoPublish: false, // Manual publish to use existing tracks
+            autoPublish: false,
             preflightStream: preflightStream || undefined
           }
         );
@@ -607,7 +564,6 @@ const GoLive: React.FC = () => {
         if (connectedService) {
           console.log('[GoLive] Connected. Publishing tracks...');
           
-          // Publish video
           if (videoTrack) {
              if (connectedService.publishVideoTrack) {
                await connectedService.publishVideoTrack(videoTrack);
@@ -616,7 +572,6 @@ const GoLive: React.FC = () => {
              }
           }
 
-          // Publish audio
           if (audioTrack) {
              if (connectedService.publishAudioTrack) {
                await connectedService.publishAudioTrack(audioTrack);
@@ -627,7 +582,6 @@ const GoLive: React.FC = () => {
           console.log('[GoLive] ✅ Connected and published!');
           isConnectedNow = true;
           
-          // Update stream to live immediately (non-blocking)
           Promise.resolve(supabase
             .from('streams')
             .update({ 
@@ -637,7 +591,6 @@ const GoLive: React.FC = () => {
             .eq('id', createdId))
             .then(() => {
               console.log('[GoLive] Stream marked live');
-              // Notify followers
               supabase.functions.invoke('send-push-notification', {
                 body: {
                   broadcast_followers_id: profile.id,
@@ -653,11 +606,8 @@ const GoLive: React.FC = () => {
         }
       } catch (err) {
         console.error('[GoLive] Pre-connection failed (will retry on LivePage):', err);
-        // Do not return, allow navigation to proceed so LivePage can try
       }
       
-      // If not connected yet, update stream to starting status
-      // Fire and forget (don't await) to speed up navigation
       if (!isConnectedNow) {
         supabase
           .from('streams')
@@ -670,18 +620,14 @@ const GoLive: React.FC = () => {
       }
 
       if (sessionId) {
-        // Fire and forget
         api.request(API_ENDPOINTS.stream.markLive, {
           method: 'POST',
           body: JSON.stringify({ sessionId, status: isConnectedNow ? 'live' : 'starting', streamId: createdId })
         });
       }
 
-      // Navigate immediately without waiting for database updates
       console.log('[GoLive] ✅ preparing immediate navigation');
       
-      // ✅ Pass stream data directly via navigation state to avoid database query
-      // This eliminates replication delay issues
       const streamDataForNavigation = {
         id: insertedStream.id,
         broadcaster_id: insertedStream.broadcaster_id || profile.id,
@@ -704,8 +650,7 @@ const GoLive: React.FC = () => {
           state: { 
             streamData: streamDataForNavigation, 
             isBroadcaster: true, 
-            roomName,
-            battle: effectiveBattleData
+            roomName
           } 
         });
         console.log('[GoLive] ✅ Navigation called successfully - already publishing');
@@ -714,7 +659,6 @@ const GoLive: React.FC = () => {
         console.error('[GoLive] ❌ Navigation error', navErr);
         toast.error('Stream created but navigation failed. Please navigate manually.');
         cleanup();
-        // Don't return here, let it fall through to finally block
       }
     } catch (err: any) {
       if (hdPaid && sessionId) {
@@ -733,7 +677,6 @@ const GoLive: React.FC = () => {
         cause: err?.cause
       });
       
-      // Provide specific error messages based on error type
       if (err?.message === 'timeout') {
         toast.error('Stream creation timed out. This usually takes 10-30 seconds on slower connections. Please try again.');
       } else if (err?.message?.includes('fetch')) {
@@ -752,12 +695,6 @@ const GoLive: React.FC = () => {
     }
   };
 
-
-
-
-
-
-
   return (
     <div className="max-w-6xl mx-auto space-y-6 go-live-wrapper bg-gradient-to-br from-[#1a003a] via-[#0fffc1] to-[#1a003a] p-1 rounded-2xl shadow-[0_0_32px_4px_rgba(0,255,255,0.15)]">
 
@@ -766,7 +703,6 @@ const GoLive: React.FC = () => {
         <span className="bg-gradient-to-r from-[#0fffc1] via-[#ff00ea] to-[#00b3ff] bg-clip-text text-transparent">Go Live</span>
       </h1>
       
-      {/* Broadcast Lockdown Alert */}
       {lockdownSettings.enabled && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-red-200 flex items-start gap-3">
           <span className="text-lg">🔴</span>
@@ -829,7 +765,6 @@ const GoLive: React.FC = () => {
                 <input id="private" type="checkbox" checked={isPrivateStream} onChange={() => setIsPrivateStream((v) => !v)} />
                 <label htmlFor="private" className="text-sm text-gray-300">
                   Private Stream 
-                  {/* Level 40+ bypass logic would be checked here for display, but logic is in start stream */}
                   {(profile?.level || 0) >= 40 ? (
                     <span className="text-xs text-green-400 ml-2">(Free for Lvl 40+)</span>
                   ) : (
@@ -885,7 +820,7 @@ const GoLive: React.FC = () => {
                 {boxPriceAmount === 0 
                   ? "Guests can join boxes for free." 
                   : boxPriceType === 'per_minute' 
-                    ? `Guests pay ${boxPriceAmount} coins every minute they are in a box.`
+                    ? `Guests pay ${boxPriceAmount} coins every minute they are in a box.` 
                     : `Guests pay ${boxPriceAmount} coins once to join a box.`}
               </p>
             </div>

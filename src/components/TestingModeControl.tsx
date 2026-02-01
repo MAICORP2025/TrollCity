@@ -112,7 +112,7 @@ export function TestingModeControl() {
   return (
     <div className="bg-gradient-to-br from-purple-900/20 to-pink-900/20 rounded-xl p-6 border border-purple-500/30">
       {/* @ts-expect-error: styled-jsx global support */}
-      <style jsx global>{`
+      <style>{`
         .purple-neon {
           border: 2px solid #A78BFA;
           box-shadow: 0 0 15px rgba(167, 139, 250, 0.6), inset 0 0 15px rgba(167, 139, 250, 0.2);

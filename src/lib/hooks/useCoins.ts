@@ -14,7 +14,7 @@ interface SpendCoinsParams {
   senderId: string
   receiverId?: string // Optional - if not provided, coins are just deducted (e.g., wheel, effects)
   amount: number
-  source: 'gift' | 'wheel' | 'badge' | 'entrance_effect' | 'boost' | 'purchase' | 'bonus' | 'payroll' | 'mai_talent_vote'
+  source: 'gift' | 'wheel' | 'badge' | 'entrance_effect' | 'boost' | 'purchase' | 'bonus' | 'payroll' | 'mai_talent_vote' | 'church_gift'
   item?: string // Optional item name (e.g., 'TrollRose', 'Wheel Spin', 'VIP Badge')
 }
 
@@ -76,14 +76,22 @@ export function useCoins() {
       }
 
       const currentProfile = useAuthStore.getState().profile
-      const paidBalance =
-        profileData?.troll_coins ??
-        currentProfile?.troll_coins ??
-        0
+      // Get balance from database first, fall back to local store
+      // This ensures we always use the most recent balance from the database
+      const dbBalance = profileData?.troll_coins ?? null
+      const localBalance = currentProfile?.troll_coins ?? null
+      
+      // Use database balance if available, otherwise use local balance
+      const paidBalance = dbBalance !== null ? dbBalance : (localBalance ?? 0)
+      
+      // Only use optimistic balance if it's less than or equal to the database balance
+      // (optimistic deductions should be reflected immediately)
       const mergedPaid =
-        optimisticUntil && Date.now() < optimisticUntil && (optimisticTroll ?? 0) > paidBalance
+        optimisticUntil && Date.now() < optimisticUntil && (optimisticTroll ?? 0) > 0 && (optimisticTroll ?? 0) <= paidBalance
           ? (optimisticTroll as number)
           : paidBalance
+      
+      console.log('[refreshCoins] Balance sync:', { dbBalance, localBalance, paidBalance, mergedPaid })
       const nextTotals = {
         total_earned_coins:
           profileData?.total_earned_coins ??

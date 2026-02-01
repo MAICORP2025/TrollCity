@@ -190,7 +190,7 @@ export default function IPBanModal({
               />
             ) : (
               <div className="w-full bg-black/50 border border-purple-600 p-3 rounded-lg text-sm text-gray-500">
-                IP addresses are only visible to admins. You can still ban this user's IP.
+                IP addresses are only visible to admins. You can still ban this user&apos;s IP.
               </div>
             )}
           </div>

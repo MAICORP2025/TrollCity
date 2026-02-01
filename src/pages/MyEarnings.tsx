@@ -397,7 +397,7 @@ export default function MyEarnings() {
                       ) : (
                         <div className="mt-3">
                           <p className="text-sm text-purple-300 font-semibold">
-                            🎉 You've reached the highest payout tier!
+                            🎉 You&apos;ve reached the highest payout tier!
                           </p>
                         </div>
                       )}
@@ -483,7 +483,7 @@ export default function MyEarnings() {
                   <div className="flex-1">
                     <h3 className="text-xl font-bold text-yellow-400 mb-2">Approaching IRS Threshold</h3>
                     <p className="text-gray-200">
-                      You have earned <strong>${yearlyPaid.toFixed(2)}</strong> this year. Once you reach $600, you'll need to provide tax information for Form 1099.
+                      You have earned <strong>${yearlyPaid.toFixed(2)}</strong> this year. Once you reach $600, you&apos;ll need to provide tax information for Form 1099.
                     </p>
                   </div>
                 </div>

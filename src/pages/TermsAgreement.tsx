@@ -220,7 +220,7 @@ export default function TermsAgreement() {
         {/* Agreement Text */}
         <div className="relative z-[9999] bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] p-6 mb-6 space-y-4 pointer-events-auto" style={{ zIndex: 99999 }}>
           <div className="space-y-4 text-gray-300">
-            <p className="font-semibold text-white">By clicking "Agree & Continue" below, you acknowledge and agree to the following:</p>
+            <p className="font-semibold text-white">By clicking &quot;Agree & Continue&quot; below, you acknowledge and agree to the following:</p>
             
             <ul className="list-disc list-inside space-y-2 ml-2">
               <li>
