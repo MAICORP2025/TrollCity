@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { Home, Key, DollarSign, Building, Warehouse, Hotel, Tent, Briefcase, Edit2, X, Zap, Droplets } from 'lucide-react';
+import { Home, Key, DollarSign, Building, Warehouse, Hotel, Tent, Briefcase, Edit2, X, Zap, Droplets, FileText, Calculator, CheckCircle } from 'lucide-react';
 
 interface Property {
   id: string;
@@ -17,46 +17,110 @@ interface Property {
   is_for_sale: boolean;
   price: number;
   last_rent_change_at?: string;
+  description?: string;
+  image_url?: string;
+  amenities?: string[];
+  is_admin_created?: boolean; // Admin-created properties only landlords can buy
+  is_landlord_purchased?: boolean; // Properties bought by landlords won't show in rent section
 }
 
 interface Lease {
   id: string;
+  property_id: string;
   property: Property;
+  tenant_id: string;
   start_date: string;
   rent_due_day: number;
   last_rent_paid_at: string;
   status: string;
 }
 
-interface Loan {
+interface LandlordLoan {
   id: string;
-  property: Property;
-  amount: number; // total amount
+  user_id: string;
+  property_id: string;
+  property?: Property;
+  loan_amount: number;
   remaining_balance: number;
-  loan_type: string;
+  monthly_payment: number;
   status: 'active' | 'paid' | 'defaulted';
-  // calculated for UI
-  monthly_payment: number; 
-  next_payment_due_at: string;
+  created_at: string;
+}
+
+interface LandlordApplication {
+  id: string;
+  user_id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  business_plan: string;
+  experience_years: number;
+  has_startup_capital: boolean;
+  created_at: string;
 }
 
 export default function LivingPage() {
   const { user, profile } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'my_home' | 'my_loans' | 'market' | 'landlord'>('my_home');
+  const [activeTab, setActiveTab] = useState<'my_home' | 'my_loans' | 'market' | 'landlord' | 'landlord_apply'>('my_home');
   const [marketFilter, setMarketFilter] = useState<'rent' | 'sale'>('rent');
   const [myLease, setMyLease] = useState<Lease | null>(null);
-  const [myLoans, setMyLoans] = useState<Loan[]>([]);
+  const [myLoans, setMyLoans] = useState<LandlordLoan[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [ownedProperties, setOwnedProperties] = useState<(Property & { active_lease?: Lease & { tenant: { username: string } } })[]>([]);
   const [loading, setLoading] = useState(false);
   const [buyingProp, setBuyingProp] = useState<Property | null>(null);
   const [downPayment, setDownPayment] = useState<string>('');
   const [isLandlord, setIsLandlord] = useState(false);
+  const [landlordApplication, setLandlordApplication] = useState<LandlordApplication | null>(null);
+  
+  // Landlord Application Form State
+  const [showLandlordApplication, setShowLandlordApplication] = useState(false);
+  const [landlordAppForm, setLandlordAppForm] = useState({
+    business_plan: '',
+    experience_years: 0,
+    has_startup_capital: false,
+    loan_amount_needed: 0,
+    property_value_interest: 0,
+  });
+  
+  // Loan Application State
+  const [showLoanApplication, setShowLoanApplication] = useState(false);
+  const [loanAppForm, setLoanAppForm] = useState({
+    property_value: 0,
+    loan_amount: 0,
+    down_payment: 0,
+    property_address: '',
+    property_type: 'house',
+  });
   
   // Landlord Edit State
   const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [editName, setEditName] = useState('');
   const [editRent, setEditRent] = useState('');
+  const [editSalePrice, setEditSalePrice] = useState('');
+  const [editIsForSale, setEditIsForSale] = useState(false);
+
+  // Admin Property Creation State
+  const [showAdminCreateProperty, setShowAdminCreateProperty] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPropertyForm, setAdminPropertyForm] = useState({
+    name: '',
+    type_id: 'house',
+    rent_amount: 1500,
+    price: 15000,
+    bedrooms: 1,
+    bathrooms: 1,
+    sqft: 500,
+    electric_cost: 75,
+    water_cost: 75,
+    description: '',
+  });
+
+  // Check admin status on mount
+  useEffect(() => {
+    if (profile) {
+      const adminStatus = profile.role === 'admin' || profile.is_admin;
+      setIsAdmin(adminStatus);
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (user) {
@@ -77,6 +141,386 @@ export default function LivingPage() {
       .single();
     
     if (data) setIsLandlord(data.is_landlord || false);
+    
+    // Check for existing landlord application
+    const { data: appData } = await supabase
+      .from('landlord_applications')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    
+    if (appData) {
+      setLandlordApplication(appData);
+    }
+  };
+
+  // Landlord Application Handler
+  const handleSubmitLandlordApplication = async () => {
+    if (!user) return;
+    
+    if (!landlordAppForm.business_plan || landlordAppForm.experience_years < 0) {
+      toast.error('Please complete all required fields');
+      return;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('landlord_applications')
+        .insert({
+          user_id: user.id,
+          status: 'approved', // Instant approval
+          business_plan: landlordAppForm.business_plan,
+          experience_years: landlordAppForm.experience_years,
+          has_startup_capital: landlordAppForm.has_startup_capital,
+          loan_amount_needed: landlordAppForm.loan_amount_needed,
+          property_value_interest: landlordAppForm.property_value_interest,
+          created_at: new Date().toISOString()
+        });
+      
+      if (error) throw error;
+      
+      // Automatically grant landlord status
+      await supabase
+        .from('user_profiles')
+        .update({ is_landlord: true })
+        .eq('id', user.id);
+      
+      // Create a new property for the new landlord (holds 100 tenants, costs 15,000 coins)
+      const propertyData = {
+        name: `${user.user_metadata?.full_name || 'Landlord'}'s Apartment Complex`,
+        address: `${100 + Math.floor(Math.random() * 900)} Landlord Lane`,
+        type: 'apartment',
+        bedrooms: 100,
+        bathrooms: 50,
+        sqft: 50000,
+        price: 15000,
+        is_for_sale: true,
+        owner_id: user.id,
+        tenant_capacity: 100,
+        current_tenants: 0,
+        amenities: ['Parking', 'Laundry', 'Security', 'Pool', 'Gym'],
+        image_url: '/api/placeholder/400/300',
+        description: 'A spacious apartment complex with 100 units available for rent. Perfect for new landlords looking to start their rental business.'
+      };
+      
+      const { error: propertyError } = await supabase
+        .from('properties')
+        .insert(propertyData);
+      
+      if (propertyError) {
+        console.error('Error creating property:', propertyError);
+        // Don't fail the whole process if property creation fails
+      }
+      
+      toast.success('Landlord application approved! Property created for you to buy.');
+      setIsLandlord(true);
+      setLandlordApplication({
+        id: 'new',
+        user_id: user.id,
+        status: 'approved',
+        business_plan: landlordAppForm.business_plan,
+        experience_years: landlordAppForm.experience_years,
+        has_startup_capital: landlordAppForm.has_startup_capital,
+        created_at: new Date().toISOString()
+      });
+      setShowLandlordApplication(false);
+      setActiveTab('market'); // Switch to market so they can buy their property
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Create property for existing landlords who don't have one
+  const handleCreatePropertyForLandlords = async () => {
+    if (!user || !isLandlord) {
+      toast.error('You must be a landlord to use this feature');
+      return;
+    }
+    
+    try {
+      // Check if current user already has a property
+      const { data: existingProps } = await supabase
+        .from('properties')
+        .select('id')
+        .eq('owner_id', user.id)
+        .limit(1);
+      
+      if (existingProps && existingProps.length > 0) {
+        toast.info('You already have a property!');
+        return;
+      }
+      
+      // Create a new property for the landlord
+      const propertyData = {
+        name: `${user.user_metadata?.full_name || 'Landlord'}'s Apartment Complex`,
+        address: `${100 + Math.floor(Math.random() * 900)} Landlord Lane`,
+        type_id: 'apartment',
+        rent_amount: 1500,
+        utility_cost: 150,
+        is_for_rent: true,
+        is_for_sale: true,
+        price: 15000,
+        bedrooms: 100,
+        bathrooms: 50,
+        sqft: 50000,
+        owner_id: user.id,
+        tenant_capacity: 100,
+        current_tenants: 0,
+        amenities: ['Parking', 'Laundry', 'Security', 'Pool', 'Gym'],
+        image_url: '/api/placeholder/400/300',
+        description: 'A spacious apartment complex with 100 units available for rent. Perfect for landlords looking to expand their portfolio.'
+      };
+      
+      const { error } = await supabase
+        .from('properties')
+        .insert(propertyData);
+      
+      if (error) throw error;
+      
+      toast.success('Property created! You can now rent out units to tenants.');
+      fetchOwnedProperties();
+      setActiveTab('my_home');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Admin: Create property for landlords to buy
+  const handleAdminCreateProperty = async () => {
+    if (!user || !isAdmin) {
+      toast.error('Admin access required');
+      return;
+    }
+    
+    if (!adminPropertyForm.name || adminPropertyForm.price <= 0) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    
+    try {
+      const propertyData = {
+        name: adminPropertyForm.name,
+        type_id: adminPropertyForm.type_id,
+        rent_amount: adminPropertyForm.rent_amount,
+        price: adminPropertyForm.price,
+        bedrooms: adminPropertyForm.bedrooms,
+        bathrooms: adminPropertyForm.bathrooms,
+        sqft: adminPropertyForm.sqft,
+        electric_cost: adminPropertyForm.electric_cost,
+        water_cost: adminPropertyForm.water_cost,
+        is_for_sale: true,
+        is_for_rent: false,
+        is_admin_created: true, // Only landlords can buy this
+        is_landlord_purchased: false,
+        owner_id: null, // No owner yet, available for purchase
+        tenant_capacity: adminPropertyForm.bedrooms * 2,
+        current_tenants: 0,
+        amenities: ['Basic Amenities'],
+        description: adminPropertyForm.description || 'A property available for landlords to purchase.',
+        image_url: '/api/placeholder/400/300',
+      };
+      
+      const { error } = await supabase
+        .from('properties')
+        .insert(propertyData);
+      
+      if (error) throw error;
+      
+      toast.success('Property created for landlords to buy!');
+      setShowAdminCreateProperty(false);
+      
+      // Reset form
+      setAdminPropertyForm({
+        name: '',
+        type_id: 'house',
+        rent_amount: 1500,
+        price: 15000,
+        bedrooms: 1,
+        bathrooms: 1,
+        sqft: 500,
+        electric_cost: 75,
+        water_cost: 75,
+        description: '',
+      });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Loan Application Handler
+  const handleSubmitLoanApplication = async () => {
+    if (!user) return;
+    
+    if (loanAppForm.loan_amount <= 0 || loanAppForm.property_value <= 0) {
+      toast.error('Please enter valid property and loan amounts');
+      return;
+    }
+    
+    // Calculate required down payment (10% minimum)
+    const minDownPayment = loanAppForm.property_value * 0.1;
+    if (loanAppForm.down_payment < minDownPayment) {
+      toast.error(`Minimum down payment is ${minDownPayment.toLocaleString()} coins (10%)`);
+      return;
+    }
+    
+    // Loan cannot exceed property value
+    if (loanAppForm.loan_amount > loanAppForm.property_value) {
+      toast.error('Loan amount cannot exceed property value');
+      return;
+    }
+    
+    try {
+      // Create loan record (instant approval)
+      const { data: loan, error } = await supabase
+        .from('landlord_loans')
+        .insert({
+          user_id: user.id,
+          loan_amount: loanAppForm.loan_amount,
+          remaining_balance: loanAppForm.loan_amount,
+          monthly_payment: Math.ceil(loanAppForm.loan_amount / 50), // 50 weekly payments
+          status: 'active',
+          property_value: loanAppForm.property_value,
+          property_address: loanAppForm.property_address,
+          property_type: loanAppForm.property_type,
+          down_payment: loanAppForm.down_payment,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      toast.success('Loan approved! You can now purchase your property.');
+      setShowLoanApplication(false);
+      fetchMyLoans();
+      
+      // Reset form
+      setLoanAppForm({
+        property_value: 0,
+        loan_amount: 0,
+        down_payment: 0,
+        property_address: '',
+        property_type: 'house',
+      });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Quick loan for property purchase
+  const handleBuyWithLoan = async () => {
+    if (!buyingProp || !user) return;
+    
+    const propertyPrice = buyingProp.price;
+    const downPayment = parseInt((propertyPrice * 0.1).toString()); // 10% minimum
+    const loanAmount = propertyPrice - downPayment;
+    
+    try {
+      // Check if user already has a loan for this property
+      const { data: existingLoan } = await supabase
+        .from('landlord_loans')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('property_id', buyingProp.id)
+        .maybeSingle();
+      
+      if (existingLoan) {
+        toast.error('You already have a loan for this property');
+        return;
+      }
+      
+      // Create loan for property purchase
+      const { error: loanError } = await supabase
+        .from('landlord_loans')
+        .insert({
+          user_id: user.id,
+          property_id: buyingProp.id,
+          loan_amount: loanAmount,
+          remaining_balance: loanAmount,
+          monthly_payment: Math.ceil(loanAmount / 50),
+          status: 'active',
+          property_value: propertyPrice,
+          property_address: buyingProp.name,
+          property_type: buyingProp.type_id,
+          down_payment: downPayment,
+          created_at: new Date().toISOString()
+        });
+      
+      if (loanError) throw loanError;
+      
+      // Transfer property ownership
+      // Mark as landlord_purchased so it won't show in rent section
+      const { error: transferError } = await supabase
+        .from('properties')
+        .update({ 
+          owner_id: user.id,
+          is_for_sale: false,
+          is_for_rent: true,
+          is_landlord_purchased: true
+        })
+        .eq('id', buyingProp.id);
+      
+      if (transferError) throw transferError;
+      
+      // Grant landlord status if not already
+      if (!isLandlord) {
+        await supabase
+          .from('user_profiles')
+          .update({ is_landlord: true })
+          .eq('id', user.id);
+        setIsLandlord(true);
+      }
+      
+      toast.success(`Property purchased with loan! You owe ${loanAmount.toLocaleString()} coins.`);
+      setBuyingProp(null);
+      setActiveTab('landlord');
+      fetchOwnedProperties();
+      fetchMyLoans();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Pay off loan with 40% auto-deduction to admin pool
+  const handlePayLoan = async (loan: LandlordLoan) => {
+    const amount = prompt(`Pay off loan? (Remaining: ${loan.remaining_balance.toLocaleString()} coins)\n\n40% of payment goes to admin pool`, loan.monthly_payment.toString());
+    if (!amount) return;
+    
+    const payAmount = parseInt(amount);
+    if (isNaN(payAmount) || payAmount <= 0) return;
+
+    try {
+      const { data, error } = await supabase.rpc('pay_landlord_loan', {
+        p_loan_id: loan.id,
+        p_amount: payAmount
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        const adminAmount = Math.floor(payAmount * 0.4);
+        toast.success(`Paid ${payAmount.toLocaleString()} coins! ${adminAmount.toLocaleString()} coins to admin pool.`);
+        fetchMyLoans();
+      } else {
+        throw new Error(data?.error || 'Payment failed');
+      }
+    } catch (err: any) {
+      // If RPC doesn't exist, do manual update
+      const adminAmount = Math.floor(payAmount * 0.4);
+      const newBalance = loan.remaining_balance - (payAmount - adminAmount);
+      const newStatus = newBalance <= 0 ? 'paid' : 'active';
+      
+      await supabase
+        .from('landlord_loans')
+        .update({ 
+          remaining_balance: Math.max(0, newBalance),
+          status: newStatus
+        })
+        .eq('id', loan.id);
+      
+      toast.success(`Paid ${(payAmount - adminAmount).toLocaleString()} coins towards loan, ${adminAmount} to admin`);
+      fetchMyLoans();
+    }
   };
 
   const fetchOwnedProperties = async () => {
@@ -141,48 +585,49 @@ export default function LivingPage() {
   const fetchMarket = async () => {
     setLoading(true);
     
-    // First, get IDs of active landlords
-    const { data: landlords } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('is_landlord', true);
+    // Determine which filter to use based on marketFilter state
+    const isForSale = marketFilter === 'sale';
     
-    const landlordIds = landlords?.map(l => l.id) || [];
-    
-    if (landlordIds.length === 0) {
-      setProperties([]);
-      setLoading(false);
-      return;
-    }
-    
-    const query = supabase
-      .from('properties')
-      .select('*')
-      .in('owner_id', landlordIds)
-      .eq('is_for_rent', true)
-      .limit(50);
-
-    const { data: properties } = await query;
-    
-    if (properties) {
-      // Filter out properties that have active leases
-      const availableProperties = await Promise.all(properties.map(async (prop) => {
-        const { data: lease } = await supabase
-          .from('leases')
-          .select('id')
-          .eq('property_id', prop.id)
-          .eq('status', 'active')
-          .maybeSingle();
-        
-        if (!lease) {
-          return prop;
-        }
-        return null;
-      }));
+    if (isForSale) {
+      // For sale: Show all properties for sale
+      const { data: properties } = await supabase
+        .from('properties')
+        .select('*, owner:user_profiles(username)')
+        .eq('is_for_sale', true)
+        .neq('owner_id', user?.id || 'none')
+        .limit(50);
       
-      setProperties(availableProperties.filter((p): p is Property => p !== null));
+      setProperties(properties || []);
     } else {
-      setProperties([]);
+      // For rent: Show all properties for rent
+      const query = supabase
+        .from('properties')
+        .select('*, owner:user_profiles(username)')
+        .eq('is_for_rent', true)
+        .limit(50);
+
+      const { data: properties } = await query;
+      
+      if (properties) {
+        // Filter out properties that have active leases
+        const availableProperties = await Promise.all(properties.map(async (prop) => {
+          const { data: lease } = await supabase
+            .from('leases')
+            .select('id')
+            .eq('property_id', prop.id)
+            .eq('status', 'active')
+            .maybeSingle();
+          
+          if (!lease) {
+            return prop;
+          }
+          return null;
+        }));
+        
+        setProperties(availableProperties.filter((p): p is Property => p !== null));
+      } else {
+        setProperties([]);
+      }
     }
     setLoading(false);
   };
@@ -227,68 +672,9 @@ export default function LivingPage() {
     setDownPayment(Math.ceil(prop.price * 0.1).toString());
   };
 
-  const handleBuyWithLoan = async () => {
-    if (!buyingProp) return;
-    const dp = parseInt(downPayment);
-    if (isNaN(dp) || dp < buyingProp.price * 0.1) {
-      toast.error('Down payment must be at least 10%');
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.rpc('buy_property_with_loan', { 
-        p_property_id: buyingProp.id,
-        p_down_payment: dp
-      });
-      
-      if (error) throw error;
-      if (data && !data.success) throw new Error(data.error);
-
-      toast.success('Property purchased successfully!');
-      setBuyingProp(null);
-      setActiveTab('my_loans');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handlePayLoan = async (loan: Loan) => {
-    const amount = prompt(`How much to pay? (Remaining: ${loan.remaining_balance}, Weekly Due: ${loan.monthly_payment})`, loan.monthly_payment.toString());
-    if (!amount) return;
-    
-    const payAmount = parseInt(amount);
-    if (isNaN(payAmount) || payAmount <= 0) return;
-
-    try {
-      const { data, error } = await supabase.rpc('pay_loan', { 
-        p_loan_id: loan.id,
-        p_amount: payAmount
-      });
-      
-      if (error) throw error;
-      if (data && !data.success) throw new Error(data.error);
-
-      toast.success('Loan payment successful!');
-      fetchMyLoans();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
   const handleBecomeLandlord = async () => {
-    if (!confirm('Become a licensed landlord for 7,000 coins? This allows you to collect rent.')) return;
-
-    try {
-        const { data, error } = await supabase.rpc('purchase_landlord_license');
-        if (error) throw error;
-        if (data && !data.success) throw new Error(data.error);
-
-        toast.success('You are now a licensed Landlord!');
-        setIsLandlord(true);
-        fetchOwnedProperties();
-    } catch (err: any) {
-        toast.error(err.message);
-    }
+    // Show landlord application form instead of direct purchase
+    setShowLandlordApplication(true);
   };
 
   const getIcon = (type: string) => {
@@ -324,6 +710,15 @@ export default function LivingPage() {
       return;
     }
 
+    // Validate sale price if marked for sale
+    if (editIsForSale) {
+      const salePrice = parseInt(editSalePrice);
+      if (isNaN(salePrice) || salePrice <= 0) {
+        toast.error('Please set a valid sale price');
+        return;
+      }
+    }
+
     // Check if rent changed and if allowed
     if (newRent !== editingProp.rent_amount && !canChangeRent(editingProp)) {
       toast.error('Rent can only be changed once every 30 days');
@@ -336,6 +731,8 @@ export default function LivingPage() {
         .update({ 
           name: editName,
           rent_amount: newRent,
+          is_for_sale: editIsForSale,
+          price: editIsForSale ? parseInt(editSalePrice) : editingProp.price,
           last_rent_change_at: newRent !== editingProp.rent_amount ? new Date().toISOString() : editingProp.last_rent_change_at
         })
         .eq('id', editingProp.id);
@@ -361,54 +758,147 @@ export default function LivingPage() {
                 </h1>
                 <p className="text-gray-400 text-sm mt-1">Manage your residence, pay rent, or find a new home.</p>
             </div>
-            <div className="flex bg-zinc-900 rounded-lg p-1 border border-zinc-800">
-                <button 
-                    onClick={() => setActiveTab('my_home')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'my_home' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    My Home
-                </button>
-                <button 
-                    onClick={() => setActiveTab('my_loans')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'my_loans' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    My Loans
-                </button>
-                <button 
-                    onClick={() => setActiveTab('market')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'market' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    Find Home
-                </button>
-                <button 
-                    onClick={() => setActiveTab('landlord')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'landlord' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    Landlord
-                </button>
+            <div className="flex items-center gap-3">
+                {/* Admin Create Property Button */}
+                {isAdmin && (
+                    <button
+                        onClick={() => setShowAdminCreateProperty(true)}
+                        className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
+                    >
+                        <Building className="w-4 h-4" />
+                        Create Property
+                    </button>
+                )}
+                <div className="flex bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+                    <button 
+                        onClick={() => setActiveTab('my_home')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'my_home' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        My Home
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('my_loans')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'my_loans' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        My Loans
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('market')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'market' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Find Home
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('landlord')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'landlord' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Landlord
+                    </button>
+                </div>
             </div>
         </header>
 
         {activeTab === 'landlord' && (
             <div className="space-y-6">
                 {!isLandlord ? (
-                    <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-10 text-center">
-                        <Briefcase className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold text-white mb-2">Become a Landlord</h2>
-                        <p className="text-gray-400 mb-6 max-w-md mx-auto">
-                            Purchase a Landlord License to start collecting rent from properties you own. 
-                            As a landlord, you keep 90% of rent (10% tax).
-                        </p>
-                        <div className="flex justify-center gap-4">
-                            <button 
-                                onClick={handleBecomeLandlord}
-                                className="bg-yellow-600 hover:bg-yellow-500 text-white px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
-                            >
-                                <DollarSign className="w-5 h-5" />
-                                Buy License (7,000 Coins)
-                            </button>
-                        </div>
-                    </div>
+                    <>
+                        {/* Landlord Application Form */}
+                        {showLandlordApplication || landlordApplication?.status === 'pending' ? (
+                            <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-8">
+                                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                                    <FileText className="w-6 h-6 text-yellow-500" />
+                                    Landlord Application
+                                </h2>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-2">
+                                            Business Plan / Why do you want to be a landlord?
+                                        </label>
+                                        <textarea
+                                            value={landlordAppForm.business_plan}
+                                            onChange={(e) => setLandlordAppForm(prev => ({ ...prev, business_plan: e.target.value }))}
+                                            className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-purple-500 h-32"
+                                            placeholder="Describe your business plan..."
+                                        />
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm text-gray-400 mb-2">Years of Experience</label>
+                                            <input
+                                                type="number"
+                                                value={landlordAppForm.experience_years}
+                                                onChange={(e) => setLandlordAppForm(prev => ({ ...prev, experience_years: parseInt(e.target.value) || 0 }))}
+                                                className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-gray-400 mb-2">Loan Amount Needed</label>
+                                            <input
+                                                type="number"
+                                                value={landlordAppForm.loan_amount_needed}
+                                                onChange={(e) => setLandlordAppForm(prev => ({ ...prev, loan_amount_needed: parseInt(e.target.value) || 0 }))}
+                                                className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-4">
+                                        <label className="flex items-center gap-2 text-gray-400 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={landlordAppForm.has_startup_capital}
+                                                onChange={(e) => setLandlordAppForm(prev => ({ ...prev, has_startup_capital: e.target.checked }))}
+                                                className="w-4 h-4 rounded border-zinc-700 bg-black/30 cursor-pointer accent-yellow-500"
+                                            />
+                                            I have startup capital available
+                                        </label>
+                                    </div>
+                                    
+                                    <div className="flex gap-4 pt-4">
+                                        <button
+                                            onClick={() => setShowLandlordApplication(false)}
+                                            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-xl font-bold transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSubmitLandlordApplication}
+                                            className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <CheckCircle className="w-5 h-5" />
+                                            Submit Application
+                                        </button>
+                                    </div>
+                                    
+                                    <p className="text-xs text-gray-500 text-center mt-4">
+                                        Applications are instantly approved. You can start buying properties immediately.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-10 text-center">
+                                <Briefcase className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+                                <h2 className="text-2xl font-bold text-white mb-2">Become a Landlord</h2>
+                                <p className="text-gray-400 mb-6 max-w-md mx-auto">
+                                    Complete a landlord application to start collecting rent from properties you own. 
+                                    Loans are available to help you purchase properties!
+                                </p>
+                                <div className="flex justify-center gap-4">
+                                    <button 
+                                        onClick={() => setShowLandlordApplication(true)}
+                                        className="bg-yellow-600 hover:bg-yellow-500 text-white px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
+                                    >
+                                        <FileText className="w-5 h-5" />
+                                        Apply Now
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
                 ) : (
                     <>
                     <div className="flex items-center justify-between mb-4">
@@ -424,9 +914,17 @@ export default function LivingPage() {
                         <div className="text-center py-10 text-gray-500 bg-zinc-900/50 rounded-xl border border-zinc-800">
                             <Building className="w-12 h-12 text-gray-600 mx-auto mb-3" />
                             <p>You don&apos;t own any properties yet.</p>
-                            <button onClick={() => { setActiveTab('market'); setMarketFilter('sale'); }} className="mt-4 text-purple-400 hover:text-purple-300 text-sm font-bold">
-                                Buy a property
-                            </button>
+                            <div className="flex justify-center gap-3 mt-4">
+                                <button 
+                                    onClick={handleCreatePropertyForLandlords}
+                                    className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                >
+                                    Create Your Property
+                                </button>
+                                <button onClick={() => { setActiveTab('market'); setMarketFilter('sale'); }} className="text-purple-400 hover:text-purple-300 text-sm font-bold">
+                                    Buy a property
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -446,6 +944,8 @@ export default function LivingPage() {
                                                     setEditingProp(prop);
                                                     setEditName(prop.name);
                                                     setEditRent(prop.rent_amount.toString());
+                                                    setEditSalePrice(prop.price?.toString() || '');
+                                                    setEditIsForSale(prop.is_for_sale || false);
                                                 }}
                                                 className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-gray-400 hover:text-white transition-colors"
                                                 title="Edit Property"
@@ -501,8 +1001,139 @@ export default function LivingPage() {
 
         {activeTab === 'my_loans' && (
             <div className="space-y-4">
-                {myLoans.length === 0 ? (
-                    <div className="text-center py-10 text-gray-500">You have no active loans.</div>
+                {/* Loan Application Button */}
+                {isLandlord && (
+                    <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-yellow-600/20 rounded-xl">
+                                    <Calculator className="w-6 h-6 text-yellow-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white">Need a Loan?</h3>
+                                    <p className="text-sm text-gray-400">Get instant approval for property loans</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowLoanApplication(true)}
+                                className="bg-yellow-600 hover:bg-yellow-500 text-white px-6 py-2 rounded-xl font-bold transition-colors"
+                            >
+                                Apply for Loan
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Loan Application Form */}
+                {showLoanApplication && (
+                    <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-6">
+                        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                            <Calculator className="w-5 h-5 text-yellow-500" />
+                            Property Loan Application
+                        </h3>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Property Value</label>
+                                <input
+                                    type="number"
+                                    value={loanAppForm.property_value || ''}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setLoanAppForm(prev => ({
+                                            ...prev,
+                                            property_value: val,
+                                            down_payment: Math.ceil(val * 0.1),
+                                            loan_amount: val - Math.ceil(val * 0.1)
+                                        }));
+                                    }}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="Property value"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Property Type</label>
+                                <select
+                                    value={loanAppForm.property_type}
+                                    onChange={(e) => setLoanAppForm(prev => ({ ...prev, property_type: e.target.value }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                >
+                                    <option value="house">House</option>
+                                    <option value="apartment">Apartment</option>
+                                    <option value="mansion">Mansion</option>
+                                    <option value="trailer">Trailer</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Down Payment (10% min)</label>
+                                <input
+                                    type="number"
+                                    value={loanAppForm.down_payment || ''}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setLoanAppForm(prev => ({
+                                            ...prev,
+                                            down_payment: val,
+                                            loan_amount: Math.max(0, (prev.property_value || 0) - val)
+                                        }));
+                                    }}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="Down payment"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Loan Amount</label>
+                                <input
+                                    type="number"
+                                    value={loanAppForm.loan_amount || ''}
+                                    readOnly
+                                    className="w-full bg-black/50 border border-zinc-700 rounded-lg px-4 py-2 text-white"
+                                    placeholder="Loan amount"
+                                />
+                            </div>
+                        </div>
+                        
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4">
+                            <div className="flex justify-between text-sm mb-2">
+                                <span className="text-gray-400">Property Value:</span>
+                                <span className="text-white font-mono">{loanAppForm.property_value.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-sm mb-2">
+                                <span className="text-gray-400">Down Payment (10%):</span>
+                                <span className="text-yellow-400 font-mono">{loanAppForm.down_payment.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-sm mb-2">
+                                <span className="text-gray-400">Loan Amount:</span>
+                                <span className="text-green-400 font-mono">{loanAppForm.loan_amount.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-400">Weekly Payment (50 weeks):</span>
+                                <span className="text-white font-mono">{Math.ceil(loanAppForm.loan_amount / 50).toLocaleString()}</span>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setShowLoanApplication(false)}
+                                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg font-bold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSubmitLoanApplication}
+                                className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white py-2 rounded-lg font-bold transition-colors"
+                            >
+                                Get Approved
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {myLoans.length === 0 && !showLoanApplication ? (
+                    <div className="text-center py-10 text-gray-500 bg-zinc-900/50 rounded-xl border border-zinc-800">
+                        <Building className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                        <p>You have no active loans.</p>
+                    </div>
                 ) : (
                     myLoans.map(loan => (
                         <div key={loan.id} className="bg-[#1A1A24] border border-[#2C2C2C] rounded-xl p-6 relative overflow-hidden">
@@ -510,9 +1141,9 @@ export default function LivingPage() {
                                 <div>
                                     <h3 className="text-xl font-bold text-white flex items-center gap-2">
                                         {loan.property ? getIcon(loan.property.type_id) : <Building className="w-5 h-5" />}
-                                        {loan.property ? loan.property.name : 'Unknown Property'}
+                                        {loan.property?.name || 'Property Loan'}
                                     </h3>
-                                    <p className="text-sm text-gray-400">Total Loan: {loan.amount.toLocaleString()}</p>
+                                    <p className="text-sm text-gray-400">Total Loan: {loan.loan_amount.toLocaleString()}</p>
                                 </div>
                                 <div className="text-right">
                                     <div className="text-xs text-gray-500">Remaining</div>
@@ -526,16 +1157,19 @@ export default function LivingPage() {
                                     <div className="font-mono text-white">{loan.monthly_payment.toLocaleString()}</div>
                                 </div>
                                 <div className="bg-black/20 p-3 rounded-lg">
-                                    <div className="text-gray-500">Next Due</div>
-                                    <div className="font-mono text-white">{new Date(loan.next_payment_due_at).toLocaleDateString()}</div>
+                                    <div className="text-gray-500">Status</div>
+                                    <div className={`font-mono ${loan.status === 'paid' ? 'text-green-400' : 'text-yellow-400'}`}>
+                                        {loan.status.toUpperCase()}
+                                    </div>
                                 </div>
                             </div>
 
                             <button 
                                 onClick={() => handlePayLoan(loan)}
-                                className="w-full bg-green-600 hover:bg-green-500 text-white py-2 rounded-lg font-bold transition-colors"
+                                disabled={loan.status === 'paid'}
+                                className={`w-full py-2 rounded-lg font-bold transition-colors ${loan.status === 'paid' ? 'bg-zinc-700 text-gray-500' : 'bg-green-600 hover:bg-green-500 text-white'}`}
                             >
-                                Make Payment
+                                {loan.status === 'paid' ? 'Loan Paid Off' : 'Make Payment'}
                             </button>
                         </div>
                     ))
@@ -811,6 +1445,161 @@ export default function LivingPage() {
                                 className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-xl font-bold transition-colors"
                             >
                                 Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Admin Create Property Modal */}
+        {showAdminCreateProperty && (
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                <div className="bg-[#1A1A24] border border-[#2C2C2C] rounded-2xl w-full max-w-lg p-6 relative">
+                    <button 
+                        onClick={() => setShowAdminCreateProperty(false)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                    
+                    <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                        <Building className="w-5 h-5 text-red-500" />
+                        Create Property for Landlords
+                    </h3>
+                    <p className="text-sm text-gray-400 mb-6">
+                        This property will only be visible to landlords in the "For Sale" section.
+                    </p>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Property Name</label>
+                            <input 
+                                type="text"
+                                value={adminPropertyForm.name}
+                                onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, name: e.target.value }))}
+                                className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                placeholder="Enter property name"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Property Type</label>
+                                <select
+                                    value={adminPropertyForm.type_id}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, type_id: e.target.value }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                >
+                                    <option value="house">House</option>
+                                    <option value="apartment">Apartment</option>
+                                    <option value="mansion">Mansion</option>
+                                    <option value="trailer">Trailer</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Sale Price</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.price}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, price: parseInt(e.target.value) || 0 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="Sale price"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Monthly Rent</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.rent_amount}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, rent_amount: parseInt(e.target.value) || 0 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="Rent amount"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Bedrooms</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.bedrooms}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, bedrooms: parseInt(e.target.value) || 1 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="1"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Bathrooms</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.bathrooms}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, bathrooms: parseInt(e.target.value) || 1 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="1"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Square Feet</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.sqft}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, sqft: parseInt(e.target.value) || 500 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Electric Cost</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.electric_cost}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, electric_cost: parseInt(e.target.value) || 0 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="Electric cost"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Water Cost</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.water_cost}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, water_cost: parseInt(e.target.value) || 0 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="Water cost"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Description</label>
+                            <textarea
+                                value={adminPropertyForm.description}
+                                onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, description: e.target.value }))}
+                                className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 h-20"
+                                placeholder="Property description..."
+                            />
+                        </div>
+
+                        <div className="pt-4 flex gap-3">
+                            <button 
+                                onClick={() => setShowAdminCreateProperty(false)}
+                                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-xl font-bold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handleAdminCreateProperty}
+                                className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2 rounded-xl font-bold transition-colors"
+                            >
+                                Create Property
                             </button>
                         </div>
                     </div>

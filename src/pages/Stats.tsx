@@ -7,6 +7,7 @@ import { useXPStore } from '../stores/useXPStore'
 import { useCreditScore } from '../lib/hooks/useCreditScore'
 import CreditScoreBadge from '../components/CreditScoreBadge'
 import { Crown, Sword, Trophy, Coins, Star, TrendingUp, Shield } from 'lucide-react'
+import { STORE_USD_PER_COIN } from '../lib/coinMath'
 
 interface UserStats {
   level: number
@@ -287,7 +288,7 @@ export default function Stats() {
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-gray-300">Total Coins Value</span>
                     <span className="font-bold text-yellow-400 text-lg">
-                      ${((stats.troll_coins * 0.0001) + (stats.paid_coins * 0.0001)).toFixed(2)}
+                      ${((stats.troll_coins + stats.paid_coins) * STORE_USD_PER_COIN).toFixed(2)}
                     </span>
                   </div>
                   <div className="text-xs text-gray-500">

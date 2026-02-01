@@ -6,34 +6,22 @@ import { useAuthStore } from "../../lib/store";
 import { useBank } from "../../lib/hooks/useBank";
 import { ENTRANCE_EFFECTS_CONFIG } from "../../lib/entranceEffects";
 import CashAppPaymentModal from "./CashAppPaymentModal";
+import { COIN_PACKAGES } from "../../lib/coinMath";
 
 interface CoinPackage {
-  id: number;
+  id: number | string;
   coins: number;
   price: string;
   emoji: string;
   popular?: boolean;
   bestValue?: boolean;
+  promo?: boolean;
 }
 
-const PROMO_EXPIRY = new Date('2026-01-28T00:51:27Z').getTime();
-
-const coinPackages: CoinPackage[] = [
-  { 
-    id: 1, 
-    coins: 1000, 
-    price: Date.now() < PROMO_EXPIRY ? "$0.10" : "$1.00", 
-    emoji: "🔥", 
-    popular: true 
-  },
-  { id: 2, coins: 500, price: "$4.99", emoji: "💰" },
-  { id: 3, coins: 1000, price: "$9.99", emoji: "💎" },
-  { id: 4, coins: 2500, price: "$19.99", emoji: "👑" },
-  { id: 5, coins: 5000, price: "$39.99", emoji: "🚀" },
-  { id: 6, coins: 10000, price: "$69.99", emoji: "⭐", bestValue: true },
-  { id: 7, coins: 13000, price: "$89.99", emoji: "🌟" },
-  { id: 8, coins: 20000, price: "$129.00", emoji: "🏆" },
-];
+const coinPackages: CoinPackage[] = COIN_PACKAGES.map(p => ({
+  ...p,
+  price: p.priceDisplay
+}));
 
 interface CoinStoreModalProps {
   onClose: () => void;

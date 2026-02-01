@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { Mail, Lock, User, Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import InstallButton from '../components/InstallButton';
 
 const Auth = () => {
   const [loading, setLoading] = useState(false)
@@ -23,10 +24,6 @@ const Auth = () => {
   const [alertSubmitting, setAlertSubmitting] = useState(false)
   const navigate = useNavigate()
   const { user, profile, setAuth, setProfile } = useAuthStore()
-  const [installPrompt, setInstallPrompt] = useState<any>(null)
-  const [installed, setInstalled] = useState(() => {
-    try { return localStorage.getItem('pwa-installed') === 'true' } catch { return false }
-  })
   
   // Get referral code from URL
   const referralCode = searchParams.get('ref') || ''
@@ -322,25 +319,6 @@ const Auth = () => {
 
   
 
-  React.useEffect(() => {
-    const handleBeforeInstall = (e: any) => {
-      e.preventDefault()
-      setInstallPrompt(e)
-    }
-    const handleInstalled = () => {
-      try { localStorage.setItem('pwa-installed', 'true') } catch {}
-      setInstalled(true)
-      setInstallPrompt(null)
-      toast.success('App installed')
-    }
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall as any)
-    window.addEventListener('appinstalled', handleInstalled as any)
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstall as any)
-      window.removeEventListener('appinstalled', handleInstalled as any)
-    }
-  }, [])
-
   const handleGoogle = async () => {
     setLoading(true)
     try {
@@ -579,28 +557,14 @@ const Auth = () => {
           </div>
         </div>
 
-        {installPrompt && !installed && (
-          <div className="mt-6 p-4 bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl">
-            <div className="text-xs text-slate-300 mb-3 text-center">Install the app now. Use the same login on web and app.</div>
-            <button
-              className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-xl hover:shadow-[0_10px_30px_rgba(34,197,94,0.3)] transition-all duration-300"
-              type="button"
-              onClick={async () => {
-                try {
-                  await installPrompt.prompt()
-                  const choice = await installPrompt.userChoice
-                  if (choice?.outcome === 'accepted') {
-                    try { localStorage.setItem('pwa-installed', 'true') } catch {}
-                    setInstalled(true)
-                    setInstallPrompt(null)
-                  }
-                } catch {}
-              }}
-            >
-              Install App
-            </button>
-          </div>
-        )}
+        {/* Install Button */}
+        <div className="mt-6">
+          <InstallButton 
+            text="Install App"
+            showInstalledBadge={true}
+            className="w-full"
+          />
+        </div>
       </div>
       </div>
       {/* Alert Admin Modal */}

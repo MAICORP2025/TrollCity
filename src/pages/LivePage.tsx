@@ -475,6 +475,10 @@ function OfficerActionBubble({
   onDisableUserChat,
   onKickUser,
   onRemoveSeat,
+  onDisableUserCamera,
+  onEnableUserCamera,
+  onDisableUserMic,
+  onEnableUserMic,
   seatBans,
   onClearSeatBan,
   onClose,
@@ -495,6 +499,10 @@ function OfficerActionBubble({
   onDisableUserChat: (userId: string) => void;
   onKickUser: (userId: string) => void;
   onRemoveSeat: (userId: string) => void;
+  onDisableUserCamera: (userId: string) => void;
+  onEnableUserCamera: (userId: string) => void;
+  onDisableUserMic: (userId: string) => void;
+  onEnableUserMic: (userId: string) => void;
   seatBans: SeatBan[];
   onClearSeatBan: (banId: string) => void;
   onClose: () => void;
@@ -615,6 +623,37 @@ function OfficerActionBubble({
         >
           <span className="text-lg">📦</span> Remove From Box
         </button>
+        {/* Camera/Mic Controls for Selected Target */}
+        <div className="col-span-2 grid grid-cols-2 gap-2 mt-2">
+          <button
+            disabled={!selectedTarget}
+            onClick={() => selectedTarget && onDisableUserCamera(selectedTarget.id)}
+            className="bg-red-500/20 hover:bg-red-500/30 text-red-300 text-[10px] font-bold py-2 rounded flex flex-col items-center gap-1 disabled:opacity-50 border border-red-500/30"
+          >
+            <span className="text-lg">📷</span> Disable Camera
+          </button>
+          <button
+            disabled={!selectedTarget}
+            onClick={() => selectedTarget && onEnableUserCamera(selectedTarget.id)}
+            className="bg-green-500/20 hover:bg-green-500/30 text-green-300 text-[10px] font-bold py-2 rounded flex flex-col items-center gap-1 disabled:opacity-50 border border-green-500/30"
+          >
+            <span className="text-lg">📷</span> Enable Camera
+          </button>
+          <button
+            disabled={!selectedTarget}
+            onClick={() => selectedTarget && onDisableUserMic(selectedTarget.id)}
+            className="bg-red-500/20 hover:bg-red-500/30 text-red-300 text-[10px] font-bold py-2 rounded flex flex-col items-center gap-1 disabled:opacity-50 border border-red-500/30"
+          >
+            <span className="text-lg">🎤</span> Disable Mic
+          </button>
+          <button
+            disabled={!selectedTarget}
+            onClick={() => selectedTarget && onEnableUserMic(selectedTarget.id)}
+            className="bg-green-500/20 hover:bg-green-500/30 text-green-300 text-[10px] font-bold py-2 rounded flex flex-col items-center gap-1 disabled:opacity-50 border border-green-500/30"
+          >
+            <span className="text-lg">🎤</span> Enable Mic
+          </button>
+        </div>
         <div className="col-span-2 border-t border-red-500/20 pt-2 mt-1 max-h-40 overflow-y-auto">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] uppercase tracking-[0.2em] text-white/50">Guest-box bans</span>
@@ -1424,6 +1463,19 @@ export default function LivePage() {
 
     try {
       await claimSeat(seatIndex, { joinPrice: joinPriceForClaim });
+      
+      // Enable camera and microphone after claiming seat so viewer is seen by all
+      if (!cameraOn) {
+        liveKit.toggleCamera().then((ok) => {
+          if (ok) setCameraOn(true);
+        });
+      }
+      if (!micOn) {
+        liveKit.toggleMicrophone().then((ok) => {
+          if (ok) setMicOn(true);
+        });
+      }
+      toast.success('Joined as guest!');
     } catch (err: any) {
       console.error('Failed to claim seat:', err);
       toast.error(err?.message || 'Failed to join seat');
@@ -1909,6 +1961,67 @@ export default function LivePage() {
     } catch (err) {
       console.error('Failed to clear seat ban', err);
       toast.error('Failed to clear guest-box ban');
+    }
+  };
+
+  // Camera/Mic control handlers for guest box users
+  const handleOfficerDisableUserCamera = async (userId: string) => {
+    if (!canModerateGuests) {
+      toast.error('You do not have permission to control camera');
+      return;
+    }
+    try {
+      await handleDisableGuestMedia(userId, true, false);
+      toast.success('Camera disabled for user');
+      await recordAction('disable_camera', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
+    } catch (err) {
+      console.error('Failed to disable camera', err);
+      toast.error('Failed to disable camera');
+    }
+  };
+
+  const handleOfficerEnableUserCamera = async (userId: string) => {
+    if (!canModerateGuests) {
+      toast.error('You do not have permission to control camera');
+      return;
+    }
+    try {
+      await handleDisableGuestMedia(userId, false, false);
+      toast.success('Camera enabled for user');
+      await recordAction('enable_camera', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
+    } catch (err) {
+      console.error('Failed to enable camera', err);
+      toast.error('Failed to enable camera');
+    }
+  };
+
+  const handleOfficerDisableUserMic = async (userId: string) => {
+    if (!canModerateGuests) {
+      toast.error('You do not have permission to control mic');
+      return;
+    }
+    try {
+      await handleDisableGuestMedia(userId, false, true);
+      toast.success('Microphone disabled for user');
+      await recordAction('disable_mic', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
+    } catch (err) {
+      console.error('Failed to disable mic', err);
+      toast.error('Failed to disable microphone');
+    }
+  };
+
+  const handleOfficerEnableUserMic = async (userId: string) => {
+    if (!canModerateGuests) {
+      toast.error('You do not have permission to control mic');
+      return;
+    }
+    try {
+      await handleDisableGuestMedia(userId, false, false);
+      toast.success('Microphone enabled for user');
+      await recordAction('enable_mic', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
+    } catch (err) {
+      console.error('Failed to enable mic', err);
+      toast.error('Failed to enable microphone');
     }
   };
 
@@ -3590,6 +3703,10 @@ export default function LivePage() {
           onDisableUserChat={handleOfficerDisableUserChat}
           onKickUser={handleOfficerKickUser}
           onRemoveSeat={handleOfficerRemoveSeat}
+          onDisableUserCamera={handleOfficerDisableUserCamera}
+          onEnableUserCamera={handleOfficerEnableUserCamera}
+          onDisableUserMic={handleOfficerDisableUserMic}
+          onEnableUserMic={handleOfficerEnableUserMic}
           seatBans={seatBans}
           onClearSeatBan={handleOfficerClearSeatBan}
           onClose={() => setIsOfficerBubbleVisible(false)}

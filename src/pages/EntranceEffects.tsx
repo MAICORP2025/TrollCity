@@ -312,7 +312,7 @@ const EntranceEffects = () => {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-troll-neon-blue/70">Value:</span>
               <span className="text-troll-neon-purple font-bold">
-                ${((balances.troll_coins || 0) * 0.01).toFixed(2)}
+                ${((balances.troll_coins || 0) * STORE_USD_PER_COIN).toFixed(2)}
               </span>
             </div>
             <p className="text-xs text-troll-neon-blue/50">Real value • Can spend</p>

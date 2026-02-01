@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, Store, Video, User, Shield, Gavel, Star, Zap, DollarSign, Users, AlertTriangle, Ban, Settings, Heart, LogOut, FileText, ShoppingBag, Briefcase, Banknote, Gamepad2, Music, Swords, Camera, Gift } from 'lucide-react'
+import { Home, MessageSquare, Store, Video, User, Shield, Gavel, Star, Zap, DollarSign, Users, AlertTriangle, Ban, Settings, Heart, LogOut, FileText, ShoppingBag, Briefcase, Banknote, Gamepad2, Music, Swords, Camera, Gift, Mic } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'

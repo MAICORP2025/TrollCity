@@ -3,16 +3,25 @@
  * Handles coin packages, cashout tiers, and eligibility calculations
  */
 
-// Coin Packages (6 total)
-export const coinPackages = [
-  { id: "pack0", name: "Micro Pack", coins: 100, price: 0.75 },
-  { id: "pack1", name: "Baby Pack", coins: 1000, price: 4.49 },
-  { id: "pack2", name: "Troller Pack", coins: 5000, price: 20.99 },
-  { id: "pack3", name: "Mischief Pack", coins: 12000, price: 49.99 },
-  { id: "pack4", name: "Troll Master", coins: 25000, price: 99.99 },
-  { id: "pack5", name: "Chaos Pack", coins: 60000, price: 239.99 },
-  { id: "pack6", name: "Ultimate Troll Pack", coins: 120000, price: 459.99 }
-];
+// Single source of truth for coin valuation (based on store price: 300 coins = $1.99)
+export const STORE_USD_PER_COIN = 1.99 / 300;
+
+// Coin Packages (Source of Truth)
+export const COIN_PACKAGES = [
+  { id: 'pkg-1000-promo', coins: 1000, price: 0.10, priceDisplay: "$0.10", emoji: "💎", popular: true, promo: true, expiresAt: new Date('2026-01-28T00:51:27Z').getTime() },
+  { id: 'pkg-nice', coins: 104, price: 0.69, priceDisplay: "$0.69", emoji: "🪙", popular: false },
+  { id: 1, coins: 300, price: 1.99, priceDisplay: "$1.99", emoji: "💰", popular: true },
+  { id: 2, coins: 500, price: 4.99, priceDisplay: "$4.99", emoji: "💰", popular: true },
+  { id: 3, coins: 1000, price: 9.99, priceDisplay: "$9.99", emoji: "💎" },
+  { id: 4, coins: 2500, price: 19.99, priceDisplay: "$19.99", emoji: "👑" },
+  { id: 5, coins: 5000, price: 39.99, priceDisplay: "$39.99", emoji: "🚀" },
+  { id: 6, coins: 10000, price: 69.99, priceDisplay: "$69.99", emoji: "⭐", bestValue: true },
+  { id: 7, coins: 13000, price: 89.99, priceDisplay: "$89.99", emoji: "🌟" },
+  { id: 8, coins: 20000, price: 129.00, priceDisplay: "$129.00", emoji: "🏆" },
+].filter(p => !p.expiresAt || Date.now() < p.expiresAt);
+
+// Legacy export for backward compatibility (if needed) or can be removed if unused
+export const coinPackages = COIN_PACKAGES;
 
 // Cashout Tiers (4 total)
 export const cashoutTiers = [

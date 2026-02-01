@@ -7,15 +7,17 @@ import { AlertCircle, Coins, Wallet, Crown } from 'lucide-react'
 import { paymentProviders } from '../lib/payments'
 import { toast } from 'sonner'
 import AdminForWeekModal from '../components/AdminForWeekModal'
+import { COIN_PACKAGES } from '../lib/coinMath'
 
-const coinPackages = [
-  { id: 'pkg-1000-promo', coins: 1000, price: 0.10, label: '1,000 Coins', popular: true, promo: true },
-  { id: 'pkg-500', coins: 500, price: 4.99, label: '500 Coins' },
-  { id: 'pkg-1000', coins: 1000, price: 9.99, label: '1,000 Coins' },
-  { id: 'pkg-2500', coins: 2500, price: 19.99, label: '2,500 Coins', bestValue: true },
-  { id: 'pkg-5000', coins: 5000, price: 36.99, label: '5,000 Coins' },
-  { id: 'pkg-10000', coins: 10000, price: 69.99, label: '10,000 Coins' },
-]
+const coinPackages = COIN_PACKAGES.map(p => ({
+  id: String(p.id),
+  coins: p.coins,
+  price: p.price,
+  label: `${p.coins.toLocaleString()} Coins`,
+  popular: p.popular,
+  promo: p.promo,
+  bestValue: p.bestValue
+}))
 
 export default function CoinStoreProd() {
   const { user, profile, _refreshProfile } = useAuthStore()

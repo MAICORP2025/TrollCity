@@ -156,7 +156,7 @@ export default function ResponsiveVideoGrid({
             frameMode={frameMode}
           />
           
-          {/* Broadcaster Controls Overlay (Start Camera) */}
+          {/* Broadcaster Controls Overlay (Start Camera) - Only show for the actual broadcaster when their camera is off */}
           {isLocalBroadcaster && !isCameraOn && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-20 rounded-2xl">
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">

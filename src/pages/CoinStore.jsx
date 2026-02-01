@@ -8,7 +8,7 @@ import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { useAllCreditScores } from '../lib/hooks/useAllCreditScores';
 // import { toast } from 'sonner';
 import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle } from 'lucide-react';
-import { formatCoins } from '../lib/coinMath';
+import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
 import { deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
 import { useCheckOfficerOnboarding } from '@/hooks/useCheckOfficerOnboarding';
@@ -18,17 +18,10 @@ import TrollPassBanner from '@/components/ui/TrollPassBanner';
 import { paymentProviders } from '../lib/payments';
 import { toast } from 'sonner';
 
-const coinPackages = [
-  { id: 'pkg-1000-promo', coins: 1000, price: "$0.10", emoji: "💎", popular: true, promo: true, expiresAt: new Date('2026-01-28T00:51:27Z').getTime() },
-  { id: 1, coins: 300, price: "$1.99", emoji: "💰", popular: true },
-  { id: 2, coins: 500, price: "$4.99", emoji: "💰", popular: true },
-  { id: 3, coins: 1000, price: "$9.99", emoji: "💎" },
-  { id: 4, coins: 2500, price: "$19.99", emoji: "👑" },
-  { id: 5, coins: 5000, price: "$39.99", emoji: "🚀" },
-  { id: 6, coins: 10000, price: "$69.99", emoji: "⭐", bestValue: true },
-  { id: 7, coins: 13000, price: "$89.99", emoji: "🌟" },
-  { id: 8, coins: 20000, price: "$129.00", emoji: "🏆" },
-].filter(p => !p.expiresAt || Date.now() < p.expiresAt);
+const coinPackages = COIN_PACKAGES.map(p => ({
+  ...p,
+  price: p.priceDisplay // Map priceDisplay to price for backward compatibility with this component's expectations (string with $)
+}));
 
 const SAMPLE_EFFECTS = [
   { id: 'effect_confetti_pop', name: 'Confetti Pop', description: 'Confetti burst', coin_cost: 1000 },

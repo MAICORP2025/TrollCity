@@ -126,13 +126,16 @@ CREATE OR REPLACE FUNCTION log_paypal_email_change()
 RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.payout_paypal_email IS DISTINCT FROM NEW.payout_paypal_email THEN
-        INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+        INSERT INTO audit_logs (user_id, action, target_id, details)
         VALUES (
             auth.uid(), -- user changing their own, or admin changing it
             'update_paypal_email',
-            'user_profile',
             NEW.id,
-            jsonb_build_object('old_email', OLD.payout_paypal_email, 'new_email', NEW.payout_paypal_email)
+            jsonb_build_object(
+                'old_email', OLD.payout_paypal_email, 
+                'new_email', NEW.payout_paypal_email,
+                'entity_type', 'user_profile'
+            )
         );
         NEW.payout_paypal_email_updated_at = NOW();
     END IF;
