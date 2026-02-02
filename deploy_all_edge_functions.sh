@@ -161,6 +161,17 @@ fi
 
 echo ""
 
+# LiveKit Functions
+print_status "=== DEPLOYING LIVEKIT FUNCTIONS ==="
+deploy_category "LiveKit" "${LIVEKIT_FUNCTIONS[@]}"
+livekit_success=$?
+((total_functions += ${#LIVEKIT_FUNCTIONS[@]}))
+if [ $livekit_success -eq 0 ]; then
+    ((total_success += ${#LIVEKIT_FUNCTIONS[@]}))
+fi
+
+echo ""
+
 # Verification Functions
 print_status "=== DEPLOYING VERIFICATION FUNCTIONS ==="
 deploy_category "Verification" "${VERIFICATION_FUNCTIONS[@]}"
