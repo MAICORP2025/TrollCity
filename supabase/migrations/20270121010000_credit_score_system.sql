@@ -120,11 +120,11 @@ GRANT SELECT ON public.credit_events TO authenticated;
 CREATE OR REPLACE FUNCTION public.get_credit_tier(p_score INTEGER)
 RETURNS TEXT AS $$
 BEGIN
-  IF p_score < 150 THEN RETURN 'Untrusted';
-  ELSIF p_score < 300 THEN RETURN 'Shaky';
-  ELSIF p_score < 450 THEN RETURN 'Building';
-  ELSIF p_score < 600 THEN RETURN 'Reliable';
-  ELSIF p_score < 700 THEN RETURN 'Trusted';
+  IF p_score < 300 THEN RETURN 'Untrusted';
+  ELSIF p_score < 450 THEN RETURN 'Shaky';
+  ELSIF p_score < 600 THEN RETURN 'Building';
+  ELSIF p_score < 700 THEN RETURN 'Reliable';
+  ELSIF p_score < 800 THEN RETURN 'Trusted';
   ELSE RETURN 'Elite';
   END IF;
 END;

@@ -18,6 +18,8 @@ dist-ssr
 .env.production
 .env.*
 *.env
+vite-env.d.ts
+src/vite-env.d.ts
 
 # Editor directories and files
 .vscode/*

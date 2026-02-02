@@ -1,19 +1,21 @@
+import { lazy } from 'react'
 import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Lock, Trophy, DollarSign } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
-import DatabaseBackup from './DatabaseBackup'
-import CityControlCenter from './CityControlCenter'
-import CacheClear from './CacheClear'
-import SystemConfig from './SystemConfig'
-import LiveKitUsageTab from './components/LiveKitUsageTab'
-import BroadcastLockTab from './components/BroadcastLockTab'
-import UserFormsTab from './components/UserFormsTab'
-import AdminErrors from './AdminErrors'
-import AdminCallsTab from './components/AdminCallsTab'
-import OfficerOperations from './OfficerOperations'
-import AdminSupportTicketsPage from './AdminSupportTicketsPage'
-import CourtDocketsManager from './CourtDocketsManager'
-import StorePriceEditor from './components/StorePriceEditor'
-import TournamentManager from './components/TournamentManager'
+
+const DatabaseBackup = lazy(() => import('./DatabaseBackup'))
+const CityControlCenter = lazy(() => import('./CityControlCenter'))
+const CacheClear = lazy(() => import('./CacheClear'))
+const SystemConfig = lazy(() => import('./SystemConfig'))
+const LiveKitUsageTab = lazy(() => import('./components/LiveKitUsageTab'))
+const BroadcastLockTab = lazy(() => import('./components/BroadcastLockTab'))
+const UserFormsTab = lazy(() => import('./components/UserFormsTab'))
+const AdminErrors = lazy(() => import('./AdminErrors'))
+const AdminCallsTab = lazy(() => import('./components/AdminCallsTab'))
+const OfficerOperations = lazy(() => import('./OfficerOperations'))
+const AdminSupportTicketsPage = lazy(() => import('./AdminSupportTicketsPage'))
+const CourtDocketsManager = lazy(() => import('./CourtDocketsManager'))
+const StorePriceEditor = lazy(() => import('./components/StorePriceEditor'))
+const TournamentManager = lazy(() => import('./components/TournamentManager'))
 
 export interface AdminRoute {
   id: string

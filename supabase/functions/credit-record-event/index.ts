@@ -49,11 +49,11 @@ function clampScore(score: number): number {
 }
 
 function getTier(score: number): string {
-  if (score < 150) return "Untrusted";
-  if (score < 300) return "Shaky";
-  if (score < 450) return "Building";
-  if (score < 600) return "Reliable";
-  if (score < 700) return "Trusted";
+  if (score < 300) return "Untrusted";
+  if (score < 450) return "Shaky";
+  if (score < 600) return "Building";
+  if (score < 700) return "Reliable";
+  if (score < 800) return "Trusted";
   return "Elite";
 }
 

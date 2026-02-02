@@ -165,23 +165,23 @@ export const useAuthStore = create<AuthState>()(
           if (data) {
             let profileData = data as any
 
-            // Sync authoritative level/xp from user_profiles
+            // Sync authoritative level/xp from user_stats (Source of Truth)
             try {
               const { data: levelRow, error: levelError } = await supabase
-                .from('user_profiles')
-                .select('level, xp, total_xp, next_level_xp')
-                .eq('id', u.id)
-                .single()
+                .from('user_stats')
+                .select('level, xp_total, xp_to_next_level')
+                .eq('user_id', u.id)
+                .maybeSingle()
 
-              if (levelError) {
+              if (levelError && levelError.code !== 'PGRST116') {
                 console.warn('refreshProfile level sync error:', levelError)
               } else if (levelRow) {
                 profileData = {
                   ...profileData,
                   level: levelRow.level ?? profileData.level ?? 1,
-                  xp: levelRow.xp ?? profileData.xp ?? 0,
-                  total_xp: levelRow.total_xp ?? profileData.total_xp,
-                  next_level_xp: levelRow.next_level_xp ?? profileData.next_level_xp,
+                  xp: levelRow.xp_total ?? profileData.xp ?? 0,
+                  total_xp: levelRow.xp_total ?? profileData.total_xp,
+                  next_level_xp: levelRow.xp_to_next_level ?? profileData.next_level_xp,
                 }
               }
             } catch (err) {

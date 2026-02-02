@@ -95,12 +95,28 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-            vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
-            livekit: ['livekit-client', '@livekit/components-react'],
-            supabase: ['@supabase/supabase-js'],
-            ui: ['framer-motion', 'lucide-react', 'clsx', 'tailwind-merge', 'sonner', 'recharts', 'react-swipeable'],
-          },
+        manualChunks: (id) => {
+          // Vendor chunks for stable dependencies
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('zustand')) {
+              return 'vendor';
+            }
+            if (id.includes('livekit')) {
+              return 'livekit';
+            }
+            if (id.includes('@supabase')) {
+              return 'supabase';
+            }
+            if (id.includes('framer-motion') || id.includes('lucide-react') || id.includes('clsx') || id.includes('tailwind-merge') || id.includes('sonner') || id.includes('recharts') || id.includes('react-swipeable')) {
+              return 'ui';
+            }
+          }
+          
+          // Group admin pages into a stable chunk to reduce PWA update errors
+          if (id.includes('src/pages/admin') || id.includes('src\\pages\\admin')) {
+            return 'admin-core';
+          }
+        },
       },
     },
   },

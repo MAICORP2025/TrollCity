@@ -102,15 +102,22 @@ export function dnaClassFor(primary: string | null | undefined) {
 
 export async function currentIdentity(userId: string) {
   try {
-    const { data: lvl, error: lvlError } = await supabase.from('user_levels').select('*').eq('user_id', userId).maybeSingle()
+    const { data: lvl, error: lvlError } = await supabase.from('user_stats').select('level, xp_total, xp_to_next_level, updated_at').eq('user_id', userId).maybeSingle()
     if (lvlError && lvlError.code !== 'PGRST116') {
-      console.error('Error fetching user levels:', lvlError)
+      console.error('Error fetching user stats:', lvlError)
     }
     const { data: dna, error: dnaError } = await supabase.from('troll_dna_profiles').select('*').eq('user_id', userId).maybeSingle()
     if (dnaError && dnaError.code !== 'PGRST116') {
       console.error('Error fetching DNA profile:', dnaError)
     }
-    return { level: lvl || { level: 1, xp: 0, next_level_xp: 100 }, dna: dna || { primary_dna: null, traits: [] } }
+    
+    const levelData = lvl ? {
+      level: lvl.level || 1,
+      xp: lvl.xp_total || 0,
+      next_level_xp: lvl.xp_to_next_level || 100
+    } : { level: 1, xp: 0, next_level_xp: 100 }
+
+    return { level: levelData, dna: dna || { primary_dna: null, traits: [] } }
   } catch (err) {
     console.error('Exception in currentIdentity:', err)
     return { level: { level: 1, xp: 0, next_level_xp: 100 }, dna: { primary_dna: null, traits: [] } }
@@ -119,18 +126,16 @@ export async function currentIdentity(userId: string) {
 
 export async function getLevelProfile(userId: string) {
   try {
-    const { data, error } = await supabase.from('user_levels').select('level, xp, updated_at').eq('user_id', userId).maybeSingle()
+    const { data, error } = await supabase.from('user_stats').select('level, xp_total, xp_to_next_level, updated_at').eq('user_id', userId).maybeSingle()
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching level profile:', error)
     }
     if (data) {
-      // Calculate derived fields from actual level and xp
-      const nextLevelXp = (data.level + 1) * 100
       return {
         level: data.level || 1,
-        xp: data.xp || 0,
-        total_xp: data.xp || 0,
-        next_level_xp: nextLevelXp,
+        xp: data.xp_total || 0,
+        total_xp: data.xp_total || 0,
+        next_level_xp: data.xp_to_next_level || 100,
         updated_at: data.updated_at || new Date().toISOString()
       }
     }

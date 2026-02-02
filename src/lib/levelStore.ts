@@ -148,13 +148,12 @@ export const useLevelStore = create<LevelState>((set, get) => ({
     // DB Update
     // Using upsert or update
     const { error } = await supabase
-      .from('user_levels')
+      .from('user_stats')
       .update({
         level: newLevel,
-        xp: newCurrentXp,
-        total_xp: newTotalXp,
-        next_level_xp: newNextLevelXp,
-        daily_xp_log: newDailyLog,
+        xp_total: newTotalXp,
+        xp_to_next_level: newNextLevelXp,
+        // daily_xp_log: newDailyLog, // Column does not exist in user_stats
         updated_at: new Date().toISOString()
       })
       .eq('user_id', userId)
