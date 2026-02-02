@@ -75,18 +75,33 @@ self.addEventListener('fetch', (event: any) => {
     return;
   }
 
-  // For other requests: try network then cache
+  // For other requests: network-only for API, network-first for assets
+  const url = new URL(req.url);
+  
+  // API requests should never be cached by SW
+  if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase')) {
+    event.respondWith(fetch(req));
+    return;
+  }
+
+  // Static assets: Stale-while-revalidate or Network First
   event.respondWith(
-    fetch(req)
-      .then((res) => {
-        // Put a copy in cache (best-effort)
-        try {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
-        } catch {}
-        return res;
-      })
-      .catch(() => caches.match(req))
+    caches.match(req).then((cachedResponse) => {
+      const fetchPromise = fetch(req).then((networkResponse) => {
+        // Cache valid responses
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+           const resClone = networkResponse.clone();
+           caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+        }
+        return networkResponse;
+      }).catch(() => {
+         // Network failed, return cached if available, else offline
+         return cachedResponse || caches.match(OFFLINE_URL);
+      });
+      
+      // Return cached response immediately if available, otherwise wait for network
+      return cachedResponse || fetchPromise;
+    })
   );
 });
 

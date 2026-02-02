@@ -57,6 +57,19 @@ export default class ErrorBoundary extends Component<Props, State> {
       toast.error('Network connection issue. Please check your internet connection.')
       return
     }
+
+    // Auto-reload on chunk load errors (once)
+    if (errorMessage.includes('dynamically imported module') || errorMessage.includes('Importing a module script failed')) {
+      const storageKey = 'tc_chunk_reload_' + window.location.pathname;
+      const hasReloaded = sessionStorage.getItem(storageKey);
+      
+      if (!hasReloaded) {
+        sessionStorage.setItem(storageKey, 'true');
+        console.log('Chunk load error detected, reloading...');
+        window.location.reload();
+        return;
+      }
+    }
     
     // Default error handling
     toast.error('A module failed to load. Please refresh to update.')

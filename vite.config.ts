@@ -92,16 +92,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
-          livekit: ['livekit-client', '@livekit/components-react'],
-          supabase: ['@supabase/supabase-js'],
-          ui: ['framer-motion', 'lucide-react', 'sonner'],
-        }
-      }
-    }
+            vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+            livekit: ['livekit-client', '@livekit/components-react'],
+            supabase: ['@supabase/supabase-js'],
+            ui: ['framer-motion', 'lucide-react', 'clsx', 'tailwind-merge', 'sonner', 'recharts', 'react-swipeable'],
+          },
+      },
+    },
   },
   resolve: {
     alias: {

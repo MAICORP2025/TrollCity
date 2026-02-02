@@ -418,7 +418,15 @@ function ProfileInner() {
     window.scrollTo(0, 0);
 
     const fetchProfile = async () => {
-      setLoading(true);
+      // Only show full loading state if we don't have a profile or if the ID/username doesn't match
+      // This prevents the "refreshing" flash when currentUser updates
+      const shouldShowLoading = !profile || 
+        (userId && profile.id !== userId) || 
+        (username && profile.username !== username);
+
+      if (shouldShowLoading) {
+        setLoading(true);
+      }
       
       // Clear any cached profile data for fresh load
       if (currentUser?.id && userId === currentUser.id) {
