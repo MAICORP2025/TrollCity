@@ -60,9 +60,26 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
       const propertiesRes = results[7];
       const _vehiclesCatalogRes = results[8];
 
-      // Handle inventory
+      // Handle inventory with manual join to avoid 400 errors
       if (inventoryRes.data) {
-        setInventory(inventoryRes.data)
+        let inventoryData = inventoryRes.data;
+        // Fetch marketplace items manually
+        const itemIds = inventoryData.map((i: any) => i.item_id).filter(Boolean);
+        if (itemIds.length > 0) {
+          const { data: items } = await supabase
+            .from('marketplace_items')
+            .select('*')
+            .in('id', itemIds);
+            
+          if (items) {
+            const itemMap = new Map(items.map((i: any) => [i.id, i]));
+            inventoryData = inventoryData.map((entry: any) => ({
+              ...entry,
+              marketplace_item: itemMap.get(entry.item_id)
+            }));
+          }
+        }
+        setInventory(inventoryData)
       }
 
       // Handle effects
@@ -75,9 +92,56 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
         setPerks(perksRes.data)
       }
 
-      // Handle insurance
+      // Handle insurance with support for both UUID plans and Slug options
       if (insuranceRes.data) {
-        setInsurances(insuranceRes.data)
+        let insuranceData = insuranceRes.data;
+        // Use insurance_id as primary key, fallback to plan_id if missing
+        const rawIds = insuranceData.map((i: any) => i.insurance_id || i.plan_id).filter(Boolean);
+        
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const uuidIds = rawIds.filter((id: string) => uuidRegex.test(id));
+        const slugIds = rawIds.filter((id: string) => !uuidRegex.test(id));
+        
+        const planMap = new Map();
+
+        // Fetch UUID plans (Legacy)
+        if (uuidIds.length > 0) {
+          const { data: plans } = await supabase
+            .from('insurance_plans')
+            .select('id,name,description')
+            .in('id', Array.from(new Set(uuidIds)));
+            
+          if (plans) {
+            plans.forEach((p: any) => planMap.set(p.id, p));
+          }
+        }
+
+        // Fetch Slug options (New System)
+        if (slugIds.length > 0) {
+           const { data: options } = await supabase
+             .from('insurance_options')
+             .select('id,name,description')
+             .in('id', Array.from(new Set(slugIds)));
+             
+           if (options) {
+             options.forEach((o: any) => planMap.set(o.id, o));
+           }
+        }
+
+        // Map back to inventory
+        insuranceData = insuranceData.map((entry: any) => {
+            const id = entry.insurance_id || entry.plan_id;
+            const plan = planMap.get(id);
+            return {
+              ...entry,
+              plan: plan || {
+                  name: entry.metadata?.plan_name || id,
+                  description: entry.metadata?.plan_description || 'Insurance Plan'
+              }
+            };
+        });
+        
+        setInsurances(insuranceData)
       }
       
       // Handle cars/titles

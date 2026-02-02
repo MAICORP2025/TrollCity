@@ -64,13 +64,15 @@ function ProfileInner() {
   const [messageCost, setMessageCost] = useState(0);
   const [viewCost, setViewCost] = useState(0);
 
+  const handlePaymentComplete = useCallback(() => {
+    refreshProfile();
+  }, [refreshProfile]);
+
   // Profile View Cost Logic
   const { checking: paymentChecking, canView } = useProfileViewPayment({
     profileOwnerId: profile?.id,
     profileViewPrice: profile?.profile_view_cost || 0,
-    onPaymentComplete: () => {
-      refreshProfile();
-    }
+    onPaymentComplete: handlePaymentComplete
   });
 
   const handleUpdateCosts = async () => {
@@ -202,7 +204,7 @@ function ProfileInner() {
         supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
         supabase.from('user_cars').select('*').eq('user_id', uid).order('purchased_at', { ascending: false }),
         supabase.from('user_vehicles').select('*').eq('user_id', uid),
-        supabase.from('user_inventory').select('*, marketplace_item:marketplace_items(*)').eq('user_id', uid)
+        supabase.from('user_inventory').select('*').eq('user_id', uid)
       ]);
 
       const perksRes = results[0];
@@ -213,33 +215,75 @@ function ProfileInner() {
       const vehicleListingsRes = results[5];
       const vehiclesRes = results[6];
       const legacyVehiclesRes = results[7];
-      const titlesDeedsRes = results[8];
+      const inventoryRes = results[8];
+
+      // Manual fetch for marketplace items to avoid 400 Bad Request on join
+      let titlesAndDeedsData = inventoryRes.data || [];
+      if (titlesAndDeedsData.length > 0) {
+        try {
+          const itemIds = titlesAndDeedsData.map((i: any) => i.item_id).filter(Boolean);
+          if (itemIds.length > 0) {
+             const { data: items } = await supabase
+              .from('marketplace_items')
+              .select('*')
+              .in('id', itemIds);
+             
+             if (items) {
+               const itemMap = new Map(items.map((i: any) => [i.id, i]));
+               titlesAndDeedsData = titlesAndDeedsData.map((entry: any) => ({
+                 ...entry,
+                 marketplace_item: itemMap.get(entry.item_id)
+               }));
+             }
+          }
+        } catch (err) {
+          console.error('Error fetching marketplace items:', err);
+        }
+      }
 
       let insuranceList = insuranceUserRes.data || [];
 
-      // Client-side join to insurance_plans for names
+      // Client-side join to insurance_plans/options for names
       try {
-        const planIds = (insuranceList || []).map((p: any) => p.insurance_id).filter(Boolean);
-        if (planIds.length > 0) {
+        const rawIds = (insuranceList || []).map((p: any) => p.insurance_id || p.plan_id).filter(Boolean);
+        
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const uuidIds = rawIds.filter((id: string) => uuidRegex.test(id));
+        const slugIds = rawIds.filter((id: string) => !uuidRegex.test(id));
+        
+        const planMap = new Map<string, any>();
+
+        if (uuidIds.length > 0) {
           const { data: plans } = await supabase
             .from('insurance_plans')
             .select('id,name,description')
-            .in('id', Array.from(new Set(planIds)));
-          const planMap = new Map<string, any>();
+            .in('id', Array.from(new Set(uuidIds)));
           (plans || []).forEach((pl: any) => planMap.set(pl.id, pl));
-          insuranceList = (insuranceList || []).map((row: any) => {
-            const plan = planMap.get(row.insurance_id);
-            return {
-              ...row,
-              metadata: {
-                ...(row.metadata || {}),
-                plan_name: plan?.name,
-                plan_description: plan?.description
-              }
-            }
-          });
         }
-      } catch {}
+
+        if (slugIds.length > 0) {
+           const { data: options } = await supabase
+             .from('insurance_options')
+             .select('id,name,description')
+             .in('id', Array.from(new Set(slugIds)));
+           (options || []).forEach((o: any) => planMap.set(o.id, o));
+        }
+          
+        insuranceList = (insuranceList || []).map((row: any) => {
+            const id = row.insurance_id || row.plan_id;
+            const plan = planMap.get(id);
+            return {
+                ...row,
+                metadata: {
+                    ...(row.metadata || {}),
+                    plan_name: plan?.name || row.metadata?.plan_name || id,
+                    plan_description: plan?.description || row.metadata?.plan_description || 'Insurance Plan'
+                }
+            };
+        });
+      } catch (err) {
+          console.error('Error fetching insurance plans:', err);
+      }
 
       // Map legacy vehicles to common structure
       const legacyVehicles = (legacyVehiclesRes.data || []).map((v: any) => ({
@@ -260,7 +304,7 @@ function ProfileInner() {
         homeListings: homesRes.data || [],
         vehicleListings: vehicleListingsRes.data || [],
         vehicles: [...(vehiclesRes.data || []), ...legacyVehicles],
-        titlesAndDeeds: titlesDeedsRes.data || []
+        titlesAndDeeds: titlesAndDeedsData || []
       });
     } catch (e) {
       console.error('Error fetching inventory', e);

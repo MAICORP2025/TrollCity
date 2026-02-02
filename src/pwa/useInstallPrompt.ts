@@ -16,13 +16,15 @@ export function useInstallPrompt() {
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the default mini-infobar from appearing on mobile
+      // Prevent the default mini-infobar from appearing on mobile.
+      // NOTE: This will trigger a console warning in Chrome: "Banner not shown: beforeinstallpromptevent.preventDefault() called."
+      // This is EXPECTED behavior for custom install flows. We must call prompt() manually later.
       e.preventDefault();
       
       // Save the event so it can be triggered later
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       
-      console.log('[PWA] beforeinstallprompt event captured');
+      console.log('[PWA] beforeinstallprompt captured. Default banner suppressed for custom UI.');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);

@@ -114,7 +114,8 @@ module.exports = async function telemetryHandler(req, res) {
     if (error) {
       console.error('Telemetry insert error:', error);
       res.set(corsHeaders);
-      return res.status(500).json({ error: error.message || 'Failed to store event' });
+      // Return 200 to avoid breaking client
+      return res.status(200).json({ success: false, error: error.message || 'Failed to store event' });
     }
 
     res.set(corsHeaders);
@@ -123,7 +124,8 @@ module.exports = async function telemetryHandler(req, res) {
   } catch (err) {
     console.error('Telemetry handler error:', err);
     res.set(corsHeaders);
-    return res.status(500).json({ error: 'Internal server error', detail: String(err?.message || err) });
+    // Return 200 to avoid breaking client
+    return res.status(200).json({ success: false, error: 'Internal server error', detail: String(err?.message || err) });
   }
 };
 

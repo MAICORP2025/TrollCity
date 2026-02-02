@@ -66,10 +66,10 @@ export function useProfileViewPayment({
             return
           }
 
-          setPaymentProcessed(true)
           toast.success(`Profile view charged: ${profileViewPrice.toLocaleString()} coins`)
         }
 
+        setPaymentProcessed(true)
         setCanView(true)
         if (onPaymentComplete) {
           onPaymentComplete()
@@ -84,7 +84,7 @@ export function useProfileViewPayment({
     }
 
     checkPayment()
-  }, [user, profileOwnerId, profileViewPrice, paymentProcessed, navigate, onPaymentComplete])
+  }, [user?.id, profileOwnerId, profileViewPrice, paymentProcessed, navigate, onPaymentComplete])
 
   return { checking, canView, paymentProcessed }
 }

@@ -206,7 +206,6 @@ export default function CreditScorePage() {
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex-1">
                         <p className="font-semibold text-white">{user.username}</p>
-                        <p className="text-sm text-gray-400">{user.user_id.slice(0, 8)}...</p>
                       </div>
 
                       <div className="flex items-center gap-4">

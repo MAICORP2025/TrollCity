@@ -56,14 +56,16 @@ export default function VideoTile({
   // Fetch profile for avatar
   useEffect(() => {
     const fetchProfile = async () => {
-        if (!participant.identity) return;
+        if (!participant?.identity) return;
         const { data } = await supabase.from('user_profiles').select('avatar_url').eq('id', participant.identity).maybeSingle();
         if (data?.avatar_url) setAvatarUrl(data.avatar_url);
     };
     fetchProfile();
-  }, [participant.identity]);
+  }, [participant?.identity]);
 
   useEffect(() => {
+    if (!participant) return;
+
     const attachVideo = () => {
         const vidPub = participant.getTrackPublication(Track.Source.Camera);
         // For LocalParticipant, isSubscribed might be false/undefined but track is present
@@ -248,7 +250,7 @@ export default function VideoTile({
   const handleBroadcasterClick = (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (onClick) {
+    if (onClick && participant) {
       onClick(participant);
       return;
     }
@@ -257,7 +259,7 @@ export default function VideoTile({
     if (isBroadcaster) {
       return;
     }
-    if (isHost && !isLocal && !isBroadcaster && onDisableGuestMedia) {
+    if (isHost && !isLocal && !isBroadcaster && onDisableGuestMedia && participant) {
       // Disable guest media when broadcaster clicks on guest box
       onDisableGuestMedia(participant.identity, true, true);
     } else if (isLocal && !isHost) {
@@ -267,7 +269,7 @@ export default function VideoTile({
 
   const handleDisableVideo = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onDisableGuestMedia) {
+    if (onDisableGuestMedia && participant) {
       onDisableGuestMedia(participant.identity, true, false);
       setShowLocalControls(false);
     }
@@ -275,7 +277,7 @@ export default function VideoTile({
 
   const handleDisableAudio = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onDisableGuestMedia) {
+    if (onDisableGuestMedia && participant) {
       onDisableGuestMedia(participant.identity, false, true);
       setShowLocalControls(false);
     }
@@ -283,7 +285,7 @@ export default function VideoTile({
 
   const handleDisableBoth = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onDisableGuestMedia) {
+    if (onDisableGuestMedia && participant) {
       onDisableGuestMedia(participant.identity, true, true);
       setShowLocalControls(false);
     }
@@ -291,6 +293,8 @@ export default function VideoTile({
 
   // Border Style Logic
   const getBorderStyle = () => {
+    if (!participant) return ''; // No border if no participant
+    
     if (speaking) {
       return 'border-2 border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.8)] z-20';
     }
@@ -303,6 +307,19 @@ export default function VideoTile({
   };
 
   const borderClass = getBorderStyle();
+
+  if (!participant) {
+    return (
+      <div className={`relative w-full h-full bg-white/5 rounded-2xl overflow-hidden ${className}`} style={style}>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border-2 border-white/10 mb-3">
+             <User size={32} className="text-white/20" />
+          </div>
+          <p className="text-white/30 text-xs font-medium">Waiting for user...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative w-full h-full transition-all duration-300 ${speaking ? 'scale-[1.02]' : ''}`} style={style}>
