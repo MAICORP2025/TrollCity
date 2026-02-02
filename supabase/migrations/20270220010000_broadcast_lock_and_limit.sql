@@ -7,8 +7,13 @@ ADD COLUMN IF NOT EXISTS has_broadcast_badge BOOLEAN DEFAULT false;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.admin_settings WHERE setting_key = 'max_broadcasters') THEN
-        INSERT INTO public.admin_settings (setting_key, setting_value, description)
-        VALUES ('max_broadcasters', '{"limit": 100}', 'Maximum number of authorized broadcasters');
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'admin_settings' AND column_name = 'key') THEN
+            INSERT INTO public.admin_settings (setting_key, setting_value, description, key)
+            VALUES ('max_broadcasters', '{"limit": 100}', 'Maximum number of authorized broadcasters', 'max_broadcasters');
+        ELSE
+            INSERT INTO public.admin_settings (setting_key, setting_value, description)
+            VALUES ('max_broadcasters', '{"limit": 100}', 'Maximum number of authorized broadcasters');
+        END IF;
     END IF;
 END $$;
 
