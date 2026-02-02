@@ -60,6 +60,7 @@ PAYPAL_FUNCTIONS=(
 )
 
 OFFICER_FUNCTIONS=(
+    "officer-actions"
     "officer-auto-clockout"
     "officer-get-assignment"
     "officer-join-stream"
