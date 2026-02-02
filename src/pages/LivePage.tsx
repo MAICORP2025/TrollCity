@@ -12,7 +12,7 @@ import { useLiveKitToken } from '../hooks/useLiveKitToken';
 import { useStreamEndListener } from '../hooks/useStreamEndListener';
 import { useAuthStore } from '../lib/store';
 import { useCoins } from '../lib/hooks/useCoins';
-import { supabase, createConversation, sendConversationMessage } from '../lib/supabase';
+import { supabase, sendConversationMessage } from '../lib/supabase';
 import { sendNotification } from '../lib/sendNotification';
 import { toast } from 'sonner';
 import { Participant } from 'livekit-client';
@@ -40,7 +40,7 @@ import FlyingChatOverlay from '../components/broadcast/FlyingChatOverlay';
 import GlobalGiftBanner from '../components/GlobalGiftBanner';
 import GiftEventOverlay from './GiftEventOverlay';
 import { getUserEntranceEffect, triggerUserEntranceEffect } from '../lib/entranceEffects';
-import { processGiftXp } from '../lib/xp';
+// import { processGiftXp } from '../lib/xp';
 import { evaluateBadgesForUser } from '../services/badgeEvaluationService';
 
 import { useGiftEvents } from '../lib/hooks/useGiftEvents';
@@ -224,30 +224,14 @@ function BroadcasterSettings({
     if (!streamId) return;
     setLoading(true);
     try {
-      const { data: sp } = await supabase
-        .from('streams_participants')
-        .select('user_id,is_active,is_moderator,can_chat,chat_mute_until')
-        .eq('stream_id', streamId);
+      const { data: res, error } = await supabase.functions.invoke('officer-actions', {
+        body: { action: 'get_stream_participants', streamId }
+      });
 
-      const rows = sp || [];
-      const ids = rows.map(r => r.user_id);
-      const profiles: Record<string, { username: string; avatar_url?: string }> = {};
-      if (ids.length > 0) {
-        const { data: ups } = await supabase
-          .from('user_profiles')
-          .select('id,username,avatar_url')
-          .in('id', ids);
-        (ups || []).forEach((p: any) => { profiles[p.id] = { username: p.username, avatar_url: p.avatar_url }; });
-      }
-      setParticipants(rows.map(r => ({
-        user_id: r.user_id,
-        username: profiles[r.user_id]?.username || 'Unknown',
-        avatar_url: profiles[r.user_id]?.avatar_url,
-        is_moderator: r.is_moderator,
-        can_chat: r.can_chat,
-        chat_mute_until: r.chat_mute_until,
-        is_active: r.is_active
-      })));
+      if (error) throw error;
+      if (!res?.success) throw new Error(res?.error || 'Failed to load participants');
+
+      setParticipants(res.participants || []);
     } catch (err) {
       console.error('Failed to load participants', err);
     } finally {
@@ -260,11 +244,15 @@ function BroadcasterSettings({
   const assignModerator = async (userId: string) => {
     setUpdatingMod(userId);
     try {
-      await supabase
-        .from('streams_participants')
-        .update({ is_moderator: true })
-        .eq('stream_id', streamId)
-        .eq('user_id', userId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'assign_moderator',
+          userId,
+          streamId
+        }
+      });
+
+      if (error) throw error;
       toast.success('Moderator assigned');
       loadParticipants();
     } catch (err) {
@@ -278,11 +266,15 @@ function BroadcasterSettings({
   const removeModerator = async (userId: string) => {
     setUpdatingMod(userId);
     try {
-      await supabase
-        .from('streams_participants')
-        .update({ is_moderator: false })
-        .eq('stream_id', streamId)
-        .eq('user_id', userId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'remove_moderator',
+          userId,
+          streamId
+        }
+      });
+
+      if (error) throw error;
       toast.success('Moderator removed');
       loadParticipants();
     } catch (err) {
@@ -296,11 +288,15 @@ function BroadcasterSettings({
   const kickUser = async (userId: string) => {
     setKicking(userId);
     try {
-      await supabase
-        .from('streams_participants')
-        .update({ is_active: false, left_at: new Date().toISOString() })
-        .eq('stream_id', streamId)
-        .eq('user_id', userId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'kick_participant',
+          userId,
+          streamId
+        }
+      });
+
+      if (error) throw error;
       toast.success('User kicked from stream');
       loadParticipants();
     } catch (err) {
@@ -315,15 +311,16 @@ function BroadcasterSettings({
     const reason = window.prompt('Reason for report:', 'Violation of rules');
     if (reason === null) return;
     try {
-      await supabase
-        .from('moderation_reports')
-        .insert({
-          reporter_id: (await supabase.auth.getUser()).data.user?.id,
-          target_user_id: userId,
-          stream_id: streamId,
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'report_user',
+          targetUserId: userId,
+          streamId,
           reason,
           description: ''
-        });
+        }
+      });
+      if (error) throw error;
       toast.success('Report submitted');
     } catch (err) {
       console.error('Failed to submit report', err);
@@ -761,12 +758,16 @@ export default function LivePage() {
   const notifyMissingForms = useCallback(async (userId: string, missing: string[]) => {
     if (!missing.length) return;
     try {
-      await supabase.rpc('notify_user_rpc', {
-        p_target_user_id: userId,
-        p_type: 'system_alert',
-        p_title: 'Complete your User Forms & Compliance',
-        p_message: `Please finish the following sections: ${missing.join(', ')}. Visit your Profile Settings to complete them.`,
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'notify_user',
+          targetUserId: userId,
+          type: 'system_alert',
+          title: 'Complete your User Forms & Compliance',
+          message: `Please finish the following sections: ${missing.join(', ')}. Visit your Profile Settings to complete them.`
+        }
       });
+      if (error) throw error;
       notifiedMissingFormsRef.current.add(userId);
     } catch (err) {
       console.error('Failed to notify user about compliance:', err);
@@ -782,28 +783,14 @@ export default function LivePage() {
   const refreshBoxCountFromMessages = useCallback(
     async (id: string) => {
       try {
-        const { data, error } = await supabase
-          .from('messages')
-          .select('content')
-          .eq('stream_id', id)
-          .eq('message_type', 'system')
-          .like('content', 'BOX_COUNT_UPDATE:%')
-          .order('created_at', { ascending: false })
-          .limit(1);
+        const { data: res, error } = await supabase.functions.invoke('officer-actions', {
+            body: { action: 'get_stream_box_count', streamId: id }
+        });
 
-        if (error || !data || data.length === 0) return;
-
-        const content = data[0]?.content as string | null;
-        if (!content || typeof content !== 'string') return;
-
-        const parts = content.split(':');
-        if (parts.length < 2) return;
-        const parsed = parseInt(parts[1], 10);
-        if (Number.isNaN(parsed)) return;
-
-        const maxBoxes = 5;
-        const next = Math.max(0, Math.min(maxBoxes, parsed));
-        setBoxCount(next === 0 ? 5 : next);
+        if (error || !res?.success) return;
+        
+        const count = res.count;
+        setBoxCount(count === 0 ? 5 : count);
       } catch (err) {
         console.error('Failed to refresh box count from messages:', err);
       }
@@ -861,25 +848,14 @@ export default function LivePage() {
     let isActive = true;
 
     const loadTheme = async () => {
-      const { data: state } = await supabase
-        .from('user_broadcast_theme_state')
-        .select('active_theme_id')
-        .eq('user_id', broadcasterId)
-        .maybeSingle();
-
       if (!isActive) return;
-      if (!state?.active_theme_id) {
-        setBroadcastThemeStyle(undefined);
-        setBroadcastTheme(null);
-        setLastThemeId(null);
-        return;
-      }
 
-      const { data: theme } = await supabase
-        .from('broadcast_background_themes')
-        .select('id, asset_type, video_webm_url, video_mp4_url, image_url, background_css, background_asset_url, reactive_enabled, reactive_style, reactive_intensity')
-        .eq('id', state.active_theme_id)
-        .maybeSingle();
+      const { data: res, error } = await supabase.functions.invoke('officer-actions', {
+          body: { action: 'get_stream_theme', broadcasterId }
+      });
+
+      if (error || !res?.success) return;
+      const theme = res.theme;
 
       if (!isActive) return;
       if (!theme) {
@@ -986,50 +962,19 @@ export default function LivePage() {
   const loadSeatBans = useCallback(async () => {
     if (!isOfficerUser || !seatRoomName) return;
     try {
-      const { data, error } = await supabase
-        .from('broadcast_seat_bans')
-        .select('id,user_id,banned_until,created_at,reason')
-        .eq('room', seatRoomName)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'get_seat_bans',
+          room: seatRoomName
+        }
+      });
 
-      if (error) {
-        console.error('Failed to load seat bans', error);
+      if (error || !data?.success) {
+        console.error('Failed to load seat bans', error || data?.error);
         return;
       }
 
-      const rows = (data as any[]) || [];
-      const userIds = Array.from(
-        new Set(
-          rows
-            .map((row) => row.user_id as string | null)
-            .filter((id): id is string => Boolean(id))
-        )
-      );
-
-      const usernameMap = new Map<string, string | null>();
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('user_profiles')
-          .select('id,username')
-          .in('id', userIds);
-        (profiles as any[] | null | undefined)?.forEach((p) => {
-          usernameMap.set(p.id as string, (p.username as string | null) ?? null);
-        });
-      }
-
-      const enriched: SeatBan[] = rows.map((row) => {
-        const userId = row.user_id as string;
-        return {
-          id: row.id as string,
-          user_id: userId,
-          banned_until: (row.banned_until as string | null) ?? null,
-          created_at: row.created_at as string,
-          reason: (row.reason as string | null) ?? null,
-          username: usernameMap.get(userId) ?? null,
-        };
-      });
-
-      setSeatBans(enriched);
+      setSeatBans(data.bans || []);
     } catch (err) {
       console.error('Failed to load seat bans', err);
     }
@@ -1230,20 +1175,26 @@ export default function LivePage() {
 
     const runBilling = async () => {
       try {
-        const { data, error } = await supabase.rpc('process_stream_billing', {
-          p_stream_id: streamId,
-          p_user_id: user.id,
-          p_is_host: isBroadcaster
+        const { data, error } = await supabase.functions.invoke('officer-actions', {
+          body: {
+            action: 'process_billing',
+            streamId,
+            userId: user.id,
+            isHost: isBroadcaster
+          }
         });
 
         if (error) {
           console.error('[Billing] RPC error:', error);
           return;
         }
+        
+        // result is in data
+        const result = data;
 
-        if (data?.status === 'stop') {
-          console.warn('[Billing] Stopped:', data.reason);
-          toast.error(data.reason || 'Insufficient funds');
+        if (result?.status === 'stop') {
+          console.warn('[Billing] Stopped:', result.reason);
+          toast.error(result.reason || 'Insufficient funds');
           
           if (isBroadcaster) {
              // If broadcaster runs out of funds, stop the stream
@@ -1256,7 +1207,7 @@ export default function LivePage() {
              // Guest runs out of funds
              handleLeaveSession();
           }
-        } else if (data?.remaining !== undefined) {
+        } else if (result?.remaining !== undefined) {
           // Optional: update local coin balance if desired
           // refreshProfile(); // Might be too heavy to call every minute
         }
@@ -1276,41 +1227,24 @@ export default function LivePage() {
 
   const handleSetPrice = async (price: number) => {
     try {
-      // 1. Update DB first so RPC sees correct price
-      const { error } = await supabase
-        .from('streams')
-        .update({ box_price_amount: price })
-        .eq('id', streamId);
+      setJoinPrice(price); // Optimistic UI update
 
-      if (error) throw error;
-
-      setJoinPrice(price);
-      
-      // 2. Broadcast price to viewers via system message (Ephemeral)
-      const channel = supabase.channel(`live-updates-${streamId}`);
-      channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          channel.send({
-            type: 'broadcast',
-            event: 'system_update',
-            payload: { type: 'PRICE_UPDATE', content: String(price) }
-          });
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'set_price',
+          streamId,
+          price
         }
       });
 
-      // Optional: Keep DB insert for history if needed, but remove if causing load.
-      // We will keep it for now but clients don't listen to it.
-      await supabase.from('messages').insert({
-        stream_id: streamId,
-        user_id: user?.id,
-        message_type: 'system',
-        content: `PRICE_UPDATE:${price}`
-      });
+      if (error) throw error;
       
       toast.success(`Join price set to ${price} coins`);
     } catch (err) {
       console.error('Failed to update box price:', err);
       toast.error('Failed to update price');
+      // Revert optimistic update if possible, but we don't store previous price easily here.
+      // We could re-fetch or just let the next real-time update fix it.
     }
   };
 
@@ -1318,7 +1252,14 @@ export default function LivePage() {
     if (!streamId) return;
     setCurrentFrameMode(mode); // Optimistic update
     try {
-      await supabase.from('streams').update({ frame_mode: mode }).eq('id', streamId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'set_frame_mode',
+          streamId,
+          mode
+        }
+      });
+      if (error) throw error;
     } catch (err) {
       console.error('Failed to update frame mode', err);
       toast.error('Failed to update frame mode');
@@ -1329,84 +1270,30 @@ export default function LivePage() {
     async (targetUserId?: string) => {
       if (!streamId) return;
       try {
-        let targetUsername: string | undefined;
-        if (targetUserId) {
-          const { data: targetProfile } = await supabase
-            .from('user_profiles')
-            .select('username')
-            .eq('id', targetUserId)
-            .single();
-          targetUsername = targetProfile?.username || undefined;
-        }
-
         const reporterId = profile?.id || user?.id || null;
-        let reporterUsername: string | undefined = profile?.username;
 
-        if (!reporterUsername && reporterId) {
-          const { data: reporterProfile } = await supabase
-            .from('user_profiles')
-            .select('username')
-            .eq('id', reporterId)
-            .single();
-          reporterUsername = reporterProfile?.username || undefined;
-        }
-
-        const { data: officers } = await supabase
-          .from('user_profiles')
-          .select('id, username, role, is_officer')
-          .in('role', ['troll_officer', 'lead_troll_officer', 'admin']);
-
-        const baseMessage = targetUserId
-          ? `Alert in stream ${streamId} involving @${targetUsername || targetUserId}`
-          : `Alert in stream ${streamId}`;
-
-        const messageWithReporter =
-          reporterUsername && reporterId
-            ? `${baseMessage} (reported by @${reporterUsername})`
-            : baseMessage;
-
-        const list = (officers || []).map((o) => ({
-          user_id: o.id,
-          type: 'officer_update' as const,
-          title: 'Stream Moderation Alert',
-          message: messageWithReporter,
-          metadata: {
-            stream_id: streamId,
-            target_user_id: targetUserId,
-            target_username: targetUsername,
-            reporter_id: reporterId,
-            reporter_username: reporterUsername,
-            link: `/live/${streamId}?source=officer_alert`
+        const { data, error } = await supabase.functions.invoke('officer-actions', {
+          body: {
+            action: 'alert_officers',
+            streamId,
+            targetUserId,
+            reporterId
           }
-        }));
+        });
 
-        if (list.length > 0) {
-          await supabase.from('notifications').insert(list);
-          toast.success('Alert sent to troll officers');
+        if (error) throw error;
 
-          // Send push notifications to officers
-          try {
-            await supabase.functions.invoke('send-push-notification', {
-              body: {
-                user_ids: list.map((n) => n.user_id),
-                title: 'Stream Moderation Alert',
-                body: messageWithReporter,
-                url: `/live/${streamId}?source=officer_alert`,
-                create_db_notification: false,
-              },
-            });
-          } catch (err) {
-            console.warn('Failed to send push to officers', err);
-          }
-        } else {
+        if (data && data.count === 0) {
           toast.info('No officers found to notify');
+        } else {
+          toast.success('Alert sent to troll officers');
         }
       } catch (err) {
         console.error('Failed to alert officers', err);
         toast.error('Failed to alert officers');
       }
     },
-    [streamId, profile?.id, profile?.username, user?.id]
+    [streamId, profile?.id, user?.id]
   );
 
   const handleJoinRequest = async (seatIndex: number) => {
@@ -1439,15 +1326,17 @@ export default function LivePage() {
       if (!confirmed) return;
 
       try {
-        // Use the new join_stream_box RPC which handles billing and guest tracking atomically
-        const { data: joinResult, error: joinError } = await supabase.rpc('join_stream_box', {
-          p_stream_id: streamId,
-          p_user_id: user?.id
+        // Use the new join_stream_box action which handles billing and guest tracking atomically
+        const { data: joinResult, error: joinError } = await supabase.functions.invoke('officer-actions', {
+            body: {
+                action: 'join_stream_box',
+                streamId
+            }
         });
 
         if (joinError) throw joinError;
         
-        // Check logical success from RPC JSON response
+        // Check logical success from response
         if (joinResult && joinResult.success === false) {
            throw new Error(joinResult.error || 'Failed to join box');
         }
@@ -1488,11 +1377,14 @@ export default function LivePage() {
 
     let isOfficer = false;
     if (stream?.broadcaster_id) {
-       const { data } = await supabase.rpc('is_broadofficer', {
-         p_broadcaster_id: stream.broadcaster_id,
-         p_user_id: seat.user_id
+       const { data } = await supabase.functions.invoke('officer-actions', {
+         body: {
+            action: 'check_broadofficer',
+            broadcasterId: stream.broadcaster_id,
+            userId: seat.user_id
+         }
        });
-       isOfficer = !!data;
+       isOfficer = data?.isBroadofficer || false;
     }
     if (seat.role && ['admin', 'lead_troll_officer', 'troll_officer'].includes(seat.role)) {
         isOfficer = true;
@@ -1729,7 +1621,11 @@ export default function LivePage() {
   const handleOfficerEndBroadcast = async () => {
       if (!confirm('OFFICER ACTION: Force END this broadcast?')) return;
       try {
-        await supabase.from('streams').update({ status: 'ended', is_live: false, ended_at: new Date().toISOString() }).eq('id', streamId);
+        const { error } = await supabase.functions.invoke('officer-actions', {
+            body: { action: 'end_stream', streamId }
+        });
+        if (error) throw error;
+
         if (streamId) {
           const channel = supabase.channel(`stream-${streamId}`);
           await channel.subscribe();
@@ -1753,11 +1649,10 @@ export default function LivePage() {
   const handleOfficerMuteAll = async () => {
       if(!confirm('OFFICER ACTION: Mute all participants?')) return;
       try {
-        const until = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-        await supabase
-          .from('streams_participants')
-          .update({ can_chat: false, chat_mute_until: until })
-          .eq('stream_id', streamId);
+        const { error } = await supabase.functions.invoke('officer-actions', {
+            body: { action: 'mute_all', streamId }
+        });
+        if (error) throw error;
         toast.success('All participants muted for 10 minutes');
       } catch (err) {
         console.error('Failed to mute all participants', err);
@@ -1768,10 +1663,10 @@ export default function LivePage() {
   const handleOfficerDisableChat = async () => {
        if(!confirm('OFFICER ACTION: Disable chat globally?')) return;
        try {
-         await supabase
-           .from('streams_participants')
-           .update({ can_chat: false, chat_mute_until: null })
-           .eq('stream_id', streamId);
+         const { error } = await supabase.functions.invoke('officer-actions', {
+            body: { action: 'disable_chat', streamId }
+         });
+         if (error) throw error;
          toast.success('Chat disabled for all participants');
        } catch (err) {
          console.error('Failed to disable chat globally', err);
@@ -1779,73 +1674,51 @@ export default function LivePage() {
        }
   };
   
-  const handleOfficerKickAll = () => {
+  const handleOfficerKickAll = async () => {
       if(!confirm('OFFICER ACTION: Clear the stage (remove all boxes)?')) return;
+      // Optimistic update
       setBoxCount(0);
-      if (streamId) {
-        // Broadcast update
-        const channel = supabase.channel(`live-updates-${streamId}`);
-        channel.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            channel.send({
-              type: 'broadcast',
-              event: 'system_update',
-              payload: { type: 'BOX_COUNT_UPDATE', content: '0' }
-            });
+      try {
+        const { error } = await supabase.functions.invoke('officer-actions', {
+          body: {
+            action: 'clear_stage',
+            streamId
           }
         });
-
-        void supabase.from('messages').insert({
-          stream_id: streamId,
-          message_type: 'system',
-          content: 'BOX_COUNT_UPDATE:0'
-        });
+        if (error) throw error;
+        toast.success('Stage cleared');
+      } catch (err) {
+        console.error('Failed to clear stage', err);
+        toast.error('Failed to clear stage');
       }
-      seats.forEach((seat, index) => {
-        if (seat?.user_id) {
-          void releaseSeat(index, seat.user_id, { force: true });
-        }
-      });
-      toast.success('Stage cleared');
   };
   
-  const syncBoxCount = useCallback((next: number) => {
+  const syncBoxCount = useCallback(async (next: number) => {
     const maxBoxes = 5;
     const clamped = Math.max(0, Math.min(maxBoxes, next));
+    // Optimistic update
     setBoxCount(clamped);
+    
     if (streamId) {
-      // Broadcast update
-      const channel = supabase.channel(`live-updates-${streamId}`);
-      channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          channel.send({
-            type: 'broadcast',
-            event: 'system_update',
-            payload: { type: 'BOX_COUNT_UPDATE', content: String(clamped) }
-          });
-        }
-      });
-
-      // Keep persistence for new users
-      void supabase.from('messages').insert({
-        stream_id: streamId,
-        message_type: 'system',
-        content: `BOX_COUNT_UPDATE:${clamped}`
-      });
-    }
-    if (clamped < seats.length) {
-      seats.forEach((seat, index) => {
-        if (index >= clamped && seat?.user_id) {
-          void releaseSeat(index, seat.user_id, { force: true });
-        }
-      });
+      try {
+        const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+                action: 'update_box_count',
+                streamId,
+                count: clamped
+            }
+        });
+        if (error) throw error;
+      } catch (err) {
+        console.error('Failed to update box count', err);
+        toast.error('Failed to update box count');
+      }
     }
     return clamped;
-  }, [streamId, seats, releaseSeat]);
+  }, [streamId]);
   
   const handleAddBox = useCallback(() => {
-    const next = syncBoxCount(boxCount + 1);
-    toast.success(`Added box (${next})`);
+    void syncBoxCount(boxCount + 1).then((next) => toast.success(`Added box (${next})`));
   }, [boxCount, syncBoxCount]);
 
   const handleDeductBox = useCallback(() => {
@@ -1853,13 +1726,11 @@ export default function LivePage() {
       toast.info('No boxes left to remove');
       return;
     }
-    const next = syncBoxCount(boxCount - 1);
-    toast.success(`Removed box (${next})`);
+    void syncBoxCount(boxCount - 1).then((next) => toast.success(`Removed box (${next})`));
   }, [boxCount, syncBoxCount]);
 
   const handleOfficerAddBox = useCallback(() => {
-      const next = syncBoxCount(boxCount + 1);
-      toast.success(`Added box (${next})`);
+      void syncBoxCount(boxCount + 1).then((next) => toast.success(`Added box (${next})`));
   }, [boxCount, syncBoxCount]);
 
   const handleOfficerDeductBox = useCallback(() => {
@@ -1867,8 +1738,7 @@ export default function LivePage() {
         toast.info('No boxes left to remove');
         return;
       }
-      const next = syncBoxCount(boxCount - 1);
-      toast.success(`Removed box (${next})`);
+      void syncBoxCount(boxCount - 1).then((next) => toast.success(`Removed box (${next})`));
   }, [boxCount, syncBoxCount]);
 
   const officerTargets = useMemo(() => {
@@ -1895,12 +1765,16 @@ export default function LivePage() {
   const handleOfficerMuteUser = async (userId: string, minutes: number) => {
     if (!streamId) return;
     try {
-      const until = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-      await supabase
-        .from('streams_participants')
-        .update({ can_chat: false, chat_mute_until: until })
-        .eq('stream_id', streamId)
-        .eq('user_id', userId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'mute_participant',
+          userId,
+          streamId,
+          durationMinutes: minutes
+        }
+      });
+
+      if (error) throw error;
       toast.success(`User muted for ${minutes} minutes`);
     } catch (err) {
       console.error('Failed to mute user', err);
@@ -1911,11 +1785,15 @@ export default function LivePage() {
   const handleOfficerDisableUserChat = async (userId: string) => {
     if (!streamId) return;
     try {
-      await supabase
-        .from('streams_participants')
-        .update({ can_chat: false, chat_mute_until: null })
-        .eq('stream_id', streamId)
-        .eq('user_id', userId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'disable_chat',
+          userId,
+          streamId
+        }
+      });
+
+      if (error) throw error;
       toast.success('User chat disabled');
     } catch (err) {
       console.error('Failed to disable user chat', err);
@@ -1926,11 +1804,15 @@ export default function LivePage() {
   const handleOfficerKickUser = async (userId: string) => {
     if (!streamId) return;
     try {
-      await supabase
-        .from('streams_participants')
-        .update({ is_active: false, left_at: new Date().toISOString() })
-        .eq('stream_id', streamId)
-        .eq('user_id', userId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'kick_participant',
+          userId,
+          streamId
+        }
+      });
+
+      if (error) throw error;
       toast.success('User kicked from stream');
     } catch (err) {
       console.error('Failed to kick user', err);
@@ -1939,10 +1821,15 @@ export default function LivePage() {
   };
 
   const handleOfficerRemoveSeat = async (userId: string) => {
-    const seatIndex = seats.findIndex((seat) => seat?.user_id === userId);
-    if (seatIndex < 0) return;
     try {
-      await releaseSeat(seatIndex, userId, { force: true });
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'remove_seat',
+          streamId,
+          userId
+        }
+      });
+      if (error) throw error;
       toast.success('User removed from box');
     } catch (err) {
       console.error('Failed to remove user from seat', err);
@@ -1952,10 +1839,15 @@ export default function LivePage() {
 
   const handleOfficerClearSeatBan = async (banId: string) => {
     try {
-      await supabase
-        .from('broadcast_seat_bans')
-        .delete()
-        .eq('id', banId);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'clear_seat_ban',
+          banId,
+          streamId
+        }
+      });
+
+      if (error) throw error;
       toast.success('Guest-box ban cleared');
       await loadSeatBans();
     } catch (err) {
@@ -1971,7 +1863,16 @@ export default function LivePage() {
       return;
     }
     try {
-      await handleDisableGuestMedia(userId, true, false);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'mute_media',
+          streamId,
+          userId,
+          kind: 'video',
+          muted: true
+        }
+      });
+      if (error) throw error;
       toast.success('Camera disabled for user');
       await recordAction('disable_camera', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
     } catch (err) {
@@ -1986,7 +1887,16 @@ export default function LivePage() {
       return;
     }
     try {
-      await handleDisableGuestMedia(userId, false, false);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'mute_media',
+          streamId,
+          userId,
+          kind: 'video',
+          muted: false
+        }
+      });
+      if (error) throw error;
       toast.success('Camera enabled for user');
       await recordAction('enable_camera', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
     } catch (err) {
@@ -2001,7 +1911,16 @@ export default function LivePage() {
       return;
     }
     try {
-      await handleDisableGuestMedia(userId, false, true);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'mute_media',
+          streamId,
+          userId,
+          kind: 'audio',
+          muted: true
+        }
+      });
+      if (error) throw error;
       toast.success('Microphone disabled for user');
       await recordAction('disable_mic', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
     } catch (err) {
@@ -2016,7 +1935,16 @@ export default function LivePage() {
       return;
     }
     try {
-      await handleDisableGuestMedia(userId, false, false);
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'mute_media',
+          streamId,
+          userId,
+          kind: 'audio',
+          muted: false
+        }
+      });
+      if (error) throw error;
       toast.success('Microphone enabled for user');
       await recordAction('enable_mic', userId, officerTargets.find(t => t.id === userId)?.username || 'Unknown', 0);
     } catch (err) {
@@ -2040,7 +1968,9 @@ export default function LivePage() {
 
     try {
       if (streamId) {
-        await supabase.from('streams').update({ status: 'ended', is_live: false }).eq('id', streamId);
+        await supabase.functions.invoke('officer-actions', {
+            body: { action: 'end_stream', streamId }
+        });
       }
     } catch (err) {
       console.error('Auto-end stream update failed:', err);
@@ -2058,7 +1988,9 @@ export default function LivePage() {
     
     try {
       if (streamId) {
-        await supabase.from('streams').update({ status: 'ended', is_live: false }).eq('id', streamId);
+        await supabase.functions.invoke('officer-actions', {
+            body: { action: 'end_stream', streamId }
+        });
       }
     } catch {}
     liveKit.markClientDisconnectIntent();
@@ -2207,20 +2139,29 @@ export default function LivePage() {
       )
       .subscribe();
 
-    // Listen for system updates via Broadcast (Price, Box Count)
+    // Listen for system updates via DB (Price, Box Count)
     const systemChannel = supabase
-      .channel(`live-updates-${streamId}`)
+      .channel(`live-updates-system-${streamId}`)
       .on(
-        'broadcast',
-        { event: 'system_update' },
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `stream_id=eq.${streamId}`
+        },
         (payload) => {
-          const { type, content } = payload.payload;
+          const newMsg = payload.new as any;
+          if (newMsg.message_type !== 'system') return;
           
-          if (type === 'PRICE_UPDATE') {
-            const price = parseInt(content);
+          const content = newMsg.content;
+          if (!content || typeof content !== 'string') return;
+
+          if (content.startsWith('PRICE_UPDATE:')) {
+            const price = parseInt(content.split(':')[1]);
             if (!isNaN(price)) setJoinPrice(price);
-          } else if (type === 'BOX_COUNT_UPDATE') {
-            const parsed = parseInt(content);
+          } else if (content.startsWith('BOX_COUNT_UPDATE:')) {
+            const parsed = parseInt(content.split(':')[1]);
             if (!isNaN(parsed)) {
               const maxBoxes = 6;
               const next = Math.max(0, Math.min(maxBoxes, parsed));
@@ -2284,13 +2225,13 @@ export default function LivePage() {
     
     try {
         // Fetch by Stream ID ONLY
-        const { data: streamRow, error } = await supabase
-          .from("streams")
-        .select("id, broadcaster_id, title, category, status, start_time, end_time, current_viewers, total_gifts_coins, total_unique_gifters, is_live, is_private, thumbnail_url, room_name, created_at, updated_at, broadcast_level_percent, last_level_update_at, broadcast_xp, frame_mode")
-          .eq("id", streamId)
-          .maybeSingle();
+        const { data: res, error } = await supabase.functions.invoke('officer-actions', {
+          body: { action: 'get_stream', streamId }
+        });
 
-        if (error || !streamRow) {
+        const streamRow = res?.data;
+
+        if (error || !res?.success || !streamRow) {
             toast.error("Stream not found.");
             setIsLoadingStream(false);
             return;
@@ -2353,9 +2294,12 @@ export default function LivePage() {
     }
 
     try {
-      const { data, error } = await supabase.rpc('verify_stream_password', {
-        p_stream_id: streamId,
-        p_password: privatePasswordInput.trim(),
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'verify_stream_password',
+          streamId: streamId,
+          password: privatePasswordInput.trim(),
+        }
       });
 
       if (error) throw error;
@@ -2393,11 +2337,9 @@ export default function LivePage() {
       // Award 5 XP every 10 minutes
       if (minutesWatchedRef.current % 10 === 0) {
         try {
-           // Call add_xp with 'watch' source
-           await supabase.rpc('add_xp', { 
-             p_user_id: user.id, 
-             p_amount: 5, 
-             p_source: 'watch' 
+           // Call claim_watch_xp via officer-actions
+           await supabase.functions.invoke('officer-actions', {
+             body: { action: 'claim_watch_xp' }
            });
            console.log('[XP] Awarded 5 watch XP');
         } catch (e) {
@@ -2451,12 +2393,18 @@ export default function LivePage() {
     console.log('[LivePage] Broadcaster connected. Updating stream status to LIVE...');
     hasSetLiveRef.current = true;
 
-    supabase.from("streams").update({ 
-      status: "live", 
-      is_live: true, 
-      start_time: new Date().toISOString(),
-      room_name: roomName 
-    }).eq("id", streamId).then(async () => {
+    supabase.functions.invoke('officer-actions', {
+      body: {
+        action: 'start_stream',
+        streamId,
+        roomName
+      }
+    }).then(async ({ error }) => {
+      if (error) {
+        console.error('[LivePage] Failed to update stream status to LIVE:', error);
+        toast.error('Failed to go live. Please refresh.');
+        return;
+      }
       console.log("[LivePage] ✅ Stream status updated to LIVE");
       toast.success("You are now LIVE!");
       
@@ -2466,7 +2414,7 @@ export default function LivePage() {
       }
     });
 
-  }, [isBroadcaster, streamId, isConnected, roomName, stream?.status, stream?.is_live]);
+  }, [isBroadcaster, streamId, isConnected, roomName, stream?.status, stream?.is_live, profile?.id]);
 
   const [useFlyingChats, setUseFlyingChats] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -2564,9 +2512,11 @@ export default function LivePage() {
 
     // Initial fetch
     const fetchStream = async () => {
-      const { data } = await supabase.from("streams").select("status,is_live,current_viewers,total_gifts_coins,total_likes").eq("id", streamId).maybeSingle();
-      if (data) {
-        setStream(prev => prev ? { ...prev, ...data } : prev);
+      const { data: res } = await supabase.functions.invoke('officer-actions', {
+        body: { action: 'get_stream_status', streamId }
+      });
+      if (res?.success && res.data) {
+        setStream(prev => prev ? { ...prev, ...res.data } : prev);
       }
     };
     fetchStream();
@@ -2705,81 +2655,25 @@ export default function LivePage() {
     }
 
     try {
-      // 1. Get total count efficiently
-      const { count, error: countError } = await supabase
-        .from('stream_viewers')
-        .select('*', { count: 'exact', head: true })
-        .eq('stream_id', streamId);
-
-      if (countError) {
-        console.error('Failed to get viewer count:', countError);
-      } else {
-        setViewerCount(count || 0);
-        setStream((prev) => (prev ? { ...prev, current_viewers: count || 0 } : prev));
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+         body: {
+             action: 'get_stream_viewers',
+             streamId
+         }
+      });
+      
+      if (error || !data?.success) {
+          console.error('Failed to refresh viewer snapshot:', error || data?.error);
+          return;
       }
-
-      // 2. Get latest 50 viewers for the list
-      const { data: viewerRows, error: viewerError } = await supabase
-        .from('stream_viewers')
-        .select('user_id')
-        .eq('stream_id', streamId)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      console.log('[LivePage] Refreshing viewer snapshot. Found:', viewerRows?.length || 0, 'recent viewers');
-
-      if (viewerError) {
-        console.error('Failed to load active viewers:', viewerError);
-        return;
-      }
-
-      const viewerIds = (viewerRows || []).map((row: any) => row.user_id).filter(Boolean);
-      const fallbackViewers = viewerIds.map((id: string) => ({
-        userId: id,
-        username: `Viewer ${id.substring(0, 6)}`,
-      }));
-      let mappedViewers = fallbackViewers;
-
-      if (viewerIds.length > 0) {
-        const [profileResult, taxResult] = await Promise.all([
-          supabase
-            .from('user_profiles')
-            .select('id, username, avatar_url, role, troll_role, is_broadcaster, full_name, onboarding_completed')
-            .in('id', viewerIds),
-          supabase
-            .from('user_tax_info')
-            .select('user_id, w9_status')
-            .in('user_id', viewerIds)
-        ]);
-
-        const profileRows = profileResult.data;
-        const profileError = profileResult.error;
-        const taxRows = taxResult.data || [];
-
-        if (!profileError && Array.isArray(profileRows) && profileRows.length > 0) {
-          const profileMap = new Map(profileRows.map((p: any) => [p.id, p]));
-          const taxMap = new Map(taxRows.map((t: any) => [t.user_id, t]));
-
-          mappedViewers = viewerIds.map((id: string) => {
-            const profile = profileMap.get(id);
-            const taxInfo = taxMap.get(id);
-            const w9Status = taxInfo?.w9_status || 'pending';
-
-            return {
-              userId: id,
-              username: profile?.username || `Viewer ${id.substring(0, 6)}`,
-              avatarUrl: profile?.avatar_url,
-              role: profile?.role || profile?.troll_role || null,
-              isBroadcaster: Boolean(profile?.is_broadcaster),
-              fullName: profile?.full_name || null,
-              onboardingCompleted: Boolean(profile?.onboarding_completed),
-              w9Status,
-            };
-          });
-        }
-      }
-
-      setActiveViewers(mappedViewers);
+      
+      const count = data.count || 0;
+      setViewerCount(count);
+      setStream((prev) => (prev ? { ...prev, current_viewers: count } : prev));
+      
+      console.log('[LivePage] Refreshing viewer snapshot. Found:', data.viewers?.length || 0, 'recent viewers');
+      
+      setActiveViewers(data.viewers || []);
     } catch (err) {
       console.error('Failed to refresh viewer snapshot:', err);
     }
@@ -2873,15 +2767,6 @@ export default function LivePage() {
     }
   }, [isBroadcaster, isRoleExempt, lastGift, stream?.is_live]);
 
-  const toGiftSlug = (value?: string) => {
-    if (!value) return 'gift';
-    return value
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '') || 'gift';
-  };
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (messageBubblePosition) return;
@@ -2900,32 +2785,12 @@ export default function LivePage() {
       if (!profile?.id || !otherUserId) return null;
 
       try {
-        const { data: myMemberships, error: myError } = await supabase
-          .from('conversation_members')
-          .select('conversation_id')
-          .eq('user_id', profile.id);
+        const { data: res, error } = await supabase.functions.invoke('officer-actions', {
+            body: { action: 'ensure_dm_conversation', targetUserId: otherUserId }
+        });
 
-        let conversationId: string | null = null;
-
-        if (!myError && myMemberships && myMemberships.length > 0) {
-          const conversationIds = (myMemberships as any[]).map((m) => m.conversation_id);
-          const { data: otherMemberships, error: otherError } = await supabase
-            .from('conversation_members')
-            .select('conversation_id')
-            .eq('user_id', otherUserId)
-            .in('conversation_id', conversationIds);
-
-          if (!otherError && otherMemberships && otherMemberships.length > 0) {
-            conversationId = (otherMemberships[0] as any).conversation_id as string;
-          }
-        }
-
-        if (!conversationId) {
-          const conversation = await createConversation([otherUserId]);
-          conversationId = conversation.id;
-        }
-
-        return conversationId;
+        if (error || !res?.success) throw error || new Error(res?.error);
+        return res.conversationId;
       } catch (err) {
         console.error('Failed to ensure conversation:', err);
         return null;
@@ -3053,11 +2918,14 @@ export default function LivePage() {
         return;
     }
     const checkOfficer = async () => {
-        const { data } = await supabase.rpc('is_broadofficer', {
-            p_broadcaster_id: stream.broadcaster_id,
-            p_user_id: user.id
+        const { data } = await supabase.functions.invoke('officer-actions', {
+            body: {
+                action: 'check_broadofficer',
+                broadcasterId: stream.broadcaster_id,
+                userId: user.id
+            }
         });
-        setIsCurrentUserBroadofficer(!!data);
+        setIsCurrentUserBroadofficer(data?.isBroadofficer || false);
     };
     checkOfficer();
   }, [stream?.broadcaster_id, user?.id, isBroadcaster]);
@@ -3065,32 +2933,17 @@ export default function LivePage() {
   const handleGeneralKick = async () => {
       if (!generalUserActionTarget || !user) return;
       
-      const isPrivileged = isBroadcaster || isCurrentUserBroadofficer || isRoleExempt;
-      const fee = isPrivileged ? 0 : 500;
-      
-      if (!isPrivileged && (profile?.troll_coins || 0) < fee) {
-          toast.error(`Insufficient funds. Need ${fee} coins.`);
-          return;
-      }
-      
       try {
-        const { error } = await supabase.rpc('kick_user', {
-            p_target_user_id: generalUserActionTarget.userId,
-            p_kicker_user_id: user.id,
-            p_stream_id: stream?.id || null,
+        const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+                action: 'troll_kick',
+                targetUserId: generalUserActionTarget.userId,
+                targetUsername: generalUserActionTarget.username,
+                streamId: stream?.id
+            }
         });
         
         if (error) throw error;
-        
-        // Log action
-        await supabase.from('officer_actions').insert({
-            officer_id: user.id,
-            target_user_id: generalUserActionTarget.userId,
-            action_type: 'kick',
-            related_stream_id: stream?.id || null,
-            fee_coins: fee,
-            metadata: { username: generalUserActionTarget.username }
-        });
 
         toast.success(`Kicked ${generalUserActionTarget.username}`);
         setGeneralUserActionTarget(null);
@@ -3103,16 +2956,19 @@ export default function LivePage() {
   const handleAssignOfficer = async () => {
     if (!generalUserActionTarget || !isBroadcaster || !user) return;
     try {
-      const { data, error } = await supabase.rpc('assign_broadofficer', {
-        p_broadcaster_id: user.id,
-        p_officer_id: generalUserActionTarget.userId
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+            action: 'assign_broadofficer',
+            broadcasterId: user.id,
+            officerId: generalUserActionTarget.userId
+        }
       });
 
       if (error) throw error;
       
-      // Handle JSON response if it returns success/error object
-      if (data && typeof data === 'object' && 'success' in data && !data.success) {
-         toast.error(data.error || 'Failed to assign officer');
+      const result = data;
+      if (result && !result.success) {
+         toast.error(result.error || 'Failed to assign officer');
          return;
       }
 
@@ -3127,17 +2983,21 @@ export default function LivePage() {
   const handleRemoveOfficer = async () => {
     if (!generalUserActionTarget || !isBroadcaster || !user) return;
     try {
-      const { data, error } = await supabase.rpc('remove_broadofficer', {
-        p_broadcaster_id: user.id,
-        p_officer_id: generalUserActionTarget.userId
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+            action: 'remove_broadofficer',
+            broadcasterId: user.id,
+            officerId: generalUserActionTarget.userId
+        }
       });
 
       if (error) throw error;
 
-       if (data && typeof data === 'object' && 'success' in data && !data.success) {
-         toast.error(data.error || 'Failed to remove officer');
+       const result = data;
+       if (result && !result.success) {
+         toast.error(result.error || 'Failed to remove officer');
          return;
-      }
+       }
 
       toast.success(`${generalUserActionTarget.username} is no longer a Broadofficer`);
       setGeneralUserActionTarget(prev => prev ? { ...prev, isOfficer: false } : null);
@@ -3150,17 +3010,21 @@ export default function LivePage() {
   const recordAction = async (actionType: string, targetUserId: string, targetUsername: string, fee: number = 0, metadata: any = {}) => {
       if (!user?.id) return;
       try {
-        await supabase.from('officer_actions').insert({
-          officer_id: user.id,
-          target_user_id: targetUserId,
-          action_type: actionType,
-          related_stream_id: streamId || null,
-          fee_coins: fee,
-          metadata: {
-            username: targetUsername,
-            ...metadata,
-          },
+        const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+                action: 'log_officer_action',
+                targetUserId,
+                actionType,
+                streamId: streamId || null,
+                fee,
+                metadata: {
+                    username: targetUsername,
+                    ...metadata
+                }
+            }
         });
+        
+        if (error) throw error;
         
         if (isOfficerUser) {
            await updateOfficerActivity(user.id);
@@ -3171,71 +3035,62 @@ export default function LivePage() {
   };
 
   const handleMute = async (target: { userId: string; username: string }) => {
-      const isPrivileged = isBroadcaster || isCurrentUserBroadofficer || isOfficerUser;
-      const fee = isPrivileged ? 0 : 25;
+      try {
+          const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+                action: 'troll_mic_mute',
+                targetUserId: target.userId,
+                targetUsername: target.username,
+                streamId: stream?.id
+            }
+          });
 
-      if (!isPrivileged && (profile?.troll_coins || 0) < fee) {
-          toast.error(`Insufficient funds. Need ${fee} coins.`);
-          return;
-      }
-
-      const muteDurationMs = 10 * 60 * 1000;
-      const muteUntil = new Date(Date.now() + muteDurationMs).toISOString();
-      
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ mic_muted_until: muteUntil })
-        .eq('id', target.userId);
-
-      if (error) {
+          if (error) throw error;
+          
+          // Toast is handled by function success usually, or we show it here
+          toast.success(`Muted ${target.username} for 10 minutes`);
+      } catch (err) {
+          console.error('Failed to mute user:', err);
           toast.error('Failed to mute user');
-          return;
       }
-
-      toast.success(`Muted ${target.username} for 10 minutes`);
-      await recordAction('mute', target.userId, target.username, fee, { duration_minutes: 10 });
   };
 
   const handleUnmute = async (target: { userId: string; username: string }) => {
-       if (!isBroadcaster && !isCurrentUserBroadofficer && !isOfficerUser) {
-           toast.error('You do not have permission to unmute.');
-           return;
-       }
+       try {
+           const { error } = await supabase.functions.invoke('officer-actions', {
+             body: {
+                 action: 'troll_mic_unmute',
+                 targetUserId: target.userId,
+                 targetUsername: target.username,
+                 streamId: stream?.id
+             }
+           });
 
-       const { error } = await supabase
-        .from('user_profiles')
-        .update({ mic_muted_until: null })
-        .eq('id', target.userId);
-        
-       if (error) {
-          toast.error('Failed to unmute user');
-          return;
+           if (error) throw error;
+           toast.success(`Unmuted ${target.username}`);
+       } catch (err) {
+           console.error('Failed to unmute user:', err);
+           toast.error('Failed to unmute user');
        }
-       toast.success(`Unmuted ${target.username}`);
-       await recordAction('unmute', target.userId, target.username, 0);
   };
   
   const handleBlock = async (target: { userId: string; username: string }) => {
-       const isPrivileged = isBroadcaster || isCurrentUserBroadofficer || isOfficerUser;
-       const fee = isPrivileged ? 0 : 500;
+       try {
+           const { error } = await supabase.functions.invoke('officer-actions', {
+             body: {
+                 action: 'troll_immunity',
+                 targetUserId: target.userId,
+                 targetUsername: target.username,
+                 streamId: stream?.id
+             }
+           });
 
-       if (!isPrivileged && (profile?.troll_coins || 0) < fee) {
-          toast.error(`Insufficient funds. Need ${fee} coins.`);
-          return;
-      }
-
-       const blockUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-       const { error } = await supabase
-         .from('user_profiles')
-         .update({ no_ban_until: blockUntil })
-         .eq('id', target.userId);
-
-       if (error) {
-          toast.error('Failed to block user');
-          return;
+           if (error) throw error;
+           toast.success(`Blocked ${target.username} from bans for 24 hours`);
+       } catch (err) {
+           console.error('Failed to block user:', err);
+           toast.error('Failed to block user');
        }
-       toast.success(`Blocked ${target.username} from bans for 24 hours`);
-       await recordAction('block', target.userId, target.username, fee, { block_until: blockUntil });
   };
 
   const handleUserClick = useCallback(async (participant: Participant) => {
@@ -3243,11 +3098,14 @@ export default function LivePage() {
     // Check if officer if we are the broadcaster
     if (stream?.broadcaster_id && participant.identity) {
        // We can optimize this by keeping a list of officers in state
-       const { data } = await supabase.rpc('is_broadofficer', {
-         p_broadcaster_id: stream.broadcaster_id,
-         p_user_id: participant.identity
+       const { data } = await supabase.functions.invoke('officer-actions', {
+         body: {
+            action: 'check_broadofficer',
+            broadcasterId: stream.broadcaster_id,
+            userId: participant.identity
+         }
        });
-       isOfficer = !!data;
+       isOfficer = data?.isBroadofficer || false;
     }
 
     setGeneralUserActionTarget({
@@ -3268,121 +3126,59 @@ export default function LivePage() {
 
       const senderId = user?.id;
       const streamIdValue = stream?.id;
-      const broadcasterId = stream?.broadcaster_id;
-      const canonicalGiftName = gift?.name || "Gift";
-      const canonicalGiftSlug = toGiftSlug(canonicalGiftName);
+      // const broadcasterId = stream?.broadcaster_id;
+      // const canonicalGiftName = gift?.name || "Gift";
+      // const canonicalGiftSlug = toGiftSlug(canonicalGiftName);
 
       if (!senderId || !streamIdValue) {
         toast.error("Unable to send gift right now.");
         return;
       }
 
-      const recipients: string[] = [];
+      const recipientCountEstimate = sendToAll 
+        ? activeViewers.filter(v => v.userId !== senderId).length
+        : 1;
 
-      if (sendToAll) {
-        const viewers = activeViewers.filter(v => v.userId !== senderId).map(v => v.userId);
-        const uniqueRecipients = Array.from(new Set(viewers));
-        recipients.push(...uniqueRecipients);
-      } else {
-        const receiverId = targetMode === "broadcaster"
-          ? stream?.broadcaster_id
-          : giftReceiver?.id || stream?.broadcaster_id;
-
-        if (receiverId) recipients.push(receiverId);
-      }
-
-      if (recipients.length === 0) {
-        toast.error("No recipients found.");
+      if (sendToAll && recipientCountEstimate === 0) {
+        toast.error("No other viewers to send to.");
         return;
       }
 
       setGiftReceiver(null);
 
-      let successCount = 0;
+      // Optimistic debit
+      const estimatedTotalCost = totalCoins * recipientCountEstimate;
+      optimisticDebit(estimatedTotalCost);
 
       try {
-        const promises = recipients.map(async (receiverId) => {
-          // Optimistically update sender's balance immediately
-          optimisticDebit(totalCoins);
-          
-          const { data: spendResult, error } = await supabase.rpc("spend_coins", {
-            p_sender_id: senderId,
-            p_receiver_id: receiverId,
-            p_coin_amount: totalCoins,
-            p_source: "gift",
-            p_item: canonicalGiftName,
-          });
-
-          if (error) throw error;
-
-          if (spendResult && typeof spendResult === 'object' && 'success' in spendResult && !(spendResult as any).success) {
-            const errorMsg = (spendResult as any).error || 'Failed to send gift';
-            throw new Error(errorMsg);
+        const { data: result, error } = await supabase.functions.invoke('officer-actions', {
+          body: {
+            action: 'send_gift',
+            streamId: streamIdValue,
+            gift,
+            sendToAll,
+            targetMode,
+            targetUserId: giftReceiver?.id,
+            themeId: lastThemeId || broadcastTheme?.id
           }
-
-          try {
-            if (streamIdValue) {
-              const giftId = (spendResult as any)?.gift_id;
-              if (giftId && typeof giftId === 'string') {
-                const { error: giftUpdateError } = await supabase
-                  .from('gifts')
-                  .update({
-                    stream_id: streamIdValue,
-                    gift_slug: canonicalGiftSlug,
-                  })
-                  .eq('id', giftId)
-                  .limit(1);
-
-                if (giftUpdateError) {
-                  console.warn('Could not update gift with stream context:', giftUpdateError);
-                }
-              }
-            }
-          } catch (streamGiftErr) {
-            console.warn('Failed to update gift stream context', streamGiftErr);
-          }
-
-          let xpResult = null;
-          try {
-            xpResult = await processGiftXp(senderId, receiverId, totalCoins);
-          } catch (xpErr) {
-            console.warn('[LivePage] Failed to process gift XP:', xpErr);
-          }
-
-          setGiftBalanceDelta({
-            userId: receiverId,
-            delta: totalCoins,
-            key: Date.now(),
-          });
-          successCount++;
-          return { receiverId, xpResult };
         });
 
-        const results = await Promise.all(promises);
+        if (error) throw error;
+        if (!result.success) throw new Error(result.error || 'Failed to send gift');
 
-        if (streamIdValue && senderId) {
-          const senderName = profile?.username || 'Someone';
-          const content = sendToAll
-            ? `${senderName} sent ${gift.name} to ${successCount} users`
-            : `${senderName} sent ${gift.name}`;
-          try {
-            await supabase.from('messages').insert({
-              stream_id: streamIdValue,
-              user_id: senderId,
-              content,
-              message_type: 'gift',
-            });
-          } catch (chatErr) {
-            console.warn('Failed to insert gift chat message', chatErr);
-          }
-        }
+        const successCount = result.count;
+        const processedRecipients = result.recipients || [];
 
-        if (typeof refreshProfile === 'function') {
-          refreshProfile().catch((err) => {
-            console.warn('Failed to refresh profile after sending gift:', err);
-          });
-        }
+        // UI Animations
+        processedRecipients.forEach((r: any) => {
+           setGiftBalanceDelta({
+              userId: r.receiverId,
+              delta: totalCoins,
+              key: Date.now() + Math.random()
+           });
+        });
 
+        // Update local stream stats
         setStream((prev) =>
           prev
             ? {
@@ -3392,45 +3188,21 @@ export default function LivePage() {
             : prev
         );
 
-        if (streamIdValue && broadcasterId) {
-          const eventType = totalCoins >= 1000 ? "super_gift" : "gift";
-          const themeIdToUse = lastThemeId || broadcastTheme?.id;
-
-          // Find broadcaster XP result if any
-          const broadcasterResult = results.find(r => r.receiverId === broadcasterId);
-          const broadcasterLevel = broadcasterResult?.xpResult?.receiverData?.level;
-          const broadcasterXp = broadcasterResult?.xpResult?.receiverData?.xp; 
-
-          if (themeIdToUse) {
-            const themeEvents = recipients.map(rid => ({
-              room_id: streamIdValue,
-              broadcaster_id: broadcasterId,
-              user_id: senderId,
-              theme_id: themeIdToUse,
-              event_type: eventType,
-              payload: {
-                gift_slug: canonicalGiftSlug,
-                coins: totalCoins,
-                sender_id: senderId,
-                recipient_id: rid,
-                broadcaster_level: (rid === broadcasterId) ? broadcasterLevel : undefined,
-                broadcaster_xp: (rid === broadcasterId) ? broadcasterXp : undefined
-              }
-            }));
-
-            await supabase.from("broadcast_theme_events").insert(themeEvents);
-          }
-        }
-
         if (sendToAll) {
           toast.success(`Sent ${gift.name} to ${successCount} users!`);
+        } else {
+          toast.success(`Sent ${gift.name}!`);
         }
-      } catch (err) {
+
+        refreshProfile?.();
+
+      } catch (err: any) {
         console.error("Failed to send gift:", err);
-        toast.error("Failed to send some gifts. Please try again.");
+        toast.error(err.message || "Failed to send gift. Please try again.");
+        refreshProfile?.();
       }
     },
-    [stream?.id, user?.id, giftReceiver, stream?.broadcaster_id, broadcastTheme?.id, lastThemeId, refreshProfile, activeViewers, profile?.username, optimisticDebit]
+    [stream?.id, user?.id, giftReceiver, broadcastTheme?.id, lastThemeId, refreshProfile, activeViewers, optimisticDebit]
   );
   useEffect(() => {
     if (!streamId) return;
@@ -3485,13 +3257,15 @@ export default function LivePage() {
       try {
         setQuickGiftsLoading(true);
         setQuickGiftsError(null);
-        const { data, error } = await supabase
-          .from("gift_items")
-          .select("id,name,icon,value,category")
-          .order("value", { ascending: true });
+        const { data: result, error } = await supabase.functions.invoke('officer-actions', {
+            body: { action: 'get_quick_gifts' }
+        });
+
         if (!active) return;
         if (error) throw error;
-        const payload: GiftItem[] = (data || []).map((item: any) => ({
+        if (result && !result.success) throw new Error(result.error || 'Failed to fetch gifts');
+
+        const payload: GiftItem[] = (result.gifts || []).map((item: any) => ({
           id: item.id,
           name: item.name,
           icon: item.icon,
@@ -3530,15 +3304,15 @@ export default function LivePage() {
     if (!stream?.broadcaster_id) return;
 
     const checkActiveBattle = async () => {
-      const { data } = await supabase
-        .from('troll_battles')
-        .select('*')
-        .or(`player1_id.eq.${stream.broadcaster_id},player2_id.eq.${stream.broadcaster_id}`)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (data) {
-        setActiveBattle(data);
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+            action: 'get_active_battle',
+            broadcasterId: stream.broadcaster_id
+        }
+      });
+      
+      if (!error && data?.success && data?.battle) {
+        setActiveBattle(data.battle);
       }
     };
 
@@ -4039,10 +3813,12 @@ export default function LivePage() {
               streamId={streamId || ''}
               onOpponentFound={async (opponent, battleId) => {
                 try {
-                  const { error } = await supabase
-                    .from('troll_battles')
-                    .update({ status: 'active', started_at: new Date().toISOString() })
-                    .eq('id', battleId);
+                  const { error } = await supabase.functions.invoke('officer-actions', {
+                    body: {
+                      action: 'start_troll_battle',
+                      battleId
+                    }
+                  });
 
                   if (error) throw error;
 

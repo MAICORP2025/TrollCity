@@ -25,6 +25,7 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const profileCache = useRef<Record<string, string>>({});
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -72,9 +73,6 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
     };
 
     loadMessages();
-
-    // Profile cache to prevent N+1 queries
-    const profileCache = useRef<Record<string, string>>({});
 
     // Realtime subscription
     const channel = supabase

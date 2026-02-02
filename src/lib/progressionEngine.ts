@@ -155,8 +155,11 @@ export async function getDnaProfile(userId: string) {
 }
 
 export async function getUserFullIdentity(userId: string) {
-  const lvl = await getLevelProfile(userId)
-  const dna = await getDnaProfile(userId)
-  const { data: recent } = await supabase.from('troll_dna_events').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(20)
-  return { level: lvl, dna, events: recent || [] }
+  const [lvl, dna, recentRes] = await Promise.all([
+    getLevelProfile(userId),
+    getDnaProfile(userId),
+    supabase.from('troll_dna_events').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(20)
+  ])
+  
+  return { level: lvl, dna, events: recentRes.data || [] }
 }

@@ -18,15 +18,10 @@ const Header = () => {
 
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [searchResults, setSearchResults] = useState<any[]>([])
-  const [allUsers, setAllUsers] = useState<any[]>([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
 
   // Load all users on component mount - REMOVED for performance
   // We will search dynamically instead
-  useEffect(() => {
-    // Optional: Load top/suggested users if needed, but for now empty is better than 1000 rows
-    setAllUsers([])
-  }, [])
 
   // Search/filter logic
   useEffect(() => {
@@ -42,7 +37,7 @@ const Header = () => {
       if (query.length < 2) return // Wait for 2 chars
 
       try {
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('profiles')
             .select('id, username, avatar_url')
             .ilike('username', `%${query}%`)
@@ -128,10 +123,18 @@ const Header = () => {
           // Only count if not already read
           if (!newNotif.is_read) {
             // Show toast notification
-            toast(newNotif.title || 'New notification', {
-              description: newNotif.message,
-              duration: 5000
-            })
+            if (newNotif.priority === 'high' || newNotif.priority === 'critical') {
+              toast.error(newNotif.title || 'High Alert', {
+                description: newNotif.message,
+                duration: 8000,
+                className: 'bg-red-950 border-red-500 text-white'
+              })
+            } else {
+              toast(newNotif.title || 'New notification', {
+                description: newNotif.message,
+                duration: 5000
+              })
+            }
             setUnreadNotifications((prev) => Math.max(0, prev + 1))
           }
         }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { CreditCard, Coins, DollarSign, Check, X, Star } from 'lucide-react'
+import { CreditCard, Coins, DollarSign, Check, Star } from 'lucide-react'
+import { STORE_USD_PER_COIN } from '../lib/coinMath'
 import { useAuthStore } from '../lib/store'
 import { supabase, UserProfile } from '../lib/supabase'
 import { deductCoins } from '../lib/coinTransactions'
@@ -140,7 +141,6 @@ const EntranceEffects = () => {
         // Only update if coins actually changed (prevent flickering)
         if (currentProfile &&
             currentProfile.troll_coins === data.troll_coins &&
-            currentProfile.trollmonds === data.trollmonds &&
             currentProfile.total_earned_coins === data.total_earned_coins &&
             currentProfile.total_spent_coins === data.total_spent_coins) {
           return
@@ -316,29 +316,6 @@ const EntranceEffects = () => {
               </span>
             </div>
             <p className="text-xs text-troll-neon-blue/50">Real value • Can spend</p>
-          </div>
-        </div>
-
-        {/* trollmonds */}
-        <div className="bg-troll-dark-card/50 border border-troll-neon-red/30 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-troll-neon-red">trollmonds</h3>
-            <div className="flex items-center space-x-2">
-              <X className="w-5 h-5 text-troll-neon-red" />
-              <Coins className="w-6 h-6 text-troll-neon-orange" />
-            </div>
-          </div>
-          <div className="text-3xl font-bold text-troll-neon-red mb-4">
-            {profile ? (profile.trollmonds || 0) : 0}
-          </div>
-          <div className="border-t border-troll-neon-red/20 pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-troll-neon-blue/70">Value:</span>
-              <span className="text-troll-neon-blue/50 font-bold">
-                $0.00
-              </span>
-            </div>
-            <p className="text-xs text-troll-neon-blue/50">No cash value • Can spend</p>
           </div>
         </div>
       </div>

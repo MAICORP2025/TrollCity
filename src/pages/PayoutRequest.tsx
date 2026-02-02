@@ -4,22 +4,7 @@ import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { DollarSign, ArrowRight } from "lucide-react";
 import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from "../lib/payoutWindow";
-
-const TIERS = [
-  { coins: 12000, usd: 25 },
-  { coins: 30000, usd: 70 },
-  { coins: 60000, usd: 150 },
-  { coins: 120000, usd: 325 },
-] as const;
-const FIXED_FEE_USD = 3;
-
-function getRateForCoins(coins: number) {
-  if (coins >= 120000) return 325 / 120000;
-  if (coins >= 60000) return 150 / 60000;
-  if (coins >= 30000) return 70 / 30000;
-  if (coins >= 12000) return 25 / 12000;
-  return 0;
-}
+import { TIERS, FIXED_FEE_USD, getRateForCoins } from "../lib/payoutTiers";
 
 export default function PayoutRequest() {
   const { user, profile, refreshProfile } = useAuthStore() as any;
@@ -78,8 +63,9 @@ export default function PayoutRequest() {
         return;
       }
       
-      if (![12000, 30000, 60000, 120000].includes(num)) {
-        toast.error("Select a valid PayPal tier: 12k, 30k, 60k, 120k.");
+      const validAmounts: number[] = TIERS.map(t => t.coins);
+      if (!validAmounts.includes(num)) {
+        toast.error(`Select a valid Cashout tier: ${validAmounts.map(a => (a/1000).toFixed(1) + 'k').join(', ')}.`);
         return;
       }
       
@@ -89,9 +75,14 @@ export default function PayoutRequest() {
       }
       const tier = TIERS.find(t => t.coins === num);
       if (!tier) {
-        toast.error("Select a valid PayPal tier: 12k, 30k, 60k, 120k.");
+        toast.error("Select a valid Cashout tier.");
         return;
       }
+
+      if (tier.manualReview) {
+        toast.info("This amount requires manual review and may take longer to process.");
+      }
+
       const { data, error } = await supabase.rpc('request_visa_redemption', {
         p_user_id: user.id,
         p_coins: tier.coins,
@@ -143,7 +134,7 @@ export default function PayoutRequest() {
 
         <div>
           <label className="block text-sm font-semibold mb-2">
-            Select a Cashout tier (12k, 30k, 60k, 120k)
+            Select a Cashout tier ({TIERS.map(t => (t.coins/1000).toFixed(1) + 'k').join(', ')})
           </label>
           <input
             className="w-full mb-2 px-4 py-3 rounded-lg bg-zinc-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -156,16 +147,19 @@ export default function PayoutRequest() {
           <p className="text-sm opacity-80">
             Estimated payout: <span className="font-bold text-green-400">${grossUsd.toFixed(2)} USD</span>
           </p>
-          {[12000,30000,60000,120000].includes(parsed) && (
+          {TIERS.some(t => t.coins === parsed) && (
             <div className="text-xs text-gray-400 mt-1">
               Fee: <span className="text-red-400">${FIXED_FEE_USD.toFixed(2)}</span> • Net: <span className="text-green-400">${netUsd.toFixed(2)}</span>
+              {TIERS.find(t => t.coins === parsed)?.manualReview && (
+                 <span className="block text-yellow-400 mt-1">⚠️ Requires Manual Review</span>
+              )}
             </div>
           )}
         </div>
 
         <button
           onClick={submit}
-          disabled={loading || !coins || ![12000,30000,60000,120000].includes(Number(coins)) || Number(coins) > balance || !payoutWindowOpen}
+          disabled={loading || !coins || !TIERS.some(t => t.coins === Number(coins)) || Number(coins) > balance || !payoutWindowOpen}
           className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? "Submitting..." : "Submit Payout Request"}

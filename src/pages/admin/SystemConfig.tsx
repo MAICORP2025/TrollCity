@@ -45,7 +45,7 @@ const SystemConfig: React.FC = () => {
       if (typeof newValue === 'string') {
         try {
           parsedValue = JSON.parse(newValue);
-        } catch (e) {
+        } catch {
           // Keep as string if not valid JSON, or throw error depending on strictness
           // But for now, we assume admin knows what they are doing or we provide specific UI
           // If the original value was an object, we must parse.
@@ -101,7 +101,7 @@ const SystemConfig: React.FC = () => {
             type="text"
             className="w-full bg-black/40 border border-purple-500/30 rounded px-3 py-2 text-white"
             value={message}
-            onChange={(e) => {
+            onChange={() => {
               // Defer update or handle blur? For now, let's just show input and add a save button for text
             }}
             onBlur={(e) => handleUpdate(setting_key, { ...setting_value, message: e.target.value })}
@@ -161,7 +161,7 @@ const SystemConfig: React.FC = () => {
             try {
               const val = JSON.parse(e.target.value);
               handleUpdate(setting_key, val);
-            } catch (err) {
+            } catch {
               alert('Invalid JSON');
             }
           }}

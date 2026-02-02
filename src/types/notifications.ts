@@ -25,6 +25,7 @@ export type NotificationType =
   | 'application_result'
   | 'troll_drop'
   | 'pod_live'
+  | 'system'
 
 export interface Notification {
   id: string

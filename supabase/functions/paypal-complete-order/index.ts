@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
           } else if (jsonError.name === "UNPROCESSABLE_ENTITY") {
             errorMessage = "Payment could not be processed. Please try again.";
           }
-        } catch (e) {
+        } catch {
           // Keep default error
         }
 

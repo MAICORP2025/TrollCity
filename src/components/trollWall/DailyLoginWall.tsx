@@ -19,7 +19,6 @@ export default function DailyLoginWall({ onPostCreated }: DailyLoginWallProps) {
     loading,
     canPostToday,
     checkDailyPostStatus,
-    submitDailyPost,
     generateRandomReward,
   } = useDailyLoginPost()
 

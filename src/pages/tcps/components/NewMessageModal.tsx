@@ -18,24 +18,24 @@ export default function NewMessageModal({ isOpen, onClose, onSelectUser }: NewMe
   const [recentUsers, setRecentUsers] = useState<any[]>([])
 
   useEffect(() => {
+    const loadRecentUsers = async () => {
+      if (!user?.id) return
+      // Fetch users followed or recent interactions could be here
+      // For now, let's just fetch some random users or top users
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('id, username, avatar_url, role')
+        .neq('id', user.id)
+        .limit(5)
+      
+      if (data) setRecentUsers(data)
+    }
+
     if (isOpen) {
       loadRecentUsers()
       setSearchQuery('')
     }
-  }, [isOpen])
-
-  const loadRecentUsers = async () => {
-    if (!user?.id) return
-    // Fetch users followed or recent interactions could be here
-    // For now, let's just fetch some random users or top users
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, username, avatar_url, role')
-      .neq('id', user.id)
-      .limit(5)
-    
-    if (data) setRecentUsers(data)
-  }
+  }, [isOpen, user?.id])
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -120,7 +120,7 @@ export default function NewMessageModal({ isOpen, onClose, onSelectUser }: NewMe
                       <ClickableUsername 
                         username={result.username} 
                         userId={result.id} 
-                        rgbExpiresAt={result.rgb_username_expires_at}
+                        profile={{ rgb_username_expires_at: result.rgb_username_expires_at }}
                         className="pointer-events-none" // Disable link since the whole row is clickable
                       />
                       {result.role === 'admin' && (

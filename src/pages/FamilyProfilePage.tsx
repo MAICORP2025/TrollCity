@@ -55,12 +55,34 @@ export default function FamilyProfilePage() {
       return
     }
 
-    // 2) Load family info
-    const { data: fam, error: famErr } = await supabase
-      .from('troll_families')
-      .select('*')
-      .eq('id', member.family_id)
-      .single()
+    // 2) Load family info and members in parallel
+    const [familyRes, membersRes] = await Promise.all([
+      supabase
+        .from('troll_families')
+        .select('*')
+        .eq('id', member.family_id)
+        .single(),
+      supabase
+        .from('troll_family_members')
+        .select(
+          `
+          id,
+          user_id,
+          role,
+          contribution_points,
+          user_profiles:user_id (
+            username,
+            avatar_url,
+            has_crown_badge
+          )
+        `
+        )
+        .eq('family_id', member.family_id)
+        .order('role', { ascending: true })
+    ])
+
+    const { data: fam, error: famErr } = familyRes
+    const { data: memberList, error: membersErr } = membersRes
 
     if (famErr || !fam) {
       setFamily(null)
@@ -70,25 +92,6 @@ export default function FamilyProfilePage() {
     }
 
     setFamily(fam as Family)
-
-    // 3) Load family members
-    const { data: memberList, error: membersErr } = await supabase
-      .from('troll_family_members')
-      .select(
-        `
-        id,
-        user_id,
-        role,
-        contribution_points,
-        user_profiles:user_id (
-          username,
-          avatar_url,
-          has_crown_badge
-        )
-      `
-      )
-      .eq('family_id', fam.id)
-      .order('role', { ascending: true })
 
     if (membersErr) {
       console.error(membersErr)

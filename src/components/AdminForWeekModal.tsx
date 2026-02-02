@@ -10,7 +10,7 @@ export default function AdminForWeekModal({ isOpen, onClose }: { isOpen: boolean
   const [loading, setLoading] = useState(false);
 
   const fetchQueue = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('admin_for_week_queue')
       .select('*, user:user_profiles(username, avatar_url)')
       .in('status', ['active', 'queued'])

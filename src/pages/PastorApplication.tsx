@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { BookOpen, User } from 'lucide-react'
+// import { BookOpen, User } from 'lucide-react'
 
 export default function PastorApplication() {
   const { profile } = useAuthStore()

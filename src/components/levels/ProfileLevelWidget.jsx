@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useUserLevels } from "@/hooks/useUserLevels";
 import LevelBadge from "./LevelBadge";
 import LevelUpModal from "./LevelUpModal";
-import { getMainLevelMeta } from "@/lib/levelsConfig";
+
 
 export default function ProfileLevelWidget() {
   const { levels, loading } = useUserLevels();

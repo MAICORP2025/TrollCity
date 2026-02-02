@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
-import { Save, BookOpen, Mic, Gift, Users, Loader2 } from 'lucide-react';
+import { Save, BookOpen, Mic, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import PastorPayouts from './PastorPayouts';
@@ -13,7 +13,6 @@ export default function PastorDashboard() {
   const [activeTab, setActiveTab] = useState<'sermon' | 'payouts'>('sermon');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (profile && !profile.is_pastor && profile.role !== 'admin' && !(profile as any).is_admin) {
@@ -23,26 +22,22 @@ export default function PastorDashboard() {
   }, [profile, navigate]);
 
   useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const { data } = await supabase
+          .from('church_sermon_notes')
+          .select('notes')
+          .eq('pastor_id', profile?.id)
+          .eq('date', date)
+          .maybeSingle();
+        
+        setNotes(data?.notes || '');
+      } catch (err) {
+        console.error(err);
+      }
+    };
     fetchNotes();
-  }, [date]);
-
-  const fetchNotes = async () => {
-    setLoading(true);
-    try {
-      const { data } = await supabase
-        .from('church_sermon_notes')
-        .select('notes')
-        .eq('pastor_id', profile?.id)
-        .eq('date', date)
-        .maybeSingle();
-      
-      setNotes(data?.notes || '');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [date, profile?.id]);
 
   const handleSave = async () => {
     try {
@@ -57,9 +52,9 @@ export default function PastorDashboard() {
 
       if (error) throw error;
       toast.success('Sermon notes saved');
-    } catch (err) {
+    } catch (_err) {
       toast.error('Failed to save notes');
-      console.error(err);
+      console.error(_err);
     }
   };
 
@@ -73,7 +68,7 @@ export default function PastorDashboard() {
           created_by: profile?.id
        });
        toast.success('Broadcast sent!');
-     } catch (err) {
+     } catch {
        toast.error('Failed to send broadcast');
      }
   };

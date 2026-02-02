@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AuthApiError } from '@supabase/supabase-js'
 import { supabase, isAdminEmail } from '../lib/supabase'
 import { post, API_ENDPOINTS } from '../lib/api'
@@ -307,7 +307,7 @@ const Auth = () => {
     }
   }
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (user && profile) {
       if (profile.username) {
         navigate('/')
@@ -316,38 +316,6 @@ const Auth = () => {
       }
     }
   }, [user, profile, navigate])
-
-  
-
-  const handleGoogle = async () => {
-    setLoading(true)
-    try {
-      const envSiteUrl = (import.meta as any).env.VITE_PUBLIC_SITE_URL as string | undefined
-      let redirectBase = window.location.origin
-      if (envSiteUrl && !/localhost/i.test(envSiteUrl)) {
-        try {
-          redirectBase = new URL(envSiteUrl).origin
-        } catch {
-          redirectBase = window.location.origin
-        }
-      }
-      const { error } = await supabase.auth.signInWithOAuth({ 
-        provider: 'google', 
-        options: { 
-          redirectTo: String(redirectBase).replace(/\/$/, '') + '/auth/callback',
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          }
-        } 
-      })
-      if (error) throw error
-    } catch (err: any) {
-      toast.error(err.message || 'Google login failed')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <>

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../lib/store';
 import { trollCityTheme } from '../../styles/trollCityTheme';
 import { Mic, Users, Plus, Radio, Headphones } from 'lucide-react';
 import { toast } from 'sonner';
+import { emitEvent } from '../../lib/events';
 
 interface PodRoom {
   id: string;
@@ -20,7 +21,7 @@ interface PodRoom {
 
 export default function TrollPodsListing() {
   const navigate = useNavigate();
-  const { user, profile } = useAuthStore();
+  const { profile } = useAuthStore();
   const [rooms, setRooms] = useState<PodRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -123,12 +124,9 @@ export default function TrollPodsListing() {
       });
 
       // Trigger Task Event
-      triggerEvent('pod_started', {
-        userId: user.id,
-        metadata: {
-          roomId: data.id,
-          title: newRoomTitle
-        }
+      emitEvent('pod_started', user.id, {
+        roomId: data.id,
+        title: newRoomTitle
       });
 
       toast.success('Pod started!');

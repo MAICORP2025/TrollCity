@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { MoreVertical, Phone, Video, ArrowLeft, Ban, EyeOff, MessageCircle, X, Check, CheckCheck } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { MoreVertical, Phone, Video, ArrowLeft, Ban, EyeOff, MessageCircle, Check, CheckCheck } from 'lucide-react'
 import { supabase, createConversation, getConversationMessages, markConversationRead } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { useChatStore } from '../../../lib/chatStore'
@@ -36,21 +35,14 @@ interface Message {
 export default function ChatWindow({ conversationId, otherUserInfo, isOnline, onBack }: ChatWindowProps) {
   const { user, profile } = useAuthStore()
   const { openChatBubble } = useChatStore()
-  const navigate = useNavigate()
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [oldestLoadedAt, setOldestLoadedAt] = useState<string | null>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [actualConversationId, setActualConversationId] = useState<string | null>(conversationId)
   const [showMenu, setShowMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const [isTyping, setIsTyping] = useState(false)
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const channelRef = useRef<any>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Close menu on click outside
@@ -204,8 +196,6 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
       try {
         const mappedMessages = await fetchMessagesWithSenders(actualConversationId)
         setMessages(mappedMessages)
-        setOldestLoadedAt(mappedMessages[0]?.created_at || null)
-        setHasMore(mappedMessages.length === 50)
         
         // Mark as read
         await markConversationRead(actualConversationId)
@@ -288,7 +278,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [actualConversationId, profile?.id, scrollToBottom, user?.id, isAtBottom, fetchMessagesWithSenders])
+  }, [actualConversationId, profile, scrollToBottom, user?.id, isAtBottom, fetchMessagesWithSenders])
 
   // Poll for new messages and read status updates every second
   useEffect(() => {
@@ -320,7 +310,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
           
           return prev
         })
-      } catch (error) {
+      } catch {
         // Silent fail for polling
       }
     }
@@ -371,7 +361,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     scrollToBottom()
   }
 
-  const handleLocalTyping = (isTyping: boolean) => {
+  const handleLocalTyping = (_isTyping: boolean) => {
     // Optional: handle local typing indication if needed
   }
 
@@ -520,17 +510,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
           )
         })}
 
-        {/* Typing Indicator */}
-        {isTyping && (
-          <div className="flex items-center gap-2 p-2 px-4 text-gray-400 text-xs">
-            <div className="flex gap-1">
-              <span className="animate-bounce delay-0">.</span>
-              <span className="animate-bounce delay-100">.</span>
-              <span className="animate-bounce delay-200">.</span>
-            </div>
-            <span>{otherUserInfo?.username} is typing</span>
-          </div>
-        )}
+        {/* Typing Indicator - Removed unused state */}
 
         <div className="h-1" /> {/* Spacer */}
       </div>

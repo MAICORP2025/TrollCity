@@ -10,21 +10,41 @@ export async function sendNotification(
   message: string,
   metadata: Record<string, any> = {}
 ) {
-  const { error } = await supabase.from("notifications").insert([
-    {
-      user_id: userId ?? null,
-      type,
-      title,
-      message,
-      metadata,
-      is_read: false,
-      created_at: new Date().toISOString(),
-    },
-  ]);
+  if (!userId) {
+    console.warn("sendNotification called with null userId");
+    return;
+  }
+
+  // Try using the secure RPC function first (bypasses RLS)
+  const { error } = await supabase.rpc('create_notification', {
+    p_user_id: userId,
+    p_type: type,
+    p_title: title,
+    p_message: message,
+    p_metadata: metadata
+  });
 
   if (error) {
-    console.error("Notification Error:", error);
-    throw error;
+    // Fallback to direct insert if RPC fails (e.g. not migrated yet)
+    // This maintains compatibility for admins who can bypass RLS anyway
+    console.warn("RPC create_notification failed, trying direct insert:", error.message);
+    
+    const { error: insertError } = await supabase.from("notifications").insert([
+      {
+        user_id: userId,
+        type,
+        title,
+        message,
+        metadata,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (insertError) {
+      console.error("Notification Error:", insertError);
+      throw insertError;
+    }
   }
 
   // Send push notification via Edge Function

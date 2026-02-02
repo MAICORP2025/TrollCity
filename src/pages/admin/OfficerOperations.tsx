@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Calendar,
@@ -71,79 +71,88 @@ export default function OfficerOperations() {
   const [officers, setOfficers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState('');
+  
+  // Modal State
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedOfficer, setSelectedOfficer] = useState('');
+  const [newPatrolType, setNewPatrolType] = useState('general_patrol');
+  const [newPatrolInstructions, setNewPatrolInstructions] = useState('');
+  const [newPatrolPriority, setNewPatrolPriority] = useState(1);
 
-  const loadShifts = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('officer_work_sessions')
-      .select(`
-        *,
-        officer:user_profiles(username)
-      `)
-      .order('clock_in', { ascending: false })
-      .limit(50);
-    
-    const mappedData = (data || []).map((s: any) => ({
-      id: s.id,
-      officer_id: s.officer_id,
-      officer: s.officer,
-      shift_start: s.clock_in,
-      shift_end: s.clock_out,
-      shift_type: s.shift_type || 'Standard',
-      status: s.clock_out ? 'completed' : 'active',
-      patrol_area: s.patrol_area || 'General',
-      owc_earned: s.coins_earned || 0
-    }));
-
-    setShifts(mappedData);
+  const loadShifts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_officer_shifts', limit: 50 }
+      });
+      if (error) throw error;
+      
+      const mappedData = (data.shifts || []).map((s: any) => ({
+        id: s.id,
+        officer_id: s.officer_id,
+        officer: s.officer,
+        shift_start: s.clock_in,
+        shift_end: s.clock_out,
+        shift_type: s.shift_type || 'Standard',
+        status: s.clock_out ? 'completed' : 'active',
+        patrol_area: s.patrol_area || 'General',
+        owc_earned: s.coins_earned || 0
+      }));
+      setShifts(mappedData);
+    } catch (err) {
+      console.error('Error loading shifts:', err);
+      // toast.error('Failed to load shifts');
+    }
   }, []);
 
-  const loadPatrols = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('officer_patrols')
-      .select(`
-        *,
-        officer:user_profiles(username)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    setPatrols(data || []);
+  const loadPatrols = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_officer_patrols', limit: 50 }
+      });
+      if (error) throw error;
+      setPatrols(data.patrols || []);
+    } catch (err) {
+      console.error('Error loading patrols:', err);
+    }
   }, []);
 
-  const loadChatMessages = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('officer_chat_messages')
-      .select(`
-        *,
-        sender:user_profiles(username)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    setChatMessages(data || []);
+  const loadChatMessages = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_officer_chat_messages', limit: 100 }
+      });
+      if (error) throw error;
+      setChatMessages(data.messages || []);
+    } catch (err) {
+      console.error('Error loading chat:', err);
+    }
   }, []);
 
-  const loadPanicAlerts = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('creator_panic_alerts')
-      .select(`
-        *,
-        creator:user_profiles(username),
-        assigned_officer:user_profiles!creator_panic_alerts_assigned_officer_id_fkey(username)
-      `)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
-    setPanicAlerts(data || []);
+  const loadPanicAlerts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_panic_alerts' }
+      });
+      if (error) throw error;
+      setPanicAlerts(data.alerts || []);
+    } catch (err) {
+      console.error('Error loading panic alerts:', err);
+    }
   }, []);
 
-  const loadOfficers = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, username')
-      .or('role.eq.troll_officer,is_troll_officer.eq.true');
-    setOfficers(data || []);
+  const loadOfficers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_active_officers' }
+      });
+      if (error) throw error;
+      setOfficers(data.officers || []);
+    } catch (err) {
+      console.error('Error loading officers:', err);
+    }
   }, []);
 
-  const loadData = React.useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       await Promise.all([
@@ -165,12 +174,10 @@ export default function OfficerOperations() {
   }, [activeTab, loadData]);
 
   useEffect(() => {
-    // Replaced high-overhead Realtime subscriptions with polling (30s)
     const interval = setInterval(() => {
       loadChatMessages();
       loadPanicAlerts();
     }, 30000);
-
     return () => clearInterval(interval);
   }, [loadChatMessages, loadPanicAlerts]);
 
@@ -179,139 +186,12 @@ export default function OfficerOperations() {
 
     setLoading(true);
     try {
-      const { data: legacyData, error: legacyError } = await supabase
-        .from('messages')
-        .select('id,sender_id,receiver_id,content,created_at,stream_id')
-        .is('stream_id', null);
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'sync_legacy_messages' }
+      });
 
-      if (legacyError) throw legacyError;
-
-      if (!legacyData || legacyData.length === 0) {
-        toast.error('No legacy direct messages found in messages table');
-        setLoading(false);
-        return;
-      }
-
-      const pairKeys: Record<string, { a: string; b: string }> = {};
-
-      for (const msg of legacyData as any[]) {
-        const senderId = msg.sender_id as string | null;
-        const receiverId = msg.receiver_id as string | null;
-        if (!senderId || !receiverId) continue;
-        const a = senderId < receiverId ? senderId : receiverId;
-        const b = senderId < receiverId ? receiverId : senderId;
-        const key = `${a}:${b}`;
-        if (!pairKeys[key]) {
-          pairKeys[key] = { a, b };
-        }
-      }
-
-      const pairEntries = Object.entries(pairKeys);
-      const convMap: Record<string, string> = {};
-
-      for (const [key, pair] of pairEntries) {
-        const { data: existingMembers, error: membersError } = await supabase
-          .from('conversation_members')
-          .select('conversation_id,user_id')
-          .in('user_id', [pair.a, pair.b]);
-
-        if (membersError) throw membersError;
-
-        let conversationId: string | null = null;
-
-        if (existingMembers && existingMembers.length > 0) {
-          const byConv: Record<string, Set<string>> = {};
-          for (const row of existingMembers as any[]) {
-            const cid = row.conversation_id as string;
-            const uid = row.user_id as string;
-            if (!byConv[cid]) byConv[cid] = new Set();
-            byConv[cid].add(uid);
-          }
-          const desired = new Set([pair.a, pair.b]);
-          for (const [cid, membersSet] of Object.entries(byConv)) {
-            if (membersSet.size === desired.size) {
-              let match = true;
-              for (const uid of membersSet) {
-                if (!desired.has(uid)) {
-                  match = false;
-                  break;
-                }
-              }
-              if (match) {
-                conversationId = cid;
-                break;
-              }
-            }
-          }
-        }
-
-        if (!conversationId) {
-          const { data: convData, error: convError } = await supabase
-            .from('conversations')
-            .insert({ created_by: pair.a })
-            .select()
-            .single();
-
-          if (convError) throw convError;
-
-          conversationId = (convData as any).id as string;
-
-          const membersPayload = [
-            { conversation_id: conversationId, user_id: pair.a, role: 'owner' },
-            { conversation_id: conversationId, user_id: pair.b, role: 'member' }
-          ];
-
-          const { error: insertMembersError } = await supabase
-            .from('conversation_members')
-            .insert(membersPayload);
-
-          if (insertMembersError) throw insertMembersError;
-        }
-
-        convMap[key] = conversationId;
-      }
-
-      let migratedCount = 0;
-      const batchSize = 500;
-      const legacy = legacyData as any[];
-
-      for (let i = 0; i < legacy.length; i += batchSize) {
-        const slice = legacy.slice(i, i + batchSize);
-        const rows: any[] = [];
-
-        for (const msg of slice) {
-          const senderId = msg.sender_id as string | null;
-          const receiverId = msg.receiver_id as string | null;
-          const body = msg.content as string | null;
-          const createdAt = msg.created_at as string | null;
-          if (!senderId || !receiverId || !body) continue;
-
-          const a = senderId < receiverId ? senderId : receiverId;
-          const b = senderId < receiverId ? receiverId : senderId;
-          const key = `${a}:${b}`;
-          const conversationId = convMap[key];
-          if (!conversationId) continue;
-
-          rows.push({
-            conversation_id: conversationId,
-            sender_id: senderId,
-            body,
-            created_at: createdAt
-          });
-        }
-
-        if (rows.length === 0) continue;
-
-        const { error: insertError } = await supabase
-          .from('conversation_messages')
-          .insert(rows);
-
-        if (insertError) throw insertError;
-
-        migratedCount += rows.length;
-      }
-
-      toast.success(`Synced ${migratedCount} legacy messages into conversations`);
+      if (error) throw error;
+      toast.success(`Synced ${data.count || 0} legacy messages`);
     } catch (error: any) {
       console.error('Sync error:', error);
       toast.error('Failed to sync messages: ' + error.message);
@@ -320,30 +200,55 @@ export default function OfficerOperations() {
     }
   };
 
+  // Note: _createShift was used internally or via console? Keeping it just in case, but updated to hub.
   const _createShift = async (officerId: string, startTime: string, endTime: string, patrolArea: string) => {
     try {
-      await supabase.rpc('create_officer_shift', {
-        p_officer_id: officerId,
-        p_shift_start: startTime,
-        p_shift_end: endTime,
-        p_patrol_area: patrolArea
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+            action: 'create_officer_shift',
+            officerId,
+            startTime,
+            endTime,
+            patrolArea
+        }
       });
+      if (error) throw error;
       await loadShifts();
+      toast.success('Shift created');
     } catch (error) {
       console.error('Error creating shift:', error);
+      toast.error('Failed to create shift');
     }
   };
 
-  const _assignPatrol = async (officerId: string, patrolType: string, instructions: string) => {
+  const handleAssignPatrol = async () => {
+    if (!selectedOfficer) {
+        toast.error('Select an officer');
+        return;
+    }
     try {
-      await supabase.rpc('assign_officer_patrol', {
-        p_officer_id: officerId,
-        p_patrol_type: patrolType,
-        p_instructions: instructions
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'assign_officer_patrol',
+            officerId: selectedOfficer,
+            patrolType: newPatrolType,
+            instructions: newPatrolInstructions
+            // Priority is not in the assign_officer_patrol RPC/Hub action currently?
+            // The RPC definition in hub was: p_officer_id, p_patrol_type, p_instructions.
+            // Priority might be default or missing in RPC. We'll send what we can.
+        }
       });
+
+      if (error) throw error;
+      
+      toast.success('Patrol assigned');
+      setShowAssignModal(false);
+      setNewPatrolInstructions('');
+      setSelectedOfficer('');
       await loadPatrols();
     } catch (error) {
       console.error('Error assigning patrol:', error);
+      toast.error('Failed to assign patrol');
     }
   };
 
@@ -351,50 +256,57 @@ export default function OfficerOperations() {
     if (!newMessage.trim()) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      await supabase.rpc('send_officer_chat_message', {
-        p_sender_id: user.id,
-        p_content: newMessage
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'send_officer_chat_message',
+            content: newMessage
+        }
       });
+
+      if (error) throw error;
 
       setNewMessage('');
       await loadChatMessages();
     } catch (error) {
       console.error('Error sending message:', error);
+      toast.error('Failed to send message');
     }
   };
 
   const assignPanicAlert = async (alertId: string, officerId: string) => {
     try {
-      await supabase
-        .from('creator_panic_alerts')
-        .update({
-          assigned_officer_id: officerId,
-          status: 'assigned'
-        })
-        .eq('id', alertId);
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'assign_panic_alert',
+            alertId,
+            officerId
+        }
+      });
+      if (error) throw error;
 
+      toast.success('Alert assigned');
       await loadPanicAlerts();
     } catch (error) {
       console.error('Error assigning panic alert:', error);
+      toast.error('Failed to assign alert');
     }
   };
 
   const resolvePanicAlert = async (alertId: string) => {
     try {
-      await supabase
-        .from('creator_panic_alerts')
-        .update({
-          status: 'resolved',
-          resolved_at: new Date().toISOString()
-        })
-        .eq('id', alertId);
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'resolve_panic_alert',
+            alertId
+        }
+      });
+      if (error) throw error;
 
+      toast.success('Alert resolved');
       await loadPanicAlerts();
     } catch (error) {
       console.error('Error resolving panic alert:', error);
+      toast.error('Failed to resolve alert');
     }
   };
 
@@ -416,7 +328,7 @@ export default function OfficerOperations() {
     }
   };
 
-  if (loading) {
+  if (loading && officers.length === 0 && shifts.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center">
         <div className="animate-pulse">Loading officer operations...</div>
@@ -523,6 +435,13 @@ export default function OfficerOperations() {
                         <td className="px-4 py-3 text-green-400">+{shift.owc_earned}</td>
                       </tr>
                     ))}
+                    {shifts.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                          No shifts found
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -582,6 +501,11 @@ export default function OfficerOperations() {
                     </div>
                   </div>
                 ))}
+                {patrols.length === 0 && (
+                  <div className="col-span-full text-center py-8 text-gray-500 bg-zinc-900/50 rounded-lg">
+                    No active patrols
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -610,6 +534,11 @@ export default function OfficerOperations() {
                       </div>
                     </div>
                   ))}
+                  {chatMessages.length === 0 && (
+                    <div className="text-center text-gray-500 py-12">
+                      No messages yet. Start the conversation!
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
@@ -619,7 +548,7 @@ export default function OfficerOperations() {
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
                     placeholder="Send message to officers..."
-                    className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                   />
                   <button
                     onClick={sendChatMessage}
@@ -690,7 +619,7 @@ export default function OfficerOperations() {
                           <select
                             value={selectedOfficer}
                             onChange={(e) => setSelectedOfficer(e.target.value)}
-                            className="flex-1 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm"
+                            className="flex-1 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white"
                           >
                             <option value="">Assign Officer</option>
                             {officers.map((officer) => (
@@ -737,7 +666,7 @@ export default function OfficerOperations() {
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Officer</label>
                   <select
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded p-2"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded p-2 text-white"
                     value={selectedOfficer}
                     onChange={(e) => setSelectedOfficer(e.target.value)}
                   >
@@ -751,7 +680,7 @@ export default function OfficerOperations() {
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Patrol Type</label>
                   <select
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded p-2"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded p-2 text-white"
                     value={newPatrolType}
                     onChange={(e) => setNewPatrolType(e.target.value)}
                   >
@@ -785,7 +714,7 @@ export default function OfficerOperations() {
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Instructions</label>
                   <textarea
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded p-2 h-24"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded p-2 h-24 text-white"
                     value={newPatrolInstructions}
                     onChange={(e) => setNewPatrolInstructions(e.target.value)}
                     placeholder="Specific instructions for this patrol..."
@@ -800,7 +729,7 @@ export default function OfficerOperations() {
                     Cancel
                   </button>
                   <button
-                    onClick={_assignPatrol}
+                    onClick={handleAssignPatrol}
                     disabled={!selectedOfficer}
                     className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white disabled:opacity-50"
                   >

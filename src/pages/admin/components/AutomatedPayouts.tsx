@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronUp, RefreshCw, AlertTriangle, CheckCircle, XCircle, Lock, Unlock, PauseCircle, PlayCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw, CheckCircle, XCircle, PauseCircle, PlayCircle } from 'lucide-react';
 
 interface PayoutRun {
   id: string;
@@ -112,7 +112,7 @@ export default function AutomatedPayouts() {
 
       if (error) throw error;
       setRunDetails(prev => ({ ...prev, [runId]: data || [] }));
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to load run details');
     } finally {
       setLoadingDetails(null);
@@ -148,7 +148,7 @@ export default function AutomatedPayouts() {
     }
   };
 
-  const handleRetryRun = async (runId: string) => {
+  const handleRetryRun = async (_runId: string) => {
       // Logic to retry logic (e.g. call edge function manually if needed, or just re-run the process)
       // Since edge function is scheduled, maybe just a "Trigger Now" button for the general process?
       // Or if a run is failed but not refunded, maybe we want to retry submission?
@@ -156,7 +156,7 @@ export default function AutomatedPayouts() {
       
       const toastId = toast.loading('Triggering payout process...');
       try {
-          const { data, error } = await supabase.functions.invoke('payouts', { method: 'POST' });
+          const { error } = await supabase.functions.invoke('payouts', { method: 'POST' });
           if (error) throw error;
           toast.success('Process triggered', { id: toastId });
           loadRuns();

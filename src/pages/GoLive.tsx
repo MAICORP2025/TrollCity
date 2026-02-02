@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api, { API_ENDPOINTS } from '../lib/api';
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
-import { useCoins } from '../lib/hooks/useCoins';
+// import { useCoins } from '../lib/hooks/useCoins';
 import { useBroadcastLockdown } from '../lib/hooks/useBroadcastLockdown';
 import { Video } from 'lucide-react';
 import BroadcastThemePicker from '../components/broadcast/BroadcastThemePicker';
@@ -17,8 +17,7 @@ const PRIVATE_STREAM_COST = 500;
 type StreamQuality = 'STANDARD' | 'HD_BOOST' | 'HIGHEST';
 
 const GoLive: React.FC = () => {
-  const { profile, refreshProfile } = useAuthStore();
-  const { refreshCoins } = useCoins();
+  const { profile } = useAuthStore();
   const { settings: lockdownSettings } = useBroadcastLockdown();
 
   const [streamTitle, setStreamTitle] = useState('');
@@ -33,9 +32,9 @@ const GoLive: React.FC = () => {
   const [ownedThemeIds, setOwnedThemeIds] = useState<Set<string>>(new Set());
   const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
-  const [themesLoading, setThemesLoading] = useState(false);
-  const [themePurchaseId, setThemePurchaseId] = useState<string | null>(null);
-  const [streamerEntitlements, setStreamerEntitlements] = useState<any>(null);
+  // const [themesLoading, setThemesLoading] = useState(false);
+  // const [themePurchaseId, setThemePurchaseId] = useState<string | null>(null);
+  const [_streamerEntitlements, setStreamerEntitlements] = useState<any>(null);
   const [requestedQuality, setRequestedQuality] = useState<StreamQuality>('HIGHEST');
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -71,7 +70,7 @@ const GoLive: React.FC = () => {
     const loadThemes = async () => {
       const { user } = useAuthStore.getState();
       if (!user?.id) return;
-      setThemesLoading(true);
+      // setThemesLoading(true);
       try {
         const { data: catalog } = await supabase
           .from('broadcast_background_themes')
@@ -104,7 +103,7 @@ const GoLive: React.FC = () => {
       } catch (err) {
         console.error('Failed to load broadcast themes', err);
       } finally {
-        setThemesLoading(false);
+        // setThemesLoading(false);
       }
     };
 
@@ -123,6 +122,7 @@ const GoLive: React.FC = () => {
     }
   }, [isPrivateStream]);
 
+  /*
   const formatCountdown = (targetDate?: string | null) => {
     if (!targetDate) return null;
     const diff = new Date(targetDate).getTime() - Date.now();
@@ -132,46 +132,47 @@ const GoLive: React.FC = () => {
     const hours = Math.floor((totalMinutes % 1440) / 60);
     return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
   };
+  */
 
-  const getEligibility = (theme: any) => {
-    const now = Date.now();
-    const startsAt = theme?.starts_at ? new Date(theme.starts_at).getTime() : null;
-    const endsAt = theme?.ends_at ? new Date(theme.ends_at).getTime() : null;
-    const limitedActive = !theme?.is_limited || ((startsAt ? now >= startsAt : true) && (endsAt ? now <= endsAt : true));
-    const seasonalState = theme?.is_limited
-      ? startsAt && now < startsAt
-        ? `Starts in ${formatCountdown(theme.starts_at)}`
-        : endsAt && now > endsAt
-          ? 'Season ended'
-          : endsAt
-            ? `Ends in ${formatCountdown(theme.ends_at)}`
-            : null
-      : null;
-
-    const entitlements = streamerEntitlements || {};
-    const streamLevel = entitlements.streamer_level ?? profile?.level ?? 0;
-    const followersCount = entitlements.followers_count ?? 0;
-    const hoursStreamed = entitlements.total_hours_streamed ?? 0;
-    const minLevel = theme?.min_stream_level ?? null;
-    const minFollowers = theme?.min_followers ?? null;
-    const minHours = theme?.min_total_hours_streamed ?? null;
-    const requiresStreamer = Boolean(theme?.is_streamer_exclusive || minLevel || minFollowers || minHours);
-    const meetsStreamer =
-      (!minLevel || streamLevel >= minLevel) &&
-      (!minFollowers || followersCount >= minFollowers) &&
-      (!minHours || hoursStreamed >= minHours);
-
-    return {
-      limitedActive,
-      seasonalState,
-      requiresStreamer,
-      meetsStreamer,
-      isEligible: limitedActive && (!requiresStreamer || meetsStreamer),
-      minLevel,
-      minFollowers,
-      minHours,
-    };
-  };
+  // const getEligibility = (theme: any) => {
+  //   const now = Date.now();
+  //   const startsAt = theme?.starts_at ? new Date(theme.starts_at).getTime() : null;
+  //   const endsAt = theme?.ends_at ? new Date(theme.ends_at).getTime() : null;
+  //   const limitedActive = !theme?.is_limited || ((startsAt ? now >= startsAt : true) && (endsAt ? now <= endsAt : true));
+  //   const seasonalState = theme?.is_limited
+  //     ? startsAt && now < startsAt
+  //       ? `Starts in ${formatCountdown(theme.starts_at)}`
+  //       : endsAt && now > endsAt
+  //         ? 'Season ended'
+  //         : endsAt
+  //           ? `Ends in ${formatCountdown(theme.ends_at)}`
+  //           : null
+  //     : null;
+  //
+  //   const entitlements = streamerEntitlements || {};
+  //   const streamLevel = entitlements.streamer_level ?? profile?.level ?? 0;
+  //   const followersCount = entitlements.followers_count ?? 0;
+  //   const hoursStreamed = entitlements.total_hours_streamed ?? 0;
+  //   const minLevel = theme?.min_stream_level ?? null;
+  //   const minFollowers = theme?.min_followers ?? null;
+  //   const minHours = theme?.min_total_hours_streamed ?? null;
+  //   const requiresStreamer = Boolean(theme?.is_streamer_exclusive || minLevel || minFollowers || minHours);
+  //   const meetsStreamer =
+  //     (!minLevel || streamLevel >= minLevel) &&
+  //     (!minFollowers || followersCount >= minFollowers) &&
+  //     (!minHours || hoursStreamed >= minHours);
+  //
+  //   return {
+  //     limitedActive,
+  //     seasonalState,
+  //     requiresStreamer,
+  //     meetsStreamer,
+  //     isEligible: limitedActive && (!requiresStreamer || meetsStreamer),
+  //     minLevel,
+  //     minFollowers,
+  //     minHours,
+  //   };
+  // };
 
   const handleSelectTheme = async (themeId: string | null) => {
     const { user } = useAuthStore.getState();
@@ -191,34 +192,34 @@ const GoLive: React.FC = () => {
     }
   };
 
-  const handleBuyTheme = async (themeId: string) => {
-    const { user } = useAuthStore.getState();
-    if (!user?.id) return;
-    setThemePurchaseId(themeId);
-    try {
-      const { data, error } = await supabase.rpc('purchase_broadcast_theme', {
-        p_theme_id: themeId,
-        p_set_active: true
-      });
-      if (error || data?.success === false) {
-        throw new Error(data?.error || error?.message || 'Purchase failed');
-      }
-      setOwnedThemeIds((prev) => new Set([...Array.from(prev), themeId]));
-      setActiveThemeId(themeId);
-      if (refreshCoins) {
-        await refreshCoins();
-      }
-      if (refreshProfile) {
-        await refreshProfile();
-      }
-      toast.success('Theme purchased and applied');
-    } catch (err: any) {
-      console.error('Theme purchase failed', err);
-      toast.error(err?.message || 'Unable to purchase theme');
-    } finally {
-      setThemePurchaseId(null);
-    }
-  };
+  // const handleBuyTheme = async (themeId: string) => {
+  //   const { user } = useAuthStore.getState();
+  //   if (!user?.id) return;
+  //   // setThemePurchaseId(themeId);
+  //   try {
+  //     const { data, error } = await supabase.rpc('purchase_broadcast_theme', {
+  //       p_theme_id: themeId,
+  //       p_set_active: true
+  //     });
+  //     if (error || data?.success === false) {
+  //       throw new Error(data?.error || error?.message || 'Purchase failed');
+  //     }
+  //     setOwnedThemeIds((prev) => new Set([...Array.from(prev), themeId]));
+  //     setActiveThemeId(themeId);
+  //     if (refreshCoins) {
+  //       await refreshCoins();
+  //     }
+  //     if (refreshProfile) {
+  //       await refreshProfile();
+  //     }
+  //     toast.success('Theme purchased and applied');
+  //   } catch (err: any) {
+  //     console.error('Theme purchase failed', err);
+  //     toast.error(err?.message || 'Unable to purchase theme');
+  //   } finally {
+  //     // setThemePurchaseId(null);
+  //   }
+  // };
 
   const handleStartStream = async () => {
     const { profile, user } = useAuthStore.getState();
@@ -708,7 +709,7 @@ const GoLive: React.FC = () => {
           <span className="text-lg">🔴</span>
           <div>
             <p className="font-semibold">Broadcast Lockdown Active</p>
-            <p className="text-sm mt-1">Only the admin can create new broadcasts right now. You can still join and participate in the admin's broadcast!</p>
+            <p className="text-sm mt-1">Only the admin can create new broadcasts right now. You can still join and participate in the admin&apos;s broadcast!</p>
           </div>
         </div>
       )}
@@ -724,7 +725,7 @@ const GoLive: React.FC = () => {
           <Video className="w-16 h-16 mx-auto mb-3 text-purple-400" />
           <h3 className="text-lg font-semibold text-white mb-2">Ready to Go Live!</h3>
           <p className="text-sm text-gray-300 max-w-sm mx-auto">
-            Configure your stream settings and click "Go Live Now!" to start broadcasting.
+            Configure your stream settings and click &quot;Go Live Now!&quot; to start broadcasting.
           </p>
         </div>
       </div>

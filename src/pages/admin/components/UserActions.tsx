@@ -16,9 +16,12 @@ interface UserActionsProps {
 const UserActions: React.FC<UserActionsProps> = ({ user, refresh }) => {
   const banUser = async () => {
     try {
-      const { error } = await supabase.rpc('ban_user', {
-        p_user_id: user.id,
-        p_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // ban for 1 year
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'ban_user_action',
+          userId: user.id,
+          until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        }
       });
       if (error) throw error;
       toast.success('User banned');
@@ -30,10 +33,12 @@ const UserActions: React.FC<UserActionsProps> = ({ user, refresh }) => {
 
   const unbanUser = async () => {
     try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ is_banned: false, banned_until: null })
-        .eq('id', user.id);
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'unban_user_action',
+          userId: user.id
+        }
+      });
       if (error) throw error;
       toast.success('User unbanned');
       refresh();
@@ -45,9 +50,12 @@ const UserActions: React.FC<UserActionsProps> = ({ user, refresh }) => {
   const deleteUser = async () => {
     if (!confirm(`Delete user @${user.username}? This action cannot be undone.`)) return;
     try {
-      const { error } = await supabase.rpc('admin_soft_delete_user', {
-        p_user_id: user.id,
-        p_reason: 'Admin deleted via dashboard'
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'soft_delete_user',
+          userId: user.id,
+          reason: 'Admin deleted via dashboard'
+        }
       });
       
       if (error) throw error;

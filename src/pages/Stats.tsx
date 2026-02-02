@@ -90,7 +90,6 @@ export default function Stats() {
         if (familyMember) badges.push('⚔️ Family War')
         if (level >= 10) badges.push('👑 Top Rank')
         if (balances.paid_coins > 1000) badges.push('💰 Big Spender')
-        if (balances.trollmonds > 100) badges.push('💎 Diamond Holder')
 
         setStats({
           level: level,
@@ -99,7 +98,6 @@ export default function Stats() {
           nextLevelXp: xpToNext + xpTotal,
           troll_coins: balances.troll_coins || 0,
           paid_coins: balances.paid_coins || 0,
-          trollmonds: balances.trollmonds || 0,
           ...familyData,
           ...warStats,
           badges

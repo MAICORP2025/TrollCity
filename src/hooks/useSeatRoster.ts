@@ -238,49 +238,24 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
           throw new Error('You already have a seat in this stream. Please release your current seat first.')
         }
 
-        const userId = payload?.user_id ?? stableUserId
         const username = payload?.username ?? profile?.username ?? user?.email?.split('@')[0] ?? 'Officer'
         const role = payload?.role ?? profile?.role ?? 'troll_officer'
         const avatar_url = payload?.avatarUrl ?? profile?.avatar_url ?? null
         const metadata = payload?.metadata ?? {}
         const joinPrice = payload?.joinPrice ?? 0
 
-        // Handle coin deduction if there's a join price
-        if (joinPrice > 0 && userId) {
-          try {
-            const { deductCoins } = await import('../lib/coinTransactions')
-            const deductionResult = await deductCoins({
-              userId: userId,
-              amount: joinPrice,
-              type: 'perk_purchase',
-              description: `Joined seat ${safeIndex + 1} in broadcast`,
-              metadata: {
-                seatIndex: safeIndex + 1,
-                room: roomName,
-                ...metadata
-              }
-            })
-
-            if (!deductionResult.success) {
-              throw new Error(deductionResult.error || 'Failed to deduct coins for seat join')
-            }
-          } catch (coinError) {
-            console.error('Failed to deduct coins for seat join:', coinError)
-            throw new Error(`Failed to deduct coins: ${coinError instanceof Error ? coinError.message : 'Unknown error'}`)
-          }
-        }
-
-        const response = await api.request(API_ENDPOINTS.broadcastSeats.action, {
+        // Handle coin deduction and seat claim via officer-actions hub
+        const response = await api.request('officer-actions', {
           method: 'POST',
           body: JSON.stringify({
-            action: 'claim',
+            action: 'join_stream_box',
             room: roomName,
-            seat_index: safeIndex + 1,
-            user_id: userId,
+            seatIndex: safeIndex + 1,
             username,
-            avatar_url,
+            avatarUrl: avatar_url,
             role,
             metadata,
+            joinPrice: joinPrice > 0 ? joinPrice : undefined
           }),
         })
 

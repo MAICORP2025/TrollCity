@@ -1,4 +1,4 @@
-import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Lock } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Lock, Trophy, DollarSign } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 import DatabaseBackup from './DatabaseBackup'
 import CityControlCenter from './CityControlCenter'
@@ -12,6 +12,8 @@ import AdminCallsTab from './components/AdminCallsTab'
 import OfficerOperations from './OfficerOperations'
 import AdminSupportTicketsPage from './AdminSupportTicketsPage'
 import CourtDocketsManager from './CourtDocketsManager'
+import StorePriceEditor from './components/StorePriceEditor'
+import TournamentManager from './components/TournamentManager'
 
 export interface AdminRoute {
   id: string
@@ -184,5 +186,31 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-red-500/10',
     tileBorderColor: 'border-red-500/30',
     category: 'moderation'
+  },
+  {
+    id: 'store-pricing',
+    title: 'Store Pricing',
+    path: '/admin/store/pricing',
+    component: StorePriceEditor,
+    roles: [UserRole.ADMIN],
+    description: 'Edit store item prices and details',
+    icon: <DollarSign className="w-5 h-5 text-green-200" />,
+    tileColor: 'text-green-200',
+    tileBgColor: 'bg-green-500/10',
+    tileBorderColor: 'border-green-500/30',
+    category: 'economy'
+  },
+  {
+    id: 'tournaments',
+    title: 'Tournaments',
+    path: '/admin/tournaments',
+    component: TournamentManager,
+    roles: [UserRole.ADMIN],
+    description: 'Manage universe events and tournaments',
+    icon: <Trophy className="w-5 h-5 text-yellow-200" />,
+    tileColor: 'text-yellow-200',
+    tileBgColor: 'bg-yellow-500/10',
+    tileBorderColor: 'border-yellow-500/30',
+    category: 'events'
   }
 ]

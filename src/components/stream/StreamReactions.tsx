@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 interface StreamReactionsProps {
@@ -24,7 +24,6 @@ const reactionEmojis: Record<string, string> = {
 
 export default function StreamReactions({ streamId, onReaction }: StreamReactionsProps) {
   const [reactions, setReactions] = useState<ReactionItem[]>([])
-  const reactionIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!streamId) return

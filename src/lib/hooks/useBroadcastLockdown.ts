@@ -8,9 +8,9 @@ interface BroadcastLockdownSettings {
   admin_broadcast_room: string | null;
 }
 
-interface MaxBroadcastersSettings {
-  limit: number;
-}
+// interface MaxBroadcastersSettings {
+//   limit: number;
+// }
 
 export function useBroadcastLockdown() {
   const { profile } = useAuthStore();

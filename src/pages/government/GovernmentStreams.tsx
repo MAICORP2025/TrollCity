@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { 
   Users, 
@@ -7,23 +6,18 @@ import {
   Shield, 
   Eye, 
   X, 
-  Mic, 
   MicOff, 
-  MessageSquare, 
   MessageSquareOff, 
   Gavel, 
   StopCircle,
   Activity,
   AlertTriangle
 } from 'lucide-react';
-import { format12hr } from '@/utils/timeFormat';
 import { LiveKitRoom, 
   VideoTrack, 
   useTracks, 
-  useParticipant,
   RoomAudioRenderer
 } from '@livekit/components-react';
-import { Track } from 'livekit-client';
 import { useLiveKitToken } from '@/hooks/useLiveKitToken';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
@@ -64,8 +58,6 @@ interface StreamParticipant {
 }
 
 export default function GovernmentStreams() {
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
   const [streams, setStreams] = useState<StreamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStream, setSelectedStream] = useState<StreamRow | null>(null);
@@ -536,7 +528,7 @@ function SummonModal({ stream, onClose }: { stream: StreamRow; onClose: () => vo
       }
     };
     loadParticipants();
-  }, [stream.id]);
+  }, [stream]);
 
   const handleSummon = async () => {
     if (!selectedUserId) {
@@ -563,7 +555,7 @@ function SummonModal({ stream, onClose }: { stream: StreamRow; onClose: () => vo
       toast.success('User summoned to court successfully');
       onClose();
     } catch (err) {
-      console.error('Summon failed', err);
+      console.error(err);
       toast.error('Failed to summon user');
     } finally {
       setSubmitting(false);
@@ -571,68 +563,94 @@ function SummonModal({ stream, onClose }: { stream: StreamRow; onClose: () => vo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#151515] w-full max-w-md rounded-2xl border border-orange-500/30 shadow-2xl overflow-hidden">
-        <div className="p-4 bg-orange-900/20 border-b border-orange-500/20 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-orange-400 flex items-center gap-2">
-            <Gavel className="w-5 h-5" />
-            Summon to Court
-          </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-[#1a1a1a] w-full max-w-md p-6 rounded-2xl border border-orange-500/30 shadow-[0_0_50px_rgba(249,115,22,0.1)]">
+        <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-orange-900/20 p-2 rounded-lg border border-orange-500/20">
+              <Gavel className="w-6 h-6 text-orange-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">Summon to Court</h3>
+              <p className="text-xs text-gray-400">Issue a court summons</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        
-        <div className="p-6 space-y-4">
+
+        <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Select User from Stream</label>
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Select Defendant</label>
             {loading ? (
-              <div className="text-center py-4 text-gray-500">Loading participants...</div>
+              <div className="text-center py-4 text-gray-500 text-sm">Loading participants...</div>
+            ) : participants.length === 0 ? (
+              <div className="text-center py-4 text-gray-500 text-sm border border-white/10 rounded-lg bg-black/20">
+                No active participants found
+              </div>
             ) : (
-              <select 
-                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white focus:border-orange-500 outline-none"
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-              >
-                <option value="">-- Select User --</option>
+              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                 {participants.map(p => (
-                  <option key={p.user_id} value={p.user_id}>
-                    {p.username} {p.user_id === stream.broadcaster_id ? '(Host)' : ''}
-                  </option>
+                  <button
+                    key={p.user_id}
+                    onClick={() => setSelectedUserId(p.user_id)}
+                    className={`flex items-center gap-3 p-2 rounded-lg border transition-all ${
+                      selectedUserId === p.user_id 
+                        ? 'bg-orange-500/20 border-orange-500 text-white' 
+                        : 'bg-white/5 border-white/5 text-gray-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <img 
+                      src={p.avatar_url || `https://ui-avatars.com/api/?name=${p.username}&background=random`}
+                      className="w-8 h-8 rounded-full bg-black"
+                      alt={p.username}
+                    />
+                    <div className="text-left">
+                      <div className="font-bold text-sm">{p.username}</div>
+                      <div className="text-[10px] text-gray-400">{p.user_id.slice(0, 8)}...</div>
+                    </div>
+                    {selectedUserId === p.user_id && (
+                      <div className="ml-auto w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.8)]" />
+                    )}
+                  </button>
                 ))}
-              </select>
+              </div>
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Reason for Summons</label>
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Reason</label>
             <select 
-              className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white focus:border-orange-500 outline-none"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
+              className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white focus:border-orange-500 outline-none"
             >
               <option value="Disorderly Conduct">Disorderly Conduct</option>
-              <option value="Troll Toll Evasion">Troll Toll Evasion</option>
+              <option value="Hate Speech">Hate Speech</option>
               <option value="Harassment">Harassment</option>
-              <option value="Illegal Broadcasting">Illegal Broadcasting</option>
-              <option value="Public Nuisance">Public Nuisance</option>
+              <option value="Trolling without License">Trolling without License</option>
               <option value="Other">Other</option>
             </select>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <button 
-              onClick={onClose}
-              className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={handleSummon}
-              disabled={submitting || !selectedUserId}
-              className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-bold text-white transition-colors shadow-lg shadow-orange-900/20"
-            >
-              {submitting ? 'Issuing...' : 'Issue Summons'}
-            </button>
-          </div>
+          <button
+            onClick={handleSummon}
+            disabled={submitting || !selectedUserId}
+            className="w-full py-3 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-orange-900/20 mt-4 flex items-center justify-center gap-2"
+          >
+            {submitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Issuing Summons...
+              </>
+            ) : (
+              <>
+                <Gavel className="w-4 h-4" />
+                Issue Summons
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

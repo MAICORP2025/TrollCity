@@ -16,53 +16,6 @@ interface GlobalEvent {
   linkPath?: string;
 }
 
-interface VoteEventRow {
-  id: string;
-  event_type: string;
-  created_at: string;
-}
-
-const mapVoteEventToGlobal = (row: VoteEventRow): GlobalEvent => {
-  const baseStart = row.created_at ? new Date(row.created_at) : new Date();
-  const baseEnd = new Date(baseStart.getTime() + 60 * 60 * 1000);
-
-  if (row.event_type === 'officer_cycle_started') {
-    return {
-      id: row.id,
-      title: 'Vote: Troll Officer of the Week',
-      description: 'Support your favorite broadcaster and cast your vote.',
-      type: 'special_event',
-      startTime: baseStart,
-      endTime: baseEnd,
-      isActive: true,
-      linkPath: '/officer/vote',
-    };
-  }
-
-  if (row.event_type === 'officer_cycle_winner') {
-    return {
-      id: row.id,
-      title: 'Troll Officer of the Week Selected',
-      description: 'A new Troll Officer has been chosen by the community.',
-      type: 'special_event',
-      startTime: baseStart,
-      endTime: baseEnd,
-      isActive: true,
-      linkPath: '/officer/vote',
-    };
-  }
-
-  return {
-    id: row.id,
-    title: 'Troll City Event',
-    description: 'A new city event just dropped. Jump in and participate.',
-    type: 'special_event',
-    startTime: baseStart,
-    endTime: baseEnd,
-    isActive: true,
-  };
-};
-
 const GlobalEventsBanner: React.FC = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();

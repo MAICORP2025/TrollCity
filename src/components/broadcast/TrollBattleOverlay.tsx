@@ -35,41 +35,19 @@ const TrollBattleOverlay: React.FC<TrollBattleOverlayProps> = ({
   useEffect(() => {
     const fetchBattleData = async () => {
       try {
-        let currentBattle = battle;
-        
-        if (!currentBattle) {
-          const { data, error } = await supabase
-            .from('troll_battles')
-            .select('*')
-            .eq('id', battleId)
-            .single();
-          
-          if (error) throw error;
-          currentBattle = data;
-          setBattle(data);
-        }
-
-        // Fetch profiles
-        const { data: profiles, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url')
-          .in('id', [currentBattle.player1_id, currentBattle.player2_id]);
-
-        if (profileError) throw profileError;
-
-        const p1Profile = profiles.find((p: any) => p.id === currentBattle.player1_id);
-        const p2Profile = profiles.find((p: any) => p.id === currentBattle.player2_id);
-
-        setPlayer1({
-          ...p1Profile,
-          score: currentBattle.player1_score
+        const { data, error } = await supabase.functions.invoke('officer-actions', {
+          body: {
+            action: 'get_battle',
+            battleId
+          }
         });
 
-        setPlayer2({
-          ...p2Profile,
-          score: currentBattle.player2_score
-        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Failed to load battle');
 
+        setBattle(data.battle);
+        setPlayer1(data.player1);
+        setPlayer2(data.player2);
         setLoading(false);
       } catch (err) {
         console.error('Failed to load battle data:', err);
@@ -124,7 +102,9 @@ const TrollBattleOverlay: React.FC<TrollBattleOverlayProps> = ({
         clearInterval(interval);
         
         if (battle.status === 'active' && user?.id === broadcasterId) {
-             supabase.rpc('finalize_battle', { p_battle_id: battleId }).then(({ error }) => {
+             supabase.functions.invoke('officer-actions', {
+                 body: { action: 'finalize_troll_battle', battleId }
+             }).then(({ error }) => {
                  if (error) console.error('Finalize battle error', error);
              });
         }

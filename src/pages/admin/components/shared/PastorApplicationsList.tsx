@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { toast } from 'sonner'
-import { BookOpen, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { BookOpen, CheckCircle, XCircle } from 'lucide-react'
 
 interface Application {
   id: string

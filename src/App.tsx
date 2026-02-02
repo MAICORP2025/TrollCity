@@ -44,7 +44,6 @@ import ExitPage from "./pages/ExitPage";
 
 import TrollBank from "./pages/TrollBank";
 import CityHall from "./pages/CityHall";
-import AuctionsPage from "./pages/AuctionsPage";
 const LivingPage = lazy(() => import("./pages/LivingPage"));
 const ChurchPage = lazy(() => import("./pages/ChurchPage"));
 const PastorDashboard = lazy(() => import("./pages/church/PastorDashboard"));
@@ -198,6 +197,7 @@ const LeadOfficerReview = lazy(() => import("./pages/lead-officer/Review"));
 const LeadOfficerDashboard = lazy(() => import("./pages/lead-officer/LeadOfficerDashboard").then(module => ({ default: module.LeadOfficerDashboard })));
 const ShopPartnerPage = lazy(() => import("./pages/ShopPartnerPage"));
 const CommandBattleGoLive = lazy(() => import("./pages/CommandBattleGoLive"));
+const UniverseEventPage = lazy(() => import("./pages/UniverseEventPage"));
 const TrollBattleSetup = lazy(() => import("./pages/TrollBattleSetup"));
 const ShopView = lazy(() => import("./pages/ShopView"));
 const CourtRoom = lazy(() => import("./pages/CourtRoom"));
@@ -794,6 +794,8 @@ function AppContent() {
                   <Route path="/messages" element={<Navigate to="/tcps" replace />} />
                   <Route path="/tcps" element={<TCPS />} />
           <Route path="/city-hall" element={<CityHall />} />
+                  <Route path="/universe-event" element={<UniverseEventPage />} />
+                  <Route path="/events/universe" element={<Navigate to="/universe-event" replace />} />
                   <Route path="/call/:roomId/:type/:userId" element={<Call />} />
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/following" element={<Following />} />

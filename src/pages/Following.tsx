@@ -50,7 +50,7 @@ export default function Following() {
     } finally {
       setLoading(false)
     }
-  }, [profile, targetId])
+  }, [targetId])
 
   useEffect(() => {
     load()

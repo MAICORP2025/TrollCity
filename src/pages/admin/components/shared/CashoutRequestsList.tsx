@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { CashoutRequest } from '../../../../types/admin'
 import { toast } from 'sonner'
-import { DollarSign, Check, X, CreditCard, Lock, Unlock, AlertTriangle } from 'lucide-react'
+import { DollarSign, Check, X, CreditCard, Lock, Unlock } from 'lucide-react'
 import { useAuthStore } from '../../../../lib/store'
 
 interface CashoutRequestsListProps {
@@ -35,22 +35,15 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
   const fetchRequests = useCallback(async () => {
     setLoading(true)
     try {
-      let query = supabase
-        .from('cashout_requests')
-        .select(`
-          *,
-          user_profile:user_profiles!cashout_requests_user_id_fkey(username, email)
-        `)
-        .order('requested_at', { ascending: false })
-
-      if (filterStatus !== 'all') {
-        query = query.eq('status', filterStatus)
-      }
-
-      const { data, error } = await query
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+          action: 'get_cashout_requests',
+          filterStatus 
+        }
+      });
 
       if (error) throw error
-      setRequests(data || [])
+      setRequests(data?.requests || [])
     } catch (error) {
       console.error('Error fetching cashouts:', error)
       toast.error('Failed to load cashout requests')
@@ -71,31 +64,23 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
   const handleUpdateStatus = async (id: string, status: string, notes?: string) => {
     if (!user) return
     try {
-      const updates: any = { status }
-      
+      let action = 'update_cashout_status';
+      let params: any = { requestId: id, status };
+
       if (status === 'approved') {
-        updates.approved_by = user.id
-        updates.approved_at = new Date().toISOString()
-        
-        const { error } = await supabase
-          .from('cashout_requests')
-          .update(updates)
-          .eq('id', id)
-        if (error) throw error
+        action = 'approve_cashout';
+        params = { requestId: id };
       } else if (status === 'denied') {
-        const { error } = await supabase.rpc('process_cashout_refund', {
-          p_request_id: id,
-          p_admin_id: user.id,
-          p_notes: notes || 'Request denied'
-        })
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('cashout_requests')
-          .update(updates)
-          .eq('id', id)
-        if (error) throw error
+        action = 'reject_cashout';
+        params = { requestId: id, reason: notes || 'Request denied' };
       }
+
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: { action, ...params }
+      });
+
+      if (error) throw error;
+
       toast.success(`Request marked as ${status}`)
       fetchRequests()
     } catch (error) {
@@ -107,12 +92,14 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
   const handleToggleHold = async (req: ExtendedCashoutRequest, hold: boolean, reason?: string) => {
     if (!user) return
     try {
-      const { error } = await supabase.rpc('toggle_cashout_hold', {
-        p_request_id: req.id,
-        p_admin_id: user.id,
-        p_hold: hold,
-        p_reason: reason || null
-      })
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+          action: 'toggle_cashout_hold',
+          requestId: req.id,
+          hold,
+          reason
+        }
+      });
 
       if (error) throw error
       
@@ -137,12 +124,14 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
     if (!user) return
 
     try {
-      const { error } = await supabase.rpc('fulfill_cashout_request', {
-        p_request_id: selectedRequest.id,
-        p_admin_id: user.id,
-        p_notes: 'Fulfilled via admin panel',
-        p_gift_card_code: giftCardCode
-      })
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+          action: 'fulfill_cashout_request',
+          requestId: selectedRequest.id,
+          giftCardCode,
+          notes: 'Fulfilled via admin panel'
+        }
+      });
 
       if (error) throw error
       toast.success('Request fulfilled with Gift Card code!')

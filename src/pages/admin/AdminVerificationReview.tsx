@@ -81,32 +81,26 @@ export default function AdminVerificationReview() {
   const handleApprove = async (requestId: string, userId: string, grantInfluencer: boolean = false) => {
     setProcessing(requestId)
     try {
-      await supabase
-        .from('verification_requests')
-        .update({
-          status: 'approved',
-          reviewed_at: new Date().toISOString(),
-          admin_reviewer: profile?.id,
-          admin_note: adminNote || null,
-          influencer_tier: grantInfluencer
-        })
-        .eq('id', requestId)
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'review_verification',
+          requestId,
+          reviewAction: 'approve',
+          notes: adminNote || undefined,
+          grantInfluencer,
+          userId
+        }
+      })
 
-      await supabase
-        .from('user_profiles')
-        .update({
-          is_verified: true,
-          verification_date: new Date().toISOString(),
-          influencer_tier: grantInfluencer ? 'gold' : null
-        })
-        .eq('id', userId)
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
 
       toast.success('Verification approved')
       setSelectedRequest(null)
       loadRequests()
     } catch (error: any) {
       console.error('Error approving:', error)
-      toast.error('Failed to approve verification')
+      toast.error(error.message || 'Failed to approve verification')
     } finally {
       setProcessing(null)
     }
@@ -115,22 +109,24 @@ export default function AdminVerificationReview() {
   const handleDeny = async (requestId: string) => {
     setProcessing(requestId)
     try {
-      await supabase
-        .from('verification_requests')
-        .update({
-          status: 'denied',
-          reviewed_at: new Date().toISOString(),
-          admin_reviewer: profile?.id,
-          admin_note: adminNote || null
-        })
-        .eq('id', requestId)
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'review_verification',
+          requestId,
+          reviewAction: 'deny',
+          notes: adminNote || undefined
+        }
+      })
+
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
 
       toast.success('Verification denied')
       setSelectedRequest(null)
       loadRequests()
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error('Error denying:', error)
-      toast.error('Failed to deny verification')
+      toast.error(error.message || 'Failed to deny verification')
     } finally {
       setProcessing(null)
     }

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Trash2, Shield, UserX } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Send, Trash2, UserX } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 import { useAuthStore } from "../../lib/store";
@@ -32,7 +32,7 @@ export default function PodChatBox({ roomId, isHost, currentUserId }: PodChatBox
   useEffect(() => {
     const fetchMessages = async () => {
       // Step 1: Fetch messages
-      const { data: msgs, error } = await supabase
+      const { data: msgs } = await supabase
         .from('pod_chat_messages')
         .select('*')
         .eq('room_id', roomId)

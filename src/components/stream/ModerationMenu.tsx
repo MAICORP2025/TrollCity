@@ -1,254 +1,134 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import IPBanModal from '../officer/IPBanModal'
-import { updateOfficerActivity } from '../../lib/officerActivity'
 
 interface ModerationMenuProps {
   target: { userId: string; username: string; x: number; y: number }
   streamId: string
   onClose: () => void
   onActionComplete: () => void
-  isBroadcaster?: boolean
-  isBroadofficer?: boolean
 }
 
 export default function ModerationMenu({ 
   target, 
   streamId, 
   onClose, 
-  onActionComplete,
-  isBroadcaster = false,
-  isBroadofficer = false
+  onActionComplete
 }: ModerationMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const [showIPBanModal, setShowIPBanModal] = useState(false)
   const [targetIP, setTargetIP] = useState<string | null>(null)
 
-  const fetchOfficerContext = useCallback(async () => {
-    const { data: sessionData } = await supabase.auth.getUser()
-    const currentUser = sessionData.user
-    if (!currentUser) {
-      throw new Error('You must be signed in to take this action')
-    }
-
-    const { data: officerProfile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('id, role, is_troll_officer, is_admin')
-      .eq('id', currentUser.id)
-      .single()
-
-    if (profileError || !officerProfile) {
-      throw new Error(profileError?.message || 'Unable to load your officer profile')
-    }
-
-    const isAdmin =
-      officerProfile.role === 'admin' || officerProfile.is_admin === true
-    const isGlobalOfficer =
-      officerProfile.is_troll_officer === true ||
-      officerProfile.role === 'troll_officer'
-
-    if (!isAdmin && !isGlobalOfficer && !isBroadcaster && !isBroadofficer) {
-      throw new Error('Officer access required')
-    }
-
-    // Officers pay fees, but Admins, Broadcasters, and Broadofficers (stream mods) are exempt
-    return { currentUser, officerProfile, isPrivileged: isAdmin || isBroadcaster || isBroadofficer }
-  }, [isBroadcaster, isBroadofficer])
-
-  const recordOfficerAction = useCallback(
-    async (
-      officerId: string,
-      actionType: string,
-      opts: {
-        fee_coins?: number
-        metadata?: Record<string, any>
-        action_subtype?: string | null
-      } = {}
-    ) => {
-      try {
-        await supabase.from('officer_actions').insert({
-          officer_id: officerId,
-          target_user_id: target.userId,
-          action_type: actionType,
-          related_stream_id: streamId || null,
-          fee_coins: opts.fee_coins || 0,
-          metadata: {
-            username: target.username,
-            ...opts.metadata,
-          },
-          action_subtype: opts.action_subtype || null,
-        })
-        await updateOfficerActivity(officerId)
-      } catch (err) {
-        console.error('Failed to log officer action:', err)
-      }
-    },
-    [streamId, target.userId, target.username]
-  )
-
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        onClose()
+    let mounted = true;
+    supabase.functions.invoke('officer-actions', {
+      body: { action: 'get_moderation_context', streamId }
+    }).then(({ data, error }) => {
+      if (mounted && !error && data?.success) {
+        // Permissions logic removed as it was unused
       }
-    }
+    })
+    return () => { mounted = false }
+  }, [streamId])
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [onClose])
 
   const handleAction = async (
-    actionType: 'mute' | 'block' | 'report' | 'restrict_live',
+    actionType: 'mute' | 'block' | 'report' | 'restrict_live' | 'unmute',
     duration?: number
   ) => {
     try {
-      const { officerProfile, isPrivileged } = await fetchOfficerContext()
-
       switch (actionType) {
         case 'mute': {
           const muteDurationMs = duration || 10 * 60 * 1000
           const muteMinutes = Math.round(muteDurationMs / 60000)
-          const muteUntil = new Date(Date.now() + muteDurationMs)
           
-          const fee = 25; // Fee for mute
-          
-          if (!isPrivileged) {
-            if ((officerProfile?.troll_coins || 0) < fee) {
-              toast.error(`Insufficient coins. Need ${fee} coins to mute.`);
-              return;
+          const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+              action: 'troll_mic_mute',
+              targetUserId: target.userId,
+              targetUsername: target.username,
+              streamId,
+              durationMinutes: muteMinutes
             }
+          })
 
-            // Deduct coins
-            const { error: spendError } = await supabase.rpc('troll_bank_spend_coins', {
-              p_user_id: officerProfile.id,
-              p_amount: fee,
-              p_bucket: 'paid',
-              p_source: 'moderation_fee',
-              p_metadata: { action: 'mute', target_id: target.userId }
-            });
-
-            if (spendError) {
-              console.error('Failed to deduct mute fee:', spendError);
-              toast.error('Failed to process fee. Action cancelled.');
-              return;
-            }
-          }
-
-          await supabase
-            .from('user_profiles')
-            .update({ mic_muted_until: muteUntil.toISOString() })
-            .eq('id', target.userId)
+          if (error) throw error
 
           toast.success(
             `Muted ${target.username}'s microphone for ${muteMinutes} minute${
               muteMinutes === 1 ? '' : 's'
             }.`
           )
-
-          await recordOfficerAction(officerProfile.id, 'mute', {
-            fee_coins: fee,
-            metadata: { mute_until: muteUntil.toISOString(), duration_minutes: muteMinutes },
-          })
           break
         }
         case 'unmute': {
-          await supabase
-            .from('user_profiles')
-            .update({ mic_muted_until: null })
-            .eq('id', target.userId)
+          const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+              action: 'troll_mic_unmute',
+              targetUserId: target.userId,
+              targetUsername: target.username,
+              streamId
+            }
+          })
+
+          if (error) throw error
 
           toast.success(`Unmuted ${target.username}'s microphone.`)
-
-          await recordOfficerAction(officerProfile.id, 'unmute', {
-            fee_coins: 0,
-            metadata: {},
-          })
           break
         }
         case 'restrict_live': {
           const restrictDurationMs = duration || 60 * 60 * 1000
           const restrictMinutes = Math.round(restrictDurationMs / 60000)
-          const restrictedUntil = new Date(Date.now() + restrictDurationMs)
-          await supabase
-            .from('user_profiles')
-            .update({ live_restricted_until: restrictedUntil.toISOString() })
-            .eq('id', target.userId)
+          
+          const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+              action: 'restrict_live',
+              targetUserId: target.userId,
+              targetUsername: target.username,
+              streamId,
+              durationMinutes: restrictMinutes
+            }
+          })
+
+          if (error) throw error
 
           toast.success(
             `Restricted ${target.username} from going live for ${restrictMinutes} minute${
               restrictMinutes === 1 ? '' : 's'
             }.`
           )
-
-          await recordOfficerAction(officerProfile.id, 'restrict_live', {
-            metadata: {
-              restricted_until: restrictedUntil.toISOString(),
-              duration_minutes: restrictMinutes,
-            },
-          })
           break
         }
         case 'block': {
-          const blockUntil = new Date(Date.now() + 24 * 60 * 60 * 1000)
-          
-          const fee = 500;
-          
-          if (!isPrivileged) {
-            if ((officerProfile?.troll_coins || 0) < fee) {
-              toast.error(`Insufficient coins. Need ${fee} coins to block.`);
-              return;
+          const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+              action: 'troll_immunity', // Handles no_ban_until (block)
+              targetUserId: target.userId,
+              targetUsername: target.username,
+              streamId
             }
+          })
 
-            // Deduct coins
-            const { error: spendError } = await supabase.rpc('troll_bank_spend_coins', {
-              p_user_id: officerProfile.id,
-              p_amount: fee,
-              p_bucket: 'paid',
-              p_source: 'moderation_fee',
-              p_metadata: { action: 'block', target_id: target.userId }
-            });
-
-            if (spendError) {
-              console.error('Failed to deduct block fee:', spendError);
-              toast.error('Failed to process fee. Action cancelled.');
-              return;
-            }
-          }
-          
-          await supabase
-            .from('user_profiles')
-            .update({ no_ban_until: blockUntil.toISOString() })
-            .eq('id', target.userId)
+          if (error) throw error
 
           toast.success(`Blocked ${target.username} from bans for 24 hours.`)
-
-          await recordOfficerAction(officerProfile.id, 'block', {
-            fee_coins: fee,
-            metadata: { block_until: blockUntil.toISOString() },
-          })
           break
         }
         case 'report': {
-          const ticket = await supabase.from('support_tickets').insert({
-            user_id: target.userId,
-            type: 'troll_attack',
-            description: `Officer report for ${target.username} in stream ${streamId}`,
-            metadata: {
-              stream_id: streamId,
-              reported_by: officerProfile.id,
-            },
+          const { error } = await supabase.functions.invoke('officer-actions', {
+            body: {
+              action: 'report_troll_attack',
+              targetUserId: target.userId,
+              targetUsername: target.username,
+              streamId,
+              description: `Officer report for ${target.username} in stream ${streamId}`
+            }
           })
 
-          if (ticket.error) {
-            throw ticket.error
-          }
+          if (error) throw error
 
           toast.success(`Report filed for ${target.username}`)
-
-          await recordOfficerAction(officerProfile.id, 'report', {
-            metadata: { stream_id: streamId },
-          })
           break
         }
         default:
@@ -259,68 +139,38 @@ export default function ModerationMenu({
       onClose()
     } catch (err: any) {
       console.error('Error performing moderation action:', err)
-      toast.error(err?.message || 'Failed to perform action')
+      // Check for custom error message from Edge Function
+      const msg = err?.context?.json?.error || err?.message || 'Failed to perform action';
+      // If it's a "Forbidden" or "Insufficient funds" error, it will come through here.
+      if (msg.includes('Insufficient funds')) {
+         toast.error(msg);
+      } else {
+         toast.error(msg);
+      }
     }
   }
 
   const handleKick = async () => {
     try {
-      const { currentUser, officerProfile, isPrivileged } = await fetchOfficerContext()
-
-      const fee = isPrivileged ? 0 : 500
-      
-      // Check coins
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('troll_coins')
-        .eq('id', currentUser.id)
-        .single()
-        
-      if (!isPrivileged && (profile?.troll_coins || 0) < fee) {
-        toast.error(`Insufficient coins. Need ${fee} coins to kick.`)
-        return
-      }
-
-      if (!isPrivileged) {
-        const { error: spendError } = await supabase.rpc('troll_bank_spend_coins', {
-          p_user_id: officerProfile.id,
-          p_amount: fee,
-          p_bucket: 'paid',
-          p_source: 'moderation_fee',
-          p_metadata: { action: 'kick', target_id: target.userId }
-        });
-
-        if (spendError) {
-          console.error('Failed to deduct kick fee:', spendError);
-          toast.error('Failed to process fee. Action cancelled.');
-          return;
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'troll_kick',
+          targetUserId: target.userId,
+          targetUsername: target.username,
+          streamId
         }
-      }
-
-      const { data, error } = await supabase.rpc('kick_user', {
-        p_target_user_id: target.userId,
-        p_kicker_user_id: currentUser.id,
-        p_stream_id: streamId || null,
       })
 
       if (error) throw error
 
-      await recordOfficerAction(officerProfile.id, 'kick', {
-        fee_coins: fee,
-        metadata: { stream_id: streamId || null },
-      })
-
-      if (data?.auto_banned) {
-        toast.success(`${target.username} was kicked and auto-banned.`)
-      } else {
-        toast.success(`${target.username} was kicked.`)
-      }
+      toast.success(`${target.username} was kicked.`)
 
       onActionComplete()
       onClose()
     } catch (err: any) {
       console.error('Error kicking user:', err)
-      toast.error(err?.message || 'Failed to kick user')
+      const msg = err?.context?.json?.error || err?.message || 'Failed to kick user';
+      toast.error(msg)
     }
   }
 
@@ -331,30 +181,25 @@ export default function ModerationMenu({
         // Cancelled or empty
         return
       }
-
-      const { officerProfile } = await fetchOfficerContext()
       
-      // Use issue_warrant RPC instead of ban
-      const { data, error } = await supabase.rpc('issue_warrant', {
-        p_user_id: target.userId,
-        p_reason: reason.trim()
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'issue_warrant',
+          targetUserId: target.userId,
+          targetUsername: target.username,
+          reason: reason.trim()
+        }
       })
 
       if (error) throw error
-      if (data && !data.success) {
-        throw new Error(data.error || 'Failed to issue warrant')
-      }
-
-      await recordOfficerAction(officerProfile.id, 'ban', { // Keeping action type 'ban' for stats consistency if desired, or change to 'warrant'
-        metadata: { reason: reason.trim(), type: 'warrant' },
-      })
 
       toast.success(`Warrant issued for ${target.username}. Access restricted until court appearance.`)
       onActionComplete()
       onClose()
     } catch (err: any) {
       console.error('Warrant issuance failed:', err)
-      toast.error(err?.message || 'Failed to issue warrant')
+      const msg = err?.context?.json?.error || err?.message || 'Failed to issue warrant';
+      toast.error(msg)
     }
   }
 
@@ -473,17 +318,7 @@ export default function ModerationMenu({
       <div className="border-t border-purple-500/30 my-2"></div>
 
       <button
-        onClick={async () => {
-          // Fetch user's IP address (officers can't see it, but can still ban)
-          const { data } = await supabase
-            .from('user_profiles')
-            .select('last_known_ip')
-            .eq('id', target.userId)
-            .single()
-          
-          if (data?.last_known_ip) {
-            setTargetIP(data.last_known_ip)
-          }
+        onClick={() => {
           setShowIPBanModal(true)
         }}
         className="w-full text-left px-3 py-2 hover:bg-red-600/30 rounded text-red-400 flex items-center gap-2 transition-colors font-semibold"

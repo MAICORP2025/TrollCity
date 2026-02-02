@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { Heart, Trash2, Send, MessageCircle, AlertTriangle, Loader2, Gavel } from 'lucide-react';
@@ -30,21 +30,7 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
   // Check if user is pastor or admin
   const isPastorOrAdmin = profile?.is_pastor || profile?.role === 'admin' || (profile as any)?.is_admin;
 
-  useEffect(() => {
-    fetchPrayers();
-
-    // Poll every 30 seconds instead of Realtime subscription
-    const interval = setInterval(() => {
-      fetchPrayers();
-    }, 30000);
-
-    return () => {
-      clearInterval(interval);
-      supabase.channel('church_prayers_channel').unsubscribe();
-    };
-  }, [profile?.id]);
-
-  const fetchPrayers = async () => {
+  const fetchPrayers = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('church_prayers')
@@ -78,7 +64,21 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [profile]);
+
+  useEffect(() => {
+    fetchPrayers();
+
+    // Poll every 30 seconds instead of Realtime subscription
+    const interval = setInterval(() => {
+      fetchPrayers();
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+      supabase.channel('church_prayers_channel').unsubscribe();
+    };
+  }, [fetchPrayers]);
 
 
 
@@ -125,7 +125,7 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
     try {
       await supabase.from('church_prayers').delete().eq('id', id);
       toast.success('Prayer deleted');
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete');
     }
   };
@@ -157,7 +157,7 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
        } else {
           await supabase.from('church_prayer_likes').insert({ prayer_id: prayer.id, user_id: profile.id });
        }
-     } catch (err) {
+     } catch {
        // Revert on error (fetching again is easiest)
        fetchPrayers();
      }

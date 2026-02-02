@@ -17,6 +17,8 @@ export interface ExecutiveIntake {
   description?: string
   submitted_by?: string
   title?: string
+  type?: string
+  metadata?: any
 }
 
 export interface ExecutiveReport {

@@ -67,11 +67,6 @@ const CourtDocketDashboard: React.FC = (): JSX.Element => {
         .from('court_docket')
         .update(updateData)
         .eq('id', docketId);
-  // Soft delete function
-  const softDeleteDocket = async (docketId: string) => {
-    if (!confirm('Are you sure you want to delete this docket entry?')) return;
-    await updateDocketStatus(docketId, 'deleted', 'Entry deleted');
-  };
 
       if (error) throw error;
 
@@ -80,6 +75,12 @@ const CourtDocketDashboard: React.FC = (): JSX.Element => {
     } catch (error) {
       console.error('Error updating docket:', error);
     }
+  };
+
+  // Soft delete function
+  const softDeleteDocket = async (docketId: string) => {
+    if (!confirm('Are you sure you want to delete this docket entry?')) return;
+    await updateDocketStatus(docketId, 'deleted', 'Entry deleted');
   };
 
   const dismissCase = async (docketId: string) => {

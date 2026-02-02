@@ -6,8 +6,7 @@ import { toast } from 'sonner'
 import { 
   Loader, DollarSign, Users, 
   Search, TrendingUp,
-  Building, Settings, Plus, Trash,
-  RefreshCw
+  Building, Settings, Plus, Trash
 } from 'lucide-react'
 import { EarningsView } from '../../types/earnings'
 import AutomatedPayouts from './components/AutomatedPayouts'
@@ -31,7 +30,7 @@ const AdminEarningsDashboard: React.FC = () => {
   const navigate = useNavigate()
   
   // Tabs state
-  const [activeTab, setActiveTab] = useState<'creators' | 'properties' | 'settings'>('creators')
+  const [activeTab, setActiveTab] = useState<'creators' | 'properties' | 'settings' | 'automated'>('creators')
 
   // Creators State
   const [creators, setCreators] = useState<CreatorEarnings[]>([])

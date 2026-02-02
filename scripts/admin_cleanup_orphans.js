@@ -48,7 +48,7 @@ async function cleanupOrphans() {
         for (const user of users) {
             checkedCount++;
             // Check if profile exists
-            const { data: profile, error: pErr } = await supabase
+            const { data: profile, error: _pErr } = await supabase
                 .from('user_profiles')
                 .select('id')
                 .eq('id', user.id)

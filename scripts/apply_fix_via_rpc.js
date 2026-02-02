@@ -24,7 +24,7 @@ async function run() {
   
   console.log('Attempting to execute SQL via RPC "exec_sql" or similar if available...')
   
-  const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql })
+  const { error } = await supabase.rpc('exec_sql', { sql_query: sql })
   
   if (error) {
     console.log('RPC exec_sql failed (likely does not exist).')

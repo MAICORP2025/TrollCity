@@ -10,7 +10,7 @@ if (fs.existsSync(envPath)) {
 }
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+// const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Prefer service role for migrations
 
 if (!supabaseUrl || !supabaseServiceKey) {
@@ -32,7 +32,7 @@ async function runMigration() {
     // If not, we might need to use the SQL editor or a direct connection.
     // However, since we are using the JS client, we rely on the RPC 'exec_sql' created in the setup.
     
-    const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql });
+    const { error } = await supabase.rpc('exec_sql', { sql_query: sql });
 
     if (error) {
       console.error('Migration failed:', error);

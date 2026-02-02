@@ -23,52 +23,19 @@ export default function TrollBattlesSetup({ streamId, onOpponentFound, onCancel:
     if (!streamId) return;
     
     try {
-        const { data: gifts } = await supabase
-            .from('gifts')
-            .select('receiver_id, coins_spent')
-            .eq('stream_id', streamId);
-
-        if (!gifts) return;
-
-        const totals: Record<string, number> = {};
-        gifts.forEach(g => {
-            if (g.receiver_id === user?.id) return;
-            if (g.receiver_id) {
-                totals[g.receiver_id] = (totals[g.receiver_id] || 0) + (g.coins_spent || 0);
+        await supabase.functions.invoke('officer-actions', {
+            body: {
+                action: 'assign_battle_guests',
+                battleId,
+                isPlayer1,
+                streamId
             }
         });
-
-        const sortedIds = Object.entries(totals)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 2)
-            .map(([id]) => id);
-
-        if (sortedIds.length === 0) return;
-
-        const { data: guests } = await supabase
-            .from('user_profiles')
-            .select('id, username, avatar_url')
-            .in('id', sortedIds);
-
-        if (!guests || guests.length === 0) return;
-
-        const battleParticipants = guests.map(g => ({
-            user_id: g.id,
-            username: g.username,
-            avatar_url: g.avatar_url
-        }));
-
-        const updateField = isPlayer1 ? 'host_guests' : 'challenger_guests';
-        
-        await supabase
-            .from('troll_battles')
-            .update({ [updateField]: battleParticipants })
-            .eq('id', battleId);
 
     } catch (err) {
         console.error('Failed to assign guests', err);
     }
-  }, [streamId, user]);
+  }, [streamId]);
 
   // Poll for battle status if searching
   useEffect(() => {
@@ -113,15 +80,16 @@ export default function TrollBattlesSetup({ streamId, onOpponentFound, onCancel:
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase.rpc('find_opponent', { p_user_id: user.id });
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+            action: 'find_opponent'
+        }
+      });
       
       if (error) throw error;
+      const result = data; // result is already the data returned by function
 
-      if (data.status === 'matched') {
-        // If RPC returns matched immediately (rare but possible if someone is waiting)
-        // We still need to fetch opponent details if not provided fully
-        // The polling effect will catch it, or we can set it here if RPC returns full object.
-        // Let's rely on the polling/subscription for consistency or a second fetch.
+      if (result.status === 'matched') {
         setStatus('searching'); // Will catch it in next poll
       } else {
         setStatus('searching');
@@ -138,15 +106,18 @@ export default function TrollBattlesSetup({ streamId, onOpponentFound, onCancel:
     if (!user || !battleId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('skip_opponent', { 
-        p_user_id: user.id,
-        p_battle_id: battleId 
+      const { data, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+            action: 'skip_opponent',
+            battleId
+        }
       });
 
       if (error) throw error;
+      const result = data;
 
-      if (data.success) {
-        setSkipsUsed(data.skips_used);
+      if (result.success) {
+        setSkipsUsed(result.skips_used);
         setStatus('searching'); // Go back to searching
         setOpponent(null);
         setBattleId(null);

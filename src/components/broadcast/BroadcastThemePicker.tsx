@@ -12,8 +12,7 @@ export interface BroadcastTheme {
 export default function BroadcastThemePicker({
   themes,
   selected,
-  onSelect,
-  ownedThemeIds
+  onSelect
 }: {
   themes: BroadcastTheme[];
   selected: string | null;

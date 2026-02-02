@@ -13,7 +13,7 @@ export function useGiftEvents(streamId?: string | null) {
     console.log('🎁 Setting up gift events subscription for stream:', streamId)
 
     // Subscribe to Broadcast channel (Primary source - Fast, No DB load)
-    const broadcastChannel = supabase
+    const _broadcastChannel = supabase
       .channel(`stream_events_${streamId}`)
       .on('broadcast', { event: 'gift_sent' }, (payload) => {
         console.log('📡 Broadcast gift received:', payload.payload)
@@ -58,10 +58,10 @@ export function useGiftEvents(streamId?: string | null) {
         // If it's a broadcast, we have full data.
         // If it's DB, we use what we have and DO NOT fetch profile to save DB.
         
-        let senderUsername = gift.sender_username || 'Anonymous'
-        let senderAvatar = gift.sender_avatar || null
-        let senderRole = gift.sender_role || null
-        let senderTrollRole = gift.sender_troll_role || null
+        const senderUsername = gift.sender_username || 'Anonymous'
+        const senderAvatar = gift.sender_avatar || null
+        const senderRole = gift.sender_role || null
+        const senderTrollRole = gift.sender_troll_role || null
         
         const senderId = gift.from_user_id || gift.sender_id || gift.senderId
 

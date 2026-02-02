@@ -4,7 +4,7 @@ import { useAuthStore } from '../../../lib/store';
 import { toast } from 'sonner';
 import { 
   Lock, Unlock, Users, Shield, AlertTriangle, 
-  CheckCircle, XCircle, RefreshCw, User, Crown, Settings
+  CheckCircle, XCircle, RefreshCw, Crown, Settings
 } from 'lucide-react';
 
 interface Broadcaster {
@@ -130,10 +130,12 @@ export default function BroadcastLockDashboard() {
     if (!user) return;
     
     try {
-      const { error } = await supabase.rpc('toggle_broadcast_lockdown', {
-        p_admin_id: user.id,
-        p_enabled: !lockdownSettings.is_enabled,
-        p_reason: reason || null
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'toggle_broadcast_lockdown',
+          enabled: !lockdownSettings.is_enabled,
+          reason: reason || null
+        }
       });
 
       if (error) throw error;
@@ -153,9 +155,12 @@ export default function BroadcastLockDashboard() {
   const lockIndividualBroadcaster = async (userId: string, locked: boolean) => {
     setLockingUser(userId);
     try {
-      const { error } = await supabase.rpc('lock_broadcaster', {
-        p_user_id: userId,
-        p_locked: locked
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'lock_broadcaster',
+          userId,
+          locked
+        }
       });
 
       if (error) throw error;
@@ -173,8 +178,11 @@ export default function BroadcastLockDashboard() {
   const grantBadge = async (userId: string) => {
     setGrantBadgeUser(userId);
     try {
-      const { error } = await supabase.rpc('grant_broadcaster_badge', {
-        p_user_id: userId
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'grant_broadcaster_badge',
+          userId
+        }
       });
 
       if (error) throw error;
@@ -192,8 +200,11 @@ export default function BroadcastLockDashboard() {
   const revokeBadge = async (userId: string) => {
     setRevokeBadgeUser(userId);
     try {
-      const { error } = await supabase.rpc('revoke_broadcaster_badge', {
-        p_user_id: userId
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'revoke_broadcaster_badge',
+          userId
+        }
       });
 
       if (error) throw error;
@@ -216,12 +227,12 @@ export default function BroadcastLockDashboard() {
     
     setUpdatingLimit(true);
     try {
-      const { error } = await supabase
-        .from('broadcaster_limits')
-        .upsert({
-          max_broadcasters: newLimit,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'update_broadcaster_limit',
+          limit: newLimit
+        }
+      });
       
       if (error) throw error;
       

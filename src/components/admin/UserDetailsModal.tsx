@@ -225,11 +225,13 @@ export default function UserDetailsModal({ userId, username, onClose }: UserDeta
     try {
       const missingList = userData.missing_items.map(item => `${item.category}: ${item.item}`).join(', ')
 
-      const { error } = await supabase.rpc('notify_user_rpc', {
-        p_target_user_id: userId,
-        p_type: 'system_alert',
-        p_title: 'Action Required: Complete Your Profile',
-        p_message: `Please complete the following items: ${missingList}. Visit your profile settings to update your information.`
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'notify_user',
+          targetUserId: userId,
+          title: 'Action Required: Complete Your Profile',
+          message: `Please complete the following items: ${missingList}. Visit your profile settings to update your information.`
+        }
       })
 
       if (error) throw error

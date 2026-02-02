@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { CreditCard, DollarSign, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { CASHOUT_TIERS } from '@/lib/payoutConfig';
+import { TIERS } from '@/lib/payoutTiers';
 
 export default function PastorPayouts() {
   const { profile, refreshProfile } = useAuthStore();
@@ -97,34 +97,33 @@ export default function PastorPayouts() {
       <div className="space-y-4">
         <h3 className="font-semibold text-white">Select Payout Tier</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {CASHOUT_TIERS.map((tier, index) => {
-            const isAffordable = balance >= tier.coins;
+          {TIERS.map((tier, index) => {
             const isSelected = selectedTier?.coins === tier.coins;
-
+            const canAfford = balance >= tier.coins;
+            
             return (
               <button
                 key={index}
-                onClick={() => isAffordable && setSelectedTier(tier)}
-                disabled={!isAffordable}
+                onClick={() => canAfford && setSelectedTier({ coins: tier.coins, usd: tier.usd })}
+                disabled={!canAfford}
                 className={`
                   relative p-4 rounded-xl border text-left transition-all
                   ${isSelected 
-                    ? 'bg-green-600/20 border-green-500 ring-1 ring-green-500' 
-                    : isAffordable
-                      ? 'bg-zinc-800 border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800/80'
-                      : 'bg-zinc-900/50 border-zinc-800 opacity-50 cursor-not-allowed'
+                    ? 'bg-purple-600/20 border-purple-500 ring-1 ring-purple-500' 
+                    : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600'
                   }
+                  ${!canAfford && 'opacity-50 cursor-not-allowed'}
                 `}
               >
-                <div className="flex justify-between items-center mb-1">
-                  <span className={`text-lg font-bold ${isSelected ? 'text-green-300' : 'text-white'}`}>
-                    ${tier.usd} USD
-                  </span>
-                  {!isAffordable && (
-                    <span className="text-xs text-red-400 font-medium">Insufficient</span>
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-2xl font-bold text-white">${tier.usd}</span>
+                  {tier.manualReview && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                      MANUAL
+                    </span>
                   )}
                 </div>
-                <div className={`text-sm ${isSelected ? 'text-green-400/80' : 'text-gray-400'}`}>
+                <div className="text-sm text-gray-400">
                   {tier.coins.toLocaleString()} Coins
                 </div>
               </button>

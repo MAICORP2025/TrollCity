@@ -169,7 +169,7 @@ export const useAuthStore = create<AuthState>()(
             try {
               const { data: levelRow, error: levelError } = await supabase
                 .from('user_profiles')
-                .select('level, xp')
+                .select('level, xp, total_xp, next_level_xp')
                 .eq('id', u.id)
                 .single()
 

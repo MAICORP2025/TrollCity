@@ -97,7 +97,6 @@ export default function ExpandedStatsPanel({ isOpen, onClose }: ExpandedStatsPan
           nextLevelXp: 2000,
           troll_coins: profile?.troll_coins || 0,
           paid_coins: profile?.paid_coins || 0,
-          trollmonds: profile?.trollmonds || 0,
           ...familyData,
           ...warStats,
           badges

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { X, Wrench, ArrowUp, Coins, AlertCircle, Settings, Zap } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { X, Wrench, ArrowUp, Coins, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 
@@ -31,11 +31,7 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [userCarId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch all available upgrades
@@ -62,7 +58,11 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
     } finally {
       setLoading(false);
     }
-  };
+  }, [userCarId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handlePurchase = async (upgrade: Upgrade) => {
     // Check if already installed (or higher tier installed?)
@@ -72,7 +72,7 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
 
     setPurchasing(upgrade.id);
     try {
-      const { data, error } = await supabase.rpc('apply_car_upgrade', {
+      const { error } = await supabase.rpc('apply_car_upgrade', {
         p_user_car_id: userCarId,
         p_upgrade_id: upgrade.id
       });
@@ -87,17 +87,6 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
       toast.error(error.message || 'Failed to purchase upgrade');
     } finally {
       setPurchasing(null);
-    }
-  };
-
-  const getUpgradeIcon = (type: string) => {
-    switch (type) {
-      case 'engine': return <Wrench className="w-5 h-5 text-red-400" />;
-      case 'transmission': return <Settings className="w-5 h-5 text-blue-400" />;
-      case 'tires': return <div className="w-5 h-5 rounded-full border-4 border-zinc-400" />;
-      case 'body': return <div className="w-5 h-5 bg-zinc-400 rounded" />;
-      case 'nitro': return <Zap className="w-5 h-5 text-yellow-400" />;
-      default: return <Wrench className="w-5 h-5 text-gray-400" />;
     }
   };
 
@@ -191,42 +180,3 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
     </div>
   );
 }
-
-function ZapIcon(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  )
-}
-
-function SettingsIcon(props: any) {
-    return (
-      <svg
-        {...props}
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    )
-  }

@@ -222,9 +222,8 @@ export async function getUserPurchases(
 
   try {
     // Trigger lazy cleanup of expired items (10s buffer)
-    await client.rpc('cleanup_expired_user_purchases').catch(err => {
-      // Ignore error if RPC doesn't exist yet or fails, to not block fetching
-      console.warn('Cleanup RPC failed:', err);
+    await client.rpc('cleanup_expired_user_purchases').then(({ error }) => {
+      if (error) console.warn('Cleanup RPC failed:', error);
     });
 
     // Filter out expired items (fallback if cleanup hasn't run)

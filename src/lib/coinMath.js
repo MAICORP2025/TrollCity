@@ -25,10 +25,10 @@ export const coinPackages = COIN_PACKAGES;
 
 // Cashout Tiers (4 total)
 export const cashoutTiers = [
-  { id: "basic", name: "Basic", coins: 12375, payout: 50 },
-  { id: "pro", name: "Pro", coins: 30375, payout: 70 },
-  { id: "elite", name: "Elite", coins: 60375, payout: 170 },
-  { id: "diamond", name: "Diamond", coins: 120375, payout: 355 }
+  { id: "basic", name: "Basic", coins: 12000, payout: 25 },
+  { id: "pro", name: "Pro", coins: 26375, payout: 70 },
+  { id: "elite", name: "Elite", coins: 60000, payout: 150 },
+  { id: "diamond", name: "Diamond", coins: 120000, payout: 355 }
 ];
 
 /**

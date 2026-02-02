@@ -31,7 +31,7 @@ export default function IPBanModal({
 }: IPBanModalProps) {
   const { user, profile } = useAuthStore()
   const [ipAddress, setIPAddress] = useState(targetIP || '')
-  const [internalTargetIP, setInternalTargetIP] = useState(targetIP || '')
+  // Removed internalTargetIP since backend handles lookups for officers
   const [banReason, setBanReason] = useState<string>('abuse')
   const [banDetails, setBanDetails] = useState('')
   const [banDuration, setBanDuration] = useState<'permanent' | 'temporary'>('permanent')
@@ -50,40 +50,34 @@ export default function IPBanModal({
       return
     }
 
-    // For officers, use internalTargetIP if available, otherwise require admin to enter IP
-    let ipToBan = ''
+    // Validation
+    const ipToBan = ipAddress.trim();
     
-    if (!profile.is_admin) {
-      // Officers can't see IPs, but can ban using internalTargetIP if provided
-      if (internalTargetIP) {
-        ipToBan = internalTargetIP
-      } else {
-        toast.error('IP address is required. Only admins can view and enter IP addresses.')
-        return
-      }
-    } else {
+    if (profile.is_admin) {
       // Admins must enter IP address
-      if (!ipAddress.trim()) {
+      if (!ipToBan) {
         toast.error('Please enter an IP address')
         return
       }
 
       // Validate IP address format (only for admins)
       const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-      if (!ipRegex.test(ipAddress.trim())) {
+      if (!ipRegex.test(ipToBan)) {
         toast.error('Invalid IP address format')
         return
       }
-      
-      ipToBan = ipAddress.trim()
+    } else {
+       // Officers: Ensure we have a target user or IP (if somehow populated)
+       if (!targetUserId && !ipToBan) {
+          toast.error('Cannot ban: No user selected and no IP provided');
+          return;
+       }
     }
 
     if (!banReason) {
       toast.error('Please select a ban reason')
       return
     }
-
-    // No confirmation - proceed directly
 
     setBanning(true)
     try {
@@ -95,15 +89,20 @@ export default function IPBanModal({
         bannedUntil = untilDate.toISOString()
       }
 
-      const { data, error } = await supabase.rpc('ban_ip_address', {
-        p_ip_address: ipToBan,
-        p_ban_reason: banReason,
-        p_officer_id: user.id,
-        p_ban_details: banDetails.trim() || null,
-        p_banned_until: bannedUntil
-      })
+      const { data: responseData, error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+            action: 'ban_ip_address',
+            targetUserId: targetUserId,
+            ipAddress: ipToBan || undefined, // Send only if we have it
+            banReason: banReason,
+            banDetails: banDetails.trim() || null,
+            bannedUntil: bannedUntil
+        }
+      });
 
       if (error) throw error
+      
+      const data = responseData; // Result from hub
 
       if (data?.success) {
         const displayIP = profile.is_admin ? ipToBan : '***.***.***.***'
@@ -121,30 +120,32 @@ export default function IPBanModal({
       }
     } catch (error: any) {
       console.error('Error banning IP:', error)
-      toast.error(error?.message || 'Failed to ban IP address')
+      const msg = error?.context?.json?.error || error?.message || 'Failed to ban IP address';
+      toast.error(msg)
     } finally {
       setBanning(false)
     }
   }
 
-  // Fetch user's IP if targetUserId is provided (only for admins to see, but officers can still ban)
+  // Fetch user's IP if targetUserId is provided (only for admins to see)
   useEffect(() => {
-    if (targetUserId && !targetIP && isOpen) {
-      supabase
-        .from('user_profiles')
-        .select('last_known_ip')
-        .eq('id', targetUserId)
-        .single()
-        .then(({ data }) => {
-          if (data?.last_known_ip) {
-            // Only set IPAddress for admins to see
-            if (profile?.is_admin) {
-              setIPAddress(data.last_known_ip)
-            }
-            // Always set internalTargetIP for banning (officers can use it but won't see it)
-            setInternalTargetIP(data.last_known_ip)
-          }
-        })
+    if (targetUserId && !targetIP && isOpen && profile?.is_admin) {
+      supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'get_user_ip',
+          userId: targetUserId
+        }
+      }).then(({ data: res, error }) => {
+        if (error) {
+          console.error('Failed to fetch user IP', error);
+          return;
+        }
+        if (res?.success && res.ip) {
+          setIPAddress(res.ip);
+        } else if (res?.ip) {
+             setIPAddress(res.ip);
+        }
+      });
     }
   }, [targetUserId, targetIP, isOpen, profile?.is_admin])
 
@@ -275,7 +276,7 @@ export default function IPBanModal({
             </button>
             <button
               onClick={handleBan}
-              disabled={banning || (!profile?.is_admin && !targetIP) || (profile?.is_admin && !ipAddress.trim()) || !banReason}
+              disabled={banning || (!profile?.is_admin && !targetUserId && !targetIP) || (profile?.is_admin && !ipAddress.trim()) || !banReason}
               className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {banning ? 'Banning...' : 'Ban IP Address'}

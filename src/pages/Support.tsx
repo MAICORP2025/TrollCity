@@ -26,7 +26,7 @@ export default function Support() {
     if (profile?.role === 'admin' || profile?.is_admin) {
       navigate('/admin/support-tickets', { replace: true })
     }
-  }, [profile?.role, navigate])
+  }, [profile?.role, profile?.is_admin, navigate])
   const [subject, setSubject] = useState('')
   const [category, setCategory] = useState<'general' | 'appeal'>('general')
   const [message, setMessage] = useState('')

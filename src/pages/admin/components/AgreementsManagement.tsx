@@ -69,15 +69,15 @@ Last Updated: January 1, 2026`
   const fetchAgreements = useCallback(async () => {
     setIsLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('user_agreements')
-        .select('*')
-        .order('accepted_at', { ascending: false })
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_user_agreements' }
+      })
 
       if (error) throw error
+      if (data.error) throw new Error(data.error)
 
-      if (data) {
-        const formattedAgreements = data as AgreementRecord[]
+      if (data && data.agreements) {
+        const formattedAgreements = data.agreements as AgreementRecord[]
         setAgreements(formattedAgreements)
         onLoadAgreements(formattedAgreements)
       }

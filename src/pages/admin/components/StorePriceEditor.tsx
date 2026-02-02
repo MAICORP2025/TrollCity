@@ -116,29 +116,19 @@ export default function StorePriceEditor() {
     setLoading(true)
     setError(null)
     try {
-      const [
-        coinRes,
-        effectsRes,
-        perksRes,
-        insuranceRes,
-      ] = await Promise.all([
-        supabase
-          .from('coin_packages')
-          .select('id, name, coin_amount, currency, price, description')
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('entrance_effects')
-          .select('id, name, coin_cost, rarity, animation_type')
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('perks')
-          .select('id, name, cost, duration_minutes, perk_type')
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('insurance_options')
-          .select('id, name, cost, duration_hours, protection_type')
-          .order('created_at', { ascending: true }),
-      ])
+      const { data, error: invokeError } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_store_catalogs' }
+      });
+
+      if (invokeError) throw invokeError;
+
+      const { coin_packages, entrance_effects, perks, insurance_options, errors } = data;
+
+      // Wrap in structure expected by handleResult
+      const coinRes = { data: coin_packages, error: errors?.coin_packages };
+      const effectsRes = { data: entrance_effects, error: errors?.entrance_effects };
+      const perksRes = { data: perks, error: errors?.perks };
+      const insuranceRes = { data: insurance_options, error: errors?.insurance_options };
 
       const handleResult = (result: any, table: TableKey) => {
         if (result.error) {
@@ -210,11 +200,15 @@ export default function StorePriceEditor() {
 
     setSavingKeys((prev) => [...prev, key])
     try {
-      const updatePayload = { [section.field]: parsed }
-      const { error: updateError } = await supabase
-        .from(section.key)
-        .update(updatePayload)
-        .eq('id', item.id)
+      const { error: updateError } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'update_store_price',
+            table: section.key,
+            id: item.id,
+            field: section.field,
+            value: parsed
+        }
+      });
 
       if (updateError) {
         console.error('Price update failed:', updateError)

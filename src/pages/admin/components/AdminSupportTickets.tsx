@@ -24,16 +24,15 @@ const AdminSupportTickets: React.FC = () => {
   const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
 
   const loadTickets = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("support_tickets")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_support_tickets' }
+    });
 
     if (error) {
       toast.error("Failed to load tickets");
       return;
     }
-    setTickets(data || []);
+    setTickets(data?.tickets || []);
     setLoading(false);
   }, []);
 
@@ -58,10 +57,13 @@ const AdminSupportTickets: React.FC = () => {
     if (!responding) return;
 
     try {
-      const { error } = await supabase.rpc('resolve_support_ticket', {
-        p_ticket_id: ticketId,
-        p_response: responding.message
-      })
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'resolve_support_ticket',
+            ticketId: ticketId,
+            response: responding.message
+        }
+      });
 
       if (error) throw error
 
@@ -76,10 +78,12 @@ const AdminSupportTickets: React.FC = () => {
 
   const closeTicket = useCallback(async (ticketId: string) => {
     try {
-      const { error } = await supabase
-        .from("support_tickets")
-        .update({ status: "closed", response_at: new Date().toISOString() })
-        .eq("id", ticketId);
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'close_support_ticket',
+            ticketId: ticketId
+        }
+      });
       if (error) throw error;
       toast.success("Ticket closed");
       loadTickets();
@@ -96,7 +100,12 @@ const AdminSupportTickets: React.FC = () => {
       // Optimistically remove from state first
       setTickets((prev) => prev.filter((t) => t.id !== ticketId));
       
-      const { error } = await supabase.rpc('delete_support_ticket', { p_ticket_id: ticketId })
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'delete_support_ticket',
+            ticketId: ticketId
+        }
+      });
         
       if (error) {
         console.error("Delete ticket failed", error);

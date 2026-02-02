@@ -32,6 +32,7 @@ import ResponsiveVideoGrid from '../components/stream/ResponsiveVideoGrid';
 import { useRoomParticipants } from '../hooks/useRoomParticipants';
 import { useSeatRoster } from '../hooks/useSeatRoster';
 import { useViewerTracking } from '../hooks/useViewerTracking';
+import { useXPTracking } from '../hooks/useXPTracking';
 
 // Constants
 const MOBILE_NAV_HEIGHT = 76;
@@ -659,7 +660,7 @@ export default function WatchPage() {
     };
 
     void sendEntrance();
-  }, [streamId, user?.id, isConnected, profile?.username, profile?.role, profile?.is_ghost_mode, user?.email]);
+  }, [streamId, user?.id, isConnected, profile?.username, profile?.role, profile?.is_ghost_mode, user?.email, profile?.is_og_user, profile?.is_troll_officer]);
 
   const handleGiftFromProfile = useCallback((profile: any) => {
       setGiftRecipient(profile);
@@ -786,7 +787,7 @@ export default function WatchPage() {
     } catch (e) {
       console.error('Failed to record manual gift event:', e);
     }
-  }, [stream?.id, stream?.broadcaster_id, user?.id, giftRecipient?.id, broadcastTheme?.id, lastThemeId, isMobile]);
+  }, [stream?.id, stream?.broadcaster_id, user?.id, giftRecipient?.id, broadcastTheme?.id, lastThemeId, isMobile, profile?.username]);
 
   const handleCoinsPurchased = useCallback(() => {
     setIsCoinStoreOpen(false);
@@ -825,7 +826,7 @@ export default function WatchPage() {
         seats={seats}
         isHost={false}
         boxCount={boxCount}
-        onUserClick={(p) => {
+        onUserClick={() => {
           // Find profile from participants if possible, or just ignore
         }}
       />

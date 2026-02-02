@@ -65,6 +65,10 @@ export const API_ENDPOINTS = {
     chatPurge: '/moderation', // Handled by take_action with type chat_purge
     disableStream: '/moderation', // Handled by take_action with type suspend_stream
   },
+  officerVoting: {
+    vote: '/officer-vote',
+    cycle: '/officer-vote-cycle'
+  },
 };
 
 interface ApiResponse<T = any> {
@@ -426,6 +430,16 @@ export async function startRtmpRelay(roomName: string, streamKey: string) {
   return await post(API_ENDPOINTS.rtmp.start, { roomName, streamKey })
 }
 
-const api = { get, post, put, patch, delete: del, request, createMuxStream, startRtmpRelay };
+const api = { 
+  get, 
+  post, 
+  put, 
+  patch, 
+  delete: del, 
+  request, 
+  createMuxStream, 
+  startRtmpRelay,
+  endpoints: API_ENDPOINTS 
+};
 
 export default api;

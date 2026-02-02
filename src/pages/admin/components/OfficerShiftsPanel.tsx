@@ -45,47 +45,12 @@ export default function OfficerShiftsPanel() {
   const loadShifts = useCallback(async () => {
     setLoading(true)
     try {
-      let query = supabase
-        .from('officer_work_sessions')
-        // Avoid FK-name joins to prevent schema-cache/constraint-name drift (PGRST200)
-        .select('*')
-        .order('clock_in', { ascending: false })
-        .limit(100)
-
-      if (filter === 'active') {
-        query = query.is('clock_out', null)
-      } else if (filter === 'completed') {
-        query = query.not('clock_out', 'is', null)
-      }
-
-      const { data, error } = await query
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: { action: "get_officer_shifts", filter },
+      })
 
       if (error) throw error
-
-      const raw = (data as any) || []
-      const officerIds = Array.from(
-        new Set(raw.map((s: any) => s.officer_id).filter((id: any) => typeof id === 'string' && id.length > 0)),
-      )
-
-      const officerMap = new Map<string, any>()
-      if (officerIds.length) {
-        const { data: officersData, error: officersError } = await supabase
-          .from('user_profiles')
-          .select('id, username')
-          .in('id', officerIds)
-        if (officersError) {
-          console.warn('Failed to hydrate officer usernames (non-fatal):', officersError)
-        } else {
-          ;(officersData || []).forEach((o: any) => officerMap.set(o.id, o))
-        }
-      }
-
-      setShifts(
-        raw.map((s: any) => ({
-          ...s,
-          officer: officerMap.get(s.officer_id) ? { username: officerMap.get(s.officer_id).username } : undefined,
-        })),
-      )
+      setShifts(data?.shifts || [])
     } catch (err: any) {
       console.error('Error loading shifts:', err)
       toast.error(err?.message || 'Failed to load shifts')
@@ -97,18 +62,12 @@ export default function OfficerShiftsPanel() {
   const loadSlots = useCallback(async () => {
     setSlotsLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('officer_shift_slots')
-        .select(`
-          *,
-          officer:user_profiles!officer_shift_slots_officer_id_fkey(id, username)
-        `)
-        .order('shift_date', { ascending: true })
-        .order('shift_start_time', { ascending: true })
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: { action: "get_officer_shift_slots" },
+      })
 
       if (error) throw error
-
-      setSlots((data as ScheduledSlot[]) || [])
+      setSlots((data?.slots as ScheduledSlot[]) || [])
     } catch (err: any) {
       console.error('Error loading scheduled slots:', err)
       toast.error('Failed to load scheduled shifts')
@@ -397,9 +356,12 @@ export default function OfficerShiftsPanel() {
                             className="rounded-lg bg-red-700 px-3 py-1 text-xs font-semibold hover:bg-red-800 disabled:opacity-50"
                             onClick={async () => {
                               try {
-                                const { error } = await supabase.rpc('admin_end_shift', {
-                                  p_shift_id: shift.id,
-                                  p_reason: 'Admin ended shift'
+                                const { error } = await supabase.functions.invoke("admin-actions", {
+                                  body: { 
+                                    action: "admin_end_shift", 
+                                    shiftId: shift.id,
+                                    reason: 'Admin ended shift' 
+                                  },
                                 })
                                 if (error) {
                                   console.error('Error ending shift:', error)

@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { trollCityTheme } from '../../styles/trollCityTheme';
-import { Mic, MicOff, Users, PhoneOff, MessageSquare, Hand, Video, VideoOff, UserPlus, UserMinus, UserX } from 'lucide-react';
+import { Mic, MicOff, Users, MessageSquare, Hand, UserPlus, UserMinus, UserX } from 'lucide-react';
 import { toast } from 'sonner';
 import { LiveKitRoom, useParticipants, useRoomContext, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
@@ -74,7 +73,7 @@ const PodRoomContent = ({
     }, 300000); // 5 minutes
 
     return () => clearInterval(interval);
-  }, [currentUser?.id, room.id]);
+  }, [currentUser, room.id]);
 
   // Instant Mute Enforcement
   useEffect(() => {
@@ -91,7 +90,7 @@ const PodRoomContent = ({
         await supabase.from('pod_room_participants').delete().eq('room_id', room.id).eq('user_id', userId);
         await supabase.from('pod_bans').insert({ room_id: room.id, user_id: userId });
         toast.success('User kicked');
-        } catch (err) {
+        } catch {
         toast.error('Failed to kick user');
         }
     }

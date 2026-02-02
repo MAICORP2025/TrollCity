@@ -5,8 +5,8 @@ import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { 
   Briefcase, Calendar, Clock, Users, Shield, Video, 
-  CheckCircle, FileText, TrendingUp, Star, ArrowRight,
-  Mic, Heart, Cross, Music, Gamepad2
+  CheckCircle, FileText, Star, ArrowRight,
+  Cross, Music, Gamepad2
 } from 'lucide-react'
 
 // Job position type
@@ -175,7 +175,7 @@ export default function Career() {
   const [applications, setApplications] = useState<Application[]>([])
   const [interviews, setInterviews] = useState<InterviewSession[]>([])
   const [loading, setLoading] = useState(false)
-  const [selectedPosition, setSelectedPosition] = useState<JobPosition | null>(null)
+  // const [selectedPosition, setSelectedPosition] = useState<JobPosition | null>(null)
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null)
   const [scheduleDate, setScheduleDate] = useState('')

@@ -41,7 +41,7 @@ async function applyFix() {
 
   // 2. Check if grant_starter_vehicle function exists
   console.log('\n🔍 Checking grant_starter_vehicle function...');
-  const { data: funcExists, error: funcError } = await supabase
+  const { error: funcError } = await supabase
     .rpc('grant_starter_vehicle', { p_user_id: '00000000-0000-0000-0000-000000000000' })
     .then(() => ({ data: true, error: null }))
     .catch(e => ({ data: false, error: e }));

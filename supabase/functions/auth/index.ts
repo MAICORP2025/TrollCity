@@ -37,7 +37,7 @@ const buildAppSettingFetcher = (client: ReturnType<typeof createClient>) => asyn
 
 async function waitForProfile(supabase: ReturnType<typeof createClient>, uid: string) {
   for (let i = 0; i < 10; i++) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('user_profiles')
       .select('id')
       .eq('id', uid)
@@ -314,7 +314,7 @@ Deno.serve(async (req: Request) => {
 
       // Get test user benefits
       const benefitsSetting = await fetchAppSettingValue('test_user_benefits');
-      const benefits = benefitsSetting || { initial_coins: 5000, bypass_family_fee: true, bypass_admin_message_fee: true };
+      const _benefits = benefitsSetting || { initial_coins: 5000, bypass_family_fee: true, bypass_admin_message_fee: true };
 
       // Always resolve role name for user_profiles (text only)
       const roleName = String(role || 'user').toLowerCase();

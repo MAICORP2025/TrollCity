@@ -29,30 +29,39 @@ const ReportsPanel = () => {
   const [bans, setBans] = useState<BannedUser[]>([]);
 
   const loadReports = async () => {
-    const { data: reportsData } = await supabase
-      .from("stream_reports")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setReports((reportsData as Report[]) || []);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: { action: "get_stream_reports", limit: 50 },
+      });
+      if (error) throw error;
+      setReports(data?.reports || []);
+    } catch (err) {
+      console.error("Error loading reports:", err);
+    }
   };
 
   const loadChatLogs = async () => {
-    const { data: chatData } = await supabase
-      .from("messages")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    setChatLogs((chatData as ChatMessage[]) || []);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: { action: "get_recent_chat_logs", limit: 100 },
+      });
+      if (error) throw error;
+      setChatLogs(data?.logs || []);
+    } catch (err) {
+      console.error("Error loading chat logs:", err);
+    }
   };
 
   const loadBans = async () => {
-    const { data: bansData } = await supabase
-      .from("user_profiles")
-      .select("id, username, email, is_banned")
-      .eq("is_banned", true)
-      .order("created_at", { ascending: false });
-    setBans((bansData as BannedUser[]) || []);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: { action: "get_banned_users" },
+      });
+      if (error) throw error;
+      setBans(data?.users || []);
+    } catch (err) {
+      console.error("Error loading bans:", err);
+    }
   };
 
   useEffect(() => {

@@ -31,16 +31,14 @@ export default function ExploreFeed() {
     window.scrollTo(0, 0);
   }, []);
 
-  const [page, setPage] = useState(0);
+  const [_page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const ITEMS_PER_PAGE = 20;
 
-  const fetchBroadcasts = useCallback(async (isLoadMore = false) => {
-    if (!hasMore && isLoadMore) return;
-
+  const fetchBroadcasts = useCallback(async (targetPage: number, isLoadMore?: boolean) => {
     try {
-      const currentPage = isLoadMore ? page + 1 : 0;
-      const from = currentPage * ITEMS_PER_PAGE;
+      if (targetPage === 0) setLoading(true);
+      const from = targetPage * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
       let query = supabase
@@ -67,7 +65,7 @@ export default function ExploreFeed() {
 
       if (isLoadMore) {
         setBroadcasts(prev => [...prev, ...(data || [])]);
-        setPage(currentPage);
+        setPage(targetPage);
       } else {
         setBroadcasts(data || []);
         setPage(0);
@@ -86,31 +84,23 @@ export default function ExploreFeed() {
     } finally {
       setLoading(false);
     }
-  }, [filter, hasMore, page]);
+  }, [filter]);
 
   // Initial load
   useEffect(() => {
-    fetchBroadcasts(false);
+    fetchBroadcasts(0, false);
     
     // Polling every 30s - resets list to keep "Top" fresh
-    // We only poll page 0 to avoid jittering the user's scroll position if they are deep down
     const interval = setInterval(() => {
-       // Optional: Only refresh if near top? For now, let's just refresh page 0 logic if needed
-       // or just let the user manually refresh. 
-       // Automated refreshing of a paginated list is UX tricky.
-       // Let's remove auto-refresh of the *entire* list to prevent resetting user context.
-       // Or just refresh the viewer counts of currently visible items?
-       // For simplicity/scalability, we'll rely on manual refresh or "Load More".
-       // But to keep it "Live", maybe just re-fetch page 0 if we are at page 0.
        if (window.scrollY < 500) {
-         fetchBroadcasts(false);
+         fetchBroadcasts(0, false);
        }
     }, 30000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [filter]); // Remove fetchBroadcasts from dependency to avoid loop if it changes
+  }, [filter, fetchBroadcasts]);
 
   const getTimeSince = (timestamp: string) => {
     const minutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000);
@@ -310,7 +300,7 @@ export default function ExploreFeed() {
         {hasMore && !loading && broadcasts.length > 0 && (
           <div className="mt-12 flex justify-center">
             <button
-              onClick={() => fetchBroadcasts(true)}
+              onClick={() => fetchBroadcasts(_page + 1, true)}
               className={`px-8 py-3 rounded-xl font-bold text-white ${trollCityTheme.gradients.primary} ${trollCityTheme.shadows.glow} hover:scale-105 transition-transform duration-300`}
             >
               Load More Streams

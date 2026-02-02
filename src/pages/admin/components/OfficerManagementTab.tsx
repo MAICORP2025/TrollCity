@@ -30,14 +30,16 @@ export default function OfficerManagementTab() {
     if (searchQuery.length < 3) return
 
     try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, username, avatar_url, role, is_officer_active, is_lead_officer, troll_role')
-        .ilike('username', `%${searchQuery}%`)
-        .limit(10)
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: { 
+          action: "get_users", 
+          search: searchQuery,
+          limit: 10 
+        },
+      })
 
       if (error) throw error
-      setSearchResults(data || [])
+      setSearchResults(data?.data || [])
     } catch (error) {
       console.error(error)
       toast.error('Search failed')
@@ -52,24 +54,21 @@ export default function OfficerManagementTab() {
   }
 
   const fetchUserDetails = async (userId: string) => {
-    // Fetch badges
-    const { data: badgeData } = await supabase
-      .from('officer_badges')
-      .select('*')
-      .eq('user_id', userId)
-    
-    setBadges(badgeData || [])
-
-    // Fetch logs
     setLoadingLogs(true)
-    const { data: logData } = await supabase
-      .from('role_change_log')
-      .select('*')
-      .eq('target_user', userId)
-      .order('created_at', { ascending: false })
-    
-    setLogs(logData || [])
-    setLoadingLogs(false)
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
+        body: { action: "get_officer_details_admin", userId },
+      })
+
+      if (error) throw error
+      setBadges(data?.badges || [])
+      setLogs(data?.logs || [])
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load details')
+    } finally {
+      setLoadingLogs(false)
+    }
   }
 
   const handleSetRole = async (newRole: string) => {
@@ -79,23 +78,22 @@ export default function OfficerManagementTab() {
     }
 
     try {
-      const { error } = await supabase.rpc('set_user_role', {
-        target_user: selectedUser.id,
-        new_role: newRole,
-        reason: actionReason
+      const { error } = await supabase.functions.invoke("admin-actions", {
+        body: {
+          action: "update_user_profile",
+          userId: selectedUser.id,
+          roleUpdate: {
+            newRole: newRole,
+            reason: actionReason
+          }
+        }
       })
 
       if (error) throw error
       toast.success(`Role updated to ${newRole}`)
       
-      // Refresh user data
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('id, username, avatar_url, role, is_officer_active, is_lead_officer, troll_role')
-        .eq('id', selectedUser.id)
-        .single()
-      
-      if (data) setSelectedUser(data)
+      // Optimistic update
+      setSelectedUser({ ...selectedUser, role: newRole })
       fetchUserDetails(selectedUser.id)
       setActionReason('')
     } catch (error) {
@@ -111,23 +109,20 @@ export default function OfficerManagementTab() {
     }
 
     try {
-      const { error } = await supabase.rpc('set_officer_status', {
-        target_user_id: selectedUser.id,
-        new_status: status,
-        reason: actionReason
+      const { error } = await supabase.functions.invoke("admin-actions", {
+        body: {
+          action: "set_officer_status",
+          targetUserId: selectedUser.id,
+          status: status,
+          reason: actionReason
+        }
       })
 
       if (error) throw error
       toast.success(`Officer status updated to ${status ? 'Active' : 'Suspended'}`)
       
-      // Refresh user data
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('id, username, avatar_url, role, is_officer_active, is_lead_officer, troll_role')
-        .eq('id', selectedUser.id)
-        .single()
-      
-      if (data) setSelectedUser(data)
+      // Optimistic update
+      setSelectedUser({ ...selectedUser, is_officer_active: status })
       fetchUserDetails(selectedUser.id)
       setActionReason('')
     } catch (error) {
@@ -140,22 +135,20 @@ export default function OfficerManagementTab() {
     if (!selectedUser || !user) return
 
     try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ is_lead_officer: !selectedUser.is_lead_officer })
-        .eq('id', selectedUser.id)
+      const newVal = !selectedUser.is_lead_officer
+      const { error } = await supabase.functions.invoke("admin-actions", {
+        body: {
+          action: "toggle_lead_officer",
+          targetUserId: selectedUser.id,
+          isLead: newVal
+        }
+      })
 
       if (error) throw error
-      toast.success(`User ${selectedUser.is_lead_officer ? 'demoted from' : 'promoted to'} Lead Officer`)
+      toast.success(`User ${newVal ? 'promoted to' : 'demoted from'} Lead Officer`)
 
-      // Refresh user data
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('id, username, avatar_url, role, is_officer_active, is_lead_officer, troll_role')
-        .eq('id', selectedUser.id)
-        .single()
-      
-      if (data) setSelectedUser(data)
+      // Optimistic update
+      setSelectedUser({ ...selectedUser, is_lead_officer: newVal })
       fetchUserDetails(selectedUser.id)
     } catch (error) {
       console.error(error)

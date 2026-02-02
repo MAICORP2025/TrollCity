@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { 
-  Video, Calendar, Clock, FileText, CheckCircle, 
-  XCircle, AlertCircle, Users, MessageSquare
+import {
+  Video,
+  Calendar,
+  FileText,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react'
 
 // Application type
@@ -43,19 +46,10 @@ export default function InterviewRoomPage() {
   const [hasApplication, setHasApplication] = useState(false)
   const [application, setApplication] = useState<Application | null>(null)
   const [existingInterview, setExistingInterview] = useState<InterviewSession | null>(null)
-  const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [selectedPosition, setSelectedPosition] = useState('')
   const [scheduleDate, setScheduleDate] = useState('')
   const [scheduleTime, setScheduleTime] = useState('')
   const [scheduling, setScheduling] = useState(false)
-
-  useEffect(() => {
-    if (!user) {
-      navigate('/login')
-      return
-    }
-    checkApplicationAndInterview()
-  }, [user])
 
   // Check if user is admin (matching Sidebar.tsx logic)
   const isAdmin = profile?.role === 'admin' || 
@@ -68,7 +62,7 @@ export default function InterviewRoomPage() {
   const appointedRoles = ['pastor']
   const hasAppointedRole = appointedRoles.includes(profile?.role) || appointedRoles.includes(profile?.troll_role)
 
-  const checkApplicationAndInterview = async () => {
+  const checkApplicationAndInterview = useCallback(async () => {
     if (!user) return
 
     // Admins have direct access
@@ -119,10 +113,19 @@ export default function InterviewRoomPage() {
       }
     } catch (error) {
       console.error('Error checking application:', error)
+      toast.error('Failed to check application status')
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, isAdmin, hasAppointedRole, navigate])
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    checkApplicationAndInterview()
+  }, [user, navigate, checkApplicationAndInterview])
 
   const scheduleInterview = async () => {
     if (!user || !application || !selectedPosition || !scheduleDate || !scheduleTime) {
@@ -136,7 +139,7 @@ export default function InterviewRoomPage() {
       const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
 
       // Create interview session
-      const { data: interview, error } = await supabase
+      const { error } = await supabase
         .from('interview_sessions')
         .insert({
           application_id: application.id,
@@ -171,7 +174,6 @@ export default function InterviewRoomPage() {
       }
 
       toast.success('Interview scheduled successfully! Admins have been notified.')
-      setShowScheduleModal(false)
       navigate('/career')
     } catch (error: any) {
       console.error('Error scheduling interview:', error)

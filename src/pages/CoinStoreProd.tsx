@@ -20,7 +20,7 @@ const coinPackages = COIN_PACKAGES.map(p => ({
 }))
 
 export default function CoinStoreProd() {
-  const { user, profile, _refreshProfile } = useAuthStore()
+  const { user, profile, refreshProfile: _refreshProfile } = useAuthStore()
   const [selectedProviderId, setSelectedProviderId] = useState(paymentProviders[0]?.id || 'paypal')
   const [selectedPackage, setSelectedPackage] = useState(coinPackages[0])
   const [loading, setLoading] = useState(false)

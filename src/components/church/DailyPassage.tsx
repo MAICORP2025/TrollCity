@@ -22,7 +22,7 @@ export default function DailyPassage() {
       const today = new Date().toISOString().split('T')[0];
       
       // 1. Check DB cache
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('church_passages')
         .select('*')
         .eq('date', today)
@@ -46,7 +46,7 @@ export default function DailyPassage() {
 
       // 3. Cache in DB
       // We use upsert to handle race conditions (if multiple users hit it at once)
-      const { data: insertedData, error: insertError } = await supabase
+      const { data: insertedData } = await supabase
         .from('church_passages')
         .upsert(newPassage, { onConflict: 'date' })
         .select()

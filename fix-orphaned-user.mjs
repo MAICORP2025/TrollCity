@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://yjxpwfalenorzrqxwmtr.supabase.co'
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqeHB3ZmFsZW5vcnpycXh3bXRyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDAyOTExNywiZXhwIjoyMDc5NjA1MTE3fQ.Ra1AhVwUYPxODzeFnCnWyurw8QiTzO0OeCo-sXzTVHo'
+// ⚠️  IMPORTANT: Use environment variables for production!
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://your-project.supabase.co'
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!SERVICE_ROLE_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required')
+}
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: {
@@ -14,10 +19,8 @@ async function fixOrphanedUser() {
   console.log('\n=== FIXING ORPHANED USER ===\n')
 
   const userId = '8d8b6a4f-d990-495f-8a2b-3de5ee7739c9'
-  // const email = 'udryve2025@gmail.com'
   const username = 'udryve2025'
 
-  // Create profile for the orphaned auth user
   const { error } = await supabase
     .from('user_profiles')
     .insert([{

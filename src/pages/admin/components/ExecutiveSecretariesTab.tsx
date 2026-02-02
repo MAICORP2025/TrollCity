@@ -11,9 +11,16 @@ interface UserOption {
   avatar_url: string
 }
 
+interface SecretaryAssignmentWithProfile extends SecretaryAssignment {
+  secretary: {
+    username: string
+    avatar_url: string
+  }
+}
+
 export default function ExecutiveSecretariesTab() {
   const { user } = useAuthStore()
-  const [assignments, setAssignments] = useState<SecretaryAssignment[]>([])
+  const [assignments, setAssignments] = useState<SecretaryAssignmentWithProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<UserOption[]>([])
@@ -26,12 +33,13 @@ export default function ExecutiveSecretariesTab() {
   const fetchAssignments = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('secretary_assignments')
-        .select('*')
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_secretary_assignments' }
+      })
 
       if (error) throw error
-      setAssignments(data || [])
+      if (data.error) throw new Error(data.error)
+      setAssignments(data.assignments || [])
     } catch (error) {
       console.error('Error fetching secretaries:', error)
       toast.error('Failed to load secretaries')
@@ -49,14 +57,16 @@ export default function ExecutiveSecretariesTab() {
 
     setSearching(true)
     try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, username, avatar_url')
-        .ilike('username', `%${query}%`)
-        .limit(5)
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+          action: 'search_users_for_secretary',
+          query
+        }
+      })
 
       if (error) throw error
-      setSearchResults(data || [])
+      if (data.error) throw new Error(data.error)
+      setSearchResults(data.users || [])
     } catch (error) {
       console.error('Search error:', error)
     } finally {
@@ -72,32 +82,38 @@ export default function ExecutiveSecretariesTab() {
     }
 
     try {
-      const { error } = await supabase
-        .from('secretary_assignments')
-        .insert({
-          secretary_id: targetUser.id,
-          assigned_by: user.id
-        })
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'assign_secretary',
+          secretaryId: targetUser.id
+        }
+      })
 
       if (error) throw error
+      if (data.error) throw new Error(data.error)
+
       toast.success(`Assigned ${targetUser.username} as Secretary`)
       setSearchQuery('')
       setSearchResults([])
       fetchAssignments()
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      toast.error('Failed to assign secretary')
+      toast.error(error.message || 'Failed to assign secretary')
     }
   }
 
   const handleRemove = async (assignmentId: string) => {
     try {
-      const { error } = await supabase
-        .from('secretary_assignments')
-        .delete()
-        .eq('id', assignmentId)
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'remove_secretary',
+          assignmentId
+        }
+      })
 
       if (error) throw error
+      if (data.error) throw new Error(data.error)
+
       toast.success('Secretary removed')
       fetchAssignments()
     } catch (error) {
@@ -182,19 +198,8 @@ export default function ExecutiveSecretariesTab() {
   )
 }
 
-function SecretaryCard({ assignment, onRemove }: { assignment: SecretaryAssignment, onRemove: () => void }) {
-  const [profile, setProfile] = useState<UserOption | null>(null)
-
-  useEffect(() => {
-    supabase
-      .from('user_profiles')
-      .select('username, avatar_url')
-      .eq('id', assignment.secretary_id)
-      .single()
-      .then(({ data }) => setProfile(data as any))
-  }, [assignment.secretary_id])
-
-  if (!profile) return <div className="animate-pulse bg-slate-900 h-16 rounded-lg"></div>
+function SecretaryCard({ assignment, onRemove }: { assignment: SecretaryAssignmentWithProfile, onRemove: () => void }) {
+  const profile = assignment.secretary;
 
   return (
     <div className="bg-slate-900 p-4 rounded-lg flex justify-between items-center border border-slate-700">

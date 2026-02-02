@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { sendNotification } from '../../lib/sendNotification'
 import { toast } from 'sonner'
 import { CheckCircle, XCircle, Clock } from 'lucide-react'
 import ClickableUsername from '../../components/ClickableUsername'
@@ -73,12 +74,12 @@ export default function TimeOffRequestsList() {
       }
 
       // Notify officer
-      await supabase.from('notifications').insert({
-        user_id: officerId,
-        type: 'shift_update',
-        message: `Your time off request for ${date} has been ${action}d.${action === 'approve' ? ' Any scheduled shift for this date has been removed.' : ''}`,
-        is_read: false
-      })
+      await sendNotification(
+        officerId,
+        'officer_update',
+        'Time Off Request Update',
+        `Your time off request for ${date} has been ${action}d.${action === 'approve' ? ' Any scheduled shift for this date has been removed.' : ''}`
+      )
       
       toast.success(`Request ${action}d`)
       loadRequests()

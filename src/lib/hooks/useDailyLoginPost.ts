@@ -1,16 +1,16 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '../supabase'
 import { useAuthStore } from '../store'
-import { useCoins } from './useCoins'
-import { toast } from 'sonner'
+// import { useCoins } from './useCoins'
+// import { toast } from 'sonner'
 
-interface DailyLoginPostReward {
-  success: boolean
-  coinsEarned: number
-  message: string
-  canPostToday: boolean
-  lastPostDate?: string
-}
+// interface DailyLoginPostReward {
+//   success: boolean
+//   coinsEarned: number
+//   message: string
+//   canPostToday: boolean
+//   lastPostDate?: string
+// }
 
 /**
  * Hook for managing daily login wall posts with coin rewards
@@ -18,8 +18,8 @@ interface DailyLoginPostReward {
  */
 export function useDailyLoginPost() {
   const { user } = useAuthStore()
-  const { refreshCoins } = useCoins()
-  const [loading, setLoading] = useState(false)
+  // const { refreshCoins } = useCoins()
+  const [loading] = useState(false)
   const [canPostToday, setCanPostToday] = useState(true)
   const [lastPostDate, setLastPostDate] = useState<string | null>(null)
 
@@ -63,7 +63,7 @@ export function useDailyLoginPost() {
 
 
   // No-op for submitDailyPost, just for compatibility
-  const submitDailyPost = useCallback(async (postId: string) => ({
+  const submitDailyPost = useCallback(async (_postId: string) => ({
     success: true,
     coinsEarned: 0,
     message: 'Posted',

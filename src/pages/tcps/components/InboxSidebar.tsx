@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, MessageCircle, Trash2, Mail, Users, Archive, MoreVertical, Ban, EyeOff, MessageSquare } from 'lucide-react'
-import { supabase, UserRole } from '../../../lib/supabase'
+import { Search, MessageCircle, Mail, MoreVertical, Ban, EyeOff, MessageSquare } from 'lucide-react'
+import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { useChatStore } from '../../../lib/chatStore'
 import { toast } from 'sonner'
-import ClickableUsername from '../../../components/ClickableUsername'
 
 interface SidebarConversation {
   other_user_id: string
@@ -54,19 +53,19 @@ export default function InboxSidebar({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleBlockUser = async (userId: string) => {
+  const handleBlockUser = async (_userId: string) => {
     if (!user) return
     try {
       // Implement block logic here or call a helper
       // For now just toast
       toast.success('User blocked (simulation)')
       setOpenMenuId(null)
-    } catch (error) {
+    } catch {
       toast.error('Failed to block user')
     }
   }
 
-  const handleHideChat = async (userId: string) => {
+  const handleHideChat = async (_userId: string) => {
     // Implement hide chat logic
     toast.success('Chat hidden (simulation)')
     setOpenMenuId(null)

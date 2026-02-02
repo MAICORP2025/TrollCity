@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useBroadcastLockdown } from '../../../lib/hooks/useBroadcastLockdown';
-import { Shield, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function BroadcastLockdownControl() {
@@ -22,7 +22,7 @@ export default function BroadcastLockdownControl() {
             : 'Broadcast Lockdown enabled - only admins can broadcast!'
         );
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update broadcast lockdown settings');
     } finally {
       setIsUpdating(false);

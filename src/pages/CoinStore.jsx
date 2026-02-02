@@ -58,6 +58,19 @@ const SAMPLE_INSURANCE_PLANS = [
   { id: 'insurance_supreme_month', name: 'Supreme Monthly Shield', description: '-50% loss + 20 penalty blocks/month', cost: 300000, duration_hours: 720, protection_type: 'supreme' },
 ];
 
+const SAMPLE_CHAT_SOUNDS = [
+  { id: 'sound_1', name: 'Troll Laugh', cost: 100, sound_type: 'chat', file_path: '/sounds/troll.mp3' },
+  { id: 'sound_2', name: 'Coins', cost: 100, sound_type: 'chat', file_path: '/sounds/coins.mp3' },
+  { id: 'sound_3', name: 'Diamond', cost: 200, sound_type: 'chat', file_path: '/sounds/diamond.mp3' },
+  { id: 'sound_4', name: 'Heart', cost: 200, sound_type: 'chat', file_path: '/sounds/heart.mp3' },
+  { id: 'sound_5', name: 'Gold Star', cost: 300, sound_type: 'chat', file_path: '/sounds/goldstar.mp3' },
+  { id: 'sound_6', name: 'Rocket', cost: 300, sound_type: 'chat', file_path: '/sounds/rocket.mp3' },
+  { id: 'sound_7', name: 'Crown', cost: 500, sound_type: 'chat', file_path: '/sounds/crown.mp3' },
+  { id: 'sound_8', name: 'Car Rev', cost: 500, sound_type: 'chat', file_path: '/sounds/car.mp3' },
+  { id: 'sound_9', name: 'Scratch', cost: 150, sound_type: 'chat', file_path: '/sounds/scratch.mp3' },
+  { id: 'sound_10', name: 'Magic Wand', cost: 250, sound_type: 'chat', file_path: '/sounds/wand.mp3' },
+];
+
 const isMissingTableError = (error) =>
   Boolean(
     error?.message?.includes('schema cache') ||
@@ -248,6 +261,7 @@ export default function CoinStore() {
     };
   };
 
+  /*
   const SAMPLE_CHAT_SOUNDS = [
     { id: 'sound_1', name: 'Troll Laugh', cost: 100, sound_type: 'chat', file_path: '/sounds/troll.mp3' },
     { id: 'sound_2', name: 'Coins', cost: 100, sound_type: 'chat', file_path: '/sounds/coins.mp3' },
@@ -260,6 +274,7 @@ export default function CoinStore() {
     { id: 'sound_9', name: 'Scratch', cost: 150, sound_type: 'chat', file_path: '/sounds/scratch.mp3' },
     { id: 'sound_10', name: 'Magic Wand', cost: 250, sound_type: 'chat', file_path: '/sounds/wand.mp3' },
   ];
+  */
 
   /*
   const getRarityFrame = (rarity) => {
@@ -1487,7 +1502,7 @@ export default function CoinStore() {
                       <div className="min-w-[150px]">
                         <PayPalButtons
                           style={{ layout: "horizontal", height: 45, tagline: false }}
-                          createOrder={(data, actions) => createPayPalOrder({
+                          createOrder={(_data, _actions) => createPayPalOrder({
                             id: 'troll_pass_bundle',
                             coins: 1500,
                             price: 9.99,
@@ -1544,7 +1559,7 @@ export default function CoinStore() {
                           {selectedProviderId === 'paypal' ? (
                             <PayPalButtons
                               style={{ layout: "horizontal", height: 45, tagline: false }}
-                              createOrder={(data, actions) => createPayPalOrder(pkg)}
+                              createOrder={(_data, _actions) => createPayPalOrder(pkg)}
                               onApprove={(data, actions) => onPayPalApprove(data, actions, pkg)}
                               onError={(err) => {
                                 console.error('PayPal Error:', err);
@@ -1800,7 +1815,7 @@ export default function CoinStore() {
                           <button
                             onClick={() => {
                               const audio = new Audio(sound.file_path);
-                              audio.play().catch(e => toast.error('Preview failed'));
+                              audio.play().catch(() => toast.error('Preview failed'));
                             }}
                             className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm font-semibold transition-colors"
                           >

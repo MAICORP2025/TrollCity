@@ -111,7 +111,6 @@ export function TestingModeControl() {
 
   return (
     <div className="bg-gradient-to-br from-purple-900/20 to-pink-900/20 rounded-xl p-6 border border-purple-500/30">
-      {/* @ts-expect-error: styled-jsx global support */}
       <style>{`
         .purple-neon {
           border: 2px solid #A78BFA;

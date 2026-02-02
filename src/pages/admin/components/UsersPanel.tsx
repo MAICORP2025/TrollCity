@@ -28,11 +28,12 @@ const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", desc
       setLoading(true);
       setError(null);
       
-      const { data, error: queryError } = await supabase
-        .from("user_profiles")
-        .select("id, username, email, avatar_url, is_banned, role, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
+      const { data: responseData, error: queryError } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'get_users',
+            limit: 100
+        }
+      });
       
       if (queryError) {
         console.error('Error loading users:', queryError);
@@ -42,8 +43,9 @@ const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", desc
         return;
       }
       
-      console.log('Loaded users:', data?.length || 0);
-      setUsers(data || []);
+      const usersData = responseData?.data || [];
+      console.log('Loaded users:', usersData.length);
+      setUsers(usersData);
     } catch (err: any) {
       console.error('Exception loading users:', err);
       setError(`Error: ${err?.message || 'Unknown error'}`);

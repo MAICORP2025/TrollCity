@@ -97,14 +97,12 @@ export default function ManualTrollPassOrdersList() {
     try {
       setProcessing(confirmApproval.id)
       
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No user')
-
-      // Call the approve_manual_order RPC
-      const { error } = await supabase.rpc('approve_manual_order', {
-        p_order_id: confirmApproval.id,
-        p_admin_id: user.id,
-        p_external_tx_id: txId.trim() || `MANUAL-${Date.now()}`
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'approve_manual_order',
+          orderId: confirmApproval.id,
+          externalTxId: txId.trim() || `MANUAL-${Date.now()}`
+        }
       })
 
       if (error) throw error
@@ -126,10 +124,13 @@ export default function ManualTrollPassOrdersList() {
     try {
       setProcessing(order.id)
       
-      const { error } = await supabase
-        .from('manual_coin_orders')
-        .update({ status: 'rejected' })
-        .eq('id', order.id)
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'reject_manual_order',
+          orderId: order.id,
+          reason: 'Rejected by admin'
+        }
+      })
 
       if (error) throw error
 

@@ -5,7 +5,7 @@ import { useCoins } from '@/lib/hooks/useCoins';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Play, Upload, Star, Trophy, Gavel, Video, Heart, Share2, AlertCircle } from 'lucide-react';
+import { Play, Upload, Star, Trophy, Video, AlertCircle } from 'lucide-react';
 
 interface Audition {
   id: string;
@@ -114,6 +114,7 @@ export default function MaiTalentPage() {
     return () => {
       clearInterval(interval);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
   if (!isAdmin) {

@@ -29,7 +29,7 @@ export const useXPStore = create<XPState>((set) => {
     })
   }
 
-  const computeXpState = (data: {
+  const _computeXpState = (data: {
     level?: number; xp?: number; total_xp?: number; next_level_xp?: number;
     current_level?: number; current_xp?: number; buyer_level?: number; buyer_xp?: number; stream_level?: number; stream_xp?: number;
     [key: string]: any;
@@ -110,7 +110,7 @@ export const useXPStore = create<XPState>((set) => {
           syncAuthProfile(level, xpTotal, nextLevelTotal)
         } else {
             console.log('No user_stats found, initializing...')
-             const { data: newData, error: insertError } = await supabase
+             const { data: _newData, error: insertError } = await supabase
                 .rpc('grant_xp', { 
                     p_user_id: userId, 
                     p_amount: 0, 
@@ -153,7 +153,7 @@ export const useXPStore = create<XPState>((set) => {
           (payload) => {
             console.log('XP Update received:', payload)
             if (payload.new) {
-               const data = payload.new
+               const data = payload.new as any
                const level = data.level || 1
                const xpTotal = data.xp_total || 0
                const progress = data.xp_progress || 0

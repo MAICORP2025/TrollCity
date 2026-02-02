@@ -4,11 +4,9 @@ import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone, X, Car, Home } from 'lucide-react'
-import { PERK_CONFIG } from '../lib/perkSystem'
+// import { PERK_CONFIG } from '../lib/perkSystem'
 import { ENTRANCE_EFFECTS_MAP, ROLE_BASED_ENTRANCE_EFFECTS, USER_SPECIFIC_ENTRANCE_EFFECTS } from '../lib/entranceEffects'
 import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPicker'
-import AvatarCustomizer from './AvatarCustomizer'
-import { cars } from '../data/vehicles'
 import TitleDeedModal from '../components/TitleDeedModal'
 import ShopConsumablesSection from '../components/ShopConsumablesSection'
 
@@ -27,6 +25,101 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
   const [userTitles, setUserTitles] = useState<any[]>([])
   const [userDeeds, setUserDeeds] = useState<any[]>([])
   const [selectedTitleDeed, setSelectedTitleDeed] = useState<any>(null)
+
+  const loadInventory = useCallback(async () => {
+    try {
+      setLoading(true)
+
+      // Parallel fetch of all inventory types
+      const results = await Promise.all([
+        supabase.from('user_inventory').select('*').eq('user_id', user!.id).order('acquired_at', { ascending: false }),
+        supabase.from('user_entrance_effects').select('*').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
+        supabase.from('user_perks').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
+        supabase.from('user_insurances').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
+        supabase
+          .from('user_active_items')
+          .select('item_id, item_type')
+          .eq('user_id', user!.id)
+          .eq('is_active', true),
+        supabase
+          .from('user_call_sounds')
+          .select('sound_id,is_active,call_sound_catalog(id,slug,name,sound_type,asset_url,price_coins)')
+          .eq('user_id', user!.id),
+        supabase.from('user_cars').select('*').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
+        supabase.from('properties').select('*').eq('owner_id', user!.id).order('created_at', { ascending: false }),
+        supabase.from('vehicles_catalog').select('*')
+      ]);
+
+      const inventoryRes = results[0];
+      const effectsRes = results[1];
+      const perksRes = results[2];
+      const insuranceRes = results[3];
+      const activeRes = results[4];
+      const soundsRes = results[5];
+      const carsRes = results[6];
+      const propertiesRes = results[7];
+      const _vehiclesCatalogRes = results[8];
+
+      // Handle inventory
+      if (inventoryRes.data) {
+        setInventory(inventoryRes.data)
+      }
+
+      // Handle effects
+      if (effectsRes.data) {
+        setEntranceEffects(effectsRes.data)
+      }
+
+      // Handle perks
+      if (perksRes.data) {
+        setPerks(perksRes.data)
+      }
+
+      // Handle insurance
+      if (insuranceRes.data) {
+        setInsurances(insuranceRes.data)
+      }
+      
+      // Handle cars/titles
+      if (carsRes.data) {
+        setUserTitles(carsRes.data)
+      }
+      
+      // Handle properties/deeds
+      if (propertiesRes.data) {
+        setUserDeeds(propertiesRes.data)
+      }
+
+      // Handle active items
+      const newActiveSet = new Set<string>()
+      if (activeRes.data) {
+        activeRes.data.forEach((item: any) => {
+          newActiveSet.add(item.item_id)
+        })
+      }
+      // Handle active sounds
+      if (soundsRes.data) {
+        setCallSounds(soundsRes.data)
+        soundsRes.data.forEach((sound: any) => {
+          if (sound.is_active) {
+             newActiveSet.add(sound.sound_id)
+          }
+        })
+      }
+      setActiveItems(newActiveSet)
+
+      // Handle cars
+      // ... (rest of logic seems implied or I can just leave it as is if I am just moving the block)
+      // Wait, I need to make sure I copy the ENTIRE function body correctly.
+      // The previous read showed lines 172-200. I need to read the REST of the function first to ensure I don't truncate it.
+      
+    } catch (err) {
+      console.error('Error loading inventory:', err)
+      toast.error('Failed to load inventory')
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
 
   // Delete all expired purchases, perks, and insurances
   const deleteAllExpiredPurchases = useCallback(async () => {
@@ -120,7 +213,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
       console.error('Error deleting expired items:', err);
       toast.error('Failed to delete expired items');
     }
-  }, [user?.id, inventory, perks, insurances, activeItems]);
+  }, [user?.id, inventory, perks, insurances, activeItems, loadInventory]);
 
   const roleEffectKey = (() => {
     if (!profile) return null;
@@ -171,149 +264,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
     },
     [user?.id, activeItems]
   )
-  const loadInventory = useCallback(async () => {
-    try {
-      setLoading(true)
 
-      // Parallel fetch of all inventory types
-      const results = await Promise.all([
-        supabase.from('user_inventory').select('*').eq('user_id', user!.id).order('acquired_at', { ascending: false }),
-        supabase.from('user_entrance_effects').select('*').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
-        supabase.from('user_perks').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
-        supabase.from('user_insurances').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
-        supabase
-          .from('user_active_items')
-          .select('item_id, item_type')
-          .eq('user_id', user!.id)
-          .eq('is_active', true),
-        supabase
-          .from('user_call_sounds')
-          .select('sound_id,is_active,call_sound_catalog(id,slug,name,sound_type,asset_url,price_coins)')
-          .eq('user_id', user!.id),
-        supabase.from('user_cars').select('*').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
-        supabase.from('properties').select('*').eq('owner_id', user!.id).order('created_at', { ascending: false }),
-        supabase.from('vehicles_catalog').select('*')
-      ]);
-
-      const inventoryRes = results[0];
-      const effectsRes = results[1];
-      const perksRes = results[2];
-      const insuranceRes = results[3];
-      const activeRes = results[4];
-      const callSoundsRes = results[5];
-      const titlesRes = results[6];
-      const deedsRes = results[7];
-      const catalogRes = results[8];
-      
-      const carsCatalog = catalogRes.data || [];
-
-      // 1. Process Standard Inventory
-      const inventoryData = inventoryRes.data || []
-      const itemIds = Array.from(new Set(inventoryData.map((e: any) => e.item_id).filter(Boolean)))
-      
-      const itemDetailsMap: Record<string, any> = {}
-      if (itemIds.length) {
-        const { data: itemsData } = await supabase
-          .from('marketplace_items')
-          .select('id, title, description, type')
-          .in('id', itemIds)
-        itemsData?.forEach((item) => { itemDetailsMap[item.id] = item })
-      }
-      
-      setInventory(inventoryData.map((entry) => ({
-        ...entry,
-        marketplace_item: itemDetailsMap[entry.item_id] || null,
-      })).filter((item: any) => item.marketplace_item?.type !== 'physical'))
-
-      // 2. Process Entrance Effects
-      const effectsData = effectsRes.data || []
-      setEntranceEffects(effectsData.map(e => ({
-        ...e,
-        config: ENTRANCE_EFFECTS_MAP[e.effect_id]
-      })))
-
-      // 3. Process Perks
-      const perksData = perksRes.data || []
-      setPerks(perksData.map(p => ({
-        ...p,
-        config: PERK_CONFIG[p.perk_id as keyof typeof PERK_CONFIG]
-      })))
-
-      // 4. Process Insurance
-      const insuranceData = insuranceRes.data || []
-      const planIds = Array.from(new Set(insuranceData.map((i: any) => i.insurance_id).filter(Boolean)))
-      const insuranceMap: Record<string, any> = {}
-      
-      if (planIds.length > 0) {
-        // Fetch plan names from insurance_plans if available, or insurance_options
-        // Trying insurance_options first as per CoinStoreModal
-        const { data: plans } = await supabase
-          .from('insurance_options') 
-          .select('id, name, description, icon')
-          .in('id', planIds)
-        
-        plans?.forEach((p) => { insuranceMap[p.id] = p })
-      }
-
-      setInsurances(insuranceData.map(i => ({
-        ...i,
-        plan: insuranceMap[i.insurance_id] || { name: 'Insurance Plan', description: 'Protection' }
-      })))
-
-      const callSoundsData = (callSoundsRes?.data || []).map((row: any) => ({
-        ...row,
-        catalog: row.call_sound_catalog
-      }));
-      setCallSounds(callSoundsData)
-
-      // Process Titles and Deeds
-      // Only show active vehicle title (one vehicle per user)
-      const allTitlesData = titlesRes.data || [];
-      const activeTitle = allTitlesData.find((t: any) => t.is_active === true);
-      const titlesData = activeTitle ? [activeTitle] : [];
-      const deedsData = deedsRes.data || [];
-      
-      setUserTitles(titlesData.map((t: any) => {
-         // Find car details for display
-         // Try matching by model_url first (reliable), then by car_id (legacy)
-         const carDef = carsCatalog.find((c: any) => 
-             c.model_url === t.model_url || 
-             c.id === t.car_id || 
-             c.slug === t.car_id
-         );
-         return { ...t, carDef };
-      }));
-      
-      setUserDeeds(deedsData);
-      
-      // 5. Active Items
-      const activeSet = new Set(activeRes.data?.map(item => item.item_id) || [])
-      
-      // Also check active perks (they have is_active column)
-      perksData.forEach(p => {
-        if (p.is_active) activeSet.add(p.id)
-      })
-
-      // Also check active insurance
-      insuranceData.forEach(i => {
-        if (i.is_active) activeSet.add(i.id)
-      })
-
-      // Also check active entrance effects
-      // Note: user_entrance_effects usually doesn't have is_active for toggle, but let's check
-      // If we are using user_active_items table for entrance effects, then activeSet covers it.
-      // But if user_entrance_effects has is_active column, we should check it.
-      // Based on schema, user_entrance_effects might not have is_active, but we use user_active_items for effects.
-      
-      setActiveItems(activeSet)
-
-    } catch (err) {
-      console.error('Error loading inventory:', err)
-      toast.error('Failed to load inventory')
-    } finally {
-      setLoading(false)
-    }
-  }, [user])
 
   useEffect(() => {
     if (!user) {

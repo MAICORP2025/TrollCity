@@ -89,12 +89,14 @@ export default function TrollOfficerLounge() {
     }
     setSubmittingCallOff(true)
     try {
-      const { error } = await supabase.from('officer_time_off_requests').insert({
-        officer_id: user?.id,
-        date: callOffDate,
-        reason: callOffReason,
-        status: 'pending'
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'request_time_off',
+          date: callOffDate,
+          reason: callOffReason
+        }
       })
+      
       if (error) throw error
       toast.success('Call off request submitted for approval')
       setShowCallOffModal(false)
@@ -204,27 +206,16 @@ export default function TrollOfficerLounge() {
 
   const handleApproveRequest = async (request: any) => {
     try {
-      // 1. Update request status
-      const { error: updateError } = await supabase
-        .from('officer_time_off_requests')
-        .update({ status: 'approved', reviewed_by: user?.id, reviewed_at: new Date().toISOString() })
-        .eq('id', request.id)
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'approve_time_off',
+          requestId: request.id
+        }
+      })
 
-      if (updateError) throw updateError
+      if (error) throw error
 
-      // 2. Delete scheduled shifts for that date
-      const { error: deleteError } = await supabase
-        .from('officer_shift_slots')
-        .delete()
-        .eq('officer_id', request.officer_id)
-        .eq('shift_date', request.date)
-
-      if (deleteError) {
-        console.error('Error removing shift:', deleteError)
-        toast.error('Request approved but failed to remove shift automatically')
-      } else {
-        toast.success('Request approved and shift removed')
-      }
+      toast.success('Request approved and shift removed')
 
       // Refresh list
       setRequestsList(prev => prev.filter(r => r.id !== request.id))
@@ -235,10 +226,12 @@ export default function TrollOfficerLounge() {
 
   const handleDenyRequest = async (requestId: string) => {
     try {
-      const { error } = await supabase
-        .from('officer_time_off_requests')
-        .update({ status: 'rejected', reviewed_by: user?.id, reviewed_at: new Date().toISOString() })
-        .eq('id', requestId)
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'reject_time_off',
+          requestId
+        }
+      })
 
       if (error) throw error
       toast.success('Request rejected')
@@ -288,12 +281,12 @@ export default function TrollOfficerLounge() {
 
   // Listen for reports - Replaced with Polling
   useEffect(() => {
-    const checkReports = async () => {
-      // Just check for new reports in the last 30 seconds
-      // This is a simplified "polling for notification" logic
-      // In a real app, you'd track the last viewed report ID.
-      // For now, we'll just poll the latest list silently or rely on manual refresh/polling logic below.
-    }
+    // const checkReports = async () => {
+    //   // Just check for new reports in the last 30 seconds
+    //   // This is a simplified "polling for notification" logic
+    //   // In a real app, you'd track the last viewed report ID.
+    //   // For now, we'll just poll the latest list silently or rely on manual refresh/polling logic below.
+    // }
     
     // We already have a polling interval for other things? No.
     // Let's add a poller for the critical data needed here.
@@ -356,12 +349,15 @@ export default function TrollOfficerLounge() {
   const sendOfficerMessage = async () => {
     if (!newOfficerMessage.trim() || !user) return
     setChatLoading(true)
-    const { error } = await supabase.from('officer_chat_messages').insert({
-      user_id: user.id,
-      message: newOfficerMessage,
-      username: profile?.username || 'Officer',
-      role: 'Officer'
+    
+    const { error } = await supabase.functions.invoke('officer-actions', {
+      body: {
+        action: 'send_officer_chat',
+        message: newOfficerMessage,
+        username: profile?.username
+      }
     })
+
     if (error) toast.error('Failed to send message')
     else setNewOfficerMessage('')
     setChatLoading(false)
@@ -369,20 +365,14 @@ export default function TrollOfficerLounge() {
 
   // Moderation Actions
   const kickUser = async (username: string) => {
-    const { data: targetUser, error: userError } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('username', username)
-      .single()
-    if (userError || !targetUser) {
-      toast.error(`User ${username} not found`)
-      return
-    }
-    const { data: _kickResult, error: kickError } = await supabase.rpc('kick_user', {
-      p_target_user_id: targetUser.id,
-      p_kicker_user_id: profile?.id,
-      p_stream_id: selectedStream?.id || null
+    const { error: kickError } = await supabase.functions.invoke('officer-actions', {
+      body: {
+        action: 'kick_user',
+        targetUsername: username,
+        streamId: selectedStream?.id
+      }
     })
+
     if (kickError) {
       console.error('Kick error:', kickError)
       toast.error(`Failed to kick user: ${kickError.message}`)
@@ -393,31 +383,19 @@ export default function TrollOfficerLounge() {
   }
 
   const banUser = async (username: string) => {
-    const { data: targetUser, error: userError } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('username', username)
-      .single()
-    if (userError || !targetUser) {
-      toast.error(`User ${username} not found`)
-      return
-    }
-    
     const reason = window.prompt(`Reason for warrant against ${username}?`)
     if (!reason) return
 
-    const { data, error } = await supabase.rpc('issue_warrant', {
-      p_user_id: targetUser.id,
-      p_reason: reason
+    const { error } = await supabase.functions.invoke('officer-actions', {
+      body: {
+        action: 'ban_user',
+        targetUsername: username,
+        reason
+      }
     })
 
     if (error) {
       toast.error(error.message)
-      return
-    }
-
-    if (data && !data.success) {
-      toast.error(data.error)
       return
     }
 

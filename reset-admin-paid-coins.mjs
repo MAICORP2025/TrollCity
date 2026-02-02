@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://yjxpwfalenorzrqxwmtr.supabase.co'
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqeHB3ZmFsZW5vcnpycXh3bXRyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDAyOTExNywiZXhwIjoyMDc5NjA1MTE3fQ.Ra1AhVwUYPxODzeFnCnWyurw8QiTzO0OeCo-sXzTVHo'
+// ⚠️  IMPORTANT: Use environment variables for production!
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://your-project.supabase.co'
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!SERVICE_ROLE_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required')
+}
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -10,7 +15,6 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 async function resetAdmintroll_coins() {
   console.log('\n=== RESETTING ADMIN troll_coins ===\n')
 
-  // Get admin account
   const { data: admin, error: fetchError } = await supabase
     .from('user_profiles')
     .select('*')
@@ -25,17 +29,10 @@ async function resetAdmintroll_coins() {
   console.log('Current Admin Balance:')
   console.log(`  Username: ${admin.username}`)
   console.log(`  troll_coins: ${admin.troll_coins}`)
-  console.log(`  Free Coins: ${admin.troll_coins}`)
-  console.log(`  Total Earned: ${admin.total_earned_coins}`)
-  console.log(`  Total Spent: ${admin.total_spent_coins}`)
 
-  // Reset troll_coins to 0
   const { data: updated, error: updateError } = await supabase
     .from('user_profiles')
-    .update({ 
-      troll_coins: 0,
-      total_earned_coins: admin.troll_coins // Reset to only free coins
-    })
+    .update({ troll_coins: 0 })
     .eq('role', 'admin')
     .select()
     .single()
@@ -46,12 +43,7 @@ async function resetAdmintroll_coins() {
   }
 
   console.log('\n✅ Admin troll_coins reset successfully!')
-  console.log('\nNew Admin Balance:')
-  console.log(`  Username: ${updated.username}`)
-  console.log(`  troll_coins: ${updated.troll_coins}`)
-  console.log(`  Free Coins: ${updated.troll_coins}`)
-  console.log(`  Total Earned: ${updated.total_earned_coins}`)
-  console.log(`  Total Spent: ${updated.total_spent_coins}`)
+  console.log(`  New Balance: ${updated.troll_coins}`)
 }
 
 resetAdmintroll_coins().catch(console.error)

@@ -117,13 +117,15 @@ export default function AdminControlPanel() {
             return
           }
 
-          const { error: levelError } = await supabase
-            .from('user_profiles')
-            .update({
-              tier: level,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', selectedUser.id)
+          const { error: levelError } = await supabase.functions.invoke('admin-actions', {
+            body: {
+              action: 'update_user_profile',
+              userId: selectedUser.id,
+              updates: {
+                tier: level
+              }
+            }
+          })
 
           if (levelError) throw levelError
 
@@ -153,34 +155,25 @@ export default function AdminControlPanel() {
             return
           }
 
-          // Use correct RPC based on application type
-          if (application.type === 'troll_officer') {
-            // Use approve_officer_application with p_user_id (must match: { p_user_id: application.user_id })
-            const { data: approveData, error: approveError } = await supabase.rpc('approve_officer_application', {
-              p_user_id: selectedUser.id  // selectedUser.id === application.user_id
-            })
-
-            if (approveError) {
-              console.error('RPC error (approve_officer_application):', approveError)
-              throw approveError
+          const { data: approveData, error: approveError } = await supabase.functions.invoke('admin-actions', {
+            body: {
+              action: 'approve_application',
+              applicationId: application.id,
+              type: application.type,
+              userId: selectedUser.id
             }
+          })
 
-            if (approveData?.success) {
-              result = { success: true, message: `Approved officer application for ${selectedUser.username}` }
-            } else {
-              throw new Error(approveData?.error || 'Failed to approve officer application')
-            }
-          } else {
-            // Use general approve_application for other types
-            const { error: approveError } = await supabase.rpc('approve_application', {
-              p_app_id: application.id,
-              p_reviewer_id: user.id
-            })
-
-            if (approveError) throw approveError
-
-            result = { success: true, message: `Approved ${application.type} application for ${selectedUser.username}` }
+          if (approveError) {
+            console.error('Edge Function error (approve_application):', approveError)
+            throw approveError
           }
+          
+          if (approveData?.error) {
+             throw new Error(approveData.error)
+          }
+
+          result = { success: true, message: `Approved ${application.type} application for ${selectedUser.username}` }
 
           setMessage(result.message || '')
           toast.success(result.message || '')
@@ -212,10 +205,12 @@ export default function AdminControlPanel() {
             return
           }
 
-          // Use existing reject RPC
-          const { error: rejectError } = await supabase.rpc('deny_application', {
-            p_app_id: rejectApp.id,
-            p_reviewer_id: user.id
+          const { error: rejectError } = await supabase.functions.invoke('admin-actions', {
+            body: {
+              action: 'deny_application',
+              applicationId: rejectApp.id,
+              reason: 'Rejected via Admin Control Panel'
+            }
           })
 
           if (rejectError) throw rejectError

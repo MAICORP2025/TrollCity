@@ -34,7 +34,8 @@ import {
   Warehouse,
   Landmark,
   Video,
-  Mic
+  Mic,
+  Globe
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -49,7 +50,7 @@ export default function Sidebar() {
   const { profile } = useAuthStore()
   const { level, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
   const { balances, loading } = useCoins()
-  const { isUpdated, isCategoryUpdated, markAsViewed } = useSidebarUpdates()
+  const { isUpdated, markAsViewed } = useSidebarUpdates()
   const location = useLocation()
   const isActive = (path: string) => location.pathname === path
 
@@ -181,7 +182,7 @@ export default function Sidebar() {
   
   const supportPaths = ['/support', '/safety']
   
-  const socialPaths = ['/tcps', '/pool']
+  const socialPaths = ['/tcps', '/pool', '/universe-event']
   if (canSeeFamilyLounge) socialPaths.push('/family/lounge')
   
   const specialAccessPaths: string[] = []
@@ -362,6 +363,15 @@ export default function Sidebar() {
             collapsed={isSidebarCollapsed}
             highlight={isUpdated('/pool')} onClick={() => markAsViewed('/pool')}
             className="text-cyan-400 hover:text-cyan-300"
+          />
+          <SidebarItem 
+            icon={Globe} 
+            label="Universe Event" 
+            to="/universe-event" 
+            active={isActive('/universe-event')} 
+            collapsed={isSidebarCollapsed}
+            highlight={isUpdated('/universe-event')} onClick={() => markAsViewed('/universe-event')}
+            className="text-indigo-400 hover:text-indigo-300"
           />
           {canSeeFamilyLounge && (
             <SidebarItem 

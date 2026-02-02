@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { sendNotification } from '../../../lib/sendNotification'
 import { toast } from 'sonner'
 import { Calendar, Clock, Plus, Trash2, CheckCircle } from 'lucide-react'
 import ClickableUsername from '../../../components/ClickableUsername'
@@ -49,16 +50,7 @@ export default function CreateSchedulePanel() {
 
   const sendPushNotification = async (userId: string, message: string) => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: userId,
-          message: message,
-          type: 'shift_update',
-          is_read: false
-        })
-      
-      if (error) throw error
+      await sendNotification(userId, 'officer_update', 'Shift Update', message)
     } catch (err) {
       console.error('Error sending push notification:', err)
     }

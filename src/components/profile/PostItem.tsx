@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { Heart, MessageCircle, Gift, Share2, MoreHorizontal, Trash2, Reply, Smile } from 'lucide-react';
+import { Heart, MessageCircle, Gift, Share2, Trash2, Smile } from 'lucide-react';
+
 import { toast } from 'sonner';
 import ClickableUsername from '../ClickableUsername';
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
@@ -31,14 +32,16 @@ export default function PostItem({ post, onDelete }: PostItemProps) {
   const { user } = useAuthStore();
   const [comments, setComments] = useState<Comment[]>([]);
   const [showComments, setShowComments] = useState(false);
-  const [loadingComments, setLoadingComments] = useState(false);
+  const [_loadingComments, setLoadingComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const [likesCount, setLikesCount] = useState(post.likes_count || 0);
   const [liked, setLiked] = useState(false);
-  const [gifting, setGifting] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [_gifting, setGifting] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 

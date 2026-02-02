@@ -3,7 +3,7 @@ import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { Building2, Crown, Users, Clock, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 
 interface AdminQueueItem {
     user_id: string;
@@ -20,8 +20,7 @@ interface CurrentAdmin {
 }
 
 export default function CityHall() {
-    const { user, profile } = useAuthStore();
-    const navigate = useNavigate();
+    const { user } = useAuthStore();
     const [queue, setQueue] = useState<AdminQueueItem[]>([]);
     const [currentAdmin, setCurrentAdmin] = useState<CurrentAdmin | null>(null);
     const [loading, setLoading] = useState(false);
@@ -34,7 +33,7 @@ export default function CityHall() {
     const fetchData = async () => {
         setLoading(true);
         // Fetch Current Admin
-        const { data: currentData, error: currentError } = await supabase.rpc('get_current_admin_week');
+        const { data: currentData, error: _currentError } = await supabase.rpc('get_current_admin_week');
         if (currentData && currentData.length > 0) {
             setCurrentAdmin(currentData[0]);
         } else {
@@ -42,7 +41,7 @@ export default function CityHall() {
         }
 
         // Fetch Queue
-        const { data: queueData, error: queueError } = await supabase.rpc('get_admin_queue');
+        const { data: queueData, error: _queueError } = await supabase.rpc('get_admin_queue');
         if (queueData) {
             setQueue(queueData);
         }

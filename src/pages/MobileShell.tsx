@@ -15,6 +15,7 @@ import {
   Crown,
   User,
   LucideIcon,
+  Landmark,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 

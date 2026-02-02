@@ -276,36 +276,36 @@ const FamilyLounge = () => {
     }
   }, [user, loadFamilyData])
 
-  const contributeToTask = async (taskId) => {
-    // This function is now deprecated for manual contribution to auto-tracked tasks
-    // But kept for any manual tasks if they exist
-    try {
-      const { error } = await supabase.rpc('increment_task_progress', {
-        p_task_id: taskId,
-        p_increment: 1
-      })
-
-      if (error) throw error
-
-      toast.success('Contribution recorded!')
-      loadFamilyData() 
-    } catch (error) {
-      console.error('Error contributing to task:', error)
-      toast.error('Failed to record contribution')
-    }
-  }
+  // const contributeToTask = async (taskId) => {
+  //   // This function is now deprecated for manual contribution to auto-tracked tasks
+  //   // But kept for any manual tasks if they exist
+  //   try {
+  //     const { error } = await supabase.rpc('increment_task_progress', {
+  //       p_task_id: taskId,
+  //       p_increment: 1
+  //     })
+  //
+  //     if (error) throw error
+  //
+  //     toast.success('Contribution recorded!')
+  //     loadFamilyData() 
+  //   } catch (error) {
+  //     console.error('Error contributing to task:', error)
+  //     toast.error('Failed to record contribution')
+  //   }
+  // }
 
   // Helper to check if task is auto-tracked
-  const isAutoTracked = (metric) => {
-    const autoMetrics = [
-      'family_members_recruited',
-      'streams_started', 
-      'gifts_sent',
-      'wars_declared',
-      'wars_won'
-    ]
-    return autoMetrics.includes(metric)
-  }
+  // const isAutoTracked = (metric) => {
+  //   const autoMetrics = [
+  //     'family_members_recruited',
+  //     'streams_started', 
+  //     'gifts_sent',
+  //     'wars_declared',
+  //     'wars_won'
+  //   ]
+  //   return autoMetrics.includes(metric)
+  // }
 
   const getEventIcon = (eventType) => {
     switch (eventType) {

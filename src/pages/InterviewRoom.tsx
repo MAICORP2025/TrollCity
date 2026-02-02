@@ -58,20 +58,21 @@ function BroadcastBox({
   useFakeAvatar?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [avatarSeed] = useState(() => Math.random().toString(36).substring(7))
+  // const [avatarSeed] = useState(() => Math.random().toString(36).substring(7))
 
   useEffect(() => {
-    if (participant?.videoTrack?.track && videoRef.current && !useFakeAvatar) {
+    const videoElement = videoRef.current;
+    if (participant?.videoTrack?.track && videoElement && !useFakeAvatar) {
       try {
-        participant.videoTrack.track.attach(videoRef.current)
+        participant.videoTrack.track.attach(videoElement)
       } catch (e) {
         console.warn('Video attach failed:', e)
       }
     }
     return () => {
-      if (participant?.videoTrack?.track && videoRef.current) {
+      if (participant?.videoTrack?.track && videoElement) {
         try {
-          participant.videoTrack.track.detach(videoRef.current)
+          participant.videoTrack.track.detach(videoElement)
         } catch (e) {
           console.warn('Video detach failed:', e)
         }

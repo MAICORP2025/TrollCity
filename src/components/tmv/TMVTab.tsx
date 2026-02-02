@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
-import { Car, AlertTriangle, CheckCircle, Clock, Shield, XCircle, Gavel, Wrench } from 'lucide-react';
+import { Car, AlertTriangle, CheckCircle, Shield, XCircle, Gavel, Wrench } from 'lucide-react';
+
 import { toast } from 'sonner';
 import DriversTest from './DriversTest';
 import CarUpgradesModal from '@/components/CarUpgradesModal';
@@ -166,18 +167,18 @@ function VehicleList({ userId, onPurchaseInsurance, loading, canPurchase }: { us
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
   
-  React.useEffect(() => {
-     if (!userId) return;
-     loadVehicles();
-  }, [userId]);
-
-  const loadVehicles = async () => {
+  const loadVehicles = React.useCallback(async () => {
     const { data } = await supabase
       .from('user_cars')
       .select('*')
       .eq('user_id', userId);
     if (data) setVehicles(data);
-  };
+  }, [userId]);
+  
+  React.useEffect(() => {
+     if (!userId) return;
+     loadVehicles();
+  }, [userId, loadVehicles]);
 
   if (vehicles.length === 0) return <p className="text-gray-500">No vehicles owned.</p>;
 

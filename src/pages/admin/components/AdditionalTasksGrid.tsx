@@ -83,20 +83,25 @@ export default function AdditionalTasksGrid({
 
   const navigate = useNavigate()
 
+  const mapRouteToTask = (route: any) => ({
+    icon: route.icon || <Database className="w-5 h-5" />,
+    label: route.title,
+    description: route.description || 'Open system tool',
+    action: () => navigate(route.path),
+    color: route.tileColor || 'text-white',
+    bgColor: route.tileBgColor || 'bg-white/5',
+    borderColor: route.tileBorderColor,
+    count: route.id === 'user-forms' ? counts.user_forms : undefined
+  })
+
   const systemManagementGroup = {
     title: 'System Management',
     color: 'text-cyan-400',
     bgColor: 'bg-cyan-500/20',
     borderColor: 'border-cyan-500/30',
-    tasks: systemManagementRoutes.map((route) => ({
-      icon: route.icon || <Database className="w-5 h-5" />,
-      label: route.title,
-      description: route.description || 'Open system tool',
-      action: () => navigate(route.path),
-      color: route.tileColor || 'text-white',
-      bgColor: route.tileBgColor || 'bg-white/5',
-      borderColor: route.tileBorderColor
-    }))
+    tasks: systemManagementRoutes
+      .filter((r) => !r.category || ['system', 'support'].includes(r.category))
+      .map(mapRouteToTask)
   }
 
   const executiveOfficeGroup = {
@@ -225,15 +230,9 @@ export default function AdditionalTasksGrid({
           color: 'text-green-400',
           bgColor: 'bg-green-500/20'
         },
-        {
-          icon: <Activity className="w-5 h-5" />,
-          label: 'User Forms',
-          description: 'Manage user forms',
-          action: () => navigate('/admin/user-forms'),
-          color: 'text-purple-400',
-          bgColor: 'bg-purple-500/20',
-          count: counts.user_forms
-        }
+        ...systemManagementRoutes
+          .filter((r) => ['users', 'moderation'].includes(r.category || ''))
+          .map(mapRouteToTask)
       ]
     },
     {
@@ -325,14 +324,6 @@ export default function AdditionalTasksGrid({
           bgColor: 'bg-yellow-500/20'
         },
         {
-          icon: <ShoppingCart className="w-5 h-5" />,
-          label: 'Store Pricing',
-          description: 'Adjust effects/perks/insurance price',
-          action: pickTab('store_pricing'),
-          color: 'text-yellow-400',
-          bgColor: 'bg-yellow-500/20'
-        },
-        {
           icon: <DollarSign className="w-5 h-5" />,
           label: 'Tax Reviews',
           description: 'Review tax calculations',
@@ -355,7 +346,10 @@ export default function AdditionalTasksGrid({
           action: () => navigate('/admin/manual-orders'),
           color: 'text-emerald-400',
           bgColor: 'bg-emerald-500/20'
-        }
+        },
+        ...systemManagementRoutes
+          .filter((r) => r.category === 'economy')
+          .map(mapRouteToTask)
       ]
     },
     {
@@ -397,7 +391,10 @@ export default function AdditionalTasksGrid({
           color: 'text-pink-400',
           bgColor: 'bg-pink-500/20',
           count: counts.referrals
-        }
+        },
+        ...systemManagementRoutes
+          .filter((r) => r.category === 'events')
+          .map(mapRouteToTask)
       ]
     },
     {

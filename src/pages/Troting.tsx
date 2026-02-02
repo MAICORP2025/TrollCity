@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { Vote, Calendar, Trophy, Plus, AlertCircle, Loader2, XCircle, ShieldAlert, Trash2, ThumbsUp, ThumbsDown } from 'lucide-react'
-import { getWeeklyTopBroadcasters } from '../lib/leaderboards'
 import TrotingAdminView from '../components/TrotingAdminView'
 
 interface Pitch {
@@ -38,7 +37,6 @@ export default function Troting() {
   const [submitting, setSubmitting] = useState(false)
   const [votingId, setVotingId] = useState<string | null>(null)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
-  const [isEligible, setIsEligible] = useState(false)
   
   const isAdmin = profile?.role === 'admin' || profile?.is_admin
 
@@ -46,10 +44,53 @@ export default function Troting() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
 
+  const loadContest = async () => {
+    try {
+      setLoading(true)
+      const { data: contestData } = await supabase
+        .from('pitch_contests')
+        .select('*')
+        .eq('status', 'submission')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      
+      // If no submission contest, try finding a voting one
+      let activeContest = contestData
+      if (!activeContest) {
+         const { data: votingContest } = await supabase
+            .from('pitch_contests')
+            .select('*')
+            .eq('status', 'voting')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+         activeContest = votingContest
+      }
+
+       if (activeContest) {
+         setContest(activeContest as Contest)
+         // fetch pitches
+         const { data: pitchesData } = await supabase
+            .from('pitches')
+            .select('*, author:user_profiles(username, avatar_url)')
+            .eq('contest_id', activeContest.id)
+            .order('vote_count', { ascending: false })
+         
+         setPitches(pitchesData || [])
+       } else {
+         setContest(null)
+         setPitches([])
+       }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadContest()
-    checkEligibility()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   // Subscribe to real-time updates for votes
@@ -83,50 +124,10 @@ export default function Troting() {
     }
   }, [contest?.id])
 
-  const checkEligibility = async () => {
-    if (!user) return
-    // Check if user is in top 5 broadcasters
-    const topBroadcasters = await getWeeklyTopBroadcasters(5)
-    const eligible = topBroadcasters.some(b => b.user_id === user.id)
-    setIsEligible(eligible)
-  }
+  // checkEligibility and loadContest moved up
 
-  const loadContest = async () => {
-    try {
-      setLoading(true)
-      
-      // Get current active or submission contest
-      const { data: contests, error } = await supabase
-        .from('pitch_contests')
-        .select('*')
-        .in('status', ['voting', 'submission'])
-        .order('created_at', { ascending: false })
-        .limit(1)
 
-      if (error) throw error
-
-      const currentContest = contests?.[0]
-      setContest(currentContest || null)
-
-      if (currentContest) {
-        const { data: pitchData, error: pitchError } = await supabase
-          .from('pitches')
-          .select('*, author:user_profiles(username, avatar_url)')
-          .eq('contest_id', currentContest.id)
-          .order('vote_count', { ascending: false })
-
-        if (pitchError) throw pitchError
-        setPitches(pitchData || [])
-      }
-    } catch (err) {
-      console.error('Error loading contest:', err)
-      toast.error('Failed to load contest data')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleVote = async (pitch: Pitch) => {
+  const handleVote = async (pitch: Pitch, direction: 'up' | 'down') => {
     if (!user) return
     
     try {
@@ -134,7 +135,8 @@ export default function Troting() {
       
       const { data, error } = await supabase.rpc('vote_for_pitch', {
         p_pitch_id: pitch.id,
-        p_voter_id: user.id
+        p_voter_id: user.id,
+        p_vote_type: direction
       })
 
       if (error) throw error

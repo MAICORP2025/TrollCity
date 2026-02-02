@@ -44,84 +44,24 @@ export default function PayoutQueue() {
   const loadPayouts = useCallback(async () => {
     setLoading(true)
     try {
-      // Avoid FK-name joins (schema cache/constraint-name drift can cause PGRST200)
-      let query = supabase
-        .from('payout_requests')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      // Apply status filter
-      if (statusFilter === 'pending') {
-        query = query.in('status', ['pending', 'approved'])
-      } else if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter)
-      }
-
-      const { data, error } = await query
-
-      if (error) throw error
-
-      const raw = data || []
-      const userIds = Array.from(
-        new Set(raw.map((p: any) => p.user_id).filter((id: any) => typeof id === 'string' && id.length > 0)),
-      )
-      const processorIds = Array.from(
-        new Set(
-          raw
-            .map((p: any) => p.processed_by || p.admin_id)
-            .filter((id: any) => typeof id === 'string' && id.length > 0),
-        ),
-      )
-
-      const idsToHydrate = Array.from(new Set([...userIds, ...processorIds]))
-      const profileMap = new Map<string, any>()
-      if (idsToHydrate.length) {
-        const { data: profiles, error: profErr } = await supabase
-          .from('user_profiles')
-          .select('id, username, email')
-          .in('id', idsToHydrate)
-        if (profErr) {
-          console.warn('Failed to hydrate user_profiles (non-fatal):', profErr)
-        } else {
-          ;(profiles || []).forEach((p: any) => profileMap.set(p.id, p))
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+          action: 'get_payout_requests',
+          statusFilter: 'all' 
         }
-      }
+      });
 
-      const transformedPayouts: PayoutRequest[] = raw.map((p: any) => {
-        const userProfile = profileMap.get(p.user_id)
-        const processorProfile = profileMap.get(p.processed_by || p.admin_id)
-        return {
-          id: p.id,
-          user_id: p.user_id,
-          username: userProfile?.username || 'Unknown',
-          email: userProfile?.email || '',
-          coins_used: p.coins_redeemed || p.coins_used || p.coin_amount || p.requested_coins || 0,
-          cash_amount: Number(p.cash_amount || p.amount_usd || 0),
-          net_amount: Number(p.net_amount) || Number(p.cash_amount) || 0,
-          fee_amount: Number(p.processing_fee || p.fee_amount || 0),
-          status: p.status,
-          payment_method: p.payment_method || p.payout_method,
-          payment_reference: p.payment_reference || p.payout_address || p.paypal_email,
-          provider_type: p.provider_type || p.payment_method || p.payout_method,
-          provider_username: p.provider_username || p.payment_reference || p.payout_address || p.paypal_email,
-          notes: p.notes,
-          rejection_reason: p.rejection_reason,
-          created_at: p.created_at,
-          approved_at: p.approved_at,
-          paid_at: p.paid_at,
-          processed_by: p.processed_by,
-          processed_by_username: processorProfile?.username || null
-        }
-      })
+      if (error) throw error;
+      if (!data?.payouts) throw new Error('No data returned');
 
-      setPayouts(transformedPayouts)
+      setPayouts(data.payouts)
     } catch (error: any) {
       console.error('Error loading payouts:', error)
       toast.error('Failed to load payout requests')
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [])
 
   useEffect(() => {
     loadPayouts()
@@ -157,64 +97,6 @@ export default function PayoutQueue() {
     }
   };
 
-  const approve = async (e: React.MouseEvent, id: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    try {
-      const { data, error } = await supabase.rpc('approve_payout', {
-        p_payout_id: id
-      })
-
-      if (error) {
-        console.error('Approve payout error:', error)
-        toast.error(`Approval failed: ${error.message || 'Unknown error'}`)
-        return
-      }
-
-      if (data?.success) {
-        toast.success(`Paid ${data.username}. New balance: ${data.new_balance} coins`)
-        loadPayouts()
-      } else {
-        toast.error(data?.error || 'Failed to approve payout')
-      }
-    } catch (error: any) {
-      console.error('Approve payout error:', error)
-      toast.error(error.message || 'Failed to approve payout')
-    }
-  }
-
-  const reject = async (e: React.MouseEvent, id: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    const reason = prompt('Enter rejection reason:')
-    if (!reason || !reason.trim()) {
-      toast.error('Rejection reason is required')
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from('payout_requests')
-        .update({
-          status: 'rejected',
-          rejection_reason: reason,
-          processed_by: profile?.id,
-          processed_at: new Date().toISOString()
-        })
-        .eq('id', id)
-
-      if (error) throw error
-
-      toast.success('Payout rejected')
-      loadPayouts()
-    } catch (error: any) {
-      console.error('Reject payout error:', error)
-      toast.error(error.message || 'Failed to reject payout')
-    }
-  }
-
   const handleStatusUpdate = async (payoutId: string, newStatus: string, reason?: string) => {
     if (!profile) {
       toast.error('You must be logged in as admin')
@@ -226,50 +108,50 @@ export default function PayoutQueue() {
       return
     }
 
+    const toastId = toast.loading(`Updating status to ${newStatus}...`)
+
     try {
-      const { data, error } = await supabase.rpc('admin_update_payout_status', {
-        p_payout_id: payoutId,
-        p_admin_id: profile.id,
-        p_new_status: newStatus,
-        p_rejection_reason: reason || null,
-        p_payment_reference: paymentReference || null,
-        p_notes: adminNotes || null
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'update_payout_status',
+          payoutId,
+          newStatus,
+          reason: reason || null,
+          paymentReference: paymentReference || null,
+          notes: adminNotes || null
+        }
       })
 
       if (error) throw error
 
       if (data?.success) {
-        toast.success(`Payout ${newStatus} successfully`)
+        toast.success(`Payout ${newStatus} successfully`, { id: toastId })
         
         // Send email notification
         const payout = payouts.find(p => p.id === payoutId)
         if (payout) {
           try {
-            await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL || 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'}/sendEmail`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`
-              },
-              body: JSON.stringify({
-                to: payout.email,
-                subject: newStatus === 'approved' 
-                  ? '✅ Payout Approved' 
-                  : newStatus === 'paid'
-                  ? '💰 Payout Sent'
-                  : '❌ Payout Rejected',
-                html: `
-                  <p>Hi ${payout.username},</p>
-                  <p>Your payout request status has been updated.</p>
-                  <p><strong>Status: ${newStatus.toUpperCase()}</strong></p>
-                  ${reason ? `<p>Reason: ${reason}</p>` : ''}
-                  ${paymentReference ? `<p>Payment Reference: ${paymentReference}</p>` : ''}
-                  <p>– TrollCity Team</p>
-                `
-              })
-            })
+             await supabase.functions.invoke('sendEmail', {
+                body: {
+                    to: payout.email,
+                    subject: newStatus === 'approved' 
+                      ? '✅ Payout Approved' 
+                      : newStatus === 'paid'
+                      ? '💰 Payout Sent'
+                      : '❌ Payout Rejected',
+                    html: `
+                      <p>Hi ${payout.username},</p>
+                      <p>Your payout request status has been updated.</p>
+                      <p><strong>Status: ${newStatus.toUpperCase()}</strong></p>
+                      ${reason ? `<p>Reason: ${reason}</p>` : ''}
+                      ${paymentReference ? `<p>Payment Reference: ${paymentReference}</p>` : ''}
+                      <p>– TrollCity Team</p>
+                    `
+                }
+             });
           } catch (emailError) {
             console.error('Email send error:', emailError)
+            toast.error('Status updated but failed to send email', { id: toastId })
           }
         }
 
@@ -279,11 +161,28 @@ export default function PayoutQueue() {
         setAdminNotes('')
         loadPayouts()
       } else {
-        toast.error(data?.error || 'Failed to update payout status')
+        toast.error(data?.error || 'Failed to update payout status', { id: toastId })
       }
     } catch (error: any) {
       console.error('Update payout error:', error)
-      toast.error(error.message || 'Failed to update payout status')
+      toast.error(error.message || 'Failed to update payout status', { id: toastId })
+    }
+  }
+
+  const onApproveClick = (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (window.confirm('Approve this payout request?')) {
+      handleStatusUpdate(id, 'approved')
+    }
+  }
+
+  const onRejectClick = (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const reason = prompt('Enter rejection reason:')
+    if (reason) {
+      handleStatusUpdate(id, 'rejected', reason)
     }
   }
 
@@ -321,7 +220,10 @@ export default function PayoutQueue() {
     return styles[status as keyof typeof styles] || styles.pending
   }
 
-  const filteredPayouts = payouts
+  // Client-side filtering
+  const filteredPayouts = statusFilter === 'all' 
+    ? payouts 
+    : payouts.filter(p => p.status === statusFilter)
 
   return (
     <div className="space-y-6">
@@ -357,7 +259,7 @@ export default function PayoutQueue() {
           <div className="text-right">
             <p className="text-sm text-gray-400 mb-1">Total Requests</p>
             <p className="text-2xl font-semibold text-white">
-              {filteredPayouts.length}
+              {payouts.length}
             </p>
           </div>
         </div>
@@ -408,7 +310,8 @@ export default function PayoutQueue() {
                 {filteredPayouts.map((payout) => (
                   <tr 
                     key={payout.id} 
-                    className="border-b border-gray-800 hover:bg-[#1A1A1A] transition-colors"
+                    onClick={() => setSelectedPayout(payout)}
+                    className="border-b border-gray-800 hover:bg-[#1A1A1A] transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-3">
                       <Link 
@@ -421,7 +324,7 @@ export default function PayoutQueue() {
                     </td>
                     <td className="px-4 py-3 text-white">{payout.coins_used.toLocaleString()}</td>
                     <td className="px-4 py-3 text-green-400 font-semibold">
-                      ${payout.cash_amount.toFixed(2)}
+                      {formatCurrency(payout.cash_amount)}
                     </td>
                     <td className="px-4 py-3 text-gray-300">
                       {payout.provider_type && payout.provider_username 
@@ -430,30 +333,30 @@ export default function PayoutQueue() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {payout.status === 'pending' && (
-                        <>
+                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             onClick={(e) => payWithPayPal(e, payout.id)}
-                            className="bg-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-700 mr-2"
+                            className="bg-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-700"
                             title="Pay with PayPal"
                           >
                             PayPal
                           </button>
                           <button
                             type="button"
-                            onClick={(e) => approve(e, payout.id)}
+                            onClick={(e) => onApproveClick(e, payout.id)}
                             className="bg-green-600 px-3 py-1 rounded text-sm hover:bg-green-700"
                           >
-                            Approve & Pay
+                            Approve
                           </button>
                           <button
                             type="button"
-                            onClick={(e) => reject(e, payout.id)}
-                            className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700 ml-2"
+                            onClick={(e) => onRejectClick(e, payout.id)}
+                            className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700"
                           >
                             Reject
                           </button>
-                        </>
+                        </div>
                       )}
                       {payout.status !== 'pending' && (
                         <span className={`px-2 py-1 rounded text-xs font-medium border ${getStatusBadge(payout.status)}`}>
@@ -650,5 +553,3 @@ export default function PayoutQueue() {
     </div>
   )
 }
-
-

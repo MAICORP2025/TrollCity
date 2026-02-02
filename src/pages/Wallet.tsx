@@ -6,6 +6,7 @@ import { getTransactionHistory, logCoinAction } from "../lib/coinUtils";
 import { supabase } from "../lib/supabase";
 import { format12hr } from "../utils/timeFormat";
 import { toast } from "sonner";
+import { TIERS } from "../lib/payoutTiers";
 
 interface CoinTx {
   id: string;
@@ -269,6 +270,28 @@ export default function Wallet() {
         </div>
       </div>
 
+      {/* Cashout Tiers */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-3">Cashout Tiers</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {TIERS.map((tier) => (
+            <div key={tier.coins} className="bg-zinc-900/50 border border-zinc-700 rounded-xl p-4 flex flex-col items-center text-center hover:border-purple-500 transition-colors">
+              <div className="text-2xl font-bold text-white mb-1">
+                ${tier.usd}
+              </div>
+              <div className="text-sm text-purple-400 font-medium mb-2">
+                {tier.coins.toLocaleString()} coins
+              </div>
+              {tier.manualReview && (
+                <div className="text-[10px] uppercase tracking-wider font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
+                  Manual Review
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Enhanced Transaction History */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-3">
@@ -286,12 +309,17 @@ export default function Wallet() {
 
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl bg-black/40 border border-gray-600 p-4">
-          <h3 className="text-lg font-semibold mb-3">PayPal Payouts</h3>
-          <p className="text-sm text-gray-300">
-            When you qualify, payouts are sent directly to your PayPal account using your payout email.
-          </p>
-          <p className="text-xs text-gray-500 mt-2">
-            Update your PayPal payout email in Payout Settings and use the Request Payout page to cash out.
+          <h3 className="text-lg font-semibold mb-3">Cashout Tiers</h3>
+          <div className="space-y-2">
+            {TIERS.map((tier) => (
+              <div key={tier.coins} className="flex items-center justify-between text-sm">
+                <span className="text-gray-300">{(tier.coins / 1000).toFixed(1)}k coins</span>
+                <span className="font-mono text-green-400">${tier.usd} USD {tier.manualReview && <span className="text-yellow-500 text-xs ml-1">(Manual Review)</span>}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-4">
+            Request a payout when you reach these milestones.
           </p>
         </div>
       </div>

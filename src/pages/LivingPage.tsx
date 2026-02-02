@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { Home, Key, DollarSign, Building, Warehouse, Hotel, Tent, Briefcase, Edit2, X, Zap, Droplets, FileText, Calculator, CheckCircle } from 'lucide-react';
+import { Home, DollarSign, Building, Warehouse, Hotel, Tent, Briefcase, Edit2, X, Zap, Droplets, FileText, Calculator, CheckCircle, Trash2 } from 'lucide-react';
 
 interface Property {
   id: string;
@@ -22,6 +22,8 @@ interface Property {
   amenities?: string[];
   is_admin_created?: boolean; // Admin-created properties only landlords can buy
   is_landlord_purchased?: boolean; // Properties bought by landlords won't show in rent section
+  max_tenants?: number;
+  occupancy?: number; // Client-side calculated
 }
 
 interface Lease {
@@ -97,6 +99,7 @@ export default function LivingPage() {
   const [editRent, setEditRent] = useState('');
   const [editSalePrice, setEditSalePrice] = useState('');
   const [editIsForSale, setEditIsForSale] = useState(false);
+  const [editMaxTenants, setEditMaxTenants] = useState(1);
 
   // Admin Property Creation State
   const [showAdminCreateProperty, setShowAdminCreateProperty] = useState(false);
@@ -112,6 +115,7 @@ export default function LivingPage() {
     electric_cost: 75,
     water_cost: 75,
     description: '',
+    max_tenants: 1,
   });
 
   // Check admin status on mount
@@ -122,19 +126,9 @@ export default function LivingPage() {
     }
   }, [profile]);
 
-  useEffect(() => {
-    if (user) {
-      checkLandlordStatus();
-      if (activeTab === 'my_home') fetchMyLease();
-      if (activeTab === 'my_loans') fetchMyLoans();
-      if (activeTab === 'market') fetchMarket();
-      if (activeTab === 'landlord') fetchOwnedProperties();
-    }
-  }, [user, activeTab, marketFilter]);
-
-  const checkLandlordStatus = async () => {
+  const checkLandlordStatus = useCallback(async () => {
     if (!user) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('user_profiles')
       .select('is_landlord')
       .eq('id', user.id)
@@ -152,7 +146,7 @@ export default function LivingPage() {
     if (appData) {
       setLandlordApplication(appData);
     }
-  };
+  }, [user]);
 
   // Landlord Application Handler
   const handleSubmitLandlordApplication = async () => {
@@ -198,6 +192,7 @@ export default function LivingPage() {
         owner_id: user.id,
         tenant_capacity: 100,
         current_tenants: 0,
+        max_tenants: 100,
         amenities: ['Parking', 'Laundry', 'Security', 'Pool', 'Gym'],
         image_url: '/api/placeholder/400/300',
         description: 'A spacious apartment complex with 100 units available for rent. Perfect for new landlords looking to start their rental business.'
@@ -258,7 +253,7 @@ export default function LivingPage() {
         rent_amount: 1500,
         utility_cost: 150,
         is_for_rent: true,
-        is_for_sale: true,
+        is_for_sale: false,
         price: 15000,
         bedrooms: 100,
         bathrooms: 50,
@@ -309,14 +304,15 @@ export default function LivingPage() {
         electric_cost: adminPropertyForm.electric_cost,
         water_cost: adminPropertyForm.water_cost,
         is_for_sale: true,
-        is_for_rent: false,
+        is_for_rent: true,
         is_admin_created: true, // Only landlords can buy this
         is_landlord_purchased: false,
         owner_id: null, // No owner yet, available for purchase
-        tenant_capacity: adminPropertyForm.bedrooms * 2,
+        tenant_capacity: adminPropertyForm.max_tenants, // Legacy support
+        max_tenants: adminPropertyForm.max_tenants,
         current_tenants: 0,
         amenities: ['Basic Amenities'],
-        description: adminPropertyForm.description || 'A property available for landlords to purchase.',
+        description: adminPropertyForm.description || 'A property available for rent.',
         image_url: '/api/placeholder/400/300',
       };
       
@@ -326,7 +322,7 @@ export default function LivingPage() {
       
       if (error) throw error;
       
-      toast.success('Property created for landlords to buy!');
+      toast.success('Property created for rent!');
       setShowAdminCreateProperty(false);
       
       // Reset form
@@ -341,6 +337,7 @@ export default function LivingPage() {
         electric_cost: 75,
         water_cost: 75,
         description: '',
+        max_tenants: 1,
       });
     } catch (err: any) {
       toast.error(err.message);
@@ -349,62 +346,15 @@ export default function LivingPage() {
 
   // Loan Application Handler
   const handleSubmitLoanApplication = async () => {
+    toast.error("This feature is being upgraded. Please find a property in the Market and use 'Buy with Loan'.");
+    return;
+    /* 
+    Legacy implementation disabled to prevent data inconsistency
     if (!user) return;
     
     if (loanAppForm.loan_amount <= 0 || loanAppForm.property_value <= 0) {
-      toast.error('Please enter valid property and loan amounts');
-      return;
-    }
-    
-    // Calculate required down payment (10% minimum)
-    const minDownPayment = loanAppForm.property_value * 0.1;
-    if (loanAppForm.down_payment < minDownPayment) {
-      toast.error(`Minimum down payment is ${minDownPayment.toLocaleString()} coins (10%)`);
-      return;
-    }
-    
-    // Loan cannot exceed property value
-    if (loanAppForm.loan_amount > loanAppForm.property_value) {
-      toast.error('Loan amount cannot exceed property value');
-      return;
-    }
-    
-    try {
-      // Create loan record (instant approval)
-      const { data: loan, error } = await supabase
-        .from('landlord_loans')
-        .insert({
-          user_id: user.id,
-          loan_amount: loanAppForm.loan_amount,
-          remaining_balance: loanAppForm.loan_amount,
-          monthly_payment: Math.ceil(loanAppForm.loan_amount / 50), // 50 weekly payments
-          status: 'active',
-          property_value: loanAppForm.property_value,
-          property_address: loanAppForm.property_address,
-          property_type: loanAppForm.property_type,
-          down_payment: loanAppForm.down_payment,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      toast.success('Loan approved! You can now purchase your property.');
-      setShowLoanApplication(false);
-      fetchMyLoans();
-      
-      // Reset form
-      setLoanAppForm({
-        property_value: 0,
-        loan_amount: 0,
-        down_payment: 0,
-        property_address: '',
-        property_type: 'house',
-      });
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    ...
+    */
   };
 
   // Quick loan for property purchase
@@ -412,66 +362,27 @@ export default function LivingPage() {
     if (!buyingProp || !user) return;
     
     const propertyPrice = buyingProp.price;
-    const downPayment = parseInt((propertyPrice * 0.1).toString()); // 10% minimum
-    const loanAmount = propertyPrice - downPayment;
+    const calculatedDownPayment = parseInt((propertyPrice * 0.1).toString()); // 10% minimum
     
     try {
-      // Check if user already has a loan for this property
-      const { data: existingLoan } = await supabase
-        .from('landlord_loans')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('property_id', buyingProp.id)
-        .maybeSingle();
+      // Use secure RPC for purchase
+      // This handles: Balance check, Loan creation, Ownership transfer, Ledger logging
+      const { data, error } = await supabase.rpc('buy_property_with_loan', {
+        p_property_id: buyingProp.id,
+        p_down_payment: calculatedDownPayment 
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Purchase failed');
       
-      if (existingLoan) {
-        toast.error('You already have a loan for this property');
-        return;
-      }
-      
-      // Create loan for property purchase
-      const { error: loanError } = await supabase
-        .from('landlord_loans')
-        .insert({
-          user_id: user.id,
-          property_id: buyingProp.id,
-          loan_amount: loanAmount,
-          remaining_balance: loanAmount,
-          monthly_payment: Math.ceil(loanAmount / 50),
-          status: 'active',
-          property_value: propertyPrice,
-          property_address: buyingProp.name,
-          property_type: buyingProp.type_id,
-          down_payment: downPayment,
-          created_at: new Date().toISOString()
-        });
-      
-      if (loanError) throw loanError;
-      
-      // Transfer property ownership
-      // Mark as landlord_purchased so it won't show in rent section
-      const { error: transferError } = await supabase
-        .from('properties')
-        .update({ 
-          owner_id: user.id,
-          is_for_sale: false,
-          is_for_rent: true,
-          is_landlord_purchased: true
-        })
-        .eq('id', buyingProp.id);
-      
-      if (transferError) throw transferError;
-      
-      // Grant landlord status if not already
+      // Grant landlord status if not already (optimistic update, or fetch profile again)
       if (!isLandlord) {
-        await supabase
-          .from('user_profiles')
-          .update({ is_landlord: true })
-          .eq('id', user.id);
-        setIsLandlord(true);
+         // The RPC doesn't update is_landlord automatically usually, but we can do it or check
+         // We can trust the UI state for now or re-fetch
+         checkLandlordStatus();
       }
       
-      toast.success(`Property purchased with loan! You owe ${loanAmount.toLocaleString()} coins.`);
+      toast.success(`Property purchased with loan!`);
       setBuyingProp(null);
       setActiveTab('landlord');
       fetchOwnedProperties();
@@ -481,16 +392,17 @@ export default function LivingPage() {
     }
   };
 
-  // Pay off loan with 40% auto-deduction to admin pool
+  // Pay off loan with 40% auto-deduction to admin pool (Logic handled in RPC now)
   const handlePayLoan = async (loan: LandlordLoan) => {
-    const amount = prompt(`Pay off loan? (Remaining: ${loan.remaining_balance.toLocaleString()} coins)\n\n40% of payment goes to admin pool`, loan.monthly_payment.toString());
+    const amount = prompt(`Pay off loan? (Remaining: ${loan.remaining_balance.toLocaleString()} coins)`, loan.monthly_payment.toString());
     if (!amount) return;
     
     const payAmount = parseInt(amount);
     if (isNaN(payAmount) || payAmount <= 0) return;
 
     try {
-      const { data, error } = await supabase.rpc('pay_landlord_loan', {
+      // Use secure RPC
+      const { data, error } = await supabase.rpc('pay_bank_loan', {
         p_loan_id: loan.id,
         p_amount: payAmount
       });
@@ -498,35 +410,20 @@ export default function LivingPage() {
       if (error) throw error;
       
       if (data?.success) {
-        const adminAmount = Math.floor(payAmount * 0.4);
-        toast.success(`Paid ${payAmount.toLocaleString()} coins! ${adminAmount.toLocaleString()} coins to admin pool.`);
+        toast.success(`Paid ${payAmount.toLocaleString()} coins!`);
         fetchMyLoans();
       } else {
         throw new Error(data?.error || 'Payment failed');
       }
     } catch (err: any) {
-      // If RPC doesn't exist, do manual update
-      const adminAmount = Math.floor(payAmount * 0.4);
-      const newBalance = loan.remaining_balance - (payAmount - adminAmount);
-      const newStatus = newBalance <= 0 ? 'paid' : 'active';
-      
-      await supabase
-        .from('landlord_loans')
-        .update({ 
-          remaining_balance: Math.max(0, newBalance),
-          status: newStatus
-        })
-        .eq('id', loan.id);
-      
-      toast.success(`Paid ${(payAmount - adminAmount).toLocaleString()} coins towards loan, ${adminAmount} to admin`);
-      fetchMyLoans();
+      toast.error(err.message);
     }
   };
 
-  const fetchOwnedProperties = async () => {
+  const fetchOwnedProperties = useCallback(async () => {
     setLoading(true);
     // Fetch properties owned by user
-    const { data: props, error } = await supabase
+    const { data: props, error: _error } = await supabase
       .from('properties')
       .select('*')
       .eq('owner_id', user?.id);
@@ -545,10 +442,10 @@ export default function LivingPage() {
       setOwnedProperties(propsWithLease);
     }
     setLoading(false);
-  };
+  }, [user]);
 
-  const fetchMyLease = async () => {
-    const { data, error } = await supabase
+  const fetchMyLease = useCallback(async () => {
+    const { data, error: _error } = await supabase
       .from('leases')
       .select('*, property:properties(*)')
       .eq('tenant_id', user?.id)
@@ -557,13 +454,13 @@ export default function LivingPage() {
     
     if (data) setMyLease(data);
     else setMyLease(null);
-  };
+  }, [user]);
 
-  const fetchMyLoans = async () => {
+  const fetchMyLoans = useCallback(async () => {
     setLoading(true);
     // Note: 'bank_loans' is the table, but we need property details.
     // Ensure RLS allows reading properties even if not owner (public read is on).
-    const { data, error } = await supabase
+    const { data, error: _error } = await supabase
       .from('bank_loans')
       .select('*, property:properties(*)')
       .eq('user_id', user?.id)
@@ -573,6 +470,7 @@ export default function LivingPage() {
         // Map to Loan interface
         const loans = data.map((l: any) => ({
             ...l,
+            loan_amount: l.amount, // Map bank_loans amount to UI interface
             // Mocking payment schedule for UI as it's not in DB yet
             monthly_payment: Math.ceil(l.amount / 50), 
             next_payment_due_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -580,56 +478,137 @@ export default function LivingPage() {
         setMyLoans(loans);
     }
     setLoading(false);
-  };
+  }, [user]);
 
-  const fetchMarket = async () => {
+  const fetchMarket = useCallback(async () => {
     setLoading(true);
     
     // Determine which filter to use based on marketFilter state
     const isForSale = marketFilter === 'sale';
     
-    if (isForSale) {
-      // For sale: Show all properties for sale
-      const { data: properties } = await supabase
-        .from('properties')
-        .select('*, owner:user_profiles(username)')
-        .eq('is_for_sale', true)
-        .neq('owner_id', user?.id || 'none')
-        .limit(50);
-      
-      setProperties(properties || []);
-    } else {
-      // For rent: Show all properties for rent
-      const query = supabase
-        .from('properties')
-        .select('*, owner:user_profiles(username)')
-        .eq('is_for_rent', true)
-        .limit(50);
+    try {
+      if (isForSale) {
+        // For sale: Show all properties for sale
+        const { data: properties, error } = await supabase
+          .from('properties')
+          .select('*')
+          .eq('is_for_sale', true)
+          .limit(100);
+        
+        if (error) throw error;
 
-      const { data: properties } = await query;
-      
-      if (properties) {
-        // Filter out properties that have active leases
-        const availableProperties = await Promise.all(properties.map(async (prop) => {
-          const { data: lease } = await supabase
-            .from('leases')
-            .select('id')
-            .eq('property_id', prop.id)
-            .eq('status', 'active')
+        // Filter out own properties client-side to handle nulls correctly
+        // and handle both owner_id and owner_user_id columns
+        // const filteredProps = (properties || []).filter(p => {
+        //   const ownerId = p.owner_id || p.owner_user_id;
+        //   return ownerId !== user?.id;
+        // });
+        const filteredProps = properties || [];
+
+        // Fetch owner names manually since join might fail
+        const propsWithOwners = await Promise.all(filteredProps.map(async (p) => {
+          const ownerId = p.owner_id || p.owner_user_id;
+          if (!ownerId) return { ...p, owner: null };
+
+          const { data: ownerProfile } = await supabase
+            .from('user_profiles')
+            .select('username')
+            .eq('id', ownerId)
             .maybeSingle();
           
-          if (!lease) {
-            return prop;
-          }
-          return null;
+          return { ...p, owner: ownerProfile };
         }));
         
-        setProperties(availableProperties.filter((p): p is Property => p !== null));
+        setProperties(propsWithOwners);
       } else {
-        setProperties([]);
+        // For rent: Show all properties for rent
+        
+        // Fetch properties that are for rent
+        // We do NOT filter by occupancy here because we want to show "1/100" etc.
+        // The sign_lease RPC sets is_for_rent = false only when full, so relying on is_for_rent is safe for availability,
+        // but we might want to show full properties too? 
+        // For now, let's trust is_for_rent which is managed by the RPC.
+        
+        const { data: properties, error } = await supabase
+          .from('properties')
+          .select('*')
+          .eq('is_for_rent', true)
+          .limit(100);
+
+        if (error) throw error;
+        
+        if (properties) {
+          // Filter out own properties (optional but recommended)
+          // const availableProperties = properties.filter(p => {
+          //    const ownerId = p.owner_id || p.owner_user_id;
+          //    return ownerId !== user?.id;
+          // });
+          const availableProperties = properties;
+
+          // Fetch owner names and occupancy
+          const propsWithDetails = await Promise.all(availableProperties.map(async (p) => {
+            const ownerId = p.owner_id || p.owner_user_id;
+            
+            // Fetch Owner
+            let ownerProfile = null;
+            if (ownerId) {
+                const { data } = await supabase
+                    .from('user_profiles')
+                    .select('username')
+                    .eq('id', ownerId)
+                    .maybeSingle();
+                ownerProfile = data;
+            }
+
+            // Fetch Occupancy
+            const { count } = await supabase
+                .from('leases')
+                .select('*', { count: 'exact', head: true })
+                .eq('property_id', p.id)
+                .eq('status', 'active');
+
+            return { 
+                ...p, 
+                owner: ownerProfile,
+                occupancy: count || 0,
+                max_tenants: p.max_tenants || 1
+            };
+          }));
+          
+          setProperties(propsWithDetails);
+        } else {
+          setProperties([]);
+        }
       }
+    } catch (error: any) {
+        console.error('Error fetching market properties:', error);
+        toast.error('Failed to load properties');
+        setProperties([]);
+    } finally {
+        setLoading(false);
     }
-    setLoading(false);
+  }, [marketFilter]);
+
+  const handleDeleteProperty = async (propertyId: string) => {
+    if (!isAdmin) return;
+    
+    if (!confirm('Are you sure you want to delete this property? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .delete()
+        .eq('id', propertyId);
+
+      if (error) throw error;
+
+      toast.success('Property deleted successfully');
+      fetchMarket();
+    } catch (err: any) {
+      toast.error('Error deleting property: ' + err.message);
+    }
   };
 
   const handleRent = async (propertyId: string, cost: number) => {
@@ -672,10 +651,6 @@ export default function LivingPage() {
     setDownPayment(Math.ceil(prop.price * 0.1).toString());
   };
 
-  const handleBecomeLandlord = async () => {
-    // Show landlord application form instead of direct purchase
-    setShowLandlordApplication(true);
-  };
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -733,7 +708,8 @@ export default function LivingPage() {
           rent_amount: newRent,
           is_for_sale: editIsForSale,
           price: editIsForSale ? parseInt(editSalePrice) : editingProp.price,
-          last_rent_change_at: newRent !== editingProp.rent_amount ? new Date().toISOString() : editingProp.last_rent_change_at
+          last_rent_change_at: newRent !== editingProp.rent_amount ? new Date().toISOString() : editingProp.last_rent_change_at,
+          max_tenants: editMaxTenants
         })
         .eq('id', editingProp.id);
 
@@ -946,14 +922,15 @@ export default function LivingPage() {
                                                     setEditRent(prop.rent_amount.toString());
                                                     setEditSalePrice(prop.price?.toString() || '');
                                                     setEditIsForSale(prop.is_for_sale || false);
+                                                    setEditMaxTenants(prop.max_tenants || 1);
                                                 }}
                                                 className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-gray-400 hover:text-white transition-colors"
                                                 title="Edit Property"
                                             >
                                                 <Edit2 className="w-4 h-4" />
                                             </button>
-                                            <div className={`px-2 py-1 rounded text-xs font-bold ${prop.active_lease ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                                {prop.active_lease ? 'RENTED' : 'VACANT'}
+                                            <div className={`px-2 py-1 rounded text-xs font-bold ${prop.occupancy && prop.occupancy > 0 ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                                {prop.occupancy && prop.occupancy > 0 ? `${prop.occupancy}/${prop.max_tenants || 1}` : 'VACANT'}
                                             </div>
                                         </div>
                                     </div>
@@ -972,17 +949,25 @@ export default function LivingPage() {
                                             <span className="text-white font-mono">{(prop.water_cost ?? (prop.utility_cost ?? 0) / 2).toLocaleString()}</span>
                                         </div>
                                         
-                                        {prop.active_lease ? (
+                                        {prop.occupancy && prop.occupancy > 0 ? (
                                             <div className="bg-green-500/10 rounded-lg p-3 mt-2 border border-green-500/20">
-                                                <div className="text-xs text-green-400 mb-1 font-bold">CURRENT TENANT</div>
+                                                <div className="text-xs text-green-400 mb-1 font-bold">OCCUPANCY</div>
                                                 <div className="flex justify-between items-center">
-                                                    <span className="text-white">{prop.active_lease.tenant?.username || 'Unknown Tenant'}</span>
-                                                    <span className="text-xs text-gray-400">Since {new Date(prop.active_lease.start_date).toLocaleDateString()}</span>
+                                                    <span className="text-white">
+                                                        {prop.max_tenants && prop.max_tenants > 1 
+                                                            ? `${prop.occupancy} / ${prop.max_tenants} Tenants`
+                                                            : (prop.active_lease?.tenant?.username || 'Unknown Tenant')}
+                                                    </span>
+                                                    {(!prop.max_tenants || prop.max_tenants === 1) && prop.active_lease && (
+                                                        <span className="text-xs text-gray-400">Since {new Date(prop.active_lease.start_date).toLocaleDateString()}</span>
+                                                    )}
                                                 </div>
-                                                <div className="mt-2 text-xs flex justify-between border-t border-green-500/10 pt-2">
-                                                    <span className="text-gray-400">Last Paid</span>
-                                                    <span className="text-white">{prop.active_lease.last_rent_paid_at ? new Date(prop.active_lease.last_rent_paid_at).toLocaleDateString() : 'Never'}</span>
-                                                </div>
+                                                {(!prop.max_tenants || prop.max_tenants === 1) && prop.active_lease && (
+                                                    <div className="mt-2 text-xs flex justify-between border-t border-green-500/10 pt-2">
+                                                        <span className="text-gray-400">Last Paid</span>
+                                                        <span className="text-white">{prop.active_lease.last_rent_paid_at ? new Date(prop.active_lease.last_rent_paid_at).toLocaleDateString() : 'Never'}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             <div className="bg-yellow-500/5 rounded-lg p-3 mt-2 border border-yellow-500/10 text-center">
@@ -1339,12 +1324,33 @@ export default function LivingPage() {
                                         <div className="text-xs text-gray-500 uppercase tracking-wider">{prop.type_id}</div>
                                     </div>
                                 </div>
-                                {marketFilter === 'sale' && (
-                                    <div className="text-right">
-                                        <div className="text-xs text-gray-500">Price</div>
-                                        <div className="font-bold text-green-400">{prop.price?.toLocaleString()}</div>
-                                    </div>
-                                )}
+                                <div className="flex items-center gap-2">
+                                    {isAdmin && (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteProperty(prop.id);
+                                            }}
+                                            className="text-red-500 hover:text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors"
+                                            title="Delete Property"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                    {marketFilter === 'sale' ? (
+                                        <div className="text-right">
+                                            <div className="text-xs text-gray-500">Price</div>
+                                            <div className="font-bold text-green-400">{prop.price?.toLocaleString()}</div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-right">
+                                            <div className="text-xs text-gray-500">Occupancy</div>
+                                            <div className={`font-bold ${prop.occupancy && prop.occupancy >= (prop.max_tenants || 1) ? 'text-red-400' : 'text-green-400'}`}>
+                                                {prop.occupancy || 0}/{prop.max_tenants || 1}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="space-y-2 text-sm border-t border-white/5 pt-3 mb-4">
@@ -1365,9 +1371,14 @@ export default function LivingPage() {
                             {marketFilter === 'rent' ? (
                                 <button 
                                     onClick={() => handleRent(prop.id, prop.rent_amount + (prop.electric_cost ?? (prop.utility_cost ?? 0) / 2) + (prop.water_cost ?? (prop.utility_cost ?? 0) / 2))}
-                                    className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg font-bold text-sm transition-colors"
+                                    disabled={prop.occupancy !== undefined && prop.max_tenants !== undefined && prop.occupancy >= prop.max_tenants}
+                                    className={`w-full py-2 rounded-lg font-bold text-sm transition-colors ${
+                                        prop.occupancy !== undefined && prop.max_tenants !== undefined && prop.occupancy >= prop.max_tenants
+                                            ? 'bg-zinc-700 text-gray-500 cursor-not-allowed'
+                                            : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                                    }`}
                                 >
-                                    Rent Now
+                                    {prop.occupancy !== undefined && prop.max_tenants !== undefined && prop.occupancy >= prop.max_tenants ? 'Fully Occupied' : 'Rent Now'}
                                 </button>
                             ) : (
                                 <button 
@@ -1433,6 +1444,18 @@ export default function LivingPage() {
                             )}
                         </div>
 
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Max Tenants</label>
+                            <input 
+                                type="number"
+                                value={editMaxTenants}
+                                onChange={(e) => setEditMaxTenants(parseInt(e.target.value) || 1)}
+                                className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                placeholder="Max Tenants"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Maximum number of tenants allowed.</p>
+                        </div>
+
                         <div className="pt-4 flex gap-3">
                             <button 
                                 onClick={() => setEditingProp(null)}
@@ -1465,10 +1488,10 @@ export default function LivingPage() {
                     
                     <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                         <Building className="w-5 h-5 text-red-500" />
-                        Create Property for Landlords
+                        Create Property for Rent
                     </h3>
                     <p className="text-sm text-gray-400 mb-6">
-                        This property will only be visible to landlords in the "For Sale" section.
+                        This property will be visible in the &quot;For Rent&quot; section.
                     </p>
 
                     <div className="space-y-4">
@@ -1551,6 +1574,19 @@ export default function LivingPage() {
                                     onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, sqft: parseInt(e.target.value) || 500 }))}
                                     className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
                                     placeholder="500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Max Tenants</label>
+                                <input 
+                                    type="number"
+                                    value={adminPropertyForm.max_tenants}
+                                    onChange={(e) => setAdminPropertyForm(prev => ({ ...prev, max_tenants: parseInt(e.target.value) || 1 }))}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+                                    placeholder="1"
                                 />
                             </div>
                         </div>

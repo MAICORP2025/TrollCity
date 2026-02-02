@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+// import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
@@ -14,7 +14,7 @@ import api from '../lib/api'
 
 export default function OfficerModeration() {
   const { profile } = useAuthStore()
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
   
   // Tab State
   const [activeTab, setActiveTab] = useState<'reports' | 'actions' | 'logs'>('reports')
@@ -90,7 +90,9 @@ export default function OfficerModeration() {
         .ilike('username', targetUsername)
         .maybeSingle()
     
-    if (data) {
+    if (error) {
+        toast.error(error.message)
+    } else if (data) {
         setTargetId(data.id)
         toast.success(`Found user: ${data.username}`)
     } else {

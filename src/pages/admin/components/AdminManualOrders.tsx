@@ -59,45 +59,17 @@ export default function AdminManualOrders() {
   const loadOrders = useCallback(async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('manual_coin_orders')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(200)
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_manual_orders_dashboard' }
+      })
 
       if (error) throw error
-      const rows = data || []
+      
+      const { orders: rows = [], profiles: profilesMap = {}, packages: packagesMap = {} } = data || {}
       setOrders(rows)
+      setProfiles(profilesMap)
+      setPackages(packagesMap)
 
-      const userIds = Array.from(new Set(rows.map((r: any) => r.user_id).filter(Boolean)))
-      const pkgIds = Array.from(new Set(rows.map((r: any) => r.package_id).filter(Boolean))) as string[]
-
-      // Note: Cannot use embedded relationship 'user:user_profiles' due to multiple FKs
-      // to user_profiles (user_id, processed_by). Must fetch separately.
-      if (userIds.length) {
-        const { data: userData, error: userError } = await supabase
-          .from('user_profiles')
-          .select('id, username, email, rgb_username_expires_at, role')
-          .in('id', userIds)
-        if (!userError && userData) {
-          const map: Record<string, UserProfileLite> = {}
-          userData.forEach((u) => { map[u.id] = u })
-          setProfiles(map)
-        }
-      }
-
-      if (pkgIds.length) {
-        const { data: pkgData, error: pkgError } = await supabase
-          .from('coin_packages')
-          .select('id, name, coins, price_usd, amount_cents')
-          .in('id', pkgIds)
-        if (!pkgError && pkgData) {
-          const map: Record<string, CoinPackageLite> = {}
-          pkgData.forEach((p) => { map[p.id] = p })
-          setPackages(map)
-        }
-      }
     } catch (e: any) {
       console.error('Manual orders load error', e)
       toast.error(e?.message || 'Failed to load manual orders')
@@ -113,13 +85,17 @@ export default function AdminManualOrders() {
   const approveOrder = useCallback(async (orderId: string) => {
     setActionId(orderId)
     try {
-      const { data, error } = await supabase.rpc('process_manual_coin_order', {
-        p_order_id: orderId,
-        p_external_tx_id: txRefs[orderId] || null
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+          action: 'approve_manual_order',
+          orderId,
+          externalTxId: txRefs[orderId] || null
+        }
       })
 
       if (error) throw error
-      if (data && !data.success) throw new Error(data.error || 'Approval failed')
+      // Check for business logic error returned in data
+      if (data && data.error) throw new Error(data.error)
 
       toast.success('Order credited successfully')
       loadOrders()
@@ -135,13 +111,15 @@ export default function AdminManualOrders() {
     if (!window.confirm('Delete this manual Cash App order? This cannot be undone.')) return
     setActionId(orderId)
     try {
-      // Soft delete
-      const { error } = await supabase
-        .from('manual_coin_orders')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', orderId)
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { 
+          action: 'delete_manual_order',
+          orderId
+        }
+      })
 
       if (error) throw error
+      if (data && data.error) throw new Error(data.error)
 
       toast.success('Manual order deleted')
       loadOrders()

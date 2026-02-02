@@ -36,7 +36,6 @@ export default function TrotingAdminView() {
   const [newSplitUser, setNewSplitUser] = useState('')
   const [newSplitPercent, setNewSplitPercent] = useState('')
   const [formTitle, setFormTitle] = useState('')
-  const [duration, setDuration] = useState('7') // Default 1 week
 
   useEffect(() => {
     loadContests()

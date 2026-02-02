@@ -32,7 +32,8 @@ export default function CoinStoreModal({
   onClose,
 }: CoinStoreModalProps) {
   const { profile, refreshProfile } = useAuthStore();
-  const { loan, tiers, applyForLoan, loading: bankLoading } = useBank();
+  const { loans, tiers, applyForLoan, loading: bankLoading } = useBank();
+  const loan = loans && loans.length > 0 ? loans[0] : null;
   const [activeTab, setActiveTab] = useState<'coins' | 'perks' | 'insurance' | 'effects' | 'loan'>('coins');
   const [selectedPackage, setSelectedPackage] = useState<CoinPackage | null>(null);
   const [perks, setPerks] = useState<any[]>([]);

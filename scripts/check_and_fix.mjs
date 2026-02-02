@@ -67,7 +67,7 @@ async function main() {
   
   for (const user of users) {
     // Check if profile exists
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('user_profiles')
       .select('id')
       .eq('id', user.id)

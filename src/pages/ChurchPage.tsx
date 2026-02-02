@@ -3,21 +3,19 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
-import { BookOpen, Clock, Users, Gift, Shield, AlertTriangle, Calendar, Info, Loader2 } from 'lucide-react';
+import { BookOpen, Clock, Gift, Shield, Calendar, Info, Loader2 } from 'lucide-react';
 import DailyPassage from '@/components/church/DailyPassage';
 import PrayerFeed from '@/components/church/PrayerFeed';
-import { useCoins } from '@/lib/hooks/useCoins';
-import { toast } from 'sonner';
+// import { toast } from 'sonner';
 
 export default function ChurchPage() {
   const { profile } = useAuthStore();
   const navigate = useNavigate();
-  const { spendCoins, balances } = useCoins();
   const [isOpen, setIsOpen] = useState(false);
   const [isSunday, setIsSunday] = useState(false);
   const [timeUntilOpen, setTimeUntilOpen] = useState('');
   const [loading, setLoading] = useState(true);
-  const [pastorId, setPastorId] = useState<string | null>(null);
+  const [_pastorId, setPastorId] = useState<string | null>(null);
 
   // Hooks must be called unconditionally at the top level
   useEffect(() => {
@@ -62,6 +60,7 @@ export default function ChurchPage() {
       if (admin) setPastorId(admin.id);
   };
 
+  /*
   const handleGift = async () => {
       if (!pastorId || !profile) return;
       
@@ -83,7 +82,7 @@ export default function ChurchPage() {
           toast.success(`Offering sent! (+${amount} coins)`);
       }
   };
-
+  */
 
   const checkTime = () => {
     const now = new Date();

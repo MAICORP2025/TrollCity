@@ -5,7 +5,7 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-Deno.serve(async (req) => {
+Deno.serve(async (_req) => {
   try {
     console.log('Starting cron tasks...')
 

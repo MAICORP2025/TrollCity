@@ -4,6 +4,7 @@ import {
   ChevronRight,
   ChevronDown,
 } from "lucide-react";
+import { supabase } from "../lib/supabase";
 import api from "../lib/api";
 import IPBanModal from "./officer/IPBanModal";
 
@@ -15,6 +16,8 @@ interface ModerationPanelProps {
 
 export default function ModerationPanel({ room, targetUserId, roomId }: ModerationPanelProps) {
   const [open, setOpen] = useState(false);
+  const [showIPBanModal, setShowIPBanModal] = useState(false);
+  const [targetIP, setTargetIP] = useState<string | null>(null);
 
   const handleBan = async () => {
     const reason = window.prompt("Enter ban reason:");

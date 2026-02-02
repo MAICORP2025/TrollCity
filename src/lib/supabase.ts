@@ -98,6 +98,11 @@ export interface UserProfile {
 
   // Troller fields
   is_troller?: boolean
+
+  // Notifications
+  banner_notifications_enabled?: boolean
+  church_notifications_enabled?: boolean
+  credit_score?: number
   troller_level?: number // 1=Basic Troller, 2=Chaos Agent, 3=Supreme Troll
 
   onboarding_completed?: boolean

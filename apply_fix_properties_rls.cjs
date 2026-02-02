@@ -47,7 +47,7 @@ async function runMigration() {
     console.log('Running migration to fix properties RLS policies...');
     
     // Execute the migration SQL
-    const { data, error } = await supabase.rpc('execute_sql', { sql: migrationSQL });
+    const { error } = await supabase.rpc('execute_sql', { sql: migrationSQL });
     
     if (error) {
       console.error('Migration failed:', error);

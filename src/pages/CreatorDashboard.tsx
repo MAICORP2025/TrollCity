@@ -128,7 +128,7 @@ export default function CreatorDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [loadEarningsOverview, loadDailyEarningsSeries, loadHourlyActivity, loadTopGifters, loadBattleEventEarnings]);
+  }, [loadEarningsOverview, loadEarningsHistorySeries, loadHourlyActivity, loadTopGifters, loadBattleEventEarnings]);
 
   useEffect(() => {
     if (user) {

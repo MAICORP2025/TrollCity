@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Crown, Users, Video, Shield, Star, Mic } from 'lucide-react';
+import { Crown, Users, Video, Shield, Star } from 'lucide-react';
 
 interface Stream {
   id: string;

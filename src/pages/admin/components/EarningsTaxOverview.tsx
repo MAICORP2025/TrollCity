@@ -41,7 +41,7 @@ export default function EarningsTaxOverview() {
     platformKept: 0,
     forms1099Sent: 0
   })
-  const [monthlyData, setMonthlyData] = useState<MonthlyEarnings[]>([])
+  const [monthlyData, _setMonthlyData] = useState<MonthlyEarnings[]>([])
   const [creators, setCreators] = useState<CreatorEarnings[]>([])
   const [filteredCreators, setFilteredCreators] = useState<CreatorEarnings[]>([])
   const [selectedCreator, setSelectedCreator] = useState<CreatorEarnings | null>(null)
@@ -102,7 +102,7 @@ export default function EarningsTaxOverview() {
     } catch (error) {
       console.error('Error loading creators list:', error)
     }
-  }, [])
+  }, [selectedYear])
 
   const loadData = React.useCallback(async () => {
     setLoading(true)
@@ -110,8 +110,8 @@ export default function EarningsTaxOverview() {
       // Load dashboard cards data
       await Promise.all([
         loadDashboardCards(),
-        loadMonthlyEarnings(),
-        loadCreatorsList()
+        // loadMonthlyEarnings(), // TODO: Implement loadMonthlyEarnings
+        // loadCreatorsList() // TODO: check if needed, logic seems to be in loadDashboardCards
       ])
     } catch (error) {
       console.error('Error loading earnings data:', error)
@@ -119,7 +119,7 @@ export default function EarningsTaxOverview() {
     } finally {
       setLoading(false)
     }
-  }, [loadDashboardCards, loadMonthlyEarnings, loadCreatorsList])
+  }, [loadDashboardCards])
 
   useEffect(() => {
     loadData()

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function MoneyRain() {
-  const [items, setItems] = useState<{ id: number; x: number; delay: number; duration: number }[]>([]);
+  const [items, setItems] = useState<{ id: number; x: number; delay: number; duration: number; rotation: number; scale: number }[]>([]);
 
   useEffect(() => {
     // Generate rain items

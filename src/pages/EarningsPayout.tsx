@@ -9,6 +9,8 @@ import { DollarSign, Banknote, Send, History } from 'lucide-react'
 
 type PayoutMethod = 'PayPal'
 
+import { TIERS } from "../lib/payoutTiers";
+
 interface CashoutTier {
   id: string
   coins: number
@@ -16,12 +18,12 @@ interface CashoutTier {
   label: string
 }
 
-const CASHOUT_TIERS: CashoutTier[] = [
-  { id: 'tier1', coins: 12375, usd: 50, label: '12,375 Troll Coins → $50' },
-  { id: 'tier2', coins: 30375, usd: 70, label: '30,375 Troll Coins → $70' },
-  { id: 'tier3', coins: 60375, usd: 170, label: '60,375 Troll Coins → $170' },
-  { id: 'tier4', coins: 120375, usd: 355, label: '120,375 Troll Coins → $355' },
-]
+const CASHOUT_TIERS: CashoutTier[] = TIERS.map((t, i) => ({
+  id: `tier${i+1}`,
+  coins: t.coins,
+  usd: t.usd,
+  label: `${t.coins.toLocaleString()} Troll Coins → $${t.usd}${t.manualReview ? ' (Manual Review)' : ''}`
+}));
 
 export default function EarningsPayout() {
   const { profile, user } = useAuthStore()

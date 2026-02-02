@@ -13,7 +13,6 @@ interface GiftEvent {
   timestamp: number;
 }
 
-const HUGE_GIFT_THRESHOLD = 500;
 const DISPLAY_DURATION = 8000;
 
 export default function GlobalGiftBanner() {

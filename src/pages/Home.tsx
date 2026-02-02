@@ -1,7 +1,7 @@
 import BroadcastLockdownControl from './admin/components/BroadcastLockdownControl';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { subscribeToNtfyGlobal } from '../lib/ntfySubscribe';
 import { 
   Gamepad2, 
@@ -16,8 +16,6 @@ import {
   Play,
   Sparkles
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import TopBroadcastersGrid from '@/components/TopBroadcastersGrid';
 import HomeLiveGrid from '@/components/HomeLiveGrid';
 
 // Animated gradient background
@@ -114,70 +112,10 @@ const _StatsSection = () => {
 export default function Home() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
-  const [adminStream, setAdminStream] = useState<{ id: string; title: string | null; username: string | null } | null>(null);
-
   // Auto-scroll to top and subscribe to push notifications on page load
   useEffect(() => {
     window.scrollTo(0, 0);
     subscribeToNtfyGlobal();
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadAdminBroadcast = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('streams')
-          .select('id, title, is_live, status, user_profiles!broadcaster_id ( username, role, is_admin )')
-          .eq('is_live', true)
-          .eq('status', 'live')
-          .order('created_at', { ascending: false })
-          .limit(20);
-
-        if (error || !isMounted) {
-          return;
-        }
-
-        const rows = (data || []) as any[];
-        let selected: { id: string; title: string | null; username: string | null } | null = null;
-
-        for (const row of rows) {
-          const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
-          if (!profile) continue;
-          const role = profile.role || '';
-          const isAdmin = !!profile.is_admin || role === 'admin';
-          if (isAdmin) {
-            selected = {
-              id: row.id,
-              title: row.title || null,
-              username: profile.username || null,
-            };
-            break;
-          }
-        }
-
-        if (!isMounted) {
-          return;
-        }
-
-        setAdminStream(selected);
-      } catch {
-        if (!isMounted) {
-          return;
-        }
-        setAdminStream(null);
-      }
-    };
-
-    loadAdminBroadcast();
-
-    const interval = setInterval(loadAdminBroadcast, 60000); // Poll every 60 seconds
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
   }, []);
 
   const features = [

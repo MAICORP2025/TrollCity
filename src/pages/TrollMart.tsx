@@ -60,7 +60,7 @@ export default function TrollMart() {
       try {
         const data = await getTrollMartItems()
         // Add consumables to the end of the list
-        setItems([...(data as TrollMartClothing[]), ...CONSUMABLES])
+        setItems([...(data as TrollMartClothing[]), ...(CONSUMABLES as any[])])
       } finally {
         setLoading(false)
       }

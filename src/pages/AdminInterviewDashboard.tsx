@@ -4,8 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { 
-  Video, Calendar, Clock, FileText, CheckCircle, 
-  XCircle, AlertCircle, Users, MessageSquare, Play
+  Video, Clock, CheckCircle, 
+  Users, Play
 } from 'lucide-react'
 
 interface InterviewSession {
@@ -22,10 +22,10 @@ interface InterviewSession {
 
 export default function AdminInterviewDashboard() {
   const navigate = useNavigate()
-  const { profile, user } = useAuthStore()
+  const { user } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [interviews, setInterviews] = useState<InterviewSession[]>([])
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  // const [showCreateModal, setShowCreateModal] = useState(false)
 
   useEffect(() => {
     fetchInterviews()

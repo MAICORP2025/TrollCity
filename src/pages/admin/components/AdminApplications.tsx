@@ -63,42 +63,23 @@ export default function AdminApplications() {
     if (!skipLoadingState) setLoading(true)
 
     try {
-      const { data: filled } = await supabase.rpc('is_lead_officer_position_filled')
-      setPositionFilled(filled || false)
+      const [appRes, appealRes] = await Promise.all([
+        supabase.functions.invoke('admin-actions', { body: { action: 'get_applications' } }),
+        supabase.functions.invoke('admin-actions', { body: { action: 'get_seller_appeals' } })
+      ])
 
-      // Load regular applications (only Lead Officer approved ones for admin review)
-      const { data, error } = await supabase
-        .from('applications')
-        .select(`
-          *,
-          user_profiles!user_id (
-            username,
-            email
-          )
-        `)
-        // Show ALL non-deleted applications; UI splits into Pending/Approved/Rejected
-        .neq('status', 'deleted')
-        .order('created_at', { ascending: false })
+      const { data: appData, error: appError } = appRes
+      const { data: appealData, error: appealError } = appealRes
 
-      if (error) throw error
-      setApplications(data || [])
+      if (appError) throw appError
+      if (appData?.error) throw new Error(appData.error)
 
-      // Load seller appeals
-      const { data: appealsData, error: appealsErr } = await supabase
-        .from('applications')
-        .select(`
-          *,
-          user_profiles!user_id (
-            username,
-            email
-          )
-        `)
-        .eq('type', 'seller')
-        .eq('appeal_requested', true)
-        .eq('appeal_status', 'pending')
-        .order('appeal_requested_at', { ascending: false })
+      setPositionFilled(appData.positionFilled || false)
+      setApplications(appData.applications || [])
 
-      if (!appealsErr) setSellerAppeals(appealsData || [])
+      if (!appealError && !appealData?.error) {
+        setSellerAppeals(appealData.appeals || [])
+      }
     } catch (err: unknown) {
       toast.error("Failed to load applications")
       console.error(err)
@@ -137,39 +118,26 @@ export default function AdminApplications() {
     try {
       setLoading(true)
 
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'approve_application',
+            applicationId: app.id,
+            type: app.type,
+            userId: app.user_id
+        }
+      });
+
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+
+      // Handle specific success messages based on type
       if (app.type === "seller") {
-        // Special handling for seller applications via Atomic RPC
-        const { data: result, error: rpcError } = await supabase.rpc('approve_seller_application', {
-          p_application_id: app.id,
-          p_reviewer_id: user.id
-        })
-
-        if (rpcError) throw rpcError
-        if (result && !result.success) throw new Error(result.error || "Failed to approve seller application")
-
         toast.success("Seller application approved! Store created and user can now manage their shop.")
-      }
-      else if (app.type === "lead_officer") {
-        const { error } = await supabase.rpc('approve_lead_officer_application', {
-          p_application_id: app.id,
-          p_reviewer_id: user.id
-        })
-        if (error) throw error
+      } else if (app.type === "lead_officer") {
         toast.success("Lead Officer application approved!")
-      }
-      else if (app.type === "troll_officer") {
-        const { error } = await supabase.rpc('approve_officer_application', {
-          p_user_id: app.user_id
-        })
-        if (error) throw error
+      } else if (app.type === "troll_officer") {
         toast.success("Troll Officer application approved!")
-      }
-      else {
-        const { error } = await supabase.rpc('approve_application', {
-          p_app_id: app.id,
-          p_reviewer_id: user.id
-        })
-        if (error) throw error
+      } else {
         toast.success("Application approved!")
       }
 
@@ -194,11 +162,13 @@ export default function AdminApplications() {
     try {
       setLoading(true)
 
-      const { error } = await supabase.rpc('deny_application', {
-        p_app_id: app.id,
-        p_reviewer_id: user.id,
-        p_reason: null
-      })
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'deny_application',
+            applicationId: app.id,
+            reason: null // Or prompt for reason if needed, current code passed null
+        }
+      });
 
       if (error) throw error
 
@@ -235,14 +205,12 @@ export default function AdminApplications() {
     try {
       setLoading(true)
 
-      const { error } = await supabase
-        .from('applications')
-        .update({
-          status: 'deleted',
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq('id', app.id)
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'delete_application',
+            applicationId: app.id
+        }
+      });
 
       if (error) throw error
 
@@ -271,19 +239,19 @@ export default function AdminApplications() {
     try {
       setLoading(true)
 
-      const { data, error } = await supabase.rpc('review_seller_appeal', {
-        p_application_id: appeal.id,
-        p_action: 'approve',
-        p_notes: notes || null
-      })
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'review_seller_appeal',
+            applicationId: appeal.id,
+            reviewAction: 'approve',
+            notes: notes || undefined
+        }
+      });
 
       if (error) throw error
+      if (data?.error) throw new Error(data.error)
 
-      if (data?.success) {
-        toast.success("Seller appeal approved! Application and store created.")
-      } else {
-        toast.error(data?.error || "Failed to approve appeal")
-      }
+      toast.success("Seller appeal approved! Store access restored.")
 
       const scrollY = window.scrollY
       await loadApplications()
@@ -298,6 +266,7 @@ export default function AdminApplications() {
     }
   }, [user, loadApplications, refreshProfile])
 
+
   // REJECT SELLER APPEAL
   const handleRejectAppeal = useCallback(async (appeal: SellerAppeal) => {
     if (!user) return toast.error("You must be logged in")
@@ -308,19 +277,19 @@ export default function AdminApplications() {
     try {
       setLoading(true)
 
-      const { data, error } = await supabase.rpc('review_seller_appeal', {
-        p_application_id: appeal.id,
-        p_action: 'deny',
-        p_notes: notes
-      })
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+            action: 'review_seller_appeal',
+            applicationId: appeal.id,
+            reviewAction: 'deny',
+            notes: notes
+        }
+      });
 
       if (error) throw error
+      if (data?.error) throw new Error(data.error)
 
-      if (data?.success) {
-        toast.error("Seller appeal denied")
-      } else {
-        toast.error(data?.error || "Failed to deny appeal")
-      }
+      toast.error("Seller appeal denied")
 
       const scrollY = window.scrollY
       await loadApplications()

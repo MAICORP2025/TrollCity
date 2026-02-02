@@ -262,6 +262,10 @@ export default function Trollifications() {
                   onClick={() => handleNotificationClick(notif)}
                   className={`p-4 hover:bg-[#0D0D0D] transition-colors cursor-pointer ${
                     !notif.is_read ? 'bg-purple-900/10 border-l-4 border-purple-500' : ''
+                  } ${
+                    (notif as any).priority === 'high' || (notif as any).priority === 'critical'
+                      ? 'bg-red-900/10 border border-red-500/50 hover:bg-red-900/20'
+                      : 'border-transparent'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -269,9 +273,16 @@ export default function Trollifications() {
                       {getIcon(notif.type)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold ${!notif.is_read ? 'text-white' : 'text-gray-300'}`}>
-                        {notif.title}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        {((notif as any).priority === 'high' || (notif as any).priority === 'critical') && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white uppercase tracking-wider">
+                            High Alert
+                          </span>
+                        )}
+                        <p className={`text-sm font-semibold ${!notif.is_read ? 'text-white' : 'text-gray-300'}`}>
+                          {notif.title}
+                        </p>
+                      </div>
                       <p className={`text-sm mt-1 ${!notif.is_read ? 'text-gray-200' : 'text-gray-400'}`}>
                         {notif.message}
                       </p>

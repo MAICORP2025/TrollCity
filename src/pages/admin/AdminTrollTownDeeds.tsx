@@ -98,7 +98,9 @@ export default function AdminTrollTownDeeds() {
     
     setForeclosing(true)
     try {
-        const { error } = await supabase.rpc('foreclose_property', { p_deed_id: deedId })
+        const { error } = await supabase.functions.invoke('admin-actions', {
+            body: { action: 'foreclose_property_action', deedId }
+        })
         if (error) throw error
         toast.success('Property foreclosed successfully')
         setSelectedDeed(null)
@@ -113,78 +115,15 @@ export default function AdminTrollTownDeeds() {
     const load = async () => {
       setLoading(true)
       try {
-        const { data, error } = await supabase
-          .from('deed_transfers')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(500)
+        const { data, error } = await supabase.functions.invoke('admin-actions', {
+            body: { action: 'get_troll_town_deeds' }
+        })
 
-        if (error) {
-          if (error.code === '42P01' || error.code === 'PGRST116' || error.code === 'PGRST106') {
-            setRows([])
-          } else {
-            throw error
-          }
-        } else {
-          const transfers = (data || []) as any[]
+        if (error) throw error
+        
+        const { transfers, deedRows, usernames, adminPoolBalance: balance } = data || {}
 
-          // Use the admin oversight view if available, otherwise fall back to deeds table
-          let deedRows: any[] = []
-          const { data: oversightRows, error: oversightError } = await supabase
-            .from('admin_deed_oversight')
-            .select('*')
-          
-          if (!oversightError && oversightRows) {
-             deedRows = oversightRows.map(r => ({
-                 id: r.deed_id,
-                 property_id: r.property_id,
-                 current_owner_user_id: r.current_owner_user_id,
-                 property_name: r.property_name,
-                 owner_username: r.owner_username
-             }))
-          } else {
-             const { data: rawDeeds, error: deedsError } = await supabase
-                .from('deeds')
-                .select('id, property_id, current_owner_user_id, property_name, owner_username')
-             
-             if (!deedsError && rawDeeds) {
-                 deedRows = rawDeeds
-             }
-          }
-
-          const userIds = new Set<string>()
-          transfers.forEach(row => {
-            if (row.seller_user_id) userIds.add(row.seller_user_id)
-            if (row.buyer_user_id) userIds.add(row.buyer_user_id)
-          })
-
-          deedRows.forEach(row => {
-              if (row.current_owner_user_id) {
-                userIds.add(row.current_owner_user_id as string)
-              }
-          })
-
-          const usernames = new Map<string, string>()
-          // Pre-fill usernames from deedRows if available
-          deedRows.forEach(row => {
-              if (row.current_owner_user_id && row.owner_username) {
-                  usernames.set(row.current_owner_user_id, row.owner_username)
-              }
-          })
-
-          // Fetch remaining usernames
-          const missingUserIds = Array.from(userIds).filter(id => !usernames.has(id))
-          if (missingUserIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from('user_profiles')
-              .select('id, username')
-              .in('id', missingUserIds);
-            (profiles || []).forEach((p: any) => {
-                usernames.set(p.id, p.username)
-            })
-          }
-
-          const mapped: DeedTransferRow[] = transfers.map(row => ({
+        const mapped: DeedTransferRow[] = (transfers || []).map((row: any) => ({
             id: row.id,
             property_id: row.property_id,
             seller_user_id: row.seller_user_id,
@@ -196,15 +135,15 @@ export default function AdminTrollTownDeeds() {
               ? Number(row.system_value_at_sale)
               : null,
             created_at: row.created_at,
-            seller_username: usernames.get(row.seller_user_id) || undefined,
-            buyer_username: usernames.get(row.buyer_user_id) || undefined
-          }))
-          setRows(mapped)
+            seller_username: usernames[row.seller_user_id],
+            buyer_username: usernames[row.buyer_user_id]
+        }))
+        setRows(mapped)
 
-          if (deedRows.length > 0) {
+        if (deedRows && deedRows.length > 0) {
             const groups = new Map<string, UserDeedGroup>()
 
-            deedRows.forEach(row => {
+            deedRows.forEach((row: any) => {
               const ownerId = row.current_owner_user_id as string | null
               if (!ownerId) return
 
@@ -219,7 +158,7 @@ export default function AdminTrollTownDeeds() {
               } else {
                 groups.set(ownerId, {
                   user_id: ownerId,
-                  username: usernames.get(ownerId),
+                  username: usernames[ownerId],
                   deeds: [deed]
                 })
               }
@@ -235,20 +174,12 @@ export default function AdminTrollTownDeeds() {
             })
 
             setUserDeedGroups(sortedGroups)
-          } else {
+        } else {
             setUserDeedGroups([])
-          }
         }
 
-        const { data: poolRow } = await supabase
-          .from('admin_pool')
-          .select('trollcoins_balance')
-          .maybeSingle()
-        if (poolRow) {
-          setAdminPoolBalance(Number(poolRow.trollcoins_balance || 0))
-        } else {
-          setAdminPoolBalance(null)
-        }
+        setAdminPoolBalance(balance)
+
       } catch (error: any) {
         toast.error(error?.message || 'Failed to load Troll Town deeds')
       } finally {

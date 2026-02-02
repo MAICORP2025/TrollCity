@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { Bell, X, Dot, AlertTriangle, CheckCircle, Video, Gift, User, MessageCircle, Shield, Car } from 'lucide-react'
+import { Bell, X, Dot, CheckCircle, Video, Gift, User, MessageCircle, Shield, Car, DollarSign, FileText, Gavel } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Notification {
@@ -16,12 +16,25 @@ interface Notification {
     | 'message'
     | 'announcement'
     | 'officer_update'
+    | 'vehicle_auction'
+    | 'kick'
+    | 'ban'
+    | 'mute'
+    | 'report'
+    | 'officer_clock_in'
+    | 'officer_clock_out'
+    | 'application_submitted'
+    | 'support_ticket'
+    | 'property_purchased'
+    | 'item_purchased'
+    | 'system'
   title: string
   message: string
   created_at: string
   is_read: boolean
   is_dismissed: boolean
   metadata?: any
+  priority?: 'low' | 'normal' | 'high' | 'critical'
 }
 
 export default function Notifications() {
@@ -167,13 +180,27 @@ export default function Notifications() {
     switch (type) {
       case 'stream_live': return <Video className="w-5 h-5 text-red-500" />
       case 'join_approved': return <CheckCircle className="w-5 h-5 text-green-500" />
-      case 'moderation_alert': return <AlertTriangle className="w-5 h-5 text-yellow-500" />
+      case 'moderation_alert': 
+      case 'kick':
+      case 'ban':
+      case 'mute':
+      case 'report':
+        return <Gavel className="w-5 h-5 text-red-600" />
       case 'new_follower': return <User className="w-5 h-5 text-blue-500" />
       case 'gift_received': return <Gift className="w-5 h-5 text-purple-500" />
-      case 'message': return <MessageCircle className="w-5 h-5 text-cyan-500" />
+      case 'message': 
+      case 'support_ticket':
+        return <MessageCircle className="w-5 h-5 text-cyan-500" />
       case 'announcement': return <Bell className="w-5 h-5 text-orange-500" />
       case 'vehicle_auction': return <Car className="w-5 h-5 text-purple-400" />
-      case 'officer_update': return <Shield className="w-5 h-5 text-red-400" />
+      case 'officer_update': 
+      case 'officer_clock_in':
+      case 'officer_clock_out':
+        return <Shield className="w-5 h-5 text-blue-400" />
+      case 'application_submitted': return <FileText className="w-5 h-5 text-green-400" />
+      case 'property_purchased':
+      case 'item_purchased':
+        return <DollarSign className="w-5 h-5 text-green-400" />
       default: return <Bell className="w-5 h-5 text-gray-400" />
     }
   }
@@ -284,7 +311,11 @@ export default function Notifications() {
               <div
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
-                className={`bg-[#1A1A1A] rounded-xl p-4 border border-[#2C2C2C] relative cursor-pointer ${
+                className={`rounded-xl p-4 border relative cursor-pointer transition-colors ${
+                  notification.priority === 'high' || notification.priority === 'critical'
+                    ? 'bg-red-900/10 border-red-500/50 hover:bg-red-900/20'
+                    : 'bg-[#1A1A1A] border-[#2C2C2C] hover:bg-[#222]'
+                } ${
                   !notification.is_read ? 'border-purple-500/30' : ''
                 }`}
               >

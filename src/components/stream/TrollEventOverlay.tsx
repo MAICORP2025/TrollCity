@@ -60,23 +60,26 @@ export default function TrollEventOverlay({ streamId, userJoinedAt }: TrollEvent
         loadActiveEvent()
     }, 15000)
 
-    // Check expiration every second
+    return () => {
+      clearInterval(eventInterval)
+    }
+  }, [streamId, userJoinedAt])
+
+  // Check expiration every second
+  useEffect(() => {
+    if (!activeEvent) return
+
     const checkInterval = setInterval(() => {
-      if (activeEvent) {
-        const now = new Date()
-        const expiresAt = new Date(activeEvent.expires_at)
-        if (now > expiresAt) {
-          setActiveEvent(null)
-          setHasClaimed(false)
-        }
+      const now = new Date()
+      const expiresAt = new Date(activeEvent.expires_at)
+      if (now > expiresAt) {
+        setActiveEvent(null)
+        setHasClaimed(false)
       }
     }, 1000)
 
-    return () => {
-      clearInterval(eventInterval)
-      clearInterval(checkInterval)
-    }
-  }, [streamId, userJoinedAt])
+    return () => clearInterval(checkInterval)
+  }, [activeEvent])
 
   const handleTrollClick = async () => {
     if (!activeEvent || !user || hasClaimed || isClaiming) return

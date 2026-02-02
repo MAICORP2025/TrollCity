@@ -477,14 +477,9 @@ export function LeadOfficerDashboard() {
 
     setLoading(true)
     try {
-      const { error } = await supabase
-        .from('applications')
-        .update({
-          lead_officer_approved: true,
-          lead_officer_reviewed_by: currentUserId,
-          lead_officer_reviewed_at: new Date().toISOString()
-        })
-        .eq('id', applicationId)
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: { action: 'approve_lead_application', applicationId }
+      })
 
       if (error) throw error
 
@@ -508,15 +503,9 @@ export function LeadOfficerDashboard() {
     
     setLoading(true)
     try {
-      const { error } = await supabase
-        .from('applications')
-        .update({
-          lead_officer_approved: false,
-          lead_officer_reviewed_by: currentUserId,
-          lead_officer_reviewed_at: new Date().toISOString(),
-          status: 'rejected'
-        })
-        .eq('id', applicationId)
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: { action: 'reject_lead_application', applicationId }
+      })
 
       if (error) throw error
 

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../lib/store';
 import { supabase, getSystemSettings, getCountdown } from '../lib/supabase';
 import { toast } from 'sonner';
-import { CASHOUT_TIERS } from '../lib/payoutConfig';
-import { CreditCard, Smartphone, CheckCircle, AlertTriangle, ShieldCheck, Loader2, Lock } from 'lucide-react';
+// import { CASHOUT_TIERS } from '../lib/payoutConfig';
+import { Lock } from 'lucide-react';
 
 import { Link } from 'react-router-dom';
 
@@ -26,22 +26,20 @@ interface CashoutRequest {
 }
 
 const CashoutPage: React.FC = () => {
-  const { user, profile } = useAuthStore();
+  const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [existingRequest, setExistingRequest] = useState<CashoutRequest | null>(null);
   const [lockEnabled, setLockEnabled] = useState(false);
   const [unlockAt, setUnlockAt] = useState<string | null>(null);
   
-  // Wizard State
-  const [step, setStep] = useState(1);
-  const [selectedCard, setSelectedCard] = useState<'Visa' | null>(null);
-  const [deliveryMethod, setDeliveryMethod] = useState<'App Delivery' | null>(null);
-  const [selectedTier, setSelectedTier] = useState<{coins: number, usd: number} | null>(null);
+  // Wizard State - Commented out as unused
+  // const [step, setStep] = useState(1);
+  // const [selectedCard, setSelectedCard] = useState<'Visa' | null>(null);
+  // const [deliveryMethod, setDeliveryMethod] = useState<'App Delivery' | null>(null);
+  // const [selectedTier, setSelectedTier] = useState<{coins: number, usd: number} | null>(null);
 
-  const rawBalance = Number(profile?.troll_coins || 0);
-  const reserved = Number(profile?.reserved_troll_coins || 0);
-  const balance = Math.max(0, rawBalance - reserved);
-
+  // const rawBalance = Number(profile?.troll_coins || 0);
+  // const reserved = Number(profile?.reserved_troll_coins || 0);
   useEffect(() => {
     if (!user?.id) return;
     const loadExisting = async () => {
@@ -98,6 +96,7 @@ const CashoutPage: React.FC = () => {
     }
   };
 
+/*
   const handleNextStep = () => {
     setStep(prev => prev + 1);
   };
@@ -172,6 +171,7 @@ const CashoutPage: React.FC = () => {
       setLoading(false);
     }
   };
+*/
 
   if (lockEnabled) {
     const c = getCountdown(unlockAt)

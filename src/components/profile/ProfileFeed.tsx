@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import PostItem from './PostItem';
-import { Image, Video, Send, Smile, X, Loader2 } from 'lucide-react';
+import { Image, Send, Smile, X, Loader2 } from 'lucide-react';
+
 import { toast } from 'sonner';
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 
@@ -182,8 +183,10 @@ export default function ProfileFeed({ userId }: ProfileFeedProps) {
         toast.success('Post deleted');
         setPosts(prev => prev.filter(p => p.id !== postId));
     } catch (err) {
-        toast.error('Failed to delete post');
+      console.error('Failed to delete post', err);
+      toast.error('Failed to delete post');
     }
+
   };
 
   return (
@@ -194,7 +197,7 @@ export default function ProfileFeed({ userId }: ProfileFeedProps) {
           <div className="flex gap-4">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 p-0.5 flex-shrink-0">
                <div className="w-full h-full rounded-full bg-black flex items-center justify-center text-white font-bold">
-                  {user.username?.substring(0, 2).toUpperCase()}
+                  {(user.user_metadata?.username || user.email || 'U').substring(0, 2).toUpperCase()}
                </div>
             </div>
             <div className="flex-1 relative">

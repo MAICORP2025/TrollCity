@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import BottomNavigation from '../BottomNavigation'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
@@ -7,7 +7,6 @@ import PWAInstallPrompt from '../PWAInstallPrompt'
 import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
 import { useAuthStore } from '../../lib/store'
-import { UserRole } from '../../lib/supabase'
 import ChatBubble from '../ChatBubble'
 
 interface AppLayoutProps {
@@ -24,22 +23,10 @@ export default function AppLayout({
   showBottomNav = true 
 }: AppLayoutProps) {
   const location = useLocation();
-  const profile = useAuthStore((s) => s.profile)
   const showLegacySidebar = useAuthStore((s) => s.showLegacySidebar)
   const isAuthPage = location.pathname.startsWith('/auth');
   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/broadcast/');
-  const isStaff = Boolean(
-    profile &&
-      (
-        profile.role === UserRole.ADMIN ||
-        profile.role === UserRole.TROLL_OFFICER ||
-        profile.role === UserRole.LEAD_TROLL_OFFICER ||
-        profile.role === UserRole.HR_ADMIN ||
-        profile.is_admin ||
-        profile.is_troll_officer ||
-        profile.is_lead_officer
-      )
-  )
+
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

@@ -21,7 +21,7 @@ import ProfileFeed from '../components/profile/ProfileFeed';
 function ProfileInner() {
   const { username, userId } = useParams();
   const navigate = useNavigate();
-  const { user: currentUser, refreshProfile } = useAuthStore();
+  const { user: currentUser, profile: currentUserProfile, refreshProfile } = useAuthStore();
   
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,8 @@ function ProfileInner() {
     callMinutes: any, 
     homeListings: any[], 
     vehicleListings: any[],
-    vehicles: any[]
+    vehicles: any[],
+    titlesAndDeeds: any[]
   }>({
     perks: [], 
     effects: [], 
@@ -44,7 +45,8 @@ function ProfileInner() {
     callMinutes: null, 
     homeListings: [], 
     vehicleListings: [],
-    vehicles: []
+    vehicles: [],
+    titlesAndDeeds: []
   });
   const [showInsuranceCard, setShowInsuranceCard] = useState<any | null>(null);
   const [earnings, setEarnings] = useState<any[]>([]);
@@ -132,8 +134,8 @@ function ProfileInner() {
     }
 
     // Double confirmation
-    const confirmUsername = window.prompt(`Please type your username "${currentUser.username}" to confirm deletion:`);
-    if (confirmUsername !== currentUser.username) {
+    const confirmUsername = window.prompt(`Please type your username "${currentUserProfile?.username}" to confirm deletion:`);
+    if (confirmUsername !== currentUserProfile?.username) {
       toast.error('Username does not match. Deletion cancelled.');
       return;
     }
@@ -188,7 +190,7 @@ function ProfileInner() {
     }
   };
 
-  const fetchInventory = async (uid: string) => {
+  const fetchInventory = useCallback(async (uid: string) => {
     // setInventoryLoading(true);
     try {
       const results = await Promise.all([
@@ -265,9 +267,9 @@ function ProfileInner() {
     } finally {
       // setInventoryLoading(false);
     }
-  };
+  }, []);
 
-  const fetchEarnings = async (uid: string) => {
+  const fetchEarnings = useCallback(async (uid: string) => {
     setEarningsLoading(true);
     try {
       const { data } = await supabase
@@ -284,12 +286,12 @@ function ProfileInner() {
     } finally {
       setEarningsLoading(false);
     }
-  };
+  }, []);
 
   const [purchases, setPurchases] = useState<any[]>([]);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
 
-  const fetchPurchases = async (uid: string) => {
+  const fetchPurchases = useCallback(async (uid: string) => {
     setPurchasesLoading(true);
     try {
       const { data } = await supabase
@@ -305,7 +307,7 @@ function ProfileInner() {
     } finally {
       setPurchasesLoading(false);
     }
-  };
+  }, []);
 
   // Move const declarations before useEffects that use them
   const isOwnProfile = currentUser?.id === profile?.id;
@@ -314,7 +316,6 @@ function ProfileInner() {
     viewerRole === 'admin' ||
     viewerRole === 'troll_officer' ||
     viewerRole === 'lead_troll_officer';
-  const [ownedCar, setOwnedCar] = useState<any | null>(null);
   const tabOptions = [
     { key: 'social', label: 'Social', show: true },
     { key: 'inventory', label: 'Inventory & Perks', show: canSeeFullProfile },
@@ -334,16 +335,7 @@ function ProfileInner() {
     if (activeTab === 'purchases' && profile?.id) {
       fetchPurchases(profile.id);
     }
-  }, [activeTab, profile?.id, isOwnProfile]);
-
-  useEffect(() => {
-    if (profile?.active_vehicle) {
-      const car = cars.find(c => c.id === profile.active_vehicle);
-      setOwnedCar(car || null);
-    } else {
-      setOwnedCar(null);
-    }
-  }, [profile]);
+  }, [activeTab, profile?.id, isOwnProfile, fetchEarnings, fetchPurchases]);
 
   const handleRepurchasePerk = async (perk: any) => {
     if (!currentUser || currentUser.id !== profile.id) return;
@@ -465,32 +457,36 @@ function ProfileInner() {
         if (currentUser?.id === data.id) {
           setMessageCost(data.message_cost || 0);
           setViewCost(data.profile_view_cost || 0);
+        }
+
+        // Fetch follower/following/posts counts in parallel for performance
+        const [followersRes, followingRes, postsRes] = await Promise.all([
+          supabase
+            .from('user_follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('following_id', data.id),
+          supabase
+            .from('user_follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('follower_id', data.id),
+          supabase
+            .from('troll_posts')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', data.id)
+        ]);
+          
+        setFollowersCount(followersRes.count || 0);
+        setFollowingCount(followingRes.count || 0);
+        setPostsCount(postsRes.count || 0);
+
+        // Fetch inventory last as it's heavy and not immediately needed for above-the-fold content
+        if (currentUser?.id === data.id) {
           fetchInventory(data.id);
         } else {
           setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [], vehicles: [], titlesAndDeeds: [] });
           setEarnings([]);
           setPurchases([]);
         }
-        
-        // Fetch follower/following counts
-        const { count: followers } = await supabase
-          .from('user_follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('following_id', data.id);
-        
-        const { count: following } = await supabase
-          .from('user_follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('follower_id', data.id);
-
-        const { count: postsC } = await supabase
-          .from('troll_posts')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', data.id);
-          
-        setFollowersCount(followers || 0);
-        setFollowingCount(following || 0);
-        setPostsCount(postsC || 0);
       }
       setLoading(false);
     };
@@ -521,7 +517,7 @@ function ProfileInner() {
         supabase.removeChannel(channel)
       }
     }
-  }, [username, userId, currentUser?.id]);
+  }, [username, userId, currentUser?.id, fetchInventory]);
 
   // Live status check
   useEffect(() => {

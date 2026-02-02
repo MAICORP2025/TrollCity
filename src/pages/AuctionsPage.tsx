@@ -15,6 +15,7 @@ interface VehicleListing {
   price: number;
   status: 'active' | 'sold' | 'cancelled' | 'expired';
   metadata: any;
+  user_car_id?: string;
   created_at: string;
 }
 

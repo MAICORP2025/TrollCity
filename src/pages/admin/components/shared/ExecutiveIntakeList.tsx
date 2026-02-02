@@ -26,28 +26,20 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
   const fetchIntake = useCallback(async () => {
     setLoading(true)
     try {
-      const query = supabase
-        .from('executive_intake')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (viewMode === 'secretary') {
-        // Secretaries might only see their assigned items or unassigned ones?
-        // Requirement: "Intake Inbox: Full view of executive_intake"
-        // So they see everything.
-      }
-
-      const { data, error } = await query
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_executive_intake' }
+      })
 
       if (error) throw error
-      setIntakeItems(data || [])
+      if (data.error) throw new Error(data.error)
+      setIntakeItems(data.intake || [])
     } catch (error) {
       console.error('Error fetching intake:', error)
       toast.error('Failed to load intake items')
     } finally {
       setLoading(false)
     }
-  }, [viewMode])
+  }, [])
 
   useEffect(() => {
     fetchIntake()
@@ -62,10 +54,13 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('executive_intake')
-        .update({ status: newStatus })
-        .eq('id', id)
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'update_intake_status',
+          requestId: id,
+          status: newStatus
+        }
+      })
 
       if (error) throw error
       toast.success('Status updated')
@@ -79,10 +74,13 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
   const handleAssignSelf = async (id: string) => {
     if (!user) return
     try {
-      const { error } = await supabase
-        .from('executive_intake')
-        .update({ assigned_secretary: user.id })
-        .eq('id', id)
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'assign_intake',
+          requestId: id,
+          assigneeId: user.id
+        }
+      })
 
       if (error) throw error
       toast.success('Assigned to self')
@@ -95,10 +93,13 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
 
   const handleSaveNotes = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('executive_intake')
-        .update({ secretary_notes: notes })
-        .eq('id', id)
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'update_intake_notes',
+          requestId: id,
+          notes: notes
+        }
+      })
 
       if (error) throw error
       toast.success('Notes saved')
@@ -112,10 +113,12 @@ export default function ExecutiveIntakeList({ viewMode }: ExecutiveIntakeListPro
 
   const handleEscalate = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('executive_intake')
-        .update({ escalated_to_admin: true, status: 'escalated' })
-        .eq('id', id)
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'escalate_intake',
+          requestId: id
+        }
+      })
 
       if (error) throw error
       toast.success('Escalated to Admin')

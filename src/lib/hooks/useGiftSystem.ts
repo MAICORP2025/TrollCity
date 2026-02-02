@@ -372,7 +372,9 @@ export function useGiftSystem(
           p_user_id: user.id, 
           p_metric: 'gifts_sent', 
           p_increment: 1 
-        }).catch(err => console.error('Error tracking family gift task:', err))
+        }).then(({ error }) => {
+          if (error) console.error('Error tracking family gift task:', error)
+        })
       }
 
       if (bonusInfo) {

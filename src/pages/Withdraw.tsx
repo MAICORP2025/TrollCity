@@ -3,6 +3,8 @@ import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
 import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from "../lib/payoutWindow";
+// import { Coins, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { TIERS } from '../lib/payoutTiers';
 
 export default function Withdraw() {
   const { user } = useAuthStore();
@@ -35,8 +37,8 @@ export default function Withdraw() {
 
     const coinAmount = parseInt(amount, 10);
 
-    if (![12000, 30000, 60000, 120000].includes(coinAmount)) {
-      toast.error("Select a valid Visa tier: 12k, 30k, 60k, 120k");
+    if (!TIERS.some(t => t.coins === coinAmount)) {
+      toast.error(`Select a valid Cashout tier: ${TIERS.map(t => (t.coins/1000).toFixed(1) + 'k').join(', ')}`);
       return;
     }
 
@@ -64,17 +66,16 @@ export default function Withdraw() {
       return;
     }
 
-    const tiers = [
-      { coins: 12000, usd: 25 },
-      { coins: 30000, usd: 70 },
-      { coins: 60000, usd: 150 },
-      { coins: 120000, usd: 325 },
-    ] as const;
-    const tier = tiers.find(t => t.coins === coinAmount);
+    const tier = TIERS.find(t => t.coins === coinAmount);
     if (!tier) {
-      toast.error("Select a valid PayPal tier: 12k, 30k, 60k, 120k");
+      toast.error("Select a valid Cashout tier.");
       return;
     }
+    
+    if (tier.manualReview) {
+       toast.info("This amount requires manual review and may take longer to process.");
+    }
+
     const { data, error } = await supabase.rpc('request_visa_redemption', {
       p_user_id: user.id,
       p_coins: tier.coins,

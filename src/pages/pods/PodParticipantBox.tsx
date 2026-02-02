@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Participant, Track, LocalParticipant, RemoteParticipant, TrackPublication } from 'livekit-client';
-import { Mic, MicOff, User, MoreVertical, Ban, UserMinus, ArrowDown } from 'lucide-react';
+import { Participant, Track, LocalParticipant, TrackPublication } from 'livekit-client';
+import { Mic, MicOff, User, UserMinus, ArrowDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface PodParticipantBoxProps {
@@ -23,7 +23,6 @@ export default function PodParticipantBox({
   const [videoTrack, setVideoTrack] = useState<MediaStreamTrack | null>(null);
   const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [showControls, setShowControls] = useState(false);
   
   const isLocal = participant instanceof LocalParticipant;
 
@@ -53,21 +52,21 @@ export default function PodParticipantBox({
     setVideoTrack(getTrack(Track.Source.Camera));
     setAudioTrack(getTrack(Track.Source.Microphone));
 
-    const handleTrackSubscribed = (track: Track, pub: TrackPublication) => {
+    const handleTrackSubscribed = (track: Track, _pub: TrackPublication) => {
       if (track.kind === Track.Kind.Video) setVideoTrack(track.mediaStreamTrack);
       if (track.kind === Track.Kind.Audio) setAudioTrack(track.mediaStreamTrack);
     };
 
-    const handleTrackUnsubscribed = (track: Track, pub: TrackPublication) => {
+    const handleTrackUnsubscribed = (track: Track, _pub: TrackPublication) => {
       if (track.kind === Track.Kind.Video) setVideoTrack(null);
       if (track.kind === Track.Kind.Audio) setAudioTrack(null);
     };
     
     const handleMute = (pub: TrackPublication) => {
-        if (pub.kind === Track.Kind.Microphone) setIsMuted(true);
+        if (pub.source === Track.Source.Microphone) setIsMuted(true);
     }
     const handleUnmute = (pub: TrackPublication) => {
-        if (pub.kind === Track.Kind.Microphone) setIsMuted(false);
+        if (pub.source === Track.Source.Microphone) setIsMuted(false);
     }
 
     participant.on('trackSubscribed', handleTrackSubscribed);

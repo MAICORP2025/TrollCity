@@ -90,86 +90,35 @@ const PayoutAdmin: React.FC = () => {
 
   const approveRequest = async (requestId: string) => {
     try {
-      // Check if user has permission (admin or lead_officer)
-      const { data: userData, error: userError } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user!.id)
-        .single();
-
-      if (userError) throw userError;
-
-      if (!['admin', 'lead_officer'].includes(userData.role)) {
-        toast.error('Insufficient permissions');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('payout_requests')
-        .update({
-          status: 'approved',
-          reviewed_by: user!.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', requestId);
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'approve_payout', requestId }
+      });
 
       if (error) throw error;
-
-      // Log the action
-      await supabase.rpc('log_admin_action', {
-        p_action_type: 'approve_payout_request',
-        p_target_id: requestId,
-        p_details: { status: 'approved' }
-      });
+      if (data?.error) throw new Error(data.error);
 
       toast.success('Payout request approved');
       loadPayoutData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving request:', error);
-      toast.error('Failed to approve request');
+      toast.error(error.message || 'Failed to approve request');
     }
   };
 
   const rejectRequest = async (requestId: string, reason: string) => {
     try {
-      // Check if user has permission (admin or lead_officer)
-      const { data: userData, error: userError } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user!.id)
-        .single();
-
-      if (userError) throw userError;
-
-      if (!['admin', 'lead_officer'].includes(userData.role)) {
-        toast.error('Insufficient permissions');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('payout_requests')
-        .update({
-          status: 'rejected',
-          rejected_reason: reason,
-          reviewed_by: user!.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', requestId);
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'reject_payout', requestId, reason }
+      });
 
       if (error) throw error;
-
-      // Log the action
-      await supabase.rpc('log_admin_action', {
-        p_action_type: 'reject_payout_request',
-        p_target_id: requestId,
-        p_details: { status: 'rejected', reason: reason }
-      });
+      if (data?.error) throw new Error(data.error);
 
       toast.success('Payout request rejected');
       loadPayoutData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error rejecting request:', error);
-      toast.error('Failed to reject request');
+      toast.error(error.message || 'Failed to reject request');
     }
   };
 

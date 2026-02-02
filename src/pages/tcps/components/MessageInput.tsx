@@ -16,7 +16,7 @@ interface MessageInputProps {
 }
 
 export default function MessageInput({ conversationId, otherUserId, onMessageSent, onNewMessage, onTyping }: MessageInputProps) {
-  const { user, profile } = useAuthStore()
+  const { user: _user, profile } = useAuthStore()
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)

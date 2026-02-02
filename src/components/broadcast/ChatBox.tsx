@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Send, Coins, Shield, Image as ImageIcon } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { useAuthStore } from "../../lib/store";
 import { toast } from "sonner";
 import ClickableUsername from "../ClickableUsername";
 import { UserBadge } from "../UserBadge";
-import { useXPTracking } from '../../lib/hooks/useXPTracking';
 
 interface ChatBoxProps {
   streamId: string;
@@ -36,7 +36,8 @@ interface Message {
 }
 
 export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadcaster }: ChatBoxProps) {
-  const { trackChatMessage } = useXPTracking();
+  const { user } = useAuthStore();
+  const uid = user?.id;
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -68,8 +69,6 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
   const [coinAmount, setCoinAmount] = useState(10);
 
   const [isGlobalBanned, setIsGlobalBanned] = useState(false);
-  const [shadowBannedUsers, setShadowBannedUsers] = useState<Set<string>>(new Set());
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     if (userCacheRef.current[userId]) return userCacheRef.current[userId];
@@ -122,52 +121,11 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
     }
   }, []);
 
-  // Fetch active shadow bans
-  useEffect(() => {
-    if (!streamId) return;
-
-    const fetchShadowBans = async () => {
-      const { data } = await supabase
-        .from('shadow_bans')
-        .select('target_user_id')
-        .eq('stream_id', streamId)
-        .eq('is_active', true)
-        .gt('expires_at', new Date().toISOString());
-      
-      if (data) {
-        setShadowBannedUsers(new Set(data.map(b => b.target_user_id)));
-      }
-    };
-
-    fetchShadowBans();
-
-    const channel = supabase
-      .channel(`shadow_bans:${streamId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'shadow_bans',
-          filter: `stream_id=eq.${streamId}`
-        },
-        () => {
-          fetchShadowBans();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [streamId]);
-
   // Check global ban status and get current user
   useEffect(() => {
     const checkBanStatus = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setCurrentUserId(user.id);
         const profile = await fetchUserProfile(user.id);
         if (profile.is_banned) {
           setIsGlobalBanned(true);
@@ -194,7 +152,10 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
     queue.forEach(msg => {
         const uid = msg.user_id || (msg as any).sender_id;
         if (uid && msg.sender_profile && !userCacheRef.current[uid]) {
-            userCacheRef.current[uid] = msg.sender_profile;
+            userCacheRef.current[uid] = {
+              ...msg.sender_profile,
+              hasInsurance: msg.sender_profile.hasInsurance ?? false
+            };
         }
     });
 
@@ -285,7 +246,7 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
         // Here we simplify: if it's a "real" message coming in, we just add it.
         // But we need to filter out optimistic versions if they exist.
         
-        const cleanedPrev = prev.filter(msg => {
+        const cleanedPrev = prev.filter(_ => {
              // If we have a new message that "matches" this one (by content/user/time), 
              // and this one is optimistic (or we just want to replace it with the real one)
              // The duplicate check above PREVENTS adding the new one if the old one exists.
@@ -508,7 +469,7 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
       mounted = false;
       supabase.removeChannel(channel);
     };
-  }, [streamId]);
+  }, [streamId, uid]);
 
   const scrollToBottom = (smooth = true) => {
     const el = chatContainerRef.current;
@@ -539,11 +500,13 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
         return;
       }
 
-      const { error } = await supabase.from('messages').insert({
-        stream_id: streamId,
-        user_id: user.id,
-        content: inputValue,
-        message_type: 'chat'
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'send_stream_message',
+          streamId,
+          content: inputValue,
+          messageType: 'chat'
+        }
       });
 
       if (error) throw error;
@@ -642,11 +605,13 @@ export default function ChatBox({ streamId, onProfileClick, onCoinSend, isBroadc
       });
 
       // Persist
-      const { error } = await supabase.from('messages').insert({
-        stream_id: streamId,
-        user_id: user.id,
-        content: uploadedUrl,
-        message_type: 'image'
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: {
+          action: 'send_stream_message',
+          streamId,
+          content: uploadedUrl,
+          messageType: 'image'
+        }
       });
       if (error) {
         throw error;

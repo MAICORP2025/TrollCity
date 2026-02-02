@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useBroadcastLockdown } from '../../../lib/hooks/useBroadcastLockdown';
 import { supabase } from '../../../lib/supabase';
 import { 
-  Shield, ShieldAlert, ShieldCheck, Search, Lock, Unlock, 
-  BadgeCheck, Ban, Save, RefreshCw, ChevronLeft, ChevronRight 
+  ShieldAlert, ShieldCheck, Search, Lock, Unlock, 
+  BadgeCheck, Save, RefreshCw, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,7 +22,7 @@ export default function BroadcastLockTab() {
     setNewLimit(maxBroadcasters);
   }, [maxBroadcasters]);
 
-  const loadUsers = async () => {
+  const loadUsers = React.useCallback(async () => {
     setLoadingUsers(true);
     try {
       let query = supabase
@@ -33,7 +33,7 @@ export default function BroadcastLockTab() {
         query = query.ilike('username', `%${search}%`);
       }
 
-      const { data, count, error } = await query
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .range(page * 20, (page + 1) * 20 - 1);
 
@@ -54,11 +54,11 @@ export default function BroadcastLockTab() {
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, [page, search]);
 
   useEffect(() => {
     loadUsers();
-  }, [page, search]);
+  }, [loadUsers]);
 
   const handleToggleLockdown = async () => {
     await updateSettings({
@@ -83,7 +83,7 @@ export default function BroadcastLockTab() {
       
       setUsers(users.map(u => u.id === userId ? { ...u, is_broadcast_locked: !currentStatus } : u));
       toast.success(`User ${!currentStatus ? 'locked' : 'unlocked'}`);
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to update user lock');
     }
   };
@@ -107,7 +107,7 @@ export default function BroadcastLockTab() {
       setUsers(users.map(u => u.id === userId ? { ...u, has_broadcast_badge: !currentStatus } : u));
       setBroadcasterCount(prev => !currentStatus ? prev + 1 : prev - 1);
       toast.success(`Badge ${!currentStatus ? 'granted' : 'removed'}`);
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to update badge');
     }
   };

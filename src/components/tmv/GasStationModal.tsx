@@ -15,33 +15,33 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
   const [followingLoading, setFollowingLoading] = useState(false);
 
   useEffect(() => {
+    const fetchFollowing = async () => {
+      if (!profile) return;
+      setFollowingLoading(true);
+      try {
+        const { data } = await supabase
+          .from('user_follows')
+          .select('following:user_profiles!user_follows_following_id_fkey(id, username, avatar_url)')
+          .eq('follower_id', profile.id)
+          .limit(50); // Limit to recent/top 50 for performance
+  
+        if (data) {
+          const users = data.map((d: any) => d.following).filter(Boolean);
+          setFollowingUsers(users);
+        }
+      } catch (e) {
+        console.error('Error fetching following:', e);
+      } finally {
+        setFollowingLoading(false);
+      }
+    };
+
     if (isOpen && tab === 'request') {
       fetchFollowing();
     }
-  }, [isOpen, tab]);
+  }, [isOpen, tab, profile]);
 
   if (!isOpen || !profile) return null;
-
-  const fetchFollowing = async () => {
-    if (!profile) return;
-    setFollowingLoading(true);
-    try {
-      const { data } = await supabase
-        .from('user_follows')
-        .select('following:user_profiles!user_follows_following_id_fkey(id, username, avatar_url)')
-        .eq('follower_id', profile.id)
-        .limit(50); // Limit to recent/top 50 for performance
-
-      if (data) {
-        const users = data.map((d: any) => d.following).filter(Boolean);
-        setFollowingUsers(users);
-      }
-    } catch (e) {
-      console.error('Error fetching following:', e);
-    } finally {
-      setFollowingLoading(false);
-    }
-  };
 
   const filteredUsers = followingUsers.filter(u => 
     u.username.toLowerCase().includes(targetUser.toLowerCase())

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
@@ -22,7 +22,7 @@ export default function SessionMonitor() {
 
     // Initial check
     const checkSession = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('active_sessions')
         .select('is_active')
         .eq('session_id', sessionId)

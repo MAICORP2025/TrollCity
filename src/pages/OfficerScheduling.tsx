@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, isAdminEmail } from '../lib/supabase'
+import { sendNotification } from '../lib/sendNotification'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { Calendar, Clock, Plus, Trash2, CheckCircle, XCircle, AlertCircle, DollarSign } from 'lucide-react'
@@ -358,19 +359,7 @@ export default function OfficerScheduling() {
 
   const sendPushNotification = async (userId: string, message: string) => {
     try {
-      // Insert notification into database
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: userId,
-          message: message,
-          type: 'shift_assignment',
-          is_read: false
-        })
-      
-      if (error) throw error
-      
-      // In a real app, you would also send a push notification via a service like Firebase
+      await sendNotification(userId, 'officer_update', 'Shift Assignment', message)
       console.log(`Push notification sent to user ${userId}: ${message}`)
     } catch (err) {
       console.error('Error sending push notification:', err)

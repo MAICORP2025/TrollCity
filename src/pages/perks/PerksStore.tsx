@@ -16,9 +16,6 @@ interface Perk {
 
 export default function PerksStore() {
   const { profile, user } = useAuthStore()
-  const [perks, setPerks] = useState<Perk[]>([])
-  const [loading, setLoading] = useState(true)
-  const [purchasing, setPurchasing] = useState<string | null>(null)
 
   if (!profile) {
     return (

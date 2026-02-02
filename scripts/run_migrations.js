@@ -8,7 +8,12 @@ const migrationsToRun = [
   '../supabase/migrations/20270215000002_fix_payout_requests_permissions.sql',
   '../supabase/migrations/20270215000000_remove_gamerz_add_pods.sql',
   '../supabase/migrations/20270215000001_fix_streams_permissions.sql',
-  '../supabase/migrations/20270215010000_create_pod_storage.sql'
+  '../supabase/migrations/20270215010000_create_pod_storage.sql',
+  '../supabase/migrations/20270217110000_fix_tournament_participants_status.sql',
+  '../supabase/migrations/20270217111000_rename_neon_city.sql',
+  '../supabase/migrations/20270217120000_tournament_rpc.sql',
+  '../supabase/migrations/20270218000000_secure_notification_rpc.sql',
+  '../supabase/migrations/20270218000001_fix_tournament_deletion_rls.sql'
 ]
 
 async function run() {

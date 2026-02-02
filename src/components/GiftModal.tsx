@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
-import { supabase } from '../supabaseClient'
 import { useAuthStore } from '../lib/store'
 import { useCoins } from '../lib/hooks/useCoins'
 import { toast } from 'sonner'
-import { Gift, Coins, Zap, X, Loader2 } from 'lucide-react'
+import { Gift, Coins, X, Loader2 } from 'lucide-react'
 
 interface GiftModalProps {
   isOpen: boolean

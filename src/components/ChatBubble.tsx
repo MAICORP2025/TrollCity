@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { X, Minus, MessageSquare, Check, CheckCheck } from 'lucide-react'
+import { X, Minus, Check, CheckCheck } from 'lucide-react'
 import { supabase, createConversation, getConversationMessages, markConversationRead } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { useChatStore } from '../lib/chatStore'
@@ -22,21 +22,23 @@ interface Message {
 
 export default function ChatBubble() {
   const { user, profile } = useAuthStore()
-  const { isOpen, activeUserId, activeUsername, activeUserAvatar, closeChatBubble, toggleChatBubble } = useChatStore()
+  const { isOpen, activeUserId, activeUsername, activeUserAvatar, closeChatBubble } = useChatStore()
   
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
   const [actualConversationId, setActualConversationId] = useState<string | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
-  const [isTyping, setIsTyping] = useState(false)
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const channelRef = useRef<any>(null)
+  const [isTyping, _setIsTyping] = useState(false)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Audio ref for message sounds
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [activeSoundUrl, setActiveSoundUrl] = useState<string | null>(null)
+
+  const handleLocalTyping = (_typing: boolean) => {
+    // TODO: Implement typing status broadcast
+    // For now this is just a stub to satisfy the interface
+  }
 
   // Initialize conversation when bubble opens
   useEffect(() => {
@@ -212,12 +214,8 @@ export default function ChatBubble() {
             await markConversationRead(actualConversationId)
             // Play sound
             if (audioRef.current) {
-              if (activeSoundUrl) {
-                audioRef.current.src = activeSoundUrl
-              } else {
-                 // Default sound if none equipped (using a known file)
-                 audioRef.current.src = '/sounds/pop.mp3'
-              }
+              // Default sound if none equipped (using a known file)
+              audioRef.current.src = '/sounds/pop.mp3'
               // Simple play attempt
               audioRef.current.play().catch(e => console.log('Audio play blocked:', e))
             }
@@ -230,7 +228,20 @@ export default function ChatBubble() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [actualConversationId, profile?.id, isOpen, user?.id, scrollToBottom, fetchMessagesWithSenders])
+  }, [
+    actualConversationId, 
+    profile?.id, 
+    profile?.username, 
+    profile?.avatar_url, 
+    profile?.rgb_username_expires_at, 
+    isOpen, 
+    user?.id, 
+    activeUserId, 
+    activeUsername, 
+    activeUserAvatar, 
+    scrollToBottom, 
+    fetchMessagesWithSenders
+  ])
 
   // Poll for new messages and read status updates every second
   useEffect(() => {
@@ -262,7 +273,7 @@ export default function ChatBubble() {
           
           return prev
         })
-      } catch (error) {
+      } catch {
         // Silent fail for polling
       }
     }
@@ -295,10 +306,6 @@ export default function ChatBubble() {
     }
     setMessages(prev => [...prev, pendingMsg])
     scrollToBottom()
-  }
-
-  const handleLocalTyping = (isTyping: boolean) => {
-    // Optional: handle local typing indication if needed
   }
 
   if (!isOpen) return null

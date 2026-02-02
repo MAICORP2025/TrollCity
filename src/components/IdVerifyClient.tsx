@@ -2,6 +2,7 @@ import React, {useRef, useState, useEffect} from 'react'
 import Tesseract from 'tesseract.js'
 import * as faceapi from 'face-api.js'
 import {supabase} from '../lib/supabase'
+import {sendNotification} from '../lib/sendNotification'
 
 type Result = {
   ocrText?: string
@@ -97,12 +98,13 @@ export default function IdVerifyClient({onComplete}:{onComplete:(r:Result)=>void
       })
 
       if(status === 'needs_review' || status === 'failed'){
-        await supabase.from('notifications').insert([{
-          user_id: uid,
-          type: 'id_verification_review',
-          data: JSON.stringify({ocr: ocrText, score: matchScore}),
-          message: 'New ID verification requires review',
-        }])
+        await sendNotification(
+          uid,
+          'system',
+          'ID Verification Review',
+          'New ID verification requires review',
+          { ocr: ocrText, score: matchScore }
+        )
       }
     }catch(e){
       console.error('upload error', e)

@@ -33,7 +33,7 @@ export function getTierFromXP(xp: number): TierInfo {
   return TIER_LEVELS[0]
 }
 
-export function getLevelFromXP(xp: number, isAdmin: boolean = false): number {
+export function getLevelFromXP(xp: number, _isAdmin: boolean = false): number {
   // Use the standard formula matching SQL calculate_level_details
   // Levels 1-50: 100 * 1.1^(L-1)
   // Levels 50+: 10000 flat per level
@@ -60,7 +60,7 @@ export function getLevelFromXP(xp: number, isAdmin: boolean = false): number {
   }
 }
 
-export function getXPForNextLevel(currentXp: number, isAdmin: boolean = false): { current: number; needed: number; percentage: number } {
+export function getXPForNextLevel(currentXp: number, _isAdmin: boolean = false): { current: number; needed: number; percentage: number } {
   let curr_lvl = 1;
   let xp_accum = 0;
   let xp_needed = 100;

@@ -408,7 +408,7 @@ export const useGoLiveFlow = () => {
       setError(err.message || 'Failed to finish going live')
       return false
     }
-  }, [stream, publishTracks])
+  }, [stream, publishTracks, user?.id])
 
   const disconnect = useCallback(() => {
     localTracksRef.current.forEach((track) => track.stop?.())

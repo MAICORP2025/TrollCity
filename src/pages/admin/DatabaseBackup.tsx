@@ -11,11 +11,12 @@ import {
   Archive
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { toast } from 'sonner';
 
 const DatabaseBackup: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [backupStatus, setBackupStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-  const [lastBackup, setLastBackup] = useState<string>(new Date(Date.now() - 86400000).toLocaleString());
+  const [lastBackup] = useState<string>(new Date(Date.now() - 86400000).toLocaleString());
 
   const handleCreateBackup = async () => {
     setLoading(true);
@@ -25,7 +26,7 @@ const DatabaseBackup: React.FC = () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
 
-      const { data, error } = await supabase.rpc('trigger_manual_backup', {
+      const { error } = await supabase.rpc('trigger_manual_backup', {
         p_admin_id: user.user.id
       });
       

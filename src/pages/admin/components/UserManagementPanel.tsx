@@ -54,26 +54,24 @@ export default function UserManagementPanel({
   const loadUsers = useCallback(async () => {
     setLoading(true)
     try {
-      const selectFields = canViewEmails
-        ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status'
-        : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status'
-
-      const { data, error } = await (supabase as any)
-        .from('user_profiles')
-        // supabase-js types can't infer dynamic select strings; using explicit return type cast below
-        .select(selectFields)
-        .order('created_at', { ascending: false })
-        .limit(100)
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'get_users',
+          limit: 100
+        }
+      })
 
       if (error) throw error
-      setUsers((data as unknown as UserProfile[]) || [])
+      if (data?.error) throw new Error(data.error)
+      
+      setUsers((data.data as UserProfile[]) || [])
     } catch (error: unknown) {
       console.error('Error loading users:', error)
       toast.error('Failed to load users')
     } finally {
       setLoading(false)
     }
-  }, [canViewEmails])
+  }, [])
 
   useEffect(() => {
     loadUsers()
@@ -122,92 +120,39 @@ export default function UserManagementPanel({
 
     setSaving(true)
     try {
-      // 1. Prepare updates for non-Troll Bank fields
-      const updates: Partial<UserProfile> = {
-        free_coin_balance: editingCoins.free,
-        level: editingLevel,
-        // role: editingRole, // Handled via RPC
-        updated_at: new Date().toISOString()
-      }
-
-      // 2. Execute direct update for basic fields
-      const { error } = await supabase
-        .from('user_profiles')
-        .update(updates)
-        .eq('id', selectedUser.id)
-
-      if (error) throw error
-
-      // 3. Handle Role Update via Secure RPC if changed
-      if (editingRole !== selectedUser.role) {
-        const { error: roleError } = await supabase.rpc('set_user_role', {
-          target_user: selectedUser.id,
-          new_role: editingRole,
-          reason: `Admin panel update by ${adminProfile.username}`
-        })
-        
-        if (roleError) {
-          console.error('Error setting role:', roleError)
-          toast.error('Failed to update role: ' + roleError.message)
-        }
-      }
-
-      // 4. Handle Troll Coins via Troll Bank RPC
+      // 1. Prepare data
       const currentTrollCoins = selectedUser.troll_coins || 0
       const newTrollCoins = editingCoins.paid
       const delta = newTrollCoins - currentTrollCoins
 
-      if (delta !== 0) {
-        if (delta > 0) {
-           // Credit
-           const { error: creditError } = await supabase.rpc('troll_bank_credit_coins', {
-             p_user_id: selectedUser.id,
-             p_coins: delta,
-             p_bucket: 'paid', // Admin adjustment treated as paid/generic
-             p_source: 'admin_grant',
-             p_ref_id: null,
-             p_metadata: { admin_id: adminProfile.id, reason: 'Manual Adjustment' }
-           })
-           if (creditError) {
-             console.error('Error crediting coins:', creditError)
-             toast.error('Failed to update coin balance')
-           }
-        } else {
-           // Debit
-           const { error: spendError } = await supabase.rpc('troll_bank_spend_coins_secure', {
-             p_user_id: selectedUser.id,
-             p_amount: Math.abs(delta),
-             p_bucket: 'paid',
-             p_source: 'admin_deduct',
-             p_ref_id: null,
-             p_metadata: { admin_id: adminProfile.id, reason: 'Manual Adjustment' }
-           })
-           if (spendError) {
-             console.error('Error deducting coins:', spendError)
-             toast.error('Failed to update coin balance')
-           }
-        }
+      const updates: any = {
+        free_coin_balance: editingCoins.free,
+        level: editingLevel
       }
 
-      // Log the admin action
-      const { error: logError } = await supabase.from('coin_transactions').insert({
-        user_id: selectedUser.id,
-        type: 'admin_adjustment',
-        amount: editingCoins.paid - (selectedUser.troll_coins || 0),
-        description: `Admin adjustment: ${adminProfile.username} updated user ${selectedUser.username}`,
-        metadata: {
-          admin_id: adminProfile.id,
-          previous_balance: selectedUser.troll_coins,
-          new_balance: editingCoins.paid,
-          previous_level: selectedUser.level,
-          new_level: editingLevel,
-          previous_role: selectedUser.role,
-          new_role: editingRole
+      const roleUpdate = editingRole !== selectedUser.role ? {
+        newRole: editingRole,
+        reason: `Admin panel update by ${adminProfile.username}`
+      } : undefined
+
+      const coinAdjustment = delta !== 0 ? {
+        amount: delta,
+        reason: 'Manual Adjustment'
+      } : undefined
+
+      // 2. Call Edge Function
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'update_user_profile',
+          userId: selectedUser.id,
+          updates,
+          roleUpdate,
+          coinAdjustment
         }
       })
-      if (logError) {
-        console.error('Error logging admin action:', logError)
-      }
+
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
 
       toast.success('User updated successfully')
       setSelectedUser(null)
@@ -280,11 +225,13 @@ export default function UserManagementPanel({
 
                 let sent = 0
                 for (const { user: u, missing } of targets) {
-                  const { error } = await supabase.rpc('notify_user_rpc', {
-                    p_target_user_id: u.id,
-                    p_type: 'system_alert',
-                    p_title: 'Complete your account',
-                    p_message: `Please complete the following: ${missing.join(', ')}.`
+                  const { error } = await supabase.functions.invoke('admin-actions', {
+                    body: {
+                      action: 'notify_user',
+                      targetUserId: u.id,
+                      title: 'Complete your account',
+                      message: `Please complete the following: ${missing.join(', ')}.`
+                    }
                   })
                   if (!error) {
                     sent += 1

@@ -32,7 +32,7 @@ serve(async (req) => {
       );
     }
 
-    const token = authHeader.replace("Bearer ", "").trim();
+    // const token = authHeader.replace("Bearer ", "").trim();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -63,7 +63,7 @@ serve(async (req) => {
     let body;
     try {
       body = await req.json();
-    } catch (e) {
+    } catch {
       return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: corsHeaders });
     }
 

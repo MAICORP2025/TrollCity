@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Heart } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { toast } from 'sonner';
 
 interface TrollLikeButtonProps {
   streamId: string;

@@ -317,7 +317,6 @@ export const getTransactionHistory = async (
   }
 }
 
-import { supabase, UserProfile } from './supabase'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Production-ready audit logging
