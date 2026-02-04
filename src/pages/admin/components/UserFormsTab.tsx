@@ -4,6 +4,7 @@ import { useAuthStore } from '../../../lib/store';
 import { FileText, AlertCircle, Bell, Check, Search, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import UserNameWithAge from '../../../components/UserNameWithAge';
+import UserDetailsModal from '../../../components/admin/UserDetailsModal';
 
 interface UserFormStatus {
   id: string;

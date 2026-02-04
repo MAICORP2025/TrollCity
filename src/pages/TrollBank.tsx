@@ -16,6 +16,24 @@ export default function TrollBank() {
   const activeLoan = loans && loans.length > 0 ? loans[0] : null
   
   const [bankBalance, setBankBalance] = useState<number | null>(null)
+  const [creditScore, setCreditScore] = useState<number | null>(null)
+  
+  // Fetch Credit Score
+  useEffect(() => {
+    const fetchCredit = async () => {
+      if (!profile?.id) return
+      const { data } = await supabase
+        .from('user_credit')
+        .select('score')
+        .eq('user_id', profile.id)
+        .single()
+      
+      if (data) {
+        setCreditScore(data.score)
+      }
+    }
+    fetchCredit()
+  }, [profile?.id])
   
   // Fetch and Subscribe to Bank Reserves
   useEffect(() => {
@@ -93,6 +111,16 @@ export default function TrollBank() {
         canApply = false
       }
 
+      // Elite Credit Override
+      if (creditScore && creditScore > 650) {
+        setEligibility({ 
+            canApply: canApply, // Still respects active loan check
+            reasons, 
+            maxAmount: 500000 
+        })
+        return
+      }
+
       // Calculate account age
       const created = new Date(profile?.created_at || Date.now())
       const diffTime = Math.abs(Date.now() - created.getTime())
@@ -108,20 +136,15 @@ export default function TrollBank() {
            reasons.push(`Account too new for any loan tier.`)
            canApply = false
         }
-        // If tiers not loaded, we might just wait (canApply defaults false if reasons empty? No, let's allow basic 100 if tiers fail to load?)
-        // Better to block until tiers load.
       }
 
       const maxAmount = eligibleTier ? eligibleTier.max_loan_coins : 0
-      
-      // Ensure requested amount is within limit
-      // We don't block applying here based on amount, but we validate it on submit
       
       setEligibility({ canApply: canApply && maxAmount > 0, reasons, maxAmount })
     }
 
     checkEligibility(activeLoan, ledger || [], tiers || [])
-  }, [activeLoan, ledger, tiers, profile?.created_at])
+  }, [activeLoan, ledger, tiers, profile?.created_at, creditScore])
 
   const handleApply = async () => {
     if (!eligibility.canApply) return
@@ -325,17 +348,28 @@ export default function TrollBank() {
                       label="No active loans" 
                       met={!activeLoan} 
                     />
-                    <Requirement 
-                      label="Account age check" 
-                      met={eligibility.maxAmount > 0} 
-                      note={`(Limit: ${eligibility.maxAmount})`}
-                    />
-                    {profile?.credit_score !== undefined && (
+                    
+                    {creditScore && creditScore > 650 ? (
+                         <Requirement 
+                            label="Elite Credit Status (> 650)" 
+                            met={true} 
+                            note="(Instant Approval up to 500,000)"
+                        />
+                    ) : (
+                        <Requirement 
+                          label="Account age check" 
+                          met={eligibility.maxAmount > 0} 
+                          note={`(Limit: ${eligibility.maxAmount})`}
+                        />
+                    )}
+
+                    {creditScore !== null && (
                       <li className="flex items-center gap-2 text-sm">
                         <span className="text-cyan-400">Credit Score:</span>
-                        <span className="font-semibold">{profile.credit_score}</span>
+                        <span className="font-semibold">{creditScore}</span>
                       </li>
                     )}
+
                     {profile?.created_at && (
                       <li className="flex items-center gap-2 text-sm">
                         <span className="text-cyan-400">Account Age:</span>

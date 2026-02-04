@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { Home, DollarSign, Building, Warehouse, Hotel, Tent, Briefcase, Edit2, X, Zap, Droplets, FileText, Calculator, CheckCircle, Trash2 } from 'lucide-react';
+import { Home, DollarSign, Building, Warehouse, Hotel, Tent, Briefcase, Edit2, X, Zap, Droplets, FileText, Calculator, CheckCircle, Trash2, CreditCard } from 'lucide-react';
 
 interface Property {
   id: string;
@@ -75,6 +75,8 @@ export default function LivingPage() {
   
   // Landlord Application Form State
   const [showLandlordApplication, setShowLandlordApplication] = useState(false);
+  const [useLoan, setUseLoan] = useState(false);
+  const [creditScore, setCreditScore] = useState(0);
   const [landlordAppForm, setLandlordAppForm] = useState({
     business_plan: '',
     experience_years: 0,
@@ -82,6 +84,14 @@ export default function LivingPage() {
     loan_amount_needed: 0,
     property_value_interest: 0,
   });
+
+  useEffect(() => {
+    if (user) {
+        supabase.from('user_credit').select('score').eq('user_id', user.id).single().then(({ data }) => {
+            if (data) setCreditScore(data.score);
+        });
+    }
+  }, [user]);
   
   // Loan Application State
   const [showLoanApplication, setShowLoanApplication] = useState(false);
@@ -156,9 +166,25 @@ export default function LivingPage() {
       toast.error('Please complete all required fields');
       return;
     }
+
+    if (useLoan && creditScore <= 650) {
+        toast.error("Credit score must be > 650 for instant loan approval.");
+        return;
+    }
     
     try {
-      const { error } = await supabase
+      // 1. Purchase License via RPC (handles cost/loan and status update)
+      const { data: licenseData, error: licenseError } = await supabase.rpc('purchase_landlord_license', {
+        p_use_loan: useLoan
+      });
+
+      if (licenseError) throw licenseError;
+      if (licenseData && !licenseData.success) {
+        throw new Error(licenseData.error || licenseData.message || 'Application denied');
+      }
+
+      // 2. Log Application (Optional, for records)
+      await supabase
         .from('landlord_applications')
         .insert({
           user_id: user.id,
@@ -171,15 +197,7 @@ export default function LivingPage() {
           created_at: new Date().toISOString()
         });
       
-      if (error) throw error;
-      
-      // Automatically grant landlord status
-      await supabase
-        .from('user_profiles')
-        .update({ is_landlord: true })
-        .eq('id', user.id);
-      
-      // Create a new property for the new landlord (holds 100 tenants, costs 15,000 coins)
+      // 3. Create a new property for the new landlord (Bonus Starter Property)
       const propertyData = {
         name: `${user.user_metadata?.full_name || 'Landlord'}'s Apartment Complex`,
         address: `${100 + Math.floor(Math.random() * 900)} Landlord Lane`,
@@ -207,7 +225,7 @@ export default function LivingPage() {
         // Don't fail the whole process if property creation fails
       }
       
-      toast.success('Landlord application approved! Property created for you to buy.');
+      toast.success('Landlord license purchased & application approved!');
       setIsLandlord(true);
       setLandlordApplication({
         id: 'new',
@@ -219,6 +237,7 @@ export default function LivingPage() {
         created_at: new Date().toISOString()
       });
       setShowLandlordApplication(false);
+      setUseLoan(false);
       setActiveTab('market'); // Switch to market so they can buy their property
     } catch (err: any) {
       toast.error(err.message);
@@ -361,6 +380,11 @@ export default function LivingPage() {
   const handleBuyWithLoan = async () => {
     if (!buyingProp || !user) return;
     
+    if (creditScore <= 650) {
+        toast.error("Credit score must be > 650 for instant loan approval.");
+        return;
+    }
+
     const propertyPrice = buyingProp.price;
     const calculatedDownPayment = parseInt((propertyPrice * 0.1).toString()); // 10% minimum
     
@@ -832,6 +856,39 @@ export default function LivingPage() {
                                             />
                                             I have startup capital available
                                         </label>
+                                    </div>
+
+                                    {/* License Fee & Loan Option */}
+                                    <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700 mt-4">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-sm text-gray-300">Landlord License Fee</span>
+                                            <span className="text-yellow-400 font-mono font-bold">7,000 TC</span>
+                                        </div>
+
+                                        {creditScore > 650 && (
+                                            <div className="flex justify-between items-center pt-2 border-t border-white/5 mt-2">
+                                                <div className="flex items-center gap-2">
+                                                    <CreditCard className="w-4 h-4 text-emerald-400" />
+                                                    <span className="text-gray-300 text-sm">Instant Loan (10% Down)</span>
+                                                </div>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={useLoan} 
+                                                        onChange={(e) => setUseLoan(e.target.checked)} 
+                                                        className="sr-only peer" 
+                                                    />
+                                                    <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                                </label>
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-between items-end mt-3 pt-3 border-t border-white/10">
+                                            <div className="text-sm text-gray-400">Total Due Now</div>
+                                            <div className="text-xl font-bold text-yellow-400 font-mono">
+                                                {useLoan ? '700' : '7,000'} TC
+                                            </div>
+                                        </div>
                                     </div>
                                     
                                     <div className="flex gap-4 pt-4">

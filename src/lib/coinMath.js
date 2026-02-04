@@ -9,7 +9,6 @@ export const STORE_USD_PER_COIN = 1.99 / 300;
 // Coin Packages (Source of Truth)
 export const COIN_PACKAGES = [
   { id: 'pkg-1000-promo', coins: 1000, price: 0.10, priceDisplay: "$0.10", emoji: "💎", popular: true, promo: true, expiresAt: new Date('2026-01-28T00:51:27Z').getTime() },
-  { id: 'pkg-nice', coins: 104, price: 0.69, priceDisplay: "$0.69", emoji: "🪙", popular: false },
   { id: 1, coins: 300, price: 1.99, priceDisplay: "$1.99", emoji: "💰", popular: true },
   { id: 2, coins: 500, price: 4.99, priceDisplay: "$4.99", emoji: "💰", popular: true },
   { id: 3, coins: 1000, price: 9.99, priceDisplay: "$9.99", emoji: "💎" },

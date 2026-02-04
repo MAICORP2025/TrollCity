@@ -11,7 +11,6 @@ import { WallPost, WallPostType } from '../types/trollWall'
 import CreatePostModal from '../components/trollWall/CreatePostModal'
 import GiftModal from '../components/trollWall/GiftModal'
 import DailyLoginWall from '../components/trollWall/DailyLoginWall'
-import ClickableUsername from '../components/ClickableUsername'
 import UserNameWithAge from '../components/UserNameWithAge'
 
 // Available reactions
@@ -487,11 +486,19 @@ export default function TrollCityWall() {
             posts.map((post) => (
               <div
                 key={post.id}
-                className="bg-zinc-900 rounded-xl p-6 border border-[#2C2C2C] hover:border-purple-500/30 transition-colors"
+                className={`rounded-xl p-6 border transition-colors ${
+                  post.post_type === 'announcement'
+                    ? 'bg-amber-950/20 border-amber-500/50 hover:border-amber-400'
+                    : 'bg-zinc-900 border-[#2C2C2C] hover:border-purple-500/30'
+                }`}
               >
                 {/* Post Header */}
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 ${
+                    post.post_type === 'announcement' 
+                      ? 'bg-gradient-to-br from-amber-400 to-yellow-600 ring-2 ring-amber-500' 
+                      : 'bg-gradient-to-br from-purple-500 to-pink-500'
+                  }`}>
                     {post.avatar_url ? (
                       <img src={post.avatar_url} alt={post.username} className="w-full h-full object-cover" />
                     ) : (
@@ -510,11 +517,12 @@ export default function TrollCityWall() {
                             is_og_user: post.is_og_user,
                             created_at: post.user_created_at
                           }}
-                          className="font-semibold text-white hover:text-purple-400" 
+                          className={`font-semibold hover:text-purple-400 ${post.post_type === 'announcement' ? 'text-amber-400' : 'text-white'}`} 
                         />
                       ) : (
                         <span className="font-semibold text-gray-500">Deleted User</span>
                       )}
+                      {post.post_type === 'announcement' && <span className="px-2 py-0.5 bg-amber-500 text-black text-xs font-bold rounded border border-amber-400">PRESIDENT</span>}
                       {post.is_admin && <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded">ADMIN</span>}
                       {post.is_troll_officer && <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded">OFFICER</span>}
                       {post.is_og_user && <span className="px-2 py-0.5 bg-yellow-600 text-white text-xs font-bold rounded">OG</span>}

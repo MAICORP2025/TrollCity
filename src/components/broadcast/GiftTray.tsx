@@ -18,7 +18,7 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
   const [loading, setLoading] = useState(true);
   const { sendGift, isSending } = useGiftSystem(recipientId, streamId, battleId, recipientId);
   const { balances } = useAuthStore();
-  const [sendingToAll, setSendingToAll] = useState(false);
+  // const [sendingToAll, setSendingToAll] = useState(false);
 
   useEffect(() => {
     const fetchGifts = async () => {

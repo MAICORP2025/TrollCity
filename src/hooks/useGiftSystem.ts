@@ -16,7 +16,7 @@ export function useGiftSystem(
   recipientId: string, 
   streamId: string, 
   battleId?: string | null,
-  targetUserId?: string
+  _targetUserId?: string
 ) {
   const [isSending, setIsSending] = useState(false);
   const { user, refreshProfile } = useAuthStore();
@@ -35,19 +35,20 @@ export function useGiftSystem(
     setIsSending(true);
 
     try {
-      // Use the unified spend_coins RPC which handles the 10% admin cut
-      const { data, error } = await supabase.rpc('spend_coins', {
-        p_sender_id: user.id,
+      // Use the scalable send_gift_ledger RPC (Single Write)
+      const { data, error } = await supabase.rpc('send_gift_ledger', {
         p_receiver_id: recipientId,
-        p_coin_amount: gift.coinCost,
-        p_reason: `gift:${gift.slug}`,
+        p_gift_id: gift.slug || gift.id,
+        p_amount: gift.coinCost,
+        p_stream_id: streamId,
         p_metadata: {
           stream_id: streamId,
           battle_id: battleId || null,
           gift_name: gift.name,
           gift_icon: gift.icon,
-          gift_id: gift.id
-        }
+          original_gift_id: gift.id
+        },
+        p_idempotency_key: crypto.randomUUID()
       });
 
       if (error) throw error;
@@ -55,23 +56,12 @@ export function useGiftSystem(
       if (data && data.success) {
         toast.success(`Sent ${gift.name}!`);
         
-        // Refresh profile to update balance
+        // Refresh profile to update balance (Optimistic)
         refreshProfile(); 
         
-        // Record the gift in stream_gifts table for history/analytics if needed
-        // (The RPC might do this, but usually we track it)
-        // For now, we trust the RPC handled the transaction.
+        // NO manual insert into stream_gifts. 
+        // The ledger processor will handle history and stats.
         
-        // We can also manually insert into stream_gifts if the RPC doesn't
-        await supabase.from('stream_gifts').insert({
-            stream_id: streamId,
-            sender_id: user.id,
-            receiver_id: recipientId,
-            gift_id: gift.id, // Assuming gifts table has UUIDs
-            amount: gift.coinCost,
-            battle_id: battleId
-        });
-
         return true;
       } else {
         toast.error(data?.message || "Failed to send gift");

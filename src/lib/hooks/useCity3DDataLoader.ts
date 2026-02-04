@@ -34,21 +34,32 @@ export const useCity3DDataLoader = () => {
           setAvatar(avatar);
         }
 
-        // Load purchased cars (from user_perks where perk_type = 'car')
-        const { data: carPerks } = await supabase
-          .from('user_perks')
-          .select('perk_id, metadata')
-          .eq('user_id', userId)
-          .ilike('perk_id', '%car%')
-          .eq('is_active', true);
+        // Load purchased cars (from user_vehicles joined with vehicles_catalog)
+        const { data: userVehicles } = await supabase
+          .from('user_vehicles')
+          .select(`
+            id,
+            mods,
+            vehicles_catalog (
+              name,
+              tier,
+              image
+            )
+          `)
+          .eq('user_id', userId);
 
-        if (carPerks) {
+        if (userVehicles) {
           let firstCar: CarData | null = null;
-          carPerks.forEach((perk) => {
+          userVehicles.forEach((uv: any) => {
+            // Determine color from mods or default
+            const mods = uv.mods || {};
+            const color = mods.color || '#3b82f6'; // Default blue-ish
+
             const car: CarData = {
-              id: perk.perk_id,
-              model: perk.metadata?.car_model || 'Unknown Car',
-              color: perk.metadata?.color || '#ff0000',
+              id: uv.id,
+              model: uv.vehicles_catalog?.name || 'Unknown Car',
+              color: color,
+              // Random position for now, or could store in DB if we had it
               position: [Math.random() * 20 - 10, 0, Math.random() * 20 - 10],
               rotation: Math.random() * Math.PI * 2,
               isOwned: true,

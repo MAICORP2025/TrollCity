@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Gift as GiftIcon, Coins, Star, Sparkles } from 'lucide-react';
+import { Gift as GiftIcon, Star, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Gift } from '../../types/broadcast';
-import { useCoins } from '../../lib/hooks/useCoins';
 
 interface GiftAnimationOverlayProps {
   streamId: string;

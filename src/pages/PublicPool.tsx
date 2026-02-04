@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { Coins, Send, Waves, Trophy, User } from 'lucide-react'
-import ClickableUsername from '../components/ClickableUsername'
+import UserNameWithAge from '../components/UserNameWithAge'
 
 type Donation = {
   id: string

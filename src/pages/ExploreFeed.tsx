@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Users, Radio, Play, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { trollCityTheme } from '../styles/trollCityTheme';
 import UserNameWithAge from '../components/UserNameWithAge';

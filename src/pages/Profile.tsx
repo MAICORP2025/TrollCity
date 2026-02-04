@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import CreditScoreBadge from '../components/CreditScoreBadge';
 import BadgesGrid from '../components/badges/BadgesGrid';
-import UserNameWithAge from '../components/UserNameWithAge';
+import UserBadge from '../components/UserBadge';
 import { useCreditScore } from '../lib/hooks/useCreditScore';
 import { useProfileViewPayment } from '../hooks/useProfileViewPayment';
 import { getLevelName } from '../lib/xp';
@@ -202,8 +202,7 @@ function ProfileInner() {
         supabase.from('call_minutes').select('*').eq('user_id', uid).single(),
         supabase.from('properties').select('*').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
         supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
-        supabase.from('user_cars').select('*').eq('user_id', uid).order('purchased_at', { ascending: false }),
-        supabase.from('user_vehicles').select('*').eq('user_id', uid),
+        supabase.from('user_vehicles').select('*, vehicles_catalog(*)').eq('user_id', uid).order('purchased_at', { ascending: false }),
         supabase.from('user_inventory').select('*').eq('user_id', uid)
       ]);
 
@@ -214,8 +213,7 @@ function ProfileInner() {
       const homesRes = results[4];
       const vehicleListingsRes = results[5];
       const vehiclesRes = results[6];
-      const legacyVehiclesRes = results[7];
-      const inventoryRes = results[8];
+      const inventoryRes = results[7];
 
       // Manual fetch for marketplace items to avoid 400 Bad Request on join
       let titlesAndDeedsData = inventoryRes.data || [];
@@ -285,17 +283,6 @@ function ProfileInner() {
           console.error('Error fetching insurance plans:', err);
       }
 
-      // Map legacy vehicles to common structure
-      const legacyVehicles = (legacyVehiclesRes.data || []).map((v: any) => ({
-        id: v.id,
-        car_id: v.vehicle_id,
-        is_active: v.is_equipped,
-        purchased_at: v.created_at || new Date().toISOString(),
-        customization_json: { car_model_id: Number(v.vehicle_id) },
-        insurance_expiry: null,
-        is_legacy: true
-      }));
-
       setInventory({
         perks: perksRes.data || [],
         effects: effectsRes.data || [],
@@ -303,7 +290,7 @@ function ProfileInner() {
         callMinutes: callRes.data || null,
         homeListings: homesRes.data || [],
         vehicleListings: vehicleListingsRes.data || [],
-        vehicles: [...(vehiclesRes.data || []), ...legacyVehicles],
+        vehicles: vehiclesRes.data || [],
         titlesAndDeeds: titlesAndDeedsData || []
       });
     } catch (e) {
@@ -462,21 +449,35 @@ function ProfileInner() {
     window.scrollTo(0, 0);
 
     const fetchProfile = async () => {
-      // Only show full loading state if we don't have a profile or if the ID/username doesn't match
-      // This prevents the "refreshing" flash when currentUser updates
-      const shouldShowLoading = !profile || 
-        (userId && profile.id !== userId) || 
-        (username && profile.username !== username);
-
-      if (shouldShowLoading) {
-        setLoading(true);
-      }
+      // const targetUserId = userId || (username ? null : currentUser?.id);
       
-      // Clear any cached profile data for fresh load
-      if (currentUser?.id && userId === currentUser.id) {
-        try {
-          localStorage.removeItem(`tc-profile-${currentUser.id}`);
-        } catch {}
+      // OPTIMIZATION: Check if we already have the data in the global store for own profile
+      if (currentUserProfile && (
+          (userId && userId === currentUserProfile.id) || 
+          (username && username === currentUserProfile.username) ||
+          (!userId && !username && currentUser?.id === currentUserProfile.id)
+      )) {
+          // Use cached data immediately
+          console.log('Using cached profile from store');
+          setProfile(currentUserProfile);
+          setLoading(false);
+          
+          if (currentUser?.id === currentUserProfile.id) {
+            setMessageCost(currentUserProfile.message_cost || 0);
+            setViewCost(currentUserProfile.profile_view_cost || 0);
+          }
+          
+          // Background fetch to update if needed (SWR pattern)
+          // We don't set loading=true here to prevent flash
+      } else {
+          // Only show loading if we don't have data yet
+          const shouldShowLoading = !profile || 
+            (userId && profile.id !== userId) || 
+            (username && profile.username !== username);
+
+          if (shouldShowLoading) {
+            setLoading(true);
+          }
       }
       
       let query = supabase.from('user_profiles').select('*');
@@ -485,6 +486,8 @@ function ProfileInner() {
         query = query.eq('id', userId);
       } else if (username) {
         query = query.eq('username', username);
+      } else if (currentUser?.id) {
+         query = query.eq('id', currentUser.id);
       } else {
          setLoading(false);
          return;
@@ -495,6 +498,8 @@ function ProfileInner() {
       if (error || !data) {
         console.error('Profile not found', error);
       } else {
+        // ... (rest of logic)
+
         console.log('Loaded profile data:', data); // Debug log
         console.log('Gender:', data.gender); // Debug log
         console.log('Banner URL:', data.banner_url); // Debug log
@@ -579,6 +584,7 @@ function ProfileInner() {
         supabase.removeChannel(channel)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, userId, currentUser?.id, fetchInventory]);
 
   // Live status check
@@ -1166,30 +1172,24 @@ function ProfileInner() {
                 <div className="space-y-4">
                   {inventory.vehicles.length > 0 ? (
                     inventory.vehicles.map((v: any) => {
-                      // Resolve car details
-                      // user_cars.car_id might be a string (legacy) or uuid.
-                      // If it's a number string "1", we can match it.
-                      // If it's a UUID, we might need to rely on customization_json.car_model_id or similar, 
-                      // OR look it up in the catalog (which we don't have loaded here).
-                      // BUT, the dealership page logic suggests customization_json.car_model_id is a fallback for numeric ID.
+                      const catalog = v.vehicles_catalog;
                       
-                      let carConfig = null;
-                      if (v.customization_json?.car_model_id) {
-                         carConfig = cars.find(c => c.id === v.customization_json.car_model_id);
-                      } else if (!isNaN(Number(v.car_id))) {
-                         carConfig = cars.find(c => c.id === Number(v.car_id));
+                      // Legacy Fallback
+                      let legacyCarConfig = null;
+                      if (!catalog) {
+                          if (v.customization_json?.car_model_id) {
+                             legacyCarConfig = cars.find(c => c.id === v.customization_json.car_model_id);
+                          } else if (v.car_id && !isNaN(Number(v.car_id))) {
+                             legacyCarConfig = cars.find(c => c.id === Number(v.car_id));
+                          }
                       }
 
-                      // If we still can't find it (maybe legacy data), try to match by name if stored? No name stored on user_cars.
-                      // Fallback:
-                      const displayName = carConfig?.name || `Vehicle #${v.car_id.slice(0,8)}`;
-                      const displayImage = carConfig?.image || null;
-                      const displayTier = carConfig?.tier || null;
+                      const displayName = catalog?.name || legacyCarConfig?.name || `Vehicle #${v.id.slice(0,8)}`;
+                      const displayImage = catalog?.image || legacyCarConfig?.image || null;
+                      const displayTier = catalog?.tier || legacyCarConfig?.tier || null;
 
                       const isInsured = v.insurance_expiry && new Date(v.insurance_expiry) > new Date();
-                      const isActive = String(profile.active_vehicle) === String(v.id) || 
-                                       String(profile.active_vehicle) === String(v.car_id) || 
-                                       (carConfig && String(profile.active_vehicle) === String(carConfig.id));
+                      const isActive = String(profile.active_vehicle) === String(v.id);
 
                       return (
                         <div key={v.id} className={`bg-zinc-900 p-4 rounded-xl border ${isActive ? 'border-emerald-500/50 bg-emerald-900/10' : 'border-zinc-800'} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
@@ -1236,7 +1236,7 @@ function ProfileInner() {
                                   onClick={() => setShowInsuranceCard({
                                     user: profile,
                                     vehicle: v,
-                                    config: carConfig
+                                    config: catalog || legacyCarConfig
                                   })}
                                   className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors"
                                 >

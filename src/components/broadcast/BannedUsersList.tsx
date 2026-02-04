@@ -25,27 +25,27 @@ export default function BannedUsersList({ streamId, onClose }: BannedUsersListPr
     const [bannedUsers, setBannedUsers] = useState<BannedUser[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchBannedUsers = async () => {
-        setLoading(true);
-        const { data, error } = await supabase
-            .from('stream_bans')
-            .select(`
-                user_id, reason, banned_at, expires_at,
-                user:user_profiles(username, avatar_url, created_at)
-            `)
-            .eq('stream_id', streamId)
-            .order('banned_at', { ascending: false });
-        
-        if (error) {
-            console.error(error);
-            toast.error("Failed to load banned users");
-        } else {
-            setBannedUsers(data as any || []);
-        }
-        setLoading(false);
-    };
-
     useEffect(() => {
+        const fetchBannedUsers = async () => {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('stream_bans')
+                .select(`
+                    user_id, reason, banned_at, expires_at,
+                    user:user_profiles(username, avatar_url, created_at)
+                `)
+                .eq('stream_id', streamId)
+                .order('banned_at', { ascending: false });
+            
+            if (error) {
+                console.error(error);
+                toast.error("Failed to load banned users");
+            } else {
+                setBannedUsers(data as any || []);
+            }
+            setLoading(false);
+        };
+
         fetchBannedUsers();
     }, [streamId]);
 

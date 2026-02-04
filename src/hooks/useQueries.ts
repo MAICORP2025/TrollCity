@@ -16,97 +16,30 @@ export function useLiveStreams() {
   return useQuery({
     queryKey: queryKeys.liveStreams,
     queryFn: async () => {
-      // NOTE: Cache disabled to ensure immediate removal of ended streams (Emergency Stop support)
-      // To re-enable 30m caching, uncomment the RPC block below.
-      /*
-      // Try cached rankings first
-      const { data: ranked, error: rankedError } = await supabase.rpc('get_cached_home_rankings_30m')
-      if (!rankedError && Array.isArray(ranked) && ranked.length > 0) {
-        let normalizedRanked = ranked.map((s: any) => ({
-          ...s,
-          user_profiles: Array.isArray(s.user_profiles) ? s.user_profiles[0] : s.user_profiles,
-          stream_momentum: Array.isArray(s.stream_momentum) ? s.stream_momentum[0] : s.stream_momentum,
-        }))
-
-        // Fill missing thumbnails
-        const missingThumbIds = normalizedRanked
-          .filter((s) => !s.thumbnail_url)
-          .map((s) => s.id)
-          .filter(Boolean)
-
-        if (missingThumbIds.length > 0) {
-          const { data: streamThumbs } = await supabase
-            .from('streams')
-            .select('id, thumbnail_url')
-            .in('id', missingThumbIds)
-
-          if (streamThumbs?.length) {
-            const thumbMap = new Map(streamThumbs.map((row) => [row.id, row.thumbnail_url]))
-            normalizedRanked = normalizedRanked.map((s) => ({
-              ...s,
-              thumbnail_url: s.thumbnail_url || thumbMap.get(s.id) || null,
-            }))
-          }
-        }
-
-        // Sort by birthday first, then momentum
-        const today = new Date()
-        return normalizedRanked.sort((a: any, b: any) => {
-          const aBirthday = a.user_profiles?.date_of_birth
-          const bBirthday = b.user_profiles?.date_of_birth
-
-          const aIsBirthday = aBirthday ?
-            new Date(aBirthday).getMonth() === today.getMonth() &&
-            new Date(aBirthday).getDate() === today.getDate() : false
-          const bIsBirthday = bBirthday ?
-            new Date(bBirthday).getMonth() === today.getMonth() &&
-            new Date(bBirthday).getDate() === today.getDate() : false
-
-          if (aIsBirthday && !bIsBirthday) return -1
-          if (!aIsBirthday && bIsBirthday) return 1
-
-          const aMomentum = Number(a.stream_momentum?.momentum ?? 100)
-          const bMomentum = Number(b.stream_momentum?.momentum ?? 100)
-          if (aMomentum !== bMomentum) return bMomentum - aMomentum
-
-          return 0
-        })
-      }
-      */
-
-      // Fallback to direct query (Real-time)
-      const { data, error } = await supabase
-        .from('streams')
-        .select(`
-          id,
-          title,
-          category,
-          current_viewers,
-          is_live,
-          livekit_url,
-          start_time,
-          broadcaster_id,
-          thumbnail_url,
-          stream_momentum (
-            momentum,
-            last_gift_at,
-            last_decay_at
-          ),
-          user_profiles!broadcaster_id (
-            username,
-            avatar_url,
-            date_of_birth
-          )
-        `)
-        .eq('is_live', true)
-        .order('start_time', { ascending: false })
+      // Use Scalable RPC
+      const { data, error } = await supabase.rpc('get_active_streams_paged', {
+        p_limit: 20,
+        p_offset: 0
+      });
 
       if (error) throw error
 
       return (data || []).map((s: any) => ({
-        ...s,
-        user_profiles: Array.isArray(s.user_profiles) ? s.user_profiles[0] : s.user_profiles,
-        stream_momentum: Array.isArray(s.stream_momentum) ? s.stream_momentum[0] : s.stream_momentum,
+        id: s.id,
+        broadcaster_id: s.broadcaster_id,
+        title: s.title,
+        category: s.category,
+        current_viewers: s.current_viewers,
+        is_live: true,
+        livekit_url: null, // Removed from select
+        start_time: s.start_time,
+        thumbnail_url: s.thumbnail_url,
+        stream_momentum: s.stream_momentum || { momentum: 0 },
+        user_profiles: {
+            username: s.broadcaster_username,
+            avatar_url: s.broadcaster_avatar,
+            date_of_birth: s.broadcaster_dob
+        }
       }))
     },
     refetchInterval: 10000, // Poll every 10 seconds

@@ -31,38 +31,32 @@ export default function SidebarTopBroadcasters({ isCollapsed }: SidebarTopBroadc
 
   const fetchTopBroadcasters = async () => {
     try {
-      // 1. Get top gifters (last 24h)
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
+      // 1. Get top broadcasters from stats (last 24h) - Scalable Read
+      const { data: statsData, error: statsError } = await supabase
+        .from('broadcaster_stats')
+        .select('user_id, total_gifts_24h')
+        .order('total_gifts_24h', { ascending: false })
+        .limit(50);
 
-      const { data: giftData, error: giftError } = await supabase
-        .from('gift_transactions')
-        .select('recipient_id, amount')
-        .gte('created_at', yesterday.toISOString())
-        .order('amount', { ascending: false })
-        .limit(50); // Fetch more to filter
+      if (statsError) throw statsError;
 
-      if (giftError) throw giftError;
-
-      // Aggregate gifts
       const giftMap = new Map<string, number>();
-      giftData?.forEach((tx: any) => {
-        const current = giftMap.get(tx.recipient_id) || 0;
-        giftMap.set(tx.recipient_id, current + tx.amount);
+      statsData?.forEach((s: any) => {
+        giftMap.set(s.user_id, s.total_gifts_24h);
       });
-
-      // 2. Check live status for these users
-      const userIds = Array.from(giftMap.keys());
-      if (userIds.length === 0) {
+      
+      const broadcasterIds = Array.from(giftMap.keys());
+      if (broadcasterIds.length === 0) {
           setBroadcasters([]);
           setLoading(false);
           return;
       }
 
+      // 2. Check live status for these users
       const { data: streams } = await supabase
         .from('streams')
         .select('broadcaster_id, id, is_live')
-        .in('broadcaster_id', userIds)
+        .in('broadcaster_id', broadcasterIds)
         .eq('is_live', true);
 
       const liveMap = new Map<string, string>(); // userId -> streamId
@@ -72,7 +66,7 @@ export default function SidebarTopBroadcasters({ isCollapsed }: SidebarTopBroadc
       const { data: profiles } = await supabase
         .from('user_profiles')
         .select('id, username, avatar_url')
-        .in('id', userIds);
+        .in('id', broadcasterIds);
 
       // 4. Combine data
       const combined: TopBroadcaster[] = [];

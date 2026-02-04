@@ -1,4 +1,7 @@
 import React from 'react'
+import { Shield, Skull, Star } from 'lucide-react'
+import OfficerTierBadge from './OfficerTierBadge'
+import { EmpireBadge } from './EmpireBadge'
 
 interface UserBadgeProps {
   profile: {
@@ -11,10 +14,71 @@ interface UserBadgeProps {
     prestige_level?: number
     drivers_license_status?: string
     is_landlord?: boolean
+    is_admin?: boolean
+    is_troller?: boolean
+    officer_level?: number
+    troller_level?: number
+    empire_role?: string | null
+    royal_title?: any // If available in the profile object
   } | null | undefined
 }
 
 export default function UserBadge({ profile }: UserBadgeProps) {
     if (!profile) return null
-    return null
+
+    // Determine roles
+    const isAdmin = profile.is_admin || profile.role === 'admin'
+    const isOfficer = !isAdmin && (
+        profile.is_troll_officer || 
+        profile.role === 'troll_officer'
+    )
+    const isTroller = !isAdmin && !isOfficer && (
+        profile.is_troller || 
+        profile.role === 'troller'
+    )
+
+    const officerLevel = profile.officer_level || 1
+    const trollerLevel = profile.troller_level || 1
+
+    const trollerTitles: Record<number, string> = {
+        1: 'Troller',
+        2: 'Chaos Agent',
+        3: 'Supreme Troll',
+    }
+
+    return (
+        <span className="inline-flex items-center gap-1 align-middle">
+            {/* Admin Badge */}
+            {isAdmin && (
+                <span className="inline-flex items-center justify-center w-5 h-5 bg-red-500/20 text-red-500 rounded border border-red-500/30" title="Admin">
+                    <Shield size={12} fill="currentColor" />
+                </span>
+            )}
+
+            {/* Officer Badge */}
+            {isOfficer && (
+                <OfficerTierBadge level={officerLevel} />
+            )}
+
+            {/* Troller Badge */}
+            {isTroller && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30" title={trollerTitles[trollerLevel] || 'Troller'}>
+                    <Skull size={12} />
+                    <span className="text-[10px] font-bold uppercase hidden sm:inline">
+                        {trollerTitles[trollerLevel] || 'Troller'}
+                    </span>
+                </span>
+            )}
+
+            {/* OG Badge */}
+            {profile.is_og_user && (
+                <span className="inline-flex items-center justify-center w-5 h-5 bg-yellow-500/20 text-yellow-500 rounded-full border border-yellow-500/30" title="OG User">
+                    <Star size={12} fill="currentColor" />
+                </span>
+            )}
+
+            {/* Empire Badge */}
+            <EmpireBadge empireRole={profile.empire_role} />
+        </span>
+    )
 }

@@ -35,7 +35,7 @@ export default function ActiveUserStrip({ streamId, isHost, isModerator, onGift 
   useEffect(() => {
     const fetchViewers = async () => {
       // Fetch viewers active in the last 5 minutes
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('stream_viewers')
         .select('user_id, user:user_profiles(username, avatar_url, role, troll_role, created_at, active_entrance_effect)')
         .eq('stream_id', streamId)
@@ -43,7 +43,7 @@ export default function ActiveUserStrip({ streamId, isHost, isModerator, onGift 
         .limit(20);
 
       if (data) {
-        // @ts-ignore
+        // @ts-expect-error: data type inference
         const newViewers = data as Viewer[];
         
         // Detect new viewers for effects

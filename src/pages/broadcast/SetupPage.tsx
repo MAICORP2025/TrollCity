@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
-import { Video, Mic, MicOff, VideoOff, Settings } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SetupPage() {
@@ -19,6 +19,8 @@ export default function SetupPage() {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
 
   useEffect(() => {
+    let localStream: MediaStream | null = null;
+
     // Request camera access on mount
     async function getMedia() {
       try {
@@ -26,6 +28,7 @@ export default function SetupPage() {
           video: true, 
           audio: true 
         });
+        localStream = mediaStream;
         setStream(mediaStream);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
@@ -34,6 +37,7 @@ export default function SetupPage() {
         console.warn("Error accessing media devices, trying audio only.", err);
         try {
             const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            localStream = audioStream;
             setStream(audioStream);
             setIsVideoEnabled(false);
             toast.warning("Camera not found. Audio only mode.");
@@ -47,8 +51,8 @@ export default function SetupPage() {
 
     return () => {
       // Cleanup stream
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
       }
     };
   }, []);

@@ -1,4 +1,4 @@
-import { useState, KeyboardEvent, useRef } from 'react'
+import { useState, KeyboardEvent, useRef, useEffect } from 'react'
 import { Send, Smile } from 'lucide-react'
 import { supabase, sendConversationMessage } from '../../../lib/supabase'
 import { sendNotification } from '../../../lib/sendNotification'
@@ -21,13 +21,37 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
   const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
+  useEffect(() => {
+    if (!conversationId) return
+    const channel = supabase.channel(`chat:${conversationId}`)
+    channel.subscribe()
+    channelRef.current = channel
+    return () => { supabase.removeChannel(channel) }
+  }, [conversationId])
 
   const handleTyping = () => {
+    if (channelRef.current && profile?.id) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { userId: profile.id, isTyping: true }
+      })
+    }
+
     if (onTyping) {
       onTyping(true)
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = setTimeout(() => {
         onTyping(false)
+        if (channelRef.current && profile?.id) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'typing',
+                payload: { userId: profile.id, isTyping: false }
+            })
+        }
       }, 3000)
     }
   }
@@ -79,8 +103,8 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
           return
         }
       }
-
-      const newMsg = await sendConversationMessage(conversationId, message)
+      
+      await sendConversationMessage(conversationId, message)
       
       // Notify the user
       await sendNotification(
@@ -96,7 +120,7 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
 
       setMessage('')
       if (onNewMessage) {
-        onNewMessage(newMsg)
+        // onNewMessage(newMsg) - disabled to prevent double rendering as subscription handles it
       }
       onMessageSent()
     } catch (error: any) {

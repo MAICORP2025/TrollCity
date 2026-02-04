@@ -1,15 +1,8 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with, accept",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
-};
-
-
-serve(async (req) => {
+Deno.serve(async (req) => {
   // 1. Handle Preflight Options
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -433,7 +426,7 @@ serve(async (req) => {
                 .in('id', userIds);
             
             if (userError) throw userError;
-            userData?.forEach((u) => { profilesMap[u.id] = u; });
+            userData?.forEach((u: any) => { profilesMap[u.id] = u; });
         }
 
         // 3. Fetch Packages
@@ -446,7 +439,7 @@ serve(async (req) => {
                 .in('id', pkgIds);
 
             if (pkgError) throw pkgError;
-            pkgData?.forEach((p) => { packagesMap[p.id] = p; });
+            pkgData?.forEach((p: any) => { packagesMap[p.id] = p; });
         }
 
         result = { orders, profiles: profilesMap, packages: packagesMap };

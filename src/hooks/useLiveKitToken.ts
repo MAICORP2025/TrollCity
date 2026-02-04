@@ -20,6 +20,7 @@ interface UseLiveKitTokenProps {
   userId: string | undefined;
   roomName: string | undefined;
   canPublish?: boolean;
+  enabled?: boolean;
 }
 
 export function useLiveKitToken({
@@ -28,6 +29,7 @@ export function useLiveKitToken({
   userId,
   roomName,
   canPublish = false,
+  enabled = true,
 }: UseLiveKitTokenProps) {
   const [token, setToken] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
@@ -37,7 +39,6 @@ export function useLiveKitToken({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-
     // Reset state when inputs change
     setToken(null);
     setServerUrl(null);
@@ -46,7 +47,7 @@ export function useLiveKitToken({
     setError(null);
 
     // Hard requirements check
-    if (!userId || !roomName || !streamId) {
+    if (!enabled || !userId || !roomName || !streamId) {
       return;
     }
 
@@ -170,7 +171,7 @@ export function useLiveKitToken({
     return () => {
       mounted = false;
     };
-  }, [streamId, isHost, userId, roomName, canPublish]);
+  }, [streamId, isHost, userId, roomName, canPublish, enabled]);
 
   return {
     token,

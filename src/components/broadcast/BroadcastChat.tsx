@@ -1,7 +1,17 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Send, User, Trash2, Shield, Crown, Star, Sparkles } from 'lucide-react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Send, User, Trash2, Shield, Crown, Sparkles, Car } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
+import UserNameWithAge from '../UserNameWithAge';
+
+interface VehicleStatus {
+  has_vehicle: boolean;
+  vehicle_name?: string;
+  plate?: string;
+  license_status?: string;
+  is_suspended?: boolean;
+  insurance_active?: boolean;
+}
 
 interface Message {
   id: string;
@@ -9,6 +19,14 @@ interface Message {
   content: string;
   created_at: string;
   type?: 'chat' | 'system';
+  // Denormalized fields
+  user_name?: string;
+  user_avatar?: string;
+  user_role?: string;
+  user_troll_role?: string;
+  user_created_at?: string;
+  vehicle_snapshot?: VehicleStatus;
+
   user_profiles?: {
     username: string;
     avatar_url: string;
@@ -16,6 +34,7 @@ interface Message {
     troll_role?: string;
     created_at?: string;
   } | null;
+  vehicle_status?: VehicleStatus;
 }
 
 interface BroadcastChatProps {
@@ -25,14 +44,20 @@ interface BroadcastChatProps {
     isHost?: boolean;
 }
 
-import UserNameWithAge from '../UserNameWithAge';
-
 export default function BroadcastChat({ streamId, hostId, isModerator, isHost }: BroadcastChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streamMods, setStreamMods] = useState<string[]>([]);
-  const user = useAuthStore(s => s.user);
+  const { user, profile } = useAuthStore();
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Rate limiting
+  const lastSentRef = useRef<number>(0);
+  const RATE_LIMIT_MS = 1000; // 1 message per second
+  // const [cooldown, setCooldown] = useState(0);
+
+  // Cache for vehicle status to avoid repeated calls
+  const [vehicleCache, setVehicleCache] = useState<Record<string, VehicleStatus>>({});
 
   // Fetch Stream Mods
   useEffect(() => {
@@ -46,6 +71,21 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
       if (hostId) fetchMods();
   }, [hostId]);
 
+  const fetchVehicleStatus = useCallback(async (userId: string) => {
+    if (vehicleCache[userId]) return vehicleCache[userId];
+    
+    try {
+      const { data, error } = await supabase.rpc('get_broadcast_vehicle_status', { target_user_id: userId });
+      if (!error && data) {
+        setVehicleCache(prev => ({ ...prev, [userId]: data }));
+        return data as VehicleStatus;
+      }
+    } catch (err) {
+      console.error('Error fetching vehicle status:', err);
+    }
+    return null;
+  }, [vehicleCache]);
+
   // Fetch initial messages (only last 25s)
   useEffect(() => {
     const fetchMessages = async () => {
@@ -58,8 +98,40 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
             .order('created_at', { ascending: true });
         
         if (data) {
-            // @ts-ignore
-            setMessages(data.map(m => ({ ...m, type: 'chat' })));
+            // Process messages: Use denormalized data if available, else fallback
+            const processedMessages = await Promise.all(data.map(async (m: any) => {
+                let vStatus = m.vehicle_snapshot as VehicleStatus | undefined;
+                
+                // Construct profile from denormalized data OR fallback to joined data
+                const uProfile = {
+                    username: m.user_name || m.user_profiles?.username || 'Unknown',
+                    avatar_url: m.user_avatar || m.user_profiles?.avatar_url || '',
+                    role: m.user_role || m.user_profiles?.role,
+                    troll_role: m.user_troll_role || m.user_profiles?.troll_role,
+                    created_at: m.user_created_at || m.user_profiles?.created_at
+                };
+
+                // Fallback for old messages without snapshot
+                if (!vStatus && !m.vehicle_snapshot) {
+                     // Check cache or fetch (Legacy support only)
+                     if (vehicleCache[m.user_id]) {
+                         vStatus = vehicleCache[m.user_id];
+                     } else {
+                         // We intentionally allow this fetch for OLD messages on load, 
+                         // but new messages will skip it.
+                         vStatus = await fetchVehicleStatus(m.user_id) || undefined;
+                     }
+                }
+
+                return {
+                    ...m,
+                    type: 'chat',
+                    user_profiles: uProfile,
+                    vehicle_status: vStatus
+                } as Message;
+            }));
+            
+            setMessages(processedMessages);
         }
     };
     fetchMessages();
@@ -72,19 +144,25 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
             schema: 'public',
             table: 'stream_messages',
             filter: `stream_id=eq.${streamId}`
-        }, async (payload) => {
-            // We need to fetch the user profile for the new message
-            const { data: userData } = await supabase
-                .from('user_profiles')
-                .select('username, avatar_url, role, troll_role, created_at')
-                .eq('id', payload.new.user_id)
-                .single();
+        }, (payload) => {
+            // OPTIMIZED: No RPCs, No profile fetches.
+            const newRow = payload.new as any;
             
-            const newMsg = {
-                ...payload.new,
+            const newMsg: Message = {
+                id: newRow.id,
+                user_id: newRow.user_id,
+                content: newRow.content,
+                created_at: newRow.created_at,
                 type: 'chat',
-                user_profiles: userData
-            } as Message;
+                user_profiles: {
+                    username: newRow.user_name || 'Unknown',
+                    avatar_url: newRow.user_avatar || '',
+                    role: newRow.user_role,
+                    troll_role: newRow.user_troll_role,
+                    created_at: newRow.user_created_at
+                },
+                vehicle_status: newRow.vehicle_snapshot
+            };
 
             setMessages(prev => [...prev, newMsg]);
             setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -99,40 +177,28 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
         })
         .subscribe();
 
-    // Subscribe to User Entrance (stream_viewers)
+    // Subscribe to User Entrance (Presence)
     const viewerChannel = supabase
-        .channel(`viewers:${streamId}`)
-        .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'stream_viewers',
-            filter: `stream_id=eq.${streamId}`
-        }, async (payload) => {
-            // Fetch user info
-            const { data: userData } = await supabase
-                .from('user_profiles')
-                .select('username, created_at, role, troll_role')
-                .eq('id', payload.new.user_id)
-                .single();
-
-            if (userData) {
+        .channel(`room:${streamId}`)
+        .on('presence', { event: 'join' }, ({ newPresences }) => {
+            newPresences.forEach((p: any) => {
                 const systemMsg: Message = {
                     id: `sys-${Date.now()}-${Math.random()}`,
-                    user_id: payload.new.user_id,
+                    user_id: p.user_id,
                     content: 'joined the broadcast',
                     created_at: new Date().toISOString(),
                     type: 'system',
                     user_profiles: {
-                        username: userData.username,
-                        avatar_url: '', // Not needed for system msg
-                        created_at: userData.created_at,
-                        role: userData.role,
-                        troll_role: userData.troll_role
+                        username: p.username || 'Guest',
+                        avatar_url: p.avatar_url || '',
+                        created_at: p.joined_at,
+                        role: p.role,
+                        troll_role: p.troll_role
                     }
                 };
                 setMessages(prev => [...prev, systemMsg]);
                 setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-            }
+            });
         })
         .subscribe();
 
@@ -140,7 +206,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
         supabase.removeChannel(chatChannel); 
         supabase.removeChannel(viewerChannel);
     };
-  }, [streamId]);
+  }, [streamId, fetchVehicleStatus, vehicleCache]);
 
   // Auto-delete loop
   useEffect(() => {
@@ -153,15 +219,37 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !user) return;
+    if (!input.trim() || !user || !profile) return;
+    
+    // Rate Limit Check
+    const now = Date.now();
+    if (now - lastSentRef.current < RATE_LIMIT_MS) {
+        setCooldown(RATE_LIMIT_MS);
+        return; // Silent fail or show UI feedback
+    }
+    lastSentRef.current = now;
 
     const content = input.trim();
     setInput('');
 
+    // Fetch my vehicle status ONCE
+    let myVehicle = vehicleCache[user.id];
+    if (!myVehicle) {
+        // We can safely await this here because it's initiated by the SENDER (1 person), not receivers (1000 people)
+        myVehicle = (await fetchVehicleStatus(user.id)) || { has_vehicle: false };
+    }
+
     await supabase.from('stream_messages').insert({
         stream_id: streamId,
         user_id: user.id,
-        content
+        content,
+        // Denormalized Payload
+        user_name: profile.username,
+        user_avatar: profile.avatar_url,
+        user_role: profile.role,
+        user_troll_role: profile.troll_role,
+        user_created_at: profile.created_at,
+        vehicle_snapshot: myVehicle
     });
   };
 
@@ -195,6 +283,28 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
       return null;
   };
 
+  const renderVehicleBadge = (status?: VehicleStatus) => {
+    if (!status || !status.has_vehicle) return null;
+    
+    // Check for issues
+    const isSuspended = status.is_suspended || status.license_status === 'suspended';
+    const noInsurance = status.insurance_active === false;
+    
+    let colorClass = "text-blue-400";
+    if (isSuspended) colorClass = "text-red-500 animate-pulse";
+    else if (noInsurance) colorClass = "text-orange-400";
+    
+    return (
+        <span 
+            className={`inline-flex items-center gap-0.5 ml-1 mr-1 ${colorClass}`} 
+            title={`Vehicle: ${status.vehicle_name} | Plate: ${status.plate} | Status: ${status.license_status} | Insured: ${status.insurance_active ? 'Yes' : 'No'}`}
+        >
+            <Car size={12} />
+            {isSuspended && <span className="text-[10px] font-bold">!</span>}
+        </span>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full text-white">
         <div className="p-4 border-b border-white/10 font-bold bg-zinc-900/50 flex items-center gap-2">
@@ -224,10 +334,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                                         id: msg.user_id
                                     }}
                                     className="text-zinc-300"
-                                    showBadges={false} // System messages already have badge via renderBadge? Or should we enable? 
-                                    // User asked: "when a role enters it needs to have they badge next to they username"
-                                    // renderBadge handles it. UserNameWithAge might duplicate.
-                                    // Let's keep showBadges={false} and rely on renderBadge.
+                                    showBadges={false}
                                     isBroadcaster={isHost}
                                     isModerator={isModerator}
                                     streamId={streamId}
@@ -250,6 +357,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                     <div className="flex-1 min-w-0 break-words">
                         <div className="font-bold text-yellow-500 text-sm mr-2 flex items-center inline-flex flex-wrap">
                             {renderBadge(msg.user_id, msg.user_profiles?.role, msg.user_profiles?.troll_role)}
+                            {renderVehicleBadge(msg.vehicle_status)}
                             <UserNameWithAge 
                                 user={{
                                     username: msg.user_profiles?.username || 'User',

@@ -2,7 +2,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "jsr:@supabase/supabase-js@2"
 import { corsHeaders } from "../_shared/cors.ts"
-import { getPurchaseErrorStatus, PURCHASE_REQUIRED_MESSAGE } from "../_shared/purchaseGate.ts"
+import { PURCHASE_REQUIRED_MESSAGE } from "../_shared/purchaseGate.ts"
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -221,7 +221,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "release") {
-      const { data, error } = await supabase.rpc("release_broadcast_seat", {
+      const { error } = await supabase.rpc("release_broadcast_seat", {
         p_room: room,
         p_seat_index: seatIndex,
         p_user_id: profile.id,

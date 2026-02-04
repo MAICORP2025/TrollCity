@@ -7,6 +7,7 @@ import { syncPropertyPurchase, subscribeToProperties, listenForPurchaseBroadcast
 import { toast } from 'sonner'
 import { useCoins } from '../lib/hooks/useCoins'
 import { recordCoinTransaction, deductCoins } from '../lib/coinTransactions'
+import KTAuto from '../components/ktauto/KTAuto'
 
 type PropertyRow = {
   id: string
@@ -348,6 +349,7 @@ const TrollsTownPage: React.FC = () => {
   const [loadingTransactions, setLoadingTransactions] = useState(false)
   const [sellingToBank, setSellingToBank] = useState(false)
   const [sellingAllToBank, setSellingAllToBank] = useState(false)
+  const [activeTab, setActiveTab] = useState<'real_estate' | 'ktauto'>('real_estate')
 
   const effectiveBalance = useMemo(() => {
     // Prefer the hook balance as it's more frequently updated
@@ -1520,7 +1522,35 @@ const TrollsTownPage: React.FC = () => {
           </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      {/* Navigation Tabs */}
+      <div className="flex gap-4 mb-6 border-b border-white/10">
+        <button
+          onClick={() => setActiveTab('real_estate')}
+          className={`pb-3 text-sm font-medium transition-colors relative ${
+            activeTab === 'real_estate' ? 'text-emerald-400' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Real Estate
+          {activeTab === 'real_estate' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('ktauto')}
+          className={`pb-3 text-sm font-medium transition-colors relative ${
+            activeTab === 'ktauto' ? 'text-blue-400' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          KTAuto Dealership
+          {activeTab === 'ktauto' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400" />
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'ktauto' && <KTAuto />}
+
+      <div className={`grid grid-cols-1 xl:grid-cols-3 gap-6 ${activeTab === 'ktauto' ? 'hidden' : ''}`}>
         <div className="xl:col-span-2 space-y-6">
           <div className="bg-black/40 border border-emerald-500/40 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">

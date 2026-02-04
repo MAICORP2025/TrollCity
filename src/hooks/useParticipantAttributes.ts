@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { isPerkActive, PerkKey } from '../lib/perkSystem';
+import { PerkKey } from '../lib/perkSystem';
 
 export interface ParticipantAttributes {
   username: string;
@@ -136,6 +136,7 @@ export function useParticipantAttributes(participantIds: string[], streamId: str
       supabase.removeChannel(perkChannel);
       supabase.removeChannel(profileChannel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(participantIds), streamId]);
 
   return attributes;

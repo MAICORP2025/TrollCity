@@ -1,178 +1,70 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../lib/store'
 
 /**
- * Enhanced viewer tracking with instant count updates
- * - Immediate count update when viewer joins
- * - Immediate count update when viewer leaves
- * - Heartbeat updates every 30 seconds for activity
- * - Real-time subscriptions for instant sync across all clients
+ * Tracks viewer presence using Supabase Realtime.
+ * - Viewers join the 'room:{streamId}' channel.
+ * - The Host (broadcaster) is responsible for periodically updating the 'streams' table
+ *   with the accurate viewer count to avoid DB write storms.
  */
-export function useViewerTracking(streamId: string | null, userId: string | null) {
-  
-  // Function to update viewer count immediately
-  const updateViewerCount = useCallback(async () => {
-    if (!streamId) return
-    
-    try {
-      // Count active viewers (last seen within 2 minutes)
-      const { count, error } = await supabase
-        .from('stream_viewers')
-        .select('*', { count: 'exact', head: true })
-        .eq('stream_id', streamId)
-        .gt('last_seen', new Date(Date.now() - 120000).toISOString())
-      
-      if (error) {
-        console.error('Error counting viewers:', error)
-        return
-      }
-      
-      // Update stream's current_viewers field immediately
-      const { error: updateError } = await supabase.rpc('update_viewer_count', {
-        p_stream_id: streamId,
-        p_count: count || 0
+export function useViewerTracking(streamId: string | null, isHost: boolean = false) {
+  const { user, profile } = useAuthStore()
+  const [viewerCount, setViewerCount] = useState<number>(0)
+  const lastDbUpdate = useRef<number>(0)
+
+  useEffect(() => {
+    if (!streamId || !user) return
+
+    const channel = supabase.channel(`room:${streamId}`)
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        // Count unique user_ids (handling multiple tabs per user if necessary, though presenceState groups by key)
+        const count = Object.keys(state).length
+        setViewerCount(count)
+
+        // If Host, update DB (throttled)
+        if (isHost) {
+          const now = Date.now()
+          if (now - lastDbUpdate.current > 15000) { // Update every 15s
+            lastDbUpdate.current = now
+            supabase
+              .from('streams')
+              .update({ current_viewers: count })
+              .eq('id', streamId)
+              .then(({ error }) => {
+                if (error) console.error('Failed to update stream viewer count:', error)
+              })
+          }
+        }
       })
-      
-      if (updateError) {
-        console.error('Error updating stream viewer count:', updateError)
-      }
-    } catch (error) {
-      console.error('Error in updateViewerCount:', error)
-    }
-  }, [streamId])
-
-  // Track viewer when component mounts
-  useEffect(() => {
-    if (!streamId || !userId) return
-
-    let mounted = true
-
-    const trackViewer = async () => {
-      try {
-        // Check if user is already tracked for this stream
-        const { data: existing, error: checkError } = await supabase
-          .from('stream_viewers')
-          .select('id')
-          .eq('stream_id', streamId)
-          .eq('user_id', userId)
-          .maybeSingle()
-
-        if (checkError) {
-          console.error('Error checking existing viewer:', checkError)
-          return
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_id: user.id,
+            username: profile?.username || 'User',
+            avatar_url: profile?.avatar_url,
+            role: profile?.role,
+            troll_role: profile?.troll_role,
+            joined_at: new Date().toISOString()
+          })
         }
-
-        if (existing) {
-          // User already tracked, just update the timestamp
-          const { error: updateError } = await supabase
-            .from('stream_viewers')
-            .update({ last_seen: new Date().toISOString() })
-            .eq('id', existing.id)
-
-          if (updateError) {
-            console.error('Error updating viewer timestamp:', updateError)
-          }
-        } else {
-          // Add new viewer - IMMEDIATE COUNT UPDATE
-          const { error: insertError } = await supabase
-            .from('stream_viewers')
-            .insert({
-              stream_id: streamId,
-              user_id: userId,
-              joined_at: new Date().toISOString(),
-              last_seen: new Date().toISOString()
-            })
-
-          if (insertError) {
-            console.error('Error inserting new viewer:', insertError)
-          }
-          
-          // Trigger immediate count update for new viewer
-          await updateViewerCount()
-        }
-      } catch (error) {
-        console.error('Error in trackViewer:', error)
-      }
-    }
-
-    if (mounted) {
-      trackViewer()
-    }
-
-    // Set up heartbeat interval (every 30 seconds)
-    const heartbeatInterval = setInterval(async () => {
-      if (!mounted || !streamId || !userId) return
-      
-      try {
-        // Update last_seen for this viewer
-        const { error: updateError } = await supabase
-          .from('stream_viewers')
-          .update({ last_seen: new Date().toISOString() })
-          .eq('stream_id', streamId)
-          .eq('user_id', userId)
-
-        if (updateError) {
-          console.error('Error updating heartbeat:', updateError)
-        } else {
-          // Optimization: Do NOT update count on every heartbeat.
-          // This prevents thundering herd on the DB.
-          // Count is updated on Join/Leave. Ghost users will eventually drop off 
-          // when a new user joins/leaves and triggers a recount, or via cron.
-        }
-      } catch (error) {
-        console.error('Error in heartbeat:', error)
-      }
-    }, 30000)
+      })
 
     return () => {
-      mounted = false
-      clearInterval(heartbeatInterval)
+      channel.untrack()
+      supabase.removeChannel(channel)
     }
-  }, [streamId, userId, updateViewerCount])
+  }, [streamId, user, isHost, profile])
 
-  // Cleanup function for when user leaves (call this on unmount)
-  useEffect(() => {
-    if (!streamId || !userId) return
-
-    let mounted = true
-
-    const cleanup = async () => {
-      if (!mounted || !streamId || !userId) return
-      
-      try {
-        // Delete viewer record
-        const { error: deleteError } = await supabase
-          .from('stream_viewers')
-          .delete()
-          .eq('stream_id', streamId)
-          .eq('user_id', userId)
-
-        if (deleteError) {
-          console.error('Error removing viewer:', deleteError)
-          return
-        }
-        
-        // IMMEDIATE COUNT UPDATE after removal
-        await updateViewerCount()
-      } catch (error) {
-        console.error('Error in viewer cleanup:', error)
-      }
-    }
-
-    // Return cleanup function (will be called on unmount)
-    return () => {
-      mounted = false
-      // Perform async cleanup
-      cleanup().catch(err => console.error('Cleanup error:', err))
-    }
-  }, [streamId, userId, updateViewerCount])
-
-  return null
+  return { viewerCount }
 }
 
 /**
- * Hook to get live viewer count for a stream
- * Subscribes to real-time updates
+ * Hook to get live viewer count for a stream from the Database.
+ * Used for listing pages (Home, Sidebar) where we don't need real-time presence.
  */
 export function useLiveViewerCount(streamId: string | null) {
   const [viewerCount, setViewerCount] = useState(0)
@@ -187,37 +79,24 @@ export function useLiveViewerCount(streamId: string | null) {
 
     let mounted = true
 
-    // Initial fetch from streams table (more efficient than counting rows)
+    // Initial fetch
     const getCount = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('streams')
-          .select('current_viewers')
-          .eq('id', streamId)
-          .maybeSingle()
-
-        if (error) {
-          console.error('Error getting viewer count:', error)
-          return
-        }
-
-        if (mounted) {
-          setViewerCount(data?.current_viewers || 0)
-          setLoading(false)
-        }
-      } catch (error) {
-        console.error('Error in getCount:', error)
-        if (mounted) {
-          setLoading(false)
-        }
+      const { data } = await supabase
+        .from('streams')
+        .select('current_viewers')
+        .eq('id', streamId)
+        .single()
+      
+      if (mounted && data) {
+        setViewerCount(data.current_viewers || 0)
+        setLoading(false)
       }
     }
-
     getCount()
 
-    // Subscribe to streams table updates for real-time viewer count
+    // Subscribe to DB updates (debounced by the host's 15s update interval)
     const channel = supabase
-      .channel(`viewer-count-${streamId}`)
+      .channel(`viewer-count-db:${streamId}`)
       .on(
         'postgres_changes',
         {
@@ -227,8 +106,9 @@ export function useLiveViewerCount(streamId: string | null) {
           filter: `id=eq.${streamId}`,
         },
         (payload) => {
-          if (mounted && payload.new && typeof payload.new.current_viewers === 'number') {
-            setViewerCount(payload.new.current_viewers)
+          if (mounted && payload.new) {
+             // @ts-expect-error: payload.new type is not inferred correctly
+             setViewerCount(payload.new.current_viewers || 0)
           }
         }
       )
@@ -242,5 +122,3 @@ export function useLiveViewerCount(streamId: string | null) {
 
   return { viewerCount, loading }
 }
-
-

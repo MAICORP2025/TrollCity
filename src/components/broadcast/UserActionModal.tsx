@@ -3,8 +3,6 @@ import { User, Gift, MicOff, Ban, Shield, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
-import { deductCoins } from '../../lib/coinTransactions';
-import { useAuthStore } from '../../lib/store';
 
 interface UserActionModalProps {
   streamId: string;
@@ -17,6 +15,7 @@ interface UserActionModalProps {
   onClose: () => void;
   onGift: () => void;
   onGiftAll?: () => void;
+  onKickStage?: () => void;
 }
 
 export default function UserActionModal({ 
@@ -29,9 +28,9 @@ export default function UserActionModal({
   isModerator, 
   onClose, 
   onGift,
-  onGiftAll
+  onGiftAll,
+  onKickStage
 }: UserActionModalProps) {
-  const { user } = useAuthStore();
   const [fetchedUsername, setFetchedUsername] = React.useState<string | null>(null);
   const [fetchedCreatedAt, setFetchedCreatedAt] = React.useState<string | null>(null);
   const [targetRole, setTargetRole] = React.useState<string | null>(role || null);
@@ -122,58 +121,6 @@ export default function UserActionModal({
     }
   };
 
-  const handleKick = async () => {
-    if (!user) return;
-    if (isTargetStaff) {
-        toast.error("Cannot kick staff members.");
-        return;
-    }
-    
-    if (!confirm(`Kick ${displayName} for 100 coins? This cannot be undone.`)) return;
-
-    // Deduct coins first
-    const { success, error: payError } = await deductCoins({
-        userId: user.id,
-        amount: 100,
-        type: 'moderation_action',
-        description: `Paid kick on user ${displayName}`,
-        metadata: { target_user_id: userId, stream_id: streamId }
-    });
-
-    if (!success) {
-        toast.error(payError || "Insufficient coins or payment failed");
-        return;
-    }
-
-    // Execute Kick
-    // Try to use kick_user RPC, fallback to updating stream_viewers or similar if needed
-    // Assuming kick_user exists as it's a standard mod action
-    const { error } = await supabase.rpc('kick_user', { p_stream_id: streamId, p_user_id: userId });
-    
-    if (error) {
-        console.error("Kick failed:", error);
-        toast.error("Failed to kick user (coins deducted - contact support if issue persists)");
-    } else {
-        toast.success("User kicked!");
-        onClose();
-    }
-  };
-
-  const handleBan = async () => {
-    if (isTargetStaff) {
-        toast.error("Cannot ban staff members.");
-        return;
-    }
-    if (!confirm(`Are you sure you want to ban ${displayName}?`)) return;
-
-    const { error } = await supabase.rpc('ban_user', { p_stream_id: streamId, p_user_id: userId });
-    if (error) toast.error("Failed to ban user");
-    else {
-        toast.success("User banned");
-        onClose();
-    }
-  };
-
   const handlePromote = async () => {
     if (!confirm("Promote this user to Broadofficer? They will have moderation powers.")) return;
     const { error } = await supabase.rpc('assign_broadofficer', { p_user_id: userId });
@@ -236,6 +183,21 @@ export default function UserActionModal({
                 </button>
             )}
           </div>
+
+          {onKickStage && (isHost || isModerator) && (
+            <button 
+              onClick={() => {
+                if (confirm("Remove this user from the stage?")) {
+                  onKickStage();
+                  onClose();
+                }
+              }}
+              className="flex items-center gap-2 w-full p-3 hover:bg-white/10 rounded-lg transition-colors text-left text-orange-400"
+            >
+              <Ban size={20} />
+              <span>Remove from Stage</span>
+            </button>
+          )}
 
           {/* Moderation Actions */}
           {(isHost || isModerator) && (

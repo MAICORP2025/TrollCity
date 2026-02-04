@@ -5,9 +5,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase, searchUsers } from '../lib/supabase'
 import { toast } from 'sonner'
-import ClickableUsername from './ClickableUsername'
 import UserNameWithAge from './UserNameWithAge'
 import ProfileDropdown from './ui/ProfileDropdown'
+import PresidentialToolsModal from './PresidentialToolsModal'
 
 const Header = () => {
   const { user, profile } = useAuthStore()
@@ -41,7 +41,7 @@ const Header = () => {
           // Search by first 4 characters of username
           const searchQuery = query.substring(0, 4).toLowerCase()
         
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('user_profiles')
             .select('id, username, avatar_url, rgb_username_expires_at, created_at')
             .ilike('username', `${searchQuery}%`)
@@ -357,6 +357,7 @@ const Header = () => {
       </div>
 
       <div className="relative z-10 flex items-center space-x-6">
+        <PresidentialToolsModal />
         <Link
           to="/trollifications"
           className="relative p-3 text-purple-400 hover:text-purple-300 transition-all duration-300 group"

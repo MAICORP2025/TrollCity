@@ -1,9 +1,8 @@
 import React from 'react';
-import { User, Coins, MicOff, Plus } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { User, Coins, Plus } from 'lucide-react';
 
 // Mock Grid Component (Pure UI, no LiveKit)
-const MockBattleGrid = ({ title, hostName, score, isLeft }: { title: string, hostName: string, score: number, isLeft: boolean }) => {
+const MockBattleGrid = ({ title, hostName, score }: { title: string, hostName: string, score: number, isLeft: boolean }) => {
   return (
     <div className="h-full flex flex-col p-4">
         {/* Header */}
@@ -74,7 +73,7 @@ export default function BattlePreview() {
         <div className="h-20 bg-zinc-900 border-b border-amber-500/30 flex items-center justify-center relative z-20 shadow-lg shadow-amber-900/20 px-8">
             <div className="flex-1 flex items-center justify-end gap-4">
                 <div className="text-right">
-                    <h2 className="text-2xl font-bold text-white tracking-tight">TrollKing's Stream</h2>
+                    <h2 className="text-2xl font-bold text-white tracking-tight">TrollKing&apos;s Stream</h2>
                     <div className="flex items-center justify-end gap-1 text-amber-500">
                         <Coins size={16} />
                         <span className="font-mono text-xl font-bold">12,500</span>
@@ -175,7 +174,7 @@ export default function BattlePreview() {
                 <div className="text-center space-y-2 z-10">
                     <h3 className="text-2xl font-bold text-white">Battle in Progress</h3>
                     <p className="text-zinc-400 max-w-md mx-auto">
-                        Who will win the Troll Crown? Send gifts to boost your favorite streamer's score!
+                        Who will win the Troll Crown? Send gifts to boost your favorite streamer&apos;s score!
                     </p>
                 </div>
 

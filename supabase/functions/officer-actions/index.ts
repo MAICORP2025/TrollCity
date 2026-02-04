@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     try {
       const text = await req.text();
       body = text ? JSON.parse(text) : {};
-    } catch (e) {
+    } catch {
       return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -697,14 +697,14 @@ Deno.serve(async (req) => {
           const today = new Date().toISOString().split('T')[0];
           
           // Check existing skips
-          const { data: skipData, error: skipFetchError } = await supabaseAdmin
+          const { data: skipData } = await supabaseAdmin
               .from('battle_skips')
               .select('skips_used')
               .eq('user_id', user.id)
               .eq('skip_date', today)
               .maybeSingle();
               
-          let currentSkips = skipData?.skips_used || 0;
+          const currentSkips = skipData?.skips_used || 0;
           const newSkips = currentSkips + 1;
 
           const { error: skipUpsertError } = await supabaseAdmin

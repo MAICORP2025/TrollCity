@@ -4,6 +4,7 @@ import { Participant } from './types'
 import { Input } from '../ui/input'
 import { Search, User } from 'lucide-react'
 import { Card, CardContent } from '../ui/card'
+import UserNameWithAge from '../UserNameWithAge'
 
 interface ParticipantsListProps {
   tournamentId: string

@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
-import { Car, AlertTriangle, CheckCircle, Shield, XCircle, Gavel, Wrench } from 'lucide-react';
-
+import { Car, AlertTriangle, CheckCircle, Shield, XCircle, Gavel, Wrench, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import DriversTest from './DriversTest';
 import CarUpgradesModal from '@/components/CarUpgradesModal';
@@ -23,21 +22,43 @@ export default function TMVTab({ profile, isOwnProfile }: { profile: any, isOwnP
    // Check if profile is admin (for infinite license)
    const isAdminProfile = profile.role === 'admin' || profile.is_admin;
 
-   const handlePurchaseInsurance = async (carId: string) => {
+   const handlePurchaseInsurance = async (vehicleId: string) => {
      setLoading(true);
      try {
-       const { error } = await supabase.rpc('purchase_insurance', { p_car_id: carId });
+       const { data, error } = await supabase.rpc('renew_vehicle_insurance', { p_vehicle_id: vehicleId });
        if (error) throw error;
+       if (data && !data.success) {
+         throw new Error(data.message);
+       }
        toast.success('Insurance purchased!');
-       await refreshProfile();
-       // We also need to trigger a refresh of the profile being viewed if it's the same
-       // But refreshProfile() only refreshes the logged in user. 
-       // Profile.tsx handles real-time updates for the viewed profile, so it should be fine.
+       // Trigger refresh in list via key or context if needed, but for now we rely on the list's own refresh
      } catch (e: any) {
        toast.error(e.message || 'Failed to purchase insurance');
      } finally {
        setLoading(false);
      }
+   };
+
+   const handleSetActive = async (vehicleId: string) => {
+       setLoading(true);
+       try {
+           const { error } = await supabase
+               .from('user_profiles')
+               .update({ active_vehicle: vehicleId })
+               .eq('id', profile.id);
+
+           if (error) throw error;
+           
+           toast.success('Active vehicle updated!');
+           if (isOwnProfile) {
+               await refreshProfile();
+           }
+       } catch (e: any) {
+           toast.error('Failed to set active vehicle');
+           console.error(e);
+       } finally {
+           setLoading(false);
+       }
    };
 
    const handleAdminAction = async (action: 'suspend' | 'revoke' | 'reinstate') => {
@@ -50,6 +71,7 @@ export default function TMVTab({ profile, isOwnProfile }: { profile: any, isOwnP
            });
            if (error) throw error;
            toast.success(`License ${action}ed`);
+           refreshProfile(); 
        } catch (e: any) {
            toast.error(e.message || 'Action failed');
        } finally {
@@ -157,62 +179,137 @@ export default function TMVTab({ profile, isOwnProfile }: { profile: any, isOwnP
              onPurchaseInsurance={handlePurchaseInsurance} 
              loading={loading} 
              canPurchase={isOwnProfile}
+             activeVehicleId={profile.active_vehicle}
+             onSetActive={handleSetActive}
            />
         </div>
      </div>
    );
 }
 
-function VehicleList({ userId, onPurchaseInsurance, loading, canPurchase }: { userId: string, onPurchaseInsurance: (id: string) => void, loading: boolean, canPurchase: boolean }) {
+function VehicleList({ 
+    userId, 
+    onPurchaseInsurance, 
+    loading, 
+    canPurchase, 
+    activeVehicleId,
+    onSetActive 
+}: { 
+    userId: string, 
+    onPurchaseInsurance: (id: string) => void, 
+    loading: boolean, 
+    canPurchase: boolean,
+    activeVehicleId?: string,
+    onSetActive: (id: string) => void
+}) {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0); // Force refresh
   
-  const loadVehicles = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('user_cars')
-      .select('*')
-      .eq('user_id', userId);
-    if (data) setVehicles(data);
+  const loadVehicles = useCallback(async () => {
+    // Join user_vehicles with vehicles_catalog and vehicle_insurance_policies
+    // Note: Supabase JS select with joined tables
+    const { data, error } = await supabase
+      .from('user_vehicles')
+      .select(`
+        *,
+        catalog:vehicles_catalog(*),
+        insurance:vehicle_insurance_policies(*),
+        registration:vehicle_registrations(*)
+      `)
+      .eq('user_id', userId)
+      .order('purchased_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading vehicles:', error);
+      return;
+    }
+    
+    const formatted = data.map((v: any) => {
+      // Find active insurance
+      // Depending on Supabase response structure, insurance might be array or object
+      const policies = Array.isArray(v.insurance) ? v.insurance : (v.insurance ? [v.insurance] : []);
+      const activePolicy = policies.find((p: any) => p.status === 'active' && new Date(p.expires_at) > new Date());
+      
+      // Find registration
+      const registrations = Array.isArray(v.registration) ? v.registration : (v.registration ? [v.registration] : []);
+      const activeReg = registrations[0]; // Assuming one active registration or just taking the first one
+      
+      return {
+        id: v.id,
+        name: v.catalog?.name || 'Unknown Vehicle',
+        tier: v.catalog?.tier || 'Standard',
+        image: v.catalog?.image || v.catalog?.model_url, // Fallback to model_url if image is missing, though image is preferred
+        insurance_expiry: activePolicy ? activePolicy.expires_at : null,
+        plate: activeReg?.plate_number || 'TEMP',
+        purchased_at: v.purchased_at
+      };
+    });
+
+    setVehicles(formatted);
   }, [userId]);
   
-  React.useEffect(() => {
+  useEffect(() => {
      if (!userId) return;
      loadVehicles();
-  }, [userId, loadVehicles]);
+  }, [userId, loadVehicles, loading, refreshKey]); // Reload when loading state changes (after purchase)
 
   if (vehicles.length === 0) return <p className="text-gray-500">No vehicles owned.</p>;
 
   return (
     <>
-      <CarUpgradesModal
-        userCarId={selectedCarId!}
-        onClose={() => {
-          setSelectedCarId(null);
-          loadVehicles();
-        }}
-        onUpdate={loadVehicles}
-      />
+      {selectedCarId && (
+        <CarUpgradesModal
+            userCarId={selectedCarId}
+            onClose={() => {
+            setSelectedCarId(null);
+            setRefreshKey(prev => prev + 1);
+            }}
+            onUpdate={() => setRefreshKey(prev => prev + 1)}
+        />
+      )}
       <div className="space-y-3">
          {vehicles.map(v => {
             const insuranceExpiry = v.insurance_expiry;
             const isInsured = insuranceExpiry && new Date(insuranceExpiry) > new Date();
-            const currentValue = v.current_value || 0;
+            const isActive = activeVehicleId === v.id;
             
             return (
-               <div key={v.id} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg border border-zinc-700">
-                  <div>
-                     <p className="font-bold text-white capitalize">{v.car_id.replace(/_/g, ' ')} <span className="text-xs text-gray-500">({v.tier || 'Car'})</span></p>
-                     <div className="flex items-center gap-3 mt-1">
-                        <p className="text-xs text-gray-400">
-                           {isInsured ? `Insured until ${new Date(insuranceExpiry).toLocaleDateString()}` : 'No Active Insurance'}
-                        </p>
-                        <p className="text-xs text-emerald-400 font-mono">
-                          Value: {currentValue.toLocaleString()} coins
-                        </p>
+               <div key={v.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isActive ? 'bg-purple-900/20 border-purple-500/50' : 'bg-zinc-800 border-zinc-700'}`}>
+                  <div className="flex items-center gap-4">
+                     {v.image && (
+                         <img src={v.image} alt={v.name} className="w-16 h-10 object-contain bg-black/50 rounded" />
+                     )}
+                     <div>
+                        <div className="flex items-center gap-2">
+                            <p className="font-bold text-white">{v.name} <span className="text-xs text-gray-500">({v.tier})</span></p>
+                            {isActive && (
+                                <span className="px-1.5 py-0.5 bg-purple-500 text-white text-[10px] uppercase font-bold rounded">Active</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                            <p className="text-xs text-gray-400 font-mono bg-black/30 px-1 rounded">
+                                {v.plate}
+                            </p>
+                            <p className={`text-xs ${isInsured ? 'text-green-400' : 'text-red-400'}`}>
+                            {isInsured ? `Insured until ${new Date(insuranceExpiry).toLocaleDateString()}` : 'No Active Insurance'}
+                            </p>
+                        </div>
                      </div>
                   </div>
                   
                   <div className="flex items-center gap-2">
+                     {canPurchase && !isActive && (
+                         <button
+                             onClick={() => onSetActive(v.id)}
+                             disabled={loading}
+                             className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-xs rounded font-medium flex items-center gap-1 text-zinc-200"
+                             title="Set as Active Vehicle"
+                         >
+                             <Key size={12} /> Drive
+                         </button>
+                     )}
+                     
                      {canPurchase && (
                        <button 
                          onClick={() => setSelectedCarId(v.id)}

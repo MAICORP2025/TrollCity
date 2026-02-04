@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Stream } from '../../types/broadcast';
 import { supabase } from '../../lib/supabase';
-import { Plus, Minus, LayoutGrid, Swords, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon } from 'lucide-react';
+import { Plus, Minus, LayoutGrid, Swords, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import BattleControlsList from './BattleControls'; // Renamed import to avoid recursion if name matches
@@ -17,9 +17,10 @@ interface BroadcastControlsProps {
   chatOpen: boolean;
   toggleChat: () => void;
   onGiftHost: () => void;
+  onLeave?: () => void;
 }
 
-export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat, onGiftHost }: BroadcastControlsProps) {
+export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat, onGiftHost, onLeave }: BroadcastControlsProps) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const { user, isAdmin, profile } = useAuthStore();
   const [seatPrice, setSeatPrice] = useState(stream.seat_price || 0);
@@ -98,17 +99,7 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
   const isCamOn = isCameraEnabled;
 
 
-  // Debounce price updates to DB
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (debouncedPrice !== stream.seat_price) {
-        updateStreamConfig(debouncedPrice, locked);
-      }
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [debouncedPrice]);
-
-  const updateStreamConfig = async (price: number, isLocked: boolean) => {
+  const updateStreamConfig = React.useCallback(async (price: number, isLocked: boolean) => {
     if (!canManageStream) return;
     try {
         await supabase
@@ -119,7 +110,17 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
     } catch (e) {
         console.error(e);
     }
-  };
+  }, [canManageStream, stream.id]);
+
+  // Debounce price updates to DB
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (debouncedPrice !== stream.seat_price) {
+        updateStreamConfig(debouncedPrice, locked);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [debouncedPrice, stream.seat_price, locked, updateStreamConfig]);
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value) || 0;
@@ -359,7 +360,6 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
                     <>
                     <button 
                         onClick={() => {
-                            if (!showBannedList) fetchBannedUsers();
                             setShowBannedList(!showBannedList);
                             setShowEffects(false);
                             setShowThemeSelector(false);
@@ -409,6 +409,17 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
                      >
                         <Power size={16} />
                         End Stream
+                     </button>
+                 )}
+
+                 {/* Leave Seat (Guest Only) */}
+                 {onLeave && !isHost && (
+                     <button 
+                        onClick={onLeave}
+                        className="ml-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-500 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"
+                     >
+                        <LogOut size={16} />
+                        Leave
                      </button>
                  )}
             </div>

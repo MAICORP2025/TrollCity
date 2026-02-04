@@ -17,7 +17,7 @@ interface UserNameWithAgeProps {
 export default function UserNameWithAge({
   user,
   className = '',
-  showBadges = true,
+  showBadges: _showBadges = true,
   onClick,
   prefix,
   isBroadcaster,

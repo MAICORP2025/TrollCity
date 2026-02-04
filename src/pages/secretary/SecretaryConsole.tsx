@@ -24,8 +24,10 @@ import ManualTrollPassOrdersList from '../admin/components/shared/ManualTrollPas
 import PastorApplicationsList from '../admin/components/shared/PastorApplicationsList'
 import StaffManagement from '../admin/components/StaffManagement'
 import AutomatedPayouts from '../admin/components/AutomatedPayouts'
+import SecretaryDashboard from '../president/SecretaryDashboard'
+import ProposalManagementPanel from '../admin/components/shared/ProposalManagementPanel'
 
-type Tab = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'staff' | 'manual_payments' | 'troll_pass' | 'pastor_apps' | 'automated_payouts'
+type Tab = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'staff' | 'manual_payments' | 'troll_pass' | 'pastor_apps' | 'automated_payouts' | 'elections' | 'proposals'
 
 export default function SecretaryConsole() {
   const { user, profile, logout } = useAuthStore()
@@ -80,6 +82,36 @@ export default function SecretaryConsole() {
               <div className="text-left">
                 <div className="font-medium">Intake Inbox</div>
                 <div className="text-[10px] opacity-70">New requests</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('elections')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === 'elections' 
+                  ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <Crown className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-medium">Elections</div>
+                <div className="text-[10px] opacity-70">Presidential System</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('proposals')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === 'proposals' 
+                  ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-medium">Proposals</div>
+                <div className="text-[10px] opacity-70">Review & Approve</div>
               </div>
             </button>
 
@@ -230,6 +262,22 @@ export default function SecretaryConsole() {
                   <p className="text-slate-400">Manage and process incoming executive requests.</p>
                 </div>
                 <ExecutiveIntakeList viewMode="secretary" />
+              </div>
+            )}
+
+            {activeTab === 'elections' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <SecretaryDashboard />
+              </div>
+            )}
+
+            {activeTab === 'proposals' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                 <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-white mb-2">Presidential Proposals</h2>
+                  <p className="text-slate-400">Review and manage proposals submitted by the President.</p>
+                </div>
+                <ProposalManagementPanel viewMode="secretary" />
               </div>
             )}
 

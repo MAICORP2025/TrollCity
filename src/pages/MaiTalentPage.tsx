@@ -4,6 +4,7 @@ import { useAuthStore } from '@/lib/store';
 import { useCoins } from '@/lib/hooks/useCoins';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import UserNameWithAge from '@/components/UserNameWithAge';
 import { toast } from 'sonner';
 import { Play, Upload, Star, Trophy, Video, AlertCircle } from 'lucide-react';
 

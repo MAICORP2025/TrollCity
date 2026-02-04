@@ -10,6 +10,7 @@ import {
   AlertTriangle
 } from 'lucide-react'
 import UserNameWithAge from '../../../components/UserNameWithAge'
+import BroadcastLockdownControl from '../../../components/admin/BroadcastLockdownControl'
 
 
 export default function AdminControlPanel() {
@@ -252,7 +253,7 @@ export default function AdminControlPanel() {
   return (
     <div className="space-y-6">
       {/* Broadcast Lockdown Control - Top Priority */}
-      <BroadcastLockdownToggle />
+      <BroadcastLockdownControl />
 
       {/* Rest of Admin Controls */}
       <div className="bg-black/60 border border-purple-600/30 rounded-xl p-6">

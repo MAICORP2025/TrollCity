@@ -12,14 +12,32 @@ export default function Leaderboard() {
     const load = async () => {
       setLoading(true)
       try {
-        const { data: users } = await supabase
-          .from('user_profiles')
-          .select('id, username, total_earned_coins, troll_coins, rgb_username_expires_at, created_at')
-          .order('total_earned_coins', { ascending: false })
-          .limit(50) // Get more to filter
+        // Optimized: Use broadcaster_stats (O(1)) instead of user_profiles scan
+        const { data: stats } = await supabase
+          .from('broadcaster_stats')
+          .select(`
+            user_id, 
+            total_gifts_all_time, 
+            user_profiles (
+              username, 
+              rgb_username_expires_at, 
+              created_at
+            )
+          `)
+          .order('total_gifts_all_time', { ascending: false })
+          .limit(50)
+
+        // Map to format expected by UI
+        const users = (stats || []).map((s: any) => ({
+          id: s.user_id,
+          username: s.user_profiles?.username,
+          total_earned_coins: s.total_gifts_all_time,
+          rgb_username_expires_at: s.user_profiles?.rgb_username_expires_at,
+          created_at: s.user_profiles?.created_at
+        }));
 
         // Filter out fake/test accounts
-        const realUsers = (users || []).filter(user => {
+        const realUsers = users.filter(user => {
           const username = (user.username || '').toLowerCase();
           // Exclude test/demo/mock accounts
           const isRealUser = !username.includes('test') &&

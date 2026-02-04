@@ -52,6 +52,7 @@ export interface UserProfile {
   insurance_level: string | null
   insurance_expires_at: string | null
   rgb_username_expires_at?: string | null
+  username_style?: string | null // 'gold', etc.
   no_kick_until: string | null
   no_ban_until: string | null
   mic_muted_until?: string | null
@@ -342,7 +343,9 @@ export enum UserRole {
   TROLL_FAMILY = 'troll_family',
   TROLLER = 'troller',
   EMPIRE_PARTNER = 'empire_partner',
-  SECRETARY = 'secretary'
+  SECRETARY = 'secretary',
+  PRESIDENT = 'president',
+  VICE_PRESIDENT = 'vice_president'
 }
 
 export enum Permission {
@@ -621,10 +624,17 @@ export async function reportError(params: {
   context?: any
 }) {
   try {
+    let userId = params.userId
+    // 🔧 REQUIRED client confirmation: Ensure user_id is included
+    if (!userId) {
+      const { data } = await supabase.auth.getUser()
+      userId = data.user?.id || null
+    }
+
     const payload = {
       message: params.message?.slice(0, 1000),
       stack: params.stack?.slice(0, 4000),
-      user_id: params.userId || null,
+      user_id: userId,
       url: params.url || (typeof window !== 'undefined' ? window.location.pathname : null),
       component: params.component || null,
       context: params.context ? JSON.stringify(params.context).slice(0, 8000) : {},

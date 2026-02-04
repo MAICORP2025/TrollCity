@@ -17,6 +17,7 @@ import GlobalEventsBanner from "./components/GlobalEventsBanner";
 import { useGlobalApp } from "./contexts/GlobalAppContext";
 import { updateRoute } from "./utils/sessionStorage";
 import { useDebouncedProfileUpdate } from "./hooks/useDebouncedProfileUpdate";
+import { initTimeUpdater } from "./hooks/useGlobalTime";
 import { APP_DATA_REFETCH_EVENT_NAME } from "./lib/appEvents";
 import { autoUnlockPayouts } from "./lib/supabase";
 import { initTelemetry } from "./lib/telemetry";
@@ -75,6 +76,9 @@ const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const TrollCityWall = lazy(() => import("./pages/TrollCityWall"));
 const WallPostPage = lazy(() => import("./pages/WallPostPage"));
 const TrollCourt = lazy(() => import("./pages/TrollCourt"));
+const PresidentPage = lazy(() => import("./pages/President"));
+const PresidentDashboard = lazy(() => import("./pages/president/PresidentDashboard"));
+const SecretaryDashboard = lazy(() => import("./pages/president/SecretaryDashboard"));
 const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard"));
 // Gift store pages removed
 const Application = lazy(() => import("./pages/Application"));
@@ -188,7 +192,7 @@ const ExecutiveSecretaries = lazy(() => import("./pages/admin/ExecutiveSecretari
 const GiftCardsManager = lazy(() => import("./pages/admin/GiftCardsManager"));
 const ExecutiveIntake = lazy(() => import("./pages/admin/ExecutiveIntake"));
 const ExecutiveReports = lazy(() => import("./pages/admin/ExecutiveReports"));
-const AdminManualOrders = lazy(() => import("./pages/admin/components/AdminManualOrders"));
+const AdminManualOrders = lazy(() => import("./pages/admin/AdminManualOrders"));
 const CashoutManager = lazy(() => import("./pages/admin/CashoutManager"));
 const CriticalAlertsManager = lazy(() => import("./pages/admin/CriticalAlertsManager"));
 const OfficerManager = lazy(() => import("./pages/admin/OfficerManager"));
@@ -787,6 +791,19 @@ function AppContent() {
 
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
+                  {/* President Routes */}
+                  <Route path="/president" element={<PresidentPage />} />
+                  <Route path="/president/dashboard" element={
+                    <RequireRole roles={[UserRole.PRESIDENT, UserRole.ADMIN]}>
+                      <PresidentDashboard />
+                    </RequireRole>
+                  } />
+                  <Route path="/president/secretary" element={
+                    <RequireRole roles={[UserRole.SECRETARY, UserRole.ADMIN]}>
+                      <SecretaryDashboard />
+                    </RequireRole>
+                  } />
+
                   {/* Broadcast Routes */}
                   <Route path="/broadcast/setup" element={<SetupPage />} />
                   <Route path="/broadcast/:id" element={<BroadcastPage />} />
@@ -805,7 +822,7 @@ function AppContent() {
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/following" element={<Following />} />
                   <Route path="/following/:userId" element={<Following />} />
-                <Route path="/explore" element={<ExploreFeed />} />
+                  <Route path="/explore" element={<ExploreFeed />} />
                   <Route path="/trollifications" element={<Trollifications />} />
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/pool" element={<PublicPool />} />

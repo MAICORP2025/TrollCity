@@ -88,11 +88,9 @@ export default function ManualCoinOrdersList() {
   const handleConfirmApprove = async () => {
     if (!confirmApproval) return
 
-    // If CashApp, warn if no Tx ID (but allow if admin really wants to)
-    if (confirmApproval.payment_method === 'cashapp' && !txId.trim()) {
-        // Just a warning toast? Or block?
-        // Let's block for safety unless they explicitly type something like "N/A"
-        toast.error('Please enter the CashApp Transaction ID from your phone/app')
+    // Require TX ID for all manual methods
+    if (!txId.trim()) {
+        toast.error(`Please enter the ${confirmApproval.payment_method} Transaction ID/Reference`)
         return
     }
 
@@ -223,6 +221,10 @@ export default function ManualCoinOrdersList() {
                   <div className="text-sm text-slate-300 flex items-center gap-1">
                     {order.payment_method === 'cashapp' ? (
                       <span className="text-green-400 font-bold">$</span>
+                    ) : order.payment_method === 'venmo' ? (
+                      <span className="text-blue-400 font-bold">V</span>
+                    ) : order.payment_method === 'paypal' ? (
+                      <span className="text-indigo-400 font-bold">P</span>
                     ) : (
                       <CreditCard className="w-3 h-3" />
                     )}
@@ -289,8 +291,8 @@ export default function ManualCoinOrdersList() {
                             <span className="capitalize text-white">{confirmApproval.payment_method}</span>
                         </div>
                         {confirmApproval.payer_cashtag && (
-                             <div className="flex justify-between">
-                                <span className="text-slate-400">Cashtag</span>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Handle/Tag</span>
                                 <span className="text-white font-mono">{confirmApproval.payer_cashtag}</span>
                             </div>
                         )}
@@ -298,22 +300,19 @@ export default function ManualCoinOrdersList() {
 
                     <div>
                         <label className="block text-sm text-slate-400 mb-1">
-                            Transaction ID / Reference
-                            {confirmApproval.payment_method === 'cashapp' && <span className="text-red-400 ml-1">*</span>}
+                            Transaction ID / Reference <span className="text-red-400 ml-1">*</span>
                         </label>
                         <input 
                             type="text"
                             value={txId}
                             onChange={(e) => setTxId(e.target.value)}
-                            placeholder={confirmApproval.payment_method === 'cashapp' ? "Enter CashApp Transaction ID" : "Optional reference"}
+                            placeholder={`Enter ${confirmApproval.payment_method} Transaction ID`}
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-green-500 outline-none"
                             autoFocus
                         />
-                         {confirmApproval.payment_method === 'cashapp' && (
-                            <p className="text-xs text-yellow-500/80 mt-1">
-                                Please verify the payment on your CashApp before approving.
-                            </p>
-                         )}
+                        <p className="text-xs text-yellow-500/80 mt-1">
+                            Please verify the payment on your {confirmApproval.payment_method} before approving.
+                        </p>
                     </div>
 
                     <div className="flex gap-3 pt-2">

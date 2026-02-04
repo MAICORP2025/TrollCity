@@ -79,7 +79,10 @@ export default function InboxSidebar({
 
   const fetchConversations = useCallback(async () => {
     if (!user?.id) return
-    setLoading(true)
+    // Only show loading state if we have no conversations yet
+    if (conversations.length === 0) {
+        setLoading(true)
+    }
     try {
       // Use the listUserConversations helper or manual query
       // The snippet suggested listUserConversations might exist, but we can do it manually for more control over last message
@@ -164,7 +167,7 @@ export default function InboxSidebar({
     } finally {
       setLoading(false)
     }
-  }, [user?.id, onConversationsLoaded])
+  }, [user?.id, onConversationsLoaded, conversations.length])
 
   useEffect(() => {
     fetchConversations()

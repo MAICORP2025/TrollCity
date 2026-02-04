@@ -13,10 +13,6 @@ type TokenRequest = {
   user_id?: string;
 };
 
-function parseAllowPublish(v: any): boolean {
-  return v === true || v === "true" || v === 1 || v === "1";
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[livekit-token] 🔄 New request: ${req.method} ${req.url}`);
   
@@ -119,45 +115,98 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Determine publish permissions
     let canPublish = false;
-    
-    // Check if this is a tracked stream
-    const { data: stream } = await supabase
-      .from('streams')
-      .select('id, user_id')
-      .or(`id.eq.${roomName},livekit_room.eq.${roomName}`)
-      .maybeSingle();
+    let role = 'viewer';
+
+    // Fetch stream and user profile in parallel
+    const [streamResult, profileResult] = await Promise.all([
+      supabase
+        .from('streams')
+        .select('id, user_id, broadcaster_id')
+        .or(`id.eq.${roomName},livekit_room.eq.${roomName}`)
+        .maybeSingle(),
+      supabase
+        .from('user_profiles')
+        .select('role, is_admin')
+        .eq('id', userData.user.id)
+        .single()
+    ]);
+
+    const stream = streamResult.data;
+    const userProfile = profileResult.data;
 
     if (stream) {
-      // 1. Broadcaster (Host)
-      if (stream.user_id === userData.user.id) {
+      const broadcasterId = stream.broadcaster_id || stream.user_id;
+      
+      // 1. Host/Owner
+      if (broadcasterId === userData.user.id) {
         canPublish = true;
-      } 
-      // 2. Guest in Box
+        role = 'broadcaster';
+      }
+      // 2. Staff/Admin (Explicit override)
+      else if (
+        userProfile?.is_admin === true || 
+        ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'super_admin'].includes(userProfile?.role || '')
+      ) {
+        canPublish = true;
+        role = 'admin'; // or specific role
+      }
+      // 3. Valid Guest Seat
       else {
-        const { data: guest } = await supabase
-          .from('stream_guests')
-          .select('status')
+        // Check active seat session
+        const { data: seatSession } = await supabase
+          .from('stream_seat_sessions')
+          .select('id, status')
           .eq('stream_id', stream.id)
           .eq('user_id', userData.user.id)
           .eq('status', 'active')
           .maybeSingle();
-        
-        if (guest) {
+
+        if (seatSession) {
           canPublish = true;
+          role = 'guest';
+        } else {
+          // Check legacy stream_guests table if seat session not found (backward compatibility if needed)
+          // But strict requirement says "Valid Guest Seat (paid seat session)". 
+          // We will strictly enforce seat session for new system.
+          // If you want to support legacy, uncomment below:
+          /*
+          const { data: guest } = await supabase
+            .from('stream_guests')
+            .select('status')
+            .eq('stream_id', stream.id)
+            .eq('user_id', userData.user.id)
+            .eq('status', 'active')
+            .maybeSingle();
+          if (guest) canPublish = true;
+          */
         }
       }
-    } else {
-      // Legacy/Test fallback (e.g. ad-hoc rooms)
-      // Only allow if role is specifically authorized
-      const roleParam = String(payload.role || "").toLowerCase();
-      const explicitAllow = parseAllowPublish(payload.allowPublish);
       
-      if (['broadcaster', 'admin', 'troll_officer', 'lead_troll_officer'].includes(roleParam)) {
+      // 4. Server-side Stage Cap Enforcement (Safety Net)
+      // Even if logic above allows it, we can enforce a hard cap here if needed.
+      // However, if they have a valid seat, they should be allowed. 
+      // The seat system should prevent > 6 active seats.
+      
+    } else {
+      // Stream not found in DB - Fallback for testing/admin only?
+      // Requirement says "Server must compute permissions strictly from trusted sources".
+      // If stream is not in DB, we probably shouldn't allow publish unless it's an admin testing?
+      // Or maybe it's a new stream not yet synced?
+      // For safety, default to FALSE unless admin.
+      
+      if (
+        userProfile?.is_admin === true || 
+        ['admin', 'super_admin'].includes(userProfile?.role || '')
+      ) {
         canPublish = true;
+        role = 'admin';
       } else {
-        canPublish = explicitAllow; // Fallback to client request if not a tracked stream
+        canPublish = false;
+        role = 'viewer';
       }
     }
+
+    console.log(`[livekit-token] Permissions calculated: user=${userData.user.id}, role=${role}, canPublish=${canPublish}`);
 
     // Create LiveKit token
     const token = new AccessToken(apiKey, apiSecret, {
@@ -166,7 +215,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ttl: 60 * 60, // 1 hour
       metadata: JSON.stringify({
         identity,
-        role: roleParam || "viewer",
+        role: role,
         level: Number(payload.level || 1),
         user_id: userData.user.id,
       }),

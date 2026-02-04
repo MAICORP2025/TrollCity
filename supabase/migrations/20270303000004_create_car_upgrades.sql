@@ -1,0 +1,84 @@
+
+-- Create and Seed Car Upgrades Table
+-- Essential for the Car Upgrades Modal to function
+
+-- 1. Create car_upgrades table
+CREATE TABLE IF NOT EXISTS public.car_upgrades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- engine, transmission, tires, body, nitro
+    tier INTEGER NOT NULL DEFAULT 1,
+    cost INTEGER NOT NULL,
+    value_increase_amount INTEGER NOT NULL DEFAULT 0,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Enable RLS
+ALTER TABLE public.car_upgrades ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read upgrades" ON public.car_upgrades FOR SELECT USING (true);
+
+-- 3. Ensure user_vehicle_upgrades exists (retry if previous migration failed due to missing FK)
+CREATE TABLE IF NOT EXISTS public.user_vehicle_upgrades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_vehicle_id UUID REFERENCES public.user_vehicles(id) ON DELETE CASCADE,
+    upgrade_id UUID REFERENCES public.car_upgrades(id) ON DELETE CASCADE,
+    installed_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_vehicle_id, upgrade_id)
+);
+
+ALTER TABLE public.user_vehicle_upgrades ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users view own upgrades" ON public.user_vehicle_upgrades FOR SELECT USING (
+    user_vehicle_id IN (SELECT id FROM public.user_vehicles WHERE user_id = auth.uid())
+);
+
+-- 4. Seed Data
+INSERT INTO public.car_upgrades (name, type, tier, cost, value_increase_amount, description) VALUES
+-- Engine
+('Street Tuned Engine', 'engine', 1, 2000, 1500, 'Basic ECU remap and intake for better street performance.'),
+('Sport Performance Engine', 'engine', 2, 8000, 6000, 'Forged internals and high-flow turbo for serious power.'),
+('Race Spec Engine', 'engine', 3, 25000, 20000, 'Full race engine build capable of extreme RPMs.'),
+
+-- Transmission
+('Short Shifter', 'transmission', 1, 1000, 800, 'Faster gear changes for street racing.'),
+('Race Transmission', 'transmission', 2, 5000, 4000, 'Sequential gearbox for lightning-fast shifts.'),
+
+-- Tires
+('Street Performance Tires', 'tires', 1, 1500, 1000, 'Improved grip for city driving.'),
+('Slick Racing Tires', 'tires', 2, 4000, 3000, 'Maximum grip for dry tarmac.'),
+('Off-Road Rally Tires', 'tires', 2, 4000, 3000, 'Deep treads for dirt and rough terrain.'),
+
+-- Nitro
+('Nitrous Oxide System (NOS)', 'nitro', 1, 3000, 2500, 'Temporary speed boost injection.'),
+('Dual-Stage Nitrous', 'nitro', 2, 10000, 8000, 'Professional grade nitrous system for sustained boosts.'),
+
+-- Body
+('Aerodynamic Body Kit', 'body', 1, 2500, 2000, 'Reduces drag and improves stability.'),
+('Widebody Kit', 'body', 2, 6000, 5000, 'Wider stance for better cornering and aggressive look.'),
+('Carbon Fiber Weight Reduction', 'body', 3, 15000, 12000, 'Replaces panels with carbon fiber to reduce weight.')
+ON CONFLICT DO NOTHING; -- Avoid duplicates if re-run (though UUIDs make this tricky, but names aren't unique constraint)
+-- Note: UUIDs are generated, so subsequent runs will add duplicates unless we clear. 
+-- For a robust seed, we usually clear or check. 
+-- Since this is "Create", we assume fresh or we accept duplicates in dev.
+-- To be cleaner, let's truncate if we want a clean slate, but that deletes user data.
+-- Better: Only insert if table is empty.
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.car_upgrades) THEN
+        INSERT INTO public.car_upgrades (name, type, tier, cost, value_increase_amount, description) VALUES
+        ('Street Tuned Engine', 'engine', 1, 2000, 1500, 'Basic ECU remap and intake for better street performance.'),
+        ('Sport Performance Engine', 'engine', 2, 8000, 6000, 'Forged internals and high-flow turbo for serious power.'),
+        ('Race Spec Engine', 'engine', 3, 25000, 20000, 'Full race engine build capable of extreme RPMs.'),
+        ('Short Shifter', 'transmission', 1, 1000, 800, 'Faster gear changes for street racing.'),
+        ('Race Transmission', 'transmission', 2, 5000, 4000, 'Sequential gearbox for lightning-fast shifts.'),
+        ('Street Performance Tires', 'tires', 1, 1500, 1000, 'Improved grip for city driving.'),
+        ('Slick Racing Tires', 'tires', 2, 4000, 3000, 'Maximum grip for dry tarmac.'),
+        ('Off-Road Rally Tires', 'tires', 2, 4000, 3000, 'Deep treads for dirt and rough terrain.'),
+        ('Nitrous Oxide System (NOS)', 'nitro', 1, 3000, 2500, 'Temporary speed boost injection.'),
+        ('Dual-Stage Nitrous', 'nitro', 2, 10000, 8000, 'Professional grade nitrous system for sustained boosts.'),
+        ('Aerodynamic Body Kit', 'body', 1, 2500, 2000, 'Reduces drag and improves stability.'),
+        ('Widebody Kit', 'body', 2, 6000, 5000, 'Wider stance for better cornering and aggressive look.'),
+        ('Carbon Fiber Weight Reduction', 'body', 3, 15000, 12000, 'Replaces panels with carbon fiber to reduce weight.');
+    END IF;
+END $$;

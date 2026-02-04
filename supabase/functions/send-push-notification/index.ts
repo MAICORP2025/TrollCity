@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3?target=deno";
-import webpush from "web-push";
+import webpush from "https://esm.sh/web-push@3.6.7";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -18,6 +18,7 @@ interface PushRequest {
   badge?: string;
   image?: string;
   tag?: string;
+  data?: Record<string, unknown>;
 }
 
 interface UserFollow {
@@ -55,7 +56,7 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { user_id, user_ids, broadcast_followers_id, conversation_id, sender_id, title, body, url, icon, badge, image, tag, create_db_notification, type } = await req.json() as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string };
+    const { user_id, user_ids, broadcast_followers_id, conversation_id, sender_id, title, body, url, icon, badge, image, tag, data, create_db_notification, type } = await req.json() as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string };
 
     if ((!user_id && (!user_ids || user_ids.length === 0) && !broadcast_followers_id && !conversation_id) || !title || !body) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: corsHeaders });
@@ -143,7 +144,8 @@ serve(async (req: Request) => {
       icon: icon ?? "/icons/icon-192.png",
       badge: badge ?? "/icons/icon-72.png",
       image,
-      tag
+      tag,
+      data
     });
 
     webpush.setVapidDetails(

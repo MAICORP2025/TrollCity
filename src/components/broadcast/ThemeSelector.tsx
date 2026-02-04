@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { toast } from 'sonner';
-import { Palette, Check, Lock, Loader2 } from 'lucide-react';
+import { Palette, Check, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface ThemeSelectorProps {
@@ -29,12 +29,7 @@ export default function ThemeSelector({ streamId, currentThemeUrl, onClose }: Th
     const [loading, setLoading] = useState(true);
     const [activating, setActivating] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!user) return;
-        fetchThemes();
-    }, [user]);
-
-    const fetchThemes = async () => {
+    const fetchThemes = useCallback(async () => {
         setLoading(true);
         try {
             // Fetch inventory items
@@ -48,25 +43,27 @@ export default function ThemeSelector({ streamId, currentThemeUrl, onClose }: Th
             // Filter for themes (client-side filtering as marketplace_item is joined)
             // Assuming type is 'broadcast_theme' or similar. 
             // If the join returns null (item not found), filter it out.
-            const themeItems = (inventory as any[])
-                .filter(item => item.marketplace_item && (
-                    item.marketplace_item.type === 'broadcast_theme' || 
-                    item.marketplace_item.type === 'theme'
-                ))
-                .map(item => ({
+            const themes: ThemeItem[] = inventory
+                .filter((item: any) => item.marketplace_item && item.marketplace_item.type === 'broadcast_theme')
+                .map((item: any) => ({
                     id: item.id,
                     item_id: item.item_id,
                     marketplace_item: item.marketplace_item
                 }));
 
-            setThemes(themeItems);
-        } catch (e) {
-            console.error("Error fetching themes:", e);
-            toast.error("Failed to load themes");
+            setThemes(themes);
+        } catch (err) {
+            console.error('Error fetching themes:', err);
+            toast.error('Failed to load themes');
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
+
+    useEffect(() => {
+        if (!user) return;
+        fetchThemes();
+    }, [user, fetchThemes]);
 
     const handleSelectTheme = async (themeUrl: string | null) => {
         if (!user) return;

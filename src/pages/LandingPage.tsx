@@ -257,6 +257,11 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <div className="py-8 text-center text-slate-500 text-sm">
+          © 2026 Troll City, LLC. All rights reserved.
+        </div>
       </div>
 
       <style>

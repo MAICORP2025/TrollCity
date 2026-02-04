@@ -42,11 +42,11 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
 
       if (upgradesError) throw upgradesError;
 
-      // Fetch installed upgrades for this car
+      // Fetch installed upgrades for this vehicle
       const { data: installedData, error: installedError } = await supabase
-        .from('user_car_upgrades')
+        .from('user_vehicle_upgrades')
         .select('*, upgrade:car_upgrades(*)')
-        .eq('user_car_id', userCarId);
+        .eq('user_vehicle_id', userCarId);
 
       if (installedError) throw installedError;
 
@@ -65,19 +65,19 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
   }, [loadData]);
 
   const handlePurchase = async (upgrade: Upgrade) => {
-    // Check if already installed (or higher tier installed?)
-    // For simplicity, just check if this specific upgrade is installed
+    // Check if already installed
     const isInstalled = installedUpgrades.some(u => u.upgrade_id === upgrade.id);
     if (isInstalled) return;
 
     setPurchasing(upgrade.id);
     try {
-      const { error } = await supabase.rpc('apply_car_upgrade', {
-        p_user_car_id: userCarId,
+      const { error, data } = await supabase.rpc('apply_vehicle_upgrade', {
+        p_vehicle_id: userCarId,
         p_upgrade_id: upgrade.id
       });
 
       if (error) throw error;
+      if (data && !data.success) throw new Error(data.message);
 
       toast.success(`Purchased ${upgrade.name}!`);
       await loadData();
@@ -98,7 +98,7 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
         <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Wrench className="w-6 h-6 text-emerald-400" />
-            <h2 className="text-xl font-bold text-white">Car Upgrades</h2>
+            <h2 className="text-xl font-bold text-white">Vehicle Upgrades</h2>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
             <X className="w-5 h-5 text-zinc-400" />
@@ -123,9 +123,6 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {categoryUpgrades.map(upgrade => {
                       const isInstalled = installedUpgrades.some(u => u.upgrade_id === upgrade.id);
-                      // Check if a better upgrade of same type is installed? 
-                      // For now, allow mixing if the logic permits, but usually it's one per type.
-                      // The UI will just show list.
                       
                       return (
                         <div key={upgrade.id} className={`p-3 rounded-xl border ${isInstalled ? 'bg-emerald-900/10 border-emerald-500/50' : 'bg-zinc-800/50 border-zinc-700'} flex flex-col gap-2 transition-all hover:border-zinc-600`}>
@@ -140,7 +137,7 @@ export default function CarUpgradesModal({ userCarId, onClose, onUpdate }: CarUp
                           <div className="mt-2 flex items-center justify-between">
                              <div className="text-xs text-emerald-400 flex items-center gap-1">
                                <ArrowUp className="w-3 h-3" />
-                               Value +{upgrade.value_increase_amount.toLocaleString()}
+                               Value +{upgrade.value_increase_amount?.toLocaleString() || 0}
                              </div>
                              
                              {!isInstalled && (

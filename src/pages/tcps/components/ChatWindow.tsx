@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react'
 import { MoreVertical, Phone, Video, ArrowLeft, Ban, EyeOff, MessageCircle, Check, CheckCheck } from 'lucide-react'
-import { supabase, createConversation, getConversationMessages, markConversationRead } from '../../../lib/supabase'
+import { supabase, createConversation, markConversationRead } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { useChatStore } from '../../../lib/chatStore'
 import UserNameWithAge from '../../../components/UserNameWithAge'
@@ -41,11 +41,17 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
   
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
-  const [isAtBottom, setIsAtBottom] = useState(true)
   const [actualConversationId, setActualConversationId] = useState<string | null>(conversationId)
   const [showMenu, setShowMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [isTyping, setIsTyping] = useState(false)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [hasMore, setHasMore] = useState(true)
+  
+  // Refs for scroll restoration
+  const prevScrollHeightRef = useRef<number>(0)
+  const isFetchingOlderRef = useRef(false)
 
   // Close menu on click outside
   useEffect(() => {
@@ -158,8 +164,25 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
   }, [])
 
   // Fetch messages and sender info
-  const fetchMessagesWithSenders = useCallback(async (convId: string) => {
-    const messagesData = await getConversationMessages(convId, { limit: 50 })
+  const fetchMessagesWithSenders = useCallback(async (convId: string, limit = 50, before?: string) => {
+    let query = supabase
+      .from('conversation_messages')
+      .select('*')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false }) // Tie-breaker
+      .limit(limit)
+
+    if (before) {
+      query = query.lt('created_at', before)
+    }
+
+    const { data: messagesData, error } = await query
+    
+    if (error || !messagesData) {
+      console.error('Error fetching messages:', error)
+      return []
+    }
     
     // Enhance with sender info
     const senderIds = [...new Set(messagesData.map(m => m.sender_id))]
@@ -190,15 +213,74 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     })).reverse()
   }, [])
 
+  // Use layout effect to adjust scroll position after messages update to prevent jumping
+  useLayoutEffect(() => {
+    if (isFetchingOlderRef.current && messagesContainerRef.current) {
+      const scrollHeight = messagesContainerRef.current.scrollHeight
+      const scrollDiff = scrollHeight - prevScrollHeightRef.current
+      messagesContainerRef.current.scrollTop = prevScrollTopRef.current + scrollDiff
+      isFetchingOlderRef.current = false
+    }
+  }, [messages])
+
+  const loadMoreMessages = async () => {
+    if (loading || !hasMore || !actualConversationId || messages.length === 0) return
+    
+    // Capture current scroll state BEFORE loading/spinner
+    if (messagesContainerRef.current) {
+        prevScrollHeightRef.current = messagesContainerRef.current.scrollHeight
+        prevScrollTopRef.current = messagesContainerRef.current.scrollTop
+        isFetchingOlderRef.current = true
+    }
+    
+    const oldestMsg = messages[0]
+    setLoading(true)
+    console.log(`[ChatWindow] Loading more messages before ${oldestMsg.created_at}`)
+    
+    try {
+      const olderMessages = await fetchMessagesWithSenders(actualConversationId, 50, oldestMsg.created_at)
+      
+      if (olderMessages.length < 50) {
+        setHasMore(false)
+      }
+
+      if (olderMessages.length > 0) {
+        setMessages(prev => {
+            // Deduplicate just in case
+            const prevIds = new Set(prev.map(m => m.id))
+            const uniqueOlder = olderMessages.filter(m => !prevIds.has(m.id))
+            return [...uniqueOlder, ...prev]
+        })
+        // Scroll adjustment is handled in useLayoutEffect/useEffect
+      } else {
+        isFetchingOlderRef.current = false // Reset if no messages found
+      }
+    } catch (err) {
+      console.error('Failed to load older messages', err)
+      toast.error('Failed to load older messages')
+      isFetchingOlderRef.current = false
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Load messages
   useEffect(() => {
     if (!actualConversationId || !profile?.id) return
 
     const loadMessages = async () => {
       setLoading(true)
+      console.log(`[ChatWindow] Initial load for ${actualConversationId}`)
       try {
         const mappedMessages = await fetchMessagesWithSenders(actualConversationId)
         setMessages(mappedMessages)
+        
+        // If we got fewer than 50 messages, there are no more
+        if (mappedMessages.length < 50) {
+            setHasMore(false)
+        } else {
+            setHasMore(true)
+        }
         
         // Mark as read
         await markConversationRead(actualConversationId)
@@ -213,8 +295,12 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     }
 
     loadMessages()
+  }, [actualConversationId, profile?.id, scrollToBottom, fetchMessagesWithSenders])
 
-    // Subscribe to new messages
+  // Subscribe to real-time updates
+  useEffect(() => {
+    if (!actualConversationId || !profile?.id) return
+
     const channel = supabase
       .channel(`chat:${actualConversationId}`)
       .on(
@@ -273,17 +359,43 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
           if (newMsg.sender_id !== user?.id) {
             await markConversationRead(actualConversationId)
           }
-          if (isAtBottom) {
+          if (isAtBottomRef.current) {
             setTimeout(scrollToBottom, 100)
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversation_messages',
+          filter: `conversation_id=eq.${actualConversationId}`
+        },
+        (payload) => {
+          const updatedMsg = payload.new
+          setMessages(prev => prev.map(m => 
+            m.id === updatedMsg.id ? { ...m, read_at: updatedMsg.read_at } : m
+          ))
+        }
+      )
+      .on('broadcast', { event: 'typing' }, (payload) => {
+         if (payload.payload.userId === otherUserInfo?.id) {
+            setIsTyping(payload.payload.isTyping)
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+            
+            if (payload.payload.isTyping) {
+               // Auto clear after 3 seconds if no stop event received
+               typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000)
+            }
+         }
+      })
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [actualConversationId, profile, scrollToBottom, user?.id, isAtBottom, fetchMessagesWithSenders])
+  }, [actualConversationId, profile, scrollToBottom, user?.id, otherUserInfo?.id])
 
   // Poll for new messages and read status updates every second
   useEffect(() => {
@@ -291,29 +403,40 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
 
     const pollMessages = async () => {
       try {
-        const mappedMessages = await fetchMessagesWithSenders(actualConversationId)
+        const mappedMessages = await fetchMessagesWithSenders(actualConversationId, 50)
         
         setMessages(prev => {
+          // If previous messages are empty, just return mapped
+          if (prev.length === 0) return mappedMessages
+
+          // We only want to append NEW messages at the bottom, or update read status
+          // We DO NOT want to overwrite the whole list because we might have loaded older messages via scroll
+          
           const prevIds = new Set(prev.map(m => m.id))
+          const newMsgs = mappedMessages.filter(m => !prevIds.has(m.id))
           
-          // Check if there are new messages
-          const hasNewMessages = mappedMessages.some(m => !prevIds.has(m.id))
-          if (hasNewMessages) {
-            return mappedMessages
-          }
-          
-          // Check for read status updates on existing messages
-          const hasReadUpdate = mappedMessages.some((m, idx) => {
-            if (idx < prev.length) {
-              return prev[idx].read_at !== m.read_at
-            }
-            return false
+          let hasChanges = false
+          let nextState = [...prev]
+
+          // Update read status for existing messages
+          nextState = nextState.map(m => {
+             const updated = mappedMessages.find(up => up.id === m.id)
+             if (updated && updated.read_at !== m.read_at) {
+                hasChanges = true
+                return { ...m, read_at: updated.read_at }
+             }
+             return m
           })
-          if (hasReadUpdate) {
-            return mappedMessages
+
+          if (newMsgs.length > 0) {
+             hasChanges = true
+             // Only append if they are newer than the last message we have
+             const lastMsgTime = new Date(prev[prev.length - 1].created_at).getTime()
+             const trulyNew = newMsgs.filter(m => new Date(m.created_at).getTime() > lastMsgTime)
+             nextState = [...nextState, ...trulyNew]
           }
-          
-          return prev
+
+          return hasChanges ? nextState : prev
         })
       } catch {
         // Silent fail for polling
@@ -333,12 +456,20 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     }
   }, [actualConversationId, fetchMessagesWithSenders])
 
+  const isAtBottomRef = useRef(true)
+
   const handleScroll = () => {
     if (!messagesContainerRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
-    setIsAtBottom(scrollHeight - scrollTop - clientHeight < 100)
+    const atBottom = scrollHeight - scrollTop - clientHeight < 100
+    setIsAtBottom(atBottom)
+    isAtBottomRef.current = atBottom
     
-    // Load more logic could go here if scrollTop is 0
+    // Load more logic
+    if (scrollTop < 50 && hasMore && !loading) {
+       console.log('[ChatWindow] Triggering loadMoreMessages', { scrollTop, hasMore, loading })
+       loadMoreMessages()
+    }
   }
 
   if (!otherUserInfo) {
@@ -386,9 +517,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
               alt={otherUserInfo.username}
               className="w-10 h-10 rounded-full border border-purple-500/30"
             />
-            {isOnline && (
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#14141F]" />
-            )}
+            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#14141F] ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
           </div>
           
           <div>
@@ -400,7 +529,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
               }}
               className="font-bold text-white leading-none hover:text-purple-400 transition-colors block"
             />
-            <span className="text-xs text-gray-400">
+            <span className={`text-xs ${isOnline ? 'text-green-400' : 'text-red-400'}`}>
               {isOnline ? 'Online' : 'Offline'}
             </span>
           </div>
@@ -456,6 +585,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
         className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar"
         ref={messagesContainerRef}
         onScroll={handleScroll}
+        style={{ overflowAnchor: 'none' }}
       >
         {loading && (
           <div className="flex justify-center">
@@ -524,7 +654,26 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
           )
         })}
 
-        {/* Typing Indicator - Removed unused state */}
+        {/* Typing Indicator */}
+        {isTyping && (
+          <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-200">
+             <div className="w-8 flex-shrink-0 flex flex-col justify-end">
+               <img 
+                 src={otherUserInfo.avatar_url || `https://ui-avatars.com/api/?name=${otherUserInfo.username}&background=random`}
+                 className="w-8 h-8 rounded-full border border-purple-500/20"
+                 alt={otherUserInfo.username}
+               />
+             </div>
+             <div className="flex flex-col items-start space-y-1">
+                <span className="text-xs text-gray-400 ml-1">{otherUserInfo.username}</span>
+                <div className="px-4 py-2 rounded-2xl rounded-tl-none bg-[#1F1F2E] text-gray-400 border border-purple-500/10 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" />
+                </div>
+             </div>
+          </div>
+        )}
 
         <div className="h-1" /> {/* Spacer */}
       </div>

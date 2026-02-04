@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, refreshProfile]);
+  }, [user, refreshProfile]);
 
   return <>{children}</>
 }

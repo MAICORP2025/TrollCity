@@ -208,52 +208,7 @@ export interface EffectConfig {
   imageUrl?: string;
 }
 
-/**
- * Get the fully resolved entrance effect for a user (checking specific -> role -> active)
- */
-export async function getUserEntranceEffect(userId: string): Promise<{ config: EffectConfig | null }> {
-  try {
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('role, username, active_entrance_effect')
-      .eq('id', userId)
-      .single();
 
-    if (!profile) return { config: null };
-
-    // 1. User Specific
-    if (profile.username && USER_SPECIFIC_ENTRANCE_EFFECTS[profile.username]) {
-      return { config: USER_SPECIFIC_ENTRANCE_EFFECTS[profile.username] };
-    }
-
-    // 2. Role Based
-    if (profile.role && ROLE_BASED_ENTRANCE_EFFECTS[profile.role]) {
-      return { config: ROLE_BASED_ENTRANCE_EFFECTS[profile.role] };
-    }
-
-    // 3. Purchased/Active
-    if (profile.active_entrance_effect && ENTRANCE_EFFECTS_MAP[profile.active_entrance_effect]) {
-        const effect = ENTRANCE_EFFECTS_MAP[profile.active_entrance_effect];
-        return {
-            config: {
-                name: effect.name,
-                description: effect.description,
-                animationType: effect.animation_type,
-                soundEffect: 'default',
-                durationSeconds: 4,
-                cost: effect.coin_cost,
-                rarity: effect.rarity,
-                imageUrl: effect.image_url
-            }
-        };
-    }
-
-    return { config: null };
-  } catch (e) {
-    console.error('Error getting user entrance effect:', e);
-    return { config: null };
-  }
-}
 
 /**
  * Role-based entrance effects - automatically triggered based on user role

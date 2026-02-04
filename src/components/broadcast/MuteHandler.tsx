@@ -26,7 +26,7 @@ export default function MuteHandler({ streamId }: { streamId: string }) {
                 table: 'stream_mutes', 
                 filter: `stream_id=eq.${streamId}` 
             }, (payload) => {
-                // @ts-ignore
+                // @ts-expect-error: payload.new type is not inferred correctly
                 if (payload.new.user_id === localParticipant.identity) {
                     localParticipant.setMicrophoneEnabled(false);
                     toast.error("You have been muted by a moderator.");
@@ -38,7 +38,7 @@ export default function MuteHandler({ streamId }: { streamId: string }) {
                 table: 'stream_mutes', 
                 filter: `stream_id=eq.${streamId}` 
             }, (payload) => {
-                 // @ts-ignore
+                 // @ts-expect-error: payload.old type is not inferred correctly
                  if (payload.old.user_id === localParticipant.identity) {
                      localParticipant.setMicrophoneEnabled(true);
                      toast.success("You have been unmuted.");

@@ -4,8 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { Stream } from '../../types/broadcast';
 import BroadcastGrid from './BroadcastGrid';
 import { useAuthStore } from '../../lib/store';
-import { Loader2, Coins, User, Plus } from 'lucide-react';
-import BroadcastControls from './BroadcastControls';
+import { Loader2, Coins, User } from 'lucide-react';
 import BroadcastChat from './BroadcastChat';
 import MuteHandler from './MuteHandler';
 import { toast } from 'sonner';
@@ -98,7 +97,7 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [battle?.started_at, battle?.status, isChallengerHost, isOpponentHost, hasEnded]);
+  }, [battle?.started_at, battle?.status, isChallengerHost, isOpponentHost, hasEnded, endBattle]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -136,7 +135,7 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
     fetchTokens();
   }, [user, challengerStream, opponentStream]);
 
-  const endBattle = async () => {
+  const endBattle = React.useCallback(async () => {
       if (!battle) return;
       if (confirm("Are you sure you want to end this battle?")) {
           try {
@@ -158,7 +157,7 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
               console.error(e);
           }
       }
-  };
+  }, [battle, user, challengerStream, opponentStream]);
 
   if (loading || !challengerStream || !opponentStream) {
     return <div className="flex items-center justify-center h-screen bg-black text-amber-500"><Loader2 className="animate-spin" size={48} /></div>;

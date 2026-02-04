@@ -10,14 +10,19 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const normalizeCashtag = (raw: string | undefined | null) => {
+const normalizeHandle = (raw: string | undefined | null) => {
   const trimmed = (raw ?? "").trim();
-  const withoutDollar = trimmed.replace(/^\$+/, "");
-  if (!withoutDollar) return { tag: null, error: null };
-  if (!/^[A-Za-z0-9._-]{1,30}$/.test(withoutDollar)) {
-    return { tag: null, error: "Cash App tag must be 1-30 letters/numbers (no $)." };
+  // Remove leading $ or @
+  const clean = trimmed.replace(/^[$@]+/, "");
+  
+  if (!clean) return { tag: null, error: null };
+  
+  // Allow alphanumeric, ., _, -, and @ (for emails), plus + for email aliases
+  if (!/^[A-Za-z0-9._\-@+]{1,128}$/.test(clean)) {
+    return { tag: null, error: "Handle contains invalid characters." };
   }
-  return { tag: withoutDollar };
+  
+  return { tag: clean };
 };
 
 Deno.serve(async (req) => {
@@ -45,7 +50,7 @@ Deno.serve(async (req) => {
       const coins = Number(body?.coins ?? pkg?.coins);
       const amountUsd = Number(body?.amount_usd ?? pkg?.price_usd);
       const packageId = body?.package_id ?? pkg?.id ?? null;
-      const { tag: payerCashtag, error: tagError } = normalizeCashtag(body?.cashapp_tag ?? body?.cash_app_tag ?? body?.payer_cashtag);
+      const { tag: payerCashtag, error: tagError } = normalizeHandle(body?.cashapp_tag ?? body?.cash_app_tag ?? body?.payer_cashtag);
       if (tagError) {
         return new Response(JSON.stringify({ error: tagError }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
       }
@@ -69,6 +74,11 @@ Deno.serve(async (req) => {
       const email = authData.user.email || "";
       const usernamePrefix = String(username).slice(0, 6).toUpperCase();
       const noteSuggested = `${usernamePrefix}-${coins}`;
+      
+      const purchaseType = body?.purchase_type || 'manual_cashapp';
+      let paymentMethod = 'cashapp';
+      if (purchaseType.includes('venmo')) paymentMethod = 'venmo';
+      if (purchaseType.includes('paypal')) paymentMethod = 'paypal';
 
       const { data: order, error } = await supabaseAdmin
         .from("manual_coin_orders")
@@ -79,12 +89,15 @@ Deno.serve(async (req) => {
           amount_cents,
           note_suggested: noteSuggested,
           payer_cashtag: payerCashtag || "unknown",
+          purchase_type: purchaseType,
+          payment_method: paymentMethod,
           metadata: {
             username,
             email,
             package_name: pkg?.name,
-            purchase_type: body?.purchase_type ?? null,
+            purchase_type: purchaseType,
             payer_cashtag: payerCashtag || "unknown",
+            payment_method: paymentMethod
           },
         })
         .select("id, status, coins, amount_cents, note_suggested")

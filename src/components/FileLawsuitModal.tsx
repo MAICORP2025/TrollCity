@@ -57,22 +57,38 @@ export default function FileLawsuitModal({ isOpen, onClose, onSuccess }: FileLaw
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('file_civil_lawsuit', {
-        p_defendant_id: selectedDefendant.id,
-        p_category: category,
-        p_description: description,
-        p_evidence_url: evidenceUrl,
-        p_claim_amount: claimAmount
-      });
+      let result;
+      
+      if (category === 'Presidential Impeachment') {
+        // Special flow for impeachment
+        const { data, error } = await supabase.rpc('file_impeachment_case', {
+          p_president_id: selectedDefendant.id,
+          p_reason: description
+        });
+        
+        if (error) throw error;
+        // RPC returns the case UUID directly
+        result = { success: true, data };
+      } else {
+        // Standard Civil Lawsuit
+        const { data, error } = await supabase.rpc('file_civil_lawsuit', {
+          p_defendant_id: selectedDefendant.id,
+          p_category: category,
+          p_description: description,
+          p_evidence_url: evidenceUrl,
+          p_claim_amount: claimAmount
+        });
 
-      if (error) throw error;
+        if (error) throw error;
+        result = data;
+      }
 
-      if (data && data.success) {
-        toast.success('Lawsuit filed successfully!');
+      if (result && (result.success || typeof result.data === 'string')) {
+        toast.success(category === 'Presidential Impeachment' ? 'Impeachment filed successfully!' : 'Lawsuit filed successfully!');
         onSuccess();
         onClose();
       } else {
-        toast.error(data?.message || 'Failed to file lawsuit');
+        toast.error(result?.message || 'Failed to file lawsuit');
       }
     } catch (err: any) {
       console.error('Error filing lawsuit:', err);

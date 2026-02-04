@@ -45,7 +45,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
           .from('user_call_sounds')
           .select('sound_id,is_active,call_sound_catalog(id,slug,name,sound_type,asset_url,price_coins)')
           .eq('user_id', user!.id),
-        supabase.from('user_cars').select('*').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
+        supabase.from('user_vehicles').select('*, vehicles_catalog(*)').eq('user_id', user!.id).order('purchased_at', { ascending: false }),
         supabase.from('properties').select('*').eq('owner_id', user!.id).order('created_at', { ascending: false }),
         supabase.from('vehicles_catalog').select('*')
       ]);
@@ -744,15 +744,18 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
               </div>
             ) : (
               userTitles.map((title) => {
-                const car = title.carDef;
+                const car = title.vehicles_catalog;
                 return (
                   <div key={title.id} className="bg-zinc-900 rounded-xl p-6 border border-emerald-500/20 hover:border-emerald-500/40 transition-all cursor-pointer" onClick={() => setSelectedTitleDeed({ type: 'title', ...title })}>
                     <div className="flex items-center gap-2 mb-4">
                       <Car className="w-5 h-5 text-emerald-400" />
                       <span className="text-sm text-emerald-400 font-bold uppercase tracking-wider">Title</span>
                     </div>
+                    <div className="mb-4 aspect-video rounded-lg overflow-hidden bg-black/50">
+                        <img src={car?.image} alt={car?.name} className="w-full h-full object-cover" />
+                    </div>
                     <h3 className="text-xl font-bold text-white mb-1">
-                      {car?.name || `Vehicle #${title.car_id || title.id.slice(0,8)}`}
+                      {car?.name || `Vehicle #${title.catalog_id || title.id.slice(0,8)}`}
                     </h3>
                     <p className="text-gray-400 text-sm mb-4">
                       Purchased: {new Date(title.purchased_at).toLocaleDateString()}
@@ -760,7 +763,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-zinc-500">Value</span>
                       <span className="text-white font-mono">
-                        {(title.current_value || car?.price || 0).toLocaleString()} coins
+                        {(car?.price || 0).toLocaleString()} coins
                       </span>
                     </div>
                   </div>

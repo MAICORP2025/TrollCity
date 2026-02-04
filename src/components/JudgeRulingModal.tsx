@@ -123,7 +123,7 @@ export default function JudgeRulingModal({ isOpen, onClose, caseData, onSuccess 
           {/* Ruling Form (Right) */}
           <div className="space-y-6">
              <div>
-              <h3 className="text-sm font-bold text-purple-400 mb-4 uppercase tracking-wider">Official Ruling</h3>
+              <h3 className="text-sm font-bold text-purple-400 mb-4 uppercase tracking-wider">Official Ruling {isImpeachment && '(IMPEACHMENT TRIBUNAL)'}</h3>
               
               <div className="space-y-3">
                 <button
@@ -146,8 +146,8 @@ export default function JudgeRulingModal({ isOpen, onClose, caseData, onSuccess 
                       : 'bg-black/20 border-white/10 text-gray-400 hover:bg-white/5'
                   }`}
                 >
-                  <span className="font-semibold">Rule for Plaintiff</span>
-                  <span className="text-xs">Award Damages</span>
+                  <span className="font-semibold">{isImpeachment ? 'GUILTY (Remove President)' : 'Rule for Plaintiff'}</span>
+                  <span className="text-xs">{isImpeachment ? 'Strip Role Immediately' : 'Award Damages'}</span>
                 </button>
 
                 <button
@@ -158,13 +158,13 @@ export default function JudgeRulingModal({ isOpen, onClose, caseData, onSuccess 
                       : 'bg-black/20 border-white/10 text-gray-400 hover:bg-white/5'
                   }`}
                 >
-                  <span className="font-semibold">Rule for Defendant</span>
-                  <span className="text-xs">No Damages</span>
+                  <span className="font-semibold">{isImpeachment ? 'NOT GUILTY (Acquit)' : 'Rule for Defendant'}</span>
+                  <span className="text-xs">{isImpeachment ? 'Retain Presidency' : 'No Damages'}</span>
                 </button>
               </div>
             </div>
 
-            {rulingType === 'plaintiff_favored' && (
+            {rulingType === 'plaintiff_favored' && !isImpeachment && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                 <label className="text-sm font-medium text-gray-300">Award Amount (Coins)</label>
                 <div className="relative">
@@ -182,6 +182,18 @@ export default function JudgeRulingModal({ isOpen, onClose, caseData, onSuccess 
                   If the Defendant has insufficient funds, the maximum available balance will be transferred.
                 </p>
               </div>
+            )}
+
+            {isImpeachment && rulingType === 'plaintiff_favored' && (
+               <div className="p-4 bg-red-900/20 border border-red-500/50 rounded-lg animate-in fade-in">
+                  <p className="text-red-200 text-sm font-bold flex items-center gap-2">
+                    <Gavel size={16} />
+                    WARNING: Immediate Removal
+                  </p>
+                  <p className="text-red-300/70 text-xs mt-1">
+                    Confirming this ruling will immediately strip the President of their role and badges. This action is logged and public.
+                  </p>
+               </div>
             )}
 
             <div className="space-y-2">

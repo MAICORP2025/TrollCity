@@ -82,6 +82,7 @@ serve(async (req) => {
       const { error: rpcError, data } = await supabase.rpc(
         'troll_bank_apply_for_loan',
         {
+          p_user_id: user.id,
           p_requested_coins: coins,
         }
       );

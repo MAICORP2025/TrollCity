@@ -29,7 +29,23 @@ const GrantCoins: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [grantHistory, setGrantHistory] = useState<any[]>([])
   const [historyFilter, setHistoryFilter] = useState<'all' | 'free' | 'paid'>('all')
+  const [recentUsers, setRecentUsers] = useState<any[]>([])
   const isAdmin = !!profile && (profile.role === 'admin' || profile.is_admin)
+
+  useEffect(() => {
+    const loadRecentUsers = async () => {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('id, username, role, troll_coins, free_coin_balance, is_banned, is_kicked')
+        .order('created_at', { ascending: false })
+        .limit(10)
+      
+      if (data) {
+        setRecentUsers(data)
+      }
+    }
+    loadRecentUsers()
+  }, [])
 
   
 
@@ -81,10 +97,22 @@ const GrantCoins: React.FC = () => {
     setLoadingUser(true)
     setTargetUser(null)
     try {
-      const { data, error } = await supabase
+      // Check if query is a valid UUID to prevent PostgreSQL 22P02 error
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query)
+      
+      let queryBuilder = supabase
         .from('user_profiles')
         .select('id, username, role, troll_coins, free_coin_balance, is_banned, is_kicked')
-        .or(`id.eq.${query},username.ilike.%${query}%`)
+      
+      if (isUuid) {
+        // If it looks like a UUID, search by ID OR username
+        queryBuilder = queryBuilder.or(`id.eq.${query},username.ilike.%${query}%`)
+      } else {
+        // If it's not a UUID, ONLY search by username to avoid "invalid input syntax for type uuid"
+        queryBuilder = queryBuilder.ilike('username', `%${query}%`)
+      }
+
+      const { data, error } = await queryBuilder
         .order('created_at', { ascending: false })
         .limit(1)
 
@@ -276,6 +304,39 @@ const GrantCoins: React.FC = () => {
                 )}
               </div>
             )}
+
+            {!targetUser && recentUsers.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Recent Users</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {recentUsers.map(user => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => setTargetUser(user)}
+                      className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 hover:border-zinc-700 transition-all text-left group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-zinc-800 group-hover:bg-zinc-700 flex items-center justify-center transition-colors">
+                          <User className="w-4 h-4 text-gray-400 group-hover:text-white" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-300 group-hover:text-white">{user.username}</div>
+                          <div className="text-[10px] text-gray-500">
+                            ID: {user.id.slice(0, 8)}...
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-purple-400 font-medium">
+                          {user.troll_coins?.toLocaleString()} <span className="text-[10px] opacity-70">TC</span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -294,6 +355,7 @@ const GrantCoins: React.FC = () => {
                   }`}
                 >
                   Free coins
+                  <span className="block text-[10px] opacity-60 font-normal">free_coin_balance</span>
                 </button>
                 <button
                   type="button"
@@ -305,10 +367,11 @@ const GrantCoins: React.FC = () => {
                   }`}
                 >
                   Paid coins
+                  <span className="block text-[10px] opacity-60 font-normal">troll_coins (DB Column)</span>
                 </button>
               </div>
               <p className="text-xs text-gray-400">
-                Free coins are eligible for payouts; paid coins are store currency.
+                Paid coins (troll_coins) are store currency. Free coins are for payouts.
               </p>
             </div>
 

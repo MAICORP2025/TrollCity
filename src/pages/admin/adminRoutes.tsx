@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Lock, Trophy, DollarSign } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 
 const DatabaseBackup = lazy(() => import('./DatabaseBackup'))
@@ -15,6 +15,7 @@ const AdminSupportTicketsPage = lazy(() => import('./AdminSupportTicketsPage'))
 const CourtDocketsManager = lazy(() => import('./CourtDocketsManager'))
 const StorePriceEditor = lazy(() => import('./components/StorePriceEditor'))
 const TournamentManager = lazy(() => import('./components/TournamentManager'))
+const AdminManualOrders = lazy(() => import('./AdminManualOrders'))
 
 export interface AdminRoute {
   id: string
@@ -200,5 +201,18 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-yellow-500/10',
     tileBorderColor: 'border-yellow-500/30',
     category: 'events'
+  },
+  {
+    id: 'manual-orders',
+    title: 'Manual Orders',
+    path: '/admin/manual-orders',
+    component: AdminManualOrders,
+    roles: [UserRole.ADMIN, UserRole.SECRETARY],
+    description: 'Review manual coin orders',
+    icon: <DollarSign className="w-5 h-5 text-green-200" />,
+    tileColor: 'text-green-200',
+    tileBgColor: 'bg-green-500/10',
+    tileBorderColor: 'border-green-500/30',
+    category: 'economy'
   }
 ]

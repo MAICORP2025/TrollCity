@@ -83,7 +83,7 @@ async function main() {
                  console.warn(`Error deleting from ${table}:`, error.message)
              }
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     }

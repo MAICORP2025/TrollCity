@@ -26,96 +26,110 @@ export async function syncCarPurchase(userId: string) {
     localStorage.removeItem(`trollcity_owned_vehicles_${userId}`);
     localStorage.removeItem(`trollcity_car_insurance_${userId}`);
 
-    // 2. Force fetch fresh vehicles from database
-    const { data: userCars, error: carError } = await supabase
-      .from('user_cars')
-      .select('*')
+    // 2. Fetch fresh vehicles from new TMV system
+    const { data: userVehicles, error } = await supabase
+      .from('user_vehicles')
+      .select('id, catalog_id, purchased_at')
       .eq('user_id', userId)
       .order('purchased_at', { ascending: false });
 
-    // Fallback: some environments use user_vehicles instead of user_cars
-    let sourceRows: any[] = Array.isArray(userCars) ? userCars : [];
-    if ((carError || !sourceRows.length)) {
-      const { data: userVehicles } = await supabase
-        .from('user_vehicles')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      if (Array.isArray(userVehicles) && userVehicles.length) {
-        sourceRows = userVehicles.map((row: any) => ({
-          id: row.id,
-          car_id: row.vehicle_id,
-          is_active: !!row.is_equipped,
-          purchased_at: row.created_at,
-          customization_json: row.customization_json || null
-        }));
-      }
+    if (error) {
+      console.error('Failed to fetch user vehicles after purchase:', error);
+      throw error;
     }
 
-    if (carError) {
-      console.error('Failed to fetch user cars after purchase:', carError);
-      throw carError;
-    }
+    // 3. Update profile with latest vehicle data
+    // We set the most recently purchased vehicle as active
+    const latestVehicle = userVehicles?.[0];
 
-    // 3. Update profile with latest owned vehicle data
-    const resolveModelId = (row: any) => {
-      const direct = Number(row?.car_id);
-      if (Number.isFinite(direct)) return direct;
-      const fromCustomize = row?.customization_json?.car_model_id;
-      const asNum = Number(fromCustomize);
-      return Number.isFinite(asNum) ? asNum : null;
-    };
-    const ownedIds = (sourceRows || [])
-      .map((row: any) => resolveModelId(row))
-      .filter((id: any) => Number.isFinite(id)) as number[];
-    const activeRow = (sourceRows || []).find((row: any) => row.is_active) || (sourceRows || [])[0];
-    const activeVehicleUuid = activeRow ? activeRow.id : null;
-    const activeVehicleModelId = activeRow ? resolveModelId(activeRow) : null;
-
-    // 4. Update user_profiles to keep owned_vehicle_ids in sync
-    if (ownedIds.length > 0) {
-      const { error: updateError } = await supabase
+    const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
-          owned_vehicle_ids: ownedIds,
-          // Store UUID of the active user_cars row to match DB type
-          active_vehicle: activeVehicleUuid
+          // Set active vehicle to the latest purchase (UUID)
+          active_vehicle: latestVehicle?.id
         })
         .eq('id', userId);
 
       if (updateError) {
         console.error('Failed to update profile with vehicle data:', updateError);
-        // Don't throw - this is not critical
       }
-    }
 
-    // 5. Refresh the auth store profile to ensure state is current
+    // 4. Refresh the auth store profile to ensure state is current
     const authStore = useAuthStore.getState();
     await authStore.refreshProfile();
 
-    // 6. Broadcast to other tabs/windows using BroadcastChannel API
+    // 5. Broadcast to other tabs/windows using BroadcastChannel API
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         const channel = new BroadcastChannel('trollcity_purchases');
         channel.postMessage({
-          type: 'car_purchased',
+          type: 'CAR_PURCHASED',
           userId,
-          timestamp: Date.now(),
-          ownedIds,
-          activeVehicleId: activeVehicleModelId
+          timestamp: Date.now()
         });
-        channel.close();
+        // Give it a moment to send before closing, though postMessage is sync-ish in event loop
+        setTimeout(() => channel.close(), 100);
       } catch (e) {
-        // BroadcastChannel not supported in all contexts (e.g., private browsing)
-        console.debug('BroadcastChannel not available:', e);
+        console.warn('BroadcastChannel error:', e);
       }
     }
-
-    return { success: true, ownedIds, activeVehicleId: activeVehicleModelId };
-  } catch (error) {
-    console.error('Purchase sync failed:', error);
-    throw error;
+  } catch (err) {
+    console.error('Sync failed:', err);
   }
+}
+
+/**
+ * Listens for purchase broadcasts from other tabs
+ */
+export function listenForPurchaseBroadcasts(callback: (event: any) => void) {
+  if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
+    return () => {};
+  }
+  
+  try {
+    const channel = new BroadcastChannel('trollcity_purchases');
+    
+    const handler = (event: MessageEvent) => {
+      if (event.data && (event.data.type === 'CAR_PURCHASED' || event.data.type === 'property_purchased')) {
+         callback(event.data);
+      }
+    };
+
+    channel.addEventListener('message', handler);
+    
+    return () => {
+      channel.removeEventListener('message', handler);
+      channel.close();
+    };
+  } catch (e) {
+    console.warn('BroadcastChannel error:', e);
+    return () => {};
+  }
+}
+
+/**
+ * Subscribes to real-time property updates
+ */
+export function subscribeToProperties(userId: string, onUpdate: () => void) {
+  const channel = supabase
+    .channel(`properties_sync:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'user_properties',
+        filter: `owner_user_id=eq.${userId}`
+      },
+      () => {
+        onUpdate();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -123,136 +137,31 @@ export async function syncCarPurchase(userId: string) {
  */
 export async function syncPropertyPurchase(userId: string) {
   try {
-    // 1. Clear old LocalStorage caches
-    localStorage.removeItem(`trollcity_owned_properties_${userId}`);
-    localStorage.removeItem(`trollcity_active_property_${userId}`);
-    localStorage.removeItem(`trollcity_property_insurance_${userId}`);
-
-    // 2. Force fetch fresh properties from database
-    const { data: properties, error: propError } = await supabase
-      .from('properties')
-      .select('*')
-      .eq('owner_user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (propError) {
-      console.error('Failed to fetch properties after purchase:', propError);
-      throw propError;
-    }
-
-    // 3. Get active property
-    const activeProperty = (properties || []).find((p: any) => p.is_active_home) || (properties || [])[0];
-    const activePropertyId = activeProperty?.id || null;
-
-    // 4. Update user_profiles to keep owned properties in sync
-    if ((properties || []).length > 0) {
-      const { error: updateError } = await supabase
-        .from('user_profiles')
-        .update({
-          owned_property_ids: (properties || []).map((p: any) => p.id),
-          active_home: activePropertyId
-        })
-        .eq('id', userId);
-
-      if (updateError) {
-        console.error('Failed to update profile with property data:', updateError);
-      }
-    }
-
-    // 5. Refresh auth store profile
-    const authStore = useAuthStore.getState();
-    await authStore.refreshProfile();
-
-    // 6. Broadcast to other tabs/windows
+    // 1. Broadcast to other tabs/windows
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         const channel = new BroadcastChannel('trollcity_purchases');
         channel.postMessage({
           type: 'property_purchased',
           userId,
-          timestamp: Date.now(),
-          activePropertyId
+          timestamp: Date.now()
         });
-        channel.close();
+        setTimeout(() => channel.close(), 100);
       } catch (e) {
-        console.debug('BroadcastChannel not available:', e);
+        console.warn('BroadcastChannel error:', e);
       }
     }
-
-    return { success: true, activePropertyId };
-  } catch (error) {
-    console.error('Property purchase sync failed:', error);
-    throw error;
+  } catch (err) {
+    console.error('Property sync failed:', err);
   }
 }
 
 /**
- * Listen for purchase events from other tabs/windows
- * Use in useEffect to keep the current tab synced with purchases in other tabs
+ * Subscribes to changes in the properties table for a user
  */
-export function listenForPurchaseBroadcasts(onPurchase: (data: any) => void) {
-  if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
-    return () => {}; // No-op if not available
-  }
-
-  try {
-    const channel = new BroadcastChannel('trollcity_purchases');
-    const handleMessage = (event: MessageEvent) => {
-      onPurchase(event.data);
-    };
-    channel.addEventListener('message', handleMessage);
-
-    return () => {
-      channel.removeEventListener('message', handleMessage);
-      channel.close();
-    };
-  } catch (e) {
-    console.debug('BroadcastChannel setup failed:', e);
-    return () => {};
-  }
-}
-
-/**
- * Set up real-time subscription to user_cars table
- * Use in components that display owned vehicles
- */
-export function subscribeToUserCars(userId: string, onUpdate: (cars: any[]) => void) {
+export function subscribeToProperties(userId: string, callback: (rows: any[]) => void) {
   const channel = supabase
-    .channel(`user_cars:${userId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'user_cars',
-        filter: `user_id=eq.${userId}`
-      },
-      (payload: any) => {
-        console.log('user_cars change detected:', payload);
-        // Re-fetch all user cars after any change
-        supabase
-          .from('user_cars')
-          .select('*')
-          .eq('user_id', userId)
-          .order('purchased_at', { ascending: false })
-          .then(({ data }) => {
-            if (data) {
-              onUpdate(data);
-            }
-          });
-      }
-    )
-    .subscribe();
-
-  return channel;
-}
-
-/**
- * Set up real-time subscription to properties table
- */
-export function subscribeToProperties(userId: string, onUpdate: (properties: any[]) => void) {
-  const channel = supabase
-    .channel(`properties:${userId}`)
+    .channel(`properties_sync:${userId}`)
     .on(
       'postgres_changes',
       {
@@ -261,22 +170,46 @@ export function subscribeToProperties(userId: string, onUpdate: (properties: any
         table: 'properties',
         filter: `owner_user_id=eq.${userId}`
       },
-      (payload: any) => {
-        console.log('properties change detected:', payload);
-        // Re-fetch all properties after any change
-        supabase
+      async () => {
+        // Fetch fresh data when changes occur
+        const { data } = await supabase
           .from('properties')
           .select('*')
           .eq('owner_user_id', userId)
-          .order('created_at', { ascending: false })
-          .then(({ data }) => {
-            if (data) {
-              onUpdate(data);
-            }
-          });
+          .order('created_at', { ascending: true });
+        
+        if (data) {
+          callback(data);
+        }
       }
     )
     .subscribe();
 
-  return channel;
+  return {
+    unsubscribe: () => {
+      supabase.removeChannel(channel);
+    }
+  };
+}
+
+/**
+ * Listens for purchase broadcasts from other tabs
+ */
+export function listenForPurchaseBroadcasts(callback: (data: any) => void) {
+  if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
+    return () => {};
+  }
+
+  const channel = new BroadcastChannel('trollcity_purchases');
+  
+  const handler = (event: MessageEvent) => {
+    callback(event.data);
+  };
+
+  channel.addEventListener('message', handler);
+
+  return () => {
+    channel.removeEventListener('message', handler);
+    channel.close();
+  };
 }

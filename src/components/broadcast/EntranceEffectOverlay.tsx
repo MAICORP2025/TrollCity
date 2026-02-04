@@ -9,7 +9,7 @@ interface EntranceEffectOverlayProps {
   onComplete: () => void;
 }
 
-export default function EntranceEffectOverlay({ effectId, username, avatarUrl, onComplete }: EntranceEffectOverlayProps) {
+export default function EntranceEffectOverlay({ effectId, username, avatarUrl: _avatarUrl, onComplete }: EntranceEffectOverlayProps) {
   const [effectData, setEffectData] = useState<any>(null);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function EntranceEffectOverlay({ effectId, username, avatarUrl, o
       }
     };
     fetchEffect();
-  }, [effectId]);
+  }, [effectId, onComplete]);
 
   useEffect(() => {
     if (effectData) {

@@ -295,12 +295,20 @@ export default function PostItem({ post, onDelete }: PostItemProps) {
     </div>
   );
 
+  const isAnnouncement = post.post_type === 'announcement';
+
   return (
-    <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-4 mb-4 hover:border-purple-500/30 transition-all">
+    <div className={`backdrop-blur-md border rounded-xl p-4 mb-4 transition-all ${
+      isAnnouncement 
+        ? 'bg-amber-950/20 border-amber-500/50 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.1)]' 
+        : 'bg-black/40 border-white/10 hover:border-purple-500/30'
+    }`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 p-0.5">
+           <div className={`w-10 h-10 rounded-full p-0.5 ${
+             isAnnouncement ? 'bg-gradient-to-br from-amber-400 to-orange-600' : 'bg-gradient-to-br from-purple-500 to-blue-600'
+           }`}>
               {post.user_profiles?.avatar_url ? (
                 <img 
                   src={post.user_profiles.avatar_url} 
@@ -314,14 +322,21 @@ export default function PostItem({ post, onDelete }: PostItemProps) {
               )}
            </div>
            <div>
-              <UserNameWithAge 
-                user={{
-                  username: post.user_profiles?.username,
-                  id: post.user_id,
-                  ...post.user_profiles
-                }}
-                className="font-bold text-white hover:text-purple-400"
-              />
+              <div className="flex items-center gap-2">
+                <UserNameWithAge 
+                  user={{
+                    username: post.user_profiles?.username,
+                    id: post.user_id,
+                    ...post.user_profiles
+                  }}
+                  className={`font-bold hover:text-purple-400 ${isAnnouncement ? 'text-amber-400' : 'text-white'}`}
+                />
+                {isAnnouncement && (
+                  <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 rounded text-[10px] font-bold text-amber-400 uppercase tracking-wider shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                    Official Announcement
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-gray-400">{new Date(post.created_at).toLocaleString()}</div>
            </div>
         </div>

@@ -13,7 +13,8 @@ const migrationsToRun = [
   '../supabase/migrations/20270217111000_rename_neon_city.sql',
   '../supabase/migrations/20270217120000_tournament_rpc.sql',
   '../supabase/migrations/20270218000000_secure_notification_rpc.sql',
-  '../supabase/migrations/20270218000001_fix_tournament_deletion_rls.sql'
+  '../supabase/migrations/20270218000001_fix_tournament_deletion_rls.sql',
+  '../supabase/migrations/20270218100000_president_system.sql'
 ]
 
 async function run() {

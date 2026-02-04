@@ -178,7 +178,7 @@ Deno.serve(async (req: Request) => {
     );
 
     // SAV promo count
-    const savPromoData = await safeQuery(() =>
+    await safeQuery(() =>
       supabase.from("sav_promotions").select("id") as Promise<QueryResult<any>>
     );
 

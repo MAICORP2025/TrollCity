@@ -84,7 +84,7 @@ export function useProfileViewPayment({
     }
 
     checkPayment()
-  }, [user?.id, profileOwnerId, profileViewPrice, paymentProcessed, navigate, onPaymentComplete])
+  }, [user, user?.id, profileOwnerId, profileViewPrice, paymentProcessed, navigate, onPaymentComplete])
 
   return { checking, canView, paymentProcessed }
 }

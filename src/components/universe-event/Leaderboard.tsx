@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { Participant } from './types'
 import { Crown, Medal, User } from 'lucide-react'
 import { useAuthStore } from '../../lib/store'
+import UserNameWithAge from '../UserNameWithAge'
 
 interface LeaderboardProps {
   tournamentId: string

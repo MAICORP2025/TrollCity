@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
+// PayPal removed
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
@@ -14,10 +14,15 @@ import { deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
 import { useCheckOfficerOnboarding } from '@/hooks/useCheckOfficerOnboarding';
 
-import CashAppPaymentModal from '@/components/broadcast/CashAppPaymentModal';
+import ManualPaymentModal from '@/components/broadcast/ManualPaymentModal';
 import TrollPassBanner from '@/components/ui/TrollPassBanner';
-import { paymentProviders } from '../lib/payments';
 import { toast } from 'sonner';
+
+const MANUAL_PROVIDERS = [
+  { id: 'venmo', name: 'Venmo', icon: '📱', color: 'bg-[#008CFF]' },
+  { id: 'paypal', name: 'PayPal', icon: '🅿️', color: 'bg-[#00457C]' },
+  { id: 'cashapp', name: 'Cash App', icon: '💲', color: 'bg-[#00D632]' }
+];
 
 const coinPackages = COIN_PACKAGES.map(p => ({
   ...p,
@@ -170,10 +175,10 @@ export default function CoinStore() {
   }, [user, activeLoans, tiers]);
 
   const [selectedPackage, setSelectedPackage] = useState(null);
-  const [cashAppModalOpen, setCashAppModalOpen] = useState(false);
-  // Default to CashApp as the payment provider (PayPal temporarily disabled)
-  const [selectedProviderId, setSelectedProviderId] = useState('cashapp');
-  const [loadingPay, setLoadingPay] = useState(false);
+  const [manualPaymentModalOpen, setManualPaymentModalOpen] = useState(false);
+  // Default to Venmo as requested
+  const [selectedProviderId, setSelectedProviderId] = useState('venmo');
+  // const [loadingPay, setLoadingPay] = useState(false);
   const [durationMultiplier, setDurationMultiplier] = useState(1);
   const [effects, setEffects] = useState([]);
   const [selectedEffectCategory, setSelectedEffectCategory] = useState('All');
@@ -952,59 +957,7 @@ export default function CoinStore() {
     }
   };
 
-  const createPayPalOrder = async (pkg) => {
-    try {
-      setLoadingPay(true);
-      const { data, error } = await supabase.functions.invoke('paypal-create-order', {
-        body: {
-          user_id: user.id,
-          package_id: pkg.id,
-          coins: pkg.coins,
-          amount: typeof pkg.price === 'string' ? pkg.price.replace('$', '') : pkg.price
-        }
-      });
-
-      if (error) throw error;
-      if (!data?.orderId) throw new Error('Failed to create order');
-      
-      return data.orderId;
-    } catch (err) {
-      console.error('Create Order Error:', err);
-      toast.error('Failed to initialize PayPal');
-      setLoadingPay(false);
-      throw err;
-    }
-  };
-
-  const onPayPalApprove = async (data, actions, pkg) => {
-    try {
-      const { orderID } = data;
-      const { data: result, error } = await supabase.functions.invoke('paypal-complete-order', {
-        body: {
-          orderId: orderID,
-          userId: user.id,
-          packageId: pkg.id
-        }
-      });
-
-      console.log("paypal-complete-order data:", result);
-      console.log("paypal-complete-order error:", error);
-
-      if (error) throw error;
-      if (!result?.success) throw new Error(result?.error || 'Payment verification failed');
-
-      toast.success(`Successfully purchased ${pkg.coins} coins!`);
-      await refreshCoins();
-      refreshBank(); // Update loan status if any
-      showPurchaseCompleteOverlay();
-
-    } catch (err) {
-      console.error('Capture Error (full):', err);
-      toast.error(err.message || 'Payment failed');
-    } finally {
-      setLoadingPay(false);
-    }
-  };
+  // PayPal functions removed
 
   const handleApplyLoan = async () => {
     if (!requestedAmount || requestedAmount < 100) {
@@ -1478,44 +1431,20 @@ export default function CoinStore() {
 
             {/* Coins Tab */}
             {tab === 'coins' && (
-              <PayPalScriptProvider options={{ "client-id": import.meta.env.VITE_PAYPAL_CLIENT_ID || "test" }}>
+              <>
                 <div className="mb-6">
                   <TrollPassBanner 
                     onPurchase={async () => {
                       const trollPassPkg = {
                         id: 'troll_pass_bundle',
                         coins: 1500,
-                        price: 9.99,
+                        price: '$9.99',
                         name: 'Troll Pass Premium',
                         purchaseType: 'troll_pass_bundle'
                       };
                       setSelectedPackage(trollPassPkg);
-                      setCashAppModalOpen(true);
-                    }} 
-                    customActionComponent={selectedProviderId === 'paypal' ? (
-                      <div className="min-w-[150px]">
-                        <PayPalButtons
-                          style={{ layout: "horizontal", height: 45, tagline: false }}
-                          createOrder={(_data, _actions) => createPayPalOrder({
-                            id: 'troll_pass_bundle',
-                            coins: 1500,
-                            price: 9.99,
-                            name: 'Troll Pass Premium'
-                          })}
-                          onApprove={(data, actions) => onPayPalApprove(data, actions, {
-                            id: 'troll_pass_bundle',
-                            coins: 1500,
-                            price: 9.99,
-                            name: 'Troll Pass Premium'
-                          })}
-                          onError={(err) => {
-                            console.error('PayPal Error:', err);
-                            toast.error('Payment failed. Please try again.');
-                          }}
-                          disabled={loadingPay}
-                        />
-                      </div>
-                    ) : null}
+                      setManualPaymentModalOpen(true);
+                    }}
                   />
                 </div>
                  
@@ -1525,14 +1454,14 @@ export default function CoinStore() {
                 </h2>
                 {/* Payment Provider Selector */}
                 <div className="mb-4 flex gap-2">
-                  {paymentProviders.map(p => (
+                  {MANUAL_PROVIDERS.map(p => (
                     <button
                       key={p.id}
                       onClick={() => setSelectedProviderId(p.id)}
                       className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 border transition-colors ${selectedProviderId === p.id ? 'bg-purple-600 text-white border-purple-400' : 'bg-[#181825] text-gray-300 border-[#2C2C2C] hover:bg-[#232336]'}`}
                     >
-                      {p.logoUrl && <img src={p.logoUrl} alt={p.displayName} className="h-5 w-5" />}
-                      {p.displayName}
+                      <span>{p.icon}</span>
+                      {p.name}
                     </button>
                   ))}
                 </div>
@@ -1550,34 +1479,23 @@ export default function CoinStore() {
                           <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
                           <div className="text-lg font-semibold text-green-400 mb-1">{pkg.price}</div>
                           <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
-                          {selectedProviderId === 'paypal' ? (
-                            <PayPalButtons
-                              style={{ layout: "horizontal", height: 45, tagline: false }}
-                              createOrder={(_data, _actions) => createPayPalOrder(pkg)}
-                              onApprove={(data, actions) => onPayPalApprove(data, actions, pkg)}
-                              onError={(err) => {
-                                console.error('PayPal Error:', err);
-                                toast.error('Payment failed. Please try again.');
-                              }}
-                              disabled={loadingPay}
-                            />
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setSelectedPackage(pkg);
-                                setCashAppModalOpen(true);
-                              }}
-                              className="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
-                              disabled={loadingPay && selectedPackage?.id === pkg.id}
-                            >
-                              {loadingPay && selectedPackage?.id === pkg.id ? 'Processing...' : pkg.price}
-                            </button>
-                          )}
+                          
+                          <button
+                            onClick={() => {
+                              setSelectedPackage(pkg);
+                              setManualPaymentModalOpen(true);
+                            }}
+                            className={`w-full py-2 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                              MANUAL_PROVIDERS.find(p => p.id === selectedProviderId)?.color || 'bg-purple-600'
+                            } hover:brightness-110`}
+                          >
+                            Buy with {MANUAL_PROVIDERS.find(p => p.id === selectedProviderId)?.name}
+                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
-              </PayPalScriptProvider>
+              </>
             )}
 
             {/* Entrance Effects */}
@@ -2148,18 +2066,15 @@ export default function CoinStore() {
           </div>
         </div>
         
-        <CashAppPaymentModal
-          isOpen={cashAppModalOpen}
-          onClose={() => setCashAppModalOpen(false)}
-          amount={selectedPackage?.price ? parseFloat(String(selectedPackage.price).replace('$','')) : 0}
-          packageId={selectedPackage?.id}
-          coins={selectedPackage?.coins}
-          purchaseType={selectedPackage?.purchaseType || 'coin_package'}
+        <ManualPaymentModal
+          isOpen={manualPaymentModalOpen}
+          onClose={() => setManualPaymentModalOpen(false)}
+          pkg={selectedPackage}
+          providerId={selectedProviderId}
           onSuccess={() => {
-            setCashAppModalOpen(false);
+            setManualPaymentModalOpen(false);
             showPurchaseCompleteOverlay();
             refreshCoins();
-            // Duplicate toast removed
           }}
         />
         </div>

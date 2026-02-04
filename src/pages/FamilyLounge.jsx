@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
+import UserNameWithAge from '../components/UserNameWithAge'
 import {
   Crown, Users, Coins, TrendingUp, Target, Calendar,
   Trophy, Sword, Star, Zap, Award

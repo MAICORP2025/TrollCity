@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { toast } from 'sonner'
 import { Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import UserNameWithAge from '../../../components/UserNameWithAge'
+import ClickableUsername from '../../../components/ClickableUsername'
 import { format12hr, formatFullDateTime12hr } from '../../../utils/timeFormat'
 
 interface ShiftLog {
@@ -72,8 +73,8 @@ export default function OfficerShiftsPanel() {
       // Fetch created_at for officers
       const rawSlots = (data?.slots as ScheduledSlot[]) || []
       const officerIds = Array.from(new Set(rawSlots.map((s: any) => s.officer_id).filter(Boolean))) as string[]
-
-      let profileMap = new Map<string, any>()
+      
+      const profileMap = new Map<string, any>()
       if (officerIds.length > 0) {
         const { data: profiles } = await supabase
           .from('user_profiles')

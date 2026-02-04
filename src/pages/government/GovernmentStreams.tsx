@@ -21,6 +21,7 @@ import { LiveKitRoom,
 import { useLiveKitToken } from '@/hooks/useLiveKitToken';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
+import UserNameWithAge from '@/components/UserNameWithAge';
 
 // Types
 interface OfficerLog {
@@ -66,7 +67,7 @@ export default function GovernmentStreams() {
 
   const [showAllStreams, setShowAllStreams] = useState(false);
 
-  const fetchStreams = async () => {
+  const fetchStreams = React.useCallback(async () => {
     try {
       setLoading(true);
       
@@ -116,13 +117,13 @@ export default function GovernmentStreams() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showAllStreams]);
 
   useEffect(() => {
     fetchStreams();
     const interval = setInterval(fetchStreams, 10000); // Refresh every 10s
     return () => clearInterval(interval);
-  }, [showAllStreams]);
+  }, [fetchStreams]);
 
   const handleEndLive = async (streamId: string) => {
     if (!confirm('Are you sure you want to FORCE END this stream?')) return;

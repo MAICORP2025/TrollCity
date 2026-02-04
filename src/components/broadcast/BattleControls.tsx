@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Stream } from '../../types/broadcast';
-import { Swords, User, Loader2 } from 'lucide-react';
+import { Swords, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import UserNameWithAge from '../../UserNameWithAge';
+import UserNameWithAge from '../UserNameWithAge';
 
 interface BattleControlsProps {
   currentStream: Stream;
@@ -128,7 +128,7 @@ export default function BattleControls({ currentStream }: BattleControlsProps) {
         ) : (
             <div className="space-y-4">
                 <p className="text-sm text-zinc-400">
-                    Find a worthy opponent! The system will match you with a random broadcaster you haven't battled yet.
+                    Find a worthy opponent! The system will match you with a random broadcaster you haven&apos;t battled yet.
                 </p>
                 
                 <button 

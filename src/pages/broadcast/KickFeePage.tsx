@@ -17,7 +17,7 @@ export default function KickFeePage() {
         if (!user || !streamId) return;
         
         const checkBanStatus = async () => {
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('stream_bans')
                 .select('expires_at')
                 .eq('stream_id', streamId)
@@ -43,7 +43,7 @@ export default function KickFeePage() {
                 schema: 'public',
                 table: 'stream_bans',
                 filter: `stream_id=eq.${streamId}`
-            }, (payload) => {
+            }, () => {
                 // Check if the deleted ban was for this user
                 // Payload.old might only contain ID, so we might need to re-check or check ID if we knew it.
                 // But DELETE payloads usually only contain the PK. 

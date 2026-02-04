@@ -14,6 +14,8 @@ import FinanceEconomyCenter from './components/FinanceEconomyCenter'
 import OperationsControlDeck from './components/OperationsControlDeck'
 import AdditionalTasksGrid from './components/AdditionalTasksGrid'
 import QuickActionsBar from './components/QuickActionsBar'
+import PresidentialOversightPanel from './components/PresidentialOversightPanel'
+import ProposalManagementPanel from './components/shared/ProposalManagementPanel'
 import ErrorBoundary from '../../components/ErrorBoundary'
 
 type StatState = {
@@ -1261,6 +1263,16 @@ export default function AdminDashboard() {
             stats={stats}
           />
         </ErrorBoundary>
+
+        {/* Presidential Oversight & Proposals */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <ErrorBoundary>
+             <PresidentialOversightPanel />
+          </ErrorBoundary>
+          <ErrorBoundary>
+             <ProposalManagementPanel viewMode="admin" />
+          </ErrorBoundary>
+        </div>
 
         {/* Additional Tasks Grid */}
         <ErrorBoundary>

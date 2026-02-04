@@ -66,7 +66,10 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                  currentUserProfile?.role === 'admin' || 
                  currentUserProfile?.role === 'troll_officer'
 
-  const canModerate = (isStaff || ((isBroadcaster || isModerator) && streamId)) && currentUser?.id !== targetUserId
+  const isPresident = currentUserProfile?.username_style === 'gold' || currentUserProfile?.badge === 'president';
+  const isTargetPresident = profile?.username_style === 'gold' || profile?.badge === 'president' || profile?.role === 'president';
+
+  const canModerate = (isStaff || isPresident || ((isBroadcaster || isModerator) && streamId)) && currentUser?.id !== targetUserId
 
   useEffect(() => {
     if (!targetUserId || !usernameRef.current) {
@@ -145,6 +148,20 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                 navigate(`/profile/${encodeURIComponent(username)}`)
             }
             break
+            
+        case 'assign_vp': {
+            if (!confirm(`Are you sure you want to appoint ${username} as Vice President?`)) return;
+            try {
+                const { error } = await supabase.rpc('appoint_vice_president', {
+                    p_appointee_id: targetUserId
+                });
+                if (error) throw error;
+                toast.success(`Appointed ${username} as Vice President!`);
+            } catch (err: any) {
+                toast.error(err.message);
+            }
+            break;
+        }
             
         case 'ban': {
             const reason = window.prompt('Reason for warrant/ban:', 'Violation of rules')
@@ -320,6 +337,14 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             </span>
         )}
 
+        {/* President Badge (Exclusive) */}
+        {!isAdmin && isTargetPresident && (
+            <span className="badge-icon" title="President">
+              <Crown size={18} className="text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+              <span className="badge-title text-amber-400 font-bold">President</span>
+            </span>
+        )}
+
         {/* Officer Badge (if not admin) */}
         {!isAdmin && isOfficer && (
             <>
@@ -407,6 +432,19 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                     )}
 
                     {/* Global Staff Actions */}
+                    {isPresident && (
+                         <>
+                            <div className="border-t border-gray-800 my-1"></div>
+                            <button
+                                onClick={() => handleAction('assign_vp')}
+                                className="w-full text-left px-3 py-2 text-sm text-amber-400 hover:bg-zinc-800 hover:text-amber-300 rounded flex items-center gap-2"
+                            >
+                                <Crown size={14} />
+                                Assign Vice President
+                            </button>
+                         </>
+                    )}
+
                     {isStaff && (
                         <>
                             <button

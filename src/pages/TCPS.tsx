@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../lib/store'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import InboxSidebar from './tcps/components/InboxSidebar'
@@ -198,17 +198,17 @@ export default function TCPS() {
     setShowNewMessageModal(false)
   }
 
-  const handleConversationsLoaded = (conversations: SidebarConversation[]) => {
+  const handleConversationsLoaded = useCallback((conversations: SidebarConversation[]) => {
     if (!activeConversation && conversations.length > 0) {
       const first = conversations[0]
       setActiveConversation(first.other_user_id)
       navigate(`/tcps?user=${first.other_user_id}`, { replace: true })
     }
-  }
+  }, [activeConversation, navigate])
 
   return (
-    <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#0b0b12] via-[#0d0d1a] to-[#14061a] flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8">
-      <div className="relative flex w-full max-w-6xl bg-[#0b0b12] rounded-2xl md:rounded-3xl border border-white/10 overflow-hidden flex-col md:flex-row">
+    <div className="w-full h-[100dvh] overflow-hidden bg-gradient-to-br from-[#0b0b12] via-[#0d0d1a] to-[#14061a] flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8">
+      <div className="relative flex w-full max-w-6xl bg-[#0b0b12] rounded-2xl md:rounded-3xl border border-white/10 overflow-hidden flex-col md:flex-row h-full">
         {/* Column 1: Sidebar with Conversations */}
         <div className={`flex-col border-r border-white/5 bg-[#0b0b12] w-full md:w-80 lg:w-96 ${activeConversation ? 'hidden md:flex' : 'flex'}`}>
           <InboxSidebar

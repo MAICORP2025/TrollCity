@@ -331,6 +331,7 @@ export default function Sidebar() {
           <SidebarItem icon={Coins} label="Coin Store" to="/store" active={isActive('/store')} collapsed={isSidebarCollapsed} highlight={isUpdated('/store')} onClick={() => markAsViewed('/store')} />
           <SidebarItem icon={Shuffle} label="Creator Switch" to="/creator-switch" active={isActive('/creator-switch')} collapsed={isSidebarCollapsed} highlight={isUpdated('/creator-switch')} onClick={() => markAsViewed('/creator-switch')} />
           <SidebarItem icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} collapsed={isSidebarCollapsed} highlight={isUpdated('/troll-court')} onClick={() => markAsViewed('/troll-court')} />
+          <SidebarItem icon={Crown} label="Troll President" to="/president" active={isActive('/president')} collapsed={isSidebarCollapsed} highlight={isUpdated('/president')} onClick={() => markAsViewed('/president')} />
         </SidebarGroup>
 
 

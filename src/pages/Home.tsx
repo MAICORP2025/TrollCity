@@ -13,10 +13,13 @@ import {
   Star,
   ArrowRight,
   Sparkles,
-  Play
+  Play,
+  Crown
 } from 'lucide-react';
 import HomeLiveGrid from '@/components/broadcast/HomeLiveGrid';
 import BroadcastLockdownControl from '@/components/admin/BroadcastLockdownControl';
+import PresidentialCampaignGrid from '@/components/president/PresidentialCampaignGrid';
+import PresidentInaugurationCard from '@/components/president/PresidentInaugurationCard';
 
 // Animated gradient background
 const AnimatedGradient = () => {
@@ -120,6 +123,12 @@ export default function Home() {
 
   const features = [
     {
+      icon: <Crown className="w-8 h-8 text-amber-400" />,
+      title: "Presidential Office",
+      description: "Vote for the Troll City President! The elected President manages the treasury and boosts payouts for everyone.",
+      gradient: "from-amber-600/20 to-orange-600/20",
+    },
+    {
       icon: <Users className="w-8 h-8 text-cyan-400" />,
       title: "Join Families",
       description: "Create or join families to build your community. Compete for top rankings and exclusive rewards.",
@@ -214,6 +223,13 @@ export default function Home() {
                     >
                       Explore Feed
                     </button>
+                    <button
+                      onClick={() => navigate('/president')}
+                      className="px-8 py-4 rounded-2xl font-semibold text-lg text-amber-100 bg-amber-900/40 backdrop-blur-xl border border-amber-500/30 hover:border-amber-400/60 hover:bg-amber-900/60 transition-all duration-300 hover:-translate-y-0.5 shadow-[0_10px_30px_rgba(245,158,11,0.15)] flex items-center gap-2"
+                    >
+                      <Crown className="w-5 h-5 text-amber-400" />
+                      President&apos;s Office
+                    </button>
                   </>
                 )}
               </div>
@@ -252,7 +268,13 @@ export default function Home() {
                   Join the action in Troll City
                 </p>
               </div>
+              <PresidentInaugurationCard />
               <HomeLiveGrid />
+            </div>
+
+            {/* Presidential Election Section */}
+            <div className="w-full mt-20">
+               <PresidentialCampaignGrid />
             </div>
           </div>
         </section>
@@ -280,6 +302,11 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {/* Footer */}
+        <div className="py-8 text-center text-slate-500 text-sm">
+          © 2026 Troll City, LLC. All rights reserved.
+        </div>
 
         {/* Footer safe area */}
         <div className="safe-bottom" />

@@ -70,7 +70,7 @@ const TrollerInsurance = () => {
 
     try {
       // Check user_insurances table first (new system)
-      const { data: activePolicy, error } = await supabase
+      const { data: activePolicy } = await supabase
         .from('user_insurances')
         .select('*, insurance_options(name, duration_hours)')
         .eq('user_id', profile.id)
@@ -97,8 +97,8 @@ const TrollerInsurance = () => {
           })
         }
       }
-    } catch (error) {
-      console.error('Error loading insurance status:', error)
+    } catch {
+      toast.error('Failed to load insurance status')
     }
   }, [profile])
 

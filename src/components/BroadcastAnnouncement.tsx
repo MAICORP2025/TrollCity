@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { X, Megaphone, AlertCircle } from 'lucide-react';
+import { X, Megaphone } from 'lucide-react';
 
 interface Broadcast {
   id: string;

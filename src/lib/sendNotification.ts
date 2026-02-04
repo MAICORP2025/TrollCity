@@ -50,13 +50,20 @@ export async function sendNotification(
   // Send push notification via Edge Function
   if (userId) {
     try {
+      let url = '/';
+      if (type === 'message' && metadata?.sender_id) {
+        url = `/tcps?user=${metadata.sender_id}`;
+      } else if (metadata?.url) {
+        url = metadata.url;
+      }
+
       await supabase.functions.invoke('send-push-notification', {
         body: {
           user_id: userId,
           title,
           body: message,
-          // Construct URL based on type/metadata if needed
-          // For now, default handling in service worker or simple open
+          url,
+          data: metadata
         }
       });
     } catch (pushErr) {
