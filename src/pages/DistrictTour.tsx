@@ -106,6 +106,11 @@ export default function DistrictTour() {
         { feature_name: 'Support', route_path: '/support' },
         { feature_name: 'Safety & Policies', route_path: '/safety' }
       ],
+      government_sector: [
+        { feature_name: "President's Office", route_path: '/president' },
+        { feature_name: 'President Dashboard', route_path: '/president/dashboard' },
+        { feature_name: 'Secretary Dashboard', route_path: '/president/secretary' }
+      ],
       officer_quarters: [
         { feature_name: 'Officer Lounge', route_path: '/officer/lounge' },
         { feature_name: 'Officer Moderation', route_path: '/officer/moderation' },
