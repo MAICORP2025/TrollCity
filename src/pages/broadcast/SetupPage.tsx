@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
-import { Video, Mic, MicOff, VideoOff } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SetupPage() {
@@ -11,6 +11,43 @@ export default function SetupPage() {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('general');
   const [loading, setLoading] = useState(false);
+  const [restrictionCheck, setRestrictionCheck] = useState<{ allowed: boolean; waitTime?: string } | null>(null);
+
+  useEffect(() => {
+    async function checkRestriction() {
+      if (!user) return;
+      
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('created_at')
+        .eq('id', user.id)
+        .single();
+        
+      if (profile?.created_at) {
+        const created = new Date(profile.created_at);
+        const now = new Date();
+        const diff = now.getTime() - created.getTime();
+        const hours24 = 24 * 60 * 60 * 1000;
+        
+        if (diff < hours24) {
+          const remaining = hours24 - diff;
+          const hours = Math.floor(remaining / (1000 * 60 * 60));
+          const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+          setRestrictionCheck({ 
+            allowed: false, 
+            waitTime: `${hours}h ${minutes}m` 
+          });
+        } else {
+          setRestrictionCheck({ allowed: true });
+        }
+      } else {
+         // Fallback if no profile or created_at (shouldn't happen usually)
+         setRestrictionCheck({ allowed: true });
+      }
+    }
+    
+    checkRestriction();
+  }, [user]);
   
   // Media state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -144,6 +181,27 @@ export default function SetupPage() {
         </div>
 
         {/* Form Section */}
+        {restrictionCheck && !restrictionCheck.allowed ? (
+            <div className="space-y-6 bg-slate-900/50 p-8 rounded-3xl border border-red-500/30 shadow-xl text-center flex flex-col justify-center">
+                <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                  <AlertTriangle className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">Account in Cooldown</h2>
+                <p className="text-gray-400 mb-6">
+                  New accounts must wait 24 hours before starting a broadcast to ensure community safety.
+                </p>
+                <div className="bg-slate-950 rounded-lg p-4 border border-white/5 inline-block mx-auto">
+                  <div className="text-sm text-gray-500 uppercase tracking-wider mb-1">Time Remaining</div>
+                  <div className="text-2xl font-mono text-red-400 font-bold">{restrictionCheck.waitTime}</div>
+                </div>
+                <button 
+                  onClick={() => navigate('/')}
+                  className="mt-8 w-full py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-colors text-gray-300 hover:text-white"
+                >
+                  Return to Home
+                </button>
+            </div>
+        ) : (
         <div className="space-y-6 bg-slate-900/50 p-8 rounded-3xl border border-white/5 shadow-xl">
           <div>
             <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-yellow-400 to-amber-600 bg-clip-text text-transparent">Go Live</h1>
@@ -194,6 +252,7 @@ export default function SetupPage() {
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

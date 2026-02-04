@@ -3,16 +3,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-expect-error Deno import
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const _SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://maitrollcity.com",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Vary": "Origin"
-};
 
 interface DismissRequest {
   notification_id?: string;
@@ -22,25 +16,12 @@ interface DismissRequest {
 
 serve(async (req: Request) => {
   // Handle CORS
-  const origin = req.headers.get('origin');
-  const allowedOrigins = [
-    'https://maitrollcity.com',
-    'https://www.maitrollcity.com',
-    'http://localhost:3000',
-    'http://localhost:5173'
-  ];
-  
-  const headers = { ...corsHeaders };
-  if (origin && allowedOrigins.includes(origin)) {
-    headers['Access-Control-Allow-Origin'] = origin;
-  }
-
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   try {
@@ -49,7 +30,7 @@ serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "").trim();
     
     if (!token) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401, headers });
+      return new Response(JSON.stringify({ error: "Missing authorization" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = SUPABASE_URL;
@@ -59,7 +40,7 @@ serve(async (req: Request) => {
     // Verify user
     const { data: userData, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !userData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const userId = userData.user.id;
@@ -79,13 +60,13 @@ serve(async (req: Request) => {
 
       if (updateErr) {
         console.error("Error dismissing all notifications:", updateErr);
-        return new Response(JSON.stringify({ error: "Failed to dismiss notifications" }), { status: 500, headers });
+        return new Response(JSON.stringify({ error: "Failed to dismiss notifications" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       return new Response(JSON.stringify({ 
         success: true, 
         message: "All notifications dismissed" 
-      }), { status: 200, headers });
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (notification_ids && notification_ids.length > 0) {
@@ -101,14 +82,14 @@ serve(async (req: Request) => {
 
       if (updateErr) {
         console.error("Error dismissing notifications:", updateErr);
-        return new Response(JSON.stringify({ error: "Failed to dismiss notifications" }), { status: 500, headers });
+        return new Response(JSON.stringify({ error: "Failed to dismiss notifications" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       return new Response(JSON.stringify({ 
         success: true, 
         message: `${notification_ids.length} notifications dismissed`,
         count: notification_ids.length
-      }), { status: 200, headers });
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (notification_id) {
@@ -124,20 +105,20 @@ serve(async (req: Request) => {
 
       if (updateErr) {
         console.error("Error dismissing notification:", updateErr);
-        return new Response(JSON.stringify({ error: "Failed to dismiss notification" }), { status: 500, headers });
+        return new Response(JSON.stringify({ error: "Failed to dismiss notification" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       return new Response(JSON.stringify({ 
         success: true, 
         message: "Notification dismissed" 
-      }), { status: 200, headers });
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify({ error: "Missing notification_id, notification_ids, or dismiss_all" }), { status: 400, headers });
+    return new Response(JSON.stringify({ error: "Missing notification_id, notification_ids, or dismiss_all" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (e) {
     console.error("Server error:", e);
     const errorMessage = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: "Internal server error", details: errorMessage }), { status: 500, headers });
+    return new Response(JSON.stringify({ error: "Internal server error", details: errorMessage }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

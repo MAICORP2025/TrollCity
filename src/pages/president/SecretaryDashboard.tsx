@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { usePresidentSystem } from '@/hooks/usePresidentSystem';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Check, X, Calendar, Play, Gavel } from 'lucide-react';
+import { Check, X, Calendar, Play, Gavel, History, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 export default function SecretaryDashboard() {
@@ -12,12 +12,19 @@ export default function SecretaryDashboard() {
   const { 
     currentElection, 
     createElection, 
-    finalizeElection, 
+    finalizeElection,
+    endElection,
+    allElections,
+    fetchAllElections, 
     approveCandidate, 
     rejectCandidate,
     loading,
     refresh
   } = usePresidentSystem();
+
+  useEffect(() => {
+    fetchAllElections();
+  }, [fetchAllElections]);
 
   // Access Control
   const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
@@ -205,6 +212,74 @@ export default function SecretaryDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Election History */}
+      <Card className="bg-slate-900/50 border-slate-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="w-5 h-5 text-slate-400" />
+            Election History
+          </CardTitle>
+          <CardDescription>
+            History of all past and present elections
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {allElections.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              No elections found
+            </div>
+          ) : (
+            <div className="rounded-md border border-slate-800">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-950 text-slate-400 font-medium">
+                  <tr>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Title</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Winner</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {allElections.map((election) => (
+                    <tr key={election.id} className="hover:bg-slate-800/50">
+                      <td className="p-3 text-slate-300">
+                        {new Date(election.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="p-3 font-medium text-white">
+                        {election.title || 'Untitled Election'}
+                      </td>
+                      <td className="p-3">
+                        <Badge className={statusColors[election.status] || 'bg-slate-500'}>
+                          {election.status}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-slate-300">
+                        {election.winner_candidate_id ? 'Decided' : '-'}
+                      </td>
+                      <td className="p-3 text-right">
+                        {election.status === 'open' && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                            onClick={() => {
+                              if (confirm('End this election?')) endElection(election.id);
+                            }}
+                          >
+                            End Now
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -22,8 +22,65 @@ const Auth = () => {
   const [alertEmail, setAlertEmail] = useState('')
   const [alertDetails, setAlertDetails] = useState('')
   const [alertSubmitting, setAlertSubmitting] = useState(false)
+  const [dailyLimitReached, setDailyLimitReached] = useState(false)
+  const [nextWindow, setNextWindow] = useState<Date | null>(null)
   const navigate = useNavigate()
   const { user, profile, setAuth, setProfile } = useAuthStore()
+  
+  // Check daily sign-up limit
+  useEffect(() => {
+    const checkLimit = async () => {
+      try {
+        const today = new Date()
+        today.setUTCHours(0, 0, 0, 0)
+        
+        const { count } = await supabase
+          .from('user_profiles')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', today.toISOString())
+        
+        if (count !== null && count >= 100) {
+          setDailyLimitReached(true)
+          const tomorrow = new Date(today)
+          tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+          setNextWindow(tomorrow)
+        }
+      } catch (err) {
+        console.error('Error checking daily limit:', err)
+      }
+    }
+    
+    checkLimit()
+    // Poll every minute to check if day rolled over
+    const interval = setInterval(checkLimit, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Timer countdown
+  const [timeLeft, setTimeLeft] = useState('')
+  useEffect(() => {
+    if (!nextWindow || !dailyLimitReached) return
+    
+    const updateTimer = () => {
+      const now = new Date()
+      const diff = nextWindow.getTime() - now.getTime()
+      
+      if (diff <= 0) {
+        setDailyLimitReached(false)
+        return
+      }
+      
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+      
+      setTimeLeft(`${hours}h ${minutes}m ${seconds}s`)
+    }
+    
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+    return () => clearInterval(interval)
+  }, [nextWindow, dailyLimitReached])
   
   // Get referral code from URL
   const referralCode = searchParams.get('ref') || ''
@@ -386,119 +443,140 @@ const Auth = () => {
 
           {/* Form */}
           <form onSubmit={handleEmailAuth} className="space-y-5 mb-6">
-            {/* Email Input */}
-            <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                placeholder="Email address"
-                autoComplete="email"
-                required
-              />
-            </div>
-
-            {/* Password Input */}
-            <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-              <input
-                type={showPassword ? "text" : "password"}
-                id="password"
-                name="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-12 pr-12 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                placeholder="Password"
-                autoComplete={isLogin ? 'current-password' : 'new-password'}
-                required
-                minLength={6}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-cyan-400 transition-colors"
-              >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-
-            {/* Username Input (Sign Up Only) */}
-            {!isLogin && (
+            {!isLogin && dailyLimitReached ? (
+              <div className="text-center p-6 bg-slate-800/50 rounded-xl border border-purple-500/30 animate-in fade-in zoom-in duration-300">
+                <AlertTriangle className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white mb-2">Daily Sign-Up Limit Reached</h3>
+                <p className="text-slate-300 mb-6 text-sm">
+                  We limit new registrations to 100 users per day to ensure the best experience for our citizens.
+                </p>
+                <div className="bg-slate-950/50 rounded-lg p-4 mb-6 border border-white/5">
+                  <p className="text-slate-400 text-xs uppercase tracking-widest mb-1">Next Registration Window</p>
+                  <div className="text-3xl font-mono text-cyan-400 font-bold tracking-wider">
+                    {timeLeft}
+                  </div>
+                </div>
+                <p className="text-sm text-slate-400">
+                  Already have an account? <button type="button" onClick={() => setIsLogin(true)} className="text-purple-400 hover:text-purple-300 hover:underline">Sign in here</button>
+                </p>
+              </div>
+            ) : (
               <>
+                {/* Email Input */}
                 <div className="relative group">
-                  <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
+                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
                   <input
-                    type="text"
-                    id="username"
-                    name="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                    placeholder="Username"
-                    autoComplete="username"
+                    placeholder="Email address"
+                    autoComplete="email"
                     required
                   />
                 </div>
 
-                {/* Terms Acceptance */}
-                <div className="flex items-start gap-3 px-1">
-                  <div className="relative flex items-center pt-1">
-                    <input
-                      type="checkbox"
-                      id="accept-terms"
-                      checked={acceptedTerms}
-                      onChange={(e) => setAcceptedTerms(e.target.checked)}
-                      className="peer h-5 w-5 appearance-none rounded border border-purple-500/30 bg-slate-800/50 checked:bg-purple-600 checked:border-purple-600 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all cursor-pointer"
-                    />
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-white opacity-0 peer-checked:opacity-100 transition-opacity">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-3.5 w-3.5"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                  <label htmlFor="accept-terms" className="text-sm text-slate-300 cursor-pointer select-none">
-                    I accept the{' '}
-                    <Link to="/terms" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
-                      Terms and Agreements
-                    </Link>
-                    {' '}and acknowledge the{' '}
-                    <Link to="/privacy" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
-                      Privacy Policy
-                    </Link>.
-                  </label>
+                {/* Password Input */}
+                <div className="relative group">
+                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    id="password"
+                    name="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-12 pr-12 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                    placeholder="Password"
+                    autoComplete={isLogin ? 'current-password' : 'new-password'}
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-cyan-400 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
+
+                {/* Username Input (Sign Up Only) */}
+                {!isLogin && (
+                  <>
+                    <div className="relative group">
+                      <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
+                      <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                        placeholder="Username"
+                        autoComplete="username"
+                        required
+                      />
+                    </div>
+
+                    {/* Terms Acceptance */}
+                    <div className="flex items-start gap-3 px-1">
+                      <div className="relative flex items-center pt-1">
+                        <input
+                          type="checkbox"
+                          id="accept-terms"
+                          checked={acceptedTerms}
+                          onChange={(e) => setAcceptedTerms(e.target.checked)}
+                          className="peer h-5 w-5 appearance-none rounded border border-purple-500/30 bg-slate-800/50 checked:bg-purple-600 checked:border-purple-600 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all cursor-pointer"
+                        />
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-white opacity-0 peer-checked:opacity-100 transition-opacity">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-3.5 w-3.5"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                      <label htmlFor="accept-terms" className="text-sm text-slate-300 cursor-pointer select-none">
+                        I accept the{' '}
+                        <Link to="/terms" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
+                          Terms and Agreements
+                        </Link>
+                        {' '}and acknowledge the{' '}
+                        <Link to="/privacy" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
+                          Privacy Policy
+                        </Link>.
+                      </label>
+                    </div>
+                  </>
+                )}
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-500 text-white font-semibold rounded-xl hover:shadow-[0_15px_40px_rgba(147,51,234,0.3)] transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-2"></div>
+                      Processing...
+                    </span>
+                  ) : (
+                    isLogin ? 'Sign In' : 'Sign Up'
+                  )}
+                </button>
               </>
             )}
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-500 text-white font-semibold rounded-xl hover:shadow-[0_15px_40px_rgba(147,51,234,0.3)] transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-2"></div>
-                Processing...
-              </span>
-            ) : (
-              isLogin ? 'Sign In' : 'Sign Up'
-            )}
-          </button>
-        </form>
+          </form>
 
         {/* Helper Links */}
         <div className="space-y-3 mb-6">

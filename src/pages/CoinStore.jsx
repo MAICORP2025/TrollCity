@@ -7,7 +7,7 @@ import { useCoins } from '@/lib/hooks/useCoins';
 import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { useAllCreditScores } from '../lib/hooks/useAllCreditScores';
 // import { toast } from 'sonner';
-import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle } from 'lucide-react';
+import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
 import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
 import { ENTRANCE_EFFECTS_DATA } from '../lib/entranceEffects';
 import { deductCoins } from '@/lib/coinTransactions';
@@ -1452,6 +1452,18 @@ export default function CoinStore() {
                   <Coins className="w-5 h-5 text-yellow-400" />
                   Coin Packages
                 </h2>
+
+                <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-start gap-3">
+                  <AlertTriangle className="w-6 h-6 text-yellow-500 shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-bold text-yellow-200 mb-1">Launch Notice: Manual Purchases</h3>
+                    <p className="text-sm text-yellow-200/80">
+                      Manual coin purchases are temporarily enabled to ensure accurate tracking and credit verification during our initial launch. 
+                      Staff will personally verify all transactions to prevent issues. Thank you for your patience!
+                    </p>
+                  </div>
+                </div>
+
                 {/* Payment Provider Selector */}
                 <div className="mb-4 flex gap-2">
                   {MANUAL_PROVIDERS.map(p => (

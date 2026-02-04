@@ -1,12 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
-
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { corsHeaders } from "../_shared/cors.ts"
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -17,7 +12,7 @@ serve(async (req) => {
   if (!authHeader?.startsWith("Bearer ")) {
     return new Response(
       JSON.stringify({ error: "Unauthorized", reason: "missing bearer token" }),
-      { status: 401, headers: corsHeaders }
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
   const token = authHeader.replace("Bearer ", "").trim();
@@ -31,7 +26,7 @@ serve(async (req) => {
   if (authError || !user) {
     return new Response(
       JSON.stringify({ error: "Unauthorized", reason: authError?.message ?? "user not found" }),
-      { status: 401, headers: corsHeaders }
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
@@ -39,12 +34,12 @@ serve(async (req) => {
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   const { loan_id, amount, is_full_payment } = body;
   if (!loan_id || !amount) {
-    return new Response(JSON.stringify({ error: 'Missing loan_id or amount' }), { status: 400, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: 'Missing loan_id or amount' }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   // Fetch loan
@@ -55,7 +50,7 @@ serve(async (req) => {
     .eq('user_id', user.id)
     .single();
   if (loanError || !loan) {
-    return new Response(JSON.stringify({ error: 'Loan not found' }), { status: 404, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: 'Loan not found' }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   // Payment logic
@@ -79,7 +74,7 @@ serve(async (req) => {
     .update({ balance: newBalance, status })
     .eq('id', loan_id);
   if (updateLoanError) {
-    return new Response(JSON.stringify({ error: 'Failed to update loan' }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: 'Failed to update loan' }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   // Log payment
@@ -93,7 +88,7 @@ serve(async (req) => {
       on_time: true // TODO: Calculate on_time
     });
   if (paymentError) {
-    return new Response(JSON.stringify({ error: 'Failed to log payment' }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: 'Failed to log payment' }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   // Update credit score
@@ -120,5 +115,5 @@ serve(async (req) => {
       created_at: new Date().toISOString()
     });
 
-  return new Response(JSON.stringify({ success: true, newBalance, newScore }), { headers: corsHeaders });
+  return new Response(JSON.stringify({ success: true, newBalance, newScore }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });

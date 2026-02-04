@@ -61,6 +61,8 @@ export const usePresidentSystem = () => {
   const [currentPresident, setCurrentPresident] = useState<{ user_id: string; username: string; avatar_url: string } | null>(null);
   const [currentVP, setCurrentVP] = useState<PresidentAppointment | null>(null);
   const [treasuryBalance, setTreasuryBalance] = useState<number>(0);
+  const [proposals, setProposals] = useState<any[]>([]); // Added missing state
+  const [allElections, setAllElections] = useState<PresidentElection[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchCurrentElection = useCallback(async () => {
@@ -176,14 +178,16 @@ export const usePresidentSystem = () => {
   
   const fetchTreasuryBalance = useCallback(async () => {
       try {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('president_treasury_balance')
             .select('balance_cents')
             .eq('currency', 'USD')
-            .single();
+            .maybeSingle(); // Changed from single() to maybeSingle()
             
           if (data) {
               setTreasuryBalance(data.balance_cents / 100);
+          } else {
+             setTreasuryBalance(0);
           }
       } catch (err) {
           console.error(err);
@@ -234,6 +238,57 @@ export const usePresidentSystem = () => {
       setLoading(false);
     }
   };
+
+  const endElection = async (electionId: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('president_elections')
+        .update({ status: 'closed', ends_at: new Date().toISOString() })
+        .eq('id', electionId);
+      
+      if (error) throw error;
+      toast.success('Election ended successfully');
+      fetchCurrentElection();
+      fetchAllElections();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAllElections = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('president_elections')
+        .select(`
+          *,
+          candidates:president_candidates(
+            *,
+            user:user_profiles!president_candidates_user_id_fkey(username, avatar_url)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      if (data) {
+        const formattedElections = data.map((election: any) => ({
+          ...election,
+          candidates: election.candidates?.map((c: any) => ({
+            ...c,
+            username: c.user?.username,
+            avatar_url: c.user?.avatar_url,
+            is_approved: c.status === 'approved'
+          })) || []
+        }));
+        setAllElections(formattedElections);
+      }
+    } catch (err) {
+      console.error('Error fetching all elections:', err);
+    }
+  }, []);
 
   const signupCandidate = async (electionId: string, slogan: string, statement: string, bannerPath: string = 'default') => {
     setLoading(true);
@@ -458,6 +513,9 @@ export const usePresidentSystem = () => {
     },
     createElection,
     finalizeElection,
+    endElection,
+    allElections,
+    fetchAllElections,
     signupCandidate,
     approveCandidate,
     rejectCandidate,

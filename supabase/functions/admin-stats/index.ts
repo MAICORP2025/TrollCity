@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
+import { corsHeaders } from "../_shared/cors.ts";
 
 declare const Deno: {
   serve: (handler: (req: Request) => Response | Promise<Response>) => void;
@@ -30,6 +31,7 @@ interface AdminStatsResponse {
       totalValue: number;
       giftCoins: number;
       appSponsoredGifts: number;
+      savPromoCount: number;
     };
     financial: {
       total_liability_coins: number;
@@ -90,13 +92,6 @@ Deno.serve(async (req: Request) => {
       db: { prepare: false },
     }
   );
-
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  };
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -178,7 +173,7 @@ Deno.serve(async (req: Request) => {
     );
 
     // SAV promo count
-    await safeQuery(() =>
+    const savPromoData = await safeQuery(() =>
       supabase.from("sav_promotions").select("id") as Promise<QueryResult<any>>
     );
 
@@ -257,6 +252,9 @@ Deno.serve(async (req: Request) => {
 
     // App-sponsored gifts
     const appSponsoredGifts = sum(appSponsoredGiftsData, "amount");
+
+    // SAV promo count
+    const savPromoCount = count(savPromoData);
 
     // Total liability coins
     const liability = liabilityData || [];
@@ -343,6 +341,7 @@ Deno.serve(async (req: Request) => {
           totalValue: 0,
           giftCoins: 0,
           appSponsoredGifts: 0,
+          savPromoCount: 0,
         },
         financial: {
           total_liability_coins: 0,
