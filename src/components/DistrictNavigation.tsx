@@ -78,6 +78,11 @@ export default function DistrictNavigation() {
         { feature_name: 'Support', route_path: '/support', required_role: 'user' },
         { feature_name: 'Safety & Policies', route_path: '/safety', required_role: 'user' }
       ],
+      government_sector: [
+        { feature_name: "President's Office", route_path: '/president', required_role: 'user' },
+        { feature_name: 'President Dashboard', route_path: '/president/dashboard', required_role: 'president' },
+        { feature_name: 'Secretary Dashboard', route_path: '/president/secretary', required_role: 'secretary' }
+      ],
       officer_quarters: [
         { feature_name: 'Officer Lounge', route_path: '/officer/lounge', required_role: 'troll_officer' },
         { feature_name: 'Officer Moderation', route_path: '/officer/moderation', required_role: 'troll_officer' },
