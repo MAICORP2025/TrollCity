@@ -22,8 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { roomName, participantName, identity, isPublisher } = req.body;
 
-    if (!roomName || !participantName) {
-      return res.status(400).json({ error: 'Missing roomName or participantName' });
+    if (!roomName || (!participantName && !identity)) {
+      return res.status(400).json({ error: 'Missing roomName or identity' });
     }
 
     const apiKey = process.env.LIVEKIT_API_KEY;
@@ -33,9 +33,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Server misconfigured' });
     }
 
+    const pName = participantName || identity;
+    const pIdentity = identity || participantName;
+
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: identity || participantName,
-      name: participantName,
+      identity: pIdentity,
+      name: pName,
     });
 
     at.addGrant({
