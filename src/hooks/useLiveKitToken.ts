@@ -84,8 +84,9 @@ export function useLiveKitToken({
           return;
         }
 
-        const functionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || import.meta.env.VITE_SUPABASE_FUNCTIONS_URL;
-        const baseUrl = functionsUrl || 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1';
+        // Use Vercel endpoint or fallback to Supabase
+        const tokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL || 
+                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/livekit-token`;
 
         const promise = (async (): Promise<CachedToken> => {
           const storeSession = useAuthStore.getState().session as any;
@@ -100,7 +101,7 @@ export function useLiveKitToken({
             throw new Error('No active session');
           }
 
-          const response = await fetch(`${baseUrl}/livekit-token`, {
+          const response = await fetch(tokenUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

@@ -906,9 +906,8 @@ export class LiveKitService {
         expiresIn: session.expires_at ? `${session.expires_at - now}s` : 'unknown'
       })
 
-      // Call external token endpoint (Supabase Edge Function)
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
+      // Call external token endpoint (Vercel or Supabase)
+      const tokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/livekit-token`;
       
       console.log("🔥 LiveKit tokenUrl selected:", tokenUrl);
 
