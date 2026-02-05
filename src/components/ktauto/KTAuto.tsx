@@ -7,7 +7,7 @@ import { formatCompactNumber } from '../../lib/utils';
 import { useCoins } from '../../lib/hooks/useCoins';
 
 interface CarCatalogItem {
-  id: string;
+  id: number;
   name: string;
   tier: number;
   base_price: number;
@@ -48,9 +48,9 @@ export default function KTAuto() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch Cars Catalog
+        // Fetch Cars Catalog from the dealership view
         const { data: carsData, error: carsError } = await supabase
-          .from('cars_catalog')
+          .from('v_dealership_catalog')
           .select('*')
           .order('base_price', { ascending: true });
 
