@@ -602,7 +602,7 @@ const Auth = () => {
             )}
           </form>
 
-        {/* Helper Links */}
+        {/* Helper Links - HIDDEN FOR MAINTENANCE
         <div className="space-y-3 mb-6">
           <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
             <Link
@@ -626,8 +626,9 @@ const Auth = () => {
             </button>
           </div>
         </div>
+        */}
 
-        {/* Install Button */}
+        {/* Install Button - HIDDEN FOR MAINTENANCE
         <div className="mt-6">
           <InstallButton 
             text="Install App"
@@ -635,6 +636,7 @@ const Auth = () => {
             className="w-full"
           />
         </div>
+        */}
       </div>
       </div>
       {/* Alert Admin Modal */}
