@@ -129,10 +129,10 @@ Deno.serve(async (req: Request) => {
 
                 console.log('HLS Egress started:', egressInfo.egressId);
 
-                // Optimistically update hls_url if we know the bucket URL
-                // Format: https://cdn.maitrollcity.com/streams/<stream_id>/master.m3u8
-                const publicUrlBase = Deno.env.get("S3_PUBLIC_URL") || 'https://cdn.maitrollcity.com';
-                const hlsUrl = `${publicUrlBase}/streams/${room.name}/master.m3u8`;
+                // Optimistically update hls_url
+                // We use relative path to leverage Vercel rewrites and avoid CORS issues
+                // Vercel will proxy /streams/* to the Supabase Storage bucket
+                const hlsUrl = `/streams/${room.name}/master.m3u8`;
 
                 // Update ALL possible tables with the HLS URL
                 await Promise.all([

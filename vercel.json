@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/streams/:path*",
+      "destination": "https://yjxpwfalenorzrqxwmtr.supabase.co/storage/v1/object/public/hls/streams/:path*"
+    },
+    {
       "source": "/((?!.*\\.(?:m3u8|ts|m4s)$).*)",
       "destination": "/"
     }
