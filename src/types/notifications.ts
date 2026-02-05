@@ -35,6 +35,7 @@ export interface Notification {
   message: string
   metadata: Record<string, any>
   is_read: boolean
+  is_dismissed?: boolean
   created_at: string
   username?: string
   avatar_url?: string
