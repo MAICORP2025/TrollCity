@@ -430,16 +430,19 @@ const Auth = () => {
                 Sign In
               </button>
               <button
-                onClick={() => setIsLogin(false)}
-                className={`px-6 py-2 rounded-lg font-semibold transition-all duration-300 ${
-                  !isLogin 
-                    ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-500 text-white shadow-[0_4px_12px_rgba(147,51,234,0.3)]' 
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                }`}
+                // onClick={() => setIsLogin(false)}
+                disabled={true}
+                className={`px-6 py-2 rounded-lg font-semibold transition-all duration-300 opacity-50 cursor-not-allowed text-slate-500`}
+                title="Sign ups are temporarily disabled"
               >
                 Sign Up
               </button>
             </div>
+          </div>
+          
+          <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-center">
+            <p className="text-red-200 text-sm font-bold">🚧 MAINTENANCE IN PROGRESS</p>
+            <p className="text-red-300 text-xs mt-1">Sign-ups are disabled. Login restricted to Administrators only.</p>
           </div>
 
           {/* Form */}

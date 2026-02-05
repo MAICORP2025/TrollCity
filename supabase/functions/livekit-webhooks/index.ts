@@ -179,8 +179,15 @@ Deno.serve(async (req: Request) => {
             } else {
                 console.warn('Missing LiveKit credentials, skipping Egress trigger');
             }
-        } catch (egressErr) {
+        } catch (egressErr: any) {
             console.error('Failed to trigger Egress:', egressErr);
+            // Enhanced Error Logging
+            console.error('--- FULL EGRESS ERROR DETAILS ---');
+            console.error(JSON.stringify(egressErr, Object.getOwnPropertyNames(egressErr), 2));
+            if (egressErr?.response?.data) {
+                console.error('Response Data:', JSON.stringify(egressErr.response.data, null, 2));
+            }
+            console.error('---------------------------------');
         }
     } else if (event === 'room_finished') {
       // Mark stream as ended

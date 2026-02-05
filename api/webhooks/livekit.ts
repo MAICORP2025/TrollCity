@@ -140,7 +140,14 @@ async function startEgress(roomId: string) {
     return;
   }
 
-  const httpUrl = livekitUrl.replace('wss://', 'https://');
+  let httpUrl = livekitUrl;
+  if (httpUrl.startsWith('wss://')) {
+      httpUrl = httpUrl.replace('wss://', 'https://');
+  } else if (httpUrl.startsWith('ws://')) {
+      httpUrl = httpUrl.replace('ws://', 'http://');
+  }
+  
+  console.log(`Initializing EgressClient with URL: ${httpUrl}`);
   const egressClient = new EgressClient(httpUrl, apiKey, apiSecret);
 
   const segmentsOptions: any = {
@@ -193,12 +200,20 @@ async function startEgress(roomId: string) {
     
     console.log(`HLS Path updated: ${hlsPath}`);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to start egress:', error);
+    // Enhanced Error Logging
+    console.error('--- FULL EGRESS ERROR DETAILS ---');
+    console.error(JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    if (error?.response?.data) {
+        console.error('Response Data:', JSON.stringify(error.response.data, null, 2));
+    }
+    console.error('---------------------------------');
+
     // REQUIRED ERROR LOGGING
     console.log(`roomName / streamId: ${roomId}`);
     console.log(`egressId: undefined`);
-    console.log(`error: ${error}`);
+    console.log(`error: ${error.message || error}`);
   }
 }
 

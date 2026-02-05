@@ -425,17 +425,29 @@ function SummonModal({ stream, onClose }: { stream: StreamRow; onClose: () => vo
           .eq('is_active', true);
 
         if (data) {
-          // Also fetch profiles for avatars
+          // Also fetch profiles for avatars and usernames to ensure up-to-date info
           const userIds = data.map(p => p.user_id);
           const { data: profiles } = await supabase
             .from('user_profiles')
-            .select('id, avatar_url')
+            .select('id, username, avatar_url')
             .in('id', userIds);
             
-          const merged = data.map(p => ({
-            ...p,
-            avatar_url: profiles?.find(prof => prof.id === p.user_id)?.avatar_url
-          }));
+          const merged = data.map(p => {
+            const profile = profiles?.find(prof => prof.id === p.user_id);
+            // If this is the broadcaster, prefer the stream.broadcaster info which is trusted
+            if (p.user_id === stream.broadcaster_id && stream.broadcaster) {
+              return {
+                ...p,
+                username: stream.broadcaster.username,
+                avatar_url: stream.broadcaster.avatar_url
+              };
+            }
+            return {
+              ...p,
+              username: profile?.username || p.username || 'Unknown',
+              avatar_url: profile?.avatar_url
+            };
+          });
           
           // Add broadcaster if not in list
           if (!merged.find(p => p.user_id === stream.broadcaster_id)) {
