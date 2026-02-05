@@ -74,35 +74,22 @@ const Header = () => {
           .eq('user_id', user.id)
           .lt('created_at', thirtyDaysAgo)
 
-        // Try RPC function first, but fallback to direct query if it doesn't exist
-        try {
-          const { data: count, error: rpcError } = await supabase
-            .rpc('get_unread_notification_count', { p_user_id: user.id })
-           
-          if (!rpcError && count !== null && count !== undefined) {
-            setUnreadNotifications(Number(count) || 0)
-            return // Success, exit early
-          }
-        } catch (rpcErr: any) {
-          // RPC function might not exist, fallback to direct query
-          console.warn('RPC function not available, using direct query:', rpcErr)
-        }
-        
-        // Fallback to direct query
-        const { data, error: queryError } = await supabase
+        // Use direct query with count for accurate number (excluding dismissed)
+        const { count, error } = await supabase
           .from('notifications')
-          .select('id')
+          .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id)
           .eq('is_read', false)
-        
-        if (queryError) {
-          console.warn('Error loading notifications (non-critical):', queryError)
+          .eq('is_dismissed', false)
+
+        if (error) {
+          console.warn('Error loading notifications:', error)
           setUnreadNotifications(0)
           return
         }
-        
-        if (data) {
-          setUnreadNotifications(data.length)
+
+        if (count !== null) {
+          setUnreadNotifications(count)
         }
       } catch (err) {
         console.warn('Error loading notification count (non-critical):', err)
