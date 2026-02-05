@@ -10,6 +10,7 @@ import CropPhotoModal from '../components/CropPhotoModal'
 import { KeyRound } from 'lucide-react'
 import { setResetPin } from '@/services/passwordManager'
 import { trollCityTheme } from '../styles/trollCityTheme'
+import { bunnyStorage } from '../lib/bunny-storage'
 
 const ProfileSetup = () => {
   const navigate = useNavigate()
@@ -333,47 +334,13 @@ const ProfileSetup = () => {
       setCoverCropModalOpen(false)
 
       const ext = croppedFile.name.split('.').pop() || 'jpg'
-      const name = `${user.id}-${Date.now()}.${ext}`
+      const name = `covers/${user.id}-${Date.now()}.${ext}`
 
-      // Try different bucket and path combinations
-      const uploadAttempts = [
-        { bucket: 'covers', path: name },
-        { bucket: 'troll-city-assets', path: `covers/${name}` },
-        { bucket: 'avatars', path: name },
-        { bucket: 'public', path: name }
-      ]
-      
-      let uploadedUrl: string | null = null
-      let lastErr: any = null
+      // Upload to Bunny Storage
+      const { publicUrl: uploadedUrl, error: uploadErr } = await bunnyStorage.upload(name, croppedFile)
 
-      for (const attempt of uploadAttempts) {
-        try {
-          console.log(`Trying bucket: ${attempt.bucket}, path: ${attempt.path}`)
-          
-          const { error: uploadErr } = await supabase.storage
-            .from(attempt.bucket)
-            .upload(attempt.path, croppedFile, { cacheControl: '3600', upsert: true })
-
-          if (uploadErr) {
-            console.log(`Failed with ${attempt.bucket}:`, uploadErr.message)
-            lastErr = uploadErr
-            continue
-          }
-
-          const { data: urlData } = supabase.storage.from(attempt.bucket).getPublicUrl(attempt.path)
-          if (urlData?.publicUrl) {
-            uploadedUrl = urlData.publicUrl
-            console.log(`Success with bucket ${attempt.bucket}:`, uploadedUrl)
-            break
-          }
-        } catch (err) {
-          console.log(`Error with ${attempt.bucket}:`, err)
-          lastErr = err
-        }
-      }
-
-      if (!uploadedUrl) {
-        throw lastErr || new Error('Failed to upload cover photo (no bucket available)')
+      if (uploadErr || !uploadedUrl) {
+        throw uploadErr || new Error('Failed to upload cover photo')
       }
 
       console.log('Uploaded URL:', uploadedUrl)
