@@ -151,12 +151,17 @@ const Header = () => {
           const updatedNotif = payload.new as any
           const oldNotif = payload.old as any
           
-          // If notification was marked as read or deleted
-          if ((!oldNotif.is_read && updatedNotif.is_read === true)) {
+          const wasUnread = !oldNotif.is_read
+          const isUnread = !updatedNotif.is_read
+          const wasDismissed = !!oldNotif.is_dismissed
+          const isDismissed = !!updatedNotif.is_dismissed
+          
+          const wasCounted = wasUnread && !wasDismissed
+          const isCounted = isUnread && !isDismissed
+          
+          if (wasCounted && !isCounted) {
             setUnreadNotifications((prev) => Math.max(0, prev - 1))
-          }
-          // If notification was unmarked from read
-          else if (oldNotif.is_read && updatedNotif.is_read === false) {
+          } else if (!wasCounted && isCounted) {
             setUnreadNotifications((prev) => prev + 1)
           }
         }
