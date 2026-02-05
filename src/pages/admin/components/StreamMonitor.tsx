@@ -2,14 +2,16 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 import api, { API_ENDPOINTS } from "../../../lib/api";
 import { toast } from "sonner";
-import { RefreshCw, Users, Clock, Database, Video } from "lucide-react";
+import { RefreshCw, Users, Clock, Database, Video, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import StreamWatchModal, { WatchableStream } from "../../../components/broadcast/StreamWatchModal";
 
 const StreamMonitor = () => {
   const [liveKitRooms, setLiveKitRooms] = useState<any[]>([]);
   const [dbStreams, setDbStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedStream, setSelectedStream] = useState<any | null>(null);
+  const [viewingStream, setViewingStream] = useState<WatchableStream | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
 
@@ -30,7 +32,7 @@ const StreamMonitor = () => {
       // 2. Fetch DB streams
       const { data: dbData, error: dbError } = await supabase
         .from("streams")
-        .select("id, title, broadcaster_id, status, created_at")
+        .select("id, title, broadcaster_id, status, created_at, hls_url")
         .eq("status", "live");
 
       if (dbError) throw dbError;
@@ -190,8 +192,19 @@ const StreamMonitor = () => {
                   <h3 className="text-xl font-bold text-white mb-1">
                     {selectedStream.dbData?.title || 'Unknown Title'}
                   </h3>
-                  <div className="text-sm text-gray-400 flex gap-2">
+                  <div className="text-sm text-gray-400 flex flex-wrap gap-2 items-center">
                     <span className="font-mono bg-black/30 px-2 py-1 rounded text-xs">{selectedStream.id}</span>
+                    <button
+                        onClick={() => setViewingStream({
+                            id: selectedStream.id,
+                            room_name: selectedStream.roomName,
+                            hls_url: selectedStream.dbData?.hls_url,
+                            title: selectedStream.dbData?.title
+                        })}
+                        className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
+                    >
+                        <Eye className="w-3 h-3" /> Monitor Feed
+                    </button>
                   </div>
                 </div>
 
@@ -278,6 +291,13 @@ const StreamMonitor = () => {
           </div>
         </div>
       </div>
+      {/* Modal for viewing stream */}
+      {viewingStream && (
+        <StreamWatchModal 
+          stream={viewingStream} 
+          onClose={() => setViewingStream(null)} 
+        />
+      )}
     </div>
   );
 };

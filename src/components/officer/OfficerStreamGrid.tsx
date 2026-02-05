@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Users, Radio, Shield, Eye } from 'lucide-react';
 import { format12hr } from '../../utils/timeFormat';
+import StreamWatchModal, { WatchableStream } from '../broadcast/StreamWatchModal';
 
 interface StreamRow {
   id: string;
   broadcaster_id: string;
   status: string;
   is_live: boolean;
+  hls_url?: string;
   current_viewers?: number;
   total_gifts_coins?: number;
   total_likes?: number;
@@ -26,6 +28,7 @@ export default function OfficerStreamGrid() {
   const navigate = useNavigate();
   const [streams, setStreams] = useState<StreamRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedStream, setSelectedStream] = useState<WatchableStream | null>(null);
 
   const fetchStreams = async () => {
     try {
@@ -147,7 +150,7 @@ export default function OfficerStreamGrid() {
               {/* Actions */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <button
-                  onClick={() => navigate(`/live/${stream.id}`)}
+                  onClick={() => setSelectedStream(stream)}
                   className="flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition-colors"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -165,6 +168,13 @@ export default function OfficerStreamGrid() {
           </div>
         ))}
       </div>
+
+      {selectedStream && (
+        <StreamWatchModal 
+          stream={selectedStream} 
+          onClose={() => setSelectedStream(null)} 
+        />
+      )}
     </div>
   );
 }

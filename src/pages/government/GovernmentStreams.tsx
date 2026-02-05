@@ -22,6 +22,7 @@ import { useLiveKitToken } from '@/hooks/useLiveKitToken';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import UserNameWithAge from '@/components/UserNameWithAge';
+import StreamWatchModal from '@/components/broadcast/StreamWatchModal';
 
 // Types
 interface OfficerLog {
@@ -39,6 +40,7 @@ interface StreamRow {
   broadcaster_id: string;
   status: string;
   is_live: boolean;
+  hls_url?: string;
   current_viewers: number;
   title: string;
   room_name: string;
@@ -255,7 +257,7 @@ export default function GovernmentStreams() {
 
       {/* Watch Modal */}
       {selectedStream && (
-        <WatchModal 
+        <StreamWatchModal 
           stream={selectedStream} 
           onClose={() => setSelectedStream(null)} 
         />
@@ -391,108 +393,6 @@ function StreamCard({
           No Chat
         </button>
       </div>
-    </div>
-  );
-}
-
-// Watch Modal using LiveKit
-function WatchModal({ stream, onClose }: { stream: StreamRow; onClose: () => void }) {
-  const { user } = useAuthStore();
-  
-  // Logic from LivePage to determine room name
-  const roomName = useMemo(() => {
-    // Note: LivePage uses stream.agora_channel as primary source for legacy reasons, 
-    // but newer streams use room_name. 
-    // We check both to be safe and match LivePage behavior.
-    const s = stream as any;
-    return s.agora_channel || s.room_name || stream.id;
-  }, [stream]);
-
-  const { token, serverUrl, error } = useLiveKitToken({
-    streamId: stream.id,
-    isHost: false,
-    userId: user?.id,
-    roomName: roomName
-  });
-
-  if (error) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-        <div className="bg-[#1a1a1a] p-6 rounded-2xl border border-red-500/50 text-center max-w-sm">
-          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-white mb-2">Connection Failed</h3>
-          <p className="text-gray-400 mb-6">{error}</p>
-          <button onClick={onClose} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white font-bold">Close</button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10">
-        <button 
-          onClick={onClose}
-          className="absolute top-4 right-4 z-50 p-2 bg-black/50 hover:bg-red-600 rounded-full text-white transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
-        
-        {token && serverUrl ? (
-          <LiveKitRoom
-            token={token}
-            serverUrl={serverUrl}
-            connect={true}
-            video={false}
-            audio={false}
-            onDisconnected={onClose}
-            className="w-full h-full"
-          >
-             <StreamViewer />
-             <RoomAudioRenderer />
-          </LiveKitRoom>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-white">
-            <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mr-3"></div>
-            Connecting to secure feed...
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StreamViewer() {
-  const tracks = useTracks();
-  
-  // Filter for camera tracks
-  const videoTracks = tracks.filter(track => track.source === 'camera');
-  
-  if (videoTracks.length === 0) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-gray-500">
-        Waiting for video feed...
-      </div>
-    );
-  }
-
-  // Simple grid for multiple participants
-  const gridClass = videoTracks.length === 1 
-    ? "grid-cols-1" 
-    : videoTracks.length <= 4 
-      ? "grid-cols-2" 
-      : "grid-cols-3";
-
-  return (
-    <div className={`grid ${gridClass} gap-2 w-full h-full p-2 bg-black`}>
-      {videoTracks.map((track) => (
-        <div key={track.participant.identity} className="relative bg-zinc-800 rounded-xl overflow-hidden">
-          <VideoTrack trackRef={track} className="w-full h-full object-cover" />
-          <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded text-xs text-white font-medium">
-            {track.participant.identity}
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

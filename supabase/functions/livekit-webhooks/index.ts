@@ -79,6 +79,12 @@ Deno.serve(async (req: Request) => {
             const apiKey = Deno.env.get("LIVEKIT_API_KEY");
             const apiSecret = Deno.env.get("LIVEKIT_API_SECRET");
 
+            console.log('LiveKit Env Check:', {
+                hasUrl: !!livekitUrl,
+                hasKey: !!apiKey,
+                hasSecret: !!apiSecret
+            });
+
             if (livekitUrl && apiKey && apiSecret) {
                 // Convert WSS to HTTPS for API
                 const httpUrl = livekitUrl.replace('wss://', 'https://');
@@ -104,6 +110,15 @@ Deno.serve(async (req: Request) => {
                 const s3Endpoint = Deno.env.get("S3_ENDPOINT");
                 const s3Region = Deno.env.get("S3_REGION");
 
+                console.log('S3 Env Check:', {
+                    hasBucket: !!s3Bucket,
+                    hasKey: !!s3Key,
+                    hasSecret: !!s3Secret,
+                    hasEndpoint: !!s3Endpoint,
+                    hasRegion: !!s3Region,
+                    bucketName: s3Bucket
+                });
+
                 if (s3Bucket && s3Key && s3Secret) {
                     segmentsOptions.s3 = {
                         accessKey: s3Key,
@@ -113,6 +128,12 @@ Deno.serve(async (req: Request) => {
                         region: s3Region
                     };
                 }
+
+                console.log('PAYLOAD DEBUG:', {
+                    event: event,
+                    roomName: room.name,
+                    computedHlsPath: `streams/${room.name}/master.m3u8`
+                });
 
                 // Start Egress
                 const egressInfo = await egressClient.startRoomCompositeEgress(
@@ -129,10 +150,19 @@ Deno.serve(async (req: Request) => {
 
                 console.log('HLS Egress started:', egressInfo.egressId);
 
-                // Optimistically update hls_url
-                // We use relative path to leverage Vercel rewrites and avoid CORS issues
-                // Vercel will proxy /streams/* to the Supabase Storage bucket
-                const hlsUrl = `/streams/${room.name}/master.m3u8`;
+                // Construct full HLS URL
+                const hlsBaseUrl = Deno.env.get("VITE_HLS_BASE_URL");
+                const supabaseUrl = Deno.env.get("SUPABASE_URL");
+                let hlsUrl = '';
+
+                if (hlsBaseUrl) {
+                    hlsUrl = `${hlsBaseUrl}/streams/${room.name}/master.m3u8`;
+                } else if (supabaseUrl) {
+                    hlsUrl = `${supabaseUrl}/storage/v1/object/public/hls/streams/${room.name}/master.m3u8`;
+                } else {
+                    // Fallback to relative if no base URL found (unlikely)
+                    hlsUrl = `/streams/${room.name}/master.m3u8`;
+                }
 
                 // Update ALL possible tables with the HLS URL
                 await Promise.all([
@@ -186,9 +216,10 @@ Deno.serve(async (req: Request) => {
          const { error } = await supabase
             .from('streams')
             .update({
-               recording_url: recordingUrl,
-               is_live: false, // Ensure it's marked as ended
-               status: 'ended'
+               recording_url: recordingUrl
+               // Do NOT mark as ended here. Let room_finished handle the status.
+               // is_live: false, 
+               // status: 'ended'
             })
             .eq('id', roomName); // Assuming roomName maps to stream ID
 

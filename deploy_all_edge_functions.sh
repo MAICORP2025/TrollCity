@@ -69,6 +69,10 @@ OFFICER_FUNCTIONS=(
     "officer-touch-activity"
 )
 
+LIVEKIT_FUNCTIONS=(
+    "livekit-webhooks"
+)
+
 VERIFICATION_FUNCTIONS=(
     "verify-user-complete"
     "verify-user-paypal"

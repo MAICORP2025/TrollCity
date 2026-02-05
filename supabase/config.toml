@@ -264,6 +264,9 @@ template = "Your code is {{ .Code }}"
 max_frequency = "5s"
 
 # Configure MFA via WebAuthn
+
+[functions.livekit-webhooks]
+verify_jwt = false
 # [auth.mfa.web_authn]
 # enroll_enabled = true
 # verify_enabled = true

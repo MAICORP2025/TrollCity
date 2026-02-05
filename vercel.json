@@ -37,8 +37,8 @@
   ],
   "rewrites": [
     {
-      "source": "/streams/:match*",
-      "destination": "https://cdn.maitrollcity.com/streams/:match*"
+      "source": "/streams/:path*",
+      "destination": "https://cdn.maitrollcity.com/streams/:path*"
     },
     {
       "source": "/(.*)",

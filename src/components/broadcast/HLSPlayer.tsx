@@ -9,26 +9,14 @@ interface HLSPlayerProps {
   muted?: boolean;
 }
 
-function normalizeHlsSrc(src: string): string {
-  let finalSrc = src?.trim() ?? "";
-
-  // /streams/<uuid>.m3u8 -> /streams/<uuid>/master.m3u8
-  const legacyPattern = /\/streams\/([a-f0-9-]+)\.m3u8$/i;
-  const match = finalSrc.match(legacyPattern);
-  if (match) {
-    const id = match[1];
-    finalSrc = `/streams/${id}/master.m3u8`;
-    return finalSrc;
+function extractStreamId(src: string): string {
+  // Try to extract ID from URL path: .../streams/{id}/...
+  const match = src.match(/\/streams\/([a-zA-Z0-9-]+)/);
+  if (match && match[1]) {
+    return match[1];
   }
-
-  // Force relative proxy instead of direct CDN URL
-  if (finalSrc.includes("cdn.maitrollcity.com/streams/")) {
-    finalSrc = finalSrc
-      .replace("https://cdn.maitrollcity.com/streams/", "/streams/")
-      .replace("http://cdn.maitrollcity.com/streams/", "/streams/");
-  }
-
-  return finalSrc;
+  // Fallback: assume src is the ID
+  return src.trim();
 }
 
 export default function HLSPlayer({
@@ -48,7 +36,14 @@ export default function HLSPlayer({
   const retryCountRef = useRef(0);
   const maxRetries = 10;
 
-  const finalSrc = useMemo(() => normalizeHlsSrc(src), [src]);
+  // Single source of truth for URL construction
+  const manifestUrl = useMemo(() => {
+    const streamId = extractStreamId(src);
+    if (!streamId) return "";
+    
+    const base = import.meta.env.VITE_HLS_BASE_URL.replace(/\/$/, "");
+    return `${base}/streams/${streamId}/master.m3u8`;
+  }, [src]);
 
   const clearRetryTimer = () => {
     if (retryTimerRef.current != null) {
@@ -85,7 +80,7 @@ export default function HLSPlayer({
     retryCountRef.current = 0;
     clearRetryTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finalSrc]);
+  }, [manifestUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -93,8 +88,7 @@ export default function HLSPlayer({
 
     clearRetryTimer();
 
-    // Guard: require m3u8
-    if (!finalSrc || !finalSrc.endsWith(".m3u8")) {
+    if (!manifestUrl) {
       setError("Invalid stream configuration");
       setIsRetrying(false);
       return;
@@ -150,7 +144,7 @@ export default function HLSPlayer({
 
         // 404/400 on manifest => offline
         if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR && (code === 404 || code === 400)) {
-          console.warn("[HLSPlayer] Offline manifest (404/400):", finalSrc);
+          console.warn("[HLSPlayer] Offline manifest (404/400):", manifestUrl);
           setError("Stream Offline (Waiting for Broadcast)");
           pollOffline();
           return;
@@ -159,7 +153,7 @@ export default function HLSPlayer({
         // Manifest parsing error often means HTML fallback -> treat as offline + poll
         if (data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR) {
           console.warn("[HLSPlayer] Manifest parsing error (likely HTML fallback).", {
-            url: data?.url || finalSrc,
+            url: data?.url || manifestUrl,
             response: data?.response,
           });
           setError("Stream Offline (Waiting for Broadcast)");
@@ -171,7 +165,7 @@ export default function HLSPlayer({
           type: data.type,
           details: data.details,
           fatal: data.fatal,
-          url: data?.url || finalSrc,
+          url: data?.url || manifestUrl,
           response: data?.response,
         });
 
@@ -218,11 +212,11 @@ export default function HLSPlayer({
         startPlayback();
       });
 
-      hls.loadSource(finalSrc);
+      hls.loadSource(manifestUrl);
       hls.attachMedia(video);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       // Safari native HLS
-      video.src = finalSrc;
+      video.src = manifestUrl;
 
       const onLoaded = () => {
         setError(null);
@@ -257,7 +251,7 @@ export default function HLSPlayer({
       }
     };
     // retryTick forces re-init without changing src
-  }, [finalSrc, autoPlay, retryTick]);
+  }, [manifestUrl, autoPlay, retryTick]);
 
   const handleManualRetry = () => {
     setError(null);
