@@ -82,12 +82,12 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('paypal_email')
+        .select('payout_paypal_email')
         .eq('id', user!.id)
         .single();
 
       if (error) throw error;
-      setPaypalEmail(data.paypal_email || '');
+      setPaypalEmail(data.payout_paypal_email || '');
     } catch (error) {
       console.error('Error loading PayPal email:', error);
     }
@@ -110,8 +110,8 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     try {
       const { error } = await supabase
         .from('user_profiles')
-        .update({ paypal_email: paypalEmail })
-        .eq('id', user!.id);
+        .update({ payout_paypal_email: paypalEmail })
+        .eq('id', user.id);
 
       if (error) throw error;
       toast.success('PayPal email saved');
@@ -314,9 +314,9 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
         </p>
       </div>
 
-      {!payoutWindowOpen && (
-        <div className="mb-6 rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
-          {PAYOUT_WINDOW_LABEL}
+      {payoutWindowOpen && (
+        <div className="mb-6 rounded-lg border border-green-500/40 bg-green-900/20 px-3 py-2 text-xs text-green-200">
+          Payouts are currently OPEN! (Mondays and Fridays)
         </div>
       )}
 

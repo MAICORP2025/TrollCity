@@ -222,31 +222,53 @@ const ProfileSetup = () => {
       if (!file.type.startsWith('image/')) throw new Error('File must be an image')
       if (file.size > 5 * 1024 * 1024) throw new Error('Image too large (max 5MB)')
       
-      const ext = file.name.split('.').pop()
-      const name = `${user.id}-${Date.now()}.${ext}`
-      const path = `avatars/${name}`
+      const ext = file.name.split('.').pop() || 'jpg'
+      const timestamp = Date.now()
+      const filename = `${user.id}-${timestamp}.${ext}`
       
-      // Try multiple buckets
-      const buckets = ['troll-city-assets', 'avatars', 'public']
-      let uploadedUrl = null
+      // Try 'avatars' bucket first (standard)
+      let uploadedUrl: string | null = null
+      let uploadError = null
+      
+      // Attempt 1: 'avatars' bucket
+      try {
+        const { error } = await supabase.storage
+          .from('avatars')
+          .upload(filename, file, { cacheControl: '3600', upsert: true })
+        
+        if (!error) {
+          const { data } = supabase.storage.from('avatars').getPublicUrl(filename)
+          uploadedUrl = data.publicUrl
+        } else {
+          console.warn('Upload to avatars bucket failed:', error)
+          uploadError = error
+        }
+      } catch (err) {
+        console.warn('Exception uploading to avatars bucket:', err)
+      }
 
-      for (const bucket of buckets) {
+      // Attempt 2: 'troll-city-assets' (fallback)
+      if (!uploadedUrl) {
         try {
-          const { error: uploadErr } = await supabase.storage
-            .from(bucket)
-            .upload(path, file, { cacheControl: '3600', upsert: false })
+          const fallbackPath = `avatars/${filename}`
+          const { error } = await supabase.storage
+            .from('troll-city-assets')
+            .upload(fallbackPath, file, { cacheControl: '3600', upsert: true })
           
-          if (!uploadErr) {
-            const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
-            uploadedUrl = urlData.publicUrl
-            break
+          if (!error) {
+            const { data } = supabase.storage.from('troll-city-assets').getPublicUrl(fallbackPath)
+            uploadedUrl = data.publicUrl
+          } else {
+             console.warn('Upload to troll-city-assets bucket failed:', error)
           }
-        } catch {
-          console.log(`Failed to upload to ${bucket}, trying next...`)
+        } catch (err) {
+          console.warn('Exception uploading to troll-city-assets:', err)
         }
       }
 
-      if (!uploadedUrl) throw new Error('Failed to upload profile picture to any bucket')
+      if (!uploadedUrl) {
+        throw uploadError || new Error('Failed to upload profile picture to any bucket')
+      }
 
       // Set local avatar URL immediately for instant UI feedback
       setAvatarUrl(uploadedUrl)

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Stream } from '../../types/broadcast';
 import { supabase } from '../../lib/supabase';
-import { Plus, Minus, LayoutGrid, Swords, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut } from 'lucide-react';
+import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
-import BattleControlsList from './BattleControls'; // Renamed import to avoid recursion if name matches
 import BannedUsersList from './BannedUsersList';
 import ThemeSelector from './ThemeSelector';
 import { useLocalParticipant } from '@livekit/components-react';
 import { useAuthStore } from '../../lib/store';
 import { useParticipantAttributes } from '../../hooks/useParticipantAttributes';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface BroadcastControlsProps {
   stream: Stream;
@@ -26,13 +26,14 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
   const [seatPrice, setSeatPrice] = useState(stream.seat_price || 0);
   const [locked, setLocked] = useState(stream.are_seats_locked || false);
   const [debouncedPrice, setDebouncedPrice] = useState(seatPrice);
-  const [showBattleManager, setShowBattleManager] = useState(false);
   const [showEffects, setShowEffects] = useState(false);
   const [showBannedList, setShowBannedList] = useState(false);
   const [showThemeSelector, setShowThemeSelector] = useState(false);
   const [likes, setLikes] = useState(0); // Local like count for immediate feedback
   const [isLiking, setIsLiking] = useState(false);
   const [hasRgb, setHasRgb] = useState(stream.has_rgb_effect || false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [showStreamControls, setShowStreamControls] = useState(true);
 
   // Fetch local attributes for perks
   const attributes = useParticipantAttributes(user ? [user.id] : [], stream.id);
@@ -48,23 +49,48 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
 
     try {
         if (isActive) {
-             await supabase.from('user_perks').update({ is_active: false }).eq('user_id', user.id).eq('perk_id', perkId);
+             const { error } = await supabase.from('user_perks').update({ is_active: false }).eq('user_id', user.id).eq('perk_id', perkId);
+             if (error) throw error;
         } else {
-             const { data } = await supabase.from('user_perks').select('id').eq('user_id', user.id).eq('perk_id', perkId).maybeSingle();
+             // Try to find existing perk first (active or inactive)
+             const { data, error: fetchError } = await supabase
+                .from('user_perks')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('perk_id', perkId)
+                .maybeSingle();
+             
+             if (fetchError && fetchError.code !== 'PGRST116') {
+                 throw fetchError;
+             }
+
              if (data) {
-                 await supabase.from('user_perks').update({ is_active: true }).eq('id', data.id);
+                 const { error } = await supabase.from('user_perks').update({ is_active: true }).eq('id', data.id);
+                 if (error) throw error;
              } else {
-                 await supabase.from('user_perks').insert({ 
+                 // Try to grant free perk (might fail if RLS prevents insert)
+                 const { error } = await supabase.from('user_perks').insert({ 
                     user_id: user.id, 
                     perk_id: perkId, 
                     is_active: true, 
                     expires_at: new Date(Date.now() + 86400000).toISOString() 
                  });
+                 
+                 if (error) {
+                     // 42501 is RLS violation
+                     if (error.code === '42501') {
+                         toast.error("You don't own this effect yet.");
+                     } else {
+                         throw error;
+                     }
+                 } else {
+                     toast.success("Effect activated!");
+                 }
              }
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        toast.error("Failed to toggle effect");
+        toast.error(e.message || "Failed to toggle effect");
     }
   };
 
@@ -147,40 +173,65 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
 
   const toggleStreamRgb = async () => {
      if (!canManageStream) return;
-     const newVal = !hasRgb;
-     setHasRgb(newVal); // Optimistic
+     
+     const enabling = !hasRgb;
+     
      try {
-        const { error } = await supabase.from('streams').update({ has_rgb_effect: newVal }).eq('id', stream.id);
-        if (error) throw error;
-        toast.success(newVal ? "Stream RGB Enabled" : "Stream RGB Disabled");
-     } catch (e) {
-        console.error(e);
-        setHasRgb(!newVal); // revert
-        toast.error("Failed to update RGB setting");
-     }
-  };
+        // If enabling, we might be purchasing. 
+        // We let the RPC handle the logic of "charge if not purchased yet".
+        const { data, error } = await supabase.rpc('purchase_rgb_broadcast', { 
+             p_stream_id: stream.id, 
+             p_enable: enabling 
+        });
 
-  const startBattle = async () => {
-    setShowBattleManager(!showBattleManager);
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error || "Failed to update RGB");
+        
+        // Update local state based on success
+        setHasRgb(enabling);
+        
+        if (data.message === 'Purchased and Enabled') {
+             toast.success("RGB Unlocked! (-10 Coins)");
+        } else {
+             toast.success(enabling ? "RGB Effect Enabled" : "RGB Effect Disabled");
+        }
+     } catch (e: any) {
+        console.error(e);
+        toast.error(e.message || "Failed to update RGB setting");
+        // Revert local state if needed (though we didn't optimistically update this time)
+     }
   };
 
   const handleEndStream = async () => {
     // if (!confirm("Are you sure you want to END the broadcast?")) return; // Removed confirmation as requested
     try {
-        const { error } = await supabase
-            .from('streams')
-            .update({ 
-                status: 'ended', 
-                is_live: false,
-                ended_at: new Date().toISOString() 
-            })
-            .eq('id', stream.id);
+        const { data, error } = await supabase.rpc('end_stream', { stream_id: stream.id });
         
         if (error) throw error;
+        if (data && !data.success) throw new Error(data.message || "Failed to end stream");
+
         toast.success("Broadcast ended");
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        toast.error("Failed to end broadcast");
+        // Fallback for legacy support if RPC fails or doesn't exist yet
+        if (e.message?.includes('function end_stream does not exist')) {
+             const { error: updateError } = await supabase
+                .from('streams')
+                .update({ 
+                    status: 'ended', 
+                    is_live: false,
+                    ended_at: new Date().toISOString() 
+                })
+                .eq('id', stream.id);
+             
+             if (updateError) {
+                 toast.error("Failed to end broadcast (DB Error)");
+             } else {
+                 toast.success("Broadcast ended");
+             }
+        } else {
+             toast.error(e.message || "Failed to end broadcast");
+        }
     }
   };
 
@@ -221,19 +272,31 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
   };
 
   return (
-    <div className="w-full bg-zinc-900/90 border-t border-white/10 backdrop-blur-sm p-4 flex flex-col gap-4 max-w-4xl mx-auto rounded-xl shadow-2xl relative">
-        {showBattleManager && (
-            <div className="absolute bottom-full left-0 w-full mb-4 bg-zinc-900 border border-white/10 rounded-xl p-4 shadow-2xl z-50 max-h-[60vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-white">Challenge Streamers</h3>
-                    <button onClick={() => setShowBattleManager(false)} className="text-sm text-zinc-400 hover:text-white">Close</button>
-                </div>
-                <BattleControlsList currentStream={stream} />
-            </div>
-        )}
+    <div className={cn(
+        "bg-zinc-900/90 border-t border-white/10 backdrop-blur-sm mx-auto rounded-xl shadow-2xl relative transition-all duration-300",
+        isMinimized ? "w-48 py-2 px-4 flex justify-center items-center" : "w-full p-4 flex flex-col gap-4 max-w-4xl"
+    )}>
+        <button 
+            onClick={() => setIsMinimized(!isMinimized)}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-zinc-800 border border-white/10 rounded-full p-1 text-zinc-400 hover:text-white shadow-lg z-50"
+            title={isMinimized ? "Expand Controls" : "Minimize Controls"}
+        >
+            {isMinimized ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
 
+        {isMinimized ? (
+             <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Controls</span>
+        ) : (
+        <>
+        <AnimatePresence>
         {showEffects && (
-            <div className="absolute bottom-full right-0 w-64 mb-4 bg-zinc-900 border border-white/10 rounded-xl p-4 shadow-2xl z-50 animate-in slide-in-from-bottom-2">
+            <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+                className="absolute bottom-full right-0 w-64 mb-4 bg-zinc-900 border border-white/10 rounded-xl p-4 shadow-2xl z-50"
+            >
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-white flex items-center gap-2">
                         <Sparkles size={16} className="text-yellow-400" />
@@ -273,8 +336,9 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
                         Effects visible to everyone in the room
                     </p>
                 </div>
-            </div>
+            </motion.div>
         )}
+        </AnimatePresence>
 
         {showBannedList && (
             <BannedUsersList streamId={stream.id} onClose={() => setShowBannedList(false)} />
@@ -428,15 +492,18 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
         {/* Stream Controls - Host & Staff */}
         {canManageStream && (
             <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between border-t border-white/10 pt-4">
+                <div 
+                    className="flex items-center justify-between border-t border-white/10 pt-4 cursor-pointer hover:bg-white/5 rounded-lg px-2 -mx-2 transition-colors"
+                    onClick={() => setShowStreamControls(!showStreamControls)}
+                >
                     <h3 className="text-white font-bold text-lg flex items-center gap-2">
                         <Settings2 className="text-yellow-500" />
                         Stream Controls
                     </h3>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-4">
                         {/* Media Controls - Host Only (Staff shouldn't control host's mic/cam) */}
                         {isHost && (
-                            <>
+                            <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                                 <button 
                                     onClick={toggleMic}
                                     className={cn(
@@ -459,21 +526,27 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
                                 </button>
 
                                 <div className="w-px h-8 bg-white/10 mx-2" />
-                            </>
+                            </div>
                         )}
-
-                        <button 
-                            onClick={startBattle}
-                            className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-red-900/20"
-                        >
-                            <Swords size={18} />
-                            Start Battle
-                        </button>
+                        
+                        <ChevronDown 
+                            size={20} 
+                            className={cn("text-zinc-400 transition-transform duration-200", showStreamControls && "rotate-180")} 
+                        />
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Box Layout Control */}
+                <AnimatePresence>
+                {showStreamControls && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-2">
+                            {/* Box Layout Control */}
                     <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex items-center justify-between">
                         <span className="text-zinc-400 text-sm font-medium flex items-center gap-2">
                             <LayoutGrid size={16} />
@@ -542,7 +615,11 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
                                 "w-12 h-6 rounded-full transition-colors relative flex items-center", 
                                 hasRgb ? "bg-green-500" : "bg-zinc-700"
                             )}
-                            title="Toggle RGB Border Effect"
+                            title={
+                                 hasRgb 
+                                     ? "Disable RGB Effect" 
+                                     : (stream.rgb_purchased ? "Enable RGB Effect" : "Unlock RGB Effect (10 Coins)")
+                             }
                          >
                             <div className={cn("absolute left-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm", 
                                 hasRgb && "translate-x-6"
@@ -550,7 +627,12 @@ export default function BroadcastControls({ stream, isHost, chatOpen, toggleChat
                          </button>
                     </div>
                 </div>
+                </motion.div>
+                )}
+                </AnimatePresence>
             </div>
+        )}
+        </>
         )}
     </div>
   );

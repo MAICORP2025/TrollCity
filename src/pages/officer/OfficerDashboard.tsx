@@ -14,6 +14,7 @@ interface WorkSession {
   stream_id: string
   clock_in: string
   clock_out: string | null
+  status?: string
   hours_worked: number
   coins_earned: number
   auto_clocked_out: boolean
@@ -266,7 +267,12 @@ export default function OfficerDashboard() {
             <div className="text-sm opacity-70">Status</div>
           </div>
           <div className="text-2xl font-bold">
-            {profile?.is_officer_active ? 'Active' : 'Inactive'}
+            {!profile?.is_officer_active 
+              ? 'Suspended' 
+              : (workSessions[0]?.clock_out === null 
+                  ? (workSessions[0]?.status === 'break' ? 'On Break' : 'On Duty') 
+                  : 'Off Duty')
+            }
           </div>
         </div>
         <div className="bg-black/60 border border-yellow-600 rounded-lg p-4">

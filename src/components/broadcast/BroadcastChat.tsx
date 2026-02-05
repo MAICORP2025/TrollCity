@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Send, User, Trash2, Shield, Crown, Sparkles, Car } from 'lucide-react';
+import { Send, User, Trash2, Shield, Crown, Sparkles, Car, Smile } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import UserNameWithAge from '../UserNameWithAge';
+import EmojiPicker, { Theme } from 'emoji-picker-react';
 
 interface VehicleStatus {
   has_vehicle: boolean;
@@ -54,10 +55,9 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
   // Rate limiting
   const lastSentRef = useRef<number>(0);
   const RATE_LIMIT_MS = 1000; // 1 message per second
-  // const [cooldown, setCooldown] = useState(0);
 
   // Cache for vehicle status to avoid repeated calls
-  const [vehicleCache, setVehicleCache] = useState<Record<string, VehicleStatus>>({});
+  const vehicleCacheRef = useRef<Record<string, VehicleStatus>>({});
 
   // Fetch Stream Mods
   useEffect(() => {
@@ -72,34 +72,33 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
   }, [hostId]);
 
   const fetchVehicleStatus = useCallback(async (userId: string) => {
-    if (vehicleCache[userId]) return vehicleCache[userId];
+    if (vehicleCacheRef.current[userId]) return vehicleCacheRef.current[userId];
     
     try {
       const { data, error } = await supabase.rpc('get_broadcast_vehicle_status', { target_user_id: userId });
       if (!error && data) {
-        setVehicleCache(prev => ({ ...prev, [userId]: data }));
+        vehicleCacheRef.current[userId] = data as VehicleStatus;
         return data as VehicleStatus;
       }
     } catch (err) {
       console.error('Error fetching vehicle status:', err);
     }
     return null;
-  }, [vehicleCache]);
+  }, []);
 
-  // Fetch initial messages (only last 25s)
+  // Fetch initial messages (last 50)
   useEffect(() => {
     const fetchMessages = async () => {
-        const cutoff = new Date(Date.now() - 25000).toISOString();
         const { data } = await supabase
             .from('stream_messages')
             .select('*, user_profiles(username, avatar_url, role, troll_role, created_at)')
             .eq('stream_id', streamId)
-            .gt('created_at', cutoff)
-            .order('created_at', { ascending: true });
+            .order('created_at', { ascending: false })
+            .limit(50);
         
         if (data) {
             // Process messages: Use denormalized data if available, else fallback
-            const processedMessages = await Promise.all(data.map(async (m: any) => {
+            const processedMessages = await Promise.all(data.reverse().map(async (m: any) => {
                 let vStatus = m.vehicle_snapshot as VehicleStatus | undefined;
                 
                 // Construct profile from denormalized data OR fallback to joined data
@@ -114,8 +113,8 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                 // Fallback for old messages without snapshot
                 if (!vStatus && !m.vehicle_snapshot) {
                      // Check cache or fetch (Legacy support only)
-                     if (vehicleCache[m.user_id]) {
-                         vStatus = vehicleCache[m.user_id];
+                     if (vehicleCacheRef.current[m.user_id]) {
+                         vStatus = vehicleCacheRef.current[m.user_id];
                      } else {
                          // We intentionally allow this fetch for OLD messages on load, 
                          // but new messages will skip it.
@@ -145,7 +144,6 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
             table: 'stream_messages',
             filter: `stream_id=eq.${streamId}`
         }, (payload) => {
-            // OPTIMIZED: No RPCs, No profile fetches.
             const newRow = payload.new as any;
             
             const newMsg: Message = {
@@ -164,14 +162,18 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                 vehicle_status: newRow.vehicle_snapshot
             };
 
-            setMessages(prev => [...prev, newMsg]);
+            setMessages(prev => {
+                const updated = [...prev, newMsg];
+                // Keep only last 50 messages to prevent memory issues and ensure visibility
+                if (updated.length > 50) return updated.slice(updated.length - 50);
+                return updated;
+            });
             setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
         })
         .on('postgres_changes', {
             event: 'DELETE',
             schema: 'public',
-            table: 'stream_messages',
-            filter: `stream_id=eq.${streamId}`
+            table: 'stream_messages'
         }, (payload) => {
             setMessages(prev => prev.filter(m => m.id !== payload.old.id));
         })
@@ -196,7 +198,11 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                         troll_role: p.troll_role
                     }
                 };
-                setMessages(prev => [...prev, systemMsg]);
+                setMessages(prev => {
+                    const updated = [...prev, systemMsg];
+                    if (updated.length > 50) return updated.slice(updated.length - 50);
+                    return updated;
+                });
                 setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
             });
         })
@@ -206,16 +212,10 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
         supabase.removeChannel(chatChannel); 
         supabase.removeChannel(viewerChannel);
     };
-  }, [streamId, fetchVehicleStatus, vehicleCache]);
+  }, [streamId, fetchVehicleStatus]);
 
-  // Auto-delete loop
-  useEffect(() => {
-    const interval = setInterval(() => {
-        const cutoff = new Date(Date.now() - 25000).getTime();
-        setMessages(prev => prev.filter(m => new Date(m.created_at).getTime() > cutoff));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Removed aggressive auto-delete loop to prevent messages from disappearing due to clock skew
+
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,7 +224,6 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
     // Rate Limit Check
     const now = Date.now();
     if (now - lastSentRef.current < RATE_LIMIT_MS) {
-        setCooldown(RATE_LIMIT_MS);
         return; // Silent fail or show UI feedback
     }
     lastSentRef.current = now;
@@ -233,7 +232,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
     setInput('');
 
     // Fetch my vehicle status ONCE
-    let myVehicle = vehicleCache[user.id];
+    let myVehicle = vehicleCacheRef.current[user.id];
     if (!myVehicle) {
         // We can safely await this here because it's initiated by the SENDER (1 person), not receivers (1000 people)
         myVehicle = (await fetchVehicleStatus(user.id)) || { has_vehicle: false };
@@ -389,14 +388,31 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
             <div ref={scrollRef} />
         </div>
 
-        <form onSubmit={sendMessage} className="p-4 border-t border-white/10 bg-zinc-900/80">
+        <form onSubmit={sendMessage} className="p-4 border-t border-white/10 bg-zinc-900/80 relative">
+            {showEmojiPicker && (
+                <div className="absolute bottom-full right-0 mb-2 z-[9999] shadow-2xl rounded-xl overflow-hidden border border-white/10">
+                    <EmojiPicker 
+                        onEmojiClick={(data) => setInput(prev => prev + data.emoji)}
+                        theme={Theme.DARK}
+                        width={300}
+                        height={400}
+                    />
+                </div>
+            )}
             <div className="relative">
+                <button 
+                    type="button"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-yellow-400 transition-colors z-10"
+                >
+                    <Smile size={18} />
+                </button>
                 <input 
                     type="text" 
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     placeholder="Chat..."
-                    className="w-full bg-zinc-800 border-none rounded-full pl-4 pr-10 py-2.5 focus:ring-2 focus:ring-yellow-500 text-white placeholder:text-zinc-500 text-sm"
+                    className="w-full bg-zinc-800 border-none rounded-full pl-10 pr-10 py-2.5 focus:ring-2 focus:ring-yellow-500 text-white placeholder:text-zinc-500 text-sm"
                 />
                 <button 
                     type="submit" 

@@ -648,12 +648,22 @@ function ProfileInner() {
     }
     
     if (isFollowing) {
-      await supabase.from('user_follows').delete().match({ follower_id: currentUser.id, following_id: profile.id });
+      const { error } = await supabase.from('user_follows').delete().match({ follower_id: currentUser.id, following_id: profile.id });
+      if (error) {
+        console.error('Error unfollowing:', error);
+        toast.error('Failed to unfollow user');
+        return;
+      }
       setIsFollowing(false);
       setFollowersCount(prev => Math.max(0, prev - 1));
       toast.success(`Unfollowed ${profile.username}`);
     } else {
-      await supabase.from('user_follows').insert({ follower_id: currentUser.id, following_id: profile.id });
+      const { error } = await supabase.from('user_follows').insert({ follower_id: currentUser.id, following_id: profile.id });
+      if (error) {
+        console.error('Error following:', error);
+        toast.error('Failed to follow user');
+        return;
+      }
       setIsFollowing(true);
       setFollowersCount(prev => prev + 1);
       toast.success(`Followed ${profile.username}`);

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { Bell, Check, Trash2, Gift, Trophy, AlertCircle, Shield, DollarSign, Sword, Zap } from 'lucide-react'
+import { toast } from 'sonner'
 import { Notification, NotificationType } from '../types/notifications'
 
 export default function Trollifications() {
@@ -21,6 +22,7 @@ export default function Trollifications() {
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_dismissed', false)
         .order('created_at', { ascending: false })
         .limit(100)
       
@@ -65,9 +67,13 @@ export default function Trollifications() {
         },
         (payload) => {
           const updatedNotif = payload.new as Notification
-          setNotifications((prev) => 
-            prev.map(n => n.id === updatedNotif.id ? updatedNotif : n)
-          )
+          if (updatedNotif.is_dismissed) {
+            setNotifications((prev) => prev.filter(n => n.id !== updatedNotif.id))
+          } else {
+            setNotifications((prev) => 
+              prev.map(n => n.id === updatedNotif.id ? updatedNotif : n)
+            )
+          }
         }
       )
       .on(
@@ -141,6 +147,10 @@ export default function Trollifications() {
 
   const deleteNotification = async (id: string) => {
     try {
+      // Optimistically update UI immediately
+      setNotifications(prev => prev.filter(n => n.id !== id))
+
+      // HARD DELETE
       const { error } = await supabase
         .from('notifications')
         .delete()
@@ -148,10 +158,9 @@ export default function Trollifications() {
       
       if (error) throw error
       
-      // Optimistically update UI immediately (realtime will confirm)
-      setNotifications(prev => prev.filter(n => n.id !== id))
     } catch (err) {
       console.error('Error deleting notification:', err)
+      toast.error('Failed to delete notification')
       // Reload on error to sync state
       loadNotifications()
     }

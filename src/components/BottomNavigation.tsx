@@ -40,19 +40,18 @@ export default function BottomNavigation() {
 
   const handleLogout = async () => {
     try {
-      // Check for active session first
+      // 1. Sign out from Supabase first
       try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        if (sessionData?.session) {
-          await supabase.auth.signOut()
-        }
+        const { error } = await supabase.auth.signOut()
+        if (error) console.warn('supabase.signOut returned error:', error)
       } catch (e) {
-        console.warn('Error checking/signing out session:', e)
+        console.warn('Error signing out session:', e)
       }
 
-      logout() // Clear store state
+      // 2. Clear store state
+      await logout()
 
-      // Clear client storage
+      // 3. Clear client storage
       try {
         localStorage.clear()
         sessionStorage.clear()
@@ -62,10 +61,11 @@ export default function BottomNavigation() {
 
       toast.success('Logged out successfully')
       setIsMenuOpen(false)
-      navigate('/exit')
+      navigate('/exit', { replace: true })
     } catch (error) {
       console.error('Logout error:', error)
       toast.error('Error logging out')
+      navigate('/exit', { replace: true })
     }
   }
 

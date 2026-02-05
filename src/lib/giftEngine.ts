@@ -227,12 +227,12 @@ export async function sendGiftFromInventory({
 
   const ledgerRows = [
     {
-      user_id: senderId,
+      from_user_id: senderId,
+      to_user_id: receiverId,
       gift_slug: giftSlug,
       type: 'sent',
       quantity,
-      coins_value: sentValue,
-      target_id: receiverId,
+      coins: sentValue,
       stream_id: streamId,
       description: gift.name,
       metadata: {
@@ -252,12 +252,12 @@ export async function sendGiftFromInventory({
 
   if (receiverId) {
     ledgerRows.push({
-      user_id: receiverId,
+      from_user_id: senderId,
+      to_user_id: receiverId,
       gift_slug: giftSlug,
       type: 'received',
       quantity,
-      coins_value: broadcasterEarnings,
-      target_id: senderId,
+      coins: broadcasterEarnings,
       stream_id: streamId,
       description: `Received ${gift.name}`,
       metadata: {

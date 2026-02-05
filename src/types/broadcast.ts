@@ -17,6 +17,7 @@ export interface Stream {
   seat_price: number;
   are_seats_locked: boolean;
   has_rgb_effect: boolean;
+  rgb_purchased?: boolean;
   active_theme_url?: string;
 }
 

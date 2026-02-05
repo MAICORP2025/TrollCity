@@ -5,6 +5,7 @@ import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { getActiveHolidayTheme } from '../lib/holidayThemes'
+import { OFFICIAL_GIFTS } from '../lib/giftConstants'
 
 export interface StreamParticipant {
   userId: string
@@ -27,78 +28,14 @@ interface GiftModalProps {
   defaultTargetId?: string | null // Default target user ID
 }
 
-const GIFT_ITEMS = [
-  { id: 'troll_clap', name: 'Troll Clap', coinCost: 5, type: 'paid' },
-  { id: 'glow_heart', name: 'Glow Heart', coinCost: 10, type: 'paid' },
-  { id: 'sticker_bomb', name: 'Sticker Bomb', coinCost: 15, type: 'paid' },
-  { id: 'mini_crown', name: 'Mini Crown', coinCost: 20, type: 'paid' },
-  { id: 'troll_soda', name: 'Troll Soda', coinCost: 25, type: 'paid' },
-  { id: 'laughing_mask', name: 'Laughing Mask', coinCost: 30, type: 'paid' },
-  { id: 'purple_rose', name: 'Purple Rose', coinCost: 40, type: 'paid' },
-  { id: 'hype_horn', name: 'Hype Horn', coinCost: 50, type: 'paid' },
-  { id: 'emoji_rain', name: 'Emoji Rain', coinCost: 60, type: 'paid' },
-  { id: 'gold_spark', name: 'Gold Spark', coinCost: 75, type: 'paid' },
-  { id: 'troll_mic_drop', name: 'Troll Mic Drop', coinCost: 100, type: 'paid' },
-  { id: 'vip_wristband', name: 'VIP Wristband', coinCost: 120, type: 'paid' },
-  { id: 'fire_trail', name: 'Fire Trail', coinCost: 150, type: 'paid' },
-  { id: 'neon_wings', name: 'Neon Wings', coinCost: 180, type: 'paid' },
-  { id: 'troll_taxi', name: 'Troll Taxi', coinCost: 200, type: 'paid' },
-  { id: 'street_graffiti', name: 'Street Graffiti', coinCost: 250, type: 'paid' },
-  { id: 'troll_boom_box', name: 'Troll Boom Box', coinCost: 300, type: 'paid' },
-  { id: 'diamond_smile', name: 'Diamond Smile', coinCost: 350, type: 'paid' },
-  { id: 'the_troll_drink', name: 'The Troll Drink', coinCost: 400, type: 'paid' },
-  { id: 'gold_handshake', name: 'Gold Handshake', coinCost: 450, type: 'paid' },
-  { id: 'troll_spotlight', name: 'Troll Spotlight', coinCost: 500, type: 'paid' },
-  { id: 'neon_camera', name: 'Neon Camera', coinCost: 600, type: 'paid' },
-  { id: 'streamer_shield', name: 'Streamer Shield', coinCost: 750, type: 'paid' },
-  { id: 'troll_confetti', name: 'Troll Confetti', coinCost: 850, type: 'paid' },
-  { id: 'bubble_throne', name: 'Bubble Throne', coinCost: 950, type: 'paid' },
-  { id: 'crown_blast', name: 'Crown Blast', coinCost: 1200, type: 'paid' },
-  { id: 'purple_lightning', name: 'Purple Lightning', coinCost: 1500, type: 'paid' },
-  { id: 'troll_limo', name: 'Troll Limo', coinCost: 2000, type: 'paid' },
-  { id: 'gold_vault', name: 'Gold Vault', coinCost: 2500, type: 'paid' },
-  { id: 'district_flag', name: 'District Flag', coinCost: 3000, type: 'paid' },
-  { id: 'troll_court_gavel', name: 'Troll Court Gavel', coinCost: 3500, type: 'paid' },
-  { id: 'neon_dragon', name: 'Neon Dragon', coinCost: 4000, type: 'paid' },
-  { id: 'hologram_crown', name: 'Hologram Crown', coinCost: 4500, type: 'paid' },
-  { id: 'street_king', name: 'Street King', coinCost: 5000, type: 'paid' },
-  { id: 'troll_jet', name: 'Troll Jet', coinCost: 6000, type: 'paid' },
-  { id: 'diamond_storm', name: 'Diamond Storm', coinCost: 7000, type: 'paid' },
-  { id: 'ghost_rider_troll', name: 'Ghost Rider Troll', coinCost: 8000, type: 'paid' },
-  { id: 'luxury_yacht', name: 'Luxury Yacht', coinCost: 10000, type: 'paid' },
-  { id: 'meteor_drop', name: 'Meteor Drop', coinCost: 12000, type: 'paid' },
-  { id: 'the_big_crown', name: 'The Big Crown', coinCost: 15000, type: 'paid' },
-  { id: 'golden_throne', name: 'Golden Throne', coinCost: 20000, type: 'paid' },
-  { id: 'crown_of_kings', name: 'Crown of Kings', coinCost: 25000, type: 'paid' },
-  { id: 'district_takeover', name: 'District Takeover', coinCost: 30000, type: 'paid' },
-  { id: 'troll_city_skyline', name: 'Troll City Skyline', coinCost: 35000, type: 'paid' },
-  { id: 'titan_crown_drop', name: 'Titan Crown Drop', coinCost: 40000, type: 'paid' },
-  { id: 'diamond_crown_aura', name: 'Diamond Crown Aura', coinCost: 50000, type: 'paid' },
-  { id: 'royal_parade', name: 'Royal Parade', coinCost: 60000, type: 'paid' },
-  { id: 'neon_godzilla_troll', name: 'Neon Godzilla Troll', coinCost: 75000, type: 'paid' },
-  { id: 'golden_city_explosion', name: 'Golden City Explosion', coinCost: 100000, type: 'paid' },
-  { id: 'the_crowned_legend', name: 'The Crowned Legend', coinCost: 120000, type: 'paid' },
-  { id: 'millionaire_crown', name: 'The Millionaire Crown', coinCost: 250000, type: 'paid' },
-  { id: 'troll_city_bank_heist', name: 'Troll City Bank Heist', coinCost: 300000, type: 'paid' },
-  { id: 'private_jet_champagne', name: 'Private Jet + Champagne', coinCost: 350000, type: 'paid' },
-  { id: 'diamond_vault_explosion', name: 'Diamond Vault Explosion', coinCost: 400000, type: 'paid' },
-  { id: 'golden_crown_storm', name: 'Golden Crown Storm', coinCost: 500000, type: 'paid' },
-  { id: 'the_kingmaker', name: 'The Kingmaker', coinCost: 600000, type: 'paid' },
-  { id: 'neon_dragon_dynasty', name: 'Neon Dragon Dynasty', coinCost: 750000, type: 'paid' },
-  { id: 'troll_city_penthouse', name: 'Troll City Penthouse', coinCost: 900000, type: 'paid' },
-  { id: 'the_billionaire_throne', name: 'The Billionaire Throne', coinCost: 1000000, type: 'paid' },
-  { id: 'crowned_emperor', name: 'Crowned Emperor', coinCost: 1500000, type: 'paid' },
-  { id: 'family_banner_drop', name: 'Family Banner Drop', coinCost: 2500, type: 'paid', category: 'Family' },
-  { id: 'family_shield', name: 'Family Shield', coinCost: 5000, type: 'paid', category: 'Family' },
-  { id: 'family_rally_horn', name: 'Family Rally Horn', coinCost: 7500, type: 'paid', category: 'Family' },
-  { id: 'family_loot_chest', name: 'Family Loot Chest', coinCost: 12000, type: 'paid', category: 'Family' },
-  { id: 'family_war_flag', name: 'Family War Flag', coinCost: 25000, type: 'paid', category: 'Family' },
-  { id: 'family_armory_drop', name: 'Family Armory Drop', coinCost: 35000, type: 'paid', category: 'Family' },
-  { id: 'family_firestorm', name: 'Family Firestorm', coinCost: 60000, type: 'paid', category: 'Family' },
-  { id: 'family_crown_raid', name: 'Family Crown Raid', coinCost: 75000, type: 'paid', category: 'Family' },
-  { id: 'family_dynasty_throne', name: 'Family Dynasty Throne', coinCost: 120000, type: 'paid', category: 'Family' },
-  { id: 'family_war_titan', name: 'Family War Titan', coinCost: 250000, type: 'paid', category: 'Family' },
-]
+const GIFT_ITEMS = OFFICIAL_GIFTS.map(g => ({
+  id: g.id,
+  name: g.name,
+  coinCost: g.cost,
+  type: 'paid',
+  tier: g.tier,
+  icon: g.icon
+}));
 
 interface GiftItem {
   id: string

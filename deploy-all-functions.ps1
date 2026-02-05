@@ -3,7 +3,9 @@ $functions = @(
     "payments",
     "charge-stored-card",
     "admin",
+    "admin-actions",
     "admin-reset",
+    "admin-stats",
     "battles",
     "moderation",
     "troll-events",
@@ -33,7 +35,14 @@ $functions = @(
     "calc_post_earnings",
     "adminScheduler",
     "troll-battle",
-    "mux-create-stream"
+    "mux-create-stream",
+    "officer-actions",
+    "officer-auto-clockout",
+    "officer-get-assignment",
+    "officer-join-stream",
+    "officer-leave-stream",
+    "officer-report-abuse",
+    "officer-touch-activity"
 )
 
 Write-Host "🚀 Deploying all Supabase Edge Functions..." -ForegroundColor Cyan

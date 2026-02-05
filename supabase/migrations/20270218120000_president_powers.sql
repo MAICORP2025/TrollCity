@@ -46,8 +46,10 @@ alter table president_announcements enable row level security;
 -- Policies
 
 -- Proposals
+DROP POLICY IF EXISTS "Public read proposals" ON president_proposals;
 create policy "Public read proposals" on president_proposals for select using (true);
 
+DROP POLICY IF EXISTS "President/VP create proposals" ON president_proposals;
 create policy "President/VP create proposals" on president_proposals for insert with check (
   exists (
     select 1 from user_role_grants urg
@@ -58,6 +60,7 @@ create policy "President/VP create proposals" on president_proposals for insert 
   )
 );
 
+DROP POLICY IF EXISTS "Admin/Secretary manage proposals" ON president_proposals;
 create policy "Admin/Secretary manage proposals" on president_proposals for update using (
   exists (
     select 1 from user_profiles
@@ -67,6 +70,7 @@ create policy "Admin/Secretary manage proposals" on president_proposals for upda
 );
 
 -- Audit Logs
+DROP POLICY IF EXISTS "Admins view audit logs" ON president_audit_logs;
 create policy "Admins view audit logs" on president_audit_logs for select using (
   exists (
     select 1 from user_profiles
@@ -79,6 +83,7 @@ create policy "Admins view audit logs" on president_audit_logs for select using 
 -- We'll handle log insertion via security definer functions
 
 -- Announcements
+DROP POLICY IF EXISTS "Public read president announcements" ON president_announcements;
 create policy "Public read president announcements" on president_announcements for select using (true);
 
 -- Functions

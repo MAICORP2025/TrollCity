@@ -6,7 +6,6 @@ import { hasRole, UserRole, validateProfile, isAdminEmail } from '../lib/supabas
 interface RequireRoleProps {
   roles: UserRole | UserRole[];
   children: React.ReactNode;
-  requireActive?: boolean; // For officers, require is_officer_active = true
   fallbackPath?: string; // Custom redirect path
   showValidationErrors?: boolean; // For development
 }
@@ -14,7 +13,6 @@ interface RequireRoleProps {
 const RequireRole: React.FC<RequireRoleProps> = ({
   roles,
   children,
-  requireActive = false,
   fallbackPath,
   showValidationErrors = false
 }) => {
@@ -58,7 +56,6 @@ const RequireRole: React.FC<RequireRoleProps> = ({
 
   // Check role permissions with enhanced validation
   const hasRequiredRole = hasRole(profile, roles, {
-    requireActive,
     allowAdminOverride: true
   });
 
@@ -66,8 +63,6 @@ const RequireRole: React.FC<RequireRoleProps> = ({
     console.warn('Access denied:', {
       userRole: profile.role,
       requiredRoles: roles,
-      requireActive,
-      isOfficerActive: profile.is_officer_active,
       isAdmin: profile.is_admin || (user?.email && isAdminEmail(user.email))
     });
     

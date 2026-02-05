@@ -87,7 +87,7 @@ export default function OfficerModeration() {
     const { data, error } = await supabase
         .from('user_profiles')
         .select('id, username, avatar_url')
-        .ilike('username', targetUsername)
+        .ilike('username', `%${targetUsername}%`)
         .maybeSingle()
     
     if (error) {

@@ -86,6 +86,7 @@ const ApplicationPage = lazy(() => import("./pages/ApplicationPage"));
 const TrollsTownPage = lazy(() => import("./pages/TrollsTownPage"));
 const DistrictTour = lazy(() => import("./pages/DistrictTour"));
 const TrollOfficerLounge = lazy(() => import("./pages/TrollOfficerLounge"));
+const FoundingOfficerTrial = lazy(() => import("./pages/FoundingOfficerTrial"));
 const OfficerModeration = lazy(() => import("./pages/OfficerModeration"));
 const TrollFamily = lazy(() => import("./pages/TrollFamily"));
 const FamilyLounge = lazy(() => import("./pages/FamilyLounge.jsx"));
@@ -121,7 +122,6 @@ const EarningsPage = lazy(() => import("./pages/EarningsPage"));
 const VerificationPage = lazy(() => import("./pages/VerificationPage"));
 const VerificationComplete = lazy(() => import("./pages/VerificationComplete"));
 const PayoutStatus = lazy(() => import("./pages/PayoutStatus"));
-const FoundingOfficerTrial = lazy(() => import("./pages/FoundingOfficerTrial"));
 const AdminLaunchTrial = lazy(() => import("./pages/admin/LaunchTrial"));
 
 
@@ -197,7 +197,6 @@ const CashoutManager = lazy(() => import("./pages/admin/CashoutManager"));
 const CriticalAlertsManager = lazy(() => import("./pages/admin/CriticalAlertsManager"));
 const OfficerManager = lazy(() => import("./pages/admin/OfficerManager"));
 const AdminTrollTownDeeds = lazy(() => import("./pages/admin/AdminTrollTownDeeds"));
-const LeadOfficerReview = lazy(() => import("./pages/lead-officer/Review"));
 const LeadOfficerDashboard = lazy(() => import("./pages/lead-officer/LeadOfficerDashboard").then(module => ({ default: module.LeadOfficerDashboard })));
 const ShopPartnerPage = lazy(() => import("./pages/ShopPartnerPage"));
 const UniverseEventPage = lazy(() => import("./pages/UniverseEventPage"));
@@ -769,6 +768,7 @@ function AppContent() {
                 <Route path="/verification" element={<VerificationPage />} />
                 <Route path="/verification/complete" element={<VerificationComplete />} />
                 <Route path="/founding-officer-trial" element={<FoundingOfficerTrial />} />
+
                   <Route path="/account/earnings" element={<EarningsDashboard />} />
                   <Route path="/payout-status" element={<PayoutStatus />} />
                  
@@ -932,14 +932,6 @@ function AppContent() {
                   <Route path="/admin/interview-test" element={<AdminInterviewDashboard />} />
 
                   {/* 👮 Officer */}
-                  <Route
-                    path="/lead-officer/review"
-                    element={
-                      <RequireRole roles={[UserRole.ADMIN, UserRole.TROLL_OFFICER]}>
-                        <LeadOfficerReview />
-                      </RequireRole>
-                    }
-                  />
                   <Route
                     path="/lead-officer"
                     element={

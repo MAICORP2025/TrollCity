@@ -12,7 +12,6 @@ import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
 import { ENTRANCE_EFFECTS_DATA } from '../lib/entranceEffects';
 import { deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
-import { useCheckOfficerOnboarding } from '@/hooks/useCheckOfficerOnboarding';
 
 import ManualPaymentModal from '@/components/broadcast/ManualPaymentModal';
 import TrollPassBanner from '@/components/ui/TrollPassBanner';
@@ -82,7 +81,6 @@ export default function CoinStore() {
   const { scores: allCreditScores, loading: loadingScores } = useAllCreditScores(user?.id);
   const navigate = useNavigate();
   const { troll_coins, refreshCoins } = useCoins();
-  const { checkOnboarding } = useCheckOfficerOnboarding();
   const { loans: activeLoans, ledger, refresh: refreshBank, applyForLoan, payLoan, tiers } = useBankHook(); // useBank hook
 
   const STORE_TAB_KEY = 'tc-store-active-tab';
@@ -540,10 +538,6 @@ export default function CoinStore() {
       : error?.message || 'Failed to deduct coins'
 
   const buyEffect = async (effect) => {
-   // Check officer onboarding first
-   const canProceed = await checkOnboarding();
-   if (!canProceed) return;
-
    try {
      const price = effect.price_troll_coins || effect.coin_cost || 0
      if (price <= 0) {
@@ -599,10 +593,6 @@ export default function CoinStore() {
  }
 
   const buyPerk = async (perk) => {
-   // Check officer onboarding first
-   const canProceed = await checkOnboarding();
-   if (!canProceed) return;
-
    if (perk.role_required === 'officer' && !(isOfficer || isAdmin || isSecretary)) {
      toast.error('This perk is limited to officers');
      return;
@@ -686,10 +676,6 @@ export default function CoinStore() {
  }
 
   const buyInsurance = async (plan) => {
-    // Check officer onboarding first
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-
     try {
       const basePrice = Number(plan.cost || 0);
       const price = basePrice * durationMultiplier;
@@ -756,8 +742,6 @@ export default function CoinStore() {
  }
 
   const buyBroadcastTheme = async (theme) => {
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
     if (!user?.id) {
       toast.error('Please log in to purchase a theme');
       return;
@@ -836,8 +820,6 @@ export default function CoinStore() {
   };
 
   const buyCallSound = async (sound) => {
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
     if (!user?.id) {
       toast.error('Please log in to purchase a chat sound');
       return;
@@ -901,10 +883,6 @@ export default function CoinStore() {
   };
 
   const buyCallMinutes = async (pkg) => {
-    // Check officer onboarding first
-    const canProceed = await checkOnboarding();
-    if (!canProceed) return;
-
     if (!user?.id) {
       toast.error('Please log in to purchase minutes');
       return;

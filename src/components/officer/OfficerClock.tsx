@@ -143,7 +143,7 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
     setIsSearching(true);
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('id, username')
         .ilike('username', `${targetUsername}%`)
         .limit(1)

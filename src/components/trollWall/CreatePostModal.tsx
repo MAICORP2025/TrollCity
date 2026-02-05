@@ -25,6 +25,7 @@ export default function CreatePostModal({
   const [selectedStreamId, setSelectedStreamId] = useState<string>('')
   const [availableStreams, setAvailableStreams] = useState<any[]>([])
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
 
   // Load user's streams for stream_announce type
   const loadStreams = useCallback(async () => {
@@ -92,6 +93,11 @@ export default function CreatePostModal({
         return
     }
 
+    if (postType === 'image' && !imageFile) {
+        toast.error('Please select an image file')
+        return
+    }
+
     setLoading(true)
     try {
       const metadata: any = {}
@@ -128,6 +134,28 @@ export default function CreatePostModal({
         metadata.video_url = publicUrl
       }
 
+      // Upload image if present
+      if (postType === 'image' && imageFile) {
+        const fileExt = imageFile.name.split('.').pop()
+        const fileName = `${user.id}/${Date.now()}_img.${fileExt}`
+        
+        // Try uploading to 'post-media' bucket
+        const { error: uploadError } = await supabase.storage
+            .from('post-media')
+            .upload(fileName, imageFile)
+        
+        if (uploadError) {
+             console.error('Upload failed to post-media', uploadError)
+             throw new Error('Failed to upload image. Please try again later.')
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('post-media')
+            .getPublicUrl(fileName)
+        
+        metadata.image_url = publicUrl
+      }
+
       const { error } = await supabase
         .from('troll_wall_posts')
         .insert({
@@ -144,6 +172,7 @@ export default function CreatePostModal({
       setPostType('text')
       setSelectedStreamId('')
       setVideoFile(null)
+      setImageFile(null)
       onSuccess()
     } catch (err: any) {
       console.error('Error creating post:', err)
@@ -275,7 +304,7 @@ export default function CreatePostModal({
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={postType === 'video' ? "Describe your video..." : "What's on your mind?"}
+              placeholder={postType === 'video' ? "Describe your video..." : postType === 'image' ? "Describe your photo..." : "What's on your mind?"}
               rows={4}
               maxLength={240}
               className="w-full px-4 py-3 bg-zinc-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"

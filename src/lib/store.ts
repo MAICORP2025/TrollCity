@@ -181,15 +181,19 @@ export const useAuthStore = create<AuthState>()(
                   .maybeSingle()
 
                 if (levelRow) {
-                  profileData = {
-                    ...profileData,
-                    level: levelRow.level ?? profileData.level ?? 1,
-                    xp: levelRow.xp_total ?? profileData.xp ?? 0,
-                    total_xp: levelRow.xp_total ?? profileData.total_xp,
-                    next_level_xp: levelRow.xp_to_next_level ?? profileData.next_level_xp,
+                  const currentProfile = get().profile || profileData
+                  const updatedProfile = {
+                    ...currentProfile,
+                    level: levelRow.level ?? currentProfile.level ?? 1,
+                    xp: levelRow.xp_total ?? currentProfile.xp ?? 0,
+                    total_xp: levelRow.xp_total ?? currentProfile.total_xp,
+                    next_level_xp: levelRow.xp_to_next_level ?? currentProfile.next_level_xp,
                   }
                   // Update with level data
-                  get().setProfile(profileData as UserProfile)
+                  get().setProfile(updatedProfile as UserProfile)
+                  
+                  // Update local ref for next steps
+                  profileData = updatedProfile as any
                 }
 
                 // B. RGB Perk Sync
@@ -215,8 +219,9 @@ export const useAuthStore = create<AuthState>()(
                     .eq('id', u.id)
 
                   if (!rgbUpdateError) {
-                     profileData = { ...profileData, rgb_username_expires_at: desiredRgb }
-                     get().setProfile(profileData as UserProfile)
+                     const currentProfile = get().profile || profileData
+                     const updatedProfile = { ...currentProfile, rgb_username_expires_at: desiredRgb }
+                     get().setProfile(updatedProfile as UserProfile)
                   }
                 }
               } catch (secondaryErr) {

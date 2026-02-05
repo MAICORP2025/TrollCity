@@ -3,9 +3,30 @@
 -- It also converts broadcaster_stats from a View/MV to a real Table for O(1) updates via batch processor.
 
 -- 1. Cleanup Old Objects
-DROP VIEW IF EXISTS public.gift_ledger CASCADE;
-DROP TABLE IF EXISTS public.gift_ledger CASCADE; -- In case it was a table
-DROP MATERIALIZED VIEW IF EXISTS public.broadcaster_stats CASCADE;
+DO $$ 
+BEGIN 
+    -- Try to drop as view first
+    BEGIN
+        DROP VIEW IF EXISTS public.gift_ledger CASCADE;
+    EXCEPTION
+        WHEN wrong_object_type THEN
+            NULL; -- It was likely a table
+    END;
+END $$;
+
+DROP TABLE IF EXISTS public.gift_ledger CASCADE;
+
+DO $$ 
+BEGIN 
+    -- Try to drop as materialized view first
+    BEGIN
+        DROP MATERIALIZED VIEW IF EXISTS public.broadcaster_stats CASCADE;
+    EXCEPTION
+        WHEN wrong_object_type THEN
+            NULL; -- It was likely a table or view
+    END;
+END $$;
+
 DROP TABLE IF EXISTS public.broadcaster_stats CASCADE;
 
 -- 2. Create Gift Ledger Table (Append-Only)

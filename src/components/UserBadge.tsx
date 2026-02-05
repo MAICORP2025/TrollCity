@@ -1,5 +1,5 @@
 import React from 'react'
-import { Shield, Skull, Star } from 'lucide-react'
+import { Shield, Skull, Star, ClipboardList } from 'lucide-react'
 import OfficerTierBadge from './OfficerTierBadge'
 import { EmpireBadge } from './EmpireBadge'
 
@@ -32,7 +32,10 @@ export default function UserBadge({ profile }: UserBadgeProps) {
         profile.is_troll_officer || 
         profile.role === 'troll_officer'
     )
-    const isTroller = !isAdmin && !isOfficer && (
+    const isSecretary = !isAdmin && !isOfficer && (
+        profile.role === 'secretary'
+    )
+    const isTroller = !isAdmin && !isOfficer && !isSecretary && (
         profile.is_troller || 
         profile.role === 'troller'
     )
@@ -58,6 +61,13 @@ export default function UserBadge({ profile }: UserBadgeProps) {
             {/* Officer Badge */}
             {isOfficer && (
                 <OfficerTierBadge level={officerLevel} />
+            )}
+
+            {/* Secretary Badge */}
+            {isSecretary && (
+                <span className="inline-flex items-center justify-center w-5 h-5 bg-pink-500/20 text-pink-400 rounded border border-pink-500/30" title="Secretary">
+                    <ClipboardList size={12} />
+                </span>
             )}
 
             {/* Troller Badge */}

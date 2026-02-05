@@ -468,13 +468,12 @@ export const hasRole = (
   profile: UserProfile | null,
   requiredRoles: UserRole | UserRole[],
   options: {
-    requireActive?: boolean // For officers
     allowAdminOverride?: boolean
   } = {}
 ): boolean => {
   if (!profile) return false
   
-  const { requireActive = false, allowAdminOverride = true } = options
+  const { allowAdminOverride = true } = options
   const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles]
   
   // Admin override
@@ -484,41 +483,20 @@ export const hasRole = (
   
   // Direct role match
   if (roles.includes(profile.role as UserRole)) {
-    // Additional checks for specific roles
-    if (
-      (profile.role === UserRole.TROLL_OFFICER ||
-        profile.role === UserRole.LEAD_TROLL_OFFICER) &&
-      requireActive
-    ) {
-      return Boolean(profile.is_officer_active)
-    }
     return true
   }
 
   // Unified troll_role match
   if (profile.troll_role && roles.includes(profile.troll_role as UserRole)) {
-    if (
-      (profile.troll_role === UserRole.TROLL_OFFICER ||
-        profile.troll_role === UserRole.LEAD_TROLL_OFFICER) &&
-      requireActive
-    ) {
-      return Boolean(profile.is_officer_active)
-    }
     return true
   }
   
   // Legacy role field compatibility
   if (roles.includes(UserRole.TROLL_OFFICER) && profile.is_troll_officer) {
-    if (requireActive) {
-      return Boolean(profile.is_officer_active)
-    }
     return true
   }
 
   if (roles.includes(UserRole.LEAD_TROLL_OFFICER) && profile.is_lead_officer) {
-    if (requireActive) {
-      return Boolean(profile.is_officer_active)
-    }
     return true
   }
   
@@ -681,7 +659,7 @@ export async function searchUsers(params: {
       p_query: q,
       p_limit: Math.max(limit, 1)
     })
-    if (!error && Array.isArray(data)) {
+    if (!error && Array.isArray(data) && data.length > 0) {
       return data as any[]
     }
   } catch {

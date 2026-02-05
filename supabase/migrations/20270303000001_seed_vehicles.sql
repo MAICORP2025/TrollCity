@@ -2,7 +2,7 @@
 -- Seed vehicles_catalog with data from src/data/vehicles.ts
 -- We use OVERRIDING SYSTEM VALUE to force the IDs to match the frontend constants
 
-INSERT INTO public.vehicles_catalog (id, name, tier, base_price, max_speed, armor_rating, image_url, model_url)
+INSERT INTO public.vehicles_catalog (id, name, tier, price, speed, armor, image, model_url)
 OVERRIDING SYSTEM VALUE VALUES
 (1, 'Troll Compact S1', 'Starter', 5000, 40, 20, '/assets/cars/troll_compact_s1.png', '/models/vehicles/troll_compact_s1.glb'),
 (2, 'Midline XR', 'Mid', 12000, 60, 35, '/assets/cars/midline_xr.png', '/models/vehicles/midline_xr.glb'),
@@ -23,10 +23,10 @@ OVERRIDING SYSTEM VALUE VALUES
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     tier = EXCLUDED.tier,
-    base_price = EXCLUDED.base_price,
-    max_speed = EXCLUDED.max_speed,
-    armor_rating = EXCLUDED.armor_rating,
-    image_url = EXCLUDED.image_url,
+    price = EXCLUDED.price,
+    speed = EXCLUDED.speed,
+    armor = EXCLUDED.armor,
+    image = EXCLUDED.image,
     model_url = EXCLUDED.model_url;
 
 -- Reset sequence to avoid collision if new items are added without ID

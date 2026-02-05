@@ -127,17 +127,25 @@ const Header = () => {
           const newNotif = payload.new as any
           // Only count if not already read
           if (!newNotif.is_read) {
+            const actionUrl = newNotif.metadata?.action_url
+            const toastAction = actionUrl ? {
+              label: 'View',
+              onClick: () => navigate(actionUrl)
+            } : undefined
+
             // Show toast notification
             if (newNotif.priority === 'high' || newNotif.priority === 'critical') {
               toast.error(newNotif.title || 'High Alert', {
                 description: newNotif.message,
                 duration: 8000,
-                className: 'bg-red-950 border-red-500 text-white'
+                className: 'bg-red-950 border-red-500 text-white',
+                action: toastAction
               })
             } else {
               toast(newNotif.title || 'New notification', {
                 description: newNotif.message,
-                duration: 5000
+                duration: 5000,
+                action: toastAction
               })
             }
             setUnreadNotifications((prev) => Math.max(0, prev + 1))
@@ -156,8 +164,8 @@ const Header = () => {
           const updatedNotif = payload.new as any
           const oldNotif = payload.old as any
           
-          // If notification was marked as read
-          if (!oldNotif.is_read && updatedNotif.is_read === true) {
+          // If notification was marked as read or deleted
+          if ((!oldNotif.is_read && updatedNotif.is_read === true)) {
             setUnreadNotifications((prev) => Math.max(0, prev - 1))
           }
           // If notification was unmarked from read
@@ -187,7 +195,7 @@ const Header = () => {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user?.id])
+  }, [user?.id, navigate])
 
   const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
@@ -213,23 +221,18 @@ const Header = () => {
 
   const handleLogout = async () => {
     try {
-      // Check for active session first
+      // 1. Sign out from Supabase first
       try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const hasSession = !!sessionData?.session
-        if (hasSession) {
-          const { error } = await supabase.auth.signOut()
-          if (error) console.warn('supabase.signOut returned error:', error)
-        } else {
-          console.debug('No active session; skipping supabase.auth.signOut()')
-        }
+        const { error } = await supabase.auth.signOut()
+        if (error) console.warn('supabase.signOut returned error:', error)
       } catch (innerErr: any) {
-        console.warn('Error checking/signing out session (ignored):', innerErr?.message || innerErr)
+        console.warn('Error signing out session (ignored):', innerErr?.message || innerErr)
       }
 
-      useAuthStore.getState().logout()
+      // 2. Clear store state (awaiting to ensure it finishes)
+      await useAuthStore.getState().logout()
 
-      // Clear client storage
+      // 3. Clear client storage
       try {
         localStorage.clear()
         sessionStorage.clear()
@@ -244,10 +247,11 @@ const Header = () => {
       }
 
       toast.success('Logged out successfully')
+      navigate('/exit', { replace: true })
     } catch (error: any) {
       console.error('Logout error:', error)
       toast.error(error?.message || 'Error logging out')
-    } finally {
+      // Force navigation anyway
       navigate('/exit', { replace: true })
     }
   }

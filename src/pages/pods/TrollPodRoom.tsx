@@ -11,6 +11,7 @@ import { useAuthStore } from '../../lib/store';
 import { emitEvent as triggerEvent } from '../../lib/events';
 import PodParticipantBox from './PodParticipantBox';
 import PodChatBox from './PodChatBox';
+import HLSPlayer from '../../components/broadcast/HLSPlayer';
 
 interface Room {
   id: string;
@@ -33,12 +34,117 @@ interface PodParticipant {
   };
 }
 
-// Inner component to access LiveKit context
+// --- HLS / Listener View ---
+const PodListenerView = ({
+  room,
+  currentUser,
+  participantsData,
+  onRequestSpeak,
+  onCancelRequest
+}: {
+  room: Room,
+  currentUser: any,
+  participantsData: PodParticipant[],
+  onRequestSpeak: () => void,
+  onCancelRequest: () => void
+}) => {
+  const [showChat, setShowChat] = useState(true);
+  const myRecord = participantsData.find(p => p.user_id === currentUser?.id);
+  const isHandRaised = myRecord?.is_hand_raised;
+  
+  // Construct HLS URL based on room ID (assuming standard convention)
+  const hlsUrl = `https://cdn.maitrollcity.com/streams/${room.id}.m3u8`;
+
+  // Get Speakers for display list
+  const speakers = participantsData.filter(p => p.role === 'host' || p.role === 'speaker');
+
+  return (
+    <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
+      {/* Main Content (HLS Player) */}
+      <div className={`flex-1 flex flex-col relative transition-all duration-300 ${showChat ? 'mr-80' : 'mr-0'}`}>
+        {/* Header */}
+        <div className="absolute top-0 left-0 right-0 z-20 h-16 flex items-center justify-between px-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3">
+             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+             <h1 className="text-lg font-bold truncate text-white shadow-black drop-shadow-md">{room.title}</h1>
+          </div>
+          
+          <div className="pointer-events-auto flex items-center gap-3">
+             <button 
+              onClick={() => setShowChat(!showChat)}
+              className={`p-2 rounded-full transition-colors backdrop-blur-md ${showChat ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-200 hover:bg-gray-700/50'}`}
+            >
+              <MessageSquare className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => window.history.back()}
+              className="px-4 py-1.5 bg-red-600/90 hover:bg-red-600 rounded-lg text-sm font-bold transition-colors"
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+
+        {/* Video Area */}
+        <div className="flex-1 bg-zinc-900 relative">
+           <HLSPlayer 
+             src={hlsUrl} 
+             className="w-full h-full object-contain"
+           />
+           
+           {/* Speakers Overlay (Bottom Left) */}
+           <div className="absolute bottom-24 left-4 z-10 max-w-md">
+              <h3 className="text-xs font-bold text-white/70 uppercase tracking-wider mb-2">On Stage</h3>
+              <div className="flex flex-wrap gap-2">
+                 {speakers.map(s => (
+                   <div key={s.user_id} className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full pr-3 pl-1 py-1 border border-white/10">
+                      <img 
+                        src={s.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.user_id}`} 
+                        className="w-6 h-6 rounded-full bg-zinc-800"
+                        alt={s.user?.username}
+                      />
+                      <span className="text-xs font-medium">{s.user?.username}</span>
+                   </div>
+                 ))}
+              </div>
+           </div>
+        </div>
+
+        {/* Controls Bar */}
+        <div className="h-20 bg-gray-900/90 backdrop-blur-md border-t border-gray-800 flex items-center justify-center z-20">
+            <button 
+                onClick={isHandRaised ? onCancelRequest : onRequestSpeak}
+                className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all transform hover:scale-105 ${
+                    isHandRaised 
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                    : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg shadow-purple-500/30'
+                }`}
+            >
+                <Hand className={`w-5 h-5 ${isHandRaised ? '' : 'animate-bounce'}`} />
+                {isHandRaised ? 'Cancel Request' : 'Request to Speak'}
+            </button>
+        </div>
+      </div>
+
+      {/* Chat Sidebar */}
+      <div className={`fixed right-0 top-0 bottom-0 w-80 bg-gray-900 border-l border-gray-800 transform transition-transform duration-300 z-40 ${showChat ? 'translate-x-0' : 'translate-x-full'}`}>
+         <PodChatBox 
+           roomId={room.id} 
+           currentUserId={currentUser?.id} 
+           isHost={false} 
+         />
+      </div>
+    </div>
+  );
+};
+
+// --- Active Speaker / Host View (LiveKit) ---
 const PodRoomContent = ({ 
   room, 
   currentUser, 
   isHost,
   participantsData,
+  participantCount,
   onRequestSpeak,
   onApproveRequest,
   onRemoveSpeaker,
@@ -48,6 +154,7 @@ const PodRoomContent = ({
   currentUser: any, 
   isHost: boolean,
   participantsData: PodParticipant[],
+  participantCount: number,
   onRequestSpeak: () => void,
   onApproveRequest: (userId: string) => void,
   onRemoveSpeaker: (userId: string) => void,
@@ -147,7 +254,7 @@ const PodRoomContent = ({
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1 bg-gray-800 rounded-full border border-gray-700">
               <Users className="w-4 h-4 text-gray-400" />
-              <span className="text-sm font-mono">{participants.length}</span>
+              <span className="text-sm font-mono">{participantCount}</span>
             </div>
             
             {isHost && requests.length > 0 && (
@@ -300,6 +407,7 @@ export default function TrollPodRoom() {
   const [room, setRoom] = useState<Room | null>(null);
   const { user: currentUser } = useAuthStore();
   const [participantsData, setParticipantsData] = useState<PodParticipant[]>([]);
+  const [participantCount, setParticipantCount] = useState(0);
   
   // Fetch Room Info
   useEffect(() => {
@@ -356,26 +464,39 @@ export default function TrollPodRoom() {
     if (!roomId) return;
 
     const fetchParticipants = async () => {
-        // Fetch participants first
-        const { data: participants } = await supabase
+        // OPTIMIZATION: Only fetch hosts and speakers to avoid loading thousands of listeners
+        const { data: speakers } = await supabase
             .from('pod_room_participants')
             .select('*')
+            .eq('room_id', roomId)
+            .in('role', ['host', 'speaker']);
+        
+        // Fetch count of all participants (cheap)
+        const { count } = await supabase
+            .from('pod_room_participants')
+            .select('id', { count: 'exact', head: true })
             .eq('room_id', roomId);
         
-        if (participants) {
-            // Fetch user profiles manually
-            const userIds = [...new Set(participants.map(p => p.user_id))];
+        if (count !== null) setParticipantCount(count);
+
+        if (speakers) {
+            // Fetch user profiles for speakers only
+            const userIds = [...new Set(speakers.map(p => p.user_id))];
             const { data: profiles } = await supabase
                 .from('user_profiles')
                 .select('id, username, avatar_url')
                 .in('id', userIds);
 
-            const participantsWithUsers = participants.map(p => ({
+            const participantsWithUsers = speakers.map(p => ({
                 ...p,
                 user: profiles?.find(profile => profile.id === p.user_id)
             }));
-
-            setParticipantsData(participantsWithUsers);
+            
+            // Add a "fake" participant entry for the count if needed, or just store count in state
+            // For compatibility with existing UI, we'll store speakers. 
+            // The UI uses participants.length for the count, so we need a separate state for count.
+            setParticipantsData(participantsWithUsers as PodParticipant[]);
+            // We might need to update the UI to use a separate count variable instead of participantsData.length
         }
     };
 
@@ -388,8 +509,22 @@ export default function TrollPodRoom() {
             schema: 'public',
             table: 'pod_room_participants',
             filter: `room_id=eq.${roomId}`
-        }, () => {
-            fetchParticipants();
+        }, (payload: any) => {
+            // OPTIMIZATION: Only refetch if a host/speaker is involved
+            // If a listener joins/leaves, we don't need to refetch the whole speaker list
+            // We just need to update the count (which we might skip for perf or do lazily)
+            
+            const isSpeakerEvent = 
+                (payload.new && ['host', 'speaker'].includes(payload.new.role)) ||
+                (payload.old && ['host', 'speaker'].includes(payload.old.role));
+
+            if (isSpeakerEvent) {
+                fetchParticipants();
+            } else {
+                // Update count for listener events without refetching speakers
+                if (payload.eventType === 'INSERT') setParticipantCount(prev => prev + 1);
+                if (payload.eventType === 'DELETE') setParticipantCount(prev => Math.max(0, prev - 1));
+            }
         })
         .subscribe();
     
@@ -472,6 +607,13 @@ export default function TrollPodRoom() {
   };
 
   const handleApproveRequest = async (userId: string) => {
+      // Check speaker limit (10 including host)
+      const currentSpeakers = participantsData.filter(p => p.role === 'host' || p.role === 'speaker');
+      if (currentSpeakers.length >= 10) {
+        toast.error('Speaker limit reached (10 max including host)');
+        return;
+      }
+
       await supabase.from('pod_room_participants')
         .update({ role: 'speaker', is_hand_raised: false })
         .eq('room_id', roomId)
@@ -513,10 +655,26 @@ export default function TrollPodRoom() {
     roomName: roomId,
     userId: currentUser?.id,
     isHost: isHost,
-    canPublish: canPublish
+    canPublish: canPublish,
+    enabled: canPublish // Only fetch token if we are going to publish (Host/Speaker)
   });
 
   if (!room) return <div className="flex items-center justify-center h-screen bg-black text-white">Loading room...</div>;
+  
+  // --- LISTENER MODE (HLS) ---
+  if (!canPublish) {
+     return (
+        <PodListenerView 
+            room={room}
+            currentUser={currentUser}
+            participantsData={participantsData}
+            onRequestSpeak={handleRequestSpeak}
+            onCancelRequest={handleCancelRequest}
+        />
+     );
+  }
+
+  // --- SPEAKER MODE (LiveKit) ---
   if (isLoading) return <div className="flex items-center justify-center h-screen bg-black text-white">Connecting to Pod...</div>;
   if (error) return <div className="flex items-center justify-center h-screen bg-black text-white">Error: {error}</div>;
   if (!token || !serverUrl) return <div className="flex items-center justify-center h-screen bg-black text-white">Initializing connection...</div>;
@@ -535,6 +693,7 @@ export default function TrollPodRoom() {
         currentUser={currentUser} 
         isHost={isHost} 
         participantsData={participantsData}
+        participantCount={participantCount}
         onRequestSpeak={handleRequestSpeak}
         onApproveRequest={handleApproveRequest}
         onRemoveSpeaker={handleRemoveSpeaker}

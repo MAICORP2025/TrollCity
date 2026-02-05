@@ -48,7 +48,7 @@ import SidebarTopBroadcasters from './sidebar/SidebarTopBroadcasters'
 
 export default function Sidebar() {
   const { profile } = useAuthStore()
-  const { level, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
+  const { level, progress, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
   const { balances, loading } = useCoins()
   const { isUpdated, markAsViewed } = useSidebarUpdates()
   const location = useLocation()
@@ -268,11 +268,11 @@ export default function Sidebar() {
             <div className="h-2 bg-slate-900/70 rounded-full overflow-hidden border border-white/10">
               <div 
                 className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-400 rounded-full shadow-[0_0_20px_rgba(59,130,246,0.45)]"
-                style={{ width: `${Math.min((level / (level + 1)) * 100, 100)}%` }}
+                style={{ width: `${Math.min(progress * 100, 100)}%` }}
               ></div>
             </div>
             <div className="text-[9px] text-gray-500 text-right">
-                {Math.round((level / (level + 1)) * 100)}% to next level
+                {Math.round(progress * 100)}% to next level
             </div>
           </div>
 

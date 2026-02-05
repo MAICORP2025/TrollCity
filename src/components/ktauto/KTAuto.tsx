@@ -1,66 +1,87 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { cars, Car } from '../../data/vehicles';
 import { toast } from 'sonner';
-import { Info, Car as CarIcon, DollarSign, CreditCard, AlertTriangle } from 'lucide-react';
+import { Info, Car as CarIcon, DollarSign, AlertTriangle } from 'lucide-react';
 import { formatCompactNumber } from '../../lib/utils';
 import { useCoins } from '../../lib/hooks/useCoins';
+
+interface CarCatalogItem {
+  id: string;
+  name: string;
+  tier: number;
+  base_price: number;
+  image_url: string;
+  insurance_rate_bps: number;
+  exposure_level: number;
+  registration_fee: number;
+}
+
+const TIER_MAP: Record<number, string> = {
+  1: 'Starter',
+  2: 'Mid',
+  3: 'Luxury',
+  4: 'Super',
+  5: 'Elite'
+};
 
 export default function KTAuto() {
   const { user } = useAuthStore();
   const { troll_coins: balance, refreshCoins } = useCoins();
-  const [selectedCar, setSelectedCar] = useState<Car | null>(null);
+  const [cars, setCars] = useState<CarCatalogItem[]>([]);
+  const [selectedCar, setSelectedCar] = useState<CarCatalogItem | null>(null);
   const [plateType, setPlateType] = useState<'temp' | 'hard'>('temp');
   const [purchasing, setPurchasing] = useState(false);
   const [filter, setFilter] = useState<string>('all');
+  const [loading, setLoading] = useState(true);
   
-  // New State for Loans & License
-  const [useLoan, setUseLoan] = useState(false);
-  const [creditScore, setCreditScore] = useState<number>(0);
+  // License Check
   const [licenseStatus, setLicenseStatus] = useState<string>('valid');
 
   // Costs
   const TEMP_PLATE_FEE = 200;
   const HARD_PLATE_FEE = 2000;
-  const TITLE_FEE = 500;
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!user) return;
     
-    const checkUserStatus = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        // Check Credit
-        const { data: creditData } = await supabase
-          .from('user_credit')
-          .select('score')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (creditData) setCreditScore(creditData.score);
+        // Fetch Cars Catalog
+        const { data: carsData, error: carsError } = await supabase
+          .from('cars_catalog')
+          .select('*')
+          .order('base_price', { ascending: true });
+
+        if (carsError) throw carsError;
+        setCars(carsData || []);
 
         // Check License
         const { data: licenseData } = await supabase
           .from('user_driver_licenses')
           .select('status')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle(); // Use maybeSingle to avoid error if not found
           
         if (licenseData) setLicenseStatus(licenseData.status);
       } catch (err) {
-        console.error('Error checking user status:', err);
+        console.error('Error fetching data:', err);
+        toast.error('Failed to load dealership data');
+      } finally {
+        setLoading(false);
       }
     };
     
-    checkUserStatus();
+    fetchData();
   }, [user]);
 
   const filteredCars = useMemo(() => {
     if (filter === 'all') return cars;
-    return cars.filter(c => c.tier.toLowerCase().includes(filter.toLowerCase()));
-  }, [filter]);
+    return cars.filter(c => TIER_MAP[c.tier]?.toLowerCase() === filter.toLowerCase());
+  }, [filter, cars]);
 
-  const categories = ['all', 'Starter', 'Mid', 'Luxury', 'Super', 'Elite', 'Street', 'Legendary'];
+  const categories = ['all', 'Starter', 'Mid', 'Luxury', 'Super', 'Elite'];
 
   const handlePurchase = async () => {
     if (!user || !selectedCar) return;
@@ -70,30 +91,19 @@ export default function KTAuto() {
       return;
     }
 
-    const regFee = plateType === 'hard' ? HARD_PLATE_FEE : TEMP_PLATE_FEE;
-    let upfrontCost = selectedCar.price + TITLE_FEE + regFee;
+    const regFee = selectedCar.registration_fee + (plateType === 'hard' ? 2000 : 200);
+    const totalCost = selectedCar.base_price + regFee;
 
-    if (useLoan) {
-      if (creditScore <= 650) {
-        toast.error("Credit score must be > 650 for instant loan approval.");
-        return;
-      }
-      // 10% Down Payment + Fees
-      const downPayment = Math.floor(selectedCar.price * 0.10);
-      upfrontCost = downPayment + TITLE_FEE + regFee;
-    }
-
-    if ((balance || 0) < upfrontCost) {
-      toast.error(`Insufficient funds. You need ${formatCompactNumber(upfrontCost)} coins.`);
+    if ((balance || 0) < totalCost) {
+      toast.error(`Insufficient funds. You need ${formatCompactNumber(totalCost)} coins.`);
       return;
     }
 
     setPurchasing(true);
     try {
-      const { data, error } = await supabase.rpc('purchase_from_ktauto', {
-        p_catalog_id: selectedCar.id,
-        p_plate_type: plateType,
-        p_use_loan: useLoan
+      const { data, error } = await supabase.rpc('purchase_vehicle', {
+        p_car_catalog_id: selectedCar.id,
+        p_plate_type: plateType
       });
 
       if (error) throw error;
@@ -103,21 +113,8 @@ export default function KTAuto() {
         return;
       }
 
-      // Add to 3D Scene
-      const newCar = {
-        id: data.vehicle_id,
-        model: selectedCar.name,
-        color: '#3b82f6', // Default new car color
-        position: [Math.random() * 20 - 10, 0, Math.random() * 20 - 10] as [number, number, number],
-        rotation: 0,
-        isOwned: true
-      };
-      // @ts-expect-error: window.addCar is not typed
-      if (window.addCar) window.addCar(newCar);
-
       toast.success(`Successfully purchased ${selectedCar.name}!`);
       setSelectedCar(null);
-      setUseLoan(false);
       refreshCoins();
     } catch (err: any) {
       console.error('Purchase failed:', err);
@@ -129,16 +126,11 @@ export default function KTAuto() {
 
   const calculateTotal = () => {
     if (!selectedCar) return 0;
-    const regFee = plateType === 'hard' ? HARD_PLATE_FEE : TEMP_PLATE_FEE;
-    const fees = TITLE_FEE + regFee;
-    
-    if (useLoan) {
-      const downPayment = Math.floor(selectedCar.price * 0.10);
-      return downPayment + fees;
-    }
-    return selectedCar.price + fees;
+    const regFee = selectedCar.registration_fee + (plateType === 'hard' ? 2000 : 200);
+    return selectedCar.base_price + regFee;
   };
 
+  if (loading) return <div className="p-8 text-center text-zinc-400">Loading dealership...</div>;
 
   return (
     <div className="space-y-6">
@@ -184,13 +176,17 @@ export default function KTAuto() {
             {/* Image Area */}
             <div className="relative aspect-[16/9] bg-gradient-to-b from-gray-800 to-black p-4 flex items-center justify-center overflow-hidden">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              <img 
-                src={car.image} 
-                alt={car.name}
-                className="w-full h-full object-contain drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-500"
-              />
+              {car.image_url ? (
+                <img 
+                  src={car.image_url} 
+                  alt={car.name}
+                  className="w-full h-full object-contain drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-500"
+                />
+              ) : (
+                <CarIcon className="w-12 h-12 text-zinc-700" />
+              )}
               <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] font-mono text-blue-300 border border-white/10">
-                {car.tier}
+                {TIER_MAP[car.tier] || 'Unknown'}
               </div>
             </div>
 
@@ -198,23 +194,21 @@ export default function KTAuto() {
             <div className="p-4 flex-1 flex flex-col justify-between">
               <div>
                 <h3 className="text-lg font-bold text-white leading-tight">{car.name}</h3>
-                <p className="text-xs text-gray-400 mt-1 line-clamp-2">{car.style}</p>
-                
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div className="flex items-center gap-1.5 text-gray-300">
-                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                    Speed: {car.speed}
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    Ins: {car.insurance_rate_bps / 100}%
                   </div>
                   <div className="flex items-center gap-1.5 text-gray-300">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                    Armor: {car.armor}
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                    Exp: {car.exposure_level}/4
                   </div>
                 </div>
               </div>
 
               <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
                 <div className="text-yellow-400 font-mono font-bold text-lg">
-                  {formatCompactNumber(car.price)} <span className="text-xs text-yellow-600">TC</span>
+                  {formatCompactNumber(car.base_price)} <span className="text-xs text-yellow-600">TC</span>
                 </div>
                 <button
                   onClick={() => setSelectedCar(car)}
@@ -235,14 +229,16 @@ export default function KTAuto() {
             
             {/* Left: Car Preview */}
             <div className="w-full md:w-2/5 bg-gradient-to-br from-gray-800 to-black p-6 flex flex-col items-center justify-center relative">
-               <img 
-                 src={selectedCar.image} 
-                 alt={selectedCar.name} 
-                 className="w-full object-contain drop-shadow-xl"
-               />
+               {selectedCar.image_url && (
+                 <img 
+                   src={selectedCar.image_url} 
+                   alt={selectedCar.name} 
+                   className="w-full object-contain drop-shadow-xl"
+                 />
+               )}
                <div className="mt-4 text-center">
                  <h3 className="text-xl font-bold text-white">{selectedCar.name}</h3>
-                 <p className="text-sm text-gray-400">{selectedCar.tier} Class</p>
+                 <p className="text-sm text-gray-400">{TIER_MAP[selectedCar.tier]} Class</p>
                </div>
             </div>
 
@@ -266,14 +262,14 @@ export default function KTAuto() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-300">Vehicle Base Price</span>
-                      <span className="font-mono text-yellow-400">{selectedCar.price.toLocaleString()} TC</span>
+                      <span className="font-mono text-yellow-400">{selectedCar.base_price.toLocaleString()} TC</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-300">Title Issue Fee</span>
-                      <span className="font-mono text-yellow-400">{TITLE_FEE.toLocaleString()} TC</span>
+                      <span className="text-gray-300">Registration Fee</span>
+                      <span className="font-mono text-yellow-400">{selectedCar.registration_fee.toLocaleString()} TC</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-300">Registration (Plate)</span>
+                      <span className="text-gray-300">Plate Fee</span>
                       <div className="flex bg-black/40 rounded-lg p-1 border border-white/10">
                         <button
                           onClick={() => setPlateType('temp')}
@@ -293,32 +289,6 @@ export default function KTAuto() {
                         </button>
                       </div>
                     </div>
-
-                    {/* Loan Option */}
-                    {creditScore > 650 && (
-                      <div className="flex justify-between items-center pt-2 border-t border-white/5 mt-2">
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="w-4 h-4 text-emerald-400" />
-                          <span className="text-gray-300">Instant Loan (10% Down)</span>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={useLoan} 
-                            onChange={(e) => setUseLoan(e.target.checked)} 
-                            className="sr-only peer" 
-                          />
-                          <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                        </label>
-                      </div>
-                    )}
-                    
-                    {useLoan && (
-                      <div className="text-xs text-emerald-400/80 pl-6">
-                        Paying {Math.floor(selectedCar.price * 0.10).toLocaleString()} TC down + Fees. Remainder financed.
-                      </div>
-                    )}
-
                   </div>
                 </div>
 
@@ -326,8 +296,8 @@ export default function KTAuto() {
                   <p className="flex items-center gap-2 font-bold"><Info size={14}/> Important Info</p>
                   <ul className="list-disc pl-4 space-y-1 opacity-80">
                     <li>Sales are final. No refunds.</li>
-                    <li>Insurance required for street legality (2,000 TC/mo).</li>
-                    <li>Max 25 car purchases per month.</li>
+                    <li>Daily upkeep required (Insurance: {selectedCar.insurance_rate_bps/100}%).</li>
+                    <li>Vehicles can be impounded if fees are unpaid.</li>
                   </ul>
                 </div>
 
@@ -341,7 +311,7 @@ export default function KTAuto() {
 
               <div className="mt-6 flex gap-3">
                 <button
-                  onClick={() => { setSelectedCar(null); setUseLoan(false); }}
+                  onClick={() => { setSelectedCar(null); }}
                   disabled={purchasing}
                   className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-bold transition-colors disabled:opacity-50"
                 >
@@ -356,7 +326,7 @@ export default function KTAuto() {
                     <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
-                      <DollarSign size={18} /> {useLoan ? 'Finance Purchase' : 'Confirm Purchase'}
+                      <DollarSign size={18} /> Confirm Purchase
                     </>
                   )}
                 </button>

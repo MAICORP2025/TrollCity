@@ -21,13 +21,15 @@ export function useGiftSystem(
   const [isSending, setIsSending] = useState(false);
   const { user, refreshProfile } = useAuthStore();
 
-  const sendGift = async (gift: GiftItem): Promise<boolean> => {
+  const sendGift = async (gift: GiftItem, targetIdOverride?: string, quantity: number = 1): Promise<boolean> => {
     if (!user) {
       toast.error("You must be logged in to send gifts");
       return false;
     }
 
-    if (user.id === recipientId) {
+    const finalRecipientId = targetIdOverride || recipientId;
+
+    if (user.id === finalRecipientId) {
       toast.error("You cannot send gifts to yourself");
       return false;
     }
@@ -37,10 +39,11 @@ export function useGiftSystem(
     try {
       // Use the scalable send_gift_ledger RPC (Single Write)
       const { data, error } = await supabase.rpc('send_gift_ledger', {
-        p_receiver_id: recipientId,
+        p_receiver_id: finalRecipientId,
         p_gift_id: gift.slug || gift.id,
         p_amount: gift.coinCost,
         p_stream_id: streamId,
+        p_quantity: quantity,
         p_metadata: {
           stream_id: streamId,
           battle_id: battleId || null,

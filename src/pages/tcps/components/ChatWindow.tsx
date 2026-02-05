@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react'
-import { MoreVertical, Phone, Video, ArrowLeft, Ban, EyeOff, MessageCircle, Check, CheckCheck } from 'lucide-react'
+import { MoreVertical, Phone, Video, ArrowLeft, Ban, EyeOff, MessageCircle, Check, CheckCheck, Trash2 } from 'lucide-react'
 import { supabase, createConversation, markConversationRead } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { useChatStore } from '../../../lib/chatStore'
@@ -63,6 +63,25 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('Are you sure you want to delete this message?')) return
+
+    try {
+      const { error } = await supabase
+        .from('conversation_messages')
+        .update({ is_deleted: true })
+        .eq('id', messageId)
+
+      if (error) throw error
+
+      setMessages(prev => prev.filter(m => m.id !== messageId))
+      toast.success('Message deleted')
+    } catch (err) {
+      console.error('Error deleting message:', err)
+      toast.error('Failed to delete message')
+    }
+  }
 
   const handleBlock = async () => {
     if (!otherUserInfo?.id || !user?.id) return
@@ -169,6 +188,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
       .from('conversation_messages')
       .select('*')
       .eq('conversation_id', convId)
+      .eq('is_deleted', false) // Filter out deleted messages
       .order('created_at', { ascending: false })
       .order('id', { ascending: false }) // Tie-breaker
       .limit(limit)
@@ -328,7 +348,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
                created_at: profile?.created_at
              }
           } else {
-             const { data } = await supabase.from('user_profiles').select('username,avatar_url,rgb_username_expires_at,created_at').eq('id', newMsgRaw.sender_id).single()
+             const { data } = await supabase.from('user_profiles').select('username,avatar_url,rgb_username_expires_at,created_at').eq('id', newMsgRaw.sender_id).maybeSingle()
              if (data) senderInfo = data as any
           }
 
@@ -611,7 +631,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
                 </div>
               )}
               
-              <div className={`max-w-[70%] space-y-1 ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+              <div className={`max-w-[70%] space-y-1 ${isMe ? 'items-end' : 'items-start'} flex flex-col group`}>
                 {!isMe && showAvatar && (
                    <UserNameWithAge 
                      user={{
@@ -623,14 +643,25 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
                      className="text-xs text-gray-400 ml-1 hover:text-purple-400"
                    />
                 )}
-                <div 
-                  className={`px-4 py-2 rounded-2xl break-words ${
-                    isMe 
-                      ? 'bg-purple-600 text-white rounded-tr-none' 
-                      : 'bg-[#1F1F2E] text-gray-200 rounded-tl-none border border-purple-500/10'
-                  } ${msg.isPending ? 'opacity-70' : ''}`}
-                >
-                  {msg.content}
+                <div className="flex items-center gap-2">
+                   {isMe && (
+                     <button
+                       onClick={() => handleDeleteMessage(msg.id)}
+                       className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-red-400 transition-all"
+                       title="Delete message"
+                     >
+                       <Trash2 className="w-3 h-3" />
+                     </button>
+                   )}
+                   <div 
+                     className={`px-4 py-2 rounded-2xl break-words ${
+                       isMe 
+                         ? 'bg-purple-600 text-white rounded-tr-none' 
+                         : 'bg-[#1F1F2E] text-gray-200 rounded-tl-none border border-purple-500/10'
+                     } ${msg.isPending ? 'opacity-70' : ''}`}
+                   >
+                     {msg.content}
+                   </div>
                 </div>
                 
                 <div className="flex items-center gap-1">

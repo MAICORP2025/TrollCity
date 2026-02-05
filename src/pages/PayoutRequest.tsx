@@ -126,9 +126,9 @@ export default function PayoutRequest() {
           </div>
         </div>
 
-        {!payoutWindowOpen && (
-          <div className="rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
-            {PAYOUT_WINDOW_LABEL}
+        {payoutWindowOpen && (
+          <div className="rounded-lg border border-green-500/40 bg-green-900/20 px-3 py-2 text-xs text-green-200">
+            Payouts are currently OPEN! (Mondays and Fridays)
           </div>
         )}
 

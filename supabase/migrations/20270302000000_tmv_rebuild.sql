@@ -150,7 +150,7 @@ CREATE POLICY "Public read listings" ON public.vehicle_listings FOR SELECT USING
 -- Owner Policies
 CREATE POLICY "Users view own vehicles" ON public.user_vehicles FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users view own titles" ON public.vehicle_titles FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users view own registrations" ON public.vehicle_registrations FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users view own registrations" ON public.vehicle_registrations FOR SELECT USING (user_vehicle_id IN (SELECT id FROM public.user_vehicles WHERE user_id = auth.uid()));
 CREATE POLICY "Users view own insurance" ON public.vehicle_insurance_policies FOR SELECT USING (user_vehicle_id IN (SELECT id FROM public.user_vehicles WHERE user_id = auth.uid()));
 CREATE POLICY "Users view own transactions" ON public.vehicle_transactions FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users view own license" ON public.user_driver_licenses FOR SELECT USING (auth.uid() = user_id);

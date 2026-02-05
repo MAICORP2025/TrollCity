@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.gift_batch_logs (
 -- Enable RLS (admin only)
 ALTER TABLE public.gift_batch_logs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Admins can view logs" ON public.gift_batch_logs;
 CREATE POLICY "Admins can view logs" ON public.gift_batch_logs
     FOR SELECT
     TO authenticated

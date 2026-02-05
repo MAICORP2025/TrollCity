@@ -476,8 +476,8 @@ Deno.serve(async (req) => {
         const canViewEmails = profile.role === 'admin' || profile.is_admin === true;
 
         const selectFields = canViewEmails
-          ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status'
-          : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status';
+          ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction'
+          : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction';
 
         let query = supabaseAdmin
           .from('user_profiles')
@@ -527,7 +527,8 @@ Deno.serve(async (req) => {
                 const { error: roleError } = await supabaseAdmin.rpc('set_user_role', {
                     target_user: userId,
                     new_role: newRole,
-                    reason: reason || `Admin update by ${user.id}`
+                    reason: reason || `Admin update by ${user.id}`,
+                    acting_admin_id: user.id
                 });
                 if (roleError) throw roleError;
             }
@@ -575,14 +576,53 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "ban_user_action": {
+      case "update_user_bypass": {
         if (!isAdmin) throw new Error("Unauthorized: Admin only");
-        const { userId, until } = params;
+        const { userId, bypass } = params;
         if (!userId) throw new Error("Missing userId");
 
+        const { data, error } = await supabaseAdmin
+          .from('user_profiles')
+          .update({ 
+            bypass_broadcast_restriction: bypass,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        
+        // Log action
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "update_user_bypass",
+          p_target_id: userId,
+          p_details: { bypass }
+        });
+
+        result = { success: true, data };
+        break;
+      }
+
+      case "ban_user_action": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId, until, reason } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        // Calculate minutes if 'until' is provided
+        let minutes = 525600; // Default 1 year
+        if (until) {
+            const diff = new Date(until).getTime() - Date.now();
+            if (diff > 0) {
+                minutes = Math.floor(diff / 60000);
+            }
+        }
+
         const { error } = await supabaseAdmin.rpc('ban_user', {
-            p_user_id: userId,
-            p_until: until || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+            target: userId,
+            minutes: minutes,
+            reason: reason || 'Banned by admin',
+            acting_admin_id: user.id
         });
 
         if (error) throw error;

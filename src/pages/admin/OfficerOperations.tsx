@@ -253,15 +253,17 @@ export default function OfficerOperations() {
   };
 
   const sendChatMessage = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !user) return;
 
     try {
-      const { error } = await supabase.functions.invoke('admin-actions', {
-        body: {
-            action: 'send_officer_chat_message',
-            content: newMessage
-        }
-      });
+      // Use direct insert instead of Edge Function for reliability
+      const { error } = await supabase
+        .from('officer_chat_messages')
+        .insert({
+            sender_id: user.id,
+            content: newMessage.trim(),
+            priority: 'normal'
+        });
 
       if (error) throw error;
 

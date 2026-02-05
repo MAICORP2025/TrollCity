@@ -2,6 +2,16 @@
 -- Re-implement Driver's Test RPC for the new TMV System
 -- Grades the test and issues license if passed.
 
+-- Ensure user_driver_licenses table exists (safety check)
+CREATE TABLE IF NOT EXISTS public.user_driver_licenses (
+    user_id UUID PRIMARY KEY REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'none',
+    suspended_until TIMESTAMPTZ,
+    points INTEGER DEFAULT 0,
+    issued_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE OR REPLACE FUNCTION submit_driver_test(
     answers JSONB
 )

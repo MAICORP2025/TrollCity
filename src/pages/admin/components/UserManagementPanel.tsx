@@ -25,6 +25,7 @@ interface UserProfile {
   onboarding_completed?: boolean | null
   terms_accepted?: boolean | null
   id_verification_status?: string | null
+  bypass_broadcast_restriction?: boolean
 }
 
 interface UserManagementPanelProps {
@@ -44,6 +45,7 @@ export default function UserManagementPanel({
   const [editingCoins, setEditingCoins] = useState({ paid: 0, free: 0 })
   const [editingLevel, setEditingLevel] = useState(1)
   const [editingRole, setEditingRole] = useState('user')
+  const [editingBypassBroadcast, setEditingBypassBroadcast] = useState(false)
   const [saving, setSaving] = useState(false)
   const [viewingUser, setViewingUser] = useState<{ id: string; username: string } | null>(null)
   const [notifying, setNotifying] = useState(false)
@@ -91,6 +93,7 @@ export default function UserManagementPanel({
     setEditingCoins({ paid: user.troll_coins || 0, free: user.free_coin_balance || 0 })
     setEditingLevel(user.level || 1)
     setEditingRole(user.role || 'user')
+    setEditingBypassBroadcast(user.bypass_broadcast_restriction || false)
   }
 
   const handleSaveChanges = async () => {
@@ -127,7 +130,8 @@ export default function UserManagementPanel({
 
       const updates: any = {
         free_coin_balance: editingCoins.free,
-        level: editingLevel
+        level: editingLevel,
+        bypass_broadcast_restriction: editingBypassBroadcast
       }
 
       const roleUpdate = editingRole !== selectedUser.role ? {
@@ -424,6 +428,20 @@ export default function UserManagementPanel({
                   <option value="troller">Troller</option>
                   <option value="admin">Admin</option>
                 </select>
+              </div>
+
+              {/* Broadcast Bypass */}
+              <div className="flex items-center gap-3 bg-zinc-800 p-3 rounded-lg border border-gray-700">
+                <input
+                  type="checkbox"
+                  id="bypassBroadcast"
+                  checked={editingBypassBroadcast}
+                  onChange={(e) => setEditingBypassBroadcast(e.target.checked)}
+                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 bg-gray-700 border-gray-600"
+                />
+                <label htmlFor="bypassBroadcast" className="text-sm font-semibold text-gray-300 cursor-pointer select-none">
+                  Bypass 24h Broadcast Restriction
+                </label>
               </div>
 
               {/* Actions */}

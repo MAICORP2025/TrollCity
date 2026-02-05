@@ -47,7 +47,8 @@ export async function notifyGiftReceived(
       gift_id: '', // Will be set by trigger
       sender_id: senderId,
       coins_spent: coinsSpent,
-      stream_id: streamId
+      stream_id: streamId,
+      action_url: streamId ? `/live/${streamId}` : '/wallet'
     }
   )
 }
@@ -67,7 +68,8 @@ export async function notifyBadgeUnlocked(
     `You unlocked the "${badgeName}" badge!`,
     {
       badge_id: badgeId,
-      earned_at: new Date().toISOString()
+      earned_at: new Date().toISOString(),
+      action_url: '/profile?tab=badges'
     }
   )
 }
@@ -101,7 +103,8 @@ export async function notifyPayoutStatus(
     {
       payout_id: payoutId,
       status,
-      cash_amount: cashAmount
+      amount: cashAmount,
+      action_url: '/wallet'
     }
   )
 }
@@ -137,7 +140,8 @@ export async function notifyModerationAction(
     {
       action_id: actionId,
       action_type: actionType,
-      reason
+      reason,
+      action_url: '/profile'
     }
   )
 }
@@ -161,7 +165,8 @@ export async function notifyBattleResult(
     {
       battle_id: battleId,
       winner_id: won ? userId : undefined,
-      coins_earned: coinsEarned
+      coins_earned: coinsEarned,
+      action_url: '/profile'
     }
   )
 }

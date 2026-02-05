@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Check, X, Calendar, Play, Gavel, History, AlertTriangle } from 'lucide-react';
+import { Check, X, Calendar, Play, Gavel, History } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 export default function SecretaryDashboard() {

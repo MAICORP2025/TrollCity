@@ -10,6 +10,10 @@ export interface SeatSession {
   user_profile?: {
     username: string;
     avatar_url: string;
+    is_gold?: boolean;
+    rgb_username_expires_at?: string;
+    role?: string;
+    troll_coins?: number;
   };
   status: 'active' | 'left' | 'kicked';
   joined_at: string;
@@ -27,7 +31,7 @@ export function useStreamSeats(streamId: string | undefined) {
       .from('stream_seat_sessions')
       .select(`
         *,
-        user_profile:user_profiles(username, avatar_url)
+        user_profile:user_profiles(username, avatar_url, is_gold, rgb_username_expires_at, role, troll_coins)
       `)
       .eq('stream_id', streamId)
       .eq('status', 'active');

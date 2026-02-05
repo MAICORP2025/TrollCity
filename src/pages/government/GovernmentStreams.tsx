@@ -147,7 +147,7 @@ export default function GovernmentStreams() {
   };
 
   const handleMuteBroadcaster = async (stream: StreamRow) => {
-    if (!confirm(`Are you sure you want to MUTE broadcaster ${stream.broadcaster.username}?`)) return;
+    if (!confirm(`Are you sure you want to MUTE broadcaster ${stream.broadcaster?.username || 'Unknown'}?`)) return;
     try {
       // Mute by disabling their chat capability in participants table (if they are a participant in their own stream logic)
       // Or if there is a specific 'is_muted' flag. 

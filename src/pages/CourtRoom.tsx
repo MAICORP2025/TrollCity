@@ -5,6 +5,7 @@ import { supabase, UserRole } from "../lib/supabase";
 import { startCourtSession } from "../lib/courtSessions";
 import { LiveKitRoom, ParticipantTile, useTracks } from "@livekit/components-react";
 import "@livekit/components-styles";
+import HLSPlayer from "../components/broadcast/HLSPlayer";
 import { toast } from "sonner";
 import RequireRole from "../components/RequireRole";
 import CourtAIAssistant from "../components/CourtAIAssistant";
@@ -150,6 +151,26 @@ const isValidUuid = (value?: string | null) =>
     value || ''
   );
 
+// --- HLS / Listener View for Court ---
+const CourtListenerView = ({ courtId }: { courtId: string }) => {
+  return (
+    <div className="aspect-video bg-black relative w-full h-full">
+      <HLSPlayer
+        src={`https://cdn.maitrollcity.com/streams/${courtId}.m3u8`}
+        className="w-full h-full object-contain"
+      />
+      <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
+        <div className="px-2 py-1 bg-red-600/90 backdrop-blur-sm text-white text-xs font-bold rounded animate-pulse shadow-lg shadow-red-900/20">
+          LIVE
+        </div>
+        <div className="px-2 py-1 bg-black/60 backdrop-blur-sm text-white text-xs rounded border border-white/10">
+          Spectator Mode
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function CourtRoom() {
    const { user, profile } = useAuthStore();
    const { courtId } = useParams();
@@ -289,6 +310,15 @@ export default function CourtRoom() {
       setCourtSession(session);
       setBoxCount(Math.min(6, Math.max(2, session.max_boxes || 2)));
 
+      // Logic to determine if we need a token (Speakers only)
+      const isJudge = profile?.role === 'admin' || profile?.role === 'lead_troll_officer' || profile?.is_admin || profile?.is_lead_officer;
+      const shouldConnect = isJudge || ["defendant", "accuser", "witness", "attorney"].includes(profile?.role);
+
+      if (!shouldConnect) {
+        setLoading(false);
+        return; // Listeners don't need a token immediately
+      }
+
       // Get token
       const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
       const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
@@ -326,7 +356,7 @@ export default function CourtRoom() {
     } finally {
       setLoading(false);
     }
-  }, [user, courtId, navigate, profile?.role]);
+  }, [user, courtId, navigate, profile]);
 
   useEffect(() => {
     if (!user) return;
@@ -1203,10 +1233,10 @@ export default function CourtRoom() {
     );
   }
 
-  if (!token || !serverUrl || token === '' || serverUrl === '') {
+  if ((!token || !serverUrl || token === '' || serverUrl === '') && canPublish) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-10 text-center">
-        <div className="text-red-400">Failed to join court session. Please try again.</div>
+        <div className="text-red-400">Failed to join court session (Speaker Mode). Please try again.</div>
         <div className="text-xs text-gray-500 mt-2">
           Token: {token ? 'present' : 'missing'}, ServerUrl: {serverUrl ? 'present' : 'missing'}
         </div>
@@ -1292,17 +1322,21 @@ export default function CourtRoom() {
                   </button>
                 </div>
               )}
-              <LiveKitRoom
-                token={token}
-                serverUrl={serverUrl}
-                connect={true}
-                audio={canPublish}
-                video={canPublish}
-                className="w-full"
-              >
-                <CourtTrackCounter onCount={setActiveBoxCount} />
-                <CourtVideoGrid maxTiles={boxCount} />
-              </LiveKitRoom>
+              {canPublish && token ? (
+                <LiveKitRoom
+                  token={token}
+                  serverUrl={serverUrl}
+                  connect={true}
+                  audio={canPublish}
+                  video={canPublish}
+                  className="w-full"
+                >
+                  <CourtTrackCounter onCount={setActiveBoxCount} />
+                  <CourtVideoGrid maxTiles={boxCount} />
+                </LiveKitRoom>
+              ) : (
+                <CourtListenerView courtId={courtId} />
+              )}
             </div>
 
             {/* Court Status */}

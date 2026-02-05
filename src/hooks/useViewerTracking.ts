@@ -21,21 +21,35 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
-        // Count unique user_ids (handling multiple tabs per user if necessary, though presenceState groups by key)
+        // Count unique user_ids
         const count = Object.keys(state).length
         setViewerCount(count)
 
-        // If Host, update DB (throttled)
-        if (isHost) {
+        // If Host OR Officer/Admin, update DB (throttled)
+        // This ensures the DB is updated even if the host is not in the browser
+        const isOfficer = 
+            profile?.role === 'admin' || 
+            profile?.role === 'troll_officer' || 
+            profile?.is_troll_officer ||
+            profile?.is_admin ||
+            profile?.troll_role === 'admin' ||
+            profile?.troll_role === 'troll_officer';
+
+        if (isHost || isOfficer) {
           const now = Date.now()
           if (now - lastDbUpdate.current > 15000) { // Update every 15s
             lastDbUpdate.current = now
+            
+            // Use RPC to bypass potential RLS issues for officers
             supabase
-              .from('streams')
-              .update({ current_viewers: count })
-              .eq('id', streamId)
+              .rpc('update_stream_viewer_count', { 
+                  p_stream_id: streamId, 
+                  p_count: count 
+              })
               .then(({ error }) => {
-                if (error) console.error('Failed to update stream viewer count:', error)
+                if (error) {
+                    console.error('Failed to update stream viewer count:', error)
+                }
               })
           }
         }

@@ -14,6 +14,7 @@ interface BroadcastGridOverlayProps {
   onGift: (userId: string) => void;
   seats: Record<number, SeatSession>;
   onJoinSeat: (index: number) => void;
+  broadcasterProfile?: any;
 }
 
 export default function BroadcastGridOverlay({ 
@@ -23,7 +24,8 @@ export default function BroadcastGridOverlay({
     maxItems, 
     onGift, 
     seats,
-    onJoinSeat
+    onJoinSeat,
+    broadcasterProfile
 }: BroadcastGridOverlayProps) {
   const [selectedUserForAction, setSelectedUserForAction] = useState<string | null>(null);
   const { user } = useAuthStore();
@@ -61,8 +63,26 @@ export default function BroadcastGridOverlay({
 
           const isStreamHost = userId === stream.user_id;
 
+          // Determine profile
+          let displayProfile = seat?.user_profile;
+          if (seatIndex === 0 && isStreamHost) {
+              displayProfile = broadcasterProfile;
+          }
+
+          let boxClass = "relative rounded-xl overflow-hidden aspect-video pointer-events-auto";
+          
+          const hasGold = displayProfile?.is_gold;
+          const hasRgbProfile = displayProfile?.rgb_username_expires_at && new Date(displayProfile.rgb_username_expires_at) > new Date();
+          const hasStreamRgb = (seatIndex === 0 && stream.has_rgb_effect);
+
+          if (hasGold) {
+             boxClass = "relative rounded-xl overflow-hidden aspect-video pointer-events-auto border-2 border-yellow-500 shadow-[0_0_15px_rgba(255,215,0,0.3)]";
+          } else if (hasRgbProfile || hasStreamRgb) {
+             boxClass = "relative rounded-xl overflow-hidden aspect-video pointer-events-auto rgb-box";
+          }
+
           return (
-            <div key={seatIndex} className="relative rounded-xl overflow-hidden aspect-video pointer-events-auto">
+            <div key={seatIndex} className={boxClass}>
                 {/* Empty Seat - Join Button */}
                 {!userId && (
                     <button 
@@ -88,21 +108,39 @@ export default function BroadcastGridOverlay({
                          {/* Metadata Overlay Only - Video is behind */}
                         <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
                             <div className="text-white text-sm font-bold truncate flex items-center gap-2">
-                                {isStreamHost ? (
-                                    <>
-                                        <div className="bg-yellow-500 text-black text-[10px] px-1 rounded font-bold">HOST</div>
-                                        <span>Broadcaster</span>
-                                    </>
-                                ) : (
-                                    <>
-                                    <img 
-                                        src={seat?.user_profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`} 
-                                        className="w-6 h-6 rounded-full border border-white/50"
-                                        alt="avatar"
-                                    />
-                                    {seat?.user_profile?.username || 'User'}
-                                    </>
-                                )}
+                                {(() => {
+                                    const profile = (isStreamHost && broadcasterProfile) ? broadcasterProfile : seat?.user_profile;
+                                    const name = isStreamHost 
+                                        ? (broadcasterProfile?.username || 'Broadcaster') 
+                                        : (profile?.username || 'User');
+                                    
+                                    let className = "text-white";
+                                    
+                                    if (profile) {
+                                        if (profile.is_gold) {
+                                            className = "gold-username";
+                                        } else if (profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date()) {
+                                            className = "rgb-username";
+                                        } else if (['admin', 'moderator', 'secretary'].includes(profile.role || '')) {
+                                            className = "silver-username";
+                                        }
+                                    }
+                                    
+                                    return (
+                                        <>
+                                            {isStreamHost && (
+                                                <div className="bg-red-600 text-white text-[10px] px-1 rounded font-bold">HOST</div>
+                                            )}
+                                            
+                                            <img 
+                                                src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`} 
+                                                className="w-6 h-6 rounded-full border border-white/50"
+                                                alt="avatar"
+                                            />
+                                            <span className={className}>{name}</span>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>

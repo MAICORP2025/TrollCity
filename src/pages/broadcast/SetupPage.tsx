@@ -19,9 +19,14 @@ export default function SetupPage() {
       
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('created_at')
+        .select('created_at, bypass_broadcast_restriction')
         .eq('id', user.id)
         .single();
+        
+      if (profile?.bypass_broadcast_restriction) {
+        setRestrictionCheck({ allowed: true });
+        return;
+      }
         
       if (profile?.created_at) {
         const created = new Date(profile.created_at);

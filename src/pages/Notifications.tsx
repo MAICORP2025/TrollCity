@@ -145,14 +145,25 @@ export default function Notifications() {
 
   const dismissNotification = async (id: string) => {
     try {
-      await supabase
+      // Optimistically remove
+      setNotifications(prev => prev.filter(n => n.id !== id))
+
+      // HARD DELETE
+      const { error } = await supabase
         .from('notifications')
         .delete()
         .eq('id', id)
-      setNotifications(prev => prev.filter(n => n.id !== id))
+      
+      if (error) {
+        throw error
+      }
+      
       toast.success('Notification deleted')
-    } catch {
+    } catch (err) {
+      // Revert if failed
+      console.error('Failed to dismiss notification:', err)
       toast.error('Failed to delete notification')
+      loadNotifications() // Reload to restore state
     }
   }
   
@@ -205,162 +216,142 @@ export default function Notifications() {
   }
 
   const handleNotificationClick = (notification: Notification) => {
+    // If there's an action_url in metadata, navigate to it
+    if (notification.metadata?.action_url) {
+      navigate(notification.metadata.action_url)
+    } else if (notification.type === 'new_follower' && notification.metadata?.follower_username) {
+       // Fallback for old follower notifications
+       navigate(`/profile/${notification.metadata.follower_username}`)
+    }
+    
+    // Mark as read if not already
     if (!notification.is_read) {
-      void markAsRead(notification.id)
-    }
-
-    const metadata: any = notification.metadata || {}
-    const link: string | undefined = metadata.link
-
-    if (link) {
-      navigate(link)
-      return
-    }
-
-    if (metadata.stream_id) {
-      navigate(`/live/${metadata.stream_id}`)
+      markAsRead(notification.id)
     }
   }
-
-  const filteredNotifications = notifications.filter(notification => {
-    if (filter === 'all') return true
-    if (filter === 'unread') return !notification.is_read
-    return notification.type === filter
-  })
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-  }
-
-  if (!profile) return null
-
-  const filters = [
-    { key: 'all', label: 'all', icon: null },
-    { key: 'unread', label: 'unread', icon: null },
-    { key: 'stream_live', label: 'stream live', icon: <Video className="w-4 h-4" /> },
-    { key: 'new_follower', label: 'new follower', icon: <User className="w-4 h-4" /> },
-    { key: 'gift_received', label: 'gift received', icon: <Gift className="w-4 h-4" /> },
-    { key: 'message', label: 'message', icon: <MessageCircle className="w-4 h-4" /> }
-  ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
-      <div className="max-w-4xl mx-auto p-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-              <Bell className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-white">Notifications</h1>
-              <p className="text-gray-400">Stay updated with the latest activity</p>
-              <p className="text-gray-500 text-sm mt-1">Times shown in America/Denver</p>
-            </div>
-            <div className="ml-auto flex gap-2">
-              <button 
-                onClick={deleteAllNotifications}
-                className="px-4 py-2 border border-red-500 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-colors text-sm font-medium"
-              >
-                Delete All
-              </button>
-              <button 
-                onClick={markAllAsRead}
-                className="px-4 py-2 border border-purple-500 text-purple-400 rounded-lg hover:bg-purple-500 hover:text-white transition-colors text-sm font-medium"
-              >
-                Mark all read
-              </button>
-            </div>
+    <div className="min-h-screen bg-troll-dark text-white p-4 md:p-8 pt-24">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <Bell className="w-8 h-8 text-troll-neon-pink" />
+            <h1 className="text-3xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-troll-neon-pink to-troll-neon-blue">
+              Trollifications
+            </h1>
           </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            {filters.map(({ key, label, icon }) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${
-                  filter === key
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-[#2C2C2C] text-gray-300 hover:bg-[#3C3C3C]'
-                }`}
-              >
-                {icon}
-                {label}
-              </button>
-            ))}
+          
+          <div className="flex gap-2">
+            <button
+              onClick={markAllAsRead}
+              className="px-4 py-2 bg-troll-dark-card border border-troll-neon-green/30 rounded hover:bg-troll-neon-green/10 transition-colors text-sm"
+            >
+              Mark all read
+            </button>
+            <button
+              onClick={deleteAllNotifications}
+              className="px-4 py-2 bg-troll-dark-card border border-red-500/30 rounded hover:bg-red-500/10 transition-colors text-sm text-red-400"
+            >
+              Clear all
+            </button>
           </div>
         </div>
 
-        {/* Notifications List */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="text-center text-gray-400 py-8">Loading notifications...</div>
-          ) : filteredNotifications.length === 0 ? (
-            <div className="text-center text-gray-400 py-8">No notifications</div>
-          ) : (
-            filteredNotifications.map((notification) => (
+        {/* Filter Tabs */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          {['all', 'stream_live', 'moderation_alert', 'new_follower', 'system'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+                filter === f 
+                  ? 'bg-troll-neon-blue text-black font-bold' 
+                  : 'bg-troll-dark-card border border-gray-700 text-gray-400 hover:text-white'
+              }`}
+            >
+              {f.replace('_', ' ').toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="text-center py-12 text-gray-500 animate-pulse">Loading notifications...</div>
+        ) : notifications.length === 0 ? (
+          <div className="text-center py-12 bg-troll-dark-card rounded-lg border border-gray-800">
+            <Bell className="w-12 h-12 text-gray-600 mx-auto mb-3 opacity-50" />
+            <p className="text-gray-400">No notifications yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {notifications
+              .filter(n => filter === 'all' || n.type === filter || (filter === 'moderation_alert' && ['kick', 'ban', 'mute', 'report'].includes(n.type)))
+              .map((notification) => (
               <div
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
-                className={`rounded-xl p-4 border relative cursor-pointer transition-colors ${
+                className={`relative group p-4 rounded-lg border transition-all cursor-pointer hover:scale-[1.01] ${
                   notification.priority === 'high' || notification.priority === 'critical'
-                    ? 'bg-red-900/10 border-red-500/50 hover:bg-red-900/20'
-                    : 'bg-[#1A1A1A] border-[#2C2C2C] hover:bg-[#222]'
-                } ${
-                  !notification.is_read ? 'border-purple-500/30' : ''
+                    ? 'bg-red-950/30 border-red-500/50 hover:border-red-500'
+                    : notification.is_read
+                    ? 'bg-troll-dark-card/50 border-gray-800 hover:border-gray-600'
+                    : 'bg-troll-dark-card border-troll-neon-blue/30 hover:border-troll-neon-blue'
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">
+                <div className="flex items-start gap-4">
+                  <div className={`p-2 rounded-full shrink-0 ${
+                    notification.is_read ? 'bg-gray-800 text-gray-400' : 'bg-gray-800 text-white'
+                  }`}>
                     {getNotificationIcon(notification.type)}
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-white font-semibold">
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className={`font-semibold ${notification.is_read ? 'text-gray-300' : 'text-white'}`}>
                         {notification.title}
                       </h3>
-                      {!notification.is_read && <Dot className="w-4 h-4 text-purple-500 fill-current" />}
+                      <span className="text-xs text-gray-500 whitespace-nowrap">
+                        {new Date(notification.created_at).toLocaleDateString()}
+                      </span>
                     </div>
-                    <p className="text-gray-300 text-sm mb-2">{notification.message}</p>
-                    <p className="text-gray-500 text-xs">{formatDate(notification.created_at)}</p>
+                    
+                    <p className={`mt-1 text-sm ${notification.is_read ? 'text-gray-500' : 'text-gray-300'}`}>
+                      {notification.message}
+                    </p>
+                    
+                    {notification.metadata?.action_url && (
+                       <div className="mt-2 text-xs text-troll-neon-blue flex items-center gap-1">
+                          Click to view details →
+                       </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                     {!notification.is_read && (
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void markAsRead(notification.id)
-                        }}
-                        className="text-purple-400 hover:text-purple-300 transition-colors text-xs"
+                        onClick={() => markAsRead(notification.id)}
+                        className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"
                         title="Mark as read"
                       >
-                        Mark read
+                        <Dot className="w-4 h-4" />
                       </button>
                     )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void dismissNotification(notification.id)
-                        }}
-                        className="text-gray-500 hover:text-white transition-colors"
-                        title="Dismiss"
-                      >
+                    <button
+                      onClick={() => dismissNotification(notification.id)}
+                      className="p-1.5 hover:bg-red-500/20 rounded text-gray-400 hover:text-red-400"
+                      title="Dismiss"
+                    >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
+                
+                {!notification.is_read && (
+                  <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-troll-neon-blue shadow-[0_0_10px_rgba(0,212,255,0.5)]" />
+                )}
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

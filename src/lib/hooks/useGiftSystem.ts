@@ -1,10 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 // Removed progressionEngine import - using direct RPC calls instead
 import { processGiftXp } from '../xp'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
-import { addCoins } from '../coinTransactions'
 
 export interface GiftItem {
   id: string
@@ -24,10 +23,7 @@ export function useGiftSystem(
 ) {
   const { user, profile } = useAuthStore()
   const [isSending, setIsSending] = useState(false)
-  const comboRef = useRef<{ count: number; lastTime: number }>({ count: 0, lastTime: 0 })
-  const isUuid = (value?: string | null) =>
-    typeof value === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  
   const toGiftSlug = (value?: string) => {
     if (!value) return 'gift'
     return value
@@ -58,55 +54,47 @@ export function useGiftSystem(
 
     setIsSending(true)
     try {
-      // ✅ REAL COIN LOGIC: Use spend_coins RPC for all gift sending
-      // This replaces the old fake direct database updates
-      // The RPC handles: balance deduction, receiver credit, gift record, transaction log
-      const { data: spendResult, error: spendError } = await supabase.rpc('spend_coins', {
+      // ✅ REAL COIN LOGIC: Use send_premium_gift RPC
+      // This handles: Balance check, Cost deduction, Cashback (Random + 5%), Receiver Credit (95%), Status (RGB/Gold), Logs
+      const { data: result, error: rpcError } = await supabase.rpc('send_premium_gift', {
         p_sender_id: user.id,
         p_receiver_id: targetReceiverId,
-        p_coin_amount: gift.coinCost,
-        p_source: 'gift',
-        p_item: gift.name,
+        p_stream_id: streamId || null,
+        p_gift_id: gift.id,
+        p_cost: gift.coinCost
       })
 
-      if (spendError) {
-        throw spendError
+      if (rpcError) {
+        throw rpcError
       }
 
-      // Check if RPC returned an error
-      if (spendResult && typeof spendResult === 'object' && 'success' in spendResult && !spendResult.success) {
-        const errorMsg = (spendResult as any).error || 'Failed to send gift'
-        throw new Error(errorMsg)
+      // Check RPC internal logic success
+      if (result && !result.success) {
+         toast.error(result.message || 'Insufficient funds or error')
+         return false
       }
 
-      // If streamId is provided, also insert gift record with stream/battle context
-      // (spend_coins RPC already creates a gift record, but we may need stream_id/battle_id)
-      if (streamId && streamId !== 'profile-gift' && streamId !== 'null') {
-        const giftId = (spendResult as any)?.gift_id
-        const giftSlug =
-          gift.slug ||
-          (typeof gift.id === 'string' && !isUuid(gift.id) ? gift.id : null) ||
-          toGiftSlug(gift.name)
-        if (!isUuid(giftId)) {
-          console.warn('Skipping gift context update; invalid gift_id from RPC', giftId)
-        } else {
-        // Update the gift record with stream/battle context if needed
-        // The RPC creates the gift, but we can enhance it with stream context
-        const { error: giftUpdateError } = await supabase
-          .from('gifts')
-          .update({
-            stream_id: streamId,
-            battle_id: activeBattleId || null,
-            gift_slug: giftSlug,
-          })
-          .eq('id', giftId)
-          .limit(1)
-
-        // If update fails, it's not critical - the gift was already sent
-        if (giftUpdateError) {
-          console.warn('Could not update gift with stream context:', giftUpdateError)
-        }
-        }
+      // Handle Success & Rewards
+      if (result.cashback > 0) {
+        toast.success(`Cashback! +${result.cashback} Coins Returned!`)
+      }
+      if (result.rgb_awarded) {
+        toast.success('RGB Username Unlocked! (30 Days)')
+      }
+      if (result.gold_awarded) {
+        toast.success('LEGENDARY! GOLD STATUS PERMANENTLY UNLOCKED!')
+      }
+      
+      // Update local profile balance immediately
+      if (profile) {
+        useAuthStore.getState().setProfile({
+          ...profile,
+          troll_coins: (profile.troll_coins || 0) - gift.coinCost + (result.cashback || 0),
+          is_gold: result.gold_awarded || profile.is_gold,
+          rgb_username_expires_at: result.rgb_awarded 
+            ? new Date(Date.now() + 30*24*60*60*1000).toISOString() 
+            : profile.rgb_username_expires_at
+        })
       }
 
       // Broadcast gift event to the stream channel for immediate display
@@ -121,7 +109,7 @@ export function useGiftSystem(
                   type: 'broadcast',
                   event: 'gift_sent',
                   payload: {
-                    id: (spendResult as any)?.gift_id || crypto.randomUUID(),
+                    id: crypto.randomUUID(),
                     sender_id: user.id,
                     sender_username: profile.username || 'Anonymous',
                     sender_avatar: profile.avatar_url,
@@ -156,75 +144,7 @@ export function useGiftSystem(
         useAuthStore.getState().setProfile(updatedProfile as any)
       }
 
-      const now = Date.now()
-      const withinWindow = now - comboRef.current.lastTime <= 10000
-      const newCount = withinWindow ? comboRef.current.count + 1 : 1
-      comboRef.current = { count: newCount, lastTime: now }
-
-      let comboCashback = 0
-      if (gift.coinCost >= 2000) {
-        comboCashback = Math.floor(gift.coinCost * 0.05)
-      } else if (newCount >= 20) {
-        comboCashback = Math.floor(gift.coinCost * 1.5)
-      }
-
-      if (comboCashback > 0) {
-        try {
-          const { success } = await addCoins({
-            userId: user.id,
-            amount: comboCashback,
-            type: 'reward',
-            coinType: 'troll_coins',
-            description: gift.coinCost >= 2000 ? 'High value gift cashback' : 'Gift combo cashback',
-            metadata: {
-              gift_id: (spendResult as any)?.gift_id || null,
-              combo_count: newCount,
-              gift_value: gift.coinCost
-            }
-          })
-          if (success) {
-            toast.success(`Bonus: +${comboCashback} coins`)
-          }
-        } catch (comboErr) {
-          console.warn('Combo cashback failed', comboErr)
-        }
-      }
-
-      // Troll Pass 5% gift bonus (cashback to sender in troll_coins)
-      try {
-        const tpExpire = (updatedProfile || profile)?.troll_pass_expires_at
-        const isTrollPassActive = tpExpire && new Date(tpExpire) > new Date()
-        if (isTrollPassActive) {
-          const bonusAmount = Math.floor(gift.coinCost * 0.05)
-          if (bonusAmount > 0) {
-            const { success } = await addCoins({
-              userId: user.id,
-              amount: bonusAmount,
-              type: 'reward',
-              coinType: 'troll_coins',
-              description: 'Troll Pass 5% gift bonus',
-              metadata: {
-                gift_id: (spendResult as any)?.gift_id || null,
-                bonus_pct: 5,
-                source: 'troll_pass'
-              }
-            })
-            if (success) {
-              const { data: refreshedProfile } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('id', user.id)
-                .maybeSingle()
-              if (refreshedProfile) {
-                useAuthStore.getState().setProfile(refreshedProfile as any)
-              }
-              toast.success(`🎟️ Troll Pass bonus: +${bonusAmount} coins`)
-            }
-          }
-        }
-      } catch (bonusErr) {
-        console.warn('Troll Pass bonus failed', bonusErr)
-      }
+      // (Legacy Combo/Bonus Logic Removed per MASTER SYSTEM PROMPT)
       
       toast.success(`Gift sent: ${gift.name}`)
 
@@ -250,7 +170,7 @@ export function useGiftSystem(
                   type: 'broadcast',
                   event: 'huge_gift',
                   payload: {
-                    id: (spendResult as any)?.gift_id || crypto.randomUUID(),
+                    id: crypto.randomUUID(),
                     senderId: user.id,
                     receiverId: targetReceiverId,
                     senderName: profile.username || 'Anonymous',
@@ -315,30 +235,8 @@ export function useGiftSystem(
         console.warn('Family war gift handling failed', warErr)
       }
       
-      // Check for gift bonus milestones
-      let bonusInfo = null
-      try {
-        const { data: bonusData, error: bonusError } = await supabase.rpc('handle_gift_bonus', {
-          p_sender_id: user.id,
-        })
-        
-        if (!bonusError && bonusData?.bonus_awarded) {
-          bonusInfo = bonusData
-          // Refresh profile to get updated free coin balance
-          const { data: refreshedProfile } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-          
-          if (refreshedProfile) {
-            useAuthStore.getState().setProfile(refreshedProfile as any)
-          }
-        }
-      } catch (bonusErr) {
-        console.error('Error checking gift bonus:', bonusErr)
-      }
-      
+      // (Legacy Bonus Milestone Check Removed)
+
       // Identity event hook — Gift sent
       try {
         await supabase.rpc('record_dna_event', {
@@ -377,9 +275,6 @@ export function useGiftSystem(
         })
       }
 
-      if (bonusInfo) {
-        return { success: true, bonus: bonusInfo }
-      }
       return true
     } catch (err) {
       console.error('Gift send error:', err)

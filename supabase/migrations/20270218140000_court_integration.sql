@@ -1,5 +1,26 @@
 -- Court Integration for President Liability
 
+-- Ensure court tables exist (if they were missing from previous migrations)
+CREATE TABLE IF NOT EXISTS public.court_dockets (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    court_date DATE NOT NULL,
+    status TEXT DEFAULT 'open',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.court_cases (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    docket_id UUID REFERENCES public.court_dockets(id),
+    plaintiff_id UUID REFERENCES public.user_profiles(id),
+    defendant_id UUID REFERENCES public.user_profiles(id),
+    reason TEXT,
+    status TEXT DEFAULT 'pending',
+    incident_date TIMESTAMPTZ DEFAULT now(),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    verdict TEXT,
+    judgment_summary TEXT
+);
+
 -- 1. Add 'president_impeachment' to court case types if not exists
 -- (Assuming case_type or similar column exists, or we just rely on reason text. 
 -- Based on search, `court_cases` has `status` and `reason`. We can add a type column or just use convention.)

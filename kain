@@ -1,0 +1,486 @@
+You are Trae, the lead engineer for Troll City. Implement an “Active Asset Economy” where cars and houses are achievement-priced assets but never static collectibles. Ownership must create ongoing gameplay, costs, risk, and circulation. This is not optional. Do not simplify. Do not stub. Build full backend + UI wiring.
+
+Core Objective
+
+Cars and houses already have high prices (cars: 5,000 → 580,000 Troll Coins; houses: 5,000 → 100,000,000 Troll Coins). Because of this, they are achievement assets. Achievement assets must remain active, meaning:
+
+They unlock real gameplay power and lanes
+
+They impose recurring obligations (coin sinks)
+
+They create risk/visibility at higher tiers
+
+They can be repossessed/auctioned if obligations aren’t met
+
+They have meaningful resale/trading incentives
+
+Non-Negotiable Rule
+
+Every owned car/house must have at least 2 of these at all times:
+
+Produces income
+
+Reduces a cost or unlocks access
+
+Creates risk/exposure (especially at high tiers)
+
+Requires upkeep/renewals (maintenance/taxes/insurance)
+If not, fix the design until it does.
+
+1) Data Model (Supabase) — Create/Update Tables
+A) Houses
+
+Create/ensure these tables exist:
+
+houses_catalog
+
+id uuid pk
+
+name text
+
+tier int (1–5)
+
+base_price bigint
+
+rent_slots int
+
+power_band text (apartment/condo/estate/mansion/landmark)
+
+daily_tax_rate_bps int (basis points)
+
+maintenance_rate_bps int
+
+influence_points int
+
+feature_flags jsonb (e.g. { "business_license": true, "fee_discount_bps": 200 })
+
+created_at
+
+user_houses
+
+id uuid pk
+
+user_id uuid fk
+
+house_catalog_id uuid fk
+
+purchase_price bigint
+
+condition int default 100 (0–100)
+
+is_primary bool default false
+
+status text enum: active, delinquent, foreclosed, auctioned
+
+last_tax_paid_at timestamptz
+
+last_maintenance_paid_at timestamptz
+
+next_due_at timestamptz
+
+influence_active bool default true
+
+created_at
+
+house_upgrades
+
+id uuid pk
+
+house_catalog_id uuid fk
+
+name text
+
+price bigint
+
+effects jsonb (e.g. { "rent_slots_add": 2, "fee_discount_bps": 100 })
+
+created_at
+
+user_house_upgrades
+
+id uuid pk
+
+user_house_id uuid fk
+
+house_upgrade_id uuid fk
+
+purchased_at
+
+house_rentals
+
+id uuid pk
+
+landlord_user_id uuid fk
+
+tenant_user_id uuid fk
+
+user_house_id uuid fk
+
+rent_amount bigint
+
+platform_fee_bps int (default 1000–1500 configurable)
+
+status text enum: active, late, ended, evicted
+
+last_paid_at timestamptz
+
+next_due_at timestamptz
+
+created_at
+
+B) Cars
+
+Create/ensure these tables exist:
+
+cars_catalog
+
+id uuid pk
+
+name text
+
+tier int
+
+base_price bigint
+
+exposure_level int (0–4) // 0 invisible, 4 watched
+
+insurance_rate_bps int
+
+registration_fee bigint
+
+plate_change_fee bigint default 20
+
+feature_flags jsonb (e.g. { "fast_travel": true, "elite_races": true })
+
+created_at
+
+user_cars
+
+id uuid pk
+
+user_id uuid fk
+
+car_catalog_id uuid fk
+
+purchase_price bigint
+
+condition int default 100
+
+status text enum: active, unregistered, insured, uninsured, impounded, auctioned
+
+insurance_expires_at timestamptz
+
+registration_expires_at timestamptz
+
+plate_number text
+
+plate_status text enum: valid, temp_valid, temp_expired, expired, suspended
+
+last_fees_paid_at timestamptz
+
+created_at
+
+car_upgrades
+
+id uuid pk
+
+car_catalog_id uuid fk
+
+name text
+
+price bigint
+
+effects jsonb (e.g. { "exposure_add": 1, "condition_decay_mult": 0.9 })
+
+created_at
+
+user_car_upgrades
+
+id uuid pk
+
+user_car_id uuid fk
+
+car_upgrade_id uuid fk
+
+purchased_at
+
+C) Auctions (Shared)
+asset_auctions
+
+id uuid pk
+
+asset_type text enum: house, car
+
+asset_id uuid (references user_houses or user_cars)
+
+reason text enum: foreclosure, seizure, repo, admin_action
+
+starting_bid bigint
+
+current_bid bigint
+
+current_winner_user_id uuid nullable
+
+ends_at timestamptz
+
+status text enum: active, ended, cancelled
+
+created_at
+
+auction_bids
+
+id uuid pk
+
+auction_id uuid fk
+
+bidder_user_id uuid fk
+
+amount bigint
+
+created_at
+
+D) Ledger / Transactions (must exist or add)
+
+All fees must write to a single consistent ledger:
+
+coin_ledger with: id, user_id, amount (positive/negative), type, metadata, created_at
+Types include: house_purchase, house_tax, house_maintenance, rent_payment, rent_platform_fee, car_purchase, insurance_fee, registration_fee, plate_change_fee, auction_bid_hold, auction_win, auction_refund, impound_fee.
+
+2) Business Logic (Hard Rules)
+A) Power Bands & Unlocks (Houses)
+
+Implement tier breakpoints:
+
+Tier 1 (Apartment): basic storage + minimal bonus
+
+Tier 2 (Condo): rent slots + small fee discounts
+
+Tier 3 (Estate): business licensing unlocked + bigger rent + cashout/loan limits improved
+
+Tier 4 (Mansion): political/city influence mechanics unlocked + court interactions boosted
+
+Tier 5 (Landmark): city-level influence + event hosting + premium fee reductions
+
+These must be enforced in code via:
+
+feature_flags returned from server
+
+UI must show locked vs unlocked features
+
+B) Upkeep + Decay (Houses)
+
+Every owned house must:
+
+Pay recurring tax + maintenance (daily or weekly schedule)
+
+Condition decays if maintenance not paid
+
+If delinquent beyond grace period:
+
+status → delinquent
+
+lose power flags (influence_active false)
+
+If delinquent beyond foreclosure threshold:
+
+status → foreclosed
+
+automatically create asset_auctions record
+
+remove from owner at auction end and transfer to winner
+No manual intervention required.
+
+C) Rentals (Houses) — Circulation
+
+Tenants pay rent on schedule
+
+Platform skims fee bps
+
+Landlord receives remainder
+
+Late rent triggers late status; repeated late allows eviction
+
+Add a “no home” sink: users without a primary house pay “hotel tax” daily (small but real). This pushes renting/buying demand.
+
+D) Exposure + Risk (Cars)
+
+High-tier cars must create risk:
+
+Exposure 0: minimal visibility
+
+Exposure 1–2: visible badge
+
+Exposure 3: “targeted” (higher enforcement triggers)
+
+Exposure 4: “watched” (highest scrutiny)
+
+This is a gameplay rule:
+
+In broadcasts and profiles, show a clickable car badge with:
+
+plate_status
+
+registration_expires_at
+
+insurance_expires_at
+
+exposure label
+
+If plate is expired/suspended or insurance is expired:
+
+badge shows warning state
+
+staff can see instantly and apply moderation actions (fine, impound, court summon)
+
+E) Mandatory Recurring Fees (Cars)
+
+Insurance required (recurring)
+
+Registration required (recurring)
+
+Plate change allowed for 20 coins
+If unpaid:
+
+status becomes uninsured or unregistered
+
+after grace period, car becomes impounded
+
+impounded cars require impound fee OR get auctioned after threshold
+
+F) Auctions
+
+Auctions accept bids, hold coins (bid hold)
+
+Refund losing bids automatically
+
+Winner pays, asset transfers, ledger logs everything
+
+Auctions are the primary mechanism to force circulation from delinquency
+
+3) Server Implementation (Supabase Edge Functions)
+
+Implement Edge Functions for:
+
+buy-house
+
+sell-house (peer-to-peer listing OR direct sale via marketplace; must apply platform fee)
+
+pay-house-tax
+
+pay-house-maintenance
+
+create-rental
+
+pay-rent
+
+buy-car
+
+pay-car-insurance
+
+pay-car-registration
+
+change-plate (20 coins)
+
+impound-car (staff/admin only)
+
+create-auction (system/internal only)
+
+bid-auction
+
+finalize-auction (cron-like scheduled function)
+
+All functions must:
+
+Validate balances
+
+Write to coin_ledger first (source of truth)
+
+Update ownership tables in the same transaction
+
+Be secure with RLS-safe patterns (service role only inside edge functions; client never writes directly to sensitive tables)
+
+4) Client UI Requirements
+
+Update UI to:
+
+Show house tier, power band, and unlocked features
+
+Show next due dates for tax/maintenance, and delinquency warnings
+
+Show rentals: slots used/available, rent due, late states
+
+Show car badge everywhere (profile + broadcast overlay):
+
+plate status
+
+insurance/registration expiration
+
+exposure level
+
+Marketplace:
+
+show houses/cars for sale, upgrades included
+
+show platform fee + taxes explicitly
+
+Auctions:
+
+real-time updates, countdown, bid button, current leader
+
+No fake data. Everything must fetch from Supabase and match ledger totals.
+
+5) Scheduled Jobs (Required)
+
+Implement scheduled processing (via Supabase scheduled functions/cron or equivalent):
+
+Daily: assess house taxes, maintenance decay, apply hotel tax if no primary home
+
+Daily: check car insurance/registration expiration, update statuses
+
+Daily: convert delinquent → foreclosed / impounded → auction
+
+Every minute: finalize auctions that ended, transfer assets, refund bids
+
+6) Testing Checklist (Must Pass)
+
+Buy house → ledger entry created, ownership created
+
+Skip taxes → delinquent → lose influence/unlocks
+
+Continue skipping → foreclosure → auction created
+
+Auction ends → asset transfers → losing bids refunded
+
+Buy car → badge displays valid docs
+
+Insurance expires → badge shows warning → status updates
+
+Staff can click badge during broadcast and see doc states
+
+Plate change charges 20 coins and updates plate number
+
+No primary house → hotel tax sink applies
+
+No client direct writes to sensitive tables (enforced)
+
+7) Constraints
+
+Preserve existing coin economy rules and cashout architecture.
+
+All new costs are coin-denominated sinks.
+
+Use transactions and server-side enforcement; do not rely on client-only validation.
+
+Keep code clean, modular, and consistent with existing project structure.
+
+Deliverables:
+
+SQL migrations
+
+Edge functions
+
+Updated React UI components (marketplace, asset pages, badge overlays, auctions)
+
+A short README describing how upkeep, delinquency, seizures, and auctions work
+
+Implement now. Do not stop at design.

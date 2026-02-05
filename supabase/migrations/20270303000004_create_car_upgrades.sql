@@ -14,8 +14,47 @@ CREATE TABLE IF NOT EXISTS public.car_upgrades (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure columns exist if table already existed with different schema
+DO $$
+BEGIN
+    -- Handle legacy category column if it exists (map to type)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'category') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'type') THEN
+            ALTER TABLE public.car_upgrades RENAME COLUMN category TO type;
+        ELSE
+            ALTER TABLE public.car_upgrades DROP COLUMN category;
+        END IF;
+    END IF;
+
+    -- Handle legacy cost_coins column if it exists
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'cost_coins') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'cost') THEN
+            ALTER TABLE public.car_upgrades RENAME COLUMN cost_coins TO cost;
+        ELSE
+            ALTER TABLE public.car_upgrades DROP COLUMN cost_coins;
+        END IF;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'type') THEN
+        ALTER TABLE public.car_upgrades ADD COLUMN type TEXT NOT NULL DEFAULT 'misc';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'tier') THEN
+        ALTER TABLE public.car_upgrades ADD COLUMN tier INTEGER NOT NULL DEFAULT 1;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'cost') THEN
+        ALTER TABLE public.car_upgrades ADD COLUMN cost INTEGER NOT NULL DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'value_increase_amount') THEN
+        ALTER TABLE public.car_upgrades ADD COLUMN value_increase_amount INTEGER NOT NULL DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'description') THEN
+        ALTER TABLE public.car_upgrades ADD COLUMN description TEXT;
+    END IF;
+END $$;
+
 -- 2. Enable RLS
 ALTER TABLE public.car_upgrades ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read upgrades" ON public.car_upgrades;
 CREATE POLICY "Public read upgrades" ON public.car_upgrades FOR SELECT USING (true);
 
 -- 3. Ensure user_vehicle_upgrades exists (retry if previous migration failed due to missing FK)
@@ -28,41 +67,12 @@ CREATE TABLE IF NOT EXISTS public.user_vehicle_upgrades (
 );
 
 ALTER TABLE public.user_vehicle_upgrades ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users view own upgrades" ON public.user_vehicle_upgrades;
 CREATE POLICY "Users view own upgrades" ON public.user_vehicle_upgrades FOR SELECT USING (
     user_vehicle_id IN (SELECT id FROM public.user_vehicles WHERE user_id = auth.uid())
 );
 
 -- 4. Seed Data
-INSERT INTO public.car_upgrades (name, type, tier, cost, value_increase_amount, description) VALUES
--- Engine
-('Street Tuned Engine', 'engine', 1, 2000, 1500, 'Basic ECU remap and intake for better street performance.'),
-('Sport Performance Engine', 'engine', 2, 8000, 6000, 'Forged internals and high-flow turbo for serious power.'),
-('Race Spec Engine', 'engine', 3, 25000, 20000, 'Full race engine build capable of extreme RPMs.'),
-
--- Transmission
-('Short Shifter', 'transmission', 1, 1000, 800, 'Faster gear changes for street racing.'),
-('Race Transmission', 'transmission', 2, 5000, 4000, 'Sequential gearbox for lightning-fast shifts.'),
-
--- Tires
-('Street Performance Tires', 'tires', 1, 1500, 1000, 'Improved grip for city driving.'),
-('Slick Racing Tires', 'tires', 2, 4000, 3000, 'Maximum grip for dry tarmac.'),
-('Off-Road Rally Tires', 'tires', 2, 4000, 3000, 'Deep treads for dirt and rough terrain.'),
-
--- Nitro
-('Nitrous Oxide System (NOS)', 'nitro', 1, 3000, 2500, 'Temporary speed boost injection.'),
-('Dual-Stage Nitrous', 'nitro', 2, 10000, 8000, 'Professional grade nitrous system for sustained boosts.'),
-
--- Body
-('Aerodynamic Body Kit', 'body', 1, 2500, 2000, 'Reduces drag and improves stability.'),
-('Widebody Kit', 'body', 2, 6000, 5000, 'Wider stance for better cornering and aggressive look.'),
-('Carbon Fiber Weight Reduction', 'body', 3, 15000, 12000, 'Replaces panels with carbon fiber to reduce weight.')
-ON CONFLICT DO NOTHING; -- Avoid duplicates if re-run (though UUIDs make this tricky, but names aren't unique constraint)
--- Note: UUIDs are generated, so subsequent runs will add duplicates unless we clear. 
--- For a robust seed, we usually clear or check. 
--- Since this is "Create", we assume fresh or we accept duplicates in dev.
--- To be cleaner, let's truncate if we want a clean slate, but that deletes user data.
--- Better: Only insert if table is empty.
-
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.car_upgrades) THEN

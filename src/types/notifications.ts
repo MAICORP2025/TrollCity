@@ -41,6 +41,7 @@ export interface Notification {
 }
 
 export interface NotificationMetadata {
+  action_url?: string
   gift_id?: string
   sender_id?: string
   coins_spent?: number

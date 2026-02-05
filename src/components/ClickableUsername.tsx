@@ -3,7 +3,7 @@ import VerifiedBadge from './VerifiedBadge'
 import OfficerTierBadge from './OfficerTierBadge'
 import { EmpireBadge } from './EmpireBadge'
 import { useNavigate } from 'react-router-dom'
-import { Shield, Crown, Skull, Star, UserX, Ban, MicOff, User, LogOut } from 'lucide-react'
+import { Shield, Crown, Skull, Star, UserX, Ban, MicOff, User, LogOut, ClipboardList } from 'lucide-react'
 import { applyGlowingUsername } from '../lib/perkEffects'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ interface ClickableUsernameProps {
     is_admin?: boolean
     is_troller?: boolean
     is_og_user?: boolean
+    is_gold?: boolean
     is_verified?: boolean
     officer_level?: number
     troller_level?: number
@@ -78,11 +79,24 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     
     // Check profile prop first for instant RGB feedback
     const el = usernameRef.current
-    const hasRgb = userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > new Date()
-    if (hasRgb) {
+    const now = new Date();
+    
+    // GOLD Check (Highest Priority)
+    // "Gold does NOT override Gold" (Wait, "RGB... Does NOT override Gold")
+    const isGold = userProfile?.is_gold || userProfile?.username_style === 'gold' || userProfile?.badge === 'president';
+    
+    // RGB Check
+    const hasRgb = userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > now;
+
+    if (isGold) {
+      el.classList.add('gold-username')
+      el.classList.remove('rgb-username')
+    } else if (hasRgb) {
       el.classList.add('rgb-username')
+      el.classList.remove('gold-username')
     } else {
       el.classList.remove('rgb-username')
+      el.classList.remove('gold-username')
       applyGlowingUsername(el, targetUserId)
     }
   }, [targetUserId, username, userProfile])
@@ -105,7 +119,10 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     userProfile?.is_troll_officer || 
     userProfile?.role === 'troll_officer'
   )
-  const isTroller = !isAdmin && !isOfficer && (
+  const isSecretary = !isAdmin && !isOfficer && (
+    userProfile?.role === 'secretary'
+  )
+  const isTroller = !isAdmin && !isOfficer && !isSecretary && (
     userProfile?.is_troller || 
     userProfile?.role === 'troller'
   )
@@ -358,8 +375,16 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             </>
         )}
 
+        {/* Secretary Badge */}
+        {!isAdmin && !isOfficer && isSecretary && (
+            <span className="badge-icon" title="Secretary" style={{ color: '#F472B6' }}> {/* pink-400 */}
+                <ClipboardList size={16} />
+                <span className="badge-title">Secretary</span>
+            </span>
+        )}
+
         {/* Troller Badge (if not admin or officer) */}
-        {!isAdmin && !isOfficer && isTroller && (
+        {!isAdmin && !isOfficer && !isSecretary && isTroller && (
             <span className="badge-icon troller-badge" title={trollerTitles[trollerLevel] || 'Troller'}>
             <Skull size={16} />
             <span className="badge-title">

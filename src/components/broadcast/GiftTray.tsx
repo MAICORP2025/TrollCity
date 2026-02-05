@@ -17,7 +17,7 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
   const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { sendGift, isSending } = useGiftSystem(recipientId, streamId, battleId, recipientId);
-  const { balances } = useAuthStore();
+  const { profile } = useAuthStore();
   // const [sendingToAll, setSendingToAll] = useState(false);
 
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
         </h3>
         <div className="flex items-center gap-4">
             <div className="text-yellow-400 font-mono text-sm bg-yellow-400/10 px-3 py-1 rounded-full border border-yellow-400/20">
-                {balances?.troll_coins?.toLocaleString() || 0} Coins
+                {profile?.troll_coins?.toLocaleString() || 0} Coins
             </div>
             <button 
                 onClick={onClose}

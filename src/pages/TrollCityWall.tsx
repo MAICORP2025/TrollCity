@@ -157,11 +157,11 @@ export default function TrollCityWall() {
   useEffect(() => {
     loadPosts()
 
-    // Replaced high-overhead Realtime subscription with Polling (15s)
+    // Replaced high-overhead Realtime subscription with Polling (60s)
     const interval = setInterval(() => {
       // Optional: Only poll if tab is active or just blindly poll
       loadPosts()
-    }, 15000)
+    }, 60000)
 
     return () => {
       clearInterval(interval)

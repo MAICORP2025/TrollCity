@@ -73,7 +73,7 @@ export const usePresidentSystem = () => {
           *,
           candidates:president_candidates(
             *,
-            user:user_profiles!president_candidates_user_id_fkey(username, avatar_url)
+            user:user_profiles(username, avatar_url)
           )
         `)
         .order('created_at', { ascending: false })
@@ -178,7 +178,7 @@ export const usePresidentSystem = () => {
   
   const fetchTreasuryBalance = useCallback(async () => {
       try {
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('president_treasury_balance')
             .select('balance_cents')
             .eq('currency', 'USD')
@@ -266,7 +266,7 @@ export const usePresidentSystem = () => {
           *,
           candidates:president_candidates(
             *,
-            user:user_profiles!president_candidates_user_id_fkey(username, avatar_url)
+            user:user_profiles(username, avatar_url)
           )
         `)
         .order('created_at', { ascending: false });
