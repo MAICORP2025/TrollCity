@@ -12,7 +12,8 @@ import { trollCityTheme } from '../styles/trollCityTheme';
 const Auth = () => {
   const [loading, setLoading] = useState(false)
   const [searchParams] = useSearchParams()
-  const initialIsLogin = searchParams.get('mode') === 'signup' ? false : true
+  // const initialIsLogin = searchParams.get('mode') === 'signup' ? false : true
+  const initialIsLogin = true; // FORCE LOGIN MODE
   const [isLogin, setIsLogin] = useState(initialIsLogin)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -158,6 +159,18 @@ const Auth = () => {
       profileData = fetchedProfile
 
       if (profileData) {
+        // 🚧 MAINTENANCE CHECK 🚧
+        // Strict enforcement: Only admins can proceed past this point
+        const isMaintenanceMode = true;
+        const isAdmin = profileData.role === 'admin' || profileData.is_admin === true;
+        
+        if (isMaintenanceMode && !isAdmin) {
+          console.warn('Login blocked: Maintenance mode active and user is not admin', profileData.role);
+          await supabase.auth.signOut();
+          setAuth(null, null);
+          throw new Error('MAINTENANCE MODE: Login is currently restricted to Administrators only.');
+        }
+
         // Check if admin BEFORE setting profile
         if (isAdminEmail(data.user.email) && profileData.role !== 'admin') {
           try {
@@ -416,7 +429,7 @@ const Auth = () => {
             </p>
           </div>
 
-          {/* Tab Navigation */}
+          {/* Tab Navigation - HIDDEN FOR MAINTENANCE
           <div className="flex justify-center mb-8">
             <div className="grid grid-cols-2 w-full max-w-xs bg-slate-800/50 border border-white/5 rounded-xl p-1 gap-1">
               <button
@@ -439,10 +452,17 @@ const Auth = () => {
               </button>
             </div>
           </div>
+          */}
           
-          <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-center">
-            <p className="text-red-200 text-sm font-bold">🚧 MAINTENANCE IN PROGRESS</p>
-            <p className="text-red-300 text-xs mt-1">Sign-ups are disabled. Login restricted to Administrators only.</p>
+          <div className="mb-8 p-4 bg-red-950/50 border border-red-500/50 rounded-xl text-center shadow-[0_0_20px_rgba(220,38,38,0.2)]">
+            <div className="flex justify-center mb-2">
+              <Lock className="w-8 h-8 text-red-400" />
+            </div>
+            <h3 className="text-xl font-bold text-red-200 mb-1">MAINTENANCE MODE</h3>
+            <p className="text-red-300/80 text-sm">
+              Access is currently restricted to Administrators only.<br/>
+              Sign-ups and standard logins are disabled.
+            </p>
           </div>
 
           {/* Form */}
