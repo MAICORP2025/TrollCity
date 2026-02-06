@@ -70,31 +70,14 @@ export function useStreamStats(room: Room | null, streamerId: string | null) {
 
     fetchStreamerStats()
     
-    // Subscribe to real-time updates instead of polling
-    const channel = supabase
-      .channel(`streamer_stats_${streamerId}`)
-      .on(
-        'postgres_changes',
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'user_profiles', 
-          filter: `id=eq.${streamerId}` 
-        },
-        (payload) => {
-          if (payload.new) {
-            // Merge new data with existing stats
-            setStreamerStats((prev: any) => ({
-              ...prev,
-              ...payload.new
-            }))
-          }
-        }
-      )
-      .subscribe()
+    // Polling for streamer stats (coins/level) instead of Realtime
+    // This reduces DB load when many viewers are watching one streamer
+    const interval = setInterval(() => {
+        fetchStreamerStats();
+    }, 30000); // Poll every 30s
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(interval);
     }
   }, [streamerId])
 

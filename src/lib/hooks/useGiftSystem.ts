@@ -154,13 +154,17 @@ export function useGiftSystem(
         (async () => {
           try {
             let receiverName = 'Someone';
+            let receiverGlowingColor = null;
             if (targetReceiverId) {
               const { data: rData } = await supabase
                 .from('user_profiles')
-                .select('username')
+                .select('username, glowing_username_color')
                 .eq('id', targetReceiverId)
                 .single();
-              if (rData) receiverName = rData.username;
+              if (rData) {
+                receiverName = rData.username;
+                receiverGlowingColor = rData.glowing_username_color;
+              }
             }
 
             const channel = supabase.channel('global-gifts');
@@ -174,7 +178,9 @@ export function useGiftSystem(
                     senderId: user.id,
                     receiverId: targetReceiverId,
                     senderName: profile.username || 'Anonymous',
+                    senderGlowingColor: profile.glowing_username_color,
                     receiverName: receiverName,
+                    receiverGlowingColor: receiverGlowingColor,
                     giftName: gift.name,
                     amount: gift.coinCost,
                     timestamp: Date.now()

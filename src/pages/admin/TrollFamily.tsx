@@ -39,7 +39,7 @@ export default function TrollFamily() {
   const [showAddMember, setShowAddMember] = useState(false)
   const [newMemberUsername, setNewMemberUsername] = useState('')
   const [newMemberTitle, setNewMemberTitle] = useState('Honorary Family Member')
-  const [usersCreatedAt, setUsersCreatedAt] = useState<Record<string, string>>({})
+  const [usersProfiles, setUsersProfiles] = useState<Record<string, any>>({})
 
   const loadFamilyData = React.useCallback(async () => {
     try {
@@ -72,24 +72,27 @@ export default function TrollFamily() {
         setLeaderboard(currentLeaderboard)
       }
 
-      // Fetch created_at for all relevant users
+      // Fetch profile data for all relevant users
       const userIds = new Set<string>()
       if (adminStatus?.current_wife?.user_id) userIds.add(adminStatus.current_wife.user_id)
       if (adminStatus?.current_husband?.user_id) userIds.add(adminStatus.current_husband.user_id)
+      if (adminStatus?.honorary_members) {
+        adminStatus.honorary_members.forEach((m: any) => userIds.add(m.user_id))
+      }
       currentLeaderboard.forEach((entry: LeaderboardEntry) => userIds.add(entry.user_id))
       
       if (userIds.size > 0) {
         const { data: profiles } = await supabase
           .from('user_profiles')
-          .select('id, created_at')
+          .select('id, created_at, glowing_username_color, rgb_username_expires_at')
           .in('id', Array.from(userIds))
         
         if (profiles) {
-          const ageMap: Record<string, string> = {}
+          const profileMap: Record<string, any> = {}
           profiles.forEach(p => {
-            if (p.created_at) ageMap[p.id] = p.created_at
+            profileMap[p.id] = p
           })
-          setUsersCreatedAt(ageMap)
+          setUsersProfiles(profileMap)
         }
       }
 
@@ -398,7 +401,9 @@ export default function TrollFamily() {
                           user={{
                             username: entry.username,
                             id: entry.user_id,
-                            created_at: usersCreatedAt[entry.user_id],
+                            created_at: usersProfiles[entry.user_id]?.created_at,
+                            glowing_username_color: usersProfiles[entry.user_id]?.glowing_username_color,
+                            rgb_username_expires_at: usersProfiles[entry.user_id]?.rgb_username_expires_at,
                             age_days: entry.age_days
                           }}
                           className="font-semibold"
@@ -454,7 +459,10 @@ export default function TrollFamily() {
                         user={{
                           username: member.username,
                           id: member.user_id,
-                          age_days: member.age_days
+                          age_days: member.age_days,
+                          glowing_username_color: usersProfiles[member.user_id]?.glowing_username_color,
+                          rgb_username_expires_at: usersProfiles[member.user_id]?.rgb_username_expires_at,
+                          created_at: usersProfiles[member.user_id]?.created_at
                         }}
                         className="font-semibold"
                       />

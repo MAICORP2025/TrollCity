@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase, UserProfile } from '../lib/supabase'
+import { getGlowingTextStyle } from '../lib/perkEffects'
 import { toast } from 'sonner'
 
 interface FollowRow {
@@ -103,7 +104,23 @@ export default function Following() {
                   <div className="text-[#E2E2E2]/70">You are not following anyone yet</div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {rows.map((r) => (
+                    {rows.map((r) => {
+                      const profile = r.following as any;
+                      const isGold = profile?.is_gold || profile?.username_style === 'gold' || profile?.badge === 'president';
+                      const hasRgb = profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date();
+                      
+                      let nameClass = "font-semibold";
+                      let style = {};
+
+                      if (isGold) {
+                        nameClass += " gold-username";
+                      } else if (hasRgb) {
+                        nameClass += " rgb-username";
+                      } else if (profile?.glowing_username_color) {
+                        style = getGlowingTextStyle(profile.glowing_username_color);
+                      }
+
+                      return (
                       <div key={r.id} className="flex items-center justify-between p-4 bg-[#121212] rounded-lg border border-[#2C2C2C] hover:border-[#00D4FF] transition-colors">
                         <Link to={`/profile/${r.following?.username}`} className="flex items-center gap-3 flex-1">
                           <img
@@ -112,7 +129,7 @@ export default function Following() {
                             className="w-10 h-10 rounded-full"
                           />
                           <div>
-                            <div className={`font-semibold ${r.following?.rgb_username_expires_at && new Date(r.following.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>@{r.following?.username}</div>
+                            <div className={nameClass} style={style}>@{r.following?.username}</div>
                             <div className="text-xs text-[#E2E2E2]/60">Followed {new Date(r.created_at).toLocaleDateString()}</div>
                           </div>
                         </Link>
@@ -125,7 +142,7 @@ export default function Following() {
                           </button>
                         )}
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )
               ) : (
@@ -133,21 +150,28 @@ export default function Following() {
                   <div className="text-[#E2E2E2]/70">No one is following you yet</div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {followers.map((r) => (
-                      <Link key={r.id} to={`/profile/${r.following?.username}`} className="p-4 bg-[#121212] rounded-lg border border-[#2C2C2C] hover:border-[#00D4FF] transition-colors">
+                    {followers.map((r) => {
+                      return (
+                      <div key={r.id} className="p-4 bg-[#121212] rounded-lg border border-[#2C2C2C] hover:border-[#00D4FF] transition-colors">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={r.following?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.following?.username}`}
-                            alt={r.following?.username || ''}
-                            className="w-10 h-10 rounded-full"
-                          />
+                          <Link to={`/profile/${r.following?.username}`}>
+                            <img
+                              src={r.following?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.following?.username}`}
+                              alt={r.following?.username || ''}
+                              className="w-10 h-10 rounded-full"
+                            />
+                          </Link>
                           <div>
-                            <div className={`font-semibold ${r.following?.rgb_username_expires_at && new Date(r.following.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>@{r.following?.username}</div>
+                            <ClickableUsername 
+                              username={r.following?.username || ''} 
+                              profile={r.following} 
+                              className="font-semibold"
+                            />
                             <div className="text-xs text-[#E2E2E2]/60">Followed you {new Date(r.created_at).toLocaleDateString()}</div>
                           </div>
                         </div>
-                      </Link>
-                    ))}
+                      </div>
+                    )})}
                   </div>
                 )
               )}

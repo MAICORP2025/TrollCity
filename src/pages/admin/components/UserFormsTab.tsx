@@ -38,7 +38,12 @@ export default function UserFormsTab() {
           username,
           full_name,
           onboarding_completed,
-          avatar_url
+          avatar_url,
+          is_gold,
+          glowing_username_color,
+          rgb_username_expires_at,
+          username_style,
+          badge
         `)
         .order('created_at', { ascending: false })
         .limit(100);

@@ -32,5 +32,11 @@ export interface Participant {
   user_profile?: {
     username: string
     avatar_url: string
+    is_gold?: boolean
+    username_style?: string
+    badge?: string
+    glowing_username_color?: string
+    rgb_username_expires_at?: string
+    created_at?: string
   }
 }

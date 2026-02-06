@@ -2,18 +2,20 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useInRouterContext } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
+import { useXPStore } from '../stores/useXPStore';
 import CreditScoreBadge from '../components/CreditScoreBadge';
 import BadgesGrid from '../components/badges/BadgesGrid';
 import UserBadge from '../components/UserBadge';
 import { useCreditScore } from '../lib/hooks/useCreditScore';
 import { useProfileViewPayment } from '../hooks/useProfileViewPayment';
 import { getLevelName } from '../lib/xp';
-import { ENTRANCE_EFFECTS_MAP } from '../lib/entranceEffects';
-import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home, Mars, Venus, Trash2, CheckCircle, CreditCard, FileText } from 'lucide-react';
+import { ENTRANCE_EFFECTS_MAP, EntranceEffect } from '../lib/entranceEffects';
+import { Loader2, MessageCircle, UserPlus, Settings, MapPin, Link as LinkIcon, Calendar, Package, Shield, Zap, Phone, Coins, Mail, Bell, BellOff, LogOut, ChevronDown, Car, RefreshCw, Home, Mars, Venus, Trash2, CheckCircle, CreditCard, FileText, Palette, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { deductCoins } from '@/lib/coinTransactions';
 import { PERK_CONFIG } from '@/lib/perkSystem';
-import { canMessageAdmin } from '@/lib/perkEffects';
+import { canMessageAdmin, getGlowingTextStyle } from '@/lib/perkEffects';
+import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPicker';
 import { cars } from '../data/vehicles';
 import { trollCityTheme } from '../styles/trollCityTheme';
 import TMVTab from '../components/tmv/TMVTab';
@@ -23,11 +25,13 @@ function ProfileInner() {
   const { username, userId } = useParams();
   const navigate = useNavigate();
   const { user: currentUser, profile: currentUserProfile, refreshProfile } = useAuthStore();
+  const { fetchXP, subscribeToXP, unsubscribe } = useXPStore();
   
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isProfileLive, setIsProfileLive] = useState(false);
   const [activeTab, setActiveTab] = useState('social');
+  const [showColorPickerModal, setShowColorPickerModal] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [inventory, setInventory] = useState<{
@@ -450,7 +454,12 @@ function ProfileInner() {
     window.scrollTo(0, 0);
 
     const fetchProfile = async () => {
-      // const targetUserId = userId || (username ? null : currentUser?.id);
+      // Always fetch fresh XP data for own profile to avoid level glitch
+      if (currentUser?.id) {
+        console.log('Fetching fresh XP data for user:', currentUser.id);
+        fetchXP(currentUser.id);
+        subscribeToXP(currentUser.id);
+      }
       
       // OPTIMIZATION: Check if we already have the data in the global store for own profile
       if (currentUserProfile && (
@@ -468,13 +477,13 @@ function ProfileInner() {
             setViewCost(currentUserProfile.profile_view_cost || 0);
           }
           
-          // Background fetch to update if needed (SWR pattern)
-          // We don't set loading=true here to prevent flash
+          // Always do a background fetch to ensure we have latest level data
+          // This prevents the "level jump" glitch
       } else {
           // Only show loading if we don't have data yet
           const shouldShowLoading = !profile || 
-            (userId && profile.id !== userId) || 
-            (username && profile.username !== username);
+            (userId && profile?.id !== userId) || 
+            (username && profile?.username !== username);
 
           if (shouldShowLoading) {
             setLoading(true);
@@ -587,6 +596,13 @@ function ProfileInner() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, userId, currentUser?.id, fetchInventory]);
+
+  // Cleanup XP subscription on unmount
+  useEffect(() => {
+    return () => {
+      unsubscribe();
+    };
+  }, [unsubscribe]);
 
   // Live status check
   useEffect(() => {
@@ -811,6 +827,11 @@ function ProfileInner() {
     );
   }
 
+  const hasRgbUsername = profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date();
+  const glowingStyle = (!hasRgbUsername && profile?.glowing_username_color) ? getGlowingTextStyle(profile.glowing_username_color) : undefined;
+  const isGold = profile?.is_gold || false;
+  const style = (isGold && profile?.username_style === 'gold') ? { color: '#FFD700', textShadow: '0 0 10px #FFD700' } : undefined;
+
   return (
     <div className={`min-h-screen ${trollCityTheme.backgrounds.primary} text-white pb-20`}>
       {/* Banner / Cover Photo */}
@@ -889,7 +910,7 @@ function ProfileInner() {
         </div>
         
         <div className="mt-2">
-          <h1 className={`text-2xl font-bold flex items-center gap-2 ${profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}`}>
+          <h1 className={`text-2xl font-bold flex items-center gap-2 ${hasRgbUsername ? 'rgb-username' : ''}`} style={glowingStyle}>
             {profile.display_name || profile.username}
             {(profile as any).gender === 'male' && (
               <Mars className="text-blue-400" size={16} />
@@ -916,7 +937,7 @@ function ProfileInner() {
               </button>
             )}
           </h1>
-          <p className={`${trollCityTheme.text.muted} ${profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date() ? 'rgb-username font-bold' : ''}`}>@{profile.username}</p>
+          <p className={`${trollCityTheme.text.muted} ${isGold ? 'gold-username font-bold' : hasRgbUsername ? 'rgb-username font-bold' : ''}`} style={style}>@{profile.username}</p>
           {profile.level !== undefined && (
             <p className="text-sm text-purple-400 font-semibold mt-1">
               Level {profile.level} · {getLevelName(profile.level)}
@@ -1046,21 +1067,37 @@ function ProfileInner() {
                     {inventory.perks.map(perk => {
                       const isExpired = new Date(perk.expires_at) < new Date();
                       const config = PERK_CONFIG[perk.perk_id as keyof typeof PERK_CONFIG];
+                      // Fallback name generation
+                      const fallbackName = perk.perk_id ? perk.perk_id.replace(/^perk_/, '').replace(/_/g, ' ').toUpperCase() : 'Unknown Perk';
+                      const displayName = config?.name || perk.metadata?.perk_name || fallbackName;
+
                       return (
                         <div key={perk.id} className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} p-4 rounded-xl`}>
                           <div className="flex justify-between items-start mb-2">
-                             <h4 className="font-bold text-white">{config?.name || perk.metadata?.perk_name || 'Unknown Perk'}</h4>
+                             <h4 className="font-bold text-white">{displayName}</h4>
                              <span className={`px-2 py-0.5 rounded text-xs ${isExpired ? 'bg-red-900 text-red-200' : perk.is_active ? 'bg-green-900 text-green-200' : 'bg-gray-800 text-gray-400'}`}>
                                {isExpired ? 'EXPIRED' : perk.is_active ? 'ACTIVE' : 'INACTIVE'}
                              </span>
                           </div>
-                          <p className={`text-sm ${trollCityTheme.text.muted} mb-3`}>{config?.description || perk.metadata?.description}</p>
+                          <p className={`text-sm ${trollCityTheme.text.muted} mb-3`}>{config?.description || perk.metadata?.description || 'No description available'}</p>
                           <p className={`text-sm ${trollCityTheme.text.muted} mb-3`}>Expires: {new Date(perk.expires_at).toLocaleString()}</p>
                           <div className="flex gap-2">
                             {!isExpired && isOwnProfile && (
+                              <>
                               <button onClick={() => togglePerk(perk.id, perk.is_active)} className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs">
                                 {perk.is_active ? 'Deactivate' : 'Activate'}
                               </button>
+                              
+                              {perk.perk_id === 'perk_global_highlight' && perk.is_active && (
+                                <button
+                                  onClick={() => setShowColorPickerModal(true)}
+                                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs flex items-center gap-1"
+                                >
+                                  <Palette className="w-3 h-3" />
+                                  Choose Color
+                                </button>
+                              )}
+                              </>
                             )}
                             {(isExpired || !perk.is_active) && isOwnProfile && (
                               <button onClick={() => handleRepurchasePerk(perk)} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs flex items-center gap-1">
@@ -1079,24 +1116,29 @@ function ProfileInner() {
                <div>
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-yellow-500"/> Titles & Deeds</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {inventory.titlesAndDeeds.map((item: any) => (
+                    {inventory.titlesAndDeeds.map((item: any) => {
+                      const title = item.marketplace_item?.title || item.metadata?.title || item.metadata?.name || 'Unknown Item';
+                      const description = item.marketplace_item?.description || item.metadata?.description || 'No description available';
+                      const imageUrl = item.marketplace_item?.image_url || item.metadata?.image_url || item.metadata?.image;
+                      
+                      return (
                       <div key={item.id} className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} p-4 rounded-xl flex items-start gap-4`}>
                          <div className="bg-zinc-800 p-2 rounded-lg">
-                           {item.marketplace_item?.image_url ? (
-                             <img src={item.marketplace_item.image_url} alt={item.marketplace_item.title} className="w-10 h-10 object-cover rounded" />
+                           {imageUrl ? (
+                             <img src={imageUrl} alt={title} className="w-10 h-10 object-cover rounded" />
                            ) : (
                              <FileText className="w-8 h-8 text-gray-400" />
                            )}
                          </div>
                          <div>
-                           <h4 className="font-bold text-white">{item.marketplace_item?.title || 'Unknown Item'}</h4>
-                           <p className={`text-sm ${trollCityTheme.text.muted}`}>{item.marketplace_item?.description || 'No description'}</p>
+                           <h4 className="font-bold text-white">{title}</h4>
+                           <p className={`text-sm ${trollCityTheme.text.muted}`}>{description}</p>
                            <span className={`text-[10px] px-2 py-0.5 rounded uppercase mt-2 inline-block ${item.marketplace_item?.type === 'title' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30' : 'bg-blue-900/30 text-blue-400 border border-blue-500/30'}`}>
-                             {item.marketplace_item?.type || 'item'}
+                             {item.marketplace_item?.type || item.metadata?.type || 'item'}
                            </span>
                          </div>
                       </div>
-                    ))}
+                    )})}
                     {inventory.titlesAndDeeds.length === 0 && <p className={trollCityTheme.text.muted}>No titles or deeds found.</p>}
                   </div>
                </div>
@@ -1123,7 +1165,7 @@ function ProfileInner() {
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Package className="w-5 h-5 text-blue-400"/> Entrance Effects</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {inventory.effects.map(effect => {
-                       const effectData = ENTRANCE_EFFECTS_MAP[effect.effect_id] || {};
+                                               const effectData: Partial<EntranceEffect> = ENTRANCE_EFFECTS_MAP[effect.effect_id] || {};
                        const isActive = profile.active_entrance_effect === effect.effect_id;
                        
                        return (
@@ -1719,6 +1761,35 @@ function ProfileInner() {
                >
                  Close Card
                </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Glowing Username Color Picker Modal */}
+      {showColorPickerModal && currentUser?.id && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-[#0A0A14] border border-[#2C2C2C] rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[#2C2C2C]">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-yellow-400" />
+                Choose Glow Color
+              </h2>
+              <button
+                onClick={() => setShowColorPickerModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <GlowingUsernameColorPicker
+                userId={currentUser.id}
+                onColorSelected={() => {
+                  setShowColorPickerModal(false)
+                  toast.success('Color saved!')
+                  refreshProfile()
+                }}
+              />
             </div>
           </div>
         </div>

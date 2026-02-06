@@ -12,7 +12,7 @@ interface VehicleStatus {
   insurance_active?: boolean;
 }
 
-export function useStreamChat(streamId: string) {
+export function useStreamChat(streamId: string, isViewer: boolean = false) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const { user, profile } = useAuthStore();
   const lastSentRef = useRef<number>(0);
@@ -83,6 +83,13 @@ export function useStreamChat(streamId: string) {
 
     fetchMessages();
 
+    // If Viewer (Passive Mode), use Polling instead of Realtime
+    if (isViewer) {
+        const interval = setInterval(fetchMessages, 10000); // Poll every 10 seconds
+        return () => clearInterval(interval);
+    }
+
+    // Active Mode: Use Realtime Subscription
     const chatChannel = supabase
         .channel(`chat_mobile:${streamId}`)
         .on('postgres_changes', {
@@ -117,10 +124,10 @@ export function useStreamChat(streamId: string) {
         })
         .subscribe();
 
-    return () => {
-        supabase.removeChannel(chatChannel);
+    return () => { 
+        supabase.removeChannel(chatChannel); 
     };
-  }, [streamId, fetchVehicleStatus, vehicleCache]);
+  }, [streamId, fetchVehicleStatus, vehicleCache, isViewer]);
 
   const sendMessage = async (content: string) => {
     if (!content.trim() || !user || !profile) return;

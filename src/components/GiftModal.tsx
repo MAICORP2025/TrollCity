@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../lib/store'
 import { useCoins } from '../lib/hooks/useCoins'
 import { toast } from 'sonner'
 import { Gift, Coins, X, Loader2 } from 'lucide-react'
+import { v4 as uuidv4 } from 'uuid'
 
 interface GiftModalProps {
   isOpen: boolean
@@ -18,6 +19,12 @@ const GiftModal: React.FC<GiftModalProps> = ({ isOpen, onClose, recipientId, rec
   const { balances, spendCoins } = useCoins()
   const [amount, setAmount] = useState<number>(100)
   const [loading, setLoading] = useState(false)
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null)
+
+  // Reset idempotency key when transaction parameters change
+  useEffect(() => {
+    setIdempotencyKey(null)
+  }, [amount, recipientId])
 
   if (!isOpen) return null
 
@@ -27,6 +34,12 @@ const GiftModal: React.FC<GiftModalProps> = ({ isOpen, onClose, recipientId, rec
       return
     }
 
+    // Reuse existing key if retrying, otherwise generate new one
+    const key = idempotencyKey || uuidv4()
+    if (!idempotencyKey) {
+      setIdempotencyKey(key)
+    }
+
     setLoading(true)
     try {
       const success = await spendCoins({
@@ -34,7 +47,8 @@ const GiftModal: React.FC<GiftModalProps> = ({ isOpen, onClose, recipientId, rec
         receiverId: recipientId,
         amount: amount,
         source: 'gift',
-        item: 'Coin Gift'
+        item: 'Coin Gift',
+        idempotencyKey: key
       })
 
       if (success) {
@@ -42,6 +56,7 @@ const GiftModal: React.FC<GiftModalProps> = ({ isOpen, onClose, recipientId, rec
         setTimeout(() => {
           onClose()
           setAmount(100)
+          setIdempotencyKey(null)
         }, 1500)
       }
     } catch (err: any) {

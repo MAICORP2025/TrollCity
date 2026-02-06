@@ -12,6 +12,7 @@ export interface SeatSession {
     avatar_url: string;
     is_gold?: boolean;
     rgb_username_expires_at?: string;
+    glowing_username_color?: string;
     role?: string;
     troll_coins?: number;
   };
@@ -31,7 +32,7 @@ export function useStreamSeats(streamId: string | undefined) {
       .from('stream_seat_sessions')
       .select(`
         *,
-        user_profile:user_profiles(username, avatar_url, is_gold, rgb_username_expires_at, role, troll_coins)
+        user_profile:user_profiles(username, avatar_url, is_gold, rgb_username_expires_at, glowing_username_color, role, troll_coins)
       `)
       .eq('stream_id', streamId)
       .eq('status', 'active');

@@ -109,28 +109,23 @@ export function useLiveViewerCount(streamId: string | null) {
     getCount()
 
     // Subscribe to DB updates (debounced by the host's 15s update interval)
-    const channel = supabase
-      .channel(`viewer-count-db:${streamId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'streams',
-          filter: `id=eq.${streamId}`,
-        },
-        (payload) => {
-          if (mounted && payload.new) {
-             // @ts-expect-error: payload.new type is not inferred correctly
-             setViewerCount(payload.new.current_viewers || 0)
-          }
+    // REFACTOR: Changed from Realtime subscription to Polling to reduce DB connection costs
+    const interval = setInterval(async () => {
+        if (!mounted) return;
+        const { data } = await supabase
+            .from('streams')
+            .select('current_viewers')
+            .eq('id', streamId)
+            .single();
+        
+        if (mounted && data) {
+            setViewerCount(data.current_viewers || 0);
         }
-      )
-      .subscribe()
+    }, 15000); // Poll every 15s
 
     return () => {
       mounted = false
-      supabase.removeChannel(channel)
+      clearInterval(interval);
     }
   }, [streamId])
 

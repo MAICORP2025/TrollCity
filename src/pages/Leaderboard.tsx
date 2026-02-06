@@ -14,26 +14,39 @@ export default function Leaderboard() {
       setLoading(true)
       try {
         // Optimized: Use broadcaster_stats (O(1)) instead of user_profiles scan
-        const { data: stats } = await supabase
-          .from('broadcaster_stats')
-          .select(`
-            user_id, 
-            total_gifts_all_time, 
-            user_profiles (
-              username, 
-              rgb_username_expires_at, 
-              created_at
-            )
-          `)
-          .order('total_gifts_all_time', { ascending: false })
-          .limit(50)
+        // Parallelize queries for faster loading
+        const [statsResult, streamsResult] = await Promise.all([
+          supabase
+            .from('broadcaster_stats')
+            .select(`
+              user_id, 
+              total_gifts_all_time, 
+              user_profiles (
+                username, 
+                rgb_username_expires_at, 
+                glowing_username_color,
+                created_at
+              )
+            `)
+            .order('total_gifts_all_time', { ascending: false })
+            .limit(100), // Get more for filtering
+          supabase
+            .from('streams')
+            .select('id, title, total_gifts_coins, current_viewers, broadcaster_id, user_profiles(username, created_at, rgb_username_expires_at, glowing_username_color)')
+            .order('total_gifts_coins', { ascending: false })
+            .limit(100) // Get more for filtering
+        ])
 
         // Map to format expected by UI
-        const users = (stats || []).map((s: any) => ({
+        const stats = statsResult.data || []
+        const streams = streamsResult.data || []
+
+        const users = stats.map((s: any) => ({
           id: s.user_id,
           username: s.user_profiles?.username,
           total_earned_coins: s.total_gifts_all_time,
           rgb_username_expires_at: s.user_profiles?.rgb_username_expires_at,
+          glowing_username_color: s.user_profiles?.glowing_username_color,
           created_at: s.user_profiles?.created_at
         }));
 
@@ -52,14 +65,9 @@ export default function Leaderboard() {
         });
 
         setTopUsers(realUsers.slice(0, 20)) // Take top 20 real users
-        const { data: streams } = await supabase
-          .from('streams')
-          .select('id, title, total_gifts_coins, current_viewers, broadcaster_id, user_profiles(username, created_at, rgb_username_expires_at)')
-          .order('total_gifts_coins', { ascending: false })
-          .limit(50) // Get more to filter
 
         // Filter out streams from fake/test accounts
-        const realStreams = (streams || []).filter((stream: any) => {
+        const realStreams = streams.filter((stream: any) => {
           const username = (stream.user_profiles?.username || '').toLowerCase();
           // Exclude test/demo/mock accounts
           const isRealUser = !username.includes('test') &&
@@ -105,6 +113,7 @@ export default function Leaderboard() {
                           username: u.username,
                           id: u.id,
                           rgb_username_expires_at: u.rgb_username_expires_at,
+                          glowing_username_color: u.glowing_username_color,
                           created_at: u.created_at
                         }}
                         className="text-white" 
@@ -127,7 +136,8 @@ export default function Leaderboard() {
                               user={{
                                 username: s.user_profiles?.username || 'Unknown',
                                 created_at: s.user_profiles?.created_at,
-                                rgb_username_expires_at: s.user_profiles?.rgb_username_expires_at
+                                rgb_username_expires_at: s.user_profiles?.rgb_username_expires_at,
+                                glowing_username_color: s.user_profiles?.glowing_username_color
                               }}
                               className={`${trollCityTheme.text.muted}`}
                             />

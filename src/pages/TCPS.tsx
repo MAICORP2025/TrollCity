@@ -56,7 +56,7 @@ export default function TCPS() {
     // Here param is a UUID, not a username
     supabase
       .from('user_profiles')
-      .select('id, username, avatar_url, created_at')
+      .select('id, username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color')
       .eq('id', param)
       .single()
       .then(({ data }) => {
@@ -67,7 +67,9 @@ export default function TCPS() {
             username: data.username,
             avatar_url: data.avatar_url,
             created_at: data.created_at,
-            is_online: onlineUsers[data.id] || false
+            is_online: onlineUsers[data.id] || false,
+            rgb_username_expires_at: data.rgb_username_expires_at,
+            glowing_username_color: data.glowing_username_color
           })
         }
       })
@@ -172,7 +174,7 @@ export default function TCPS() {
 
     supabase
       .from('user_profiles')
-      .select('id, username, avatar_url, created_at')
+      .select('id, username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color')
       .eq('id', activeConversation)
       .single()
       .then(({ data }) => {
@@ -182,7 +184,9 @@ export default function TCPS() {
             username: data.username,
             avatar_url: data.avatar_url,
             created_at: data.created_at,
-            is_online: onlineUsers[data.id] || false
+            is_online: onlineUsers[data.id] || false,
+            rgb_username_expires_at: data.rgb_username_expires_at,
+            glowing_username_color: data.glowing_username_color
           })
         }
       })

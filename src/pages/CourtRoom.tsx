@@ -18,10 +18,12 @@ import { Track } from "livekit-client";
 import CourtGeminiModal from "../components/CourtGeminiModal";
 import CourtDocketModal from "../components/CourtDocketModal";
 import { generateSummaryFeedback } from "../lib/courtAi";
+import { getGlowingTextStyle } from "../lib/perkEffects";
 
 const CourtParticipantLabel = ({ trackRef }: { trackRef: any }) => {
   const [username, setUsername] = useState<string | null>(null);
   const [rgbExpiry, setRgbExpiry] = useState<string | null>(null);
+  const [glowingColor, setGlowingColor] = useState<string | null>(null);
   const identity = trackRef?.participant?.identity || null;
   const name = trackRef?.participant?.name || null;
   useEffect(() => {
@@ -33,17 +35,19 @@ const CourtParticipantLabel = ({ trackRef }: { trackRef: any }) => {
       }
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('username,rgb_username_expires_at')
+        .select('username,rgb_username_expires_at,glowing_username_color')
         .eq('id', identity)
         .maybeSingle();
       if (!mounted) return;
       if (error) {
         setUsername(name || identity);
         setRgbExpiry(null);
+        setGlowingColor(null);
         return;
       }
       setUsername(data?.username || name || identity);
       setRgbExpiry(data?.rgb_username_expires_at || null);
+      setGlowingColor(data?.glowing_username_color || null);
     };
     fetchProfile();
     return () => {
@@ -52,12 +56,16 @@ const CourtParticipantLabel = ({ trackRef }: { trackRef: any }) => {
   }, [identity, name]);
   const isRgbActive =
     rgbExpiry !== null && new Date(rgbExpiry) > new Date();
+  
+  const glowingStyle = (!isRgbActive && glowingColor) ? getGlowingTextStyle(glowingColor) : undefined;
+
   return (
     <div className="absolute bottom-2 left-2 right-2 flex justify-center pointer-events-none">
       <span
         className={`px-2 py-1 rounded bg-black/60 text-white text-xs ${
           isRgbActive ? 'rgb-username font-bold' : ''
         }`}
+        style={glowingStyle}
       >
         {username || identity || 'Participant'}
       </span>

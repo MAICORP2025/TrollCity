@@ -54,8 +54,31 @@ export async function getUsernameGlowClass(userId: string): Promise<string> {
     return `custom-glowing-username-${customGlow.metadata.glowColor}`;
   }
 
+  // Fallback: Check user_profiles for color preference
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('glowing_username_color')
+    .eq('id', userId)
+    .maybeSingle();
+  
+  if (profile?.glowing_username_color) {
+    return `custom-glowing-username-${profile.glowing_username_color}`;
+  }
+
   const isActive = await isPerkActive(userId, 'perk_global_highlight');
   return isActive ? 'glowing-username' : '';
+}
+
+/**
+ * Get CSS style object for glowing username
+ */
+export function getGlowingTextStyle(color: string) {
+  return {
+    animation: 'glow 2s ease-in-out infinite alternate',
+    color: color,
+    fontWeight: 'bold' as const,
+    textShadow: `0 0 5px ${color}, 0 0 10px ${color}, 0 0 15px ${color}, 0 0 20px ${color}`
+  };
 }
 
 /**

@@ -192,6 +192,13 @@ async function startEgress(roomId: string) {
        hlsUrl = `https://${bunnyZone}.b-cdn.net${hlsPath}`;
     }
 
+    // CRITICAL SECURITY GUARD: NEVER ALLOW SUPABASE STORAGE URLS
+    if (hlsUrl.includes('supabase.co') || hlsUrl.includes('supabase.in')) {
+        console.error('CRITICAL: Generated HLS URL contains Supabase domain. Blocking update.', hlsUrl);
+        // Force fallback to Bunny
+        hlsUrl = `https://${bunnyZone}.b-cdn.net${hlsPath}`;
+    }
+
     await supabase.from('streams').update({ 
         hls_path: hlsPath,
         hls_url: hlsUrl, // Keep for backward compatibility

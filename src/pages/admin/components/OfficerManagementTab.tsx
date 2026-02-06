@@ -4,6 +4,7 @@ import { RoleChangeLog, OfficerBadge } from '../../../types/admin'
 import { toast } from 'sonner'
 import { Shield, Award, History, Ban, ArrowUp, ArrowDown } from 'lucide-react'
 import { useAuthStore } from '../../../lib/store'
+import UserNameWithAge from '../../../components/UserNameWithAge'
 
 interface UserProfile {
   id: string
@@ -13,6 +14,11 @@ interface UserProfile {
   is_officer_active: boolean
   is_lead_officer: boolean
   troll_role: string
+  glowing_username_color?: string
+  rgb_username_expires_at?: string
+  is_gold?: boolean
+  username_style?: string
+  badge?: string
 }
 
 export default function OfficerManagementTab() {
@@ -186,7 +192,7 @@ export default function OfficerManagementTab() {
               >
                 <div className="flex items-center gap-3">
                   <img src={result.avatar_url || 'https://via.placeholder.com/40'} className="w-8 h-8 rounded-full" />
-                  <span className="text-white">{result.username}</span>
+                  <UserNameWithAge user={result} className="text-white" />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300">{result.role}</span>

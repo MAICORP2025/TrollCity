@@ -7,7 +7,12 @@ import UserNameWithAge from '../../components/UserNameWithAge';
 interface ReputationRecord {
   id: string;
   user_id: string;
-  user?: { username: string; rgb_username_expires_at?: string; created_at?: string };
+  user?: { 
+    username: string; 
+    rgb_username_expires_at?: string; 
+    glowing_username_color?: string;
+    created_at?: string 
+  };
   current_score: number;
   lifetime_score: number;
   reputation_tier: string;
@@ -19,7 +24,12 @@ interface ReputationRecord {
 interface OfficerRecord {
   id: string;
   officer_id: string;
-  officer?: { username: string; rgb_username_expires_at?: string; created_at?: string };
+  officer?: { 
+    username: string; 
+    rgb_username_expires_at?: string; 
+    glowing_username_color?: string;
+    created_at?: string 
+  };
   current_score: number;
   performance_rating: string;
   cases_handled: number;
@@ -30,7 +40,12 @@ interface OfficerRecord {
 interface SellerRecord {
   id: string;
   seller_id: string;
-  seller?: { username: string; rgb_username_expires_at?: string; created_at?: string };
+  seller?: { 
+    username: string; 
+    rgb_username_expires_at?: string; 
+    glowing_username_color?: string;
+    created_at?: string 
+  };
   current_score: number;
   reliability_tier: string;
   orders_fulfilled: number;
@@ -56,7 +71,7 @@ export default function ReputationDashboard() {
           .from('user_reputation')
           .select(`
             *,
-            user:user_profiles(username, rgb_username_expires_at, created_at)
+            user:user_profiles(username, rgb_username_expires_at, glowing_username_color, created_at)
           `)
           .order('current_score', { ascending: false });
 
@@ -66,7 +81,7 @@ export default function ReputationDashboard() {
           .from('officer_performance')
           .select(`
             *,
-            officer:user_profiles(username, rgb_username_expires_at, created_at)
+            officer:user_profiles(username, rgb_username_expires_at, glowing_username_color, created_at)
           `)
           .order('current_score', { ascending: false });
 
@@ -76,7 +91,7 @@ export default function ReputationDashboard() {
           .from('seller_reliability')
           .select(`
             *,
-            seller:user_profiles(username, rgb_username_expires_at, created_at)
+            seller:user_profiles(username, rgb_username_expires_at, glowing_username_color, created_at)
           `)
           .order('current_score', { ascending: false });
 

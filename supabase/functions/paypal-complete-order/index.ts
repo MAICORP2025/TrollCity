@@ -24,6 +24,24 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Rate Limit Check
+  const ip = req.headers.get('x-forwarded-for') || 'unknown';
+  // Use anon key for rate limiting if preferred, but service role works too. 
+  // Just reusing existing client.
+  const { data: allowed, error: rateError } = await supabase.rpc('check_rate_limit', {
+    p_key: `paypal_complete_${ip}`,
+    p_limit: 10, // 10 attempts per minute
+    p_window_seconds: 60
+  });
+
+  if (rateError) console.error('Rate limit error:', rateError);
+  if (!allowed) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Too many requests. Please try again later.' }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   try {
     const body = await req.json();
     const orderId: string | undefined = body?.orderId ?? body?.orderID;

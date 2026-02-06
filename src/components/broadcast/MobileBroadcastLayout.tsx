@@ -19,6 +19,7 @@ interface MobileBroadcastLayoutProps {
   onFlipCamera: () => void;
   onLeave: () => void;
   onJoinSeat: (index: number) => void;
+  hostGlowingColor?: string;
 }
 
 export default function MobileBroadcastLayout({
@@ -32,7 +33,8 @@ export default function MobileBroadcastLayout({
   onToggleCamera,
   onFlipCamera,
   onLeave,
-  onJoinSeat
+  onJoinSeat,
+  hostGlowingColor
 }: MobileBroadcastLayoutProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false); // Local state for UI toggle simulation if needed
@@ -64,6 +66,7 @@ export default function MobileBroadcastLayout({
       <TopLiveBar 
         stream={stream} 
         hostName={stream.user_id === isHost ? 'You' : 'Host'} // Replace with actual username lookup if available
+        hostGlowingColor={hostGlowingColor}
         onClose={onLeave}
         className="z-20"
       />

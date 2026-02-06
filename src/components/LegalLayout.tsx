@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FileText, Shield, DollarSign } from 'lucide-react'
+import { FileText, Shield, DollarSign, ArrowLeft } from 'lucide-react'
+import { useAuthStore } from '../lib/store'
 
 interface LegalLayoutProps {
   children: React.ReactNode
@@ -8,9 +9,11 @@ interface LegalLayoutProps {
 
 export default function LegalLayout({ children }: LegalLayoutProps) {
   const location = useLocation()
+  const { user } = useAuthStore()
 
   const navItems = [
     { path: '/legal/terms', label: 'Terms of Service', icon: FileText },
+    { path: '/legal/privacy', label: 'Privacy Policy', icon: Shield },
     { path: '/legal/refunds', label: 'Refund & Purchase Policy', icon: DollarSign },
     { path: '/legal/payouts', label: 'Creator & Payout Policy', icon: DollarSign },
     { path: '/legal/safety', label: 'Safety & Community Guidelines', icon: Shield }
@@ -20,6 +23,16 @@ export default function LegalLayout({ children }: LegalLayoutProps) {
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 lg:flex-row">
         <aside className="w-full max-w-xs rounded-2xl bg-black/60 border border-purple-600/30 p-4 shadow lg:sticky lg:top-6 lg:h-fit">
+          <div className="mb-6">
+            <Link 
+              to={user ? '/' : '/auth'} 
+              className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors group"
+            >
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              <span>{user ? 'Back to App' : 'Back to Login'}</span>
+            </Link>
+          </div>
+          
           <div className="flex items-center gap-2 mb-2">
             <Shield className="w-5 h-5 text-purple-400" />
             <h2 className="text-lg font-semibold tracking-wide text-purple-300">

@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Gift, Zap } from 'lucide-react';
+import { getGlowingTextStyle } from '../lib/perkEffects';
 
 interface GiftEvent {
   id: string;
   senderId: string;
   receiverId: string;
   senderName?: string;
+  senderGlowingColor?: string;
   receiverName?: string;
+  receiverGlowingColor?: string;
   giftName: string;
   amount: number;
   timestamp: number;
@@ -67,9 +70,19 @@ export default function GlobalGiftBanner() {
               HUGE GIFT ALERT!
             </h4>
             <div className="text-white font-bold text-sm mt-1">
-              <span className="text-yellow-300">{currentEvent.senderName}</span> sent 
+              <span 
+                className={currentEvent.senderGlowingColor ? 'font-bold' : 'text-yellow-300'}
+                style={getGlowingTextStyle(currentEvent.senderGlowingColor)}
+              >
+                {currentEvent.senderName}
+              </span> sent 
               <span className="text-pink-300 mx-1">{currentEvent.giftName}</span>
-              to <span className="text-yellow-300">{currentEvent.receiverName}</span>!
+              to <span 
+                className={currentEvent.receiverGlowingColor ? 'font-bold' : 'text-yellow-300'}
+                style={getGlowingTextStyle(currentEvent.receiverGlowingColor)}
+              >
+                {currentEvent.receiverName}
+              </span>!
             </div>
             <div className="text-xs text-yellow-400/80 mt-1 font-mono flex items-center gap-1">
               <Zap size={12} />

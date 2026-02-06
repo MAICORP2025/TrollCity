@@ -17,6 +17,7 @@ interface Message {
   sender_username?: string
   sender_avatar_url?: string | null
   sender_rgb_expires_at?: string | null
+  sender_glowing_username_color?: string | null
   sender_created_at?: string
   isPending?: boolean
 }
@@ -32,6 +33,7 @@ export default function ChatBubble() {
   const [isMinimized, setIsMinimized] = useState(false)
   const [isTyping, _setIsTyping] = useState(false)
   const [activeUserCreatedAt, setActiveUserCreatedAt] = useState<string | undefined>(undefined)
+  const [activeUserGlowingColor, setActiveUserGlowingColor] = useState<string | null>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Audio ref for message sounds
@@ -51,11 +53,14 @@ export default function ChatBubble() {
       if (activeUserId) {
         supabase
           .from('user_profiles')
-          .select('created_at')
+          .select('created_at, glowing_username_color')
           .eq('id', activeUserId)
           .single()
           .then(({ data }) => {
-            if (data) setActiveUserCreatedAt(data.created_at)
+            if (data) {
+                setActiveUserCreatedAt(data.created_at)
+                setActiveUserGlowingColor(data.glowing_username_color)
+            }
           })
       }
 
@@ -115,7 +120,7 @@ export default function ChatBubble() {
     if (senderIds.length > 0) {
       const { data: usersData } = await supabase
         .from('user_profiles')
-        .select('id,username,avatar_url,rgb_username_expires_at,created_at')
+        .select('id,username,avatar_url,rgb_username_expires_at,glowing_username_color,created_at')
         .in('id', senderIds)
       
       usersData?.forEach(u => {
@@ -133,6 +138,7 @@ export default function ChatBubble() {
       sender_username: senderMap[m.sender_id]?.username,
       sender_avatar_url: senderMap[m.sender_id]?.avatar_url,
       sender_rgb_expires_at: senderMap[m.sender_id]?.rgb_username_expires_at,
+      sender_glowing_username_color: senderMap[m.sender_id]?.glowing_username_color,
       sender_created_at: senderMap[m.sender_id]?.created_at
     })).reverse()
   }, [])
@@ -178,27 +184,30 @@ export default function ChatBubble() {
           let senderInfo = {
              username: 'Unknown',
              avatar_url: null,
-             rgb_username_expires_at: null
+             rgb_username_expires_at: null,
+             glowing_username_color: null
           }
           
           if (newMsgRaw.sender_id === user?.id) {
              senderInfo = {
                username: profile?.username || 'You',
                avatar_url: profile?.avatar_url || null,
-               rgb_username_expires_at: profile?.rgb_username_expires_at || null
+               rgb_username_expires_at: profile?.rgb_username_expires_at || null,
+               glowing_username_color: profile?.glowing_username_color || null
              }
           } else if (newMsgRaw.sender_id === activeUserId) {
              // Optimization: Use active chat store data if available
              senderInfo = {
                username: activeUsername || 'Unknown',
                avatar_url: activeUserAvatar || null,
-               rgb_username_expires_at: null // Store might not have this, but it's better than a fetch
+               rgb_username_expires_at: null, // Store might not have this, but it's better than a fetch
+               glowing_username_color: activeUserGlowingColor || null
              }
              
              // Optional: Background refresh if we really need updated data (e.g. RGB)
              // But for chat bubble speed, this is sufficient.
           } else {
-             const { data } = await supabase.from('user_profiles').select('username,avatar_url,rgb_username_expires_at,created_at').eq('id', newMsgRaw.sender_id).single()
+             const { data } = await supabase.from('user_profiles').select('username,avatar_url,rgb_username_expires_at,glowing_username_color,created_at').eq('id', newMsgRaw.sender_id).single()
              if (data) senderInfo = data as any
           }
 
@@ -211,7 +220,8 @@ export default function ChatBubble() {
             read_at: newMsgRaw.read_at,
             sender_username: senderInfo.username,
             sender_avatar_url: senderInfo.avatar_url,
-            sender_rgb_expires_at: senderInfo.rgb_username_expires_at
+            sender_rgb_expires_at: senderInfo.rgb_username_expires_at,
+            sender_glowing_username_color: (senderInfo as any).glowing_username_color
           }
 
           setMessages(prev => {
@@ -317,6 +327,7 @@ export default function ChatBubble() {
       sender_username: profile?.username,
       sender_avatar_url: profile?.avatar_url,
       sender_rgb_expires_at: profile?.rgb_username_expires_at,
+      sender_glowing_username_color: profile?.glowing_username_color,
       isPending: true
     }
     setMessages(prev => [...prev, pendingMsg])
@@ -429,6 +440,7 @@ export default function ChatBubble() {
                            username: msg.sender_username,
                            id: msg.sender_id,
                            rgb_username_expires_at: msg.sender_rgb_expires_at || undefined,
+                           glowing_username_color: (msg as any).sender_glowing_username_color || undefined,
                            created_at: msg.sender_created_at
                          }}
                          className="text-xs font-bold text-gray-400 hover:text-purple-400"

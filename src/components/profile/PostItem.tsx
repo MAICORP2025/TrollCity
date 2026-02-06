@@ -19,6 +19,11 @@ interface Comment {
     username: string;
     avatar_url: string | null;
     created_at?: string;
+    is_gold?: boolean;
+    username_style?: string;
+    badge?: string;
+    glowing_username_color?: string;
+    rgb_username_expires_at?: string;
   };
   replies?: Comment[];
   likes_count?: number; // Future proofing
@@ -126,7 +131,7 @@ export default function PostItem({ post, onDelete }: PostItemProps) {
         .from('troll_post_comments')
         .select(`
           *,
-          user_profiles (username, avatar_url, created_at)
+          user_profiles (username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color, is_gold, username_style, badge)
         `)
         .eq('post_id', post.id)
         .order('created_at', { ascending: true });
@@ -182,7 +187,7 @@ export default function PostItem({ post, onDelete }: PostItemProps) {
         })
         .select(`
           *,
-          user_profiles (username, avatar_url, created_at)
+          user_profiles (username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color, is_gold, username_style, badge)
         `)
         .single();
 

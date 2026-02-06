@@ -24,6 +24,7 @@ export default function AdminControlPanel() {
     role?: string
     rgb_username_expires_at?: string
     created_at?: string
+    glowing_username_color?: string | null
   }>>([])
   const [selectedUser, setSelectedUser] = useState<{ 
     id: string
@@ -33,6 +34,7 @@ export default function AdminControlPanel() {
     role?: string
     rgb_username_expires_at?: string
     created_at?: string
+    glowing_username_color?: string | null
   } | null>(null)
   const [level, setLevel] = useState(1)
   const [message, setMessage] = useState('')
@@ -54,7 +56,7 @@ export default function AdminControlPanel() {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, email, troll_coins, role, rgb_username_expires_at, created_at')
+        .select('id, username, email, troll_coins, role, rgb_username_expires_at, created_at, glowing_username_color')
         .ilike('username', `%${searchTerm}%`)
         .limit(20)
         .order('username', { ascending: true })
@@ -276,7 +278,9 @@ export default function AdminControlPanel() {
                       user={{
                         id: selectedUser.id,
                         username: selectedUser.username,
-                        created_at: selectedUser.created_at
+                        created_at: selectedUser.created_at,
+                        rgb_username_expires_at: selectedUser.rgb_username_expires_at,
+                        glowing_username_color: selectedUser.glowing_username_color || undefined
                       }}
                     />
                     {selectedUser.role && (
@@ -331,7 +335,8 @@ export default function AdminControlPanel() {
                           troll_coins: u.troll_coins || 0,
                           role: u.role,
                           rgb_username_expires_at: u.rgb_username_expires_at,
-                          created_at: u.created_at
+                          created_at: u.created_at,
+                          glowing_username_color: u.glowing_username_color
                         })
                         setSearchResults([])
                         setSearchUsername('')
@@ -346,7 +351,8 @@ export default function AdminControlPanel() {
                               <UserNameWithAge 
                                 user={{
                                   username: u.username,
-                                  created_at: u.created_at
+                                  created_at: u.created_at,
+                                  glowing_username_color: u.glowing_username_color
                                 }}
                                 className={u.rgb_username_expires_at && new Date(u.rgb_username_expires_at) > new Date() ? 'rgb-username' : ''}
                               />

@@ -26,7 +26,12 @@ export default function Leaderboard({ tournamentId }: LeaderboardProps) {
           user_profiles:user_id (
             username,
             avatar_url,
-            created_at
+            created_at,
+            rgb_username_expires_at,
+            glowing_username_color,
+            is_gold,
+            username_style,
+            badge
           )
         `)
         .eq('tournament_id', tournamentId)
@@ -115,7 +120,9 @@ export default function Leaderboard({ tournamentId }: LeaderboardProps) {
                       user={{
                          username: p.user_profile?.username || 'Unknown User',
                          id: p.user_id,
-                         created_at: p.user_profile?.created_at
+                         created_at: p.user_profile?.created_at,
+                         rgb_username_expires_at: p.user_profile?.rgb_username_expires_at,
+                         glowing_username_color: p.user_profile?.glowing_username_color
                       }}
                       className={`font-bold truncate text-lg ${isMe ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-white' : 'text-gray-200 group-hover:text-white transition-colors'}`}
                     />

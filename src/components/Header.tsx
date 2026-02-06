@@ -60,126 +60,50 @@ const Header = () => {
     return () => clearTimeout(debounce)
   }, [searchQuery])
 
-  // Load notifications
   useEffect(() => {
-    if (!user?.id) return
+    if (!user) return
 
-    const loadNotifications = async () => {
+    const fetchNotifications = async () => {
       try {
-        // Auto-delete notifications older than 30 DAYS (not 30 seconds)
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-        await supabase
-          .from('notifications')
-          .delete()
-          .eq('user_id', user.id)
-          .lt('created_at', thirtyDaysAgo)
-
-        // Use direct query with count for accurate number (excluding dismissed)
-        const { count, error } = await supabase
-          .from('notifications')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('is_read', false)
-          .eq('is_dismissed', false)
-
-        if (error) {
-          console.warn('Error loading notifications:', error)
-          setUnreadNotifications(0)
-          return
-        }
-
-        if (count !== null) {
+        const { data: count, error } = await supabase.rpc('get_unread_notification_count', { 
+          p_user_id: user.id 
+        });
+        
+        if (!error && typeof count === 'number') {
           setUnreadNotifications(count)
+        } else {
+          // Fallback to direct query if RPC fails
+          const { count: fallbackCount, error: fallbackError } = await supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('is_read', false)
+            .or('is_dismissed.is.null,is_dismissed.eq.false');
+            
+          if (!fallbackError && fallbackCount !== null) {
+            setUnreadNotifications(fallbackCount)
+          }
         }
       } catch (err) {
-        console.warn('Error loading notification count (non-critical):', err)
-        setUnreadNotifications(0) // Set to 0 instead of failing
+        console.error('Error fetching notification count:', err);
       }
     }
 
-    loadNotifications()
+    fetchNotifications()
 
-    // Real-time notification listener
+    // Subscribe to new notifications
     const channel = supabase
-      .channel(`notifications-${user.id}`)
+      .channel('header-notifications')
       .on(
-        'postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'notifications', 
-          filter: `user_id=eq.${user.id}` 
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
         },
-        (payload) => {
-          const newNotif = payload.new as any
-          // Only count if not already read
-          if (!newNotif.is_read) {
-            const actionUrl = newNotif.metadata?.action_url
-            const toastAction = actionUrl ? {
-              label: 'View',
-              onClick: () => navigate(actionUrl)
-            } : undefined
-
-            // Show toast notification
-            if (newNotif.priority === 'high' || newNotif.priority === 'critical') {
-              toast.error(newNotif.title || 'High Alert', {
-                description: newNotif.message,
-                duration: 8000,
-                className: 'bg-red-950 border-red-500 text-white',
-                action: toastAction
-              })
-            } else {
-              toast(newNotif.title || 'New notification', {
-                description: newNotif.message,
-                duration: 5000,
-                action: toastAction
-              })
-            }
-            setUnreadNotifications((prev) => Math.max(0, prev + 1))
-          }
-        }
-      )
-      .on(
-        'postgres_changes', 
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'notifications', 
-          filter: `user_id=eq.${user.id}` 
-        },
-        async (payload) => {
-          const updatedNotif = payload.new as any
-          const oldNotif = payload.old as any
-          
-          const wasUnread = !oldNotif.is_read
-          const isUnread = !updatedNotif.is_read
-          const wasDismissed = !!oldNotif.is_dismissed
-          const isDismissed = !!updatedNotif.is_dismissed
-          
-          const wasCounted = wasUnread && !wasDismissed
-          const isCounted = isUnread && !isDismissed
-          
-          if (wasCounted && !isCounted) {
-            setUnreadNotifications((prev) => Math.max(0, prev - 1))
-          } else if (!wasCounted && isCounted) {
-            setUnreadNotifications((prev) => prev + 1)
-          }
-        }
-      )
-      .on(
-        'postgres_changes', 
-        { 
-          event: 'DELETE', 
-          schema: 'public', 
-          table: 'notifications', 
-          filter: `user_id=eq.${user.id}` 
-        },
-        async (payload) => {
-          const deletedNotif = payload.old as any
-          // Only decrement if it was unread
-          if (!deletedNotif.is_read) {
-            setUnreadNotifications((prev) => Math.max(0, prev - 1))
-          }
+        () => {
+          fetchNotifications()
         }
       )
       .subscribe()
@@ -187,7 +111,7 @@ const Header = () => {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user?.id, navigate])
+  }, [user])
 
   const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
@@ -339,7 +263,8 @@ const Header = () => {
                           username: user.username,
                           id: user.id,
                           created_at: user.created_at,
-                          rgb_username_expires_at: user.rgb_username_expires_at
+                          rgb_username_expires_at: user.rgb_username_expires_at,
+                          glowing_username_color: user.glowing_username_color
                         }}
                         className="text-white hover:text-purple-400"
                       />

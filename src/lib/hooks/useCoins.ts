@@ -16,6 +16,7 @@ interface SpendCoinsParams {
   amount: number
   source: 'gift' | 'wheel' | 'badge' | 'entrance_effect' | 'boost' | 'purchase' | 'bonus' | 'payroll' | 'mai_talent_vote' | 'church_gift'
   item?: string // Optional item name (e.g., 'TrollRose', 'Wheel Spin', 'VIP Badge')
+  idempotencyKey?: string // Optional idempotency key for preventing double-spending on retries
 }
 
 /**
@@ -182,6 +183,7 @@ export function useCoins() {
         p_coin_amount: params.amount,
         p_source: params.source,
         p_item: params.item || params.source,
+        p_idempotency_key: params.idempotencyKey || null,
       })
 
       if (rpcError) {

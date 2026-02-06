@@ -60,7 +60,6 @@ export default function Notifications() {
         .from('notifications')
         .select('*')
         .eq('user_id', profile.id)
-        .eq('is_dismissed', false)
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -315,7 +314,19 @@ export default function Notifications() {
                     </div>
                     
                     <p className={`mt-1 text-sm ${notification.is_read ? 'text-gray-500' : 'text-gray-300'}`}>
-                      {notification.message}
+                      {notification.type === 'gift_received' && notification.metadata?.sender_username ? (
+                        <>
+                          You received {Number(notification.metadata.coins_spent || 0).toLocaleString()} coins from{' '}
+                          <span 
+                            style={getGlowingTextStyle(notification.metadata.sender_glowing_color)}
+                            className={notification.metadata.sender_glowing_color ? 'font-bold' : ''}
+                          >
+                            @{notification.metadata.sender_username}
+                          </span>
+                        </>
+                      ) : (
+                        notification.message
+                      )}
                     </p>
                     
                     {notification.metadata?.action_url && (

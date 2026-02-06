@@ -49,52 +49,56 @@ export default function MaiTalentPage() {
   const fetchAuditions = async () => {
     setLoading(true);
     try {
+      let finalData = null;
+
       // 1. Try fetching from the View first (Preferred)
-      const { data, error } = await supabase
-        .from('mai_talent_leaderboard')
-        .select('*')
-        .order('total_votes', { ascending: false });
+      let viewData = null;
+      let viewError = null;
 
-      if (error) {
-        // 2. Check for specific 404/Missing relation error
-        // Supabase/Postgres often returns code '42P01' (undefined_table) or 404 in REST
-        if (error.code === '42P01' || error.message?.includes('does not exist') || error.code === '404') {
-          console.warn('mai_talent_leaderboard view missing. Attempting fallback to raw table.');
-          
-          // 3. Fallback: Try raw table
-          const { data: rawData, error: rawError } = await supabase
-            .from('mai_talent_auditions')
-            .select(`
-              *,
-              user:user_profiles(username, avatar_url, created_at)
-            `)
-            .in('status', ['approved', 'featured']);
-          
-          if (rawError) {
-             // If raw table also missing, feature is not deployed.
-             if (rawError.code === '42P01' || rawError.message?.includes('does not exist')) {
-                console.error('CRITICAL: mai_talent_auditions table missing. Feature unavailable.');
-                setAuditions([]); // Empty state
-                setFeatureUnavailable(true); // Stop polling
-                return; // Stop here, do not throw
-             }
-
-             throw rawError;
-          }
-          
-          // Manually calculate votes if needed (mock for now if table empty)
-          const formattedData = rawData ? rawData.map(a => ({
-            ...a,
-            total_votes: 0 // Fetch votes separately if needed, or 0
-          })) : [];
-          setAuditions(formattedData as Audition[]);
-        } else {
-          // Other error (e.g. network)
-          throw error;
-        }
-      } else {
-        setAuditions(data as Audition[]);
+      try {
+        const result = await supabase
+          .from('mai_talent_leaderboard')
+          .select('*')
+          .order('total_votes', { ascending: false });
+        viewData = result.data;
+        viewError = result.error;
+      } catch (err) {
+        console.warn('View access failed, falling back to table');
       }
+
+      if (!viewError && viewData) {
+        finalData = viewData;
+      } else {
+        // 2. Fallback: Try raw table
+        console.warn('mai_talent_leaderboard view missing or error. Attempting fallback to raw table.');
+        
+        const { data: rawData, error: rawError } = await supabase
+          .from('mai_talent_auditions')
+          .select(`
+            *,
+            user:user_profiles(username, avatar_url, created_at)
+          `)
+          .in('status', ['approved', 'featured']);
+        
+        if (rawError) {
+           // If raw table also missing, feature is not deployed.
+           if (rawError.code === '42P01' || rawError.message?.includes('does not exist')) {
+              console.error('CRITICAL: mai_talent_auditions table missing. Feature unavailable.');
+              setAuditions([]); // Empty state
+              setFeatureUnavailable(true); // Stop polling
+              return; // Stop here, do not throw
+           }
+           throw rawError;
+        }
+        
+        // Manually calculate votes if needed (mock for now if table empty)
+        finalData = rawData ? rawData.map(a => ({
+          ...a,
+          total_votes: 0 // Fetch votes separately if needed, or 0
+        })) : [];
+      }
+
+      setAuditions((finalData || []) as Audition[]);
     } catch (err) {
       console.error('Error fetching auditions:', err);
       // Do NOT show toast on every poll failure to avoid spam

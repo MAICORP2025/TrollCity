@@ -47,7 +47,7 @@ export default function NewMessageModal({ isOpen, onClose, onSelectUser }: NewMe
     try {
       const { data } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url, role, rgb_username_expires_at, created_at')
+        .select('id, username, avatar_url, role, rgb_username_expires_at, glowing_username_color, created_at')
         .ilike('username', `%${query}%`)
         .neq('id', user?.id)
         .limit(10)

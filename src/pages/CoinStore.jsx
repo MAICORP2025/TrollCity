@@ -13,6 +13,7 @@ import { ENTRANCE_EFFECTS_DATA } from '../lib/entranceEffects';
 import { deductCoins } from '@/lib/coinTransactions';
 import { useLiveContextStore } from '../lib/liveContextStore';
 
+import { trollCityTheme } from '@/styles/trollCityTheme';
 import ManualPaymentModal from '@/components/broadcast/ManualPaymentModal';
 import TrollPassBanner from '@/components/ui/TrollPassBanner';
 import { toast } from 'sonner';
@@ -176,6 +177,26 @@ export default function CoinStore() {
   const [manualPaymentModalOpen, setManualPaymentModalOpen] = useState(false);
   // Default to Venmo as requested
   const [selectedProviderId, setSelectedProviderId] = useState('venmo');
+
+  const handleManualPurchase = (pkg) => {
+    // Check for cooldown on CashApp/Venmo
+    if (['cashapp', 'venmo'].includes(selectedProviderId)) {
+      const lastRequest = localStorage.getItem('last_manual_request_time');
+      if (lastRequest) {
+        const diff = Date.now() - parseInt(lastRequest, 10);
+        if (diff < 60000) {
+          const remaining = Math.ceil((60000 - diff) / 1000);
+          toast.error(`Please wait ${remaining} seconds before making another request.`);
+          return;
+        }
+      }
+      localStorage.setItem('last_manual_request_time', Date.now().toString());
+    }
+
+    setSelectedPackage(pkg);
+    setManualPaymentModalOpen(true);
+  };
+
   // const [loadingPay, setLoadingPay] = useState(false);
   const [durationMultiplier, setDurationMultiplier] = useState(1);
   const [effects, setEffects] = useState([]);
@@ -1422,8 +1443,7 @@ export default function CoinStore() {
                         name: 'Troll Pass Premium',
                         purchaseType: 'troll_pass_bundle'
                       };
-                      setSelectedPackage(trollPassPkg);
-                      setManualPaymentModalOpen(true);
+                      handleManualPurchase(trollPassPkg);
                     }}
                   />
                 </div>
@@ -1474,8 +1494,7 @@ export default function CoinStore() {
                           
                           <button
                             onClick={() => {
-                              setSelectedPackage(pkg);
-                              setManualPaymentModalOpen(true);
+                              handleManualPurchase(pkg);
                             }}
                             className={`w-full py-2 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
                               MANUAL_PROVIDERS.find(p => p.id === selectedProviderId)?.color || 'bg-purple-600'

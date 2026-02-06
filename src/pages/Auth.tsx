@@ -12,8 +12,7 @@ import { trollCityTheme } from '../styles/trollCityTheme';
 const Auth = () => {
   const [loading, setLoading] = useState(false)
   const [searchParams] = useSearchParams()
-  // const initialIsLogin = searchParams.get('mode') === 'signup' ? false : true
-  const initialIsLogin = true; // FORCE LOGIN MODE
+  const initialIsLogin = searchParams.get('mode') === 'signup' ? false : true
   const [isLogin, setIsLogin] = useState(initialIsLogin)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -429,7 +428,7 @@ const Auth = () => {
             </p>
           </div>
 
-          {/* Tab Navigation - HIDDEN FOR MAINTENANCE
+          {/* Tab Navigation */}
           <div className="flex justify-center mb-8">
             <div className="grid grid-cols-2 w-full max-w-xs bg-slate-800/50 border border-white/5 rounded-xl p-1 gap-1">
               <button
@@ -443,26 +442,16 @@ const Auth = () => {
                 Sign In
               </button>
               <button
-                // onClick={() => setIsLogin(false)}
-                disabled={true}
-                className={`px-6 py-2 rounded-lg font-semibold transition-all duration-300 opacity-50 cursor-not-allowed text-slate-500`}
-                title="Sign ups are temporarily disabled"
+                onClick={() => setIsLogin(false)}
+                className={`px-6 py-2 rounded-lg font-semibold transition-all duration-300 ${
+                  !isLogin 
+                    ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-500 text-white shadow-[0_4px_12px_rgba(147,51,234,0.3)]' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                }`}
               >
                 Sign Up
               </button>
             </div>
-          </div>
-          */}
-          
-          <div className="mb-8 p-4 bg-red-950/50 border border-red-500/50 rounded-xl text-center shadow-[0_0_20px_rgba(220,38,38,0.2)]">
-            <div className="flex justify-center mb-2">
-              <Lock className="w-8 h-8 text-red-400" />
-            </div>
-            <h3 className="text-xl font-bold text-red-200 mb-1">MAINTENANCE MODE</h3>
-            <p className="text-red-300/80 text-sm">
-              Access is currently restricted to Administrators only.<br/>
-              Sign-ups and standard logins are disabled.
-            </p>
           </div>
 
           {/* Form */}
@@ -571,11 +560,11 @@ const Auth = () => {
                       </div>
                       <label htmlFor="accept-terms" className="text-sm text-slate-300 cursor-pointer select-none">
                         I accept the{' '}
-                        <Link to="/terms" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
+                        <Link to="/legal/terms" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
                           Terms and Agreements
                         </Link>
                         {' '}and acknowledge the{' '}
-                        <Link to="/privacy" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
+                        <Link to="/legal/privacy" target="_blank" className="text-purple-400 hover:text-purple-300 hover:underline">
                           Privacy Policy
                         </Link>.
                       </label>

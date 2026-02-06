@@ -45,6 +45,7 @@ import { useXPStore } from '@/stores/useXPStore'
 import { useSidebarUpdates } from '@/hooks/useSidebarUpdates'
 
 import SidebarTopBroadcasters from './sidebar/SidebarTopBroadcasters'
+import { getGlowingTextStyle } from '@/lib/perkEffects'
 
 export default function Sidebar() {
   const { profile } = useAuthStore()
@@ -97,13 +98,11 @@ export default function Sidebar() {
   const needsLicense = useMemo(() => {
     if (!profile) return false
     const status = (profile as any).drivers_license_status
-    return !status || status === 'none'
+    return !status || status === 'revoked' || status === 'suspended'
   }, [profile])
 
-  const hasRgb = useMemo(() => {
-    if (!profile?.rgb_username_expires_at) return false
-    return new Date(profile.rgb_username_expires_at) > new Date()
-  }, [profile?.rgb_username_expires_at])
+  const hasRgb = profile?.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date();
+  const glowingStyle = (!hasRgb && (profile as any)?.glowing_username_color) ? getGlowingTextStyle((profile as any).glowing_username_color) : undefined;
 
   useEffect(() => {
     if (profile?.id) {
@@ -223,8 +222,12 @@ export default function Sidebar() {
 
       {/* User Profile Summary (Level & XP) */}
       {!isSidebarCollapsed && (
-        <div className="p-4 border-b border-white/5 bg-white/5 mx-4 mt-4 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.35)]">
-          <div className="flex items-center gap-3 mb-3">
+        <div className="p-4 mx-4 mt-4 rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-800/90 to-slate-900/95 shadow-[0_15px_40px_rgba(0,0,0,0.5),0_0_30px_rgba(139,92,246,0.15),inset_0_1px_0_rgba(255,255,255,0.1)] border border-white/10 relative overflow-hidden">
+          {/* Shiny gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/5 via-cyan-500/5 to-pink-500/5 pointer-events-none"></div>
+          {/* Top highlight line */}
+          <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+          <div className="flex items-center gap-3 mb-3 relative z-10">
             <div className="relative">
               <img 
                 src={profile.avatar_url || `https://ui-avatars.com/api/?name=${profile.username}&background=random`} 
@@ -237,7 +240,7 @@ export default function Sidebar() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className={`font-semibold text-sm truncate text-slate-50 ${hasRgb ? 'rgb-username' : ''}`}>{profile.username}</h3>
+                <h3 className={`font-semibold text-sm truncate text-slate-50 ${hasRgb ? 'rgb-username' : ''}`} style={glowingStyle}>{profile.username}</h3>
                 {(profile as any).gender === 'male' && (
                   <Mars size={14} className="text-blue-400" />
                 )}

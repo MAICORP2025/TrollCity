@@ -75,7 +75,12 @@ export default function FamilyProfilePage() {
             username,
             avatar_url,
             has_crown_badge,
-            created_at
+            created_at,
+            is_gold,
+            glowing_username_color,
+            rgb_username_expires_at,
+            username_style,
+            badge
           )
         `
         )

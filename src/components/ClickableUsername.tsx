@@ -4,7 +4,7 @@ import OfficerTierBadge from './OfficerTierBadge'
 import { EmpireBadge } from './EmpireBadge'
 import { useNavigate } from 'react-router-dom'
 import { Shield, Crown, Skull, Star, UserX, Ban, MicOff, User, LogOut, ClipboardList } from 'lucide-react'
-import { applyGlowingUsername } from '../lib/perkEffects'
+import { applyGlowingUsername, getGlowingTextStyle } from '../lib/perkEffects'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
@@ -28,6 +28,9 @@ interface ClickableUsernameProps {
     role?: string
     empire_role?: string | null
     rgb_username_expires_at?: string
+    username_style?: string
+    badge?: string
+    glowing_username_color?: string | null
   }
   royalTitle?: {
     title_type: string
@@ -72,34 +75,41 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
 
   const canModerate = (isStaff || isPresident || ((isBroadcaster || isModerator) && streamId)) && currentUser?.id !== targetUserId
 
+  const now = new Date();
+  
+  // GOLD Check (Highest Priority)
+  const isGold = userProfile?.is_gold || userProfile?.username_style === 'gold' || userProfile?.badge === 'president';
+  
+  // RGB Check
+  const hasRgb = userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > now;
+
+  // Glowing Username Check
+  const glowingColor = userProfile?.glowing_username_color;
+
   useEffect(() => {
     if (!targetUserId || !usernameRef.current) {
       return
     }
     
-    // Check profile prop first for instant RGB feedback
     const el = usernameRef.current
-    const now = new Date();
     
-    // GOLD Check (Highest Priority)
-    // "Gold does NOT override Gold" (Wait, "RGB... Does NOT override Gold")
-    const isGold = userProfile?.is_gold || userProfile?.username_style === 'gold' || userProfile?.badge === 'president';
-    
-    // RGB Check
-    const hasRgb = userProfile?.rgb_username_expires_at && new Date(userProfile.rgb_username_expires_at) > now;
-
-    if (isGold) {
-      el.classList.add('gold-username')
-      el.classList.remove('rgb-username')
-    } else if (hasRgb) {
-      el.classList.add('rgb-username')
-      el.classList.remove('gold-username')
-    } else {
-      el.classList.remove('rgb-username')
-      el.classList.remove('gold-username')
-      applyGlowingUsername(el, targetUserId)
+    // If we have the color in profile, apply it directly
+    if (!isGold && !hasRgb && glowingColor) {
+      const style = getGlowingTextStyle(glowingColor);
+      Object.assign(el.style, style);
+      return;
     }
-  }, [targetUserId, username, userProfile])
+
+    if (!isGold && !hasRgb) {
+      applyGlowingUsername(el, targetUserId)
+    } else {
+      // Clear styles if they became gold or rgb (though rgb class is handled by className usually, we might need to clear inline styles)
+      el.style.animation = '';
+      el.style.color = '';
+      el.style.fontWeight = '';
+      el.style.textShadow = '';
+    }
+  }, [targetUserId, isGold, hasRgb, userProfile, glowingColor]) // Added dependencies
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -141,6 +151,8 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
     2: 'Chaos Agent',
     3: 'Supreme Troll',
   }
+
+  const specialClass = isGold ? 'gold-username' : hasRgb ? 'rgb-username' : '';
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -336,15 +348,16 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
 
   return (
     <>
-    <span className="relative inline-block z-10">
+    <span className={`relative inline-flex items-center gap-1 z-10 whitespace-nowrap ${className}`}>
         <span
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         ref={usernameRef}
-        className={`cursor-pointer hover:text-troll-gold transition-colors username ${isAdmin ? 'admin-user' : isOfficer ? 'officer-user' : isTroller ? 'troller-user' : ''} ${className}`}
+        className={`cursor-pointer hover:text-troll-gold transition-colors username ${isAdmin ? 'admin-user' : isOfficer ? 'officer-user' : isTroller ? 'troller-user' : ''} ${specialClass}`}
         title={`View ${username}'s profile`}
         >
         {prefix}{username}
+        </span>
         
         {/* Admin Badge First Priority */}
         {isAdmin && (
@@ -418,7 +431,6 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
         {userProfile?.is_verified && (
             <VerifiedBadge size="sm" title="Verified User" />
         )}
-        </span>
 
         {/* Staff Action Menu */}
         {showMenu && (

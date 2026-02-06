@@ -52,7 +52,9 @@ export interface UserProfile {
   insurance_level: string | null
   insurance_expires_at: string | null
   rgb_username_expires_at?: string | null
+  glowing_username_color?: string | null
   username_style?: string | null // 'gold', etc.
+  is_gold?: boolean
   no_kick_until: string | null
   no_ban_until: string | null
   mic_muted_until?: string | null
@@ -94,6 +96,10 @@ export interface UserProfile {
   // TrollTract fields
   is_trolltract?: boolean
   trolltract_activated_at?: string | null
+
+  // Profile Costs
+  message_cost?: number
+  profile_view_cost?: number
 
   // Age system
   age_days?: number
@@ -412,6 +418,32 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.CREATE_CONTENT
   ],
   [UserRole.EMPIRE_PARTNER]: [
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE
+  ],
+  [UserRole.PRESIDENT]: [
+    Permission.MANAGE_USERS,
+    Permission.MANAGE_CONTENT,
+    Permission.MANAGE_FINANCES,
+    Permission.MANAGE_SYSTEM,
+    Permission.MODERATE_CHAT,
+    Permission.MODERATE_STREAMS,
+    Permission.MANAGE_REPORTS,
+    Permission.ISSUE_WARNINGS,
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE
+  ],
+  [UserRole.VICE_PRESIDENT]: [
+    Permission.MANAGE_USERS,
+    Permission.MANAGE_CONTENT,
+    Permission.MANAGE_FINANCES,
+    Permission.MANAGE_SYSTEM,
+    Permission.MODERATE_CHAT,
+    Permission.MODERATE_STREAMS,
+    Permission.MANAGE_REPORTS,
+    Permission.ISSUE_WARNINGS,
     Permission.BROADCAST,
     Permission.CREATE_CONTENT,
     Permission.MONETIZE

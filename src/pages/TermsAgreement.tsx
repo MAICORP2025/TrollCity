@@ -225,16 +225,16 @@ export default function TermsAgreement() {
             
             <ul className="list-disc list-inside space-y-2 ml-2">
               <li>
-                I have read and agree to the <Link to="/terms-of-service" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Terms of Service</Link> and <Link to="/privacy-policy" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Privacy Policy</Link>.
+                I have read and agree to the <Link to="/legal/terms" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Terms of Service</Link> and <Link to="/legal/privacy" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Privacy Policy</Link>.
               </li>
               <li>
                 I consent to the collection and processing of my personal data as described in the Privacy Policy.
               </li>
               <li>
-                I agree to the <Link to="/payment-terms" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Payment Terms</Link> and understand that all purchases are final and non-refundable.
+                I agree to the <Link to="/legal/refunds" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Payment Terms</Link> and understand that all purchases are final and non-refundable.
               </li>
               <li>
-                I have read and agree to the <Link to="/creator-agreement" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Creator Earning / Cashout Agreement</Link>, including 1099 tax reporting requirements.
+                I have read and agree to the <Link to="/legal/creator-earnings" target="_blank" className="text-troll-purple underline hover:text-troll-neon-blue">Creator Earning / Cashout Agreement</Link>, including 1099 tax reporting requirements.
               </li>
             </ul>
           </div>

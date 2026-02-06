@@ -13,6 +13,7 @@ import KickPage from '../components/KickPage';
 import EmptyStateLiveNow from '../components/ui/EmptyStateLiveNow';
 import TrollPassBanner from '../components/ui/TrollPassBanner';
 import { UserCardSkeleton } from '../components/ui/Skeleton';
+import { getGlowingTextStyle } from '../lib/perkEffects';
 
 type HomeUser = {
   id: string;
@@ -26,6 +27,7 @@ type HomeUser = {
   is_banned?: boolean | null;
   banned_until?: string | null;
   rgb_username_expires_at?: string | null;
+  glowing_username_color?: string | null;
 };
 
 const NeonParticle: React.FC<{ delay: number; color: string }> = ({ delay, color }) => {
@@ -470,6 +472,8 @@ const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) =>
   const isAdmin = user.role === 'admin';
   const profileRoute = user.id ? `/profile/id/${user.id}` : '#';
   const hasRgbUsername = user.rgb_username_expires_at && new Date(user.rgb_username_expires_at) > new Date();
+  const glowingColor = user.glowing_username_color;
+  const glowingStyle = (!hasRgbUsername && glowingColor) ? getGlowingTextStyle(glowingColor) : undefined;
 
   const handleProfileClick = () => {
     if (!user.id) return;
@@ -504,7 +508,12 @@ const NewUserCard: React.FC<{ user: HomeUser; onClick: (profileRoute: string) =>
       </div>
       
       <div className="relative z-10 text-center flex-1 w-full">
-        <p className={`text-[clamp(12px,3.5vw,16px)] font-semibold truncate ${hasRgbUsername ? 'rgb-username' : 'text-white'}`}>{displayName}</p>
+        <p 
+          className={`text-[clamp(12px,3.5vw,16px)] font-semibold truncate ${hasRgbUsername ? 'rgb-username' : 'text-white'}`}
+          style={glowingStyle}
+        >
+          {displayName}
+        </p>
         <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all home-outline-rgb-pill ${
             isAdmin

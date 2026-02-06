@@ -76,10 +76,20 @@ export default function GovernmentStreams() {
       let query = supabase
         .from('streams')
         .select(`
-          *,
+          id,
+          broadcaster_id,
+          status,
+          is_live,
+          hls_url,
+          current_viewers,
+          title,
+          room_name,
+          category,
+          start_time,
           broadcaster:user_profiles!broadcaster_id(username, avatar_url)
         `)
-        .order('created_at', { ascending: false }); // Show newest first
+        .order('created_at', { ascending: false }) // Show newest first
+        .range(0, 49); // Limit to 50 for performance
 
       // Apply filters if not showing all
       if (!showAllStreams) {

@@ -41,8 +41,25 @@ export default function HLSPlayer({
     const streamId = extractStreamId(src);
     if (!streamId) return "";
     
-    const base = import.meta.env.VITE_HLS_BASE_URL.replace(/\/$/, "");
-    return `${base}/streams/${streamId}/master.m3u8`;
+    // SECURITY: Ensure we never hit Supabase Storage for HLS
+    if (src.includes("supabase.co") || src.includes("supabase.in")) {
+        console.error("CRITICAL: Blocked Supabase HLS URL", src);
+        setError("Playback Error: Invalid Source Configuration");
+        return "";
+    }
+
+    const base = import.meta.env.VITE_HLS_BASE_URL?.replace(/\/$/, "");
+    if (!base) {
+        // Fallback or error? For now, if no env, we might rely on the src if it's safe?
+        // But the requirement says "Client prepends Bunny base URL from env"
+        console.warn("VITE_HLS_BASE_URL is missing!");
+    }
+    
+    // If base is present, use it. Otherwise, if src is a full URL and NOT supabase, use it?
+    // The requirement says "Client prepends Bunny base URL". 
+    // So we should enforce the construction.
+    
+    return base ? `${base}/streams/${streamId}/master.m3u8` : "";
   }, [src]);
 
   const clearRetryTimer = () => {

@@ -26,6 +26,8 @@ interface Message {
   user_role?: string;
   user_troll_role?: string;
   user_created_at?: string;
+  user_rgb_expires_at?: string;
+  user_glowing_username_color?: string;
   vehicle_snapshot?: VehicleStatus;
 
   user_profiles?: {
@@ -34,6 +36,8 @@ interface Message {
     role?: string;
     troll_role?: string;
     created_at?: string;
+    rgb_username_expires_at?: string;
+    glowing_username_color?: string;
   } | null;
   vehicle_status?: VehicleStatus;
 }
@@ -43,9 +47,10 @@ interface BroadcastChatProps {
     hostId: string;
     isModerator?: boolean;
     isHost?: boolean;
+    isViewer?: boolean;
 }
 
-export default function BroadcastChat({ streamId, hostId, isModerator, isHost }: BroadcastChatProps) {
+export default function BroadcastChat({ streamId, hostId, isModerator, isHost, isViewer = false }: BroadcastChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -92,7 +97,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
     const fetchMessages = async () => {
         const { data } = await supabase
             .from('stream_messages')
-            .select('*, user_profiles(username, avatar_url, role, troll_role, created_at)')
+            .select('*, user_profiles(username, avatar_url, role, troll_role, created_at, rgb_username_expires_at, glowing_username_color)')
             .eq('stream_id', streamId)
             .order('created_at', { ascending: false })
             .limit(50);
@@ -108,7 +113,9 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                     avatar_url: m.user_avatar || m.user_profiles?.avatar_url || '',
                     role: m.user_role || m.user_profiles?.role,
                     troll_role: m.user_troll_role || m.user_profiles?.troll_role,
-                    created_at: m.user_created_at || m.user_profiles?.created_at
+                    created_at: m.user_created_at || m.user_profiles?.created_at,
+                    rgb_username_expires_at: m.user_rgb_expires_at || m.user_profiles?.rgb_username_expires_at,
+                    glowing_username_color: m.user_glowing_username_color || m.user_profiles?.glowing_username_color
                 };
 
                 // Fallback for old messages without snapshot
@@ -136,6 +143,12 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
     };
     fetchMessages();
 
+    // If Viewer (Passive Mode), use Polling instead of Realtime
+    if (isViewer) {
+        const interval = setInterval(fetchMessages, 10000); // Poll every 10 seconds
+        return () => clearInterval(interval);
+    }
+
     // Subscribe to Chat Messages
     const chatChannel = supabase
         .channel(`chat:${streamId}`)
@@ -158,7 +171,9 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                     avatar_url: newRow.user_avatar || '',
                     role: newRow.user_role,
                     troll_role: newRow.user_troll_role,
-                    created_at: newRow.user_created_at
+                    created_at: newRow.user_created_at,
+                    rgb_username_expires_at: newRow.user_rgb_expires_at,
+                    glowing_username_color: newRow.user_glowing_username_color
                 },
                 vehicle_status: newRow.vehicle_snapshot
             };
@@ -213,7 +228,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
         supabase.removeChannel(chatChannel); 
         supabase.removeChannel(viewerChannel);
     };
-  }, [streamId, fetchVehicleStatus]);
+  }, [streamId, fetchVehicleStatus, isViewer]);
 
   // Removed aggressive auto-delete loop to prevent messages from disappearing due to clock skew
 
@@ -249,6 +264,8 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
         user_role: profile.role,
         user_troll_role: profile.troll_role,
         user_created_at: profile.created_at,
+        user_rgb_expires_at: profile.rgb_username_expires_at,
+        user_glowing_username_color: profile.glowing_username_color,
         vehicle_snapshot: myVehicle
     });
   };
@@ -331,7 +348,9 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                                         created_at: msg.user_profiles?.created_at,
                                         role: msg.user_profiles?.role as any,
                                         troll_role: msg.user_profiles?.troll_role,
-                                        id: msg.user_id
+                                        id: msg.user_id,
+                                        rgb_username_expires_at: msg.user_profiles?.rgb_username_expires_at,
+                                        glowing_username_color: msg.user_profiles?.glowing_username_color
                                     }}
                                     className="text-zinc-300"
                                     showBadges={false}
@@ -364,7 +383,9 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost }:
                                     created_at: msg.user_profiles?.created_at,
                                     role: msg.user_profiles?.role as any,
                                     troll_role: msg.user_profiles?.troll_role,
-                                    id: msg.user_id
+                                    id: msg.user_id,
+                                    rgb_username_expires_at: msg.user_profiles?.rgb_username_expires_at,
+                                    glowing_username_color: msg.user_profiles?.glowing_username_color
                                 }}
                                 className="text-yellow-500"
                                 showBadges={true}

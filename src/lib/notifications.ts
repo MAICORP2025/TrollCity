@@ -34,7 +34,7 @@ export async function notifyGiftReceived(
   // Get sender username
   const { data: sender } = await supabase
     .from('user_profiles')
-    .select('username')
+    .select('username, glowing_username_color')
     .eq('id', senderId)
     .single()
 
@@ -46,6 +46,8 @@ export async function notifyGiftReceived(
     {
       gift_id: '', // Will be set by trigger
       sender_id: senderId,
+      sender_username: sender?.username,
+      sender_glowing_color: sender?.glowing_username_color,
       coins_spent: coinsSpent,
       stream_id: streamId,
       action_url: streamId ? `/live/${streamId}` : '/wallet'

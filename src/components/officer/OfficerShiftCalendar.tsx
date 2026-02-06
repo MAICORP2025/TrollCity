@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Calendar } from 'lucide-react'
 import { format12hr } from '../../utils/timeFormat'
+import { trollCityTheme as theme } from '../../styles/trollCityTheme'
 
 interface ShiftSlotRow {
   id: string
@@ -93,10 +94,10 @@ export default function OfficerShiftCalendar({ title = 'Officer Shift Calendar',
   }, [slots])
 
   return (
-    <div className={`rounded-2xl ${trollCityTheme.borders.glass} ${trollCityTheme.backgrounds.card} p-6`}>
+    <div className={`rounded-2xl ${theme.borders.glass} ${theme.backgrounds.card} p-6`}>
       <div className="flex items-center gap-2 mb-4">
         <Calendar className="w-5 h-5 text-purple-300" />
-        <h2 className={`text-lg font-semibold ${trollCityTheme.text.primary}`}>{title}</h2>
+        <h2 className={`text-lg font-semibold ${theme.text.primary}`}>{title}</h2>
       </div>
 
       {loading ? (

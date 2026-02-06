@@ -26,14 +26,20 @@ export default function HomeLiveGrid() {
       const { data, error } = await supabase
         .from('streams')
         .select(`
-          *,
+          id,
+          title,
+          status,
+          viewer_count,
+          thumbnail_url,
+          user_id,
           user_profiles:user_id (
             username,
             avatar_url
           )
         `)
         .eq('is_live', true)
-        .order('viewer_count', { ascending: false });
+        .order('viewer_count', { ascending: false })
+        .range(0, 49); // Limit to top 50 streams for performance
 
       if (error) throw error;
       setStreams(data || []);
@@ -47,19 +53,11 @@ export default function HomeLiveGrid() {
   useEffect(() => {
     fetchStreams();
 
-    const channel = supabase
-      .channel('public:streams')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'streams' },
-        () => {
-          fetchStreams();
-        }
-      )
-      .subscribe();
+    // Poll every 15 seconds instead of Realtime subscription to save costs
+    const interval = setInterval(fetchStreams, 15000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, []);
 

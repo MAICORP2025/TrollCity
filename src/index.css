@@ -259,3 +259,20 @@ button:focus-visible {
   background-color: rgba(255, 255, 255, 0.1); 
   color: white;
 }
+
+/* Glowing Username Animation */
+@keyframes glow {
+  from { text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #fff, 0 0 20px #FFC93C; }
+  to { text-shadow: 0 0 10px #FFC93C, 0 0 20px #FFC93C, 0 0 30px #FFC93C, 0 0 40px #FFD700; }
+}
+
+.glowing-username {
+  animation: glow 2s ease-in-out infinite alternate;
+  color: #FFD700;
+  font-weight: bold;
+}
+
+@keyframes flash {
+  0% { opacity: 0.8; }
+  100% { opacity: 0; }
+}

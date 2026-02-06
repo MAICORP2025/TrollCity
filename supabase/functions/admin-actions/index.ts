@@ -476,8 +476,8 @@ Deno.serve(async (req) => {
         const canViewEmails = profile.role === 'admin' || profile.is_admin === true;
 
         const selectFields = canViewEmails
-          ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction'
-          : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction';
+          ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge'
+          : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge';
 
         let query = supabaseAdmin
           .from('user_profiles')

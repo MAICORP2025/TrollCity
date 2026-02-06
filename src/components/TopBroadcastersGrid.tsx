@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Gift, Crown, Flame } from 'lucide-react';
+import { getGlowingTextStyle } from '../lib/perkEffects';
 
 interface TopBroadcaster {
   user_id: string;
@@ -8,6 +9,7 @@ interface TopBroadcaster {
   avatar_url?: string;
   total_gifts: number;
   level?: number;
+  glowing_username_color?: string;
 }
 
 export default function TopBroadcastersGrid() {
@@ -67,7 +69,8 @@ export default function TopBroadcastersGrid() {
             username: profile?.username || 'Unknown',
             avatar_url: profile?.avatar_url,
             total_gifts: transaction.amount,
-            level: profile?.level
+            level: profile?.level,
+            glowing_username_color: profile?.glowing_username_color
           });
         }
       });
@@ -197,9 +200,29 @@ export default function TopBroadcastersGrid() {
           </div>
 
           {/* Username */}
-          <h3 className="text-lg font-bold text-white mb-1 truncate px-2">
-            {broadcaster.username}
-          </h3>
+          {(() => {
+            const isGold = broadcaster.is_gold;
+            const hasRgb = broadcaster.rgb_username_expires_at && new Date(broadcaster.rgb_username_expires_at) > new Date();
+            let className = "text-lg font-bold text-white mb-1 truncate px-2";
+            let style = {};
+
+            if (isGold) {
+              className += " gold-username";
+            } else if (hasRgb) {
+              className += " rgb-username";
+            } else if (broadcaster.glowing_username_color) {
+              style = getGlowingTextStyle(broadcaster.glowing_username_color);
+            }
+
+            return (
+              <h3 
+                className={className}
+                style={style}
+              >
+                {broadcaster.username}
+              </h3>
+            );
+          })()}
 
           {/* Level */}
           {broadcaster.level && (

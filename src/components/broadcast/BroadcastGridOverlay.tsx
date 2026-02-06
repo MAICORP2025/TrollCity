@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
 import UserActionModal from './UserActionModal';
 import { SeatSession } from '../../hooks/useStreamSeats';
+import { getGlowingTextStyle } from '../../lib/perkEffects';
 
 interface BroadcastGridOverlayProps {
   stream: Stream;
@@ -114,13 +115,19 @@ export default function BroadcastGridOverlay({
                                         ? (broadcasterProfile?.username || 'Broadcaster') 
                                         : (profile?.username || 'User');
                                     
-                                    let className = "text-white";
+                                    let className = "text-white font-bold";
+                                    let style = {};
                                     
                                     if (profile) {
-                                        if (profile.is_gold) {
+                                        const isGold = profile.is_gold || profile.username_style === 'gold' || profile.badge === 'president';
+                                        const hasRgb = profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date();
+                                        
+                                        if (isGold) {
                                             className = "gold-username";
-                                        } else if (profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date()) {
+                                        } else if (hasRgb) {
                                             className = "rgb-username";
+                                        } else if (profile.glowing_username_color) {
+                                            style = getGlowingTextStyle(profile.glowing_username_color);
                                         } else if (['admin', 'moderator', 'secretary'].includes(profile.role || '')) {
                                             className = "silver-username";
                                         }
@@ -137,7 +144,7 @@ export default function BroadcastGridOverlay({
                                                 className="w-6 h-6 rounded-full border border-white/50"
                                                 alt="avatar"
                                             />
-                                            <span className={className}>{name}</span>
+                                            <span className={className} style={style}>{name}</span>
                                         </>
                                     );
                                 })()}

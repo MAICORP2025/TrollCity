@@ -6,6 +6,7 @@ import { OFFICER_BASE_HOURLY_COINS } from '../../lib/officerPay'
 import { toast } from 'sonner'
 import { format12hr, formatFullDateTime12hr } from '../../utils/timeFormat'
 import { Shield, Ghost, Clock, Award, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
+import { trollCityTheme } from '../../styles/trollCityTheme'
 import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
 import OfficerClock from '../../components/officer/OfficerClock'
 
@@ -230,7 +231,7 @@ export default function OfficerDashboard() {
       </div>
 
       {/* Live Status */}
-      {activeAssignment && (
+      {activeAssignment && workSessions.length > 0 && workSessions[0].clock_out === null && (
         <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} border-green-500 rounded-lg p-4 mb-6`}>
           <div className="flex items-center gap-2 mb-2">
             <Clock className="w-5 h-5 text-green-400" />

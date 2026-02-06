@@ -46,6 +46,27 @@ Deno.serve(async (req) => {
     if (!action) return new Response(JSON.stringify({ error: "Missing action" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
 
     if (action === "create") {
+      // Rate Limit Check (Server-Side)
+      const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
+      const rateKey = `manual_payment:${authData.user.id}:${clientIp}`;
+      
+      // Check limit: 1 request per 60 seconds
+      const { data: allowed, error: rateError } = await supabaseAdmin.rpc('check_rate_limit', {
+        p_key: rateKey,
+        p_limit: 1,
+        p_window_seconds: 60
+      });
+
+      if (rateError) {
+        console.error("Rate limit check failed", rateError);
+        // Fail open or closed? Let's fail closed for security.
+        return new Response(JSON.stringify({ error: "Rate limit check failed" }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
+      }
+
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: "Please wait 60 seconds before making another request." }), { status: 429, headers: { ...cors, "Content-Type": "application/json" } });
+      }
+
       const pkg = body?.package;
       const coins = Number(body?.coins ?? pkg?.coins);
       const amountUsd = Number(body?.amount_usd ?? pkg?.price_usd);

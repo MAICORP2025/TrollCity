@@ -30,7 +30,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose, disableNa
         
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('id, username, avatar_url, rgb_username_expires_at')
+          .select('id, username, avatar_url, rgb_username_expires_at, glowing_username_color, is_gold, username_style, badge')
           .ilike('username', `${searchQuery}%`)
           .limit(20)
           .order('created_at', { ascending: false })
@@ -53,7 +53,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose, disableNa
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url, rgb_username_expires_at')
+        .select('id, username, avatar_url, rgb_username_expires_at, glowing_username_color, is_gold, username_style, badge')
         .limit(50)
         .order('created_at', { ascending: false })
 

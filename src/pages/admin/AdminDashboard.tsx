@@ -534,66 +534,27 @@ export default function AdminDashboard() {
     }
   }, [])
 
-  // === INITIAL LOAD ===
+  // === INITIAL LOAD & REALTIME UPDATES ===
   useEffect(() => {
-    if (isAuthorized) {
-      loadDashboardData()
-      loadLiveStreams()
-      loadEconomySummary()
-    }
-  }, [isAuthorized, loadDashboardData, loadLiveStreams, loadEconomySummary])
+    if (!isAuthorized) return
 
-  // Auto-refresh core stats every 15s
-  useEffect(() => {
-    const id = setInterval(() => {
-      loadDashboardData()
-      loadEconomySummary()
-      loadLiveStreams()
-    }, 15000)
-    return () => clearInterval(id)
-  }, [loadDashboardData, loadEconomySummary, loadLiveStreams])
+    // Initial load
+    loadLiveStreams()
+    loadDashboardData()
+    loadEconomySummary()
 
-  // Global monitoring channels with real-time notifications
-  // CRITICAL OPTIMIZATION: Removed global listeners to prevent "reconnect storms" and excessive DB load.
-  // The polling interval above (15s) is sufficient for dashboard freshness.
-  /*
-  useEffect(() => {
-    const transactionsChannel = supabase
-      .channel('admin-global-transactions')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coin_transactions' }, (payload) => {
-        const tx = payload.new
-        if (tx?.type === 'store_purchase' || tx?.type === 'paypal_purchase') {
-          toast.success('New store purchase detected!')
-          sendGlobalNotification('New Purchase', 'A new store purchase just occurred.').catch(() => {})
-        }
-        if (tx?.type === 'payout') {
-          toast.success('New payout request detected!')
-          sendGlobalNotification('New Payout', 'A new payout request was submitted.').catch(() => {})
-        }
-        // Add more transaction types as needed
-        loadDashboardData()
-        loadEconomySummary()
-      })
-      .subscribe()
+    // Polling for data updates (every 30s)
+    const interval = setInterval(() => {
+        loadLiveStreams();
+        loadDashboardData();
+        // Economy summary is heavy, maybe poll less frequently or not at all?
+        // Let's keep it manual refresh or long poll if needed.
+    }, 30000);
 
-    const streamsChannel = supabase
-      .channel('admin-global-streams')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
-        const newRecord = payload.new as { is_live?: boolean; title?: string } | null
-        const oldRecord = payload.old as { is_live?: boolean; title?: string } | null
-        if (newRecord?.is_live && !oldRecord?.is_live) {
-          toast.info('A stream just started!')
-          sendGlobalNotification('Stream Started', `Stream "${newRecord.title}" is now live.`).catch(() => {})
-        }
-        if (!newRecord?.is_live && oldRecord?.is_live) {
-          toast.info('A stream just ended.')
-          sendGlobalNotification('Stream Ended', `Stream "${oldRecord.title}" has ended.`).catch(() => {})
-        }
-        loadLiveStreams()
-        loadDashboardData()
-      })
-      .subscribe()
-
+    // Realtime subscriptions
+    // Only keep low-velocity, critical admin alerts if necessary.
+    // Removed 'streams' subscription to prevent high-frequency updates from viewer counts.
+    
     const appsChannel = supabase
       .channel('admin-global-applications')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, () => {
@@ -609,13 +570,11 @@ export default function AdminDashboard() {
       .subscribe()
 
     return () => {
-      // supabase.removeChannel(transactionsChannel)
-      supabase.removeChannel(streamsChannel)
+      clearInterval(interval)
       supabase.removeChannel(appsChannel)
       supabase.removeChannel(payoutsChannel)
     }
-  }, [loadLiveStreams, loadDashboardData, loadEconomySummary])
-  */
+  }, [isAuthorized, loadLiveStreams, loadDashboardData, loadEconomySummary])
 
   const createTrollDrop = async () => {
     try {

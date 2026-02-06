@@ -35,7 +35,12 @@ export default function ParticipantsList({ tournamentId }: ParticipantsListProps
           user_profiles:user_id (
             username,
             avatar_url,
-            created_at
+            created_at,
+            rgb_username_expires_at,
+            glowing_username_color,
+            is_gold,
+            username_style,
+            badge
           )
         `)
         .eq('tournament_id', tournamentId)
@@ -114,7 +119,9 @@ export default function ParticipantsList({ tournamentId }: ParticipantsListProps
                     user={{
                       username: p.user_profile?.username || 'Unknown User',
                       id: p.user_id,
-                      created_at: (p.user_profile as any)?.created_at
+                      created_at: (p.user_profile as any)?.created_at,
+                      rgb_username_expires_at: (p.user_profile as any)?.rgb_username_expires_at,
+                      glowing_username_color: (p.user_profile as any)?.glowing_username_color
                     }}
                     className="font-bold text-white truncate text-lg group-hover:text-purple-300 transition-colors"
                   />

@@ -3,11 +3,13 @@ import { Stream } from '../../types/broadcast';
 import { User, Plus, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import BroadcastLevelBar from './BroadcastLevelBar';
+import { getGlowingTextStyle } from '../../lib/perkEffects';
 
 interface TopLiveBarProps {
   stream: Stream;
   hostName?: string;
   hostAvatar?: string;
+  hostGlowingColor?: string;
   isFollowing?: boolean;
   onFollow?: () => void;
   onClose?: () => void;
@@ -18,6 +20,7 @@ export default function TopLiveBar({
   stream,
   hostName = 'Unknown Host',
   hostAvatar,
+  hostGlowingColor,
   isFollowing = false,
   onFollow,
   onClose,
@@ -46,7 +49,12 @@ export default function TopLiveBar({
         </div>
         
         <div className="flex flex-col">
-          <span className="text-xs font-bold text-white max-w-[80px] truncate">{hostName}</span>
+          <span 
+            className="text-xs font-bold text-white max-w-[80px] truncate"
+            style={hostGlowingColor ? getGlowingTextStyle(hostGlowingColor) : undefined}
+          >
+            {hostName}
+          </span>
           <span className="text-[10px] text-zinc-300 flex items-center gap-1">
              {stream.viewer_count.toLocaleString()} Viewers
           </span>

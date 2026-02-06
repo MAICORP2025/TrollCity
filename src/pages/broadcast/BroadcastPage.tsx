@@ -27,7 +27,7 @@ import BroadcastHeader from '../../components/broadcast/BroadcastHeader';
 
 // Helper component to access LiveKit context for Mobile Stage
 const MobileStageInner = ({ 
-    stream, isHost, seats, messages, onSendMessage, onLeave, onJoinSeat, onStartBattle, children 
+    stream, isHost, seats, messages, onSendMessage, onLeave, onJoinSeat, onStartBattle, children, hostGlowingColor 
 }: {
     stream: Stream;
     isHost: boolean;
@@ -38,6 +38,7 @@ const MobileStageInner = ({
     onJoinSeat: (i: number) => void;
     onStartBattle: () => void;
     children: React.ReactNode;
+    hostGlowingColor?: string;
 }) => {
     const { localParticipant } = useLocalParticipant();
     
@@ -53,6 +54,7 @@ const MobileStageInner = ({
             onFlipCamera={() => {}} // Not easily supported in web yet without custom track manipulation
             onLeave={onLeave}
             onJoinSeat={onJoinSeat}
+            hostGlowingColor={hostGlowingColor}
         >
             <BroadcastHeader stream={stream} isHost={isHost} onStartBattle={onStartBattle} />
             {children}
@@ -80,8 +82,8 @@ export default function BroadcastPage() {
   }, []);
   
   const { isMobile } = useMobileBreakpoint();
-  const { messages, sendMessage } = useStreamChat(id || '');
-
+  // Moved useStreamChat down to access mode
+  
   // Stream End Listener
   useStreamEndListener({ 
       streamId: id || '',
@@ -99,6 +101,8 @@ export default function BroadcastPage() {
   // 'stage' = Active Participant (Host or Guest on Seat) -> Publishes Audio/Video
   // 'viewer' = Passive Viewer -> Subscribes only (Low Latency WebRTC)
   const mode = (isHost || (mySession?.status === 'active')) ? 'stage' : 'viewer';
+  
+  const { messages, sendMessage } = useStreamChat(id || '', mode === 'viewer');
 
   const { token, serverUrl, error: tokenError, isLoading: tokenLoading } = useLiveKitToken({
     streamId: id,
@@ -273,6 +277,7 @@ export default function BroadcastPage() {
                     onFlipCamera={() => {}}
                     onLeave={() => {}}
                     onJoinSeat={handleJoinRequest}
+                    hostGlowingColor={broadcasterProfile?.glowing_username_color}
                 >
                     <HLSPlayer 
                         src={stream.hls_path || stream.hls_url || stream.id}
@@ -350,6 +355,7 @@ export default function BroadcastPage() {
                     onLeave={isHost ? () => {} : leaveSeat}
                     onJoinSeat={handleJoinRequest}
                     onStartBattle={() => setShowBattleManager(true)}
+                    hostGlowingColor={broadcasterProfile?.glowing_username_color}
                 >
                         <BroadcastGrid
                         stream={stream}
@@ -503,6 +509,7 @@ export default function BroadcastPage() {
                 streamId={stream.id} 
                 hostId={stream.user_id}
                 isHost={isHost} 
+                isViewer={mode === 'viewer'}
                 isModerator={false} // TODO: Add mod logic
             />
         </div>

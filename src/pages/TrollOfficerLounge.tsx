@@ -18,8 +18,10 @@ import {
   XCircle,
   Calendar,
   ChevronDown,
-  FileText
+  FileText,
+  User
 } from 'lucide-react'
+import { trollCityTheme } from '../styles/trollCityTheme'
 
 type Stream = {
   id: string

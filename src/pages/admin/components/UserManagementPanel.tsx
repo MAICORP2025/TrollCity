@@ -26,6 +26,11 @@ interface UserProfile {
   terms_accepted?: boolean | null
   id_verification_status?: string | null
   bypass_broadcast_restriction?: boolean
+  glowing_username_color?: string
+  rgb_username_expires_at?: string
+  is_gold?: boolean
+  username_style?: string
+  badge?: string
 }
 
 interface UserManagementPanelProps {

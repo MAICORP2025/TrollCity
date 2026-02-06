@@ -150,7 +150,6 @@ Deno.serve(async (req: Request) => {
 
                 // Construct full HLS URL
                 const hlsBaseUrl = Deno.env.get("VITE_HLS_BASE_URL");
-                const supabaseUrl = Deno.env.get("SUPABASE_URL");
                 
                 // Clean path storage
                 const hlsPath = `/streams/${room.name}/master.m3u8`;
@@ -158,10 +157,16 @@ Deno.serve(async (req: Request) => {
 
                 if (hlsBaseUrl) {
                     hlsUrl = `${hlsBaseUrl}${hlsPath}`;
-                } else if (supabaseUrl) {
-                    hlsUrl = `${supabaseUrl}/storage/v1/object/public/hls${hlsPath}`;
                 } else {
-                    hlsUrl = hlsPath;
+                   // Fallback to Bunny CDN if base URL not set
+                   hlsUrl = `https://${bunnyZone}.b-cdn.net${hlsPath}`;
+                }
+
+                // CRITICAL SECURITY GUARD: NEVER ALLOW SUPABASE STORAGE URLS
+                if (hlsUrl.includes('supabase.co') || hlsUrl.includes('supabase.in')) {
+                    console.error('CRITICAL: Generated HLS URL contains Supabase domain. Blocking update.', hlsUrl);
+                    // Force fallback to Bunny
+                    hlsUrl = `https://${bunnyZone}.b-cdn.net${hlsPath}`;
                 }
 
                 // Update ALL possible tables with the HLS URL and Path

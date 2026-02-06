@@ -110,12 +110,7 @@ const ReferralBonusPanel = lazy(() => import("./pages/admin/ReferralBonusPanel")
 const SecretaryConsole = lazy(() => import("./pages/secretary/SecretaryConsole"));
 import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 
-const TermsOfService = lazy(() => import("./pages/TermsOfService"));
-const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
-const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
-const PaymentTerms = lazy(() => import("./pages/PaymentTerms"));
-const CreatorAgreement = lazy(() => import("./pages/CreatorAgreement"));
 const TaxOnboarding = lazy(() => import("./pages/TaxOnboarding"));
 const MyEarnings = lazy(() => import("./pages/MyEarnings"));
 const EarningsPage = lazy(() => import("./pages/EarningsPage"));
@@ -175,6 +170,7 @@ const CreatorOnboarding = lazy(() => import("./pages/CreatorOnboarding"));
 const CreatorSwitchProgram = lazy(() => import("./pages/CreatorSwitchProgram"));
 const PolicyCenter = lazy(() => import("./pages/PolicyCenter"));
 const TermsOfServiceLegal = lazy(() => import("./pages/legal/TermsOfService"));
+const PrivacyPolicyLegal = lazy(() => import("./pages/legal/PrivacyPolicy"));
 const RefundPolicyLegal = lazy(() => import("./pages/legal/RefundPolicy"));
 const PayoutPolicyLegal = lazy(() => import("./pages/legal/PayoutPolicy"));
 const SafetyGuidelinesLegal = lazy(() => import("./pages/legal/SafetyGuidelines"));
@@ -820,23 +816,23 @@ function AppContent() {
                 <Route path="/exit" element={<ExitPage />} />
                 <Route path="/terms" element={<TermsAgreement />} />
                 <Route path="/access-denied" element={<AccessDenied />} />
-                <Route path="/terms-of-service" element={<TermsOfService />} />
-                <Route path="/refund-policy" element={<RefundPolicy />} />
-                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="/payment-terms" element={<PaymentTerms />} />
-                <Route path="/creator-agreement" element={<CreatorAgreement />} />
+                <Route path="/terms-of-service" element={<Navigate to="/legal/terms" replace />} />
+                <Route path="/privacy-policy" element={<Navigate to="/legal/privacy" replace />} />
+                <Route path="/payment-terms" element={<Navigate to="/legal/refunds" replace />} />
+                <Route path="/creator-agreement" element={<Navigate to="/legal/creator-earnings" replace />} />
                 <Route path="/reset-password" element={<PasswordReset />} />
                 <Route path="/tax-onboarding" element={<TaxOnboarding />} />
                 <Route path="/verification" element={<VerificationPage />} />
                 <Route path="/verification/complete" element={<VerificationComplete />} />
                 <Route path="/founding-officer-trial" element={<FoundingOfficerTrial />} />
 
-                  <Route path="/account/earnings" element={<EarningsDashboard />} />
-                  <Route path="/payout-status" element={<PayoutStatus />} />
+                <Route path="/account/earnings" element={<EarningsDashboard />} />
+                <Route path="/payout-status" element={<PayoutStatus />} />
                  
-                {/* Legal/Policy Pages */}
+                {/* 📜 Legal & Policy Pages (Public) */}
                 <Route path="/legal" element={<PolicyCenter />} />
                 <Route path="/legal/terms" element={<TermsOfServiceLegal />} />
+                <Route path="/legal/privacy" element={<PrivacyPolicyLegal />} />
                 <Route path="/legal/refunds" element={<RefundPolicyLegal />} />
                 <Route path="/legal/refund" element={<RefundPolicyLegal />} />
                 <Route path="/legal/payouts" element={<PayoutPolicyLegal />} />

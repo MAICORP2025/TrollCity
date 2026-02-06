@@ -53,7 +53,7 @@ export function useNewUsers() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url, tier, level, troll_coins, created_at, role, is_banned, banned_until, rgb_username_expires_at')
+        .select('id, username, avatar_url, tier, level, troll_coins, created_at, role, is_banned, banned_until, rgb_username_expires_at, glowing_username_color')
         .order('created_at', { ascending: false })
         .limit(25)
 

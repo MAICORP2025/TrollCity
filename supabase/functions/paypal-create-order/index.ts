@@ -1,6 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-// import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from "../_shared/cors.ts"
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -8,6 +13,22 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 1. Rate Limit Check
+    const ip = req.headers.get('x-forwarded-for') || 'unknown'
+    const { data: allowed, error: rateError } = await supabase.rpc('check_rate_limit', {
+      p_key: `paypal_create_${ip}`,
+      p_limit: 10, // 10 requests per minute
+      p_window_seconds: 60
+    })
+
+    if (rateError) console.error('Rate limit error:', rateError)
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const { amount, coins, user_id, package_id } = await req.json()
     
     const clientId = Deno.env.get('PAYPAL_CLIENT_ID')

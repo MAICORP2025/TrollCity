@@ -6,6 +6,7 @@ import { User, Coins, Plus, MicOff, VideoOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import UserActionModal from './UserActionModal';
 import { SeatSession } from '../../hooks/useStreamSeats';
+import { getGlowingTextStyle } from '../../lib/perkEffects';
 
 interface BroadcastGridProps {
   stream: Stream;
@@ -213,19 +214,23 @@ export default function BroadcastGrid({
                                         : (participant?.name || profile?.username || 'User');
                                     
                                     let className = "text-white";
+                                    let style = undefined;
                                     
                                     if (profile) {
                                         if (profile.is_gold) {
                                             className = "gold-username";
                                         } else if (profile.rgb_username_expires_at && new Date(profile.rgb_username_expires_at) > new Date()) {
                                             className = "rgb-username";
+                                        } else if (profile.glowing_username_color) {
+                                            style = getGlowingTextStyle(profile.glowing_username_color);
+                                            className = "font-bold";
                                         } else if (['admin', 'moderator', 'secretary'].includes(profile.role || '')) {
                                             className = "silver-username";
                                         }
                                     }
                                     
                                     return (
-                                        <span className={className}>
+                                        <span className={className} style={style}>
                                             {name}
                                             {isStreamHost && <span className="ml-1 text-[10px] bg-red-600 px-1 rounded text-white font-normal align-middle">HOST</span>}
                                         </span>

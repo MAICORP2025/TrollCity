@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 import { toast } from "sonner";
 import UserActions from "./UserActions";
+import UserNameWithAge from "../../../components/UserNameWithAge";
 
 interface UsersPanelProps {
   title?: string;
@@ -16,6 +17,11 @@ interface AdminUser {
   is_banned: boolean;
   role: string;
   created_at?: string;
+  glowing_username_color?: string;
+  rgb_username_expires_at?: string;
+  is_gold?: boolean;
+  username_style?: string;
+  badge?: string;
 }
 
 const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", description }) => {
@@ -119,11 +125,11 @@ const UsersPanel: React.FC<UsersPanelProps> = ({ title = "User Management", desc
           users.map((u) => (
             <div key={u.id} className="flex justify-between border-b border-gray-800 py-2">
               <div>
-                <p className="text-white">
-                  @{u.username || 'No username'} 
-                  {u.is_banned && <span className="text-red-600 ml-2">(Banned)</span>}
-                  {u.role === 'admin' && <span className="text-yellow-400 ml-2">(Admin)</span>}
-                </p>
+                <div className="text-white flex items-center gap-2">
+                  <UserNameWithAge user={u} className="text-white font-medium" />
+                  {u.is_banned && <span className="text-red-600 text-xs">(Banned)</span>}
+                  {u.role === 'admin' && <span className="text-yellow-400 text-xs">(Admin)</span>}
+                </div>
                 <p className="text-xs text-gray-500">
                   Created: {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Unknown'}
                 </p>

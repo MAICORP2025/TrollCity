@@ -201,7 +201,11 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
                          alt={u.username}
                          className="w-8 h-8 rounded-full bg-zinc-800 object-cover"
                        />
-                       <span className="text-sm text-gray-300 group-hover:text-white transition-colors">@{u.username}</span>
+                       <UserNameWithAge 
+                         user={u} 
+                         onClick={() => setTargetUser(u.username)}
+                         className="text-sm text-gray-300 group-hover:text-white transition-colors"
+                       />
                      </button>
                    ))
                  ) : (

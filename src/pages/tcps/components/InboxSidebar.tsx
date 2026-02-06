@@ -14,6 +14,7 @@ interface SidebarConversation {
   unread_count: number
   is_online?: boolean
   rgb_username_expires_at?: string | null
+  glowing_username_color?: string | null
   other_created_at?: string
 }
 
@@ -111,7 +112,7 @@ export default function InboxSidebar({
       // Fetch other members for these conversations
       const { data: otherMembers } = await supabase
         .from('conversation_members')
-        .select('conversation_id, user_id, user_profiles(username, avatar_url, rgb_username_expires_at, created_at)')
+        .select('conversation_id, user_id, user_profiles(username, avatar_url, rgb_username_expires_at, glowing_username_color, created_at)')
         .in('conversation_id', convIds)
         .neq('user_id', user.id)
 
@@ -147,6 +148,7 @@ export default function InboxSidebar({
            other_username: (other.user_profiles as any).username,
            other_avatar_url: (other.user_profiles as any).avatar_url,
            rgb_username_expires_at: (other.user_profiles as any).rgb_username_expires_at,
+           glowing_username_color: (other.user_profiles as any).glowing_username_color,
            other_created_at: (other.user_profiles as any).created_at,
            last_message: lastMsg.body,
            last_timestamp: lastMsg.created_at,
@@ -277,13 +279,14 @@ export default function InboxSidebar({
                   </div>
                   
                   <div className="flex-1 min-w-0 pointer-events-none">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className={`font-medium truncate ${isActive ? 'text-purple-300' : 'text-gray-200'}`}>
+                    <div className="flex items-center justify-between mb-1 overflow-hidden">
+                      <div className={`font-medium ${isActive ? 'text-purple-300' : 'text-gray-200'} whitespace-nowrap overflow-hidden text-ellipsis`}>
                         <UserNameWithAge 
                           user={{
                             username: conv.other_username,
                             id: conv.other_user_id,
-                            created_at: conv.other_created_at
+                            created_at: conv.other_created_at,
+                            glowing_username_color: conv.glowing_username_color
                           }}
                           className="pointer-events-none" // Parent is button
                         />

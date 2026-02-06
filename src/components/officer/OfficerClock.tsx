@@ -4,6 +4,7 @@ import { useAuthStore } from '../../lib/store';
 import { toast } from 'sonner';
 import { LogIn, LogOut, Clock, User, Search, Coffee } from 'lucide-react';
 import { format12hr } from '../../utils/timeFormat';
+import { trollCityTheme } from '../../styles/trollCityTheme';
 
 interface OfficerClockProps {
   onActionComplete?: () => void;
@@ -85,6 +86,28 @@ export default function OfficerClock({ onActionComplete }: OfficerClockProps) {
         }
       } else {
         // Clock In
+        // Verify scheduled shift if not admin/lead
+        if (!isAdmin && !isLead) {
+          const now = new Date();
+          const dateStr = now.toLocaleDateString('en-CA');
+          const timeStr = now.toLocaleTimeString('en-GB', { hour12: false });
+          
+          const { data: shifts } = await supabase
+            .from('officer_shift_slots')
+            .select('id')
+            .eq('officer_id', targetId)
+            .eq('shift_date', dateStr)
+            .lte('shift_start_time', timeStr)
+            .gte('shift_end_time', timeStr)
+            .limit(1);
+            
+          if (!shifts || shifts.length === 0) {
+             toast.error('You can only clock in during a scheduled shift.');
+             setActionLoading(false);
+             return;
+          }
+        }
+
         const { error } = await supabase.rpc('manual_clock_in', { 
           p_officer_id: targetId 
         });
