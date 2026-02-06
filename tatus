@@ -1,0 +1,17 @@
+[33mcommit 62e0d5403cda40b40906710daaab173a41bc06d2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: kaintowns83 <kaintowns83@gmail.com>
+Date:   Fri Feb 6 04:57:58 2026 -0700
+
+    Signup fix
+
+[33mcommit f6e7a67273993be3e213954295181e8270e615cf[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: kaintowns83 <kaintowns83@gmail.com>
+Date:   Fri Feb 6 04:40:14 2026 -0700
+
+    Save work
+
+[33mcommit ff37b14907d858fb4bb586d9f1b742d8c22b4dfb[m
+Author: kaintowns83 <kaintowns83@gmail.com>
+Date:   Thu Feb 5 14:17:05 2026 -0700
+
+    feat: Remove helper links and install button for strict admin-only maintenance mode

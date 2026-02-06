@@ -160,7 +160,7 @@ const Auth = () => {
       if (profileData) {
         // 🚧 MAINTENANCE CHECK 🚧
         // Strict enforcement: Only admins can proceed past this point
-        const isMaintenanceMode = true;
+        const isMaintenanceMode = false;
         const isAdmin = profileData.role === 'admin' || profileData.is_admin === true;
         
         if (isMaintenanceMode && !isAdmin) {
