@@ -5,6 +5,9 @@ import { processGiftXp } from '../xp'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
 
+import { generateUUID } from '../uuid'
+import { coinOptimizer } from '../coinRotation'
+
 export interface GiftItem {
   id: string
   name: string
@@ -12,7 +15,9 @@ export interface GiftItem {
   coinCost: number
   type: 'paid' | 'free'
   category?: string
+  subcategory?: string
   slug?: string
+  currency?: 'troll_coins'
 }
 
 export function useGiftSystem(
@@ -43,17 +48,29 @@ export function useGiftSystem(
     const targetReceiverId = overrideReceiverId || receiverId || streamerId
 
     // Validate balance based on gift type (paid or free)
-    const balance = gift.type === 'paid' 
-      ? (profile.troll_coins || 0)
-      : (profile.troll_coins || 0)
+    const currency = gift.currency || 'troll_coins'
+    
+    let balance = 0
+    if (gift.type === 'paid') {
+      balance = (profile.troll_coins || 0)
+    }
 
     if (balance < gift.coinCost) {
-      toast.error(`Not enough ${gift.type} coins for this gift.`)
+      toast.error(`Not enough Coins for this gift.`)
       return false
     }
 
     setIsSending(true)
     try {
+      console.log('[GiftDebugger] Sending gift...', {
+        sender: user.id,
+        receiver: targetReceiverId,
+        streamId: streamId || null,
+        giftId: gift.id,
+        cost: gift.coinCost,
+        currentBalance: profile.troll_coins
+      })
+
       // ✅ REAL COIN LOGIC: Use send_premium_gift RPC
       // This handles: Balance check, Cost deduction, Cashback (Random + 5%), Receiver Credit (95%), Status (RGB/Gold), Logs
       const { data: result, error: rpcError } = await supabase.rpc('send_premium_gift', {
@@ -61,15 +78,26 @@ export function useGiftSystem(
         p_receiver_id: targetReceiverId,
         p_stream_id: streamId || null,
         p_gift_id: gift.id,
-        p_cost: gift.coinCost
+        p_cost: gift.coinCost,
+        p_quantity: 1
       })
+
+      console.log('[GiftDebugger] RPC Result:', { result, rpcError })
 
       if (rpcError) {
         throw rpcError
       }
 
       // Check RPC internal logic success
-      if (result && !result.success) {
+      // Handle boolean result (legacy RPC)
+      if (typeof result === 'boolean') {
+          if (!result) {
+              toast.error('Insufficient funds or error')
+              return false
+          }
+      } 
+      // Handle object result
+      else if (result && typeof result === 'object' && 'success' in result && !result.success) {
          toast.error(result.message || 'Insufficient funds or error')
          return false
       }
@@ -109,7 +137,7 @@ export function useGiftSystem(
                   type: 'broadcast',
                   event: 'gift_sent',
                   payload: {
-                    id: crypto.randomUUID(),
+                    id: generateUUID(),
                     sender_id: user.id,
                     sender_username: profile.username || 'Anonymous',
                     sender_avatar: profile.avatar_url,
@@ -133,15 +161,36 @@ export function useGiftSystem(
         })()
       }
 
-      // Refresh sender's profile from database to get accurate balance
-      const { data: updatedProfile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      // Refresh sender's profile
+      // Use new_balance from RPC if available (Authoritative source) to avoid race conditions with DB read replica
+      if (result.new_balance !== undefined) {
+          if (profile) {
+              const newData = {
+                  troll_coins: result.new_balance,
+                  is_gold: result.gold_awarded || profile.is_gold,
+                  rgb_username_expires_at: result.rgb_awarded 
+                    ? new Date(Date.now() + 30*24*60*60*1000).toISOString() 
+                    : profile.rgb_username_expires_at
+              };
+              
+              // Update Store AND CoinRotation Cache (locks polling for one cycle)
+              useAuthStore.getState().setProfile({
+                  ...profile,
+                  ...newData
+              });
+              coinOptimizer.updateOptimisticBalance(user.id, newData);
+          }
+      } else {
+          // Fallback for legacy RPC version
+          const { data: updatedProfile } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
 
-      if (updatedProfile) {
-        useAuthStore.getState().setProfile(updatedProfile as any)
+          if (updatedProfile) {
+            useAuthStore.getState().setProfile(updatedProfile as any)
+          }
       }
 
       // (Legacy Combo/Bonus Logic Removed per MASTER SYSTEM PROMPT)
@@ -174,7 +223,7 @@ export function useGiftSystem(
                   type: 'broadcast',
                   event: 'huge_gift',
                   payload: {
-                    id: crypto.randomUUID(),
+                    id: generateUUID(),
                     senderId: user.id,
                     receiverId: targetReceiverId,
                     senderName: profile.username || 'Anonymous',

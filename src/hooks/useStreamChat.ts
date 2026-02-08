@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { ChatMessage } from '../types/broadcast';
+import { toast } from 'sonner';
 
 interface VehicleStatus {
   has_vehicle: boolean;
@@ -124,13 +125,47 @@ export function useStreamChat(streamId: string, isViewer: boolean = false) {
         })
         .subscribe();
 
+    // Subscribe to User Entrance (Presence) - Consistent with BroadcastChat
+    const presenceChannel = supabase
+        .channel(`room:${streamId}`)
+        .on('presence', { event: 'join' }, ({ newPresences }) => {
+            newPresences.forEach((p: any) => {
+                const systemMsg: ChatMessage = {
+                    id: `sys-${Date.now()}-${Math.random()}`,
+                    stream_id: streamId,
+                    user_id: p.user_id,
+                    content: 'joined the broadcast',
+                    created_at: new Date().toISOString(),
+                    type: 'system', // This requires ChatMessage to support 'system' type
+                    user: {
+                        username: p.username || 'Guest',
+                        avatar_url: p.avatar_url || ''
+                    },
+                    user_profiles: {
+                        username: p.username || 'Guest',
+                        avatar_url: p.avatar_url || '',
+                        role: p.role,
+                        troll_role: p.troll_role
+                    }
+                };
+                setMessages(prev => [...prev, systemMsg]);
+            });
+        })
+        .subscribe();
+
     return () => { 
         supabase.removeChannel(chatChannel); 
+        supabase.removeChannel(presenceChannel);
     };
   }, [streamId, fetchVehicleStatus, vehicleCache, isViewer]);
 
   const sendMessage = async (content: string) => {
-    if (!content.trim() || !user || !profile) return;
+    if (!content.trim()) return;
+    
+    if (!user || !profile) {
+        toast.error('You must be logged in to chat');
+        return;
+    }
     
     const now = Date.now();
     if (now - lastSentRef.current < RATE_LIMIT_MS) return;
@@ -141,7 +176,7 @@ export function useStreamChat(streamId: string, isViewer: boolean = false) {
         myVehicle = (await fetchVehicleStatus(user.id)) || { has_vehicle: false };
     }
 
-    await supabase.from('stream_messages').insert({
+    const { error } = await supabase.from('stream_messages').insert({
         stream_id: streamId,
         user_id: user.id,
         content: content.trim(),
@@ -150,8 +185,15 @@ export function useStreamChat(streamId: string, isViewer: boolean = false) {
         user_role: profile.role,
         user_troll_role: profile.troll_role,
         user_created_at: profile.created_at,
+        user_rgb_expires_at: profile.rgb_username_expires_at,
+        user_glowing_username_color: profile.glowing_username_color,
         vehicle_snapshot: myVehicle
     });
+
+    if (error) {
+        console.error('Failed to send message:', error);
+        toast.error('Failed to send message');
+    }
   };
 
   return { messages, sendMessage };

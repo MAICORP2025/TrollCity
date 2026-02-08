@@ -8,9 +8,12 @@ import {
   CheckCircle, 
   XCircle, 
   MessageSquare,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { InterviewSchedulerModal } from '../../../components/admin/InterviewSchedulerModal';
 
 interface InterviewRequest {
   id: string;
@@ -29,10 +32,53 @@ interface InterviewRequest {
   };
 }
 
+interface Applicant {
+  id: string; // application id
+  user_id: string;
+  status: string;
+  created_at: string;
+  type: string;
+  user_profiles?: {
+    username: string;
+    avatar_url: string;
+    email?: string;
+  };
+}
+
 export default function AdminInterviewDashboard() {
   const [requests, setRequests] = useState<InterviewRequest[]>([]);
+  const [applications, setApplications] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  // Scheduler state
+  const [showScheduler, setShowScheduler] = useState(false);
+  const [selectedApplicant, setSelectedApplicant] = useState<{id: string, name: string} | null>(null);
+
+  const fetchApplications = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          user_profiles (
+            username,
+            avatar_url,
+            email
+          )
+        `)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      // Transform data to match Applicant interface if needed, or use as is
+      setApplications(data || []);
+    } catch (err) {
+      console.error('Error fetching applications:', err);
+      // Don't toast here to avoid spamming if used in parallel
+    }
+  };
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -100,6 +146,7 @@ export default function AdminInterviewDashboard() {
 
   useEffect(() => {
     fetchRequests();
+    fetchApplications();
     
     // Subscribe to new interview requests
     const channel = supabase
@@ -111,6 +158,13 @@ export default function AdminInterviewDashboard() {
         filter: "type=eq.interview_request"
       }, () => {
         fetchRequests();
+      })
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'applications'
+      }, () => {
+        fetchApplications();
       })
       .subscribe();
 
@@ -125,6 +179,50 @@ export default function AdminInterviewDashboard() {
       return;
     }
     navigate(`/interview/${roomId}?admin=true`);
+  };
+
+  const handleApprove = async (appId: string) => {
+    try {
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: { action: 'approve_lead_application', applicationId: appId }
+      });
+
+      if (error) throw error;
+
+      toast.success('Application approved');
+      
+      // Prompt to schedule
+      const app = applications.find(a => a.id === appId);
+      if (app) {
+         setSelectedApplicant({
+             id: app.user_id,
+             name: app.user_profiles?.username || 'Unknown'
+         });
+         setShowScheduler(true);
+      }
+      
+      fetchApplications();
+    } catch (error: any) {
+      console.error('Error approving application:', error);
+      toast.error('Failed to approve application');
+    }
+  };
+
+  const handleReject = async (appId: string) => {
+    if (!confirm('Are you sure you want to reject this application?')) return;
+    try {
+      const { error } = await supabase.functions.invoke('officer-actions', {
+        body: { action: 'reject_lead_application', applicationId: appId }
+      });
+
+      if (error) throw error;
+
+      toast.success('Application rejected');
+      fetchApplications();
+    } catch (error: any) {
+      console.error('Error rejecting application:', error);
+      toast.error('Failed to reject application');
+    }
   };
 
   const handleDismiss = async (id: string) => {
@@ -157,6 +255,70 @@ export default function AdminInterviewDashboard() {
 
   return (
     <div className="space-y-6 p-6 bg-zinc-950 min-h-full">
+      {/* Pending Applications Section */}
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
+          <FileText className="w-6 h-6 text-purple-400" />
+          Pending Applications
+          <span className="text-sm font-normal text-zinc-500 ml-2">
+            ({applications.length})
+          </span>
+        </h2>
+        
+        {applications.length === 0 ? (
+          <p className="text-zinc-500">No pending applications.</p>
+        ) : (
+          <div className="space-y-3">
+            {applications.map((app) => (
+              <div key={app.id} className="bg-black/40 border border-zinc-800 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                   <img 
+                    src={app.user_profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${app.user_id}`} 
+                    alt={app.user_profiles?.username} 
+                    className="w-10 h-10 rounded-full bg-zinc-800"
+                  />
+                  <div>
+                    <div className="font-semibold text-white">
+                      @{app.user_profiles?.username || 'Unknown'}
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      Applied: {new Date(app.created_at).toLocaleDateString()} • {app.type.toUpperCase().replace('_', ' ')}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedApplicant({
+                        id: app.user_id,
+                        name: app.user_profiles?.username || 'Unknown'
+                      });
+                      setShowScheduler(true);
+                    }}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg flex items-center gap-1.5 transition-colors"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Schedule Interview
+                  </button>
+                  <button
+                    onClick={() => handleApprove(app.id)}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleReject(app.id)}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -240,6 +402,21 @@ export default function AdminInterviewDashboard() {
             </div>
           ))}
         </div>
+      )}
+      {selectedApplicant && (
+        <InterviewSchedulerModal
+          isOpen={showScheduler}
+          onClose={() => {
+            setShowScheduler(false);
+            setSelectedApplicant(null);
+          }}
+          applicantId={selectedApplicant.id}
+          applicantName={selectedApplicant.name}
+          onScheduled={() => {
+             fetchApplications();
+             fetchRequests();
+          }}
+        />
       )}
     </div>
   );

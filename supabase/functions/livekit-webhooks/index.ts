@@ -195,11 +195,6 @@ Deno.serve(async (req: Request) => {
                     egress_id: egressInfo.egressId,
                     hls_started_at: new Date().toISOString()
                 }).eq('id', roomName),
-                supabase.from('pod_rooms').update({ 
-                    hls_url: null, // CLEAR THIS
-                    egress_id: egressInfo.egressId,
-                    hls_started_at: new Date().toISOString()
-                }).eq('id', roomName),
                 supabase.from('court_sessions').update({ 
                     hls_url: null, // CLEAR THIS
                     egress_id: egressInfo.egressId,

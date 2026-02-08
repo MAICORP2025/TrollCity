@@ -507,15 +507,14 @@ Deno.serve(async (req) => {
         const { userId, updates, coinAdjustment, roleUpdate } = params;
         if (!userId) throw new Error("Missing userId");
 
-        // 1. Basic Profile Update
-        if (updates) {
-          const { error } = await supabaseAdmin
-            .from('user_profiles')
-            .update({
-              ...updates,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', userId);
+        // 1. Basic Profile Update (Secure RPC)
+        if (updates && Object.keys(updates).length > 0) {
+          const { error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: updates,
+            p_admin_id: user.id,
+            p_reason: 'Admin Panel Update'
+          });
           
           if (error) throw error;
         }
@@ -581,15 +580,13 @@ Deno.serve(async (req) => {
         const { userId, bypass } = params;
         if (!userId) throw new Error("Missing userId");
 
-        const { data, error } = await supabaseAdmin
-          .from('user_profiles')
-          .update({ 
-            bypass_broadcast_restriction: bypass,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', userId)
-          .select()
-          .single();
+        // Use secure RPC to bypass trigger protection
+        const { data, error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: { bypass_broadcast_restriction: bypass },
+            p_admin_id: user.id,
+            p_reason: 'Admin Panel Bypass Update'
+        });
 
         if (error) throw error;
         
@@ -635,10 +632,12 @@ Deno.serve(async (req) => {
         const { userId } = params;
         if (!userId) throw new Error("Missing userId");
 
-        const { error } = await supabaseAdmin
-            .from('user_profiles')
-            .update({ is_banned: false, banned_until: null })
-            .eq('id', userId);
+        const { error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: { is_banned: false, banned_until: null },
+            p_admin_id: user.id,
+            p_reason: 'Unbanned by admin'
+        });
 
         if (error) throw error;
         result = { success: true };
@@ -667,10 +666,12 @@ Deno.serve(async (req) => {
         const numLevel = Number(level);
         if (isNaN(numLevel) || numLevel < 1 || numLevel > 100) throw new Error("Invalid level");
 
-        const { error } = await supabaseAdmin
-            .from('user_profiles')
-            .update({ tier: numLevel.toString(), level: numLevel, updated_at: new Date().toISOString() })
-            .eq('id', userId);
+        const { error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: { tier: numLevel.toString(), level: numLevel },
+            p_admin_id: user.id,
+            p_reason: 'Admin set level'
+        });
         
         if (error) throw error;
         result = { success: true };
@@ -999,6 +1000,25 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "send_officer_chat": {
+        // Admin/Secretary can send messages as themselves
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { message } = params;
+        if (!message) throw new Error("Missing message");
+
+        const { error } = await supabaseAdmin
+          .from('officer_chat_messages')
+          .insert({
+            sender_id: user.id,
+            content: message,
+            priority: 'normal'
+          });
+
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
       case "send_officer_chat_message": {
         // Admin/Secretary can send messages as themselves
         if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
@@ -1224,9 +1244,6 @@ Deno.serve(async (req) => {
         if (!isAdmin && !isSecretary) throw new Error("Unauthorized"); // Allow secretary too
         const { applicationId, type, userId, interviewDate, interviewTime } = params;
         if (!applicationId) throw new Error("Missing applicationId");
-
-        let rpcError;
-        let rpcData;
 
         // Determine which RPC to call based on type
         // Note: We trust the params here because we are admin. 

@@ -6,6 +6,7 @@ import { trollCityTheme } from '../../styles/trollCityTheme';
 import { Mic, Users, Plus, Radio, Headphones } from 'lucide-react';
 import { toast } from 'sonner';
 import { emitEvent } from '../../lib/events';
+import { generateUUID } from '../../lib/uuid';
 // import { getHlsUrl } from '../../lib/hls'; // Removed as unused
 
 interface PodRoom {
@@ -117,15 +118,6 @@ export default function TrollPodsListing() {
 
       if (error) throw error;
 
-      // Update HLS URL immediately
-      // This ensures we never construct URLs on the client side
-      // MATCHING WEBHOOK CONFIG: streams/<id>/master.m3u8
-      const hlsUrl = getHlsUrl(data.id);
-      await supabase
-        .from('pod_rooms')
-        .update({ hls_url: hlsUrl })
-        .eq('id', data.id);
-
       // Broadcast Pod Start (Global Banner)
       // Fire and forget
       const channel = supabase.channel('global_pod_notifications');
@@ -135,7 +127,7 @@ export default function TrollPodsListing() {
             type: 'broadcast',
             event: 'pod_started',
             payload: {
-              id: crypto.randomUUID(),
+              id: generateUUID(),
               room_id: data.id,
               title: newRoomTitle,
               host_id: user.id,

@@ -13,9 +13,37 @@ interface BroadcastHeaderProps {
 }
 
 export default function BroadcastHeader({ stream, onStartBattle, isHost, liveViewerCount }: BroadcastHeaderProps) {
-    const { profile } = useAuthStore();
+    const { profile, setProfile } = useAuthStore();
     const [likes, setLikes] = React.useState(0);
     const [isLiking, setIsLiking] = React.useState(false);
+
+    // Listen for real-time balance updates
+    React.useEffect(() => {
+        if (!profile?.id) return;
+
+        const channel = supabase.channel(`profile_balance_${profile.id}`)
+            .on(
+                'postgres_changes', 
+                { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'user_profiles', 
+                    filter: `id=eq.${profile.id}` 
+                }, 
+                (payload) => {
+                    const newProfile = { ...profile, ...payload.new } as any;
+                    // Only update if balance changed to avoid loops/renders
+                    if (newProfile.troll_coins !== profile.troll_coins) {
+                         setProfile(newProfile);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        }
+    }, [profile?.id, setProfile]);
 
     // Prefer live count from presence, fallback to DB count
     const displayViewerCount = liveViewerCount !== undefined ? liveViewerCount : (stream.viewer_count || 0);

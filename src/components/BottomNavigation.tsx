@@ -5,6 +5,7 @@ import { useAuthStore } from '../lib/store'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { useActiveBroadcasts } from '@/hooks/useActiveBroadcasts'
 
 export default function BottomNavigation() {
   const { user, profile, logout } = useAuthStore()
@@ -12,6 +13,7 @@ export default function BottomNavigation() {
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLiveMenuOpen, setIsLiveMenuOpen] = useState(false)
+  const hasActiveContent = useActiveBroadcasts()
 
   useEffect(() => {
     if (isMenuOpen || isLiveMenuOpen) {
@@ -107,7 +109,8 @@ export default function BottomNavigation() {
       label: 'Live', 
       path: '/live',
       action: () => setIsLiveMenuOpen(true), 
-      active: isActive('/live') || isLiveMenuOpen 
+      active: isActive('/live') || isLiveMenuOpen,
+      glow: hasActiveContent
     },
     { isCenter: true, ...centerBtn },
     { icon: MessageSquare, label: 'TCPS', path: '/tcps', active: isActive('/tcps') },
@@ -145,7 +148,7 @@ export default function BottomNavigation() {
       case 'viewer':
       default:
         return [
-          { category: 'General', label: 'Go Live', icon: Video, path: '/go-live' },
+          { category: 'General', label: 'Go Live', icon: Video, path: '/broadcast/setup' },
           { category: 'General', label: 'Buy Coins', icon: Store, path: '/store' },
           { category: 'Creative', label: 'Troll Pods', icon: Mic, path: '/pods' },
           { category: 'General', label: 'Support', icon: Heart, path: '/support' }
@@ -189,14 +192,19 @@ export default function BottomNavigation() {
                  <button
                    key={idx}
                    onClick={item.action}
-                   className={`flex flex-col items-center justify-center w-1/5 h-full transition-all active:scale-95 active:opacity-80 ${
+                   className={`relative flex flex-col items-center justify-center w-1/5 h-full transition-all active:scale-95 active:opacity-80 ${
                      item.active
                        ? 'text-troll-gold'
                        : 'text-gray-400 hover:text-gray-200'
                    }`}
                  >
-                   <Icon size={24} className="mb-1" />
-                   <span className="text-[10px] font-medium truncate">{item.label}</span>
+                   <div className="relative">
+                     <Icon size={24} className={`mb-1 ${item.glow ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : ''}`} />
+                     {item.glow && (
+                       <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-[#0D0D0D]" />
+                     )}
+                   </div>
+                   <span className={`text-[10px] font-medium truncate ${item.glow ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : ''}`}>{item.label}</span>
                  </button>
                )
             }
@@ -205,14 +213,19 @@ export default function BottomNavigation() {
               <button
                 key={idx}
                 onClick={() => navigate(item.path!)}
-                className={`flex flex-col items-center justify-center w-1/5 h-full transition-all active:scale-95 active:opacity-80 ${
+                className={`relative flex flex-col items-center justify-center w-1/5 h-full transition-all active:scale-95 active:opacity-80 ${
                   item.active
                     ? 'text-troll-gold'
                     : 'text-gray-400 hover:text-gray-200'
                 }`}
               >
-                <Icon size={24} className="mb-1" />
-                <span className="text-[10px] font-medium truncate">{item.label}</span>
+                <div className="relative">
+                   <Icon size={24} className={`mb-1 ${item.glow ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : ''}`} />
+                   {item.glow && (
+                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-[#0D0D0D]" />
+                   )}
+                </div>
+                <span className={`text-[10px] font-medium truncate ${item.glow ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : ''}`}>{item.label}</span>
               </button>
             )
           })}

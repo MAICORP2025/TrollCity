@@ -134,7 +134,7 @@ export const handler = async (req: Request): Promise<Response> => {
         });
       }
 
-      // Update troll coin totals (skip trollmonds contributions)
+      // Update troll coin totals
       const updates: Record<string, any> = {
         updated_at: new Date().toISOString(),
       };

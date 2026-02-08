@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '../lib/store'
+import { generateUUID } from '../lib/uuid'
 import ProfileSetup from './ProfileSetup'
 
 const AuthCallback = () => {
@@ -44,7 +45,7 @@ const AuthCallback = () => {
             const u = data.session.user
             console.log('User authenticated:', u.email)
             
-            const sessionId = crypto.randomUUID()
+            const sessionId = generateUUID()
             // Store session ID for device enforcement
             try {
               localStorage.setItem('current_device_session_id', sessionId)

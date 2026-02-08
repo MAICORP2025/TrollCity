@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
+import { trollCityTheme } from '../lib/themes';
 import { toast } from 'sonner';
 import { Car, AlertTriangle, ArrowLeft, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface CarCatalogItem {
-  id: string;
+  id: number;
   name: string;
   tier: number;
   base_price: number;
@@ -47,10 +48,11 @@ export default function CarDealership() {
     if (!user) return;
     if (!confirm(`Are you sure you want to purchase the ${car.name} for ${car.base_price.toLocaleString()} coins?`)) return;
 
-    setPurchasing(car.id);
+    setPurchasing(String(car.id));
     try {
-      const { data, error } = await supabase.rpc('purchase_car', {
-        p_car_catalog_id: car.id
+      const { data, error } = await supabase.rpc('purchase_from_ktauto', {
+        p_catalog_id: car.id,
+        p_plate_type: 'temp'
       });
 
       if (error) throw error;
@@ -60,7 +62,7 @@ export default function CarDealership() {
         await refreshProfile();
         navigate('/active-assets'); // Redirect to garage
       } else {
-        toast.error(data.error || 'Purchase failed');
+        toast.error(data.message || data.error || 'Purchase failed');
       }
     } catch (err: any) {
       console.error('Purchase error:', err);
@@ -147,10 +149,10 @@ export default function CarDealership() {
 
                   <button
                     onClick={() => handlePurchase(car)}
-                    disabled={purchasing === car.id}
+                    disabled={purchasing === String(car.id)}
                     className={`w-full py-3 ${trollCityTheme.gradients.button} rounded-lg font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:-translate-y-0.5`}
                   >
-                    {purchasing === car.id ? (
+                    {purchasing === String(car.id) ? (
                       <span className="animate-pulse">Processing...</span>
                     ) : (
                       <>

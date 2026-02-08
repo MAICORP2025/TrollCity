@@ -18,13 +18,9 @@ export async function saveGlowingUsernameColor(
   color: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({
-        glowing_username_color: color,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId)
+    const { error } = await supabase.rpc('update_glow_color', {
+      p_color: color
+    });
 
     if (error) {
       return { success: false, error: error.message }

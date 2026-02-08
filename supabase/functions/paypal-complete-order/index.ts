@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
         // Fallback to old table for backward compatibility if needed, 
         // but ideally we should only use purchasable_items now.
         // For safety during migration, we can check coin_packages.
-         const { data: pkg, error: pkgError } = await supabase
+         const { data: pkg } = await supabase
           .from("coin_packages")
           .select("coins")
           .eq("id", packageId)

@@ -1,8 +1,21 @@
 import React from 'react';
-import { User, Gift, MicOff, Ban, Shield, X } from 'lucide-react';
+import { User, Gift, MicOff, Ban, Shield, X, UserPlus, MessageSquare, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
+import { shouldBlockKick } from '../../lib/insuranceSystem';
+
+function getTierColor(tier: string) {
+  switch (tier) {
+    case 'Elite': return 'text-yellow-400 bg-yellow-400/10 border-yellow-500/30';
+    case 'Trusted': return 'text-green-400 bg-green-400/10 border-green-500/30';
+    case 'Reliable': return 'text-blue-400 bg-blue-400/10 border-blue-500/30';
+    case 'Building': return 'text-purple-400 bg-purple-400/10 border-purple-500/30';
+    case 'Shaky': return 'text-orange-400 bg-orange-400/10 border-orange-500/30';
+    case 'Untrusted': return 'text-red-400 bg-red-400/10 border-red-500/30';
+    default: return 'text-gray-400 bg-gray-400/10 border-gray-500/30';
+  }
+}
 
 interface UserActionModalProps {
   streamId: string;
@@ -34,15 +47,32 @@ export default function UserActionModal({
   const [fetchedUsername, setFetchedUsername] = React.useState<string | null>(null);
   const [fetchedCreatedAt, setFetchedCreatedAt] = React.useState<string | null>(null);
   const [targetRole, setTargetRole] = React.useState<string | null>(role || null);
+  const [fetchedTier, setFetchedTier] = React.useState<string | null>(null);
+  const [fetchedAvatar, setFetchedAvatar] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (username && role && createdAt) return;
     const fetchProfile = async () => {
-        const { data } = await supabase.from('user_profiles').select('username, role, troll_role, created_at').eq('id', userId).single();
-        if (data) {
-            setFetchedUsername(data.username);
-            setTargetRole(data.role || data.troll_role);
-            setFetchedCreatedAt(data.created_at);
+        // Fetch profile if needed
+        if (!username || !role || !createdAt) {
+          const { data } = await supabase.from('user_profiles').select('username, role, troll_role, created_at, avatar_url').eq('id', userId).single();
+          if (data) {
+              setFetchedUsername(data.username);
+              setTargetRole(data.role || data.troll_role);
+              setFetchedCreatedAt(data.created_at);
+              setFetchedAvatar(data.avatar_url);
+          }
+        } else {
+             // If we have basic info, still fetch avatar if missing
+             const { data } = await supabase.from('user_profiles').select('avatar_url').eq('id', userId).single();
+             if (data) {
+                 setFetchedAvatar(data.avatar_url);
+             }
+        }
+
+        // Fetch credit tier
+        const { data: creditData } = await supabase.from('user_credit').select('tier').eq('user_id', userId).single();
+        if (creditData) {
+            setFetchedTier(creditData.tier);
         }
     };
     fetchProfile();
@@ -57,6 +87,26 @@ export default function UserActionModal({
         toast.error("Cannot kick staff members. Please report them instead.");
         return;
     }
+
+    // Check for kick insurance
+    const isProtected = await shouldBlockKick(userId);
+    
+    if (isProtected) {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        const { data: currentUserProfile } = await supabase
+            .from('user_profiles')
+            .select('role')
+            .eq('id', currentUser?.id)
+            .single();
+            
+        const isKickerStaff = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'moderator';
+        
+        if (!isKickerStaff) {
+            toast.error("This user has Kick Insurance! They cannot be kicked.");
+            return;
+        }
+    }
+
     if (!confirm("Kick this user for 100 coins? They will be removed for 24h unless they pay the fee.")) return;
     
     // Use the new paid kick RPC
@@ -131,6 +181,35 @@ export default function UserActionModal({
     }
   };
 
+  const handleFollow = async () => {
+    if (!currentUser) return;
+    if (isFollowing) {
+        // Unfollow
+        const { error } = await supabase.from('user_follows').delete().eq('follower_id', currentUser.id).eq('following_id', userId);
+        if (!error) {
+            setIsFollowing(false);
+            toast.success(`Unfollowed ${displayName}`);
+        }
+    } else {
+        // Follow
+        const { error } = await supabase.from('user_follows').insert({ follower_id: currentUser.id, following_id: userId });
+        if (!error) {
+            setIsFollowing(true);
+            toast.success(`Followed ${displayName}`);
+        }
+    }
+  };
+
+  const handleMessage = () => {
+    openChatBubble(userId, displayName, fetchedAvatar);
+    onClose();
+  };
+
+  const handleViewProfile = () => {
+    navigate(`/profile/${userId}`);
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
@@ -138,8 +217,12 @@ export default function UserActionModal({
         {/* Header */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-zinc-800/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center text-white font-bold text-lg">
-              {displayName ? displayName.charAt(0).toUpperCase() : <User size={20} />}
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center text-white font-bold text-lg overflow-hidden">
+              {fetchedAvatar ? (
+                  <img src={fetchedAvatar} alt={displayName} className="w-full h-full object-cover" />
+              ) : (
+                  displayName ? displayName.charAt(0).toUpperCase() : <User size={20} />
+              )}
             </div>
             <div>
               <div className="font-bold text-white">
@@ -153,6 +236,11 @@ export default function UserActionModal({
                 />
               </div>
               <p className="text-xs text-zinc-400">Viewer</p>
+              {fetchedTier && (
+                <div className={`mt-1 px-2 py-0.5 rounded text-[10px] font-semibold inline-block border ${getTierColor(fetchedTier)}`}>
+                  {fetchedTier}
+                </div>
+              )}
             </div>
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors">
@@ -199,11 +287,36 @@ export default function UserActionModal({
             </button>
           )}
 
-          {/* Moderation Actions */}
-          {(isHost || isModerator) && (
+          {/* Standard Actions (Available to everyone, but filtered by role requirements) */}
+          <div className="space-y-2 pt-2 border-t border-white/10 mt-2">
+             {/* Follow / Message / Report */}
+             <div className="grid grid-cols-3 gap-2">
+                 <button onClick={handleFollow} className="flex flex-col items-center justify-center gap-1 p-2 bg-zinc-800 hover:bg-zinc-700 text-blue-400 rounded-lg transition-colors border border-white/5">
+                    <UserPlus size={16} className={isFollowing ? "text-green-500" : ""} />
+                    <span className="text-[10px]">{isFollowing ? "Following" : "Follow"}</span>
+                 </button>
+                 <button onClick={handleMessage} className="flex flex-col items-center justify-center gap-1 p-2 bg-zinc-800 hover:bg-zinc-700 text-purple-400 rounded-lg transition-colors border border-white/5">
+                    <MessageSquare size={16} />
+                    <span className="text-[10px]">Message</span>
+                 </button>
+                 <button onClick={handleReport} className="flex flex-col items-center justify-center gap-1 p-2 bg-zinc-800 hover:bg-zinc-700 text-yellow-500 rounded-lg transition-colors border border-white/5">
+                    <Shield size={16} />
+                    <span className="text-[10px]">Report</span>
+                 </button>
+             </div>
+          </div>
+
+          {/* Moderation Actions (Broadcaster / Staff / Broadofficer) */}
+          {hasModActions && (
             <div className="space-y-2 pt-2 border-t border-white/10 mt-2">
                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Moderation</p>
                
+               {/* View Profile (Only for Staff/Broadcaster/Broadofficer) */}
+               <button onClick={handleViewProfile} className="w-full flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors border border-white/5 mb-2">
+                  <Eye size={16} />
+                  <span>View Profile</span>
+               </button>
+
                {isTargetStaff ? (
                    <button onClick={handleReport} className="w-full flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-700 text-yellow-500 rounded-lg transition-colors border border-white/5">
                       <Shield size={16} />

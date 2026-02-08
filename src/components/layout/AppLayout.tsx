@@ -8,6 +8,7 @@ import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
 import { useAuthStore } from '../../lib/store'
 import ChatBubble from '../ChatBubble'
+import WalkieContainer from '../walkie/WalkieContainer'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -66,13 +67,16 @@ export default function AppLayout({
 
         {/* Mobile Bottom Navigation - Fixed at bottom */}
         {effectiveShowBottomNav && (
-          <div className="md:hidden shrink-0 z-30">
+          <div className="md:hidden fixed bottom-0 left-0 right-0 z-30">
             <BottomNavigation />
           </div>
         )}
 
         {/* Global Chat Bubble */}
         <ChatBubble />
+        
+        {/* Walkie Talkie System */}
+        <WalkieContainer />
       </div>
     </div>
   )

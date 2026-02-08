@@ -25,7 +25,7 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
     try {
       const { data } = await supabase
         .from('user_profiles')
-        .select('troll_coins, trollmonds, level')
+        .select('troll_coins, level')
         .eq('id', userId)
         .single()
       setTargetProfile(data)
@@ -111,14 +111,10 @@ export default function AdminProfilePanel({ userId, username }: AdminProfilePane
 
       {/* Current Stats */}
       {targetProfile && (
-        <div className="grid grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="bg-black/50 rounded p-2">
             <div className="text-gray-400">Troll Coins</div>
             <div className="text-yellow-400 font-bold">{targetProfile.troll_coins || 0}</div>
-          </div>
-          <div className="bg-black/50 rounded p-2">
-            <div className="text-gray-400">Trollmonds</div>
-            <div className="text-green-400 font-bold">{targetProfile.trollmonds || 0}</div>
           </div>
           <div className="bg-black/50 rounded p-2">
             <div className="text-gray-400">Level</div>

@@ -74,12 +74,10 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
   const handleRefill = async (amount: number) => {
     setLoading(true);
     try {
-      // Manual Workaround: Call spend_coins then consume_gas (with negative amount to add)
-      // This bypasses the ambiguous/broken refill_gas RPC.
-      
+      // Secure Refill: Spend coins then add gas
       const cost = Math.ceil((amount / 5) * 300);
       
-      // 1. Spend Coins
+      // 1. Spend Coins (Secure RPC)
       const { data: spendData, error: spendError } = await supabase.rpc('troll_bank_spend_coins_secure', {
         p_user_id: profile.id,
         p_amount: cost,
@@ -89,19 +87,7 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
         p_metadata: { amount_percent: amount }
       });
 
-      if (spendError) {
-          // If secure rpc not found, try without secure suffix (older migration)
-          const { error: legacyError } = await supabase.rpc('troll_bank_spend_coins', {
-            p_user_id: profile.id,
-            p_amount: cost,
-            p_bucket: 'paid',
-            p_source: 'gas_refill',
-            p_ref_id: null,
-            p_metadata: { amount_percent: amount }
-          });
-          
-          if (legacyError) throw new Error(spendError.message || legacyError.message);
-      }
+      if (spendError) throw spendError;
 
       // 2. Add Gas (consume_gas with negative amount)
       // consume_gas logic: gas = gas - p_amount. So passing -amount adds gas.

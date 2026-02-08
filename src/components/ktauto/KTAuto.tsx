@@ -106,9 +106,10 @@ export default function KTAuto() {
 
     setPurchasing(true);
     try {
-      // Use purchase_car (UUID support) instead of purchase_vehicle
-      const { data, error } = await supabase.rpc('purchase_car', {
-        p_car_catalog_id: selectedCar.id
+      // Use purchase_from_ktauto (TMV System)
+      const { data, error } = await supabase.rpc('purchase_from_ktauto', {
+        p_catalog_id: selectedCar.id,
+        p_plate_type: plateType
       });
 
       if (error) throw error;

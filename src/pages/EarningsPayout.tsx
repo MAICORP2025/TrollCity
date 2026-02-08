@@ -53,8 +53,9 @@ export default function EarningsPayout() {
 
   const loadRecent = useCallback(async () => {
     if (!profile) return
+    // Load from visa_redemptions instead of cashout_requests
     const { data, error } = await supabase
-      .from('cashout_requests')
+      .from('visa_redemptions')
       .select('*')
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
@@ -73,8 +74,8 @@ export default function EarningsPayout() {
   useEffect(() => {
     if (!profile?.id) return
     const channel = supabase
-      .channel(`cashout_requests_${profile.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashout_requests', filter: `user_id=eq.${profile.id}` }, () => {
+      .channel(`visa_redemptions_${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'visa_redemptions', filter: `user_id=eq.${profile.id}` }, () => {
         loadRecent()
       })
     channel.subscribe()
@@ -123,38 +124,48 @@ export default function EarningsPayout() {
       return
     }
 
-    if (!payoutDetails.trim()) {
-      toast.error('Enter your payout details.')
-      return
-    }
+      const now = new Date();
+      // Convert to MST (UTC-7)
+      // Standard time offset is 420 mins (7 hours). Daylight saving might apply? 
+      // The prompt says "MST", implying Standard Time specifically, or just Mountain Time.
+      // Usually "MST" means UTC-7 fixed, but often implies local Arizona/Denver time.
+      // Let's use a robust check.
+      // We'll use Intl.DateTimeFormat to get the time in 'America/Denver' (Mountain Time)
+      const mtDateString = now.toLocaleString("en-US", {timeZone: "America/Denver"});
+      const mtDate = new Date(mtDateString);
+      
+      const day = mtDate.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, ...
+      const hour = mtDate.getHours();
+      
+      // Mon (1) or Fri (5), 14:00-14:59 (2 PM MST 1 hour window)
+      const isWindowOpen = (day === 1 || day === 5) && hour === 14;
+      
+      if (!isWindowOpen) {
+          toast.error("Cashouts are only open Monday & Friday between 2:00 PM - 3:00 PM MST.");
+          return;
+      }
 
-    setLoading(true)
+      setLoading(true)
 
-    try {
-      const email = user?.email || ''
-      const username = profile.username
-
-      const { error } = await supabase.from('cashout_requests').insert([
-        {
-          user_id: profile.id,
-          username,
-          full_name: fullName,
-          email,
-          payout_method: payoutMethod,
-          payout_details: payoutDetails.trim(),
-          requested_coins: tier.coins,
-          usd_value: tier.usd,
-          status: 'pending',
-        },
-      ])
+      try {
+        const { data, error } = await supabase.rpc('request_visa_redemption', {
+            p_user_id: profile.id,
+            p_tier_id: selectedTierId
+        });
 
       if (error) {
         console.error('Cashout request error:', error)
-        toast.error(`Database error: ${error.message}`)
+        toast.error(`Request failed: ${error.message}`)
         throw error
       }
+      
+      if (data && !data.success) {
+          toast.error(data.message || 'Request failed');
+          setLoading(false);
+          return;
+      }
 
-      toast.success('Cashout request submitted! Admin will review and pay manually.')
+      toast.success('Cashout request submitted! Coins held in reserve pending approval.')
       completeFlow('cashout')
       setPayoutDetails('')
       setFullName('')
@@ -274,29 +285,23 @@ export default function EarningsPayout() {
               >
                 <div>
                   <p className="font-semibold">
-                    {r.requested_coins.toLocaleString()} Troll Coins → ${Number(r.usd_value).toFixed(2)}
+                    {r.coin_amount ? r.coin_amount.toLocaleString() : (r.requested_coins || 0).toLocaleString()} Troll Coins
                   </p>
-                  <p className="text-[11px] text-gray-400">{r.payout_method} · {r.payout_details}</p>
+                  <p className="text-[11px] text-gray-400">VISA Card Request</p>
                 </div>
                 <div className="text-right text-[11px]">
-                  <span className={r.status === 'completed'
+                  <span className={r.status === 'approved' || r.status === 'completed'
                     ? 'text-green-400'
                     : r.status === 'paid'
                     ? 'text-purple-300'
                     : r.status === 'processing'
                     ? 'text-yellow-300'
+                    : r.status === 'rejected'
+                    ? 'text-red-400'
                     : 'text-orange-300'}>
                     {r.status.toUpperCase()}
                   </span>
                   <div>{new Date(r.created_at).toLocaleDateString()}</div>
-                  {(r.status === 'pending' || r.status === 'processing') && (
-                    <button
-                      onClick={() => cancelRequest(r.id)}
-                      className="px-2 py-1 mt-2 rounded bg-red-600 hover:bg-red-700"
-                    >
-                      Cancel
-                    </button>
-                  )}
                 </div>
               </div>
             ))}

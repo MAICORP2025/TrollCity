@@ -35,12 +35,12 @@ CREATE INDEX IF NOT EXISTS idx_broadcaster_stats_24h ON public.broadcaster_stats
 -- BACKFILL broadcaster_stats from existing gift_transactions (approximate)
 INSERT INTO public.broadcaster_stats (user_id, total_gifts_24h, total_gifts_all_time, last_updated_at)
 SELECT 
-    recipient_id,
-    COALESCE(SUM(amount) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours'), 0),
-    COALESCE(SUM(amount), 0),
+    to_user_id,
+    COALESCE(SUM(coins) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours'), 0),
+    COALESCE(SUM(coins), 0),
     NOW()
 FROM public.gift_transactions
-GROUP BY recipient_id
+GROUP BY to_user_id
 ON CONFLICT (user_id) DO NOTHING;
 
 -- 3. RPC: Send Gift (Ledger Entry Only - Single Write)

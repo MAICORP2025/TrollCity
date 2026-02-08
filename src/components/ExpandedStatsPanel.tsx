@@ -17,7 +17,6 @@ interface UserStats {
   nextLevelXp: number
   troll_coins: number
   paid_coins: number
-  trollmonds: number
   familyName?: string
   familyLevel?: number
   familyXp?: number

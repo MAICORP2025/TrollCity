@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Bell, LogOut, Store, RefreshCw } from 'lucide-react'
+import { Search, Bell, LogOut, Store, RefreshCw, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase, searchUsers } from '../lib/supabase'
@@ -93,16 +93,17 @@ const Header = () => {
 
     // Subscribe to new notifications
     const channel = supabase
-      .channel('header-notifications')
+      .channel(`header-notifications-${user.id}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'notifications',
           filter: `user_id=eq.${user.id}`
         },
-        () => {
+        (payload) => {
+          // console.log('Notification update received:', payload)
           fetchNotifications()
         }
       )
@@ -212,9 +213,15 @@ const Header = () => {
   }
 
   return (
-    <header className="h-20 bg-troll-dark-bg/80 border-b border-troll-neon-pink/20 flex items-center justify-between px-8 backdrop-blur-lg relative z-50">
+    <header className="h-20 bg-troll-dark-bg/80 border-b border-troll-neon-pink/20 flex items-center justify-between px-4 md:px-8 backdrop-blur-lg relative z-50">
       <div className="absolute inset-0 bg-gradient-to-r from-troll-neon-pink/5 via-transparent to-troll-neon-green/5 pointer-events-none"></div>
-      <div className="relative z-10 flex items-center space-x-6 flex-1">
+      <div className="relative z-10 flex items-center space-x-2 md:space-x-6 flex-1">
+        <button
+          onClick={() => navigate(-1)}
+          className="md:hidden p-2 text-gray-400 hover:text-white"
+        >
+          <ArrowLeft size={24} />
+        </button>
         <div className="relative flex-1 max-w-lg">
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-blue-400 z-10" />
           <input

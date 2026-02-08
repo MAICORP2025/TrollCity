@@ -168,7 +168,7 @@ export default function LivingPage() {
     }
 
     if (useLoan && creditScore <= 650) {
-        toast.error("Credit score must be > 650 for instant loan approval.");
+        toast.error("Credit score must be > 650 for instant mortgage approval.");
         return;
     }
     
@@ -418,7 +418,7 @@ export default function LivingPage() {
 
   // Pay off loan with 40% auto-deduction to admin pool (Logic handled in RPC now)
   const handlePayLoan = async (loan: LandlordLoan) => {
-    const amount = prompt(`Pay off loan? (Remaining: ${loan.remaining_balance.toLocaleString()} coins)`, loan.monthly_payment.toString());
+    const amount = prompt(`Pay off mortgage? (Remaining: ${loan.remaining_balance.toLocaleString()} coins)`, loan.monthly_payment.toString());
     if (!amount) return;
     
     const payAmount = parseInt(amount);
@@ -780,7 +780,7 @@ export default function LivingPage() {
                         onClick={() => setActiveTab('my_loans')}
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'my_loans' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
                     >
-                        My Loans
+                        My Mortgages
                     </button>
                     <button 
                         onClick={() => setActiveTab('market')}
@@ -869,7 +869,7 @@ export default function LivingPage() {
                                             <div className="flex justify-between items-center pt-2 border-t border-white/5 mt-2">
                                                 <div className="flex items-center gap-2">
                                                     <CreditCard className="w-4 h-4 text-emerald-400" />
-                                                    <span className="text-gray-300 text-sm">Instant Loan (10% Down)</span>
+                                                    <span className="text-gray-300 text-sm">Instant Mortgage (10% Down)</span>
                                                 </div>
                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                     <input 
@@ -1071,7 +1071,7 @@ export default function LivingPage() {
                     <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-6">
                         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                             <Calculator className="w-5 h-5 text-yellow-500" />
-                            Property Loan Application
+                            Mortgage Application
                         </h3>
                         
                         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1124,13 +1124,13 @@ export default function LivingPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm text-gray-400 mb-1">Loan Amount</label>
+                                <label className="block text-sm text-gray-400 mb-1">Mortgage Amount</label>
                                 <input
                                     type="number"
                                     value={loanAppForm.loan_amount || ''}
                                     readOnly
                                     className="w-full bg-black/50 border border-zinc-700 rounded-lg px-4 py-2 text-white"
-                                    placeholder="Loan amount"
+                                    placeholder="Mortgage amount"
                                 />
                             </div>
                         </div>

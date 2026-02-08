@@ -66,6 +66,14 @@ const FamilyWarsHub = () => {
             .maybeSingle()
 
           if (war) {
+            // Check if war has ended but status is still active
+            const endsAt = new Date(war.end_time || war.ends_at)
+            if (war.status === 'active' && endsAt <= new Date()) {
+              await completeWar(war.id)
+              loadWarData() // Reload to get updated status
+              return
+            }
+
             setCurrentWar(war)
 
             // Load war scores
@@ -241,12 +249,12 @@ const FamilyWarsHub = () => {
     const end = new Date(endTime)
     const diffMs = end - now
 
-    if (diffMs <= 0) return 'Ended'
+    if (diffMs <= 0) return '0m'
 
     const hours = Math.floor(diffMs / (1000 * 60 * 60))
     const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
 
-    return `${hours}h ${minutes}m left`
+    return `${hours}h ${minutes}m`
   }
 
   if (loading) {
@@ -298,7 +306,7 @@ const FamilyWarsHub = () => {
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-red-400 mb-2">⚔️ ACTIVE WAR ⚔️</h2>
               <p className="text-gray-300">
-                {currentWar.status === 'pending' ? 'War begins' : 'War ends'} in {formatTimeLeft(currentWar.status === 'pending' ? currentWar.starts_at : currentWar.ends_at)}
+                {currentWar.status === 'pending' ? 'War begins' : 'War ends'} in {formatTimeLeft(currentWar.status === 'pending' ? (currentWar.start_time || currentWar.starts_at) : (currentWar.end_time || currentWar.ends_at))}
               </p>
             </div>
 

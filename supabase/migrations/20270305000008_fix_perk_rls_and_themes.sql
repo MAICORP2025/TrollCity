@@ -57,6 +57,8 @@ END $$;
 
 
 -- 4. RPC: Increment Stream Likes
+DROP FUNCTION IF EXISTS increment_stream_likes(UUID);
+
 CREATE OR REPLACE FUNCTION increment_stream_likes(stream_id UUID)
 RETURNS void
 LANGUAGE plpgsql
@@ -71,6 +73,8 @@ $$;
 
 
 -- 5. RPC: Purchase/Toggle RGB Broadcast
+DROP FUNCTION IF EXISTS purchase_rgb_broadcast(UUID, BOOLEAN);
+
 CREATE OR REPLACE FUNCTION purchase_rgb_broadcast(p_stream_id UUID, p_enable BOOLEAN)
 RETURNS TABLE (success BOOLEAN, message TEXT, error TEXT)
 LANGUAGE plpgsql

@@ -50,7 +50,7 @@ serve(async (req) => {
 
     // 2. Log stream session start if stream_id provided
     if (stream_id) {
-        const { error: sessionError } = await supabase
+        await supabase
             .from("guest_stream_sessions")
             .upsert({
                 ip_address,

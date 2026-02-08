@@ -227,7 +227,7 @@ serve(async (req: Request) => {
     if (roleParam === "broadcaster" || roleParam === "publisher" || roleParam === "admin") {
       canPublish = true;
     }
-    if (profile?.is_broadcaster || profile?.is_admin) canPublish = true;
+    // if (profile?.is_broadcaster || profile?.is_admin) canPublish = true;
 
     // ✅ FORCE CAN PUBLISH IF REQUESTED
     if (allowPublish) canPublish = true;

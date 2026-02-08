@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Gift as GiftIcon, Star, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Gift } from '../../types/broadcast';
+import { useCoins } from '../../lib/hooks/useCoins';
 
 interface GiftAnimationOverlayProps {
   streamId: string;
@@ -36,30 +37,50 @@ export default function GiftAnimationOverlay({ streamId }: GiftAnimationOverlayP
   }, []);
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`stream-gifts-${streamId}`)
+    // Listen for Realtime Broadcast Events (Faster, matches useGiftSystem)
+    const channel = supabase.channel(`stream_events_${streamId}`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'stream_gifts',
-          filter: `stream_id=eq.${streamId}`,
-        },
-        async (payload) => {
-          const newGift = payload.new as any;
+        'broadcast',
+        { event: 'gift_sent' },
+        (payload) => {
+          const event = payload.payload; // Payload structure from useGiftSystem
           
           // Refresh coin balance if we are the sender or recipient
           refreshBalance();
 
           // Add to animation queue
-          const giftDef = giftDefs[newGift.gift_id];
+          const giftDef = giftDefs[event.gift_slug] || giftDefs[event.gift_id] || { 
+            name: event.gift_name, 
+            icon_url: null, // You might need to pass icon in payload if not found
+            coin_price: event.amount
+          };
+
+          // Play Sound
+          const playGiftSound = (name: string) => {
+              const lower = name.toLowerCase();
+              let src = '/sounds/entrance/coins.mp3'; // Default
+              
+              if (lower.includes('rose')) src = '/sounds/rose.mp3';
+              else if (lower.includes('diamond')) src = '/sounds/diamond.mp3';
+              else if (lower.includes('heart')) src = '/sounds/heart.mp3';
+              else if (lower.includes('rocket')) src = '/sounds/rocket.mp3';
+              else if (lower.includes('confetti')) src = '/sounds/confetti.mp3';
+              else if (lower.includes('crown')) src = '/sounds/crown.mp3';
+              else if (lower.includes('bear')) src = '/sounds/bear.mp3';
+              
+              const audio = new Audio(src);
+              audio.volume = 0.5;
+              audio.play().catch(e => console.warn('Sound play blocked', e));
+          };
+          
+          playGiftSound(giftDef.name || 'Gift');
+
           const animationEvent: GiftEvent = {
-            id: Math.random().toString(36).substring(7),
-            gift_id: newGift.gift_id,
-            sender_id: newGift.sender_id,
-            recipient_id: newGift.recipient_id,
-            gift_data: giftDef
+            id: event.id || Math.random().toString(36).substring(7),
+            gift_id: event.gift_id,
+            sender_id: event.sender_id,
+            recipient_id: event.receiver_id || streamId, // Fallback
+            gift_data: giftDef as any
           };
 
           setActiveAnimations((prev) => [...prev, animationEvent]);

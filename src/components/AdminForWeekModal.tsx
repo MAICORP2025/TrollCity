@@ -24,7 +24,7 @@ export default function AdminForWeekModal({ isOpen, onClose }: { isOpen: boolean
   }, [isOpen]);
 
   const handlePurchase = async () => {
-    if (!confirm('Purchase Admin for a Week for 5,000 Coins?')) return;
+    if (!confirm('Purchase Admin for a Week for 200,000 Coins?')) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('purchase_admin_for_week');

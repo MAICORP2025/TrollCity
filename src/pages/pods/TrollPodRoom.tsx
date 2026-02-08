@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { Mic, MicOff, Users, MessageSquare, Hand, UserPlus, UserMinus, UserX } from 'lucide-react';
+import { Mic, MicOff, Users, MessageSquare, Hand, UserMinus, Settings, Coins, Map } from 'lucide-react';
+
 import { toast } from 'sonner';
 import { LiveKitRoom, useParticipants, useRoomContext, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { Track } from 'livekit-client';
 import { useLiveKitToken } from '../../hooks/useLiveKitToken';
 import { useAuthStore } from '../../lib/store';
 import { emitEvent as triggerEvent } from '../../lib/events';
 import PodParticipantBox from './PodParticipantBox';
 import PodChatBox from './PodChatBox';
+import PodHostControlPanel from './PodHostControlPanel';
+import TrollsTownControl from '../../components/TrollsTownControl';
 
 interface Room {
   id: string;
@@ -19,13 +21,14 @@ interface Room {
   is_live: boolean;
   viewer_count: number;
   started_at?: string;
+  guest_price: number;
 }
 
 interface PodParticipant {
   id: string;
   room_id: string;
   user_id: string;
-  role: 'host' | 'speaker' | 'listener';
+  role: 'host' | 'speaker' | 'listener' | 'officer';
   is_muted: boolean;
   is_hand_raised: boolean;
   user?: {
@@ -45,7 +48,8 @@ const PodRoomContent = ({
   onApproveRequest,
   onRemoveSpeaker,
   onCancelRequest,
-  isStaff
+  isStaff,
+  canPublish
 }: { 
   room: Room, 
   currentUser: any, 
@@ -56,17 +60,20 @@ const PodRoomContent = ({
   onApproveRequest: (userId: string) => void,
   onRemoveSpeaker: (userId: string) => void,
   onCancelRequest: () => void,
-  isStaff: boolean
+  isStaff: boolean,
+  canPublish: boolean
 }) => {
   const participants = useParticipants();
   const liveKitRoom = useRoomContext();
   const [showChat, setShowChat] = useState(true);
-  const [showRequests, setShowRequests] = useState(false);
+  const [showHostPanel, setShowHostPanel] = useState(false);
+  const [trollsTownControlOpen, setTrollsTownControlOpen] = useState(false);
   const navigate = useNavigate();
 
   // Derived state
   const myRecord = participantsData.find(p => p.user_id === currentUser?.id);
-  const isSpeaker = isHost || myRecord?.role === 'speaker';
+  const isSpeaker = isHost || myRecord?.role === 'speaker' || myRecord?.role === 'officer';
+  const isOfficer = myRecord?.role === 'officer';
   const isHandRaised = myRecord?.is_hand_raised;
 
   // Limits Check
@@ -121,29 +128,73 @@ const PodRoomContent = ({
     return () => clearInterval(interval);
   }, [currentUser, room.id]);
 
-  // Instant Mute Enforcement
+  // Instant Mute / Permission Enforcement
   useEffect(() => {
-    if (myRecord?.is_muted && liveKitRoom.localParticipant.isMicrophoneEnabled) {
-       liveKitRoom.localParticipant.setMicrophoneEnabled(false);
+    const p = liveKitRoom.localParticipant;
+    if (!p) return;
+
+    // 1. If I am not a speaker/host, I should NOT be publishing audio
+    if (!canPublish && p.isMicrophoneEnabled) {
+        console.log('[TrollPod] Enforcing listener mute');
+        p.setMicrophoneEnabled(false);
+    }
+
+    // 2. If I am muted by host
+    if (myRecord?.is_muted && p.isMicrophoneEnabled) {
+       p.setMicrophoneEnabled(false);
        toast.error('You have been muted by the host.');
     }
-  }, [myRecord?.is_muted, liveKitRoom.localParticipant]);
+  }, [myRecord?.is_muted, canPublish, liveKitRoom.localParticipant]);
+
+  const handlePromoteOfficer = async (userId: string) => {
+    if (!isHost) return;
+    await supabase.from('pod_room_participants')
+      .update({ role: 'officer', is_hand_raised: false })
+      .eq('room_id', room.id)
+      .eq('user_id', userId);
+    toast.success('User promoted to Officer');
+  };
+
+  const handleDisableChat = async (userId: string) => {
+    if (!isHost && !isOfficer) return;
+    const { error } = await supabase.from('pod_chat_bans').insert({ room_id: room.id, user_id: userId });
+    if (!error) toast.success('Chat disabled for user');
+    else toast.error('Failed to disable chat');
+  };
 
   const handleKick = async (userId: string) => {
-    if (!isHost) return;
-    if (confirm('Are you sure you want to kick and ban this user?')) {
+    if (!isHost && !isOfficer) return;
+    if (confirm('Are you sure you want to kick this user?')) {
         try {
         await supabase.from('pod_room_participants').delete().eq('room_id', room.id).eq('user_id', userId);
-        await supabase.from('pod_bans').insert({ room_id: room.id, user_id: userId });
         toast.success('User kicked');
         } catch {
         toast.error('Failed to kick user');
         }
     }
   };
+  
+  const handleBan = async (userId: string) => {
+      if (!isHost && !isOfficer) return;
+      if (confirm('Kick and Ban user for 24 hours?')) {
+          try {
+            await supabase.from('pod_room_participants').delete().eq('room_id', room.id).eq('user_id', userId);
+            // Calculate 24h from now
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            await supabase.from('pod_bans').insert({ 
+                room_id: room.id, 
+                user_id: userId,
+                expires_at: expiresAt
+            });
+            toast.success('User banned for 24h');
+          } catch {
+            toast.error('Failed to ban user');
+          }
+      }
+  };
 
   const handleMute = async (identity: string) => {
-    if (!isHost) return;
+    if (!isHost && !isOfficer) return;
     await supabase
       .from('pod_room_participants')
       .update({ is_muted: true })
@@ -210,6 +261,70 @@ const PodRoomContent = ({
   // Requests List (for Host)
   const requests = participantsData.filter(p => p.is_hand_raised && p.role === 'listener');
 
+  // Direct notification listener for Host (bypasses state updates for speed/reliability)
+  useEffect(() => {
+    if (!isHost || !room?.id) return;
+
+    const channel = supabase.channel(`pod_reqs_notify:${room.id}`)
+        .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'pod_room_participants',
+            filter: `room_id=eq.${room.id}`
+        }, async (payload: any) => {
+            const newRec = payload.new;
+            const oldRec = payload.old;
+            
+            // Check if hand raised changed from false to true
+            if (newRec.is_hand_raised && !oldRec.is_hand_raised) {
+                 const { data: userProfile } = await supabase
+                    .from('user_profiles')
+                    .select('username')
+                    .eq('id', newRec.user_id)
+                    .single();
+                 
+                 const name = userProfile?.username || 'A listener';
+                 
+                 toast.info(`${name} requested to speak`, {
+                     duration: 5000,
+                     action: {
+                         label: 'View',
+                         onClick: () => setShowHostPanel(true)
+                     }
+                 });
+            }
+        })
+        .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'pod_room_participants',
+            filter: `room_id=eq.${room.id}`
+        }, async (payload: any) => {
+             if (payload.new.is_hand_raised) {
+                 const { data: userProfile } = await supabase
+                    .from('user_profiles')
+                    .select('username')
+                    .eq('id', payload.new.user_id)
+                    .single();
+                 
+                 const name = userProfile?.username || 'A listener';
+                 
+                 toast.info(`${name} requested to speak`, {
+                     duration: 5000,
+                     action: {
+                         label: 'View',
+                         onClick: () => setShowHostPanel(true)
+                     }
+                 });
+             }
+        })
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, [isHost, room?.id]);
+
   return (
     <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
       {/* Main Content (Participants) */}
@@ -227,17 +342,28 @@ const PodRoomContent = ({
               <span className="text-sm font-mono">{participantCount}</span>
             </div>
             
-            {isHost && requests.length > 0 && (
+            {isHost && (
                 <button 
-                    onClick={() => setShowRequests(!showRequests)}
-                    className="relative p-2 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-500 rounded-full transition-colors"
+                    onClick={() => setShowHostPanel(true)}
+                    className={`relative p-2 rounded-full transition-colors ${requests.length > 0 ? 'bg-red-500/20 text-red-500 animate-pulse border border-red-500' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                    title="Host Control Panel"
                 >
-                    <Hand className="w-5 h-5" />
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full">
-                        {requests.length}
-                    </span>
+                    <Settings className="w-5 h-5" />
+                    {requests.length > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full">
+                            {requests.length}
+                        </span>
+                    )}
                 </button>
             )}
+
+            <button 
+              onClick={() => setTrollsTownControlOpen(true)}
+              className={`p-2 rounded-full transition-colors ${trollsTownControlOpen ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              title="GPS Tracker"
+            >
+              <Map className="w-5 h-5" />
+            </button>
 
             <button 
               onClick={() => setShowChat(!showChat)}
@@ -264,37 +390,6 @@ const PodRoomContent = ({
           </div>
         </div>
 
-        {/* Requests Panel (Overlay) */}
-        {showRequests && isHost && (
-            <div className="absolute top-16 right-80 z-50 w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-4">
-                <h3 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wider">Requests to Speak</h3>
-                <div className="space-y-2">
-                    {requests.map(req => (
-                        <div key={req.user_id} className="flex items-center justify-between bg-black/40 p-2 rounded">
-                            <span className="text-sm truncate max-w-[100px]">{req.user?.username || 'User'}</span>
-                            <div className="flex gap-1">
-                                <button 
-                                    onClick={() => onApproveRequest(req.user_id)}
-                                    className="p-1.5 bg-green-600/20 text-green-500 hover:bg-green-600 hover:text-white rounded"
-                                    title="Approve"
-                                >
-                                    <UserPlus size={14} />
-                                </button>
-                                <button 
-                                    onClick={() => onRemoveSpeaker(req.user_id)} // Technically just denies request (clears hand raise)
-                                    className="p-1.5 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded"
-                                    title="Deny"
-                                >
-                                    <UserX size={14} />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                    {requests.length === 0 && <div className="text-xs text-gray-500 text-center py-2">No active requests</div>}
-                </div>
-            </div>
-        )}
-
         {/* Participant Grid (Only Speakers/Host) */}
         {/* We filter LiveKit participants to only show those who are publishing or are host/speakers in DB */}
         <div className="flex-1 p-4 overflow-y-auto bg-gradient-to-b from-gray-900 to-black">
@@ -307,22 +402,23 @@ const PodRoomContent = ({
                const sbUser = participantsData.find(pd => pd.user_id === p.identity);
                const isSpeakerRole = sbUser?.role === 'speaker';
 
-               // Only render if they are host, approved speaker, or have active tracks
-               // We use getTrackPublication because videoTracks/audioTracks properties might not be directly exposed in this version's type def
-               const hasVideo = p.getTrackPublication(Track.Source.Camera) !== undefined;
-               const hasAudio = p.getTrackPublication(Track.Source.Microphone) !== undefined;
-               
-               if (!isParticipantHost && !isSpeakerRole && !hasVideo && !hasAudio) return null; 
+               // Only render if they are host, approved speaker
+               // Listeners should NOT be in the grid, even if they have audio tracks (unless they are speakers)
+               if (!isParticipantHost && !isSpeakerRole) return null; 
 
                return (
                  <PodParticipantBox
                    key={p.identity}
                    participant={p}
                    isHost={isParticipantHost}
+                   isOfficer={participantsData.find(pd => pd.user_id === p.identity)?.role === 'officer'}
                    isSelf={isSelf}
-                   onKick={isHost ? handleKick : undefined}
-                   onMute={isHost ? handleMute : undefined}
-                   onDemote={isHost ? onRemoveSpeaker : undefined}
+                   onKick={isHost || isOfficer ? handleKick : undefined}
+                   onBan={isHost || isOfficer ? handleBan : undefined}
+                   onMute={isHost || isOfficer ? handleMute : undefined}
+                   onDemote={isHost || isOfficer ? onRemoveSpeaker : undefined}
+                   onPromoteOfficer={isHost ? handlePromoteOfficer : undefined}
+                   onDisableChat={isHost || isOfficer ? handleDisableChat : undefined}
                  />
                );
             })}
@@ -334,7 +430,7 @@ const PodRoomContent = ({
             {isSpeaker ? (
                 <>
                     <button 
-                        className={`p-4 rounded-full transition-all duration-200 transform hover:scale-105 ${liveKitRoom.localParticipant.isMicrophoneEnabled ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20'}`}
+                        className={`p-4 rounded-full transition-all duration-200 transform hover:scale-105 ${liveKitRoom.localParticipant.isMicrophoneEnabled ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-500/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20'}`}
                         onClick={() => liveKitRoom.localParticipant.setMicrophoneEnabled(!liveKitRoom.localParticipant.isMicrophoneEnabled)}
                     >
                         {liveKitRoom.localParticipant.isMicrophoneEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
@@ -359,8 +455,24 @@ const PodRoomContent = ({
                         : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg shadow-purple-500/30'
                     }`}
                 >
-                    <Hand className={`w-5 h-5 ${isHandRaised ? '' : 'animate-bounce'}`} />
-                    {isHandRaised ? 'Cancel Request' : 'Request to Speak'}
+                    {isHandRaised ? (
+                        <>
+                            <Hand className="w-5 h-5" />
+                            Cancel Request
+                        </>
+                    ) : (
+                        room.guest_price > 0 ? (
+                            <>
+                                <Coins className="w-5 h-5 text-yellow-300" />
+                                Join Stage ({room.guest_price})
+                            </>
+                        ) : (
+                            <>
+                                <Hand className="w-5 h-5 animate-bounce" />
+                                Request to Speak
+                            </>
+                        )
+                    )}
                 </button>
             )}
         </div>
@@ -376,6 +488,21 @@ const PodRoomContent = ({
       </div>
       
       <RoomAudioRenderer />
+      
+      {showHostPanel && (
+        <PodHostControlPanel 
+            roomId={room.id}
+            requests={requests}
+            onApproveRequest={(uid) => {
+                onApproveRequest(uid);
+                // Panel stays open or closes? Usually stays open for bulk actions.
+            }}
+            onDenyRequest={onRemoveSpeaker}
+            onClose={() => setShowHostPanel(false)}
+        />
+      )}
+      
+      <TrollsTownControl isOpen={trollsTownControlOpen} onClose={() => setTrollsTownControlOpen(false)} />
     </div>
   );
 };
@@ -390,14 +517,18 @@ export default function TrollPodRoom() {
   
   // Fetch Room Info
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId) {
+      toast.error('Invalid pod ID');
+      navigate('/pods');
+      return;
+    }
 
     const fetchRoom = async () => {
       const { data, error } = await supabase
         .from('pod_rooms')
         .select('*')
         .eq('id', roomId)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         toast.error('Room not found or ended');
@@ -430,6 +561,7 @@ export default function TrollPodRoom() {
           navigate('/pods');
         }
         setRoom(payload.new as Room);
+        if (payload.new.viewer_count) setParticipantCount(payload.new.viewer_count);
       })
       .subscribe();
 
@@ -443,12 +575,13 @@ export default function TrollPodRoom() {
     if (!roomId) return;
 
     const fetchParticipants = async () => {
-        // OPTIMIZATION: Only fetch hosts and speakers to avoid loading thousands of listeners
-        const { data: speakers } = await supabase
+        // OPTIMIZATION: Fetch hosts, speakers, OFFICERS, AND any listeners who have raised their hand
+        // We also need to make sure we get the current user's status if they are in the room
+        const { data: activeParticipants } = await supabase
             .from('pod_room_participants')
             .select('*')
             .eq('room_id', roomId)
-            .in('role', ['host', 'speaker']);
+            .or(`role.in.(host,speaker,officer),is_hand_raised.eq.true${currentUser ? `,user_id.eq.${currentUser.id}` : ''}`);
         
         // Fetch count of all participants (cheap)
         const { count } = await supabase
@@ -458,24 +591,20 @@ export default function TrollPodRoom() {
         
         if (count !== null) setParticipantCount(count);
 
-        if (speakers) {
-            // Fetch user profiles for speakers only
-            const userIds = [...new Set(speakers.map(p => p.user_id))];
+        if (activeParticipants) {
+            // Fetch user profiles for active participants
+            const userIds = [...new Set(activeParticipants.map(p => p.user_id))];
             const { data: profiles } = await supabase
                 .from('user_profiles')
                 .select('id, username, avatar_url')
                 .in('id', userIds);
 
-            const participantsWithUsers = speakers.map(p => ({
+            const participantsWithUsers = activeParticipants.map(p => ({
                 ...p,
                 user: profiles?.find(profile => profile.id === p.user_id)
             }));
             
-            // Add a "fake" participant entry for the count if needed, or just store count in state
-            // For compatibility with existing UI, we'll store speakers. 
-            // The UI uses participants.length for the count, so we need a separate state for count.
             setParticipantsData(participantsWithUsers as PodParticipant[]);
-            // We might need to update the UI to use a separate count variable instead of participantsData.length
         }
     };
 
@@ -488,22 +617,22 @@ export default function TrollPodRoom() {
             schema: 'public',
             table: 'pod_room_participants',
             filter: `room_id=eq.${roomId}`
-        }, (payload: any) => {
-            // OPTIMIZATION: Only refetch if a host/speaker is involved
-            // If a listener joins/leaves, we don't need to refetch the whole speaker list
-            // We just need to update the count (which we might skip for perf or do lazily)
+        }, async (payload: any) => {
+            // OPTIMIZATION: Refetch if:
+            // 1. Role is host/speaker (join/leave/change)
+            // 2. Hand raised status changes (request/cancel/approve)
+            // 3. It's the current user (so they see their own state updates)
             
-            const isSpeakerEvent = 
-                (payload.new && ['host', 'speaker'].includes(payload.new.role)) ||
-                (payload.old && ['host', 'speaker'].includes(payload.old.role));
+            // const isRelevantUpdate = 
+            //    (payload.new && (['host', 'speaker', 'officer'].includes(payload.new.role) || payload.new.is_hand_raised || payload.new.user_id === currentUser?.id)) ||
+            //    (payload.old && (['host', 'speaker', 'officer'].includes(payload.old.role) || payload.old.is_hand_raised || payload.old.user_id === currentUser?.id));
 
-            if (isSpeakerEvent) {
-                fetchParticipants();
-            } else {
-                // Update count for listener events without refetching speakers
-                if (payload.eventType === 'INSERT') setParticipantCount(prev => prev + 1);
-                if (payload.eventType === 'DELETE') setParticipantCount(prev => Math.max(0, prev - 1));
-            }
+            // ALWAYS refetch if there's any update to participants table for now to debug sync issues
+            // In high scale, we'd revert to the optimization above
+            fetchParticipants();
+
+            if (payload.eventType === 'INSERT') setParticipantCount(prev => prev + 1);
+            if (payload.eventType === 'DELETE') setParticipantCount(prev => Math.max(0, prev - 1));
         })
         .subscribe();
     
@@ -533,45 +662,114 @@ export default function TrollPodRoom() {
     if (!roomId || !currentUser) return;
 
     const joinAsListener = async () => {
-        // Check if already in participants table
-        const { data } = await supabase
-            .from('pod_room_participants')
+        // Check ban first
+        const { data: ban } = await supabase
+            .from('pod_bans')
             .select('id')
             .eq('room_id', roomId)
             .eq('user_id', currentUser.id)
-            .single();
+            .maybeSingle();
+        
+        if (ban) {
+             toast.error('You are banned from this pod');
+             navigate('/pods');
+             return;
+        }
+
+        // Check whitelist
+        const { data: whitelist } = await supabase
+            .from('pod_whitelists')
+            .select('id')
+            .eq('room_id', roomId)
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+
+        const initialRole = whitelist ? 'speaker' : 'listener';
+
+        // Check if already in participants table
+        const { data } = await supabase
+            .from('pod_room_participants')
+            .select('id, role')
+            .eq('room_id', roomId)
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
         
         if (!data) {
-            // Not in table, insert as listener
+            // Not in table, insert
             await supabase.from('pod_room_participants').insert({
                 room_id: roomId,
                 user_id: currentUser.id,
-                role: 'listener',
+                role: initialRole,
                 is_hand_raised: false
             });
+        } else if (whitelist && data.role === 'listener') {
+            // Upgrade if whitelisted but currently listener
+             await supabase.from('pod_room_participants')
+                .update({ role: 'speaker' })
+                .eq('id', data.id);
         }
     };
 
     joinAsListener();
-  }, [roomId, currentUser]);
+  }, [roomId, currentUser, navigate]);
 
 
   // Actions
   const handleRequestSpeak = async () => {
-    if (!currentUser || !roomId) return;
+    if (!currentUser || !roomId || !room) return;
     
-    // Upsert to handle both "new joiner" and "existing participant" cases
-    // This avoids race conditions with the auto-join effect
-    const { error } = await supabase.from('pod_room_participants').upsert({
-        room_id: roomId,
-        user_id: currentUser.id,
-        role: 'listener', // Only listeners request to speak
-        is_hand_raised: true
-    }, { onConflict: 'room_id, user_id', ignoreDuplicates: false });
+    // 1. Paid Entry
+    if (room.guest_price > 0) {
+        if (confirm(`Join stage for ${room.guest_price} coins?`)) {
+            const { data, error } = await supabase.rpc('join_pod_speaker_paid', { 
+                p_room_id: roomId, 
+                p_user_id: currentUser.id 
+            });
+    
+            if (error) {
+                console.error(error);
+                toast.error('Transaction failed');
+                return;
+            }
+
+            if (!data.success) {
+                toast.error(data.error || 'Failed to join stage');
+            } else {
+                toast.success('Joined stage!');
+            }
+        }
+        return;
+    }
+
+    // 2. Free Request
+    // Try update first (most common case since user should be joined)
+    const { error, count } = await supabase.from('pod_room_participants')
+        .update({ is_hand_raised: true })
+        .eq('room_id', roomId)
+        .eq('user_id', currentUser.id)
+        .select('id');
 
     if (error) {
+        console.error('Error requesting to speak:', error);
         toast.error('Failed to request to speak');
-        console.error(error);
+        return;
+    }
+
+    if (count === 0) {
+        // User not in DB (rare race condition), insert them
+        const { error: insertError } = await supabase.from('pod_room_participants').insert({
+            room_id: roomId,
+            user_id: currentUser.id,
+            role: 'listener',
+            is_hand_raised: true
+        });
+        
+        if (insertError) {
+             console.error('Error joining with request:', insertError);
+             toast.error('Failed to request to speak');
+        } else {
+             toast.success('Request sent to host');
+        }
     } else {
         toast.success('Request sent to host');
     }
@@ -650,8 +848,8 @@ export default function TrollPodRoom() {
       token={token}
       serverUrl={serverUrl}
       connect={true}
-      video={true}
-      audio={true}
+      video={false} // Pods are audio-only
+      audio={canPublish} // Only publish audio if host/speaker
       data-lk-theme="default"
       style={{ height: '100vh' }}
       onDisconnected={() => navigate('/pods')}
@@ -667,6 +865,7 @@ export default function TrollPodRoom() {
         onRemoveSpeaker={handleRemoveSpeaker}
         onCancelRequest={handleCancelRequest}
         isStaff={isStaff}
+        canPublish={canPublish}
       />
     </LiveKitRoom>
   );

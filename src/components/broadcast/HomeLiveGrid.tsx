@@ -108,6 +108,12 @@ export default function HomeLiveGrid() {
                 alt={stream.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
+            ) : stream.user_profiles?.avatar_url ? (
+              <img
+                src={stream.user_profiles.avatar_url}
+                alt={stream.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 to-cyan-900/20 group-hover:from-purple-900/40 group-hover:to-cyan-900/40 transition-colors">
                 <Video className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-white/20 group-hover:text-white/40 transition-colors" />

@@ -85,13 +85,11 @@ function ProfileInner() {
     
     try {
       setSavingPreferences(true);
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({
-          message_cost: messageCost,
-          profile_view_cost: viewCost
-        })
-        .eq('id', currentUser.id);
+      
+      const { error } = await supabase.rpc('update_profile_costs', {
+        p_message_cost: messageCost,
+        p_view_cost: viewCost
+      });
 
       if (error) throw error;
       
@@ -387,37 +385,30 @@ function ProfileInner() {
         return;
     }
 
-    const { error: deductError } = await deductCoins({
-        userId: currentUser.id,
-        amount: config.cost,
-        type: 'perk_purchase',
-        metadata: { perk_id: perk.perk_id, perk_name: config.name },
-        supabaseClient: supabase
-    });
+    const metadata = { 
+        perk_name: config.name, 
+        description: config.description,
+        perk_type: config.type, // Ensure type is passed if available
+        base_cost: config.cost,
+        final_cost: config.cost,
+        duration_minutes: config.duration_minutes
+    };
 
-    if (deductError) {
-        toast.error("Transaction failed");
-        return;
-    }
-
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + config.duration_minutes);
-
-    const { error } = await supabase.from('user_perks').insert({
-        user_id: currentUser.id,
-        perk_id: perk.perk_id,
-        metadata: { perk_name: config.name, description: config.description },
-        expires_at: expiresAt.toISOString(),
-        is_active: true
+    const { error } = await supabase.rpc('shop_buy_perk', {
+        p_user_id: currentUser.id,
+        p_perk_id: perk.perk_id,
+        p_cost: config.cost,
+        p_duration_minutes: config.duration_minutes,
+        p_metadata: metadata
     });
 
     if (error) {
+        console.error('Repurchase error:', error);
         toast.error('Failed to repurchase perk');
         return;
     }
 
     if (perk.perk_id === 'perk_rgb_username') {
-        await supabase.from('user_profiles').update({ rgb_username_expires_at: expiresAt.toISOString() }).eq('id', currentUser.id);
         await refreshProfile();
     }
 
@@ -427,23 +418,29 @@ function ProfileInner() {
 
   const togglePerk = async (perkId: string, isActive: boolean) => {
       if (!currentUser || currentUser.id !== profile.id) return;
-      const { error } = await supabase.from('user_perks').update({ is_active: !isActive }).eq('id', perkId);
+      
+      // Use secure RPC to toggle perk and handle side effects (like RGB username)
+      const { error } = await supabase.rpc('toggle_user_perk', {
+        p_perk_id: perkId,
+        p_is_active: !isActive // The UI passes the CURRENT state, so we want to flip it? Wait.
+      });
+      // Logic check: The UI calls togglePerk(perk.id, perk.is_active). 
+      // If perk.is_active is true, we want to set it to false.
+      // So !isActive is correct for the new state.
+
       if (error) {
+          console.error('Toggle perk error:', error);
           toast.error('Failed to update perk');
           return;
       }
 
+      // Check if it was RGB to refresh profile
       const perk = inventory.perks.find(p => p.id === perkId);
       if (perk && perk.perk_id === 'perk_rgb_username') {
-          if (!isActive) {
-              await supabase.from('user_profiles').update({ rgb_username_expires_at: perk.expires_at }).eq('id', currentUser.id);
-          } else {
-              await supabase.from('user_profiles').update({ rgb_username_expires_at: null }).eq('id', currentUser.id);
-          }
           await refreshProfile();
       }
 
-      toast.success(`Perk ${isActive ? 'deactivated' : 'activated'}`);
+      toast.success(`Perk ${!isActive ? 'activated' : 'deactivated'}`);
       fetchInventory(currentUser.id);
   };
 

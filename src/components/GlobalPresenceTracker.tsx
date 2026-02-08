@@ -5,7 +5,7 @@ import { usePresenceStore } from '../lib/presenceStore';
 
 export default function GlobalPresenceTracker() {
   const { user } = useAuthStore();
-  const { setOnlineCount } = usePresenceStore();
+  const { setOnlineCount, setOnlineUserIds } = usePresenceStore();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -21,9 +21,9 @@ export default function GlobalPresenceTracker() {
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        // Count unique users
-        const count = Object.keys(state).length;
-        setOnlineCount(count);
+        const userIds = Object.keys(state);
+        setOnlineCount(userIds.length);
+        setOnlineUserIds(userIds);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -37,7 +37,7 @@ export default function GlobalPresenceTracker() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, setOnlineCount]);
+  }, [user?.id, setOnlineCount, setOnlineUserIds]);
 
   return null;
 }

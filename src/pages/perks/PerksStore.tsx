@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { deductCoins } from '@/lib/coinTransactions'
 import { Zap, Lock, Clock } from 'lucide-react'
 
 interface Perk {
@@ -91,30 +92,78 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
       return
     }
 
-    if ((profile.perk_tokens || 0) < perk.cost_tokens) {
-      toast.error('Not enough tokens')
+    // Check troll_coins instead of perk_tokens
+    if ((profile.troll_coins || 0) < perk.cost_tokens) {
+      toast.error('Not enough Troll Coins')
       return
     }
 
     setPurchasing(perk.id)
     try {
-      const { data, error } = await supabase.rpc('purchase_perk', {
-        p_perk_id: perk.id
+      // 1. Deduct Coins (Centralized Bank Logic)
+      const deductResult = await deductCoins({
+        userId: user!.id,
+        amount: perk.cost_tokens,
+        type: 'perk_purchase',
+        description: `Purchased Perk: ${perk.name}`,
+        metadata: {
+          perk_id: perk.id,
+          perk_name: perk.name,
+          category: perk.category
+        }
       })
 
-      if (error) throw error
-
-      if (data && data.success) {
-        toast.success(data.message)
-        // Refresh profile to update tokens (handled by store subscription or manual re-fetch?)
-        // Ideally useAuthStore would refresh, but let's manually trigger a profile update if possible, 
-        // or just rely on the UI update if we had a method. 
-        // For now, we might need to reload the page or fetch profile again.
-        // Assuming real-time or optimistic update isn't setup for RPC side-effects on profile.
-        window.location.reload() // Simple way to refresh tokens in Sidebar
-      } else {
-        toast.error(data?.error || 'Purchase failed')
+      if (!deductResult.success) {
+        throw new Error(deductResult.error || 'Payment failed')
       }
+
+      // 2. Grant Perk (Insert into user_perks)
+      // Calculate expiry if duration exists in metadata
+      let expiresAt = null
+      if (perk.metadata && perk.metadata.duration_minutes) {
+        const expiryDate = new Date()
+        expiryDate.setMinutes(expiryDate.getMinutes() + perk.metadata.duration_minutes)
+        expiresAt = expiryDate.toISOString()
+      } else if (perk.metadata && perk.metadata.duration_hours) {
+         const expiryDate = new Date()
+         expiryDate.setHours(expiryDate.getHours() + perk.metadata.duration_hours)
+         expiresAt = expiryDate.toISOString()
+      }
+
+      const { error: insertError } = await supabase
+        .from('user_perks')
+        .insert({
+          user_id: user!.id,
+          perk_id: perk.id,
+          purchased_at: new Date().toISOString(),
+          expires_at: expiresAt,
+          is_active: true,
+          metadata: perk.metadata
+        })
+
+      if (insertError) {
+        // Refund if grant fails (though rare)
+        // Ideally we should use a transaction or idempotent retry, but manual refund is a fallback
+        console.error('Failed to grant perk, refunding...', insertError)
+        await supabase.rpc('add_coins', {
+            p_user_id: user!.id,
+            p_amount: perk.cost_tokens,
+            p_coin_type: 'paid'
+        })
+        throw insertError
+      }
+
+      // Special handling for RGB username if needed
+      if (perk.id === 'perk_rgb_username' && expiresAt) {
+          await supabase
+            .from('user_profiles')
+            .update({ rgb_username_expires_at: expiresAt })
+            .eq('id', user!.id);
+      }
+
+      toast.success(`Purchased ${perk.name}!`)
+      window.location.reload() 
+
     } catch (error: any) {
       console.error('Purchase error:', error)
       toast.error(error.message || 'Failed to purchase perk')
@@ -148,7 +197,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
           <div>
             <p className="text-sm text-gray-400">Your Balance</p>
             <div className="text-3xl font-bold text-yellow-400 flex items-center gap-2">
-              {profile?.perk_tokens || 0} <span className="text-lg text-gray-400">Tokens</span>
+              {profile?.troll_coins || 0} <span className="text-lg text-gray-400">Troll Coins</span>
             </div>
           </div>
           <div className="text-right">
@@ -175,7 +224,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {perks.map((perk) => {
             const isLocked = (profile?.level || 0) < perk.required_level
-            const canAfford = (profile?.perk_tokens || 0) >= perk.cost_tokens
+            const canAfford = (profile?.troll_coins || 0) >= perk.cost_tokens
             
             return (
               <div 
@@ -196,7 +245,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
                     <Zap className={`w-6 h-6 ${getCategoryColor(perk.category).replace('bg-', 'text-')}`} />
                   </div>
                   <div className="px-3 py-1 bg-white/5 rounded-full text-sm font-medium border border-white/10">
-                    {perk.cost_tokens} Tokens
+                    {perk.cost_tokens} Coins
                   </div>
                 </div>
 
@@ -229,7 +278,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
                   ) : isLocked ? (
                     'Locked'
                   ) : !canAfford ? (
-                    'Not Enough Tokens'
+                    'Not Enough Coins'
                   ) : (
                     'Redeem'
                   )}

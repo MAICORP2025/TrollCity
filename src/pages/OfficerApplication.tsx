@@ -29,6 +29,33 @@ export default function OfficerApplication() {
     e?.preventDefault()
     if (!profile) return toast.error('Please sign in')
     
+    // Check for cooldown
+    try {
+      const { data: lastApp } = await supabase
+        .from('applications')
+        .select('created_at, updated_at, status')
+        .eq('user_id', profile.id)
+        .eq('type', 'troll_officer')
+        .in('status', ['rejected', 'declined'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (lastApp) {
+        const lastDate = new Date(lastApp.updated_at || lastApp.created_at)
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000
+        const timePassed = new Date().getTime() - lastDate.getTime()
+        
+        if (timePassed < sevenDaysMs) {
+          const daysLeft = Math.ceil((sevenDaysMs - timePassed) / (24 * 60 * 60 * 1000))
+          toast.error(`Please think about what you can do and reapply. Must wait 7 days to reapply.`)
+          return
+        }
+      }
+    } catch (err) {
+      console.error('Cooldown check error:', err)
+    }
+
     const requiredFields = ['fullName', 'email', 'timezone', 'availableHours', 'whyApplying', 'experience', 'conflictScenario', 'weeklyCommitment']
     const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData].trim())
     

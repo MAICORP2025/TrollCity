@@ -34,7 +34,8 @@ export function useLiveKitToken({
   canPublish = false,
   enabled = true,
   isGuest = false,
-}: UseLiveKitTokenProps) {
+  role
+}: UseLiveKitTokenProps & { role?: string }) {
   const navigate = useNavigate();
   const [token, setToken] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
@@ -179,9 +180,9 @@ export function useLiveKitToken({
                 identity: userId,
                 user_id: userId,
                 // FORCE ADMIN ROLE to bypass server-side role checks if we need to publish
-                role: (isHost || canPublish) ? 'admin' : 'viewer',
-                allowPublish: isGuest ? false : true, // Explicitly deny for guests
-                canPublish: isGuest ? false : true,
+                role: role || ((isHost || canPublish) ? 'admin' : 'viewer'),
+                allowPublish: canPublish,
+                canPublish: canPublish,
                 }),
                 signal: controller.signal
             });

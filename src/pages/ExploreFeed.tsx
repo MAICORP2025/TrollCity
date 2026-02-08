@@ -26,7 +26,7 @@ export default function ExploreFeed() {
   const navigate = useNavigate();
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'gaming' | 'irl' | 'music'>('all');
+  const [filter, setFilter] = useState<'all' | 'gaming' | 'irl' | 'music' | 'podcast'>('all');
 
   // Auto-scroll to top on page load
   useEffect(() => {
@@ -113,7 +113,7 @@ export default function ExploreFeed() {
   };
 
   const handleBroadcastClick = (broadcast: Broadcast) => {
-    navigate(`/live/${broadcast.id}`);
+    navigate(`/broadcast/${broadcast.id}`, { state: { fromExplore: true } });
   };
 
   return (
@@ -156,7 +156,7 @@ export default function ExploreFeed() {
 
           {/* Filters */}
           <div className="flex flex-wrap gap-3">
-            {['all', 'irl', 'music'].map((cat) => (
+            {['all', 'irl', 'music', 'podcast'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setFilter(cat as typeof filter)}

@@ -2,10 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import PostItem from './PostItem';
-import { Image, Send, Smile, X, Loader2 } from 'lucide-react';
+import { Image, Send, X, Loader2 } from 'lucide-react';
 
 import { toast } from 'sonner';
-import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 
 interface ProfileFeedProps {
   userId: string;
@@ -240,24 +239,6 @@ export default function ProfileFeed({ userId }: ProfileFeedProps) {
                     >
                         <Image className="w-5 h-5" />
                     </button>
-                    <div className="relative" ref={emojiPickerRef}>
-                        <button 
-                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                            className="p-2 hover:bg-white/5 rounded-full text-yellow-400 transition-colors"
-                        >
-                            <Smile className="w-5 h-5" />
-                        </button>
-                        {showEmojiPicker && (
-                            <div className="absolute top-full left-0 mt-2 z-50">
-                                <EmojiPicker
-                                    onEmojiClick={onEmojiClick}
-                                    theme={Theme.DARK}
-                                    width={300}
-                                    height={400}
-                                />
-                            </div>
-                        )}
-                    </div>
                 </div>
                 <button
                     onClick={handleCreatePost}

@@ -97,6 +97,12 @@ export interface UserProfile {
   is_trolltract?: boolean
   trolltract_activated_at?: string | null
 
+  // Credit Card fields
+  credit_limit?: number
+  credit_used?: number
+  credit_apr_fee_percent?: number
+  credit_status?: string
+
   // Profile Costs
   
   // TMV System
@@ -356,7 +362,8 @@ export enum UserRole {
   EMPIRE_PARTNER = 'empire_partner',
   SECRETARY = 'secretary',
   PRESIDENT = 'president',
-  VICE_PRESIDENT = 'vice_president'
+  VICE_PRESIDENT = 'vice_president',
+  TEMP_CITY_ADMIN = 'temp_city_admin'
 }
 
 export enum Permission {
@@ -650,9 +657,16 @@ export async function reportError(params: {
       message: params.message?.slice(0, 1000),
       stack: params.stack?.slice(0, 4000),
       user_id: userId,
-      url: params.url || (typeof window !== 'undefined' ? window.location.pathname : null),
+      url: params.url || (typeof window !== 'undefined' ? window.location.href : null),
       component: params.component || null,
-      context: params.context ? JSON.stringify(params.context).slice(0, 8000) : {},
+      context: {
+        ...params.context,
+        // @ts-expect-error -- App version global might not be defined
+        appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : undefined,
+        // @ts-expect-error -- Build time global might not be defined
+        buildTime: typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : undefined,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined
+      },
       status: 'open'
     }
     const { error } = await supabase.from('system_errors').insert(payload)

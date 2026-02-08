@@ -19,6 +19,7 @@ export interface StandardPurchaseFlowParams {
   description?: string;
   metadata?: CoinTransactionMetadata;
   supabaseClient?: SupabaseClient;
+  useCredit?: boolean;
   ensureOwnership: (client: SupabaseClient) => Promise<{ success: boolean; error?: string }>;
   activate?: (client: SupabaseClient) => Promise<{ success: boolean; error?: string }>;
 }
@@ -34,6 +35,7 @@ export async function runStandardPurchaseFlow(
     description,
     metadata,
     supabaseClient,
+    useCredit,
     ensureOwnership,
     activate,
   } = params;
@@ -47,6 +49,7 @@ export async function runStandardPurchaseFlow(
     coinType,
     description,
     metadata,
+    useCredit,
     supabaseClient: client,
   });
 

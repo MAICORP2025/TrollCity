@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { useLocalParticipant } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { useEffect, useRef, useState } from 'react';
+import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
+import { Track, RoomEvent, ConnectionState } from 'livekit-client';
 
 interface PreflightPublisherProps {
     stream: MediaStream;
@@ -9,10 +9,37 @@ interface PreflightPublisherProps {
 
 export default function PreflightPublisher({ stream, onPublished }: PreflightPublisherProps) {
     const { localParticipant } = useLocalParticipant();
+    const room = useRoomContext();
     const hasPublished = useRef(false);
+    const [isRoomReady, setIsRoomReady] = useState(false);
+
+    // Monitor room connection state
+    useEffect(() => {
+        if (!room) return;
+        
+        const checkState = () => {
+            if (room.state === ConnectionState.Connected) {
+                setIsRoomReady(true);
+            } else {
+                setIsRoomReady(false);
+            }
+        };
+
+        checkState();
+        
+        room.on(RoomEvent.Connected, checkState);
+        room.on(RoomEvent.Reconnected, checkState);
+        room.on(RoomEvent.Disconnected, checkState);
+
+        return () => {
+            room.off(RoomEvent.Connected, checkState);
+            room.off(RoomEvent.Reconnected, checkState);
+            room.off(RoomEvent.Disconnected, checkState);
+        };
+    }, [room]);
 
     useEffect(() => {
-        if (!localParticipant || hasPublished.current || !stream) return;
+        if (!localParticipant || hasPublished.current || !stream || !isRoomReady) return;
 
         // Check permissions - these are available on localParticipant
         if (!localParticipant.permissions) {
@@ -25,10 +52,11 @@ export default function PreflightPublisher({ stream, onPublished }: PreflightPub
             return;
         }
 
-        const publish = async () => {
+        const publish = async (retryCount = 0) => {
             console.log('[PreflightPublisher] Publishing preflight stream tracks...', {
                 permissions: localParticipant.permissions,
-                identity: localParticipant.identity
+                identity: localParticipant.identity,
+                retryCount
             });
 
             try {
@@ -64,17 +92,29 @@ export default function PreflightPublisher({ stream, onPublished }: PreflightPub
                 if (onPublished) onPublished();
                 
                 console.log('[PreflightPublisher] Successfully published tracks');
-            } catch (error) {
+            } catch (error: any) {
                 console.error('[PreflightPublisher] Error publishing tracks:', error);
+                
+                // Retry on timeout or connection error if we haven't exceeded limit
+                if (retryCount < 3 && (error.message?.includes('timeout') || error.message?.includes('ConnectionError'))) {
+                    console.log(`[PreflightPublisher] Retrying publication in 2s (Attempt ${retryCount + 1}/3)...`);
+                    setTimeout(() => publish(retryCount + 1), 2000);
+                }
             }
         };
 
-        publish();
+        // Small delay to ensure SFU is ready even if connected
+        const timer = setTimeout(() => {
+            publish();
+        }, 500);
+
+        return () => clearTimeout(timer);
     }, [
         localParticipant, 
         stream, 
         onPublished,
-        localParticipant?.permissions
+        localParticipant?.permissions,
+        isRoomReady
     ]);
 
     return null;

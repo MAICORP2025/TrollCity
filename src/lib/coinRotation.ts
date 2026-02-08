@@ -10,6 +10,8 @@ export class CoinRotationOptimizer {
   private refreshInterval: number = 30000 // 30 seconds
   private intervalId: NodeJS.Timeout | null = null
 
+  private skipNextRefresh = false;
+
   private constructor() {
     this.startAutoRefresh()
   }
@@ -21,6 +23,29 @@ export class CoinRotationOptimizer {
     return CoinRotationOptimizer.instance
   }
 
+  // Allow external updates (e.g. from optimistic UI updates) to update cache and pause polling
+  public updateOptimisticBalance(userId: string, partialData: any) {
+    const current = this.cache.get('coin_data') || {};
+    const newData = { ...current, ...partialData };
+    
+    this.cache.set('coin_data', newData);
+    
+    // Update store immediately
+    const { profile } = useAuthStore.getState();
+    if (profile && profile.id === userId) {
+        useAuthStore.getState().setProfile({
+            ...profile,
+            ...partialData
+        });
+    }
+
+    // Skip next refresh to prevent race condition overwriting with stale DB data
+    this.skipNextRefresh = true;
+    
+    // Notify subscribers
+    this.subscribers.forEach(callback => callback(newData));
+  }
+
   private startAutoRefresh() {
     this.intervalId = setInterval(() => {
       this.refreshCoinData()
@@ -28,6 +53,12 @@ export class CoinRotationOptimizer {
   }
 
   private async refreshCoinData() {
+    if (this.skipNextRefresh) {
+        console.log('[CoinRotation] Skipping refresh due to optimistic update');
+        this.skipNextRefresh = false;
+        return;
+    }
+
     try {
       const { profile } = useAuthStore.getState()
       if (!profile) return

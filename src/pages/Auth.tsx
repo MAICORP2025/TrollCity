@@ -8,6 +8,7 @@ import { useAuthStore } from '../lib/store'
 import { Mail, Lock, User, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import InstallButton from '../components/InstallButton';
 import { trollCityTheme } from '../styles/trollCityTheme';
+import { generateUUID } from '../lib/uuid';
 
 interface AuthProps {
   embedded?: boolean;
@@ -116,7 +117,7 @@ const Auth = ({ embedded = false, onClose, initialMode }: AuthProps = {}) => {
     if (data.user && data.session) {
       console.log('Email login successful:', data.user.email)
       
-      const sessionId = crypto.randomUUID()
+      const sessionId = generateUUID()
       // Store session ID for device enforcement
       try {
         localStorage.setItem('current_device_session_id', sessionId)

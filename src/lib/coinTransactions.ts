@@ -225,8 +225,9 @@ export async function deductCoins(params: {
   balanceAfter?: number | string | null
   platformProfit?: number
   liability?: number
+  useCredit?: boolean // New option for Credit Card payments
 }) {
-  const { userId, amount, type, coinType = 'troll_coins', description, metadata, supabaseClient, balanceAfter, platformProfit, liability } = params
+  const { userId, amount, type, coinType = 'troll_coins', description, metadata, supabaseClient, balanceAfter, platformProfit, liability, useCredit } = params
 
   const sb = supabaseClient || supabase
   if (!sb) {
@@ -256,6 +257,36 @@ export async function deductCoins(params: {
     }
 
     const metadataPayload = sanitizeMetadata(metadata)
+
+    // Handle Credit Card Payment
+    if (useCredit) {
+       console.log('[deductCoins] Attempting Credit Card Payment:', { userId, amount: normalizedAmount, type })
+       
+       // Map transaction type to allowed credit context
+       let creditContext = 'shop_purchase'
+       if (type === 'insurance_purchase') creditContext = 'insurance_payment'
+       if (type.includes('vehicle')) creditContext = 'vehicle_purchase'
+       
+       const { data: creditSuccess, error: creditError } = await sb.rpc('try_pay_with_credit_card', {
+         p_user_id: userId,
+         p_amount: normalizedAmount,
+         p_context: creditContext,
+         p_metadata: metadataPayload || {}
+       })
+
+       if (creditError) {
+          console.error('[deductCoins] Credit Card Error:', creditError)
+          return { success: false, newBalance: 0, transaction: null, error: creditError.message }
+       }
+
+       if (creditSuccess === true) {
+          // Success! We don't return a new coin balance because coins weren't touched.
+          // We return success: true.
+          return { success: true, newBalance: balanceAfter || 0, transaction: { id: 'credit-tx', amount: normalizedAmount, type: 'credit_spend' } }
+       } else {
+          return { success: false, newBalance: 0, transaction: null, error: 'Credit Card declined (Limit reached or Restricted context)' }
+       }
+    }
 
     if (coinType === 'troll_coins' || !coinType) {
       // Use Troll Bank centralized spending (v2 via try_pay_coins_secure)
@@ -501,39 +532,6 @@ export async function addCoins(params: {
 
     if (bankError) {
       console.error('addCoins: Troll Bank credit failed', bankError)
-      const msg = (bankError.message || '').toLowerCase()
-      // Fallback to legacy credit if schema drift occurs
-      if (msg.includes('column') && msg.includes('coins') && msg.includes('does not exist')) {
-        try {
-          const { data: updated, error: legacyErr } = await sb
-            .from('user_profiles')
-            .update({ troll_coins: (currentBalance || 0) + amount })
-            .eq('id', userId)
-            .select('troll_coins')
-            .single()
-
-          if (legacyErr) {
-            console.error('addCoins legacy fallback failed:', legacyErr)
-            return { success: false, newBalance: currentBalance, transaction: null, error: legacyErr.message }
-          }
-
-          const finalBalance = updated?.troll_coins ?? (currentBalance + amount)
-          try {
-            const { profile, setProfile } = useAuthStore.getState()
-            if (profile && profile.id === userId) {
-              setProfile({ ...profile, troll_coins: finalBalance })
-            }
-          } catch (e) {
-            console.warn('addCoins fallback: Failed to update local store', e)
-          }
-
-          return { success: true, newBalance: finalBalance, transaction: null, error: null }
-        } catch (fallbackErr: any) {
-          console.error('addCoins fallback exception:', fallbackErr)
-          return { success: false, newBalance: currentBalance, transaction: null, error: fallbackErr.message }
-        }
-      }
-
       return { success: false, newBalance: currentBalance, transaction: null, error: bankError.message }
     }
 

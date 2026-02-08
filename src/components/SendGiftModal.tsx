@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, Coins, Diamond } from 'lucide-react'
 import { useGiftSystem } from '../lib/hooks/useGiftSystem'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
@@ -34,7 +34,8 @@ const GIFT_ITEMS = OFFICIAL_GIFTS.map(g => ({
   coinCost: g.cost,
   type: 'paid',
   tier: g.tier,
-  icon: g.icon
+  icon: g.icon,
+  currency: 'troll_coins'
 }));
 
 interface GiftItem {
@@ -46,6 +47,7 @@ interface GiftItem {
   holiday_theme: string | null
   description?: string
   animation_type?: string
+  currency?: 'troll_coins'
 }
 
 export default function SendGiftModal({ 
@@ -111,6 +113,7 @@ export default function SendGiftModal({
           holiday_theme: item.holiday_theme || null,
           description: item.description || undefined,
           animation_type: item.animation_type || undefined,
+          currency: item.currency || 'troll_coins'
         }))
 
         // Build defaults map from hardcoded GIFT_ITEMS
@@ -123,6 +126,7 @@ export default function SendGiftModal({
             value: (g as any).coinCost || (g as any).value || 0,
             category: g.category || 'Common',
             holiday_theme: null,
+            currency: 'troll_coins'
           }
         }
 
@@ -144,6 +148,7 @@ export default function SendGiftModal({
           value: (g as any).coinCost || (g as any).value || 0,
           category: g.category || 'Common',
           holiday_theme: null,
+          currency: 'troll_coins' as const
         }))
         setGiftItems(fallback)
       } finally {
@@ -157,7 +162,12 @@ export default function SendGiftModal({
   if (!isOpen) return null
 
   const handleGiftSend = async (gift: any) => {
-    const result = await sendGift(gift)
+    // Ensure currency is passed correctly
+    const giftToSend = {
+      ...gift,
+      currency: gift.currency || 'troll_coins'
+    }
+    const result = await sendGift(giftToSend)
     if (result && (result === true || (typeof result === 'object' && result.success))) {
       toast.success(`🎁 You sent ${gift.name}`)
       
@@ -192,9 +202,12 @@ export default function SendGiftModal({
         holidayTheme: item.holiday_theme,
         icon: item.icon,
         specialEffect: item.description,
-        effect: item.description
+        effect: item.description,
+        currency: item.currency || 'troll_coins'
       }))
-    : GIFT_ITEMS.map(gift => ({ ...gift, category: 'Common' }))
+    : GIFT_ITEMS.map(gift => ({ ...gift, category: 'Common', currency: 'troll_coins' }))
+
+  const filteredGifts = displayGifts
 
   const modalContent = (
     <div className={`${inline ? 'w-full h-full' : 'bg-gray-900 p-6 w-full max-w-sm rounded-xl shadow-lg max-h-[90vh] overflow-y-auto'} text-white relative`}>
@@ -245,23 +258,19 @@ export default function SendGiftModal({
       )}
 
       <div className="text-sm mb-3 flex justify-between bg-gray-800 p-2 rounded-lg">
-        <span>troll_coins: {profile?.troll_coins || 0}</span>
-        <span>Free Coins: {profile?.troll_coins || 0}</span>
+        <span>Balance: {profile?.troll_coins || 0} Coins</span>
       </div>
 
       {loadingGifts ? (
         <div className="text-center py-8 text-gray-400">Loading gifts...</div>
       ) : (
         <div className={`grid grid-cols-2 gap-3 ${inline ? 'max-h-[calc(100vh-300px)]' : 'max-h-96'} overflow-y-auto`}>
-          {displayGifts.map((gift) => {
-          const paidBalance = profile?.troll_coins || 0
-          const freeBalance = profile?.troll_coins || 0
-          const totalBalance = paidBalance + freeBalance
-          const canAfford = totalBalance >= gift.coinCost
+          {filteredGifts.map((gift) => {
+          const trollCoinBalance = profile?.troll_coins || 0
           
-          // Determine which coin type to use (prefer paid, fallback to free)
-          const usePaid = paidBalance >= gift.coinCost
-          const giftWithType = { ...gift, type: usePaid ? 'paid' : 'free' }
+          const canAfford = trollCoinBalance >= gift.coinCost
+          
+          const giftWithType = { ...gift, type: 'paid' }
           
           const category = gift.category || 'Common'
           
@@ -296,12 +305,12 @@ export default function SendGiftModal({
               {(gift as any).holidayTheme && (
                 <span className="text-[9px] text-yellow-300 mt-0.5">🎁 Holiday</span>
               )}
-              <span className="gift-cost text-xs text-gray-300 mt-1">
+              <span className={`gift-cost text-xs mt-1 text-gray-300`}>
                 {gift.coinCost.toLocaleString()} 🪙
               </span>
               {canAfford && (
                 <span className="text-[10px] text-purple-300 mt-0.5">
-                  {usePaid ? 'Paid' : 'Free'}
+                  Coin Gift
                 </span>
               )}
             </button>

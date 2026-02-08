@@ -9,13 +9,16 @@ import { getUserEntranceEffect } from '../lib/entranceEffects'
  * - The Host (broadcaster) is responsible for periodically updating the 'streams' table
  *   with the accurate viewer count to avoid DB write storms.
  */
-export function useViewerTracking(streamId: string | null, isHost: boolean = false) {
+export function useViewerTracking(streamId: string | null, isHost: boolean = false, customUser: any = null) {
   const { user, profile } = useAuthStore()
   const [viewerCount, setViewerCount] = useState<number>(0)
   const lastDbUpdate = useRef<number>(0)
 
+  // Use customUser if provided (e.g. for Guests)
+  const effectiveUser = user || customUser;
+
   useEffect(() => {
-    if (!streamId || !user) return
+    if (!streamId || !effectiveUser) return
 
     const channel = supabase.channel(`room:${streamId}`)
 
@@ -31,7 +34,7 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
         const isOfficer = 
             profile?.role === 'admin' || 
             profile?.role === 'troll_officer' || 
-            profile?.is_troll_officer ||
+            profile?.is_troll_officer || 
             profile?.is_admin ||
             profile?.troll_role === 'admin' ||
             profile?.troll_role === 'troll_officer';
@@ -59,21 +62,23 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
         if (status === 'SUBSCRIBED') {
           // Fetch entrance effect before tracking
           let entranceEffect = null;
-          try {
-             const effectData = await getUserEntranceEffect(user.id);
-             if (effectData?.config) {
-                 entranceEffect = effectData.config;
-             }
-          } catch (e) {
-             console.error('Failed to load entrance effect:', e);
+          if (user) {
+            try {
+               const effectData = await getUserEntranceEffect(user.id);
+               if (effectData?.config) {
+                   entranceEffect = effectData.config;
+               }
+            } catch (e) {
+               console.error('Failed to load entrance effect:', e);
+            }
           }
 
           await channel.track({
-            user_id: user.id,
-            username: profile?.username || 'User',
-            avatar_url: profile?.avatar_url,
-            role: profile?.role,
-            troll_role: profile?.troll_role,
+            user_id: effectiveUser.id,
+            username: profile?.username || effectiveUser.username || 'Guest',
+            avatar_url: profile?.avatar_url || effectiveUser.avatar_url,
+            role: profile?.role || effectiveUser.role,
+            troll_role: profile?.troll_role || effectiveUser.troll_role,
             joined_at: new Date().toISOString(),
             entrance_effect: entranceEffect
           })
@@ -84,7 +89,7 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
       channel.untrack()
       supabase.removeChannel(channel)
     }
-  }, [streamId, user, isHost, profile])
+  }, [streamId, user, isHost, profile, effectiveUser])
 
   return { viewerCount }
 }

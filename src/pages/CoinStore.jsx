@@ -7,10 +7,11 @@ import { useCoins } from '@/lib/hooks/useCoins';
 import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { useAllCreditScores } from '../lib/hooks/useAllCreditScores';
 // import { toast } from 'sonner';
-import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, Gem } from 'lucide-react';
 import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
 import { ENTRANCE_EFFECTS_DATA } from '../lib/entranceEffects';
 import { deductCoins } from '@/lib/coinTransactions';
+import { purchaseCallMinutes } from '@/lib/callMinutes';
 import { useLiveContextStore } from '../lib/liveContextStore';
 
 import { trollCityTheme } from '@/styles/trollCityTheme';
@@ -82,17 +83,20 @@ export default function CoinStore() {
   const { scores: allCreditScores, loading: loadingScores } = useAllCreditScores(user?.id);
   const navigate = useNavigate();
   const { troll_coins, refreshCoins } = useCoins();
-  const { loans: activeLoans, ledger, refresh: refreshBank, applyForLoan, payLoan, tiers } = useBankHook(); // useBank hook
+  const { loans: activeLoans, ledger, refresh: refreshBank, payCreditCard, creditInfo, tiers, payLoan, applyForLoan } = useBankHook(); // useBank hook
 
   const STORE_TAB_KEY = 'tc-store-active-tab';
   const STORE_COMPLETE_KEY = 'tc-store-show-complete';
   const [loading, setLoading] = useState(true);
   const [loadingPackage, setLoadingPackage] = useState(null);
   const [tab, setTab] = useState('coins');
+  const [showStoreDropdown, setShowStoreDropdown] = useState(false);
+  const [useCredit, setUseCredit] = useState(false);
   
   // Bank State
   const [bankBalance] = useState(null);
   const [showActiveLoanModal, setShowActiveLoanModal] = useState(false);
+
   const [applying, setApplying] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [paying, setPaying] = useState(false);
@@ -126,52 +130,24 @@ export default function CoinStore() {
     }
   };
 
+  const handleDrawCredit = async () => {}; // Legacy placeholder
 
-  // Calculate Loan Eligibility
-  useEffect(() => {
-    // DEBUG: Check if coin_packages table is accessible
-    const debugLoadPackages = async () => {
-      const { data, error } = await supabase
-        .from("coin_packages")
-        .select("*");
-
-      console.log("coin packages data:", data);
-      console.log("coin packages error:", error);
-
-      if (error) throw error;
-    };
-    debugLoadPackages();
-
-    if (!user || !tiers.length) return;
-
-    const reasons = [];
-    let maxAmount = 0;
-    
-    // 1. Check active loan
-    if (activeLoans && activeLoans.length > 0) {
-      reasons.push('You already have an active loan.');
+  const handlePayCredit = async () => {
+    const amount = parseInt(payAmount);
+    if (!amount || amount <= 0) {
+        toast.error('Invalid amount');
+        return;
     }
-
-    // 2. Calculate Max Amount based on Tenure
-    const accountAgeDays = Math.floor((new Date() - new Date(user.created_at)) / (1000 * 60 * 60 * 24));
-    
-    // Find highest tier matching tenure
-    const eligibleTier = tiers
-      .filter(t => t.min_tenure_days <= accountAgeDays)
-      .sort((a, b) => b.min_tenure_days - a.min_tenure_days)[0];
-
-    if (eligibleTier) {
-      maxAmount = eligibleTier.max_loan_coins;
-    } else {
-      reasons.push('Account too new for loan eligibility.');
+    const result = await payCreditCard(amount);
+    if (result.success) {
+        setPayAmount('');
+        refreshCoins();
     }
+  };
 
-    setEligibility({
-      canApply: reasons.length === 0 && maxAmount > 0,
-      reasons,
-      maxAmount
-    });
-  }, [user, activeLoans, tiers]);
+
+  // Eligibility effect removed
+
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [manualPaymentModalOpen, setManualPaymentModalOpen] = useState(false);
@@ -566,41 +542,40 @@ export default function CoinStore() {
        return
      }
      
-     if (troll_coins < price) {
+     if (!useCredit && troll_coins < price) {
        toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`)
        return
      }
-     
-      const { error: deductErr } = await deductCoins({
+     if (useCredit && (creditInfo?.available || 0) < price) {
+       toast.error(`Not enough Credit. Need ${price}, available ${creditInfo?.available}`)
+       return
+     }
+
+     const { success, error: deductError } = await deductCoins({
         userId: user.id,
         amount: price,
         type: 'entrance_effect',
-        description: `Purchased entrance effect: ${effect.name}`,
-        metadata: { effect_id: effect.id },
-        supabaseClient: supabase,
-      })
-    
-    if (deductErr) {
-      console.error('Coin deduction error:', deductErr)
-      toast.error(formatDeductErrorMessage(deductErr))
-      return
-    }
-    
-    await refreshCoins()
+        description: `Purchased ${effect.name} entrance effect`,
+        metadata: { effect_id: effect.id, effect_name: effect.name },
+        useCredit,
+        supabaseClient: supabase
+     });
 
-     const { error: insertErr } = await supabase
+     if (!success) {
+        throw new Error(deductError || 'Payment failed');
+     }
+
+     const { error } = await supabase
        .from('user_entrance_effects')
-       .upsert(
-         [{
-           user_id: user.id,
-           effect_id: effect.id
-         }],
-         { onConflict: 'user_id,effect_id', ignoreDuplicates: true }
-       )
+       .upsert({
+         user_id: user.id,
+         effect_id: effect.id,
+         purchased_at: new Date().toISOString()
+       }, { onConflict: 'user_id, effect_id' });
      
-     if (insertErr) {
-       console.error('Effect purchase error:', insertErr)
-       toast.error(insertErr.message || 'Failed to purchase effect')
+     if (error) {
+       console.error('Effect purchase error:', error)
+       toast.error(error.message || 'Failed to purchase effect')
        return
      }
      
@@ -630,61 +605,55 @@ export default function CoinStore() {
        return
      }
      
-     if (troll_coins < price) {
+     if (!useCredit && troll_coins < price) {
        toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`)
        return
      }
-     
-     const expiresAt = new Date(Date.now() + Math.max(1, durationMinutes) * 60 * 1000).toISOString()
-     
-    const { error: deductErr } = await deductCoins({
-      userId: user.id,
-      amount: price,
-      type: 'perk_purchase',
-      description: `Purchased perk: ${perk.name} (${durationMultiplier}x duration)`,
-      metadata: { perk_id: perk.id, multiplier: durationMultiplier },
-      supabaseClient: supabase,
-    })
-    
-    if (deductErr) {
-      console.error('Coin deduction error:', deductErr)
-      toast.error(formatDeductErrorMessage(deductErr))
-      return
-    }
-    
-    await refreshCoins()
-
-     const { error: insertErr } = await supabase.from('user_perks').insert([{
-       user_id: user.id,
-       perk_id: perk.id,
-       expires_at: expiresAt,
-       is_active: true,
-       metadata: {
-         perk_name: perk.name,
-         base_cost: Number(perk.cost || 0),
-         final_cost: price,
-         duration_minutes: durationMinutes,
-         perk_type: perk.perk_type,
-       }
-     }])
-     
-     if (insertErr) {
-       console.error('Perk purchase error:', insertErr)
-       toast.error(insertErr.message || 'Failed to purchase perk')
+     if (useCredit && (creditInfo?.available || 0) < price) {
+       toast.error(`Not enough Credit. Need ${price}, available ${creditInfo?.available}`)
        return
      }
 
+     const metadata = {
+        perk_name: perk.name,
+        base_cost: Number(perk.cost || 0),
+        final_cost: price,
+        duration_minutes: durationMinutes,
+        perk_type: perk.perk_type,
+        multiplier: durationMultiplier
+     };
+
+     const { success, error: deductError } = await deductCoins({
+        userId: user.id,
+        amount: price,
+        type: 'perk_purchase',
+        description: `Purchased Perk: ${perk.name}`,
+        metadata: { ...metadata, perk_id: perk.id },
+        useCredit,
+        supabaseClient: supabase
+     });
+
+     if (!success) throw new Error(deductError || 'Payment failed');
+
+     // Calculate expiry
+     const now = new Date();
+     const expiresAt = new Date(now.getTime() + durationMinutes * 60000).toISOString();
+
+     const { error } = await supabase.from('user_perks').insert({
+         user_id: user.id,
+         perk_id: perk.id,
+         expires_at: expiresAt,
+         is_active: true,
+         metadata: { ...metadata, purchased_at: now.toISOString() }
+     });
+
+     if (error) {
+        throw error;
+     }
+
+     await refreshCoins();
      if (perk.id === 'perk_rgb_username') {
-       const { error: profileUpdateErr } = await supabase
-         .from('user_profiles')
-         .update({ rgb_username_expires_at: expiresAt })
-         .eq('id', user.id);
-       
-       if (profileUpdateErr) {
-         console.error('Failed to update RGB status:', profileUpdateErr);
-       } else {
-         await refreshProfile();
-       }
+        await refreshProfile();
      }
      
       toast.success('Perk purchased')
@@ -708,48 +677,54 @@ export default function CoinStore() {
         return
       }
 
-      if (troll_coins < price) {
+      if (!useCredit && troll_coins < price) {
         toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`)
         return
       }
-      
-      const { error: deductErr } = await deductCoins({
-        userId: user.id,
-        amount: price,
-        type: 'insurance_purchase',
-        description: `Purchased insurance: ${plan.name} (${durationMultiplier}x duration)`,
-        metadata: { insurance_id: plan.id, multiplier: durationMultiplier },
-        supabaseClient: supabase,
-      })
-      
-      if (deductErr) {
-        console.error('Coin deduction error:', deductErr)
-        toast.error(formatDeductErrorMessage(deductErr))
+      if (useCredit && (creditInfo?.available || 0) < price) {
+        toast.error(`Not enough Credit. Need ${price}, available ${creditInfo?.available}`)
         return
       }
       
-      await refreshCoins()
- 
-      const expiresAt = new Date(Date.now() + Math.max(1, durationHours) * 60 * 60 * 1000).toISOString()
-      
-      const { error: insertErr } = await supabase.from('user_insurances').insert([{
+      const { success, error: deductError } = await deductCoins({
+        userId: user.id,
+        amount: price,
+        type: 'insurance_purchase',
+        description: `Purchased Insurance: ${plan.name} (${durationMultiplier}x)`,
+        metadata: { 
+            insurance_id: plan.id, 
+            plan_name: plan.name, 
+            multiplier: durationMultiplier,
+            protection_type: plan.protection_type
+        },
+        useCredit,
+        supabaseClient: supabase
+      });
+
+      if (!success) {
+         throw new Error(deductError || 'Payment failed');
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + durationHours * 3600000).toISOString();
+
+      const { error } = await supabase.from('user_insurances').insert({
         user_id: user.id,
         insurance_id: plan.id,
+        protection_type: plan.protection_type,
         expires_at: expiresAt,
         is_active: true,
-        protection_type: plan.protection_type,
+        purchased_at: now.toISOString(),
         metadata: {
-          insurance_name: plan.name,
-          cost: price,
-          duration_hours: durationHours,
-          protection_type: plan.protection_type,
           multiplier: durationMultiplier,
+          base_cost: basePrice,
+          original_duration_hours: baseDuration
         }
-      }])
+      });
      
-     if (insertErr) {
-       console.error('Insurance purchase error:', insertErr)
-       toast.error(insertErr.message || 'Failed to purchase insurance')
+     if (error) {
+       console.error('Insurance purchase error:', error)
+       toast.error(error.message || 'Failed to purchase insurance')
        return
      }
      
@@ -793,8 +768,13 @@ export default function CoinStore() {
         setThemePurchasing(null);
         return;
       }
-      if (troll_coins < price) {
+      if (!useCredit && troll_coins < price) {
         toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`);
+        setThemePurchasing(null);
+        return;
+      }
+      if (useCredit && (creditInfo?.available || 0) < price) {
+        toast.error(`Not enough Credit. Need ${price}, available ${creditInfo?.available}`);
         setThemePurchasing(null);
         return;
       }
@@ -806,6 +786,7 @@ export default function CoinStore() {
         type: 'purchase',
         description: `Purchased broadcast theme: ${theme.name}`,
         metadata: { theme_id: theme.id, theme_name: theme.name },
+        useCredit,
         supabaseClient: supabase,
       });
       if (deductErr) {
@@ -815,14 +796,16 @@ export default function CoinStore() {
         return;
       }
 
-      // Now call the purchase RPC to record the purchase (no deduction logic inside)
-      const { data, error } = await supabase.rpc('purchase_broadcast_theme', {
-        p_user_id: user.id,
-        p_theme_id: String(theme.id),
-        p_set_active: false
+      // Now record the purchase
+      const { error } = await supabase.from('user_broadcast_theme_purchases').insert({
+        user_id: user.id,
+        theme_id: String(theme.id),
+        purchased_at: new Date().toISOString(),
+        cost: price
       });
-      if (error || data?.success === false) {
-        throw new Error(data?.error || error?.message || 'Theme purchase failed');
+
+      if (error) {
+        throw new Error(error.message || 'Theme purchase failed');
       }
 
       setOwnedThemeIds((prev) => new Set([...Array.from(prev), theme.id]));
@@ -856,6 +839,7 @@ export default function CoinStore() {
         type: 'chat_sound',
         description: `Purchased ${sound.name} chat sound`,
         metadata: { sound_id: sound.id },
+        useCredit,
         supabaseClient: supabase,
       });
 
@@ -915,34 +899,24 @@ export default function CoinStore() {
       return;
     }
 
-    if (troll_coins < totalCost) {
+    if (!useCredit && troll_coins < totalCost) {
       toast.error(`Need ${formatCoins(totalCost)} troll_coins to purchase this package.`);
+      return;
+    }
+    if (useCredit && (creditInfo?.available || 0) < totalCost) {
+      toast.error(`Need ${formatCoins(totalCost)} credit to purchase this package.`);
       return;
     }
 
     setLoadingPackage(pkg.id);
     try {
-      const deduction = await deductCoins({
-        userId: user.id,
-        amount: totalCost,
-        type: 'call_minutes',
-        description: `Purchased ${pkg.minutes} ${pkg.type} call minutes`,
-        metadata: { package_id: pkg.id, minutes: pkg.minutes, call_type: pkg.type },
-        supabaseClient: supabase,
-      });
+      const { success, error } = await purchaseCallMinutes(user.id, {
+        ...pkg,
+        cost: totalCost
+      }, useCredit);
 
-      if (!deduction?.success) {
-        throw new Error(deduction?.error || 'Failed to deduct troll_coins');
-      }
-
-      const { error } = await supabase.rpc('add_call_minutes', {
-        p_user_id: user.id,
-        p_minutes: pkg.minutes,
-        p_type: pkg.type
-      });
-
-      if (error) {
-        throw error;
+      if (!success) {
+        throw new Error(error || 'Failed to purchase minutes');
       }
 
       toast.success(`Added ${pkg.minutes} ${pkg.type} minutes!`);
@@ -1026,19 +1000,52 @@ export default function CoinStore() {
 
           {/* Header */}
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <Coins className="w-8 h-8 text-purple-400" />
-              Troll City Store
-            </h1>
-            <div className="flex gap-2 hidden md:flex">
+            <div className="flex items-center gap-6">
+                <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                <Coins className="w-8 h-8 text-purple-400" />
+                Troll City Store
+                </h1>
+
+                {/* Credit Card Toggle */}
+                {['effects', 'perks', 'calls', 'insurance', 'broadcast_themes'].includes(tab) && (
+                <div className="flex items-center gap-3 bg-black/30 border border-white/10 px-4 py-2 rounded-full">
+                    <span className={`text-xs font-bold ${!useCredit ? 'text-yellow-400' : 'text-gray-400'}`}>Use Coins</span>
+                    <button 
+                        onClick={() => setUseCredit(!useCredit)}
+                        className={`w-10 h-5 rounded-full relative transition-colors ${useCredit ? 'bg-purple-600' : 'bg-zinc-600'}`}
+                    >
+                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${useCredit ? 'left-6' : 'left-1'}`} />
+                    </button>
+                    <span className={`text-xs font-bold ${useCredit ? 'text-purple-400' : 'text-gray-400'}`}>Use Credit (+8%)</span>
+                </div>
+                )}
+            </div>
+
+            <div className="flex gap-2 hidden md:flex relative">
               <button type="button" className={`px-3 py-2 rounded ${tab==='coins'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('coins')}>Coins</button>
               <button type="button" className={`px-3 py-2 rounded ${tab==='bank'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('bank')}>Bank</button>
-              {/* Only show Make a Payment as a separate tab if needed; My Loan and Credit Report will be inside Bank tab */}
-              <button type="button" className={`px-3 py-2 rounded ${tab==='effects'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('effects')}>Entrance Effects</button>
-              <button type="button" className={`px-3 py-2 rounded ${tab==='perks'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('perks')}>Perks</button>
-              <button type="button" className={`px-3 py-2 rounded ${tab==='calls'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('calls')}>Call Minutes</button>
-              <button type="button" className={`px-3 py-2 rounded ${tab==='insurance'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('insurance')}>Insurance</button>
-              <button type="button" className={`px-3 py-2 rounded ${tab==='broadcast_themes'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('broadcast_themes')}>Broadcast Themes</button>
+              
+              <div className="relative">
+                <button 
+                    type="button" 
+                    className={`px-3 py-2 rounded flex items-center gap-2 ${['effects', 'perks', 'calls', 'insurance', 'broadcast_themes'].includes(tab) ? 'bg-purple-600' : trollCityTheme.backgrounds.card}`}
+                    onClick={() => setShowStoreDropdown(!showStoreDropdown)}
+                >
+                    Store Items
+                    <ChevronDown className="w-4 h-4" />
+                </button>
+                
+                {showStoreDropdown && (
+                    <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-purple-500/30 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
+                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='effects' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('effects'); setShowStoreDropdown(false); }}>Entrance Effects</button>
+                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='perks' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('perks'); setShowStoreDropdown(false); }}>Perks</button>
+                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
+                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='insurance' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('insurance'); setShowStoreDropdown(false); }}>Insurance</button>
+                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='broadcast_themes' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('broadcast_themes'); setShowStoreDropdown(false); }}>Broadcast Themes</button>
+                    </div>
+                )}
+              </div>
+
               {showLiveSnacks && (
                 <button type="button" className={`px-3 py-2 rounded ${tab==='live_snacks'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('live_snacks')}>LIVE SNACKS</button>
               )}
@@ -1050,8 +1057,7 @@ export default function CoinStore() {
                 className={`w-full ${trollCityTheme.backgrounds.card} text-white ${trollCityTheme.borders.glass} rounded-lg p-2 text-sm focus:outline-none focus:border-purple-500`}
               >
                 <option value="coins">Coins</option>
-                <option value="bank">Troll Bank & Loans</option>
-                {/* Only show Make a Payment as a separate tab if needed; My Loan and Credit Report will be inside Bank tab */}
+                <option value="bank">Troll Bank</option>
                 <option value="effects">Entrance Effects</option>
                 <option value="perks">Perks</option>
                 <option value="calls">Call Minutes</option>
@@ -1062,27 +1068,7 @@ export default function CoinStore() {
             </div>
 
 
-                      {/* Make a Payment Tab */}
-                      {tab === 'make_payment' && activeLoans && activeLoans.length > 0 && (
-                        <div className="space-y-6 animate-fadeIn">
-                          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                            <CreditCard className="w-5 h-5 text-purple-400" />
-                            Make a Payment
-                          </h2>
-                          {/* TODO: Payment form, preset amounts, call Edge Function, show score preview */}
-                          <div className="bg-black/30 border border-white/5 rounded-xl p-4">
-                            <div className="mb-4">Loan Balance: <span className="font-bold text-red-400">{activeLoans[0].balance}</span></div>
-                            <div className="flex gap-2 mb-4">
-                              <button className="px-3 py-1 bg-purple-600 rounded text-white">Pay 25%</button>
-                              <button className="px-3 py-1 bg-purple-600 rounded text-white">Pay 50%</button>
-                              <button className="px-3 py-1 bg-purple-600 rounded text-white">Pay Full</button>
-                            </div>
-                            <input type="number" min={1} max={activeLoans[0].balance} placeholder="Custom amount" className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white text-sm mb-4" />
-                            <button className="w-full py-2 bg-green-600 hover:bg-green-700 rounded text-white font-bold">Submit Payment</button>
-                            <div className="mt-4 text-xs text-gray-400">Credit score increase preview: <span className="font-bold text-yellow-400">{/* TODO: Show preview */}---</span></div>
-                          </div>
-                        </div>
-                      )}
+
 
 
           </div>
@@ -1120,8 +1106,8 @@ export default function CoinStore() {
                       {showActiveLoanModal && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
                           <div className="bg-zinc-900 border border-purple-500/40 rounded-xl p-8 shadow-2xl max-w-sm w-full text-center animate-fadeIn">
-                            <h2 className="text-xl font-bold text-red-400 mb-4">Active Loan Detected</h2>
-                            <p className="mb-6 text-gray-200">You already have an active loan. Please pay off your existing loan before requesting a new one.</p>
+                            <h2 className="text-xl font-bold text-red-400 mb-4">Legacy Loan Detected</h2>
+                            <p className="mb-6 text-gray-200">You have an outstanding legacy loan. Please pay it off before using new credit features.</p>
                             <button
                               className="px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white font-bold"
                               onClick={() => setShowActiveLoanModal(false)}
@@ -1142,12 +1128,109 @@ export default function CoinStore() {
             {/* Bank Tab */}
             {tab === 'bank' && (
               <div className="space-y-8 animate-fadeIn">
-                                 {/* My Loan Section (moved from tab) */}
-                                 {activeLoans && activeLoans.length > 0 && (
+                {/* Credit Card Dashboard */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Credit Status Card */}
+                  <div className="bg-gradient-to-br from-purple-900/50 via-black to-black border border-purple-500/30 rounded-xl p-6 relative overflow-hidden group">
+                     <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 blur-[50px] rounded-full pointer-events-none" />
+                     <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-6">
+                           <div>
+                              <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
+                                <CreditCard className="w-6 h-6 text-purple-400" />
+                                Troll Card
+                              </h2>
+                              <div className="text-xs text-purple-300/70 font-mono tracking-widest">**** **** **** {user?.id?.slice(0, 4) || '0000'}</div>
+                           </div>
+                           <div className="text-right">
+                              <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">Status</div>
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                                creditInfo?.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                              }`}>
+                                {creditInfo?.status || 'Active'}
+                              </span>
+                           </div>
+                        </div>
+
+                        <div className="space-y-6">
+                           <div>
+                              <div className="flex justify-between text-sm mb-2">
+                                 <span className="text-gray-400">Credit Used</span>
+                                 <span className="text-white font-mono">{formatCoins(creditInfo?.used || 0)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm mb-2">
+                                 <span className="text-gray-400">Credit Limit</span>
+                                 <span className="text-gray-400 font-mono">{formatCoins(creditInfo?.limit || 1000)}</span>
+                              </div>
+                              {/* Progress Bar */}
+                              <div className="h-4 bg-gray-800 rounded-full overflow-hidden border border-white/5 relative">
+                                 <div 
+                                    className={`h-full transition-all duration-500 ${
+                                       (creditInfo?.used || 0) > (creditInfo?.limit || 1000) ? 'bg-red-500' : 'bg-purple-500'
+                                    }`}
+                                    style={{ width: `${Math.min(100, ((creditInfo?.used || 0) / (creditInfo?.limit || 1000)) * 100)}%` }}
+                                 />
+                              </div>
+                              <div className="flex justify-between text-xs mt-2">
+                                 <span className="text-purple-400 font-bold">Available: {formatCoins((creditInfo?.limit || 1000) - (creditInfo?.used || 0))}</span>
+                                 <span className="text-gray-500">APR: {creditInfo?.apr || 8}%</span>
+                              </div>
+                           </div>
+
+                           <div className="pt-4 border-t border-white/10">
+                              <div className="flex gap-2">
+                                 <button 
+                                    onClick={() => {
+                                        const amount = prompt('Enter amount to pay off credit card debt:', Math.ceil(creditInfo?.used || 0).toString());
+                                        if (amount) {
+                                            const val = parseInt(amount);
+                                            if (val > 0) payCreditCard(val);
+                                        }
+                                    }}
+                                    disabled={!creditInfo?.used || creditInfo.used <= 0}
+                                    className="flex-1 bg-white text-black font-bold py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                 >
+                                    Pay Bill
+                                 </button>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Credit Info / Rules */}
+                  <div className="bg-black/30 border border-white/10 rounded-xl p-6 md:col-span-2">
+                     <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-blue-400" />
+                        Card Rules
+                     </h3>
+                     <ul className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-300">
+                        <li className="flex items-start gap-2">
+                           <span className="text-purple-400 font-bold">•</span>
+                           <span><strong className="text-white">8% Finance Fee:</strong> Applied immediately to any credit purchase.</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                           <span className="text-red-400 font-bold">•</span>
+                           <span><strong className="text-white">Direct Purchase Only:</strong> Use your card directly in the shop. No cash advances or transfers.</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                           <span className="text-yellow-400 font-bold">•</span>
+                           <span><strong className="text-white">Cashout Block:</strong> You cannot request a payout while you have ANY credit debt.</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                           <span className="text-green-400 font-bold">•</span>
+                           <span><strong className="text-white">Dynamic Limit:</strong> Increases by 10 coins for every day your account exists.</span>
+                        </li>
+                     </ul>
+                  </div>
+                </div>
+
+                {/* Legacy Loans Section */}
+                {activeLoans && activeLoans.length > 0 && (
                                    <div className="space-y-6">
                                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                                        <CreditCard className="w-5 h-5 text-purple-400" />
-                                       My Loans
+                                       Legacy Loans
                                      </h2>
                                      {activeLoans.map((loan) => (
                                        <div key={loan.id} className="bg-black/30 border border-white/5 rounded-xl p-4 mb-6">
@@ -1226,156 +1309,9 @@ export default function CoinStore() {
                                      )}
                                    </div>
                                  </div>
-                 {/* Bank Header Stats */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-black/30 border border-white/5 rounded-xl p-4 relative overflow-hidden group">
-                        <div className="relative z-10">
-                            <p className="text-gray-400 text-sm font-medium mb-1">Bank Reserves</p>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-2xl font-bold text-emerald-400">
-                                {bankBalance !== null ? bankBalance.toLocaleString() : '---'}
-                                </span>
-                                <span className="text-xs text-emerald-400/70">coins</span>
-                            </div>
-                            <div className="mt-2 flex items-center gap-1 text-[10px] text-gray-500">
-                                <CheckCircle className="w-3 h-3" />
-                                <span>Verified Holdings</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="bg-black/30 border border-white/5 rounded-xl p-4 relative overflow-hidden">
-                        <div className="relative z-10">
-                            <p className="text-gray-400 text-sm font-medium mb-1">Your Active Loan</p>
-                            {activeLoans && activeLoans.length > 0 ? (
-                              <div>
-                              <div className="flex items-baseline gap-2">
-                                <span className="text-2xl font-bold text-red-400">{activeLoans[0].balance.toLocaleString()}</span>
-                                <span className="text-xs text-red-400/70">due</span>
-                              </div>
-                              <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] text-red-200">
-                                Auto-repayment active (50% of purchases)
-                              </div>
-                              </div>
-                            ) : (
-                              <div>
-                              <div className="flex items-baseline gap-2">
-                                <span className="text-2xl font-bold text-green-400">None</span>
-                              </div>
-                              <p className="mt-1 text-xs text-gray-400">You are debt free!</p>
-                              </div>
-                            )}
-                        </div>
-                    </div>
-                 </div>
 
-                 {/* Loan Application / Management */}
-                 <div className="bg-black/20 border border-white/5 rounded-xl p-6">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <CreditCard className="w-5 h-5 text-purple-400" />
-                        Loan Services
-                    </h2>
-                    
-                    {activeLoans && activeLoans.length > 0 ? (
-                        <div className="space-y-4">
-                            <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                                <h3 className="font-semibold text-emerald-400 mb-2 text-sm">Manual Repayment</h3>
-                                <p className="text-xs text-gray-300 mb-4">
-                                Pay off your loan manually. Fully paying off a loan increases your credit score by 5% of the loan amount!
-                                </p>
-                                <div className="flex gap-2">
-                                <input
-                                    type="number"
-                                    value={payAmount}
-                                    onChange={(e) => setPayAmount(e.target.value)}
-                                    placeholder="Amount to pay"
-                                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50"
-                                />
-                                <button
-                                    onClick={handlePayLoan}
-                                    disabled={paying || !payAmount}
-                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors"
-                                >
-                                    {paying ? 'Paying...' : 'Pay'}
-                                </button>
-                                <button
-                                    onClick={() => setPayAmount(activeLoans[0].balance.toString())}
-                                    className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg font-medium text-sm transition-colors"
-                                >
-                                    Max
-                                </button>
-                                </div>
-                            </div>
 
-                            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-start gap-3">
-                                <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
-                                <div>
-                                    <h3 className="font-semibold text-blue-400 text-sm">Repayment Information</h3>
-                                    <p className="text-xs text-gray-300 mt-1">
-                                    Loans are repaid automatically when you purchase or receive paid coins. 
-                                    There is no interest if paid within 30 days.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div>
-                                <h3 className="font-semibold text-white mb-2 text-sm">Apply for a Loan</h3>
-                                <p className="text-xs text-gray-400 mb-4">
-                                Get coins instantly and pay them back later automatically.
-                                </p>
-                                
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-gray-400 mb-1">
-                                            Amount (Coins) - Max: {eligibility.maxAmount}
-                                        </label>
-                                        <input 
-                                            type="number"
-                                            value={requestedAmount}
-                                            onChange={(e) => setRequestedAmount(Number(e.target.value))}
-                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors"
-                                            min={100}
-                                            max={eligibility.maxAmount || 100}
-                                        />
-                                    </div>
-                                    
-                                    <button
-                                      onClick={handleApplyLoan}
-                                      disabled={(!eligibility.canApply && !isAdmin) || applying}
-                                      className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-sm transition-all"
-                                    >
-                                      {applying ? 'Processing...' : 'Apply for Loan'}
-                                    </button>
-                                </div>
-                            </div>
 
-                            <div className="bg-black/20 rounded-xl p-4">
-                                <h3 className="font-semibold text-white mb-2 text-sm">Eligibility Requirements</h3>
-                                <ul className="space-y-2">
-                                    <li className="flex items-center gap-2 text-xs">
-                                        {!(activeLoans && activeLoans.length > 0) ? <CheckCircle className="w-3 h-3 text-green-500"/> : <div className="w-3 h-3 border rounded-full border-gray-600"/>}
-                                        <span className={!(activeLoans && activeLoans.length > 0) ? 'text-gray-200' : 'text-gray-500'}>No active loans</span>
-                                    </li>
-                                    <li className="flex items-center gap-2 text-xs">
-                                        {eligibility.maxAmount > 0 ? <CheckCircle className="w-3 h-3 text-green-500"/> : <div className="w-3 h-3 border rounded-full border-gray-600"/>}
-                                        <span className={eligibility.maxAmount > 0 ? 'text-gray-200' : 'text-gray-500'}>Account age check {eligibility.maxAmount > 0 && `(Max: ${eligibility.maxAmount})`}</span>
-                                    </li>
-                                </ul>
-                                
-                                {eligibility.reasons.length > 0 && (
-                                    <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded">
-                                        <p className="text-[10px] text-red-300 font-semibold mb-1">Why you can&apos;t apply:</p>
-                                        <ul className="list-disc list-inside text-[10px] text-red-200/80">
-                                            {eligibility.reasons.map((r, i) => <li key={i}>{r}</li>)}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                 </div>
 
                  {/* Recent Transactions */}
                  <div>
@@ -1403,9 +1339,12 @@ export default function CoinStore() {
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
                                     entry.bucket === 'repayment' ? 'bg-red-500/20 text-red-300' :
                                     entry.bucket === 'loan' ? 'bg-purple-500/20 text-purple-300' :
+                                    entry.bucket === 'credit_spend' ? 'bg-blue-500/20 text-blue-300' :
                                     'bg-gray-500/20 text-gray-300'
                                 }`}>
-                                    {entry.bucket.toUpperCase()}
+                                    {entry.bucket === 'loan' ? 'CREDIT DRAW' : 
+                                     entry.bucket === 'credit_spend' ? 'CREDIT PURCHASE' :
+                                     entry.bucket.toUpperCase()}
                                 </span>
                                 </td>
                                 <td className="py-3 px-4 text-gray-400 text-xs">{entry.source}</td>
@@ -1429,6 +1368,8 @@ export default function CoinStore() {
                  </div>
               </div>
             )}
+
+
 
             {/* Coins Tab */}
             {tab === 'coins' && (

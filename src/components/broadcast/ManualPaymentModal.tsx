@@ -160,23 +160,14 @@ export default function ManualPaymentModal({ isOpen, onClose, pkg, providerId = 
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase text-zinc-500 font-bold">3. Include Note (Crucial!)</Label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-yellow-900/20 p-3 rounded font-mono text-lg border border-yellow-700/50 text-yellow-400 flex justify-between items-center">
-                    <span>{orderData.note_suggested}</span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-yellow-900/40 text-yellow-400" onClick={() => handleCopy(orderData.note_suggested, 'Note')}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <p className="text-xs text-yellow-500 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    You MUST include this note for automated processing.
-                  </p>
-                  <p className="text-xs text-blue-400 font-bold flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Send as &quot;Friend/Family&quot; transaction to avoid fees.
+                <div className="bg-red-900/20 border border-red-500/50 rounded p-3">
+                  <p className="text-sm text-red-400 font-bold flex items-start gap-2">
+                    <AlertCircle className="h-5 w-5 shrink-0" />
+                    <span>
+                      You MUST send as &quot;Friend/Family&quot; transaction.
+                      <br />
+                      <span className="text-red-500 uppercase">Failure to do so will result in court summon.</span>
+                    </span>
                   </p>
                 </div>
               </div>

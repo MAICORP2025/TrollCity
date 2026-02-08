@@ -1,21 +1,7 @@
 
--- Create streams table if it doesn't exist (safety net for start over)
-CREATE TABLE IF NOT EXISTS public.streams (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) NOT NULL,
-  title TEXT,
-  status TEXT DEFAULT 'pending', -- pending, live, ended
-  box_count INTEGER DEFAULT 1,
-  seat_price INTEGER DEFAULT 0,
-  are_seats_locked BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  ended_at TIMESTAMPTZ
-);
-
--- Ensure RLS on streams
-ALTER TABLE public.streams ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public read streams" ON public.streams FOR SELECT USING (true);
-CREATE POLICY "Broadcasters manage streams" ON public.streams FOR ALL USING (auth.uid() = user_id);
+-- Streams table is now created in 20250202100000_broadcast_overhaul.sql
+-- to satisfy foreign key dependencies.
+-- RLS policies for streams are also defined there.
 
 -- Moderators (Broadofficers) - Permanent assignment
 CREATE TABLE IF NOT EXISTS public.stream_moderators (

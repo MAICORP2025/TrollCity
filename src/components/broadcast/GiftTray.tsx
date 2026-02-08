@@ -16,9 +16,10 @@ interface GiftTrayProps {
 export default function GiftTray({ recipientId, streamId, onClose, battleId, allRecipients }: GiftTrayProps) {
   const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState<string>('All');
   const { sendGift, isSending } = useGiftSystem(recipientId, streamId, battleId, recipientId);
   const { profile } = useAuthStore();
-  // const [sendingToAll, setSendingToAll] = useState(false);
+  const [sendingToAll, setSendingToAll] = useState(false);
 
   useEffect(() => {
     const fetchGifts = async () => {
@@ -42,9 +43,18 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
               coinCost: g.coin_price || 0,
               type: 'paid',
               slug: g.item_key,
-              category: g.category
+              category: g.category,
+              subcategory: g.metadata?.subcategory || 'Misc'
             }));
             setGifts(mappedGifts);
+            
+            // Set default category if available
+            if (mappedGifts.length > 0) {
+                 const firstCat = mappedGifts[0].subcategory;
+                 if (firstCat && firstCat !== 'Misc') {
+                     setActiveCategory('All');
+                 }
+            }
           }
       } catch (e) {
           console.error(e);
@@ -55,6 +65,34 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
 
     fetchGifts();
   }, []);
+
+  const categories = React.useMemo(() => {
+      const cats = Array.from(new Set(gifts.map(g => g.subcategory).filter(Boolean) as string[]));
+      // Custom sort order based on user request if possible, otherwise alphabetical
+      const order = [
+          'Court & Government',
+          'Podcast & Media', 
+          'Homes & Real Estate',
+          'Vehicles & Transport',
+          'Money & Flex',
+          'Battle & Chaos',
+          'Luxury / Rare'
+      ];
+      
+      return ['All', ...cats.sort((a, b) => {
+          const indexA = order.indexOf(a);
+          const indexB = order.indexOf(b);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a.localeCompare(b);
+      })];
+  }, [gifts]);
+
+  const filteredGifts = React.useMemo(() => {
+      if (activeCategory === 'All') return gifts;
+      return gifts.filter(g => g.subcategory === activeCategory);
+  }, [gifts, activeCategory]);
 
   const handleSend = async (gift: GiftItem) => {
     if (allRecipients && allRecipients.length > 0) {
@@ -106,31 +144,73 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
         </div>
       </div>
 
+      {/* Category Tabs */}
+      {!loading && gifts.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-2 custom-scrollbar">
+            {categories.map(cat => (
+                <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                        activeCategory === cat 
+                        ? 'bg-yellow-400 text-black' 
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                    }`}
+                >
+                    {cat}
+                </button>
+            ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-8">
             <Loader2 className="animate-spin text-white" />
         </div>
+      ) : filteredGifts.length === 0 ? (
+        <div className="text-center py-8 text-gray-400">
+            No gifts available in this category.
+        </div>
       ) : (
         <div className="grid grid-cols-4 md:grid-cols-5 gap-3 overflow-y-auto max-h-60 custom-scrollbar p-1">
-            {gifts.map((gift) => (
+            {filteredGifts.map((gift) => {
+                const isHighValue = gift.coinCost >= 1000;
+                const isLegendary = gift.coinCost >= 5000;
+                
+                return (
                 <button
                     key={gift.id}
                     disabled={isSending}
                     onClick={() => handleSend(gift)}
-                    className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-white/10 transition-colors group relative border border-transparent hover:border-white/10"
+                    className={`flex flex-col items-center gap-2 p-2 rounded-xl transition-all group relative border ${
+                        isHighValue 
+                        ? 'border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_10px_rgba(250,204,21,0.1)]' 
+                        : 'border-transparent hover:border-white/10 hover:bg-white/10'
+                    }`}
                 >
-                    <div className="text-3xl transform group-hover:scale-110 transition-transform duration-200">
+                    <div className={`text-3xl transform group-hover:scale-110 transition-transform duration-200 ${isLegendary ? 'animate-pulse' : ''}`}>
                         {gift.icon || '🎁'}
                     </div>
-                    <div className="text-center">
-                        <div className="text-xs text-gray-300 font-medium truncate w-full">{gift.name}</div>
-                        <div className="text-[10px] text-yellow-400 font-mono">{gift.coinCost}</div>
+                    <div className="text-center w-full">
+                        <div className={`text-xs font-medium truncate w-full ${isHighValue ? 'text-yellow-200' : 'text-gray-300'}`}>
+                            {gift.name}
+                        </div>
+                        <div className="text-[10px] text-yellow-400 font-mono flex items-center justify-center gap-1 mt-0.5">
+                           {gift.coinCost > 0 ? (
+                             <>
+                               <Coins size={10} />
+                               {gift.coinCost.toLocaleString()}
+                             </>
+                           ) : (
+                             <span className="text-green-400">FREE</span>
+                           )}
+                        </div>
                     </div>
                     
                     {/* Hover Effect Glow */}
                     <div className="absolute inset-0 bg-yellow-400/5 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity pointer-events-none" />
                 </button>
-            ))}
+            )})}
         </div>
       )}
     </div>

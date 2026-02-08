@@ -2,9 +2,11 @@ import { Component, ErrorInfo, ReactNode } from 'react'
 import { toast } from 'sonner'
 import { reportError } from '../lib/supabase'
 import { trackEvent } from '../lib/telemetry'
+import { logMobileError } from '../lib/MobileErrorLogger'
 
 interface Props {
   children: ReactNode
+  fallback?: ReactNode
 }
 
 interface State {
@@ -39,6 +41,9 @@ export default class ErrorBoundary extends Component<Props, State> {
       component: 'ErrorBoundary',
       context: { info }
     })
+    
+    // Log to mobile error logs if applicable
+    logMobileError(error, { component: 'ErrorBoundary', info })
     
     // Enhanced error detection and handling
     const errorMessage = error.message || ''
@@ -82,6 +87,10 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.hasError) {
       return this.props.children
+    }
+
+    if (this.props.fallback) {
+      return this.props.fallback
     }
 
     return (

@@ -128,6 +128,24 @@ export class LiveKitService {
   }
 
   /* =========================
+     Public Methods
+  ========================= */
+
+  /**
+   * Pre-fetches the LiveKit token and caches it.
+   * Call this when you anticipate a connection (e.g., in a setup screen).
+   */
+  public async prepareToken(): Promise<void> {
+    try {
+      this.log('🚀 Pre-fetching token...');
+      await this.getToken();
+    } catch (error) {
+      this.log('⚠️ Failed to pre-fetch token', { error });
+      // We don't throw here, as the actual connect() call will try again and handle errors properly
+    }
+  }
+
+  /* =========================
      Methods to Publish Tracks (Fix C)
   ========================= */
   

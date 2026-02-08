@@ -4,6 +4,7 @@ import { useAuthStore } from '@/lib/store';
 import { useEffect } from 'react';
 import { subscribeToNtfyGlobal } from '../lib/ntfySubscribe';
 import { trollCityTheme } from '@/styles/trollCityTheme';
+import { useActiveBroadcasts } from '@/hooks/useActiveBroadcasts';
 import { 
   Gamepad2, 
   Users, 
@@ -116,6 +117,7 @@ const _StatsSection = () => {
 export default function Home() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const hasActiveContent = useActiveBroadcasts();
   // Auto-scroll to top and subscribe to push notifications on page load
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -190,18 +192,33 @@ export default function Home() {
               {/* CTA Buttons */}
               {user && (
                 <div className="flex flex-wrap gap-4 items-center animate-fade-in-up" style={{ animationDelay: '180ms' }}>
+                  {/* Desktop/Tablet Button */}
                   <button
-                    onClick={() => navigate('/go-live')}
-                    className="md:hidden group relative px-8 py-4 rounded-2xl font-semibold text-lg text-white bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 shadow-[0_10px_40px_rgba(236,72,153,0.4)] hover:shadow-[0_15px_50px_rgba(251,146,60,0.35)] transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-2"
+                    onClick={() => navigate('/broadcast/setup')}
+                    className="hidden md:flex group relative px-8 py-4 rounded-2xl font-semibold text-lg text-white bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 shadow-[0_10px_40px_rgba(236,72,153,0.4)] hover:shadow-[0_15px_50px_rgba(251,146,60,0.35)] transition-all duration-300 hover:-translate-y-0.5 items-center gap-2"
                   >
                     <Play className="w-5 h-5" />
                     Go Live Now
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                     <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-600/0 via-white/8 to-orange-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </button>
+
+                  {/* Mobile Sticky Button (PWA Optimized) */}
+                  <div className="md:hidden fixed bottom-20 left-4 right-4 z-50">
+                    <button
+                      onClick={() => navigate('/broadcast/setup')}
+                      className="w-full group relative px-6 py-4 rounded-2xl font-bold text-xl text-white bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 shadow-[0_8px_30px_rgba(236,72,153,0.5)] active:scale-95 transition-all duration-200 flex items-center justify-center gap-3 border border-white/20"
+                    >
+                      <div className="absolute inset-0 bg-white/20 rounded-2xl animate-pulse" />
+                      <Play className="w-6 h-6 fill-current" />
+                      <span className="relative z-10">GO LIVE NOW</span>
+                    </button>
+                  </div>
                   <button
                     onClick={() => navigate('/explore')}
-                    className="px-8 py-4 rounded-2xl font-semibold text-lg text-slate-50 bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-0.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                    className={`px-8 py-4 rounded-2xl font-semibold text-lg text-slate-50 bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/40 hover:bg-slate-800/70 transition-all duration-300 hover:-translate-y-0.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ${
+                      hasActiveContent ? 'shadow-[0_0_25px_rgba(34,211,238,0.5)] border-cyan-400/50' : ''
+                    }`}
                   >
                     Explore Feed
                   </button>

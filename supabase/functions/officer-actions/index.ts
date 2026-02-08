@@ -238,6 +238,38 @@ Deno.serve(async (req) => {
         result = { success: true };
         break;
       }
+
+      case "approve_lead_application": {
+        if (!isLeadOfficer) throw new Error("Unauthorized");
+        const { applicationId } = params;
+        const { error } = await supabaseAdmin
+          .from('applications')
+          .update({ 
+            status: 'approved',
+            reviewed_by: user.id,
+            reviewed_at: new Date().toISOString()
+          })
+          .eq('id', applicationId);
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      case "reject_lead_application": {
+        if (!isLeadOfficer) throw new Error("Unauthorized");
+        const { applicationId } = params;
+        const { error } = await supabaseAdmin
+          .from('applications')
+          .update({ 
+            status: 'rejected',
+            reviewed_by: user.id,
+            reviewed_at: new Date().toISOString()
+          })
+          .eq('id', applicationId);
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
       
       case "send_officer_chat": {
         const { message } = params;

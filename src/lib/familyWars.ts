@@ -62,7 +62,7 @@ export async function checkWarCompletion(warId: string) {
 
     // Check if war has ended
     const now = new Date()
-    const endsAt = new Date(war.ends_at)
+    const endsAt = new Date(war.end_time || war.ends_at) // Handle both for safety
 
     if (now >= endsAt) {
       await completeWar(warId)
@@ -98,7 +98,7 @@ export async function completeWar(warId: string) {
         .from('family_wars')
         .update({
           status: 'cancelled',
-          ends_at: new Date().toISOString()
+          end_time: new Date().toISOString()
         })
         .eq('id', warId)
       return
@@ -124,7 +124,7 @@ export async function completeWar(warId: string) {
       .update({
         status: 'completed',
         winner_family_id: winnerId,
-        ends_at: new Date().toISOString()
+        end_time: new Date().toISOString()
       })
       .eq('id', warId)
 
@@ -262,10 +262,12 @@ export async function declareWar(
       .insert({
         family_a_id: attackerFamilyId,
         family_b_id: defenderFamilyId,
-        status: 'pending', // Pending until start time? Or active immediately? Hub uses pending/active.
-        created_by: declarerUserId,
-        starts_at: startTime.toISOString(),
-        ends_at: endTime.toISOString()
+        attacking_family_id: attackerFamilyId,
+        defending_family_id: defenderFamilyId,
+        status: 'active', // Active immediately as startTime is now
+        // created_by: declarerUserId, // Column likely missing
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString()
       })
       .select()
       .single()

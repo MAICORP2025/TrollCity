@@ -20,6 +20,7 @@ interface MobileBroadcastLayoutProps {
   onLeave: () => void;
   onJoinSeat: (index: number) => void;
   hostGlowingColor?: string;
+  onShare?: () => void;
 }
 
 export default function MobileBroadcastLayout({
@@ -34,7 +35,8 @@ export default function MobileBroadcastLayout({
   onFlipCamera,
   onLeave,
   onJoinSeat,
-  hostGlowingColor
+  hostGlowingColor,
+  onShare
 }: MobileBroadcastLayoutProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false); // Local state for UI toggle simulation if needed
@@ -84,9 +86,9 @@ export default function MobileBroadcastLayout({
          
          <div className="flex items-end justify-between px-4 pb-2">
              {/* Chat Area (Left/Center) */}
-             <div className="flex-1 mr-12 pointer-events-none">
-                 <ChatBottomSheet 
-                    messages={messages} 
+            <div className="flex-1 mr-16 pointer-events-none">
+                <ChatBottomSheet 
+                   messages={messages} 
                     onSendMessage={onSendMessage} 
                     className="pointer-events-auto"
                  />
@@ -99,7 +101,7 @@ export default function MobileBroadcastLayout({
                     onMenu={() => setIsDrawerOpen(true)}
                     onLike={() => {}}
                     onGift={() => {}}
-                    onShare={() => {}}
+                    onShare={onShare}
                 />
             </div>
          </div>

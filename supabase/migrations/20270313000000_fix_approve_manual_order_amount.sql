@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS public.approve_manual_order(uuid, uuid, text);
+
 CREATE OR REPLACE FUNCTION public.approve_manual_order(
   p_order_id uuid,
   p_admin_id uuid,

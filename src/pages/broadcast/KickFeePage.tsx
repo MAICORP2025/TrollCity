@@ -28,7 +28,7 @@ export default function KickFeePage() {
                 setBanInfo(data);
             } else {
                 // Not banned? Redirect back to broadcast
-                navigate(`/broadcast/${streamId}`);
+                navigate(`/watch/${streamId}`);
             }
             setCheckingStatus(false);
         };

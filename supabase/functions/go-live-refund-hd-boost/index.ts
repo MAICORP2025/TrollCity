@@ -110,13 +110,21 @@ serve(async (req: Request) => {
         .eq("id", user.id)
         .maybeSingle();
 
-      const currentCoins = Number(profile?.troll_coins || 0);
       const refundAmount = 500;
 
-      await supabaseAdmin
-        .from("user_profiles")
-        .update({ troll_coins: currentCoins + refundAmount })
-        .eq("id", user.id);
+      // Use RPC to add coins securely (handles bypass flag)
+      const { error: refundError } = await supabaseAdmin.rpc('troll_bank_credit_coins', {
+        p_user_id: user.id,
+        p_coins: refundAmount,
+        p_bucket: 'refunds',
+        p_source: 'go_live_hd_refund',
+        p_ref_id: body.sessionId
+      });
+
+      if (refundError) {
+        console.error("Refund RPC error:", refundError);
+        throw new Error("Failed to process refund: " + refundError.message);
+      }
 
       await supabaseAdmin
         .from("wallet_transactions")

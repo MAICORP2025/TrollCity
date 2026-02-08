@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Stream } from '../../types/broadcast';
 import { cn } from '../../lib/utils';
-import { Plus } from 'lucide-react';
+import { Plus, Coins } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
 import UserActionModal from './UserActionModal';
 import { SeatSession } from '../../hooks/useStreamSeats';
@@ -94,7 +94,12 @@ export default function BroadcastGridOverlay({
                             <Plus size={32} />
                             <span className="text-xs mt-2 font-bold">Join Stage</span>
                             {stream.seat_price > 0 && (
-                                <span className="text-[10px] text-yellow-400 mt-1">{stream.seat_price} Coins</span>
+                                <div className="flex items-center gap-1 bg-black/60 px-2 py-1 rounded-full mt-2 border border-yellow-500/30">
+                                    <Coins size={12} className="text-yellow-500" />
+                                    <span className="text-xs font-bold text-yellow-400">
+                                        {stream.seat_price}
+                                    </span>
+                                </div>
                             )}
                          </div>
                     </button>
@@ -156,9 +161,12 @@ export default function BroadcastGridOverlay({
                  {/* Action Modal */}
                  {selectedUserForAction && selectedUserForAction === userId && (
                     <UserActionModal
-                        isOpen={true}
                         onClose={() => setSelectedUserForAction(null)}
-                        targetUserId={userId}
+                        userId={userId}
+                        streamId={stream.id}
+                        username={displayProfile?.username}
+                        role={displayProfile?.role || displayProfile?.troll_role}
+                        createdAt={displayProfile?.created_at}
                         isHost={isHost}
                         isModerator={isModerator}
                         onGift={() => onGift(userId)}

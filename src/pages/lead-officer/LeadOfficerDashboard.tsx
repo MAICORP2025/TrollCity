@@ -13,8 +13,11 @@ import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
 import TimeOffRequestsList from './TimeOffRequestsList'
 import '../../styles/LeadOfficerDashboard.css'
 
+import { InterviewSchedulerModal } from '../../components/admin/InterviewSchedulerModal'
+
 type Applicant = {
-  id: string
+  id: string // This is user_id
+  applicationId: string
   username: string
   email?: string
   role?: string
@@ -72,6 +75,10 @@ export function LeadOfficerDashboard() {
   const [showReportForm, setShowReportForm] = useState(false)
   const [submittingReport, setSubmittingReport] = useState(false)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'hr' | 'empire' | 'reports'>('dashboard')
+
+  // Interview Scheduler State
+  const [showInterviewModal, setShowInterviewModal] = useState(false)
+  const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null)
 
   // Load weekly reports when user ID is available
   const loadWeeklyReports = async () => {
@@ -177,6 +184,7 @@ export function LeadOfficerDashboard() {
         const up = Array.isArray(app.user_profiles) ? app.user_profiles[0] : app.user_profiles
         return {
           id: app.user_id,
+          applicationId: app.id,
           username: up?.username || 'Unknown',
           email: up?.email || '',
           role: up?.role || 'user',
@@ -407,6 +415,15 @@ export function LeadOfficerDashboard() {
 
       switch (actionType) {
         case 'hire_officer': {
+          // Check if this is an applicant that needs an interview
+          const applicant = applicants.find(a => a.id === userId)
+          if (applicant) {
+            setSelectedApplicant(applicant)
+            setShowInterviewModal(true)
+            setLoading(false)
+            return
+          }
+
           // Approve officer application using RPC
           const { data: hireData, error: hireError } = await supabase.rpc('approve_officer_application', {
             p_user_id: userId
@@ -711,71 +728,32 @@ export function LeadOfficerDashboard() {
 
       {/* Applicants */}
       <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-purple-200 flex items-center gap-2">
-            <User className="w-5 h-5" />
-            Pending Applicants
-          </h2>
-          <button
-            type="button"
-            onClick={() => Promise.all([loadApplicants(), loadOfficers(), loadLogs()])}
-            className="text-sm text-purple-300 hover:text-purple-100"
-          >
-            Refresh
-          </button>
-        </div>
-        {applicants.length === 0 ? (
-          <p className="text-sm text-purple-500">
-            No applicants waiting. The trolls are calm… for now.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-purple-400">
-                <tr className="border-b border-purple-800">
-                  <th className="text-left py-2">User</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {applicants.map((a) => (
-                  <tr
-                    key={a.id}
-                    className="border-b border-purple-900/50 hover:bg-purple-900/10"
-                  >
-                    <td className="py-2">
-                      <ClickableUsername userId={a.id} username={a.username} />
-                    </td>
-                    <td className="py-2">
-                      <div className="flex items-center justify-end gap-2">
-
-                        <button
-                          type="button"
-                          className="rounded-xl bg-emerald-600 px-3 py-1 text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
-                          disabled={loading}
-                          onClick={() => act('hire_officer', a.id)}
-                        >
-                          Hire
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Application Review Section */}
-      <section className="rounded-2xl border border-blue-800 bg-black/40 p-6">
-        <h2 className="text-xl font-semibold text-blue-200 mb-4 flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          Applications Pending Review
+        <h2 className="text-xl font-semibold text-purple-200 mb-4 flex items-center gap-2">
+          <User className="w-5 h-5" />
+          Pending Applicants
         </h2>
         <PendingApplicationsList
-          onApprove={approveApplication}
+          onApprove={async (appId, userId) => {
+            // Find the applicant object to set as selected
+            // We need the full applicant object for the modal
+            const app = applicants.find(a => a.id === userId) || {
+                 id: userId, 
+                 applicationId: appId,
+                 username: 'Unknown',
+                 email: '',
+                 created_at: new Date().toISOString()
+            }
+            // First approve
+            await approveApplication(appId)
+            // Then open scheduler
+            setSelectedApplicant(app)
+            setShowInterviewModal(true)
+          }}
           onReject={rejectApplication}
+          onSchedule={(applicant) => {
+            setSelectedApplicant(applicant)
+            setShowInterviewModal(true)
+          }}
         />
       </section>
 
@@ -1044,14 +1022,37 @@ export function LeadOfficerDashboard() {
         <WeeklyReportsList reports={weeklyReports} />
       </section>
       )}
+      {/* Interview Modal */}
+      {selectedApplicant && (
+        <InterviewSchedulerModal
+          isOpen={showInterviewModal}
+          onClose={() => {
+            setShowInterviewModal(false)
+            setSelectedApplicant(null)
+          }}
+          applicantId={selectedApplicant.id}
+          applicantName={selectedApplicant.username}
+          onScheduled={async () => {
+            // After scheduling, maybe we want to navigate to the interview room?
+            // Or just refresh the list.
+            // For now, let's refresh.
+            await loadApplicants()
+            
+            // Optionally navigate to the interview room if it was scheduled for "now"
+            // But we don't know the room ID here easily without returning it from modal.
+            // Let's just toast for now.
+          }}
+        />
+      )}
     </div>
   )
 }
 
 // Component for displaying pending applications
-function PendingApplicationsList({ onApprove, onReject }: {
+function PendingApplicationsList({ onApprove, onReject, onSchedule }: {
   onApprove: (applicationId: string, userId: string) => void
   onReject: (applicationId: string) => void
+  onSchedule: (applicant: Applicant) => void
 }) {
   const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -1117,6 +1118,19 @@ function PendingApplicationsList({ onApprove, onReject }: {
               </div>
             </div>
             <div className="flex gap-2">
+              <button
+                onClick={() => onSchedule({
+                  id: app.user_id,
+                  applicationId: app.id,
+                  username: app.user_profiles?.username || 'Unknown',
+                  email: app.user_profiles?.email || '',
+                  created_at: app.created_at
+                })}
+                className="px-3 py-2 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 flex items-center gap-1"
+              >
+                <Calendar className="w-3 h-3" />
+                Schedule Interview
+              </button>
               <button
                 onClick={() => onApprove(app.id, app.user_id)}
                 className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700"

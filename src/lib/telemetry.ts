@@ -1,4 +1,7 @@
 
+import { supabase } from './supabase';
+import { generateUUID } from './uuid';
+
 export interface TelemetryEvent {
   event_type: string;
   message: string;
@@ -32,11 +35,7 @@ const breadcrumbs: Breadcrumb[] = [];
 let sessionId = sessionStorage.getItem('telemetry_session_id');
 
 if (!sessionId) {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    sessionId = crypto.randomUUID();
-  } else {
-    sessionId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  }
+  sessionId = generateUUID();
   sessionStorage.setItem('telemetry_session_id', sessionId);
 }
 

@@ -70,10 +70,12 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                  currentUserProfile?.role === 'admin' || 
                  currentUserProfile?.role === 'troll_officer'
 
+  const isCurrentTempAdmin = currentUserProfile?.role === 'temp_city_admin';
+
   const isPresident = currentUserProfile?.username_style === 'gold' || currentUserProfile?.badge === 'president';
   const isTargetPresident = profile?.username_style === 'gold' || profile?.badge === 'president' || profile?.role === 'president';
 
-  const canModerate = (isStaff || isPresident || ((isBroadcaster || isModerator) && streamId)) && currentUser?.id !== targetUserId
+  const canModerate = (isStaff || isPresident || isCurrentTempAdmin || ((isBroadcaster || isModerator) && streamId)) && currentUser?.id !== targetUserId
 
   const now = new Date();
   
@@ -125,7 +127,8 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
   
   // Determine admin, officer, and troller status from profile
   const isAdmin = userProfile?.is_admin || userProfile?.role === 'admin'
-  const isOfficer = !isAdmin && (
+  const isTempAdmin = userProfile?.role === 'temp_city_admin'
+  const isOfficer = !isAdmin && !isTempAdmin && (
     userProfile?.is_troll_officer || 
     userProfile?.role === 'troll_officer'
   )
@@ -216,8 +219,45 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             break
         }
 
+        case 'restrict_broadcast': {
+            if (!confirm(`Restrict ${username} from broadcasting/guesting for 24h?`)) return;
+            
+            try {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                
+                const { error } = await supabase
+                    .from('user_profiles')
+                    .update({ live_restricted_until: tomorrow.toISOString() })
+                    .eq('id', targetUserId);
+                    
+                if (error) throw error;
+                toast.success(`${username} restricted for 24h`);
+            } catch (err: any) {
+                toast.error(err.message);
+            }
+            break;
+        }
+
         case 'stream_mute': {
             if (!streamId) return;
+
+            if (isCurrentTempAdmin) {
+                 try {
+                    const { error } = await supabase.rpc('admin_mute_user', {
+                        target_user_id: targetUserId,
+                        duration_minutes: 60,
+                        reason: 'Stream Mute',
+                        stream_id: streamId
+                    });
+                    if (error) throw error;
+                    toast.success(`User ${username} muted in stream`);
+                 } catch (err: any) {
+                    toast.error(err.message);
+                 }
+                 break;
+            }
+
             try {
                 const { error } = await supabase
                    .from('streams_participants')
@@ -234,8 +274,43 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             break;
        }
 
+       case 'stream_unmute': {
+            if (!streamId) return;
+            try {
+                const { error } = await supabase
+                   .from('streams_participants')
+                   .update({ can_chat: true })
+                   .eq('stream_id', streamId)
+                   .eq('user_id', targetUserId);
+
+                if (error) throw error
+                toast.success(`User ${username} unmuted in stream`)
+            } catch (err: any) {
+                console.error('Error unmuting user in stream:', err)
+                toast.error('Failed to unmute user')
+            }
+            break;
+       }
+
        case 'stream_kick': {
             if (!streamId) return;
+
+            if (isCurrentTempAdmin) {
+                if (!confirm("Kick this user from the stream? (Logged Admin Action)")) return;
+                try {
+                   const { error } = await supabase.rpc('admin_kick_user', {
+                       p_stream_id: streamId,
+                       p_target_user_id: targetUserId,
+                       p_reason: 'Admin Kick'
+                   });
+                   if (error) throw error;
+                   toast.success("User kicked by Admin Authority");
+                } catch (err: any) {
+                   toast.error(err.message);
+                }
+                break;
+           }
+
             if (!confirm("Kick this user for 100 coins? They will be removed for 24h unless they pay the fee.")) return;
 
             try {
@@ -260,6 +335,25 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             break;
        }
 
+        case 'unmute': {
+            if (!confirm(`Are you sure you want to globally UNMUTE ${username}?`)) return;
+            try {
+                // 0 minutes = unmute as per baseline.sql mute_user logic
+                const { error } = await supabase.rpc('mute_user', {
+                    target: targetUserId,
+                    minutes: 0, 
+                    reason: 'Unmuted by staff'
+                })
+
+                if (error) throw error
+                toast.success(`User ${username} has been unmuted globally`)
+            } catch (err: any) {
+                console.error('Error unmuting user:', err)
+                toast.error(err.message || 'Failed to unmute user')
+            }
+            break
+        }
+
         case 'mute': {
             const reason = window.prompt('Reason for mute (optional):', 'Spamming')
             if (reason === null) return // Cancelled
@@ -274,13 +368,22 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             }
 
             try {
-                const { error } = await supabase.rpc('mute_user', {
-                    target: targetUserId,
-                    minutes: minutes,
-                    reason: reason || 'No reason provided'
-                })
+                if (isCurrentTempAdmin) {
+                    const { error } = await supabase.rpc('admin_mute_user', {
+                        target_user_id: targetUserId,
+                        duration_minutes: minutes,
+                        reason: reason || 'No reason provided'
+                    })
+                    if (error) throw error
+                } else {
+                    const { error } = await supabase.rpc('mute_user', {
+                        target: targetUserId,
+                        minutes: minutes,
+                        reason: reason || 'No reason provided'
+                    })
+                    if (error) throw error
+                }
 
-                if (error) throw error
                 toast.success(`User ${username} has been muted`)
             } catch (err: any) {
                 console.error('Error muting user:', err)
@@ -367,6 +470,14 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             </span>
         )}
 
+        {/* Temp Admin Badge */}
+        {!isAdmin && isTempAdmin && (
+            <span className="badge-icon" title="City Admin (Temporary)" style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.1)' }}>
+                <Shield size={16} fill="currentColor" />
+                <span className="badge-title" style={{ color: '#ef4444' }}>City Admin</span>
+            </span>
+        )}
+
         {/* President Badge (Exclusive) */}
         {!isAdmin && isTargetPresident && (
             <span className="badge-icon" title="President">
@@ -448,7 +559,7 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                     </button>
 
                     {/* Stream Specific Actions */}
-                    {isBroadcaster && streamId && (
+                    {( (isBroadcaster || isModerator || isCurrentTempAdmin) && streamId ) && (
                         <>
                             <button
                                 onClick={() => handleAction('stream_mute')}
@@ -457,12 +568,35 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                                 <MicOff size={14} />
                                 Mute in Stream
                             </button>
+                            {!isCurrentTempAdmin && (
+                            <button
+                                onClick={() => handleAction('stream_unmute')}
+                                className="w-full text-left px-3 py-2 text-sm text-green-400 hover:bg-zinc-800 hover:text-green-300 rounded flex items-center gap-2"
+                            >
+                                <MicOff size={14} className="rotate-180" />
+                                Unmute in Stream
+                            </button>
+                            )}
                             <button
                                 onClick={() => handleAction('stream_kick')}
                                 className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 rounded flex items-center gap-2"
                             >
                                 <LogOut size={14} />
                                 Kick from Stream
+                            </button>
+                            <div className="border-t border-gray-800 my-1"></div>
+                        </>
+                    )}
+
+                    {/* Temp Admin Global Actions */}
+                    {isCurrentTempAdmin && (
+                        <>
+                            <button
+                                onClick={() => handleAction('mute')}
+                                className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-zinc-800 hover:text-yellow-300 rounded flex items-center gap-2"
+                            >
+                                <MicOff size={14} />
+                                Global Mute
                             </button>
                             <div className="border-t border-gray-800 my-1"></div>
                         </>
@@ -492,11 +626,25 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                                 Global Mute
                             </button>
                             <button
+                                onClick={() => handleAction('unmute')}
+                                className="w-full text-left px-3 py-2 text-sm text-green-400 hover:bg-zinc-800 hover:text-green-300 rounded flex items-center gap-2"
+                            >
+                                <MicOff size={14} className="rotate-180" />
+                                Global Unmute
+                            </button>
+                            <button
                                 onClick={() => handleAction('ban')}
                                 className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 rounded flex items-center gap-2"
                             >
                                 <Ban size={14} />
                                 Global Ban
+                            </button>
+                            <button
+                                onClick={() => handleAction('restrict_broadcast')}
+                                className="w-full text-left px-3 py-2 text-sm text-orange-400 hover:bg-zinc-800 hover:text-orange-300 rounded flex items-center gap-2"
+                            >
+                                <MicOff size={14} />
+                                Restrict Broadcast (24h)
                             </button>
                             <button
                                 onClick={() => handleAction('delete')}

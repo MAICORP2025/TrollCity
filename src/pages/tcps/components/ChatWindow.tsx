@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react'
 import { MoreVertical, Phone, Video, ArrowLeft, Ban, EyeOff, MessageCircle, Check, CheckCheck, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase, createConversation, markConversationRead } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { useChatStore } from '../../../lib/chatStore'
@@ -39,6 +40,7 @@ interface Message {
 export default function ChatWindow({ conversationId, otherUserInfo, isOnline, onBack }: ChatWindowProps) {
   const { user, profile } = useAuthStore()
   const { openChatBubble } = useChatStore()
+  const navigate = useNavigate()
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   
   const [messages, setMessages] = useState<Message[]>([])
@@ -65,6 +67,11 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  const handleCall = (type: 'audio' | 'video') => {
+    if (!actualConversationId || !otherUserInfo) return
+    navigate(`/call/${actualConversationId}/${type}/${otherUserInfo.id}`)
+  }
 
   const handleDeleteMessage = async (messageId: string) => {
     if (!confirm('Are you sure you want to delete this message?')) return
@@ -483,13 +490,11 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
   }, [actualConversationId, fetchMessagesWithSenders])
 
   const isAtBottomRef = useRef(true)
-  const [isAtBottom, setIsAtBottom] = useState(true)
 
   const handleScroll = () => {
     if (!messagesContainerRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
     const atBottom = scrollHeight - scrollTop - clientHeight < 100
-    setIsAtBottom(atBottom)
     isAtBottomRef.current = atBottom
     
     // Load more logic
@@ -565,10 +570,16 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors">
+          <button 
+            onClick={() => handleCall('audio')}
+            className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors"
+          >
             <Phone className="w-5 h-5" />
           </button>
-          <button className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors">
+          <button 
+            onClick={() => handleCall('video')}
+            className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors"
+          >
             <Video className="w-5 h-5" />
           </button>
           <div className="relative" ref={menuRef}>
@@ -720,7 +731,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-[#1A1A1A] border-t border-[#2C2C2C]">
+      <div className="p-4 bg-[#1A1A1A] border-t border-[#2C2C2C]" onFocusCapture={() => setShowMenu(false)}>
         {actualConversationId && otherUserInfo && (
           <MessageInput 
             conversationId={actualConversationId}

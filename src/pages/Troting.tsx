@@ -321,66 +321,80 @@ export default function Troting() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {pitches.map((pitch) => (
-                    <div key={pitch.id} className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden hover:border-purple-500/50 transition-all">
-                      <div className="p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                          <img 
-                            src={pitch.author?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${pitch.user_id}`} 
-                            alt={pitch.author?.username}
-                            className="w-10 h-10 rounded-full bg-gray-800"
-                          />
-                          <div>
-                            <h3 className="font-semibold text-white">{pitch.title}</h3>
-                            <p className="text-sm text-gray-400">by {pitch.author?.username}</p>
-                          </div>
-                        </div>
-                        
-                        <p className="text-gray-300 mb-6 min-h-[4.5rem] line-clamp-3">
-                          {pitch.description}
-                        </p>
-
-                        <div className="flex items-center justify-between mt-auto">
-                          <div className="flex items-center gap-2">
-                            <div className="text-2xl font-bold text-white">{pitch.vote_count}</div>
-                            <span className="text-sm text-gray-500">votes</span>
-                          </div>
-                          
-                          {contest.status === 'voting' && (
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => handleVote(pitch, 'up')}
-                                    disabled={votingId === pitch.id}
-                                    className="px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    <ThumbsUp className="w-5 h-5" />
-                                    <span className="font-bold">{pitch.up_votes || 0}</span>
-                                </button>
-                                
-                                <button
-                                    onClick={() => handleVote(pitch, 'down')}
-                                    disabled={votingId === pitch.id}
-                                    className="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    <ThumbsDown className="w-5 h-5" />
-                                    <span className="font-bold">{pitch.down_votes || 0}</span>
-                                </button>
+                  {pitches.length > 0 ? (
+                    pitches.map((pitch) => (
+                      <div key={pitch.id} className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden hover:border-purple-500/50 transition-all">
+                        <div className="p-6">
+                          <div className="flex items-center gap-3 mb-4">
+                            <img 
+                              src={pitch.author?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${pitch.user_id}`} 
+                              alt={pitch.author?.username}
+                              className="w-10 h-10 rounded-full bg-gray-800"
+                            />
+                            <div>
+                              <h3 className="font-semibold text-white">{pitch.title}</h3>
+                              <p className="text-sm text-gray-400">by {pitch.author?.username}</p>
                             </div>
-                          )}
+                          </div>
                           
-                          {(isAdmin || (user && user.id === pitch.user_id)) && (
-                            <button
-                              onClick={() => handleDeletePitch(pitch)}
-                              className="p-2 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors ml-2"
-                              title="Delete Pitch"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          )}
+                          <p className="text-gray-300 mb-6 min-h-[4.5rem] line-clamp-3">
+                            {pitch.description}
+                          </p>
+
+                          <div className="flex items-center justify-between mt-auto">
+                            <div className="flex items-center gap-2">
+                              <div className="text-2xl font-bold text-white">{pitch.vote_count}</div>
+                              <span className="text-sm text-gray-500">votes</span>
+                            </div>
+                            
+                            {contest.status === 'voting' && (
+                              <div className="flex items-center gap-2">
+                                  <button
+                                      onClick={() => handleVote(pitch, 'up')}
+                                      disabled={votingId === pitch.id}
+                                      className="px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                                  >
+                                      <ThumbsUp className="w-5 h-5" />
+                                      <span className="font-bold">{pitch.up_votes || 0}</span>
+                                  </button>
+                                  
+                                  <button
+                                      onClick={() => handleVote(pitch, 'down')}
+                                      disabled={votingId === pitch.id}
+                                      className="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                                  >
+                                      <ThumbsDown className="w-5 h-5" />
+                                      <span className="font-bold">{pitch.down_votes || 0}</span>
+                                  </button>
+                              </div>
+                            )}
+                            
+                            {(isAdmin || (user && user.id === pitch.user_id)) && (
+                              <button
+                                onClick={() => handleDeletePitch(pitch)}
+                                className="p-2 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors ml-2"
+                                title="Delete Pitch"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="col-span-full text-center py-12 bg-gray-900/30 rounded-xl border border-gray-800/50 border-dashed">
+                      <p className="text-gray-400 text-lg">No pitches submitted yet.</p>
+                      {contest.status === 'submission' && (
+                        <button
+                          onClick={() => setShowSubmitModal(true)}
+                          className="mt-4 px-4 py-2 bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 rounded-lg font-medium transition-colors"
+                        >
+                          Be the first to submit!
+                        </button>
+                      )}
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}

@@ -161,14 +161,17 @@ serve(async (req) => {
         }
 
         if (action_type === 'ban_user' && target_user_id) {
-          const updateData: any = { is_banned: true }
-          if (banExpiresAt) {
-            updateData.ban_expires_at = banExpiresAt
+          // Use secure RPC for ban updates to bypass trigger protection
+          const { error: rpcError } = await supabase.rpc('admin_update_ban_status', {
+             p_target_user_id: target_user_id,
+             p_is_banned: true,
+             p_ban_expires_at: banExpiresAt || null
+          })
+          
+          if (rpcError) {
+             console.error("Ban RPC Error", rpcError)
+             return new Response(JSON.stringify({ error: rpcError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
           }
-          await supabase
-            .from('user_profiles')
-            .update(updateData)
-            .eq('id', target_user_id)
 
           // Create notification for banned user with honesty message
           await supabase
@@ -187,10 +190,16 @@ serve(async (req) => {
         }
 
         if (action_type === 'unban_user' && target_user_id) {
-          await supabase
-            .from('user_profiles')
-            .update({ is_banned: false })
-            .eq('id', target_user_id)
+          const { error: rpcError } = await supabase.rpc('admin_update_ban_status', {
+             p_target_user_id: target_user_id,
+             p_is_banned: false,
+             p_ban_expires_at: null
+          })
+
+          if (rpcError) {
+              console.error("Unban RPC Error", rpcError)
+              return new Response(JSON.stringify({ error: rpcError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          }
         }
 
         return new Response(

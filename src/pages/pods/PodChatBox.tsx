@@ -6,6 +6,8 @@ import { useAuthStore } from "../../lib/store";
 
 import UserNameWithAge from "../../components/UserNameWithAge";
 
+import { generateUUID } from "../../lib/uuid";
+
 interface PodChatBoxProps {
   roomId: string;
   isHost: boolean;
@@ -30,6 +32,38 @@ export default function PodChatBox({ roomId, isHost, currentUserId }: PodChatBox
   const [inputValue, setInputValue] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
+  const [isChatBanned, setIsChatBanned] = useState(false);
+
+  // Check chat ban status
+  useEffect(() => {
+    if (!currentUserId || !roomId) return;
+    
+    const checkBan = async () => {
+        const { data } = await supabase.from('pod_chat_bans')
+            .select('id')
+            .eq('room_id', roomId)
+            .eq('user_id', currentUserId)
+            .maybeSingle();
+        if (data) setIsChatBanned(true);
+    };
+    checkBan();
+    
+    const channel = supabase.channel(`chat_bans:${roomId}`)
+        .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'pod_chat_bans', 
+            filter: `room_id=eq.${roomId}` 
+        }, (payload) => {
+            if (payload.new.user_id === currentUserId) {
+                setIsChatBanned(true);
+                toast.error('You have been banned from chat');
+            }
+        })
+        .subscribe();
+        
+    return () => { supabase.removeChannel(channel); };
+  }, [roomId, currentUserId]);
 
   // Fetch initial messages
   useEffect(() => {
@@ -102,7 +136,7 @@ export default function PodChatBox({ roomId, isHost, currentUserId }: PodChatBox
     
     // Create optimistic message
     const newMessage: Message = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         user_id: currentUserId,
         content,
         created_at: new Date().toISOString(),
@@ -250,12 +284,13 @@ export default function PodChatBox({ roomId, isHost, currentUserId }: PodChatBox
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Say something..."
-            className="w-full bg-black/50 border border-white/10 rounded-full px-4 py-2 pr-10 text-sm text-white focus:outline-none focus:border-purple-500/50"
+            placeholder={isChatBanned ? "Chat disabled" : "Say something..."}
+            disabled={isChatBanned}
+            className={`w-full bg-black/50 border border-white/10 rounded-full px-4 py-2 pr-10 text-sm text-white focus:outline-none focus:border-purple-500/50 ${isChatBanned ? 'opacity-50 cursor-not-allowed' : ''}`}
           />
           <button 
             type="submit"
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || isChatBanned}
             className="absolute right-1 top-1 p-1.5 bg-purple-600 rounded-full text-white disabled:opacity-50 hover:bg-purple-500 transition-colors"
           >
             <Send size={14} />

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant } from '@livekit/components-react';
+import { LocalTrack } from 'livekit-client';
 import { supabase } from '../../lib/supabase';
 import { Stream } from '../../types/broadcast';
 import BroadcastGrid from './BroadcastGrid';
@@ -7,7 +8,48 @@ import { useAuthStore } from '../../lib/store';
 import { Loader2, Coins, User } from 'lucide-react';
 import BroadcastChat from './BroadcastChat';
 import MuteHandler from './MuteHandler';
+import GiftAnimationOverlay from './GiftAnimationOverlay';
+import GiftTray from './GiftTray';
 import { toast } from 'sonner';
+
+// Helper to ensure media is published/unmuted for the host
+const BattleRoomSync = ({ isHost }: { isHost: boolean }) => {
+    const { localParticipant } = useLocalParticipant();
+
+    useEffect(() => {
+        if (!localParticipant || !isHost) return;
+
+        const syncState = async () => {
+            try {
+                // Ensure track is published if not already
+                const publications = localParticipant.getTrackPublications();
+                if (publications) {
+                    for (const pub of publications.values()) {
+                        if (pub.track?.kind === 'video' && pub.isMuted) {
+                            await (pub.track as LocalTrack).unmute();
+                        }
+                        if (pub.track?.kind === 'audio' && pub.isMuted) {
+                            await (pub.track as LocalTrack).unmute();
+                        }
+                    }
+                }
+
+                if (!localParticipant.isCameraEnabled) {
+                    await localParticipant.setCameraEnabled(true);
+                }
+                if (!localParticipant.isMicrophoneEnabled) {
+                    await localParticipant.setMicrophoneEnabled(true);
+                }
+            } catch (error) {
+                console.error('[BattleRoomSync] Error syncing state:', error);
+            }
+        };
+
+        syncState();
+    }, [isHost, localParticipant]);
+
+    return null;
+};
 
 interface BattleViewProps {
   battleId: string;
@@ -24,6 +66,11 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
   
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
+  const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
+  const [giftStreamId, setGiftStreamId] = useState<string | null>(null);
+
+  const isChallengerHost = !!(user?.id && challengerStream?.user_id && user.id === challengerStream.user_id);
+  const isOpponentHost = !!(user?.id && opponentStream?.user_id && user.id === opponentStream.user_id);
 
   useEffect(() => {
     const initBattle = async () => {
@@ -65,6 +112,30 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isSuddenDeath, setIsSuddenDeath] = useState(false);
   const [hasEnded, setHasEnded] = useState(false);
+
+  const endBattle = React.useCallback(async () => {
+      if (!battle) return;
+      if (confirm("Are you sure you want to end this battle?")) {
+          try {
+            // 1. Mark as ended
+            await supabase.from('battles').update({ status: 'ended', winner_id: user?.id }).eq('id', battle.id);
+            
+            // 2. Distribute Winnings (RPC)
+            const { data, error } = await supabase.rpc('distribute_battle_winnings', { p_battle_id: battle.id });
+            if (error) {
+                console.error("Distribution error:", error);
+                toast.error("Battle ended but payout failed.");
+            } else {
+                toast.success(`Battle Ended! Winnings distributed to ${data?.recipients || 0} participants.`);
+            }
+
+            // 3. Cleanup Streams
+            await supabase.from('streams').update({ battle_id: null, is_battle: false }).in('id', [challengerStream?.id, opponentStream?.id]);
+          } catch (e) {
+              console.error(e);
+          }
+      }
+  }, [battle, user, challengerStream, opponentStream]);
 
   useEffect(() => {
     if (!battle?.started_at || battle.status !== 'active') {
@@ -112,14 +183,14 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
     const fetchTokens = async () => {
         try {
             // Token for Challenger Room
-            const { data: dataC, error: errorC } = await supabase.functions.invoke('get-livekit-token', {
+            const { data: dataC, error: errorC } = await supabase.functions.invoke('livekit-token', {
                 body: { room: challengerStream.id, username: user.id } // Room name is stream ID
             });
             if (errorC) throw errorC;
             if (dataC?.token) setTokenChallenger(dataC.token);
 
             // Token for Opponent Room
-            const { data: dataO, error: errorO } = await supabase.functions.invoke('get-livekit-token', {
+            const { data: dataO, error: errorO } = await supabase.functions.invoke('livekit-token', {
                 body: { room: opponentStream.id, username: user.id }
             });
             if (errorO) throw errorO;
@@ -135,38 +206,14 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
     fetchTokens();
   }, [user, challengerStream, opponentStream]);
 
-  const endBattle = React.useCallback(async () => {
-      if (!battle) return;
-      if (confirm("Are you sure you want to end this battle?")) {
-          try {
-            // 1. Mark as ended
-            await supabase.from('battles').update({ status: 'ended', winner_id: user?.id }).eq('id', battle.id);
-            
-            // 2. Distribute Winnings (RPC)
-            const { data, error } = await supabase.rpc('distribute_battle_winnings', { p_battle_id: battle.id });
-            if (error) {
-                console.error("Distribution error:", error);
-                toast.error("Battle ended but payout failed.");
-            } else {
-                toast.success(`Battle Ended! Winnings distributed to ${data?.recipients || 0} participants.`);
-            }
-
-            // 3. Cleanup Streams
-            await supabase.from('streams').update({ battle_id: null, is_battle: false }).in('id', [challengerStream?.id, opponentStream?.id]);
-          } catch (e) {
-              console.error(e);
-          }
-      }
-  }, [battle, user, challengerStream, opponentStream]);
-
   if (loading || !challengerStream || !opponentStream) {
     return <div className="flex items-center justify-center h-screen bg-black text-amber-500"><Loader2 className="animate-spin" size={48} /></div>;
   }
 
-  // Determine if I am a host of one of the sides
-  const isChallengerHost = user?.id === challengerStream.user_id;
-  const isOpponentHost = user?.id === opponentStream.user_id;
   const liveKitUrl = import.meta.env.VITE_LIVEKIT_URL || "wss://trollcity-722100.livekit.cloud";
+
+  const currentStream = [challengerStream, opponentStream].find(s => s?.id === currentStreamId);
+  const currentHostId = currentStream?.user_id;
 
   // Calculate percentages for bar
   const totalScore = (battle?.score_challenger || 0) + (battle?.score_opponent || 0);
@@ -256,12 +303,23 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
                         audio={isChallengerHost}
                         className="h-full"
                     >
+                        <BattleRoomSync isHost={isChallengerHost} />
                         <MuteHandler streamId={challengerStream.id} />
                         <BroadcastGrid 
-                            stream={challengerStream} 
+                            stream={{ ...challengerStream, box_count: 4 }} 
                             isHost={isChallengerHost} 
                             maxItems={4} 
+                            hideEmptySeats={true}
+                            onGift={(uid) => {
+                                setGiftRecipientId(uid);
+                                setGiftStreamId(challengerStream.id);
+                            }}
+                            onGiftAll={(ids) => {
+                                setGiftRecipientId('ALL'); // TODO: Pass ids if needed
+                                setGiftStreamId(challengerStream.id);
+                            }}
                         />
+                        <GiftAnimationOverlay streamId={challengerStream.id} />
                         <RoomAudioRenderer />
                     </LiveKitRoom>
                  )}
@@ -278,12 +336,23 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
                         audio={isOpponentHost}
                         className="h-full"
                     >
+                        <BattleRoomSync isHost={isOpponentHost} />
                         <MuteHandler streamId={opponentStream.id} />
                         <BroadcastGrid 
-                            stream={opponentStream} 
+                            stream={{ ...opponentStream, box_count: 4 }} 
                             isHost={isOpponentHost} 
-                            maxItems={4} 
+                            maxItems={4}
+                            hideEmptySeats={true}
+                            onGift={(uid) => {
+                                setGiftRecipientId(uid);
+                                setGiftStreamId(opponentStream.id);
+                            }}
+                            onGiftAll={(ids) => {
+                                setGiftRecipientId('ALL');
+                                setGiftStreamId(opponentStream.id);
+                            }}
                         />
+                        <GiftAnimationOverlay streamId={opponentStream.id} />
                         <RoomAudioRenderer />
                     </LiveKitRoom>
                  )}
@@ -297,7 +366,7 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
         <div className="h-64 border-t border-zinc-800 flex bg-zinc-900">
              <div className="w-1/3 border-r border-zinc-800 p-4">
                  <h3 className="text-amber-500 font-bold mb-2">Battle Chat</h3>
-                 <BroadcastChat streamId={currentStreamId} isModerator={false} />
+                 <BroadcastChat streamId={currentStreamId} hostId={currentHostId || ""} isModerator={false} />
              </div>
              <div className="w-2/3 p-4">
                 {/* Controls for the host if I am one */}
@@ -314,6 +383,20 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
                 )}
              </div>
         </div>
+
+        {giftRecipientId && giftStreamId && (
+            <div className="fixed inset-0 z-[100]">
+                <GiftTray 
+                    recipientId={giftRecipientId}
+                    streamId={giftStreamId}
+                    battleId={battleId}
+                    onClose={() => {
+                        setGiftRecipientId(null);
+                        setGiftStreamId(null);
+                    }}
+                />
+            </div>
+        )}
     </div>
   );
 }

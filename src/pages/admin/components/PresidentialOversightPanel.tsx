@@ -189,14 +189,14 @@ export default function PresidentialOversightPanel() {
                         {auditLogs.map((log) => (
                             <div key={log.id} className="text-sm border-l-2 border-slate-700 pl-4 py-1">
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="font-bold text-slate-200">{log.action.replace(/_/g, ' ').toUpperCase()}</span>
+                                    <span className="font-bold text-slate-200">{log.action_type?.replace(/_/g, ' ').toUpperCase()}</span>
                                     <span className="text-xs text-slate-500">{format(new Date(log.created_at), 'MMM d, HH:mm')}</span>
                                 </div>
                                 <div className="text-slate-400 mb-1">
                                     by <span className="text-slate-300">{log.actor?.username || 'Unknown'}</span>
                                 </div>
                                 <div className="text-xs text-slate-500 font-mono bg-black/20 p-2 rounded">
-                                    {JSON.stringify(log.details, null, 2)}
+                                    {JSON.stringify(log.metadata, null, 2)}
                                 </div>
                             </div>
                         ))}

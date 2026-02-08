@@ -132,6 +132,12 @@ export default function PayoutRequest() {
           </div>
         )}
 
+        {creditUsed > 0 && (
+          <div className="rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-200 font-bold">
+             ⚠️ You cannot request a payout while you have an outstanding Credit Card balance ({creditUsed.toLocaleString()} coins). Please pay off your balance first.
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-semibold mb-2">
             Select a Cashout tier ({TIERS.map(t => (t.coins/1000).toFixed(1) + 'k').join(', ')})
@@ -159,7 +165,7 @@ export default function PayoutRequest() {
 
         <button
           onClick={submit}
-          disabled={loading || !coins || !TIERS.some(t => t.coins === Number(coins)) || Number(coins) > balance || !payoutWindowOpen}
+          disabled={loading || !coins || !TIERS.some(t => t.coins === Number(coins)) || Number(coins) > balance || !payoutWindowOpen || creditUsed > 0}
           className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? "Submitting..." : "Submit Payout Request"}

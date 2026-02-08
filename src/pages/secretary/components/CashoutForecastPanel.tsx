@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card.jsx';
 import { Button } from '../../../components/ui/button';
-import { AlertTriangle, Users, TrendingUp, RefreshCw } from 'lucide-react';
+import { TrendingUp, RefreshCw, Users, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CashoutForecast {
@@ -22,7 +22,7 @@ export default function CashoutForecastPanel() {
   const [loading, setLoading] = useState(false);
   const [projection, setProjection] = useState(100);
 
-  const fetchForecast = async () => {
+  const fetchForecast = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('get_cashout_forecast', {
@@ -37,7 +37,7 @@ export default function CashoutForecastPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projection]);
 
   const handleRefreshData = async () => {
     const toastId = toast.loading('Refreshing earnings data...');
@@ -48,14 +48,14 @@ export default function CashoutForecastPanel() {
         }
         await fetchForecast();
         toast.success('Data refreshed', { id: toastId });
-    } catch (err) {
+    } catch {
         toast.error('Refresh failed', { id: toastId });
     }
   };
 
   useEffect(() => {
     fetchForecast();
-  }, [projection]);
+  }, [fetchForecast]);
 
   if (!stats) return <div className="p-8 text-center text-slate-500">Loading forecast...</div>;
 

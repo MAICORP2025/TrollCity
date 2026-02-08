@@ -6,34 +6,15 @@ import { useBank } from '@/lib/hooks/useBank'
 import { useCoins } from '@/lib/hooks/useCoins'
 import { toast } from 'sonner'
 import { Coins, CreditCard, Landmark, History, AlertCircle, CheckCircle, Lock } from 'lucide-react'
-
-// Interfaces are now handled by useBank hook, but we keep local usage aligned
+import { trollCityTheme } from '@/styles/trollCityTheme'
 
 export default function TrollBank() {
   const { profile } = useAuthStore()
   const { balances, refreshCoins } = useCoins()
-  const { loans, ledger, tiers, refresh, applyForLoan, payLoan } = useBank()
+  const { loans, ledger, tiers, refresh, applyForLoan, payLoan, payCreditCard, creditInfo } = useBank()
   const activeLoan = loans && loans.length > 0 ? loans[0] : null
   
   const [bankBalance, setBankBalance] = useState<number | null>(null)
-  const [creditScore, setCreditScore] = useState<number | null>(null)
-  
-  // Fetch Credit Score
-  useEffect(() => {
-    const fetchCredit = async () => {
-      if (!profile?.id) return
-      const { data } = await supabase
-        .from('user_credit')
-        .select('score')
-        .eq('user_id', profile.id)
-        .single()
-      
-      if (data) {
-        setCreditScore(data.score)
-      }
-    }
-    fetchCredit()
-  }, [profile?.id])
   
   // Fetch and Subscribe to Bank Reserves
   useEffect(() => {
@@ -64,13 +45,15 @@ export default function TrollBank() {
     }
   }, [])
 
-  const [applying, setApplying] = useState(false)
-  const [requestedAmount, setRequestedAmount] = useState(100)
   const [payAmount, setPayAmount] = useState<string>('')
   const [paying, setPaying] = useState(false)
+  
+  // Legacy Loan Payment
+  const [legacyPayAmount, setLegacyPayAmount] = useState<string>('')
+  const [legacyPaying, setLegacyPaying] = useState(false)
 
-  const handlePayLoan = async () => {
-    if (!activeLoan || !payAmount) return
+  const handlePayCredit = async () => {
+    if (!payAmount) return
     const amount = parseInt(payAmount)
     if (isNaN(amount) || amount <= 0) {
       toast.error('Invalid amount')
@@ -78,97 +61,32 @@ export default function TrollBank() {
     }
     
     setPaying(true)
-    const result = await payLoan(activeLoan.id, amount)
+    const result = await payCreditCard(amount)
     setPaying(false)
     
     if (result.success) {
       setPayAmount('')
-      refreshCoins() // Update user coin balance in UI
+      refreshCoins() 
     }
   }
-  
-  // Eligibility State
-  const [eligibility, setEligibility] = useState<{
-    canApply: boolean
-    reasons: string[]
-    maxAmount: number
-  }>({ canApply: false, reasons: [], maxAmount: 0 })
 
-  useEffect(() => {
-    if (profile?.id) {
-      refresh()
-    }
-  }, [profile?.id, refresh])
-
-  // Re-check eligibility whenever data changes
-  useEffect(() => {
-    const checkEligibility = (currentLoan: any, currentLedger: any[], bankTiers: any[]) => {
-      const reasons: string[] = []
-      let canApply = true
-
-      if (currentLoan) {
-        reasons.push('You already have an active loan.')
-        canApply = false
-      }
-
-      // Elite Credit Override
-      if (creditScore && creditScore > 650) {
-        setEligibility({ 
-            canApply: canApply, // Still respects active loan check
-            reasons, 
-            maxAmount: 500000 
-        })
-        return
-      }
-
-      // Calculate account age
-      const created = new Date(profile?.created_at || Date.now())
-      const diffTime = Math.abs(Date.now() - created.getTime())
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
-
-      // Find eligible tier
-      const sortedTiers = [...(bankTiers || [])].sort((a, b) => b.min_tenure_days - a.min_tenure_days)
-      const eligibleTier = sortedTiers.find(t => diffDays >= t.min_tenure_days)
-
-      if (!eligibleTier) {
-        // Fallback if no tiers loaded yet (or 0-day tier missing)
-        if (bankTiers.length > 0) {
-           reasons.push(`Account too new for any loan tier.`)
-           canApply = false
-        }
-      }
-
-      const maxAmount = eligibleTier ? eligibleTier.max_loan_coins : 0
-      
-      setEligibility({ canApply: canApply && maxAmount > 0, reasons, maxAmount })
-    }
-
-    checkEligibility(activeLoan, ledger || [], tiers || [])
-  }, [activeLoan, ledger, tiers, profile?.created_at, creditScore])
-
-  const handleApply = async () => {
-    if (!eligibility.canApply) return
-    if (requestedAmount > eligibility.maxAmount) {
-        toast.error(`Maximum loan amount for your tier is ${eligibility.maxAmount} coins.`)
-        return
+  const handlePayLegacyLoan = async () => {
+    if (!activeLoan || !legacyPayAmount) return
+    const amount = parseInt(legacyPayAmount)
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Invalid amount')
+      return
     }
     
-    setApplying(true)
-    try {
-      const { success } = await applyForLoan(requestedAmount)
-
-      if (success) {
-        // toast handled by hook
-        await refreshCoins()
-        setRequestedAmount(100)
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to apply for loan.')
-    } finally {
-      setApplying(false)
+    setLegacyPaying(true)
+    const result = await payLoan(activeLoan.id, amount)
+    setLegacyPaying(false)
+    
+    if (result.success) {
+      setLegacyPayAmount('')
+      refreshCoins()
     }
   }
-
 
   return (
     <div className={`min-h-screen ${trollCityTheme.backgrounds.primary} text-white p-6 pb-24`}>
@@ -183,7 +101,7 @@ export default function TrollBank() {
             <h1 className={`text-3xl font-bold ${trollCityTheme.text.heading}`}>
               Troll Bank
             </h1>
-            <p className={trollCityTheme.text.secondary}>Secure Coin Storage & Lending Services</p>
+            <p className={trollCityTheme.text.secondary}>Secure Coin Storage & Credit Services</p>
           </div>
         </div>
 
@@ -227,22 +145,22 @@ export default function TrollBank() {
             </div>
           </div>
 
-          {/* Loan Status */}
+          {/* Credit Card Status */}
           <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6 relative overflow-hidden`}>
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <CreditCard className="w-32 h-32" />
             </div>
             <div className="relative z-10">
-              <p className={`${trollCityTheme.text.secondary} text-sm font-medium mb-1`}>Active Loan</p>
-              {activeLoan ? (
+              <p className={`${trollCityTheme.text.secondary} text-sm font-medium mb-1`}>Credit Card Debt</p>
+              {creditInfo.used > 0 ? (
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-red-400">{activeLoan.balance.toLocaleString()}</span>
+                    <span className="text-4xl font-bold text-red-400">{creditInfo.used.toLocaleString()}</span>
                     <span className="text-sm text-red-400/70">due</span>
                   </div>
                   <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                     <p className="text-xs text-red-200">
-                      <strong>Auto-Repayment Active:</strong> 50% of all incoming purchased coins will be automatically deducted to repay this loan.
+                      <strong>Warning:</strong> You cannot request cashouts while you have outstanding credit debt.
                     </p>
                   </div>
                 </div>
@@ -258,19 +176,30 @@ export default function TrollBank() {
           </div>
         </div>
 
-        {/* Loan Application / Management */}
+        {/* Credit Card Management */}
         <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6`}>
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-purple-400" />
-            Loan Services
+            Credit Card Management
           </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+             <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                 <p className="text-sm text-purple-300 mb-1">Total Credit Limit</p>
+                 <p className="text-2xl font-bold text-white">{creditInfo.limit.toLocaleString()}</p>
+             </div>
+             <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                 <p className="text-sm text-blue-300 mb-1">Available to Spend</p>
+                 <p className="text-2xl font-bold text-white">{creditInfo.available.toLocaleString()}</p>
+             </div>
+          </div>
           
-          {activeLoan ? (
+          {creditInfo.used > 0 && (
             <div className="space-y-4">
               <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                <h3 className="font-semibold text-emerald-400 mb-2">Manual Repayment</h3>
+                <h3 className="font-semibold text-emerald-400 mb-2">Pay Credit Card Bill</h3>
                 <p className={`text-sm ${trollCityTheme.text.secondary} mb-4`}>
-                  Pay off your loan manually. Fully paying off a loan increases your credit score by 5% of the loan amount!
+                   Pay down your balance to unlock cashouts and restore your spending limit.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -281,188 +210,98 @@ export default function TrollBank() {
                     className={`${trollCityTheme.components.input} flex-1`}
                   />
                   <button
-                    onClick={handlePayLoan}
+                    onClick={handlePayCredit}
                     disabled={paying || !payAmount}
                     className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold transition-colors"
                   >
-                    {paying ? 'Paying...' : 'Pay'}
+                    {paying ? 'Paying...' : 'Pay Bill'}
                   </button>
                   <button
-                    onClick={() => setPayAmount(activeLoan.balance.toString())}
+                    onClick={() => setPayAmount(creditInfo.used.toString())}
                     className={`${trollCityTheme.buttons.secondary} px-3 py-2 rounded-lg font-medium transition-colors`}
                   >
-                    Max
+                    Full Balance
                   </button>
-                </div>
-              </div>
-
-              <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-blue-400">Repayment Information</h3>
-                  <p className={`text-sm ${trollCityTheme.text.secondary} mt-1`}>
-                    Loans are repaid automatically when you purchase or receive paid coins. 
-                    There is no interest if paid within 30 days (currently indefinite).
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                  <h3 className="font-semibold text-white mb-2">Apply for a Loan</h3>
-                  <p className={`text-sm ${trollCityTheme.text.muted} mb-4`}>
-                    Get coins instantly and pay them back later automatically.
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className={`block text-xs font-medium ${trollCityTheme.text.muted} mb-1`}>
-                        Amount (Coins) - Max: {eligibility.maxAmount}
-                      </label>
-                      <input 
-                        type="number"
-                        value={requestedAmount}
-                        onChange={(e) => setRequestedAmount(Number(e.target.value))}
-                        className={`${trollCityTheme.components.input}`}
-                        min={100}
-                        max={eligibility.maxAmount || 100}
-                      />
-                    </div>
-                    
-                    <button
-                      onClick={handleApply}
-                      disabled={!eligibility.canApply || applying}
-                      className={`w-full ${trollCityTheme.components.buttonPrimary}`}
-                    >
-                      {applying ? 'Processing...' : 'Apply for Loan'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className={`${trollCityTheme.backgrounds.glass} rounded-xl p-4`}>
-                  <h3 className="font-semibold text-white mb-3">Eligibility Requirements</h3>
-                  <ul className="space-y-2">
-                    <Requirement 
-                      label="No active loans" 
-                      met={!activeLoan} 
-                    />
-                    
-                    {creditScore && creditScore > 650 ? (
-                         <Requirement 
-                            label="Elite Credit Status (> 650)" 
-                            met={true} 
-                            note="(Instant Approval up to 500,000)"
-                        />
-                    ) : (
-                        <Requirement 
-                          label="Account age check" 
-                          met={eligibility.maxAmount > 0} 
-                          note={`(Limit: ${eligibility.maxAmount})`}
-                        />
-                    )}
-
-                    {creditScore !== null && (
-                      <li className="flex items-center gap-2 text-sm">
-                        <span className="text-cyan-400">Credit Score:</span>
-                        <span className="font-semibold">{creditScore}</span>
-                      </li>
-                    )}
-
-                    {profile?.created_at && (
-                      <li className="flex items-center gap-2 text-sm">
-                        <span className="text-cyan-400">Account Age:</span>
-                        <span className="font-semibold">
-                          {Math.ceil(Math.abs(Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))} days
-                        </span>
-                      </li>
-                    )}
-                    {/* Removed explicit spend check from UI as it's now implicit or removed */}
-                  </ul>
-                  
-                  {eligibility.reasons.length > 0 && (
-                    <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                      <p className="text-xs text-red-300 font-semibold mb-1">Why you can&apos;t apply:</p>
-                      <ul className="list-disc list-inside text-xs text-red-200/80">
-                        {eligibility.reasons.map((r, i) => <li key={i}>{r}</li>)}
-                      </ul>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
           )}
+
+          <div className="mt-6 p-4 bg-gray-800/50 rounded-xl">
+             <h3 className="text-sm font-semibold text-gray-300 mb-2">Credit Card Terms</h3>
+             <ul className="text-sm text-gray-400 space-y-1 list-disc pl-4">
+                 <li><strong>Usage:</strong> Valid for Coin Store items and KT Auto vehicles.</li>
+                 <li><strong>Restrictions:</strong> Cannot be used for P2P transfers, gifts, or rent.</li>
+                 <li><strong>Fees:</strong> Flat 8% finance fee added to every transaction.</li>
+                 <li><strong>Cashouts:</strong> Blocked until debt is fully paid.</li>
+             </ul>
+          </div>
         </div>
 
-        {/* Ledger / History */}
-        <div className={`${trollCityTheme.components.card}`}>
+        {/* Legacy Loan Section (Only visible if active) */}
+        {activeLoan && (
+            <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6 border-red-500/30`}>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-red-400">
+                <AlertCircle className="w-5 h-5" />
+                Legacy Loan (Outstanding)
+            </h2>
+            <p className="text-sm text-gray-400 mb-4">You have an outstanding loan from the old system. Please pay this off.</p>
+            
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <div className="flex justify-between items-center mb-4">
+                    <span className="text-red-300">Amount Due</span>
+                    <span className="text-xl font-bold text-red-400">{activeLoan.balance.toLocaleString()}</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={legacyPayAmount}
+                    onChange={(e) => setLegacyPayAmount(e.target.value)}
+                    placeholder="Amount to pay"
+                    className={`${trollCityTheme.components.input} flex-1`}
+                  />
+                  <button
+                    onClick={handlePayLegacyLoan}
+                    disabled={legacyPaying || !legacyPayAmount}
+                    className="bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    {legacyPaying ? 'Paying...' : 'Pay Legacy Loan'}
+                  </button>
+                </div>
+            </div>
+            </div>
+        )}
+
+        {/* Ledger */}
+        <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6`}>
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <History className="w-5 h-5 text-gray-400" />
-            Recent Transactions
+            <History className="w-5 h-5 text-blue-400" />
+            Recent Activity
           </h2>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-xs text-gray-500 border-b border-white/5">
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Type</th>
-                  <th className="py-3 px-4">Source</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {ledger.map((entry) => (
-                  <tr key={entry.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="py-3 px-4 text-gray-400">
-                      {new Date(entry.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        entry.bucket === 'repayment' ? 'bg-red-500/20 text-red-300' :
-                        entry.bucket === 'loan' ? 'bg-purple-500/20 text-purple-300' :
-                        'bg-gray-500/20 text-gray-300'
-                      }`}>
-                        {entry.bucket.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-400">{entry.source}</td>
-                    <td className={`py-3 px-4 text-right font-mono font-medium ${
-                      entry.delta > 0 ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      {entry.delta > 0 ? '+' : ''}{entry.delta}
-                    </td>
-                  </tr>
-                ))}
-                {ledger.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-gray-500">
-                      No transactions found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {ledger.map((entry) => (
+              <div 
+                key={entry.id} 
+                className={`flex justify-between items-center p-3 rounded-lg ${trollCityTheme.backgrounds.input} border border-white/5`}
+              >
+                <div>
+                  <p className="font-medium text-white">{entry.description}</p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(entry.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className={`font-bold ${entry.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {entry.amount > 0 ? '+' : ''}{entry.amount.toLocaleString()}
+                </div>
+              </div>
+            ))}
+            {ledger.length === 0 && (
+              <p className="text-center text-gray-500 py-4">No recent activity</p>
+            )}
           </div>
         </div>
 
       </div>
     </div>
-  )
-}
-
-function Requirement({ label, met, note }: { label: string, met: boolean, note?: string }) {
-  return (
-    <li className="flex items-center gap-2 text-sm">
-      {met ? (
-        <CheckCircle className="w-4 h-4 text-green-500" />
-      ) : (
-        <div className="w-4 h-4 rounded-full border border-gray-600" />
-      )}
-      <span className={met ? 'text-gray-200' : 'text-gray-500'}>
-        {label} {note && <span className="text-xs opacity-50">{note}</span>}
-      </span>
-    </li>
   )
 }

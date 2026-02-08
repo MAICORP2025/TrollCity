@@ -235,11 +235,6 @@ async function startEgress(roomId: string, supabaseClient?: any) {
             egress_id: info.egressId,
             hls_started_at: new Date().toISOString()
         }).eq('id', roomId),
-        sb.from('pod_rooms').update({ 
-            hls_url: hlsUrl,
-            egress_id: info.egressId,
-            hls_started_at: new Date().toISOString()
-        }).eq('id', roomId),
         sb.from('court_sessions').update({ 
             hls_url: hlsUrl,
             egress_id: info.egressId,

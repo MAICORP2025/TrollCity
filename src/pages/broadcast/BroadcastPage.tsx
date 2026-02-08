@@ -19,12 +19,93 @@ import { toast } from 'sonner';
 import { useStreamSeats, SeatSession } from '../../hooks/useStreamSeats';
 import { useStreamEndListener } from '../../hooks/useStreamEndListener';
 import HLSPlayer from '../../components/broadcast/HLSPlayer';
+import BattleView from '../../components/broadcast/BattleView';
 import BattleControlsList from '../../components/broadcast/BattleControlsList';
-import { PreflightStore } from '../../lib/preflightStore';
 import PreflightPublisher from '../../components/broadcast/PreflightPublisher';
+import { PreflightStore } from '../../lib/preflightStore';
+import { MobileErrorLogger } from '../../lib/MobileErrorLogger';
 
 import BroadcastHeader from '../../components/broadcast/BroadcastHeader';
 import BroadcastEffectsLayer from '../../components/broadcast/BroadcastEffectsLayer';
+import ErrorBoundary from '../../components/ErrorBoundary';
+
+// Helper component to sync Room state with Mode (force publish/unpublish)
+const RoomStateSync = ({ mode, isHost }: { mode: 'stage' | 'viewer'; isHost: boolean }) => {
+    const { localParticipant } = useLocalParticipant();
+    
+    useEffect(() => {
+        if (!localParticipant) return;
+
+        const syncState = async () => {
+            try {
+                if (mode === 'stage') {
+                    // Force enable media when joining stage to ensure visibility
+                    // This fixes the "invisible guest" issue where tracks might not start automatically
+                    
+                    // Ensure track is published if not already
+                    const tracks = localParticipant.tracks;
+                    if (tracks) {
+                        for (const pub of tracks.values()) {
+                            if (pub.track?.kind === 'video' && pub.isMuted) {
+                                await pub.track.unmute();
+                            }
+                            if (pub.track?.kind === 'audio' && pub.isMuted) {
+                                await pub.track.unmute();
+                            }
+                        }
+                    }
+
+                    if (!localParticipant.isCameraEnabled) {
+                        console.log('[RoomStateSync] Joining stage: Enabling Camera');
+                        try {
+                            await localParticipant.setCameraEnabled(true);
+                        } catch (e) {
+                            console.warn('[RoomStateSync] Failed to enable camera (likely not connected yet):', e);
+                        }
+                    }
+                    if (!localParticipant.isMicrophoneEnabled) {
+                        console.log('[RoomStateSync] Joining stage: Enabling Mic');
+                        try {
+                            await localParticipant.setMicrophoneEnabled(true);
+                        } catch (e) {
+                            console.warn('[RoomStateSync] Failed to enable mic (likely not connected yet):', e);
+                        }
+                    }
+                } else {
+                    // We are a viewer. Force unpublish.
+                    // STRICT RULE: Downgrade role and stop all streams
+                    console.log('[RoomStateSync] Downgrading to viewer: Stopping all tracks');
+                    
+                    const tracks = localParticipant.tracks;
+                    if (tracks) {
+                        for (const pub of tracks.values()) {
+                            if (pub.track) {
+                                try {
+                                    await localParticipant.unpublishTrack(pub.track);
+                                } catch (e) {
+                                    console.warn('[RoomStateSync] Error unpublishing track:', e);
+                                }
+                            }
+                        }
+                    }
+
+                    if (localParticipant.isMicrophoneEnabled) {
+                        await localParticipant.setMicrophoneEnabled(false);
+                    }
+                    if (localParticipant.isCameraEnabled) {
+                        await localParticipant.setCameraEnabled(false);
+                    }
+                }
+            } catch (error) {
+                console.error('[RoomStateSync] Error syncing state:', error);
+            }
+        };
+
+        syncState();
+    }, [mode, localParticipant]);
+
+    return null;
+};
 
 // Guest Limit Overlay Component
 const GuestLimitOverlay = () => (
@@ -134,13 +215,13 @@ const MobileStageInner = ({
 };
 
 // Helper component to enforce viewer limits
-const BroadcastLimitEnforcer = ({ isHost, mode }: { isHost: boolean, mode: string }) => {
+const BroadcastLimitEnforcer = ({ isHost, mode, isStaff }: { isHost: boolean, mode: string, isStaff: boolean }) => {
     const participants = useParticipants();
     const navigate = useNavigate();
 
     useEffect(() => {
-        // If I am a host or on stage, limit doesn't apply to me in the same way (or handled elsewhere)
-        if (isHost || mode === 'stage') return;
+        // If I am a host, on stage, OR STAFF, limit doesn't apply
+        if (isHost || mode === 'stage' || isStaff) return;
 
         // Filter for viewers (those who cannot publish)
         const viewers = participants.filter(p => !p.permissions?.canPublish);
@@ -170,6 +251,11 @@ const BroadcastLimitEnforcer = ({ isHost, mode }: { isHost: boolean, mode: strin
 
 export default function BroadcastPage() {
   const { id } = useParams<{ id: string }>();
+  
+  // (Old ID Resolution removed - user wants to revert to direct ID)
+  // const [resolvedId, setResolvedId] = useState<string | null>(null); 
+  // ...
+
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
@@ -179,8 +265,14 @@ export default function BroadcastPage() {
   const fromExplore = location.state?.fromExplore;
 
   // Guest Identity (Persistent for session)
-  const [guestId] = useState(() => `guest-${Math.random().toString(36).substr(2, 9)}`);
+  const [guestId] = useState(() => {
+    // Generate TC-XXXX random username (not real names)
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    return `TC-${randomSuffix}`;
+  });
   const effectiveUserId = user?.id || guestId;
+  const guestUserObj = React.useMemo(() => (!user ? { id: guestId, username: guestId } : null), [user, guestId]);
+
   const [guestTimeLeft, setGuestTimeLeft] = useState<number | null>(null);
   const [hostTimeLimit, setHostTimeLimit] = useState(3600000); // Default 1 hour
 
@@ -193,11 +285,14 @@ export default function BroadcastPage() {
         
         // 1. Strict Entry Check
         // Allow if: From Explore OR Already in active session (refresh) OR Already used preview (will show expired)
+        // RELAXED: Allow direct entry for guests (deep linking support)
+        /* 
         if (!fromExplore && !sessionActive && !startStr) {
              toast.error("Please discover streams via the Explore Feed");
              navigate('/explore');
              return;
         }
+        */
 
         // Mark session active
         sessionStorage.setItem(`guest_session_${id}`, 'true');
@@ -233,8 +328,8 @@ export default function BroadcastPage() {
                     // Expired
                     if (next <= 0) {
                         clearInterval(timer);
-                        // Redirect Logic
-                        navigate(`/?signup=true&next=/watch/${id}`);
+                        // Redirect Logic removed - Show Overlay instead
+                        // navigate(`/?signup=true&next=/watch/${id}`);
                         return 0;
                     }
                     return next;
@@ -243,7 +338,7 @@ export default function BroadcastPage() {
             return () => clearInterval(timer);
         } else {
              // Already expired on load
-             navigate(`/?signup=true&next=/watch/${id}`);
+             // navigate(`/?signup=true&next=/watch/${id}`);
         }
     }
   }, [isGuest, id, fromExplore, navigate]);
@@ -277,7 +372,7 @@ export default function BroadcastPage() {
   const isHost = stream?.user_id === user?.id;
   
   // Seat System Hook
-  const { seats, mySession, joinSeat, leaveSeat, kickParticipant } = useStreamSeats(id);
+  const { seats, mySession, joinSeat, leaveSeat, kickParticipant } = useStreamSeats(id, effectiveUserId, broadcasterProfile);
 
   // Mode Determination
   // 'stage' = Active Participant (Host or Guest on Seat) -> Publishes Audio/Video
@@ -326,8 +421,8 @@ export default function BroadcastPage() {
     isHost,
     userId: effectiveUserId,
     roomName: id,
-    // ALWAYS request publish permissions to allow instant seat joining without token refresh
-    canPublish: true, 
+    // Only request publish permissions if on stage (Host or Active Seat)
+    canPublish: mode === 'stage',
     enabled: !!stream,
     isGuest
   });
@@ -368,7 +463,7 @@ export default function BroadcastPage() {
   }, [token]);
 
   // Viewer Tracking
-  const { viewerCount } = useViewerTracking(id || '', isHost);
+  const { viewerCount } = useViewerTracking(id || '', isHost, guestUserObj);
 
   // Gift Tray State
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
@@ -430,6 +525,33 @@ export default function BroadcastPage() {
         supabase.removeChannel(channel);
     };
   }, [id]);
+
+  // Host Balance Updater (Realtime)
+  useEffect(() => {
+    if (!id || !isHost || !user) return;
+
+    const channel = supabase.channel(`stream_events_${id}_host_balance`)
+        .on(
+            'broadcast',
+            { event: 'gift_sent' },
+            (payload) => {
+                const { receiver_id, gift_price } = payload.payload;
+                if (receiver_id === user.id && gift_price) {
+                        const currentProfile = useAuthStore.getState().profile;
+                        if (currentProfile) {
+                            coinOptimizer.updateOptimisticBalance(user.id, {
+                                troll_coins: (currentProfile.troll_coins || 0) + gift_price
+                            });
+                        }
+                }
+            }
+        )
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, [id, isHost, user]);
 
   // Handle Kick / Lawsuit
   useEffect(() => {
@@ -532,7 +654,36 @@ export default function BroadcastPage() {
   }
 
   if (!stream) {
-      return <div className="text-white text-center mt-20">Stream not found</div>;
+      const isUsername = !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paramId || '');
+      return (
+          <div className="h-screen w-full flex flex-col items-center justify-center bg-black text-white">
+            <h2 className="text-2xl font-bold mb-2">
+                {isUsername ? `${paramId} is offline` : 'Stream not found'}
+            </h2>
+            <button 
+                onClick={() => navigate('/')}
+                className="mt-4 px-6 py-2 bg-zinc-800 rounded hover:bg-zinc-700"
+            >
+                Back to Home
+            </button>
+          </div>
+      );
+  }
+
+  const handleShare = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+        toast.success('Broadcast link copied!');
+    }).catch(() => {
+        toast.error('Failed to copy link');
+    });
+  };
+
+  // 4. Battle Mode Transition
+  // If the stream is in a battle, render the BattleView immediately.
+  // This solves the "Battle system hangs" issue by ensuring we switch views when battle_id is present.
+  if (stream.battle_id) {
+      return <BattleView battleId={stream.battle_id} currentStreamId={id || ''} />;
   }
 
   // Viewer Limit Check
@@ -583,6 +734,7 @@ export default function BroadcastPage() {
                     onLeave={() => {}}
                     onJoinSeat={handleJoinRequest}
                     hostGlowingColor={broadcasterProfile?.glowing_username_color}
+                    onShare={handleShare}
                 >
                     <HLSPlayer 
                         src={stream.hls_path || stream.hls_url || stream.id}
@@ -645,6 +797,7 @@ export default function BroadcastPage() {
                 audio={!preflightStream}
                 className="h-full w-full"
             >
+                <RoomStateSync mode={mode} isHost={isHost} />
                 {preflightStream && (
                     <PreflightPublisher 
                         stream={preflightStream} 
@@ -707,7 +860,12 @@ export default function BroadcastPage() {
     <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
         
         {/* Main Stage / Video Area */}
-        <div className="flex-1 relative flex flex-col bg-zinc-900">
+        <div 
+            className="flex-1 relative flex flex-col bg-zinc-900 bg-cover bg-center bg-no-repeat transition-all duration-500"
+            style={{ 
+                backgroundImage: stream?.active_theme_url ? `url(${stream.active_theme_url})` : undefined 
+            }}
+        >
             
             {isStreamOffline ? (
                 <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 text-white z-0">
@@ -750,9 +908,15 @@ export default function BroadcastPage() {
                     connect={true}
                     video={mode === 'stage'}
                     audio={mode === 'stage'}
-                    className="flex-1 relative"
-                >
-                    <BroadcastLimitEnforcer isHost={isHost} mode={mode} />
+                className="flex-1 relative"
+            >
+                <RoomStateSync mode={mode} isHost={isHost} />
+                <BroadcastLimitEnforcer 
+                    isHost={isHost} 
+                    mode={mode} 
+                    isStaff={isStaffMember(profile)} 
+                    profileLoading={!!user && !profile}
+                />
                     
                     {/* Guest Preview Timer UI */}
                     {guestTimeLeft !== null && guestTimeLeft > 0 && !user && (
@@ -774,17 +938,19 @@ export default function BroadcastPage() {
                         liveViewerCount={viewerCount}
                     />
                     <BroadcastEffectsLayer streamId={stream.id} />
-                    <BroadcastGrid
-                        stream={stream}
-                        isHost={isHost}
-                        mode="stage" // Always render as stage (WebRTC)
-                        seats={seats}
-                        onGift={(uid) => setGiftRecipientId(uid)}
-                        onGiftAll={() => setGiftRecipientId('ALL')}
-                        onJoinSeat={handleJoinRequest} 
-                        onKick={kickParticipant}
-                        broadcasterProfile={broadcasterProfile}
-                    />
+                    <ErrorBoundary>
+                        <BroadcastGrid
+                            stream={stream}
+                            isHost={isHost}
+                            mode="stage" // Always render as stage (WebRTC)
+                            seats={seats}
+                            onGift={(uid) => setGiftRecipientId(uid)}
+                            onGiftAll={() => setGiftRecipientId('ALL')}
+                            onJoinSeat={handleJoinRequest} 
+                            onKick={kickParticipant}
+                            broadcasterProfile={broadcasterProfile}
+                        />
+                    </ErrorBoundary>
                     
                     {/* Controls Overlay - Visible to everyone (with different options) */}
                     <div className="absolute bottom-4 left-0 right-0 flex justify-center z-50 pointer-events-none">
@@ -797,6 +963,7 @@ export default function BroadcastPage() {
                                 toggleChat={() => {}}
                                 onGiftHost={() => setGiftRecipientId(stream.user_id)}
                                 onLeave={isHost ? undefined : handleLeave}
+                                onShare={handleShare}
                             />
                         </div>
                     </div>
@@ -804,6 +971,19 @@ export default function BroadcastPage() {
                     <RoomAudioRenderer />
                     <StartAudio label="Click to allow audio" />
                 </LiveKitRoom>
+            )}
+            
+            {/* Battle Manager Modal (Desktop) */}
+            {showBattleManager && (
+                <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 shadow-2xl w-full max-w-lg relative">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-white text-lg">Challenge Streamers</h3>
+                            <button onClick={() => setShowBattleManager(false)} className="text-sm text-zinc-400 hover:text-white">Close</button>
+                        </div>
+                        <BattleControlsList currentStream={stream} />
+                    </div>
+                </div>
             )}
             
             {/* Gift Tray (Global) */}
@@ -820,14 +1000,27 @@ export default function BroadcastPage() {
 
         {/* Sidebar: Chat & Leaderboard */}
         <div className="w-80 md:w-96 flex flex-col border-l border-white/10 bg-zinc-950/90 backdrop-blur-md z-40">
-            <BroadcastChat 
-                streamId={stream.id} 
-                hostId={stream.user_id}
-                isHost={isHost} 
-                isViewer={mode === 'viewer'}
-                isModerator={false} // TODO: Add mod logic
-                isGuest={!user}
-            />
+            <ErrorBoundary fallback={
+                <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                    <p className="text-red-400 font-bold mb-2">Chat Crashed</p>
+                    <p className="text-xs text-zinc-400 mb-4">You can still end the stream.</p>
+                    <button 
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 bg-zinc-800 rounded hover:bg-zinc-700 text-xs transition-colors"
+                    >
+                        Reload Page
+                    </button>
+                </div>
+            }>
+                <BroadcastChat 
+                    streamId={stream.id} 
+                    hostId={stream.user_id}
+                    isHost={isHost} 
+                    isViewer={mode === 'viewer'}
+                    isModerator={false} // TODO: Add mod logic
+                    isGuest={!user}
+                />
+            </ErrorBoundary>
         </div>
 
     </div>

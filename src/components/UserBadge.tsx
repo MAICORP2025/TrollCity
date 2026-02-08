@@ -28,14 +28,15 @@ export default function UserBadge({ profile }: UserBadgeProps) {
 
     // Determine roles
     const isAdmin = profile.is_admin || profile.role === 'admin'
-    const isOfficer = !isAdmin && (
+    const isTempAdmin = profile.role === 'temp_city_admin'
+    const isOfficer = !isAdmin && !isTempAdmin && (
         profile.is_troll_officer || 
         profile.role === 'troll_officer'
     )
-    const isSecretary = !isAdmin && !isOfficer && (
+    const isSecretary = !isAdmin && !isTempAdmin && !isOfficer && (
         profile.role === 'secretary'
     )
-    const isTroller = !isAdmin && !isOfficer && !isSecretary && (
+    const isTroller = !isAdmin && !isTempAdmin && !isOfficer && !isSecretary && (
         profile.is_troller || 
         profile.role === 'troller'
     )
@@ -52,8 +53,8 @@ export default function UserBadge({ profile }: UserBadgeProps) {
     return (
         <span className="inline-flex items-center gap-1 align-middle">
             {/* Admin Badge */}
-            {isAdmin && (
-                <span className="inline-flex items-center justify-center w-5 h-5 bg-red-500/20 text-red-500 rounded border border-red-500/30" title="Admin">
+            {(isAdmin || isTempAdmin) && (
+                <span className="inline-flex items-center justify-center w-5 h-5 bg-red-500/20 text-red-500 rounded border border-red-500/30" title={isTempAdmin ? "City Admin (Temporary)" : "Admin"}>
                     <Shield size={12} fill="currentColor" />
                 </span>
             )}

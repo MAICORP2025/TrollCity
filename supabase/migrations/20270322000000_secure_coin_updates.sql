@@ -60,7 +60,10 @@ BEGIN
     IF TG_TABLE_NAME = 'streams' THEN
         -- Prevent faking live status
         IF NEW.is_live IS DISTINCT FROM OLD.is_live THEN
-            RAISE EXCEPTION 'Cannot update restricted column: is_live';
+            -- Allow ending stream (true -> false), but prevent starting manually (false -> true)
+            IF NEW.is_live = true THEN
+                RAISE EXCEPTION 'Cannot update restricted column: is_live. Use the broadcast setup flow.';
+            END IF;
         END IF;
         IF NEW.status IS DISTINCT FROM OLD.status THEN
              IF NEW.status = 'live' AND OLD.status != 'live' THEN
@@ -290,6 +293,7 @@ END;
 $$;
 
 -- 5. Update deduct_user_coins (Punishment function)
+DROP FUNCTION IF EXISTS deduct_user_coins(uuid, bigint, text, uuid, text);
 CREATE OR REPLACE FUNCTION deduct_user_coins(
   p_user_id UUID,
   p_amount BIGINT,

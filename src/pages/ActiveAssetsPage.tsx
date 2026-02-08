@@ -30,10 +30,10 @@ interface House {
 interface CarAsset {
   id: string;
   name: string;
-  tier: number;
+  tier: string;
   base_price: number;
   condition: number;
-  status: 'active' | 'unregistered' | 'insured' | 'uninsured' | 'impounded' | 'auctioned';
+  status: string;
   insurance_rate_bps: number;
   plate_number: string;
   plate_status: string;
@@ -81,33 +81,51 @@ export default function ActiveAssetsPage() {
       }));
       setHouses(formattedHouses);
 
-      // Fetch Cars
+      // Fetch Cars (TMV System)
       const { data: carsData, error: carsError } = await supabase
-        .from('user_cars')
+        .from('user_vehicles')
         .select(`
-          id, condition, status, plate_number, plate_status,
-          cars_catalog (
-            name, tier, base_price, insurance_rate_bps, image_url, exposure_level
+          id, condition, purchased_at,
+          vehicles_catalog (
+            name, tier, price, image, speed, armor
+          ),
+          vehicle_registrations (
+             plate_number, status
+          ),
+          vehicle_insurance_policies (
+             status, premium_amount
           )
         `)
-        .eq('user_id', user.id)
-        .not('car_catalog_id', 'is', null); // Only fetch migrated cars
+        .eq('user_id', user.id);
 
       if (carsError) throw carsError;
 
-      const formattedCars = carsData.map((c: any) => ({
-        id: c.id,
-        name: c.cars_catalog.name,
-        tier: c.cars_catalog.tier,
-        base_price: c.cars_catalog.base_price,
-        insurance_rate_bps: c.cars_catalog.insurance_rate_bps,
-        image_url: c.cars_catalog.image_url,
-        exposure_level: c.cars_catalog.exposure_level,
-        condition: c.condition,
-        status: c.status,
-        plate_number: c.plate_number,
-        plate_status: c.plate_status,
-      }));
+      const formattedCars = carsData.map((c: any) => {
+        // Handle array responses for joined tables
+        const registration = Array.isArray(c.vehicle_registrations) ? c.vehicle_registrations[0] : c.vehicle_registrations;
+        const insurance = Array.isArray(c.vehicle_insurance_policies) ? c.vehicle_insurance_policies[0] : c.vehicle_insurance_policies;
+        
+        // Estimate insurance rate bps if not available (default 0.1% = 10bps for simplicity, or 50bps)
+        // Premium amount is usually ~2000 flat in new schema, but let's try to derive a bps if we want to show daily cost
+        const price = c.vehicles_catalog.price || 10000;
+        const premium = insurance?.premium_amount || 2000;
+        // Mock bps for display purposes
+        const insurance_rate_bps = 50; 
+
+        return {
+          id: c.id,
+          name: c.vehicles_catalog.name,
+          tier: c.vehicles_catalog.tier,
+          base_price: price,
+          insurance_rate_bps: insurance_rate_bps,
+          image_url: c.vehicles_catalog.image,
+          exposure_level: 0, // Not used in TMV
+          condition: c.condition,
+          status: insurance?.status === 'active' ? 'insured' : (registration?.status === 'active' ? 'active' : 'unregistered'),
+          plate_number: registration?.plate_number || 'NO PLATE',
+          plate_status: registration?.status || 'none',
+        };
+      });
       setCars(formattedCars);
 
     } catch (error) {

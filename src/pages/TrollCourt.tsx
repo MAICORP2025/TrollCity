@@ -10,6 +10,7 @@ import FileLawsuitModal from '../components/FileLawsuitModal'
 import JudgeRulingModal from '../components/JudgeRulingModal'
 import { toast } from 'sonner'
 import UserSearchDropdown from '../components/UserSearchDropdown'
+import { generateUUID } from '../lib/uuid'
 
 
 export default function TrollCourt() {
@@ -31,49 +32,6 @@ export default function TrollCourt() {
   const [_isSearchingUsers, setIsSearchingUsers] = useState(false)
   const [selectedCaseType, setSelectedCaseType] = useState<string>('')
   const [showDropdown, setShowDropdown] = useState(false)
-
-  // Timer for next Sunday opening (must be inside component)
-  const [timeUntilOpen, setTimeUntilOpen] = useState('');
-  // Court opens every Sunday at 1 PM
-  const getNextSundayAt1PM = () => {
-    const now = new Date();
-    const day = now.getDay(); // 0 = Sunday
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-    let daysUntilSunday = (7 - day) % 7;
-    // If today is Sunday and before 1 PM, open today at 1 PM
-    if (day === 0 && (hour < 13 || (hour === 13 && minute === 0))) {
-      daysUntilSunday = 0;
-    } else if (day === 0 && hour >= 13) {
-      daysUntilSunday = 7;
-    }
-    const nextSunday = new Date(now);
-    nextSunday.setDate(now.getDate() + daysUntilSunday);
-    nextSunday.setHours(13, 0, 0, 0); // 1 PM
-    return nextSunday;
-  };
-  useEffect(() => {
-    if (courtSession) return;
-    const updateTimer = () => {
-      const now = new Date();
-      const nextOpen = getNextSundayAt1PM();
-      const diff = nextOpen.getTime() - now.getTime();
-      if (diff <= 0) {
-        setTimeUntilOpen('Now');
-        return;
-      }
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      let timeString = '';
-      if (days > 0) timeString += `${days}d `;
-      timeString += `${hours}h ${minutes.toString().padStart(2, '0')}m`;
-      setTimeUntilOpen(timeString.trim());
-    };
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000 * 30); // update every 30s
-    return () => clearInterval(interval);
-  }, [courtSession]);
 
   const CASE_TYPES = [
     'Harassment / Threats',
@@ -97,8 +55,10 @@ export default function TrollCourt() {
     profile?.role === UserRole.ADMIN ||
     profile?.role === UserRole.LEAD_TROLL_OFFICER ||
     profile?.role === UserRole.SECRETARY ||
+    profile?.role === UserRole.TROLL_OFFICER ||
     (profile as any)?.is_admin === true ||
-    (profile as any)?.is_lead_officer === true
+    (profile as any)?.is_lead_officer === true ||
+    (profile as any)?.is_troll_officer === true
 
   // Fetch recent cases
   useEffect(() => {
@@ -251,7 +211,7 @@ export default function TrollCourt() {
 
       // 1. If no active session, start one
       if (!activeSessionId) {
-        const newSessionId = crypto.randomUUID()
+        const newSessionId = generateUUID()
         const { data, error: startError } = await startCourtSession({
           sessionId: newSessionId,
           maxBoxes: 2,
@@ -328,6 +288,53 @@ export default function TrollCourt() {
     }
   }
 
+  const handleDeleteCase = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this case docket?')) return;
+    const { error } = await supabase.from('court_cases').delete().eq('id', id);
+    if (error) toast.error('Failed to delete case');
+    else {
+      toast.success('Case docket deleted');
+      setRecentCases(prev => prev.filter(c => c.id !== id));
+    }
+  }
+
+  const handleExtendCase = async (id: string) => {
+      const daysStr = prompt('Enter number of days to extend:', '7');
+      if (!daysStr) return;
+      const days = parseInt(daysStr);
+      if (isNaN(days)) return toast.error('Invalid number');
+
+      const date = new Date();
+      date.setDate(date.getDate() + days);
+      
+      const { error } = await supabase
+          .from('court_cases')
+          .update({ scheduled_for: date.toISOString() })
+          .eq('id', id);
+
+      if (error) toast.error('Failed to extend case (Field scheduled_for may not exist)');
+      else toast.success('Case extended');
+  }
+
+  const handleEditCase = async (c: any) => {
+      const newTitle = prompt('Edit Case Title:', c.title || '');
+      const newDesc = prompt('Edit Description:', c.description || '');
+      
+      if (newTitle === null && newDesc === null) return;
+
+      const updates: any = {};
+      if (newTitle !== null) updates.title = newTitle;
+      if (newDesc !== null) updates.description = newDesc;
+
+      const { error } = await supabase.from('court_cases').update(updates).eq('id', c.id);
+      
+      if (error) toast.error('Failed to update case');
+      else {
+          toast.success('Case updated');
+          setRecentCases(prev => prev.map(item => item.id === c.id ? { ...item, ...updates } : item));
+      }
+  }
+
   return (
     <div className={`min-h-screen ${trollCityTheme.backgrounds.primary} ${trollCityTheme.text.primary} p-6`}>
       <div className="max-w-6xl mx-auto space-y-6">
@@ -357,8 +364,8 @@ export default function TrollCourt() {
                 </span>
               ) : (
                 <span className="px-3 py-1 bg-gray-600 text-white rounded-full text-sm flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-purple-400" />
-                  CLOSED • OPENS IN {timeUntilOpen}
+                  <Scale className="w-4 h-4 text-purple-400" />
+                  OPEN FOR FILING
                 </span>
               )}
             </div>
@@ -627,7 +634,7 @@ export default function TrollCourt() {
           <div className="space-y-3">
             {recentCases.length > 0 ? (
               recentCases.map((c) => (
-                <div key={c.id} className={`${trollCityTheme.backgrounds.card} rounded-lg p-4`}>
+                <div key={c.id} className={`${trollCityTheme.backgrounds.card} rounded-lg p-4 relative group`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold">{c.title || `Case #${c.id.slice(0, 8)}`}</span>
                     <span className={`text-xs px-2 py-1 rounded-full ${
@@ -639,14 +646,45 @@ export default function TrollCourt() {
                     </span>
                   </div>
                   <p className={`text-sm ${trollCityTheme.text.muted}`}>{c.description || 'No description provided'}</p>
-                  <div className="text-xs text-gray-500 mt-1 flex justify-between">
+                  <div className="text-xs text-gray-500 mt-1 flex justify-between items-center">
                     <span>
                       {c.defendant?.username ? `Defendant: ${c.defendant.username}` : ''}
                     </span>
-                    <span>
-                      {new Date(c.created_at).toLocaleDateString()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        {c.scheduled_for && (
+                            <span className="text-yellow-500">
+                                Scheduled: {new Date(c.scheduled_for).toLocaleDateString()}
+                            </span>
+                        )}
+                        <span>
+                        {new Date(c.created_at).toLocaleDateString()}
+                        </span>
+                    </div>
                   </div>
+
+                  {/* Admin Controls */}
+                  {canStartCourt && (
+                      <div className="mt-3 pt-3 border-t border-gray-700 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => handleEditCase(c)}
+                            className="text-xs bg-blue-900/40 hover:bg-blue-800 border border-blue-500/30 px-2 py-1 rounded text-blue-200"
+                          >
+                              Edit
+                          </button>
+                          <button 
+                            onClick={() => handleExtendCase(c.id)}
+                            className="text-xs bg-yellow-900/40 hover:bg-yellow-800 border border-yellow-500/30 px-2 py-1 rounded text-yellow-200"
+                          >
+                              Extend Date
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCase(c.id)}
+                            className="text-xs bg-red-900/40 hover:bg-red-800 border border-red-500/30 px-2 py-1 rounded text-red-200"
+                          >
+                              Delete
+                          </button>
+                      </div>
+                  )}
                 </div>
               ))
             ) : (

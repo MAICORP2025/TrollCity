@@ -29,6 +29,7 @@ export type LiveKitConnectionStatus = 'idle' | 'connecting' | 'connected' | 'rec
 
 export type LiveKitRoomConfig = {
   roomName?: string
+  token?: string
   user?: {
     id: string
     username?: string
@@ -89,7 +90,7 @@ const parseParticipantMetadata = (metadata?: string): Record<string, unknown> | 
 }
 
 export function useLiveKitRoom(config: LiveKitRoomOptions) {
-  const { roomName, user, allowPublish = false, autoPublish = false, roomOptions, enabled = true } = config
+  const { roomName, token: providedToken, user, allowPublish = false, autoPublish = false, roomOptions, enabled = true } = config
 
   const [room, setRoom] = useState<Room | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<LiveKitConnectionStatus>('idle')
@@ -104,6 +105,17 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
 
   const fetchToken = useCallback(
     async (publish: boolean): Promise<LiveKitTokenResponse> => {
+      // If a token is provided directly, use it
+      if (providedToken) {
+        console.log('[useLiveKitRoom] Using provided token')
+        return {
+          token: providedToken,
+          livekitUrl: LIVEKIT_URL, // Use default URL or one from config if added
+          room: roomName,
+          allowPublish: publish
+        }
+      }
+
       if (!roomName || !user?.id) {
         throw new Error('Missing room or user for LiveKit token')
       }
@@ -184,7 +196,7 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
 
       return data
     },
-    [roomName, user]
+    [roomName, user, providedToken]
   )
 
   const updateParticipantState = useCallback((identity: string, patch: Partial<LiveKitParticipantState>) => {

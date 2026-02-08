@@ -180,17 +180,15 @@ export default function GovernmentStreams() {
   }, [showAllStreams]);
 
   useEffect(() => {
-    if (viewMode === 'streams') {
-        fetchStreams();
-    } else {
-        fetchPods();
-    }
+    fetchStreams();
+    fetchPods();
+
     const interval = setInterval(() => {
-        if (viewMode === 'streams') fetchStreams();
-        else fetchPods();
+        fetchStreams();
+        fetchPods();
     }, 10000); 
     return () => clearInterval(interval);
-  }, [fetchStreams, fetchPods, viewMode]);
+  }, [fetchStreams, fetchPods]);
 
   const handleEndPod = async (podId: string) => {
     if (!confirm('FORCE END this pod?')) return;
@@ -564,31 +562,26 @@ function SummonModal({ stream, onClose }: { stream: StreamRow; onClose: () => vo
     const loadParticipants = async () => {
       try {
         const { data } = await supabase
-          .from('stream_participants') // Note: LivePage uses 'streams_participants' but schema showed 'stream_participants'. I'll check table name again.
-          // Wait, schema tool output showed 'stream_participants' (singular stream).
-          // But LivePage code used 'streams_participants' (plural streams).
-          // I will use 'stream_participants' as per schema tool output, but double check.
-          // Schema output: table "stream_participants". Relationships: "stream_participants_stream_id_fkey".
-          // LivePage line 222: .from('streams_participants').
-          // This suggests the table name might be `streams_participants` in reality if LivePage works.
-          // Or maybe I misread schema output?
-          // Schema output said: "name":"stream_participants".
-          // I will try 'stream_participants' first. If it fails, I'll try 'streams_participants'.
-          // Actually, I'll use `stream_participants` as returned by schema tool.
+          .from('stream_participants')
           .select('user_id, username, is_active')
           .eq('stream_id', stream.id)
           .eq('is_active', true);
 
         if (data) {
-          // Also fetch profiles for avatars and usernames to ensure up-to-date info
-          const userIds = data.map(p => p.user_id);
-          const { data: profiles } = await supabase
-            .from('user_profiles')
-            .select('id, username, avatar_url')
-            .in('id', userIds);
+          // Filter valid user IDs
+          const userIds = data.map(p => p.user_id).filter(Boolean);
+          
+          let profiles: any[] = [];
+          if (userIds.length > 0) {
+            const { data: profilesData } = await supabase
+              .from('user_profiles')
+              .select('id, username, avatar_url')
+              .in('id', userIds);
+            profiles = profilesData || [];
+          }
             
           const merged = data.map(p => {
-            const profile = profiles?.find(prof => prof.id === p.user_id);
+            const profile = profiles.find(prof => prof.id === p.user_id);
             // If this is the broadcaster, prefer the stream.broadcaster info which is trusted
             if (p.user_id === stream.broadcaster_id && stream.broadcaster) {
               return {
@@ -597,10 +590,17 @@ function SummonModal({ stream, onClose }: { stream: StreamRow; onClose: () => vo
                 avatar_url: stream.broadcaster.avatar_url
               };
             }
+            
+            // Fix "UN" bug: ensure we have a valid fallback
+            let username = profile?.username || p.username;
+            if (!username || username === 'UN' || username === 'Unknown User') {
+                username = p.user_id ? `User ${p.user_id.slice(0, 6)}` : 'Unknown User';
+            }
+            
             return {
               ...p,
-              username: profile?.username || p.username || 'Unknown',
-              avatar_url: profile?.avatar_url
+              username: username,
+              avatar_url: profile?.avatar_url || `https://ui-avatars.com/api/?name=${username}&background=random`
             };
           });
           
@@ -632,26 +632,31 @@ function SummonModal({ stream, onClose }: { stream: StreamRow; onClose: () => vo
     }
     setSubmitting(true);
     try {
-      // Create a court case or docket entry
-      // For now, I'll create a generic notification and log it.
-      // Ideally this creates a row in `court_cases` with status 'summoned'.
+      // Create a court case docket entry
+      // Use upsert or insert. Assuming 'court_cases' is the correct table.
+      // If direct insert fails due to RLS, we might need an RPC.
+      // For now, we'll try to insert with minimal required fields.
       
       const { error } = await supabase.from('court_cases').insert({
-        title: `Summon from Stream: ${stream.title}`,
+        title: `Summon from Stream: ${stream.title || 'Untitled'}`,
         description: `User summoned by officer from stream ${stream.id}. Reason: ${reason}`,
         defendant_id: selectedUserId,
-        status: 'waiting', // or 'summoned' if valid
-        case_type: 'civil', // default
-        severity: '1'
+        status: 'waiting', 
+        case_type: 'civil', 
+        severity: '1',
+        plaintiff_id: (await supabase.auth.getUser()).data.user?.id // Ensure plaintiff is set
       });
 
-      if (error) throw error;
+      if (error) {
+          console.error('Summon error:', error);
+          throw error;
+      }
 
       toast.success('User summoned to court successfully');
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Failed to summon user');
+      toast.error(`Failed to summon user: ${err.message || 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }

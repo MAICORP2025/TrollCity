@@ -35,6 +35,17 @@ BEGIN
         END IF;
     END IF;
 
+    -- Handle legacy price column if it exists (from 20260204 migration)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'price') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'cost') THEN
+            ALTER TABLE public.car_upgrades RENAME COLUMN price TO cost;
+            -- Ensure it is INTEGER
+            ALTER TABLE public.car_upgrades ALTER COLUMN cost TYPE INTEGER USING cost::INTEGER;
+        ELSE
+            ALTER TABLE public.car_upgrades DROP COLUMN price;
+        END IF;
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'car_upgrades' AND column_name = 'type') THEN
         ALTER TABLE public.car_upgrades ADD COLUMN type TEXT NOT NULL DEFAULT 'misc';
     END IF;

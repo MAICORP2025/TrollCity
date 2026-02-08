@@ -177,7 +177,7 @@ export default function BannedUsersList({ streamId, onClose }: BannedUsersListPr
                                         />
                                     </div>
                                     <p className="text-xs text-red-400 truncate">
-                                        {ban.expires_at ? 'Kicked (24h)' : 'Banned (Perm)'}
+                                        Banned (Perm)
                                     </p>
                                 </div>
                             </div>

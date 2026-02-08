@@ -56,7 +56,50 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { user_id, user_ids, broadcast_followers_id, conversation_id, sender_id, title, body, url, icon, badge, image, tag, data, create_db_notification, type } = await req.json() as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string };
+    const bodyJson = await req.json();
+    const { 
+      user_ids, 
+      broadcast_followers_id, 
+      conversation_id, 
+      sender_id, 
+      badge, 
+      tag, 
+      type,
+      table,
+      record 
+    } = bodyJson as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string, record?: any, table?: string };
+
+    let { 
+      user_id, 
+      title, 
+      body, 
+      url, 
+      icon, 
+      image, 
+      data, 
+      create_db_notification 
+    } = bodyJson as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string, record?: any, table?: string };
+
+    // Handle Supabase Database Webhook payload
+    if (type === 'INSERT' && table === 'notifications' && record) {
+      const record = bodyJson.record;
+      console.log("Processing Webhook for notification:", record.id);
+      
+      user_id = record.user_id;
+      title = record.title;
+      body = record.message;
+      
+      // Parse metadata if needed
+      if (record.metadata) {
+        url = record.metadata.url || record.metadata.action_url;
+        icon = record.metadata.icon;
+        image = record.metadata.image;
+        data = record.metadata;
+      }
+      
+      // Prevent infinite loop: do not create another DB notification
+      create_db_notification = false;
+    }
 
     if ((!user_id && (!user_ids || user_ids.length === 0) && !broadcast_followers_id && !conversation_id) || !title || !body) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: corsHeaders });

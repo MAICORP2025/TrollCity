@@ -38,18 +38,33 @@ export default function ChatBottomSheet({
       
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 space-y-2 mask-image-linear-gradient">
-        {messages.map((msg) => (
-          <div key={msg.id} className="flex flex-col items-start animate-fade-in-up">
-            <div className="bg-black/30 backdrop-blur-sm rounded-2xl rounded-tl-sm px-3 py-1.5 max-w-[85%] border border-white/5">
-              <span className="text-[11px] font-bold text-pink-400 block mb-0.5">
-                {msg.user?.username || 'User'}
-              </span>
-              <p className="text-sm text-white leading-snug break-words">
-                {msg.content}
-              </p>
+        {messages.map((msg) => {
+          if (msg.type === 'system') {
+            return (
+              <div key={msg.id} className="flex justify-center my-1 animate-fade-in-up">
+                <div className="bg-black/20 backdrop-blur-sm rounded-full px-3 py-1 border border-white/5">
+                   <span className="text-[10px] text-white/70 italic flex items-center gap-1">
+                     <span className="font-bold text-pink-400/80">{msg.user?.username || 'Guest'}</span>
+                     joined the broadcast
+                   </span>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={msg.id} className="flex flex-col items-start animate-fade-in-up">
+              <div className="bg-black/30 backdrop-blur-sm rounded-2xl rounded-tl-sm px-3 py-1.5 max-w-[85%] border border-white/5">
+                <span className="text-[11px] font-bold text-pink-400 block mb-0.5">
+                  {msg.user?.username || 'User'}
+                </span>
+                <p className="text-sm text-white leading-snug break-words">
+                  {msg.content}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 

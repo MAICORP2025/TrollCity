@@ -42,7 +42,12 @@ export const sendGift = async (
     }
 
     // Check if the RPC returned an error in the response
-    if (data && typeof data === 'object' && 'success' in data && !data.success) {
+    if (typeof data === 'boolean') {
+        if (!data) {
+            toast.error('Insufficient funds or error')
+            return false
+        }
+    } else if (data && typeof data === 'object' && 'success' in data && !data.success) {
       const errorMsg = (data as any).error || 'Failed to send gift'
       
       if (errorMsg.includes('Not enough coins')) {

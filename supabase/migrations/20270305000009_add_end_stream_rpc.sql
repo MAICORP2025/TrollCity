@@ -12,7 +12,7 @@ BEGIN
     END LOOP; 
 END $$;
 
-CREATE OR REPLACE FUNCTION public.end_stream(stream_id UUID)
+CREATE OR REPLACE FUNCTION public.end_stream(p_stream_id UUID)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -23,7 +23,7 @@ BEGIN
     -- Check ownership
     SELECT user_id INTO v_stream_owner
     FROM public.streams
-    WHERE id = stream_id;
+    WHERE id = p_stream_id;
 
     IF v_stream_owner IS NULL THEN
         RETURN jsonb_build_object('success', false, 'message', 'Stream not found');
@@ -43,10 +43,10 @@ BEGIN
         status = 'ended',
         is_live = false,
         ended_at = NOW()
-    WHERE id = stream_id;
+    WHERE id = p_stream_id;
 
     -- Clean up viewers
-    DELETE FROM public.stream_viewers WHERE stream_id = stream_id;
+    DELETE FROM public.stream_viewers WHERE stream_id = p_stream_id;
 
     RETURN jsonb_build_object('success', true);
 END;

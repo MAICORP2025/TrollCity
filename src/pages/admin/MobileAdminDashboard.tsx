@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronLeft
 } from 'lucide-react'
+import MobileIssues from '../../components/admin/MobileIssues'
 
 interface DashboardStats {
   totalLiability: number
@@ -28,6 +29,7 @@ interface DashboardStats {
   newPayouts: number
   newApplications: number
   newReports: number
+  newMobileIssues: number
 }
 
 interface SubItem {
@@ -45,7 +47,7 @@ interface Category {
   items: SubItem[]
 }
 
-type TabId = 'applications' | 'payouts' | 'reports' | 'earnings'
+type TabId = 'applications' | 'payouts' | 'reports' | 'earnings' | 'mobile_issues'
 
 export default function MobileAdminDashboard() {
   const { user, profile, logout, isLoading } = useAuthStore()
@@ -60,7 +62,8 @@ export default function MobileAdminDashboard() {
     activeBroadcasters: 0,
     newPayouts: 0,
     newApplications: 0,
-    newReports: 0
+    newReports: 0,
+    newMobileIssues: 0
   })
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -206,6 +209,11 @@ export default function MobileAdminDashboard() {
         .eq('status', 'pending')
         .gte('created_at', yesterday.toISOString())
 
+      const { data: newMobileIssuesData } = await supabase
+        .from('mobile_error_logs')
+        .select('id', { count: 'exact' })
+        .gte('created_at', yesterday.toISOString())
+
       setStats({
         totalLiability,
         pendingPayouts,
@@ -214,7 +222,8 @@ export default function MobileAdminDashboard() {
         activeBroadcasters,
         newPayouts: newPayoutsData?.length || 0,
         newApplications: newAppsData?.length || 0,
-        newReports: newReportsData?.length || 0
+        newReports: newReportsData?.length || 0,
+        newMobileIssues: newMobileIssuesData?.length || 0
       })
     } catch (error) {
       console.error('Error loading stats:', error)
@@ -252,10 +261,20 @@ export default function MobileAdminDashboard() {
       )
       .subscribe()
 
+    // Real-time updates for mobile issues
+    const issuesChannel = supabase
+      .channel('admin_mobile_issues')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'mobile_error_logs' },
+        () => loadStats()
+      )
+      .subscribe()
+
     return () => {
       supabase.removeChannel(payoutChannel)
       supabase.removeChannel(appChannel)
       supabase.removeChannel(reportChannel)
+      supabase.removeChannel(issuesChannel)
     }
   }, [loadStats])
 
@@ -470,12 +489,13 @@ export default function MobileAdminDashboard() {
 
       {/* Tab Navigation (Mobile Bottom Bar) */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#0D0D0D] border-t border-purple-500/30 px-2 py-2 safe-area-bottom">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {([
             { id: 'applications' as TabId, label: 'Apps', icon: FileText, badge: stats.newApplications },
             { id: 'payouts' as TabId, label: 'Payouts', icon: DollarSign, badge: stats.newPayouts },
             { id: 'reports' as TabId, label: 'Reports', icon: AlertTriangle, badge: stats.newReports },
-            { id: 'earnings' as TabId, label: 'Earnings', icon: TrendingUp, badge: 0 }
+            { id: 'earnings' as TabId, label: 'Earnings', icon: TrendingUp, badge: 0 },
+            { id: 'mobile_issues' as TabId, label: 'Issues', icon: AlertTriangle, badge: stats.newMobileIssues }
           ]).map(({ id, label, icon: Icon, badge }) => (
             <button
               key={id}
@@ -511,6 +531,9 @@ export default function MobileAdminDashboard() {
         )}
         {activeTab === 'earnings' && (
           <MobileEarningsTax onStatsUpdate={loadStats} />
+        )}
+        {activeTab === 'mobile_issues' && (
+          <MobileIssues />
         )}
       </div>
     </div>

@@ -4,6 +4,8 @@ import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { downloadPayrollPDF } from '../lib/officerPayrollPDF'
 import OfficerStreamGrid from '../components/officer/OfficerStreamGrid'
+import { walkieApi } from '../lib/walkie'
+import WalkieDirectory from '../components/walkie/WalkieDirectory'
 import {
   Eye,
   Ban,
@@ -19,7 +21,8 @@ import {
   Calendar,
   ChevronDown,
   FileText,
-  User
+  User,
+  Radio
 } from 'lucide-react'
 import { trollCityTheme } from '../styles/trollCityTheme'
 
@@ -863,6 +866,23 @@ export default function TrollOfficerLounge() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'comms' && (
+            <div className="h-full flex flex-col">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Radio size={20} className="text-green-500" />
+                Officer Walkie Directory
+              </h2>
+              <div className={`${trollCityTheme.backgrounds.card} rounded-xl border ${trollCityTheme.borders.glass} flex-1 overflow-hidden p-4`}>
+                <p className={`text-sm ${trollCityTheme.text.muted} mb-4`}>
+                  Select an officer to page directly. Connection is secured via LiveKit.
+                </p>
+                <div className="h-[calc(100%-3rem)]">
+                   <WalkieDirectory onPage={handlePage} />
+                </div>
               </div>
             </div>
           )}

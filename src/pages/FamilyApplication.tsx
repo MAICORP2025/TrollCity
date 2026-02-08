@@ -25,14 +25,21 @@ export default function FamilyApplication() {
     }
     try {
       setLoading(true)
-      const now = new Date().toISOString()
       
-      const { error: coinErr } = await supabase
-        .from('user_profiles')
-        .update({ troll_coins: profile.troll_coins - requiredCoins, updated_at: now })
-        .eq('id', profile.id)
+      // 1. Deduct coins securely
+      const { data: spendResult, error: spendError } = await supabase.rpc('troll_bank_spend_coins', {
+        p_user_id: profile.id,
+        p_amount: requiredCoins,
+        p_bucket: 'application',
+        p_source: 'family_application',
+        p_metadata: { type: 'troll_family' }
+      });
+
+      if (spendError) throw spendError;
       
-      if (coinErr) throw coinErr
+      if (spendResult && spendResult.success === false) {
+          throw new Error(spendResult.error || 'Insufficient funds');
+      }
       
       const { error } = await supabase.from('applications').insert([{
         user_id: profile.id,

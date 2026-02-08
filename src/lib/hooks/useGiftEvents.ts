@@ -134,7 +134,6 @@ export function useGiftEvents(streamId?: string | null) {
         'Diamond': '💎',
         'Rocket': '🚀',
         'paid': '🎁',
-        'trollmond': '🧌',
       }
       return iconMap[giftType] || '🎁'
     }

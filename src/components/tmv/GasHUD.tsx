@@ -51,6 +51,18 @@ export default function GasHUD() {
 
   if (!profile) return null;
 
+  // Hide Gas Bar in Broadcast Room and TrollPod Room (LiveKit pages)
+  // Broadcasts are at /broadcast/:id
+  // Pods are at /pods/:id (but not /pods listing)
+  const isBroadcastRoom = location.pathname.startsWith('/broadcast/') && location.pathname !== '/broadcast/setup' && location.pathname !== '/broadcast/summary';
+  const isPodRoom = location.pathname.startsWith('/pods/') && location.pathname.split('/').length > 2;
+  // Also hide in TCPS to prevent blocking chat UI
+  const isTCPS = location.pathname.startsWith('/tcps');
+
+  if (isBroadcastRoom || isPodRoom || isTCPS) {
+      return null;
+  }
+
   const gas = profile.gas_balance ?? 100;
   const isLow = gas <= 5;
 

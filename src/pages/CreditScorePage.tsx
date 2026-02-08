@@ -209,11 +209,6 @@ export default function CreditScorePage() {
                       </div>
 
                       <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-white">{user.score}</div>
-                          <div className="text-xs text-gray-400">/ 800</div>
-                        </div>
-
                         <div className={`px-3 py-1 rounded-full border ${getTierColor(user.tier)}`}>
                           <p className="text-sm font-semibold">{user.tier}</p>
                         </div>
@@ -247,14 +242,6 @@ export default function CreditScorePage() {
                   <div>
                     <p className="text-sm text-gray-400">Resident</p>
                     <p className="text-white font-semibold">{selectedUser.username}</p>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-700">
-                    <p className="text-sm text-gray-400 mb-2">Credit Score</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold text-white">{selectedUser.score}</span>
-                      <span className="text-gray-400">/ 800</span>
-                    </div>
                   </div>
 
                   <div className="pt-4 border-t border-slate-700">

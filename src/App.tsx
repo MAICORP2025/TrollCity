@@ -26,10 +26,10 @@ import GlobalPresenceTracker from "./components/GlobalPresenceTracker";
 // Layout
 import OfficerAlertBanner from "./components/OfficerAlertBanner";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
-import TrollsTownControl from "./components/TrollsTownControl";
 import { useVersionCheck } from "./hooks/useVersionCheck";
 import { usePwaAutoUpdateSafeReload } from "./hooks/usePwaAutoUpdateSafeReload";
 import GlobalUserCounter from "./components/admin/GlobalUserCounter";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 
 import AdminErrors from "./pages/admin/AdminErrors";
 import ProfileSetupModal from "./components/ProfileSetupModal";
@@ -55,6 +55,7 @@ const SetupPage = lazy(() => import("./pages/broadcast/SetupPage"));
 const BroadcastPage = lazy(() => import("./pages/broadcast/BroadcastPage"));
 const StreamSummary = lazy(() => import("./pages/broadcast/StreamSummary"));
 const BattlePreview = lazy(() => import("./pages/dev/BattlePreview"));
+const FrontendLimitsTest = lazy(() => import("./pages/dev/FrontendLimitsTest"));
 const LivingPage = lazy(() => import("./pages/LivingPage"));
 const ChurchPage = lazy(() => import("./pages/ChurchPage"));
 const PastorDashboard = lazy(() => import("./pages/church/PastorDashboard"));
@@ -137,6 +138,7 @@ const Call = lazy(() => import("./pages/Call"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Trollifications = lazy(() => import("./pages/Trollifications"));
 const OfficerScheduling = lazy(() => import("./pages/OfficerScheduling"));
+const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
 const OfficerPayrollDashboard = lazy(() => import("./pages/officer/OfficerPayrollDashboard"));
 const OfficerDashboard = lazy(() => import("./pages/officer/OfficerDashboard"));
 const OfficerOWCDashboard = lazy(() => import("./pages/OfficerOWCDashboard"));
@@ -205,7 +207,6 @@ const UniverseEventPage = lazy(() => import("./pages/UniverseEventPage"));
 
 const ShopView = lazy(() => import("./pages/ShopView"));
 const CourtRoom = lazy(() => import("./pages/CourtRoom"));
-const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
 const InterviewRoomPage = lazy(() => import("./pages/InterviewRoomPage"));
 const AdminInterviewDashboard = lazy(() => import("./pages/AdminInterviewDashboard"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
@@ -330,7 +331,7 @@ function AppContent() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<ServiceWorker | null>(null);
-  const [trollsTownControlOpen, setTrollsTownControlOpen] = useState(false);
+
 
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const eligibilityRefresh = useEligibilityStore((s) => s.refresh);
@@ -576,14 +577,20 @@ function AppContent() {
 
   // 🔹 Track user IP address and check for IP bans
   useEffect(() => {
+    const controller = new AbortController()
+
     const trackIP = async () => {
       if (!user?.id) return
 
       try {
-        // Get user's IP address
-        const ipResponse = await fetch('https://api.ipify.org?format=json')
+        // Get user's IP address with timeout
+        const ipResponse = await fetch('https://api.ipify.org?format=json', {
+            signal: controller.signal
+        })
         const ipData = await ipResponse.json()
         const userIP = ipData.ip
+
+        if (controller.signal.aborted) return
 
         // Check if IP is banned
         const { data: isBanned, error: banError } = await supabase.rpc('is_ip_banned', {
@@ -591,11 +598,20 @@ function AppContent() {
         })
 
         if (banError) {
+          // Ignore abort/timeout errors from Supabase
+          if (
+            banError.message?.includes('AbortError') || 
+            banError.details?.includes('AbortError') ||
+            banError.message?.includes('timeout')
+          ) {
+            return
+          }
           console.error('Error checking IP ban:', banError)
           return
         }
 
         if (isBanned) {
+          if (controller.signal.aborted) return
           toast.error('Your IP address has been banned. Please contact support.')
           // Sign out user (defensive)
           try {
@@ -615,6 +631,8 @@ function AppContent() {
           navigate('/auth', { replace: true })
           return
         }
+
+        if (controller.signal.aborted) return
 
         // Update user's last known IP
         const { data: currentProfile } = await supabase
@@ -639,13 +657,19 @@ function AppContent() {
             ip_address_history: updatedHistory
           })
           .eq('id', user.id)
-      } catch (error) {
+      } catch (error: any) {
+        // Ignore abort errors
+        if (error.name === 'AbortError' || error.message?.includes('AbortError')) return
         console.error('Error tracking IP:', error)
       }
     }
 
     if (user) {
       trackIP()
+    }
+
+    return () => {
+        controller.abort()
     }
   }, [user, navigate])
 
@@ -779,10 +803,13 @@ function AppContent() {
               <OfficerAlertBanner />
               
               {/* Global Gift Banner */}
-              <GlobalGiftBanner />
+      <GlobalGiftBanner />
 
-              {/* Broadcast Announcement */}
-              <BroadcastAnnouncement />
+      {/* PWA Install Prompt */}
+      <PWAInstallPrompt />
+
+      {/* Broadcast Announcement */}
+      <BroadcastAnnouncement />
               <GlobalPodBanner />
               <DailyChurchNotification />
 
@@ -817,7 +844,6 @@ function AppContent() {
             <BadgePopup />
           </Suspense>
         )}
-        <TrollsTownControl isOpen={trollsTownControlOpen} onClose={() => setTrollsTownControlOpen(false)} />
 
         <ErrorBoundary>
           <Suspense fallback={<LoadingScreen />}>
@@ -889,6 +915,7 @@ function AppContent() {
                   <Route path="/kick-fee/:streamId" element={<KickFeePage />} />
                   <Route path="/broadcast/summary" element={<StreamSummary />} />
                   <Route path="/dev/battle" element={<BattlePreview />} />
+                  <Route path="/dev/stress-test" element={<FrontendLimitsTest />} />
 
                   <Route path="/mobile" element={<MobileShell />} />
                   <Route path="/live" element={<LandingHome />} />
@@ -938,7 +965,7 @@ function AppContent() {
                   <Route path="/troll-court/session" element={<TrollCourtSession />} />
                   <Route path="/tromody" element={<TromodyShow />} />
                   <Route path="/live/:streamId" element={<Navigate to="/live" replace />} />
-                  <Route path="/interview/:sessionId" element={<InterviewRoom />} />
+                  <Route path="/interview/:roomId" element={<InterviewRoom />} />
                   <Route path="/stream/:id" element={<Navigate to="/live" replace />} />
                   <Route path="/stream/:streamId" element={<Navigate to="/live" replace />} />
                   <Route path="/stream/:id/summary" element={<Navigate to="/live" replace />} />

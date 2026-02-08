@@ -106,29 +106,17 @@ Deno.serve(async (req) => {
         // Promote to officer
         console.log('Officer qualifies for promotion, updating profile...');
         
-        // Use RPC to update profile to avoid JSON coercion issues
+        // Use RPC to update profile to avoid JSON coercion issues and bypass trigger
         const { data: _updateResult, error: promoteError } = await supabase.rpc(
-          'update_officer_promotion',
-          { p_user_id: officerId }
+          'system_promote_officer',
+          { 
+            p_target_user_id: officerId,
+            p_new_role: 'troll_officer'
+          }
         );
         
         if (promoteError) {
           console.error('Profile update error:', promoteError);
-          // Fallback: try direct update
-          const { error: fallbackError } = await supabase
-            .from("user_profiles")
-            .update({ 
-              role: 'troll_officer',
-              is_troll_officer: true 
-            })
-            .eq("id", officerId);
-          
-          if (fallbackError) {
-            console.error('Fallback profile update error:', fallbackError);
-          } else {
-            promoted = true;
-            console.log('Profile updated via fallback');
-          }
         } else {
           promoted = true;
           console.log('Profile updated successfully');

@@ -60,8 +60,19 @@ export interface ChatMessage {
   user_id: string;
   content: string;
   created_at: string;
+  type?: 'chat' | 'system';
   user?: {
     username: string;
     avatar_url: string;
   };
+  user_profiles?: {
+    username: string;
+    avatar_url: string;
+    role?: string;
+    troll_role?: string;
+    created_at?: string;
+    rgb_username_expires_at?: string;
+    glowing_username_color?: string;
+  };
+  vehicle_status?: any; // Avoiding circular dependency or complex type for now
 }

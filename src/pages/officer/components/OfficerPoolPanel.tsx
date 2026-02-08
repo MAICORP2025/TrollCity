@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { Briefcase, Users, DollarSign } from 'lucide-react';
+import { Briefcase, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface OfficerPoolStats {

@@ -125,6 +125,7 @@ export default function AdminErrors() {
                   {row.url && <div className="text-xs text-gray-400">URL: {row.url}</div>}
                   {row.component && <div className="text-xs text-gray-400">Component: {row.component}</div>}
                   {row.user_id && <div className="text-xs text-gray-400">User: {row.user_id}</div>}
+                  {row.context && row.context.appVersion && <div className="text-xs text-blue-400">Version: {row.context.appVersion} (Build: {row.context.buildTime})</div>}
                   {row.stack && <pre className="mt-2 text-xs text-gray-400 overflow-x-auto">{row.stack}</pre>}
                 </div>
                 <div className="flex flex-col items-end gap-2">

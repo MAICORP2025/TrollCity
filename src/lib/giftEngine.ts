@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { UserProfile } from './supabase';
 import { deductCoins, addCoins } from './coinTransactions';
 import giftCatalog, { giftCategories, tierPriority } from './giftCatalog';
+import { addXp } from './progressionEngine';
 
 const BROADCASTER_SHARE = 0.95;
 const PLATFORM_SHARE = 1 - BROADCASTER_SHARE;
@@ -316,6 +317,10 @@ export async function sendGiftFromInventory({
           trolltract_bonus: trollTractResult.bonusAmount
         }
       });
+
+      // Award XP to broadcaster based on earnings
+      await addXp(receiverId, broadcasterEarnings, `Received gift: ${gift.name}`);
+
     } catch (err) {
       console.warn('Failed to credit broadcaster', err);
     }

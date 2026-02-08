@@ -95,9 +95,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (roleParam === 'broadcaster' || roleParam === 'publisher' || roleParam === 'admin') {
         canPublish = true;
     }
-    if (profile.is_broadcaster || profile.is_admin) {
-        canPublish = true;
-    }
+    // if (profile.is_broadcaster || profile.is_admin) {
+    //     canPublish = true;
+    // }
     // Force allow if explicitly requested (and authenticated)
     if (allowPublish) canPublish = true;
 

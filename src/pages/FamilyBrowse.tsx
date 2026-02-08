@@ -27,13 +27,40 @@ export default function FamilyBrowse() {
     const loadFamilies = async () => {
       setLoading(true)
       try {
+        // Query family_stats to get coin counts, joining troll_families for details
         const { data, error } = await supabase
-          .from('troll_families')
-          .select('id,name,description,icon_emoji,emoji,banner_url,level,total_points,total_coins,created_at')
+          .from('family_stats')
+          .select(`
+            total_coins,
+            family_xp,
+            troll_families!inner (
+              id,
+              name,
+              description,
+              icon_emoji,
+              emoji,
+              banner_url,
+              created_at
+            )
+          `)
           .order('total_coins', { ascending: false })
 
         if (error) throw error
-        const rows = (data || []) as FamilyRow[]
+        
+        // Map the result to FamilyRow structure
+        const rows: FamilyRow[] = (data || []).map((item: any) => ({
+          id: item.troll_families.id,
+          name: item.troll_families.name,
+          description: item.troll_families.description,
+          icon_emoji: item.troll_families.icon_emoji,
+          emoji: item.troll_families.emoji,
+          banner_url: item.troll_families.banner_url,
+          created_at: item.troll_families.created_at,
+          total_coins: item.total_coins || 0,
+          total_points: item.family_xp || 0,
+          level: 1 // Placeholder as level calculation is complex/not available in this view
+        }))
+        
         setFamilies(rows)
 
         if (rows.length > 0) {

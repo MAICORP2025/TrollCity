@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Stream } from '../../types/broadcast';
 import { supabase } from '../../lib/supabase';
-import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp, Share2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import BannedUsersList from './BannedUsersList';
@@ -19,9 +19,10 @@ interface BroadcastControlsProps {
   toggleChat: () => void;
   onGiftHost: () => void;
   onLeave?: () => void;
+  onShare?: () => void;
 }
 
-export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave }: BroadcastControlsProps) {
+export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave, onShare }: BroadcastControlsProps) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const { user, isAdmin, profile } = useAuthStore();
   const [seatPrice, setSeatPrice] = useState(stream.seat_price || 0);
@@ -43,6 +44,9 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
   
   const isStaff = isAdmin || profile?.troll_role === 'admin' || profile?.troll_role === 'moderator';
   const canManageStream = isHost || isStaff;
+  // Only Host can control stream settings (Visuals, Price, Boxes)
+  // Staff can moderate (ban users), but NOT change stream settings
+  const canEditStream = isHost; 
 
   const togglePerk = async (perkId: string) => {
     if (!user) return;
@@ -126,14 +130,16 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
   const isCamOn = isCameraEnabled;
 
 
-  const updateStreamConfig = React.useCallback(async (price: number, isLocked: boolean) => {
-    if (!canManageStream) return;
+  const updateStreamConfig = React.useCallback(async (price: number, isLocked: boolean, showToast: boolean = true) => {
+    if (!canEditStream) return;
     try {
         await supabase
         .from('streams')
         .update({ seat_price: price, are_seats_locked: isLocked })
         .eq('id', stream.id);
-        toast.success("Stream settings updated");
+        if (showToast) {
+            toast.success("Stream settings updated");
+        }
     } catch (e) {
         console.error(e);
     }
@@ -141,15 +147,20 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
 
   // Debounce price updates to DB
   useEffect(() => {
+    // If local price matches stream price (loosely to handle potential string/number mismatch), do nothing
+    if (debouncedPrice == stream.seat_price) return;
+
     const timer = setTimeout(() => {
-      if (debouncedPrice !== stream.seat_price) {
-        updateStreamConfig(debouncedPrice, locked);
-      }
+      // Don't show toast for auto-updates
+      updateStreamConfig(debouncedPrice, locked, false);
     }, 1000);
     return () => clearTimeout(timer);
   }, [debouncedPrice, stream.seat_price, locked, updateStreamConfig]);
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only Host can change price (Prompt: Host only)
+    if (!isHost) return;
+    
     let val = parseInt(e.target.value) || 0;
     // Cap at Postgres Integer Max to avoid "integer out of range"
     if (val > 2147483647) val = 2147483647;
@@ -160,11 +171,11 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
   const toggleLock = () => {
     const newLocked = !locked;
     setLocked(newLocked);
-    updateStreamConfig(seatPrice, newLocked);
+    updateStreamConfig(seatPrice, newLocked, true); // Explicitly show toast for manual action
   };
   
   const updateBoxCount = async (increment: boolean) => {
-    if (!canManageStream) return;
+    if (!canEditStream) return;
     
     // Ensure clean integer
     const currentCount = typeof stream.box_count === 'number' 
@@ -191,7 +202,8 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
   };
 
   const toggleStreamRgb = async () => {
-     if (!canManageStream) return;
+     // Only Host can toggle RGB (Prompt: Host only)
+     if (!isHost) return;
      
      const enabling = !hasRgb;
      
@@ -462,6 +474,17 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                     <Gift size={20} className="text-zinc-400 group-hover:text-yellow-500 transition-colors" />
                  </button>
 
+                 {/* Share Button */}
+                 {onShare && (
+                     <button
+                        onClick={(e) => { e.stopPropagation(); onShare(); }}
+                        className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors group"
+                        title="Share Stream"
+                     >
+                        <Share2 size={20} className="text-zinc-400 group-hover:text-blue-500 transition-colors" />
+                     </button>
+                 )}
+
                  {/* Like Button */}
                  <button
                     onClick={(e) => { e.stopPropagation(); handleLike(); }}
@@ -513,8 +536,8 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                     </>
                  )}
 
-                 {/* Effects Toggle (Visible to all logged in users) */}
-                 {user && (
+                 {/* Effects Toggle (HOST ONLY per requirement) */}
+                 {isHost && (
                     <button 
                         onClick={(e) => {
                             e.stopPropagation();
@@ -594,7 +617,7 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                         <div className="flex items-center gap-3">
                             <button 
                                 onClick={() => updateBoxCount(false)}
-                                disabled={stream.box_count <= 1}
+                                disabled={stream.box_count <= 1 || !canEditStream}
                                 className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white transition disabled:opacity-50"
                             >
                                 <Minus size={16} />
@@ -602,7 +625,7 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                             <span className="font-bold text-white min-w-[20px] text-center">{stream.box_count}</span>
                             <button 
                                 onClick={() => updateBoxCount(true)}
-                                disabled={stream.box_count >= 6}
+                                disabled={stream.box_count >= 6 || !canEditStream}
                                 className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white transition disabled:opacity-50"
                             >
                                 <Plus size={16} />
@@ -610,7 +633,8 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                         </div>
                     </div>
 
-                    {/* Seat Pricing & Locking */}
+                    {/* Seat Pricing & Locking - Only visible to Host & Staff */}
+                    {canManageStream && (
                     <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex items-center gap-4">
                         <div className="flex-1">
                             <label className="text-zinc-400 text-xs font-medium flex items-center gap-1 mb-1">
@@ -622,7 +646,11 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                                 min="0"
                                 value={seatPrice}
                                 onChange={handlePriceChange}
-                                className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-yellow-500"
+                                disabled={!isHost}
+                                className={cn(
+                                    "w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-yellow-500",
+                                    (!isHost) && "opacity-50 cursor-not-allowed"
+                                )}
                                 placeholder="0"
                             />
                         </div>
@@ -641,8 +669,10 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                             </button>
                         </div>
                     </div>
+                    )}
 
-                    {/* Visual Effects */}
+                    {/* Visual Effects - HOST ONLY */}
+                    {isHost && (
                     <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex items-center justify-between">
                          <span className="text-zinc-400 text-sm font-medium flex items-center gap-2">
                             <Palette size={16} className="text-purple-400" />
@@ -665,6 +695,41 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                             )} />
                          </button>
                     </div>
+                    )}
+
+                    {/* Guest RGB Toggle (Only if Stream has RGB enabled) */}
+                    {!isHost && hasRgb && isOnStage && (
+                        <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex items-center justify-between">
+                            <span className="text-zinc-400 text-sm font-medium flex items-center gap-2">
+                                <Palette size={16} className="text-purple-400" />
+                                My RGB
+                            </span>
+                            <button 
+                                onClick={() => {
+                                    const currentMeta = localParticipant?.metadata ? JSON.parse(localParticipant.metadata) : {};
+                                    const isCurrentlyDisabled = currentMeta.rgb_disabled === true;
+                                    
+                                    const newMeta = {
+                                        ...currentMeta,
+                                        rgb_disabled: !isCurrentlyDisabled
+                                    };
+                                    
+                                    localParticipant?.setMetadata(JSON.stringify(newMeta));
+                                    toast.success(isCurrentlyDisabled ? "RGB Enabled" : "RGB Disabled");
+                                }}
+                                className={cn(
+                                    "w-12 h-6 rounded-full transition-colors relative flex items-center", 
+                                    // If NOT disabled, it is ON (green)
+                                    !(localParticipant?.metadata && JSON.parse(localParticipant.metadata).rgb_disabled) ? "bg-green-500" : "bg-zinc-700"
+                                )}
+                                title="Toggle your RGB border"
+                            >
+                                <div className={cn("absolute left-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm", 
+                                    !(localParticipant?.metadata && JSON.parse(localParticipant.metadata).rgb_disabled) && "translate-x-6"
+                                )} />
+                            </button>
+                        </div>
+                    )}
                 </div>
                 </motion.div>
                 )}

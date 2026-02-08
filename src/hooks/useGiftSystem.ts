@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
+import { generateUUID } from '../lib/uuid';
 
 export interface GiftItem {
   id: string;
@@ -37,22 +38,26 @@ export function useGiftSystem(
     setIsSending(true);
 
     try {
-      // Use the scalable send_gift_ledger RPC (Single Write)
-      const { data, error } = await supabase.rpc('send_gift_ledger', {
-        p_receiver_id: finalRecipientId,
-        p_gift_id: gift.slug || gift.id,
-        p_amount: gift.coinCost,
-        p_stream_id: streamId,
-        p_quantity: quantity,
-        p_metadata: {
-          stream_id: streamId,
-          battle_id: battleId || null,
-          gift_name: gift.name,
-          gift_icon: gift.icon,
-          original_gift_id: gift.id
-        },
-        p_idempotency_key: crypto.randomUUID()
+      console.log('[GiftDebugger-2] Sending gift...', {
+        sender: user.id,
+        receiver: finalRecipientId,
+        streamId: streamId || null,
+        giftId: gift.slug || gift.id,
+        cost: gift.coinCost,
+        quantity
       });
+
+      // Use the new send_premium_gift RPC with Cashback/RGB logic
+      const { data, error } = await supabase.rpc('send_premium_gift', {
+        p_sender_id: user.id,
+        p_receiver_id: finalRecipientId,
+        p_stream_id: streamId || null,
+        p_gift_id: gift.slug || gift.id,
+        p_cost: gift.coinCost,
+        p_quantity: quantity
+      });
+
+      console.log('[GiftDebugger-2] RPC Result:', { data, error });
 
       if (error) throw error;
 

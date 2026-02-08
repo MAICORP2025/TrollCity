@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import './admin.css'
 import { trollCityTheme } from '../../styles/trollCityTheme'
 import { useAuthStore } from '../../lib/store'
-import { supabase, isAdminEmail } from '../../lib/supabase'
+import { supabase, isAdminEmail, UserRole } from '../../lib/supabase'
 import { sendNotification } from '../../lib/sendNotification'
 import { sendGlobalNotification } from '../../lib/ntfyNotify'
 import { Shield } from 'lucide-react'
@@ -19,6 +19,7 @@ import QuickActionsBar from './components/QuickActionsBar'
 import PresidentialOversightPanel from './components/PresidentialOversightPanel'
 import ProposalManagementPanel from './components/shared/ProposalManagementPanel'
 import AdminInterviewDashboard from '@/pages/admin/components/AdminInterviewDashboard'
+import TempAdminDashboard from './TempAdminDashboard'
 import ErrorBoundary from '../../components/ErrorBoundary'
 
 type StatState = {
@@ -143,6 +144,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [adminCheckLoading, setAdminCheckLoading] = useState(true)
   const [isAuthorized, setIsAuthorized] = useState(false)
+  const isTempAdmin = profile?.role === UserRole.TEMP_CITY_ADMIN
 
   const [stats, setStats] = useState<StatState>({
     totalUsers: 0,
@@ -988,11 +990,12 @@ export default function AdminDashboard() {
           // Preserve admin role if user is admin email, but keep all existing data
           const isAdmin = isAdminEmail(user?.email)
           if (isAdmin && p.role !== 'admin') {
-            // Update role to admin but preserve all payment and other data
-            const { error: updateError } = await supabase
-              .from('user_profiles')
-              .update({ role: 'admin', updated_at: new Date().toISOString() })
-              .eq('id', user.id)
+            // Update role to admin securely
+            const { error: updateError } = await supabase.rpc('admin_update_user_role', {
+              p_target_user_id: user.id,
+              p_new_role: 'admin'
+            });
+            
             if (!updateError) {
               p = { ...p, role: 'admin' }
             }
@@ -1081,6 +1084,10 @@ export default function AdminDashboard() {
         </div>
       </div>
     )
+  }
+
+  if (isTempAdmin) {
+    return <TempAdminDashboard />
   }
 
   return (

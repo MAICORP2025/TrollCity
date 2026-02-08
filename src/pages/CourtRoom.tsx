@@ -18,6 +18,7 @@ import CourtGeminiModal from "../components/CourtGeminiModal";
 import CourtDocketModal from "../components/CourtDocketModal";
 import { generateSummaryFeedback } from "../lib/courtAi";
 import { getGlowingTextStyle } from "../lib/perkEffects";
+import { generateUUID } from "../lib/uuid";
 
 const CourtParticipantLabel = ({ trackRef }: { trackRef: any }) => {
   const [username, setUsername] = useState<string | null>(null);
@@ -1127,11 +1128,12 @@ export default function CourtRoom() {
 
       if (error) throw error;
 
-      // Update defendant's coin balance using centralized spend function
-      await supabase.rpc('spend_coins', {
-        p_user_id: defendant,
+      // Update defendant's coin balance using court-specific function
+      await supabase.rpc('court_levy_fine', {
+        p_defendant_id: defendant,
         p_amount: paymentData.amount,
         p_reason: `Court payment: ${paymentData.reason}`,
+        p_court_id: courtId,
         p_metadata: { recipient: paymentData.recipient }
       });
 

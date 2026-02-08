@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { Heart, MessageCircle, Gift, Share2, Trash2, Smile } from 'lucide-react';
+import { Heart, MessageCircle, Gift, Share2, Trash2 } from 'lucide-react';
 
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
-import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 import GiftModal from '../trollWall/GiftModal';
 
 interface Comment {
@@ -45,28 +44,9 @@ export default function PostItem({ post, onDelete }: PostItemProps) {
   const [likesCount, setLikesCount] = useState(post.likes_count || 0);
   const [liked, setLiked] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [_gifting, setGifting] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
-
-  // Close emoji picker when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
-        setShowEmojiPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const onEmojiClick = (emojiData: EmojiClickData) => {
-    setCommentText(prev => prev + emojiData.emoji);
-    setShowEmojiPicker(false);
-    inputRef.current?.focus();
-  };
 
   // Check if user liked this post on mount
   useEffect(() => {
@@ -430,24 +410,6 @@ export default function PostItem({ post, onDelete }: PostItemProps) {
                             className="w-full bg-white/5 border border-white/10 rounded-full pl-4 pr-20 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
                         />
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                            <div className="relative" ref={emojiPickerRef}>
-                                <button 
-                                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                    className="p-1.5 text-gray-400 hover:text-yellow-400 transition-colors"
-                                >
-                                    <Smile className="w-4 h-4" />
-                                </button>
-                                {showEmojiPicker && (
-                                    <div className="absolute bottom-full right-0 mb-2 z-50">
-                                        <EmojiPicker 
-                                            onEmojiClick={onEmojiClick}
-                                            theme={Theme.DARK}
-                                            width={300}
-                                            height={400}
-                                        />
-                                    </div>
-                                )}
-                            </div>
                             <button 
                                 onClick={handlePostComment}
                                 className="p-1.5 text-purple-400 hover:text-purple-300 transition-colors"

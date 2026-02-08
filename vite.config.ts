@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import fs from 'fs'
 import mkcert from 'vite-plugin-mkcert'
 // import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
@@ -10,10 +11,26 @@ import mkcert from 'vite-plugin-mkcert'
 
 const disableHmr = process.env.DISABLE_HMR === '1'
 
+// Read version.json
+let appVersion = '1.0.0';
+let buildTime = Date.now();
+try {
+  const versionPath = path.resolve(__dirname, 'public/version.json');
+  if (fs.existsSync(versionPath)) {
+    const versionData = JSON.parse(fs.readFileSync(versionPath, 'utf-8'));
+    appVersion = versionData.version || '1.0.0';
+    buildTime = versionData.buildTime || Date.now();
+  }
+} catch (e) {
+  console.warn('Could not read version.json in vite.config.ts');
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   define: {
     global: 'window',
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_TIME__: JSON.stringify(buildTime),
   },
   plugins: [
     react(),
@@ -141,4 +158,4 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
-})
+}))

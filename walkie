@@ -1,0 +1,147 @@
+TRAE — WALKIE TALKIE (OFFICER/STAFF) LIVEKIT AUDIO INTEGRATION + PRIORITY MUTING (CRITICAL)
+==========================================================================================
+
+ABSOLUTE RULES (DO NOT BREAK ANYTHING)
+--------------------------------------
+1) You MUST NOT modify, drop, rename, refactor, or reinterpret ANY existing Troll City tables,
+   columns, enums, functions, triggers, views, RLS policies, or economy logic.
+2) You may ONLY add new tables/columns/RPCs if required.
+3) Do NOT change any existing LiveKit usage for broadcasts except to add client-side audio ducking/muting
+   for the LOCAL user when walkie is active.
+4) Server-side permission checks MUST remain authoritative. UI-only checks are not sufficient.
+
+GOAL
+----
+Our “Walkie” feature currently exists but is not implemented as a real walkie-talkie.
+We need to make Walkie a REAL-TIME push-to-talk / live audio paging system for STAFF (officers/admins/secretary),
+using LiveKit. When an officer opens the Walkie popup and selects a page/channel, they should immediately hear
+live audio of the other staff in that walkie channel.
+
+CRITICAL AUDIO BEHAVIOR (PRIORITY)
+----------------------------------
+When Walkie audio is active for a user (the officer):
+- MUTE/DUCK all OTHER in-app audio FOR THAT USER ONLY (local mix):
+  - If the officer is watching a broadcast, the broadcast audio must be muted ONLY for the officer.
+  - It must NOT affect broadcaster audio, guests, or viewers.
+- Walkie audio must remain audible and prioritized over everything.
+
+When Walkie ends / is closed:
+- Restore previous audio state (broadcast audio returns to prior volume/mute state).
+
+WALKIE REQUIREMENTS
+-------------------
+A) LIVEKIT ARCHITECTURE
+1) Walkie uses LiveKit rooms SEPARATE from broadcast rooms.
+   - Broadcast rooms remain unchanged.
+   - Walkie rooms are staff-only voice rooms.
+
+2) Walkie rooms naming convention:
+   - "walkie:<city_id_or_env>:<channel_id>"
+   Example: walkie:prod:officer-lounge
+   or walkie:prod:dispatch
+
+3) Walkie is AUDIO-ONLY (no video). Use LiveKit audio tracks only.
+
+B) PERMISSIONS
+1) Only staff roles can join walkie rooms (officer/admin/secretary/etc. as defined by existing role logic).
+2) Tokens:
+   - Create a new RPC to mint LiveKit tokens for Walkie with strict checks.
+   - Token grants:
+     - join room
+     - publish audio (only if allowed)
+     - subscribe audio
+   - Must prevent normal users from joining staff walkie rooms.
+
+C) DATA MODEL (ONLY ADD IF NEEDED)
+If we need persistent channels and membership rules, add:
+1) public.walkie_channels
+   - id uuid pk
+   - name text (e.g., "Dispatch", "Officer Lounge")
+   - required_role text / enum OR role_mask
+   - is_active boolean default true
+   - created_at timestamptz default now()
+
+2) public.walkie_channel_memberships (optional)
+   - channel_id uuid fk
+   - user_id uuid fk
+   - added_by uuid fk
+   - created_at timestamptz default now()
+
+NOTE: If existing tables already represent staff groups/channels, reuse them; do not duplicate.
+
+D) RPC / BACKEND
+1) Create new RPC:
+   - public.get_walkie_livekit_token(p_channel_id uuid) RETURNS jsonb
+Behavior:
+   - auth.uid() required
+   - verify caller is staff and allowed to join this channel (role check)
+   - generate a LiveKit token for room "walkie:<env>:<channel_id>"
+   - return { success, room_name, token, ws_url }
+
+2) (Optional) presence/state:
+   - Track who is in which walkie channel for UI (speaking indicator, online staff count).
+   - This can be client-side via LiveKit participant list; store server-side only if required.
+
+E) FRONTEND / CLIENT INTEGRATION
+1) Walkie Popup UI
+- When user clicks a walkie page/channel button inside the Walkie popup:
+  - call get_walkie_livekit_token(channel_id)
+  - connect to LiveKit room as audio-only participant
+  - auto-subscribe to other participants’ audio tracks
+  - show a simple roster (participants + speaking indicator)
+  - show Push-To-Talk (PTT) button:
+    - press and hold to unmute mic and publish audio
+    - release to mute mic
+  - Provide a mic permission prompt and fallback error UI
+
+2) PRIORITY AUDIO MUTING (LOCAL ONLY)
+Implement a global audio manager to enforce this:
+
+- When Walkie connects or becomes active:
+  a) Mute/duck broadcast audio player output FOR THIS USER ONLY.
+     - If broadcast audio is LiveKit, mute the broadcast room’s audio tracks locally (set volume 0 or disable subscription audio)
+     - If broadcast audio is an HTMLMediaElement, set volume to 0 (store previous volume)
+  b) Mute any other app sounds (SFX/music) for this user:
+     - Set global SFX gain to 0 OR pause audio context
+  c) Ensure walkie audio is not muted and has priority gain.
+
+- When Walkie disconnects:
+  - restore prior volumes/mute states exactly.
+
+This MUST NOT alter anything for other users; only the local client changes its playback mix.
+
+3) EDGE CASES
+- If officer is broadcasting while using walkie:
+  - officer’s broadcast outgoing audio continues (do not change their upstream publishing)
+  - but their local monitoring playback of the broadcast should be muted while walkie active
+- If officer is a guest in someone else’s broadcast:
+  - only local playback is muted; upstream publishing (if any) remains unless explicitly muted by the user
+
+F) QUALITY / UX
+- Connection status: Connecting / Live / Disconnected / Reconnecting
+- Visual “LIVE Walkie” indicator
+- PTT state indicator: “Hold to Talk”
+- Volume meter / speaking indicator (simple)
+- If mic permission denied: allow listen-only mode.
+
+G) TEST PLAN (REQUIRED)
+Implement and verify:
+1) Staff can join walkie channel and hear each other live.
+2) Non-staff cannot obtain token or join walkie room.
+3) While watching a broadcast, enabling walkie mutes ONLY the officer’s broadcast audio playback.
+4) Other viewers still hear the broadcast normally (no global mute).
+5) Closing walkie restores broadcast audio to previous state.
+6) PTT works: press to talk, release to mute.
+7) Reconnect behavior works on network hiccups.
+
+DELIVERABLES
+------------
+1) SQL migration (only if new tables/columns needed) + new RPC for token generation
+2) Frontend implementation details (Walkie popup, LiveKit connect, PTT)
+3) Global audio manager implementation for local-only priority muting
+4) Clear notes on how broadcast audio is muted locally without impacting others
+
+IMPORTANT:
+- Do NOT break existing broadcast LiveKit rooms.
+- Walkie rooms must be separate and staff-only.
+- Muting must be local client-side only.

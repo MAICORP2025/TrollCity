@@ -1,43 +1,43 @@
--- Create stream_bans table if not exists
-CREATE TABLE IF NOT EXISTS public.stream_bans (
+-- Ensure stream_seat_sessions table exists (Moved from 000002)
+CREATE TABLE IF NOT EXISTS public.stream_seat_sessions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     stream_id UUID REFERENCES public.streams(id) ON DELETE CASCADE,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    reason TEXT,
-    banned_at TIMESTAMPTZ DEFAULT NOW(),
-    expires_at TIMESTAMPTZ, -- Null for permaban, timestamp for kick/tempban
-    created_by UUID REFERENCES auth.users(id)
+    seat_index INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'left', 'kicked')),
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    left_at TIMESTAMPTZ,
+    price_paid INTEGER DEFAULT 0
 );
 
 -- Enable RLS
-ALTER TABLE public.stream_bans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stream_seat_sessions ENABLE ROW LEVEL SECURITY;
 
--- Policies for stream_bans
-CREATE POLICY "Stream bans are viewable by everyone" 
-ON public.stream_bans FOR SELECT 
+-- Policies (Moved from 000002)
+-- EVERYONE must be able to see active sessions to render the grid
+DROP POLICY IF EXISTS "Anyone can view active seat sessions" ON public.stream_seat_sessions;
+CREATE POLICY "Anyone can view active seat sessions" 
+ON public.stream_seat_sessions FOR SELECT 
 USING (true);
 
-CREATE POLICY "Hosts and mods can insert bans" 
-ON public.stream_bans FOR INSERT 
-WITH CHECK (
-    EXISTS (
-        SELECT 1 FROM public.streams 
-        WHERE id = stream_bans.stream_id 
-        AND (user_id = auth.uid() OR auth.uid() IN (SELECT user_id FROM public.user_profiles WHERE role IN ('admin', 'moderator', 'troll_officer')))
-    )
-);
+-- Users can insert their own session
+DROP POLICY IF EXISTS "Users can insert their own session" ON public.stream_seat_sessions;
+CREATE POLICY "Users can insert their own session" 
+ON public.stream_seat_sessions FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Hosts and mods can delete bans" 
-ON public.stream_bans FOR DELETE 
-USING (
-    EXISTS (
-        SELECT 1 FROM public.streams 
-        WHERE id = stream_bans.stream_id 
-        AND (user_id = auth.uid() OR auth.uid() IN (SELECT user_id FROM public.user_profiles WHERE role IN ('admin', 'moderator', 'troll_officer')))
-    )
-);
+-- Users can update their own session
+DROP POLICY IF EXISTS "Users can update their own session" ON public.stream_seat_sessions;
+CREATE POLICY "Users can update their own session" 
+ON public.stream_seat_sessions FOR UPDATE
+USING (auth.uid() = user_id);
+
+-- Ensure kick_reason column exists (Added in 000001)
+ALTER TABLE public.stream_seat_sessions ADD COLUMN IF NOT EXISTS kick_reason TEXT;
 
 -- Fix End Stream RPC
+DROP FUNCTION IF EXISTS public.end_stream(UUID);
+
 CREATE OR REPLACE FUNCTION public.end_stream(p_stream_id UUID)
 RETURNS TABLE (success BOOLEAN, message TEXT) 
 LANGUAGE plpgsql
@@ -74,67 +74,74 @@ BEGIN
 END;
 $$;
 
--- Fix Visuals: Ensure user_perks are viewable
-CREATE POLICY "User perks are viewable by everyone" 
-ON public.user_perks FOR SELECT 
-USING (true);
-
--- Fix Visuals: Purchase/Toggle RGB RPC
-CREATE OR REPLACE FUNCTION public.purchase_rgb_broadcast(p_stream_id UUID, p_enable BOOLEAN)
-RETURNS TABLE (success BOOLEAN, message TEXT, error TEXT)
+-- RPC: Leave Seat Atomic
+DROP FUNCTION IF EXISTS public.leave_seat_atomic(UUID);
+CREATE OR REPLACE FUNCTION public.leave_seat_atomic(p_session_id UUID)
+RETURNS TABLE (success BOOLEAN, message TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     v_user_id UUID;
-    v_stream_owner UUID;
-    v_has_purchased BOOLEAN;
-    v_price CONSTANT INTEGER := 10;
 BEGIN
     v_user_id := auth.uid();
-    
-    -- Check stream ownership
-    SELECT user_id, rgb_purchased INTO v_stream_owner, v_has_purchased
-    FROM public.streams WHERE id = p_stream_id;
-    
-    IF v_stream_owner IS NULL THEN
-        RETURN QUERY SELECT false, NULL::TEXT, 'Stream not found'::TEXT;
-        RETURN;
-    END IF;
-    
-    IF v_stream_owner != v_user_id THEN
-        RETURN QUERY SELECT false, NULL::TEXT, 'Not stream owner'::TEXT;
+
+    -- Verify ownership of session
+    IF NOT EXISTS (
+        SELECT 1 FROM public.stream_seat_sessions
+        WHERE id = p_session_id AND user_id = v_user_id
+    ) THEN
+        RETURN QUERY SELECT false, 'Session not found or not yours'::TEXT;
         RETURN;
     END IF;
 
-    -- If enabling
-    IF p_enable THEN
-        -- Check if already purchased
-        IF v_has_purchased THEN
-            UPDATE public.streams SET has_rgb_effect = true WHERE id = p_stream_id;
-            RETURN QUERY SELECT true, 'RGB Enabled'::TEXT, NULL::TEXT;
-        ELSE
-            -- Try to charge
-            IF (SELECT troll_coins FROM public.user_profiles WHERE user_id = v_user_id) >= v_price THEN
-                -- Deduct coins
-                UPDATE public.user_profiles 
-                SET troll_coins = troll_coins - v_price 
-                WHERE user_id = v_user_id;
-                
-                -- Mark purchased and enabled
-                UPDATE public.streams 
-                SET rgb_purchased = true, has_rgb_effect = true 
-                WHERE id = p_stream_id;
-                
-                RETURN QUERY SELECT true, 'Purchased and Enabled'::TEXT, NULL::TEXT;
-            ELSE
-                RETURN QUERY SELECT false, NULL::TEXT, 'Insufficient funds (10 Coins required)'::TEXT;
-            END IF;
-        END IF;
-    ELSE
-        -- Disabling
-        UPDATE public.streams SET has_rgb_effect = false WHERE id = p_stream_id;
-        RETURN QUERY SELECT true, 'RGB Disabled'::TEXT, NULL::TEXT;
-    END IF;
+    -- Update status
+    UPDATE public.stream_seat_sessions
+    SET status = 'left', left_at = NOW()
+    WHERE id = p_session_id;
+
+    RETURN QUERY SELECT true, 'Left seat successfully'::TEXT;
 END;
 $$;
+
+-- RPC: Kick Participant Atomic
+DROP FUNCTION IF EXISTS public.kick_participant_atomic(UUID, UUID, TEXT);
+CREATE OR REPLACE FUNCTION public.kick_participant_atomic(p_stream_id UUID, p_target_user_id UUID, p_reason TEXT)
+RETURNS TABLE (success BOOLEAN, message TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+BEGIN
+    v_user_id := auth.uid();
+
+    -- Check if requester is host or admin
+    SELECT EXISTS (
+        SELECT 1 FROM public.streams
+        WHERE id = p_stream_id AND user_id = v_user_id
+    ) INTO v_is_admin;
+
+    IF NOT v_is_admin THEN
+        SELECT EXISTS (
+            SELECT 1 FROM public.user_profiles
+            WHERE user_id = v_user_id AND (role IN ('admin', 'moderator') OR is_admin = true)
+        ) INTO v_is_admin;
+    END IF;
+
+    IF NOT v_is_admin THEN
+        RETURN QUERY SELECT false, 'Permission denied'::TEXT;
+        RETURN;
+    END IF;
+
+    -- End active sessions for this user on this stream
+    UPDATE public.stream_seat_sessions
+    SET status = 'kicked', left_at = NOW(), kick_reason = p_reason
+    WHERE stream_id = p_stream_id AND user_id = p_target_user_id AND status = 'active';
+
+    RETURN QUERY SELECT true, 'User kicked from seat'::TEXT;
+END;
+$$;
+
+

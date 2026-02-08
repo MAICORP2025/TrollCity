@@ -3,16 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { PreflightStore } from '@/lib/preflightStore';
-import { Video, VideoOff, Mic, MicOff, AlertTriangle } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { LiveKitService } from '@/lib/LiveKitService';
+import { MobileErrorLogger } from '@/lib/MobileErrorLogger';
+
+import { generateUUID } from '../../lib/uuid';
 
 export default function SetupPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('general');
   const [loading, setLoading] = useState(false);
   const [restrictionCheck, setRestrictionCheck] = useState<{ allowed: boolean; waitTime?: string; reason?: string; message?: string } | null>(null);
+
+  // Pre-generate stream ID for token optimization
+  const [streamId] = useState(() => generateUUID());
 
   // Track if we are navigating to broadcast to prevent cleanup
   const isStartingStream = useRef(false);
@@ -27,7 +34,7 @@ export default function SetupPage() {
     // We strictly enforce this for ALL users, including Admins.
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('created_at, bypass_broadcast_restriction, drivers_license_status')
+      .select('created_at, bypass_broadcast_restriction, drivers_license_status, live_restricted_until')
       .eq('id', user.id)
       .single();
     
@@ -57,13 +64,29 @@ export default function SetupPage() {
 
         
       if (profile?.created_at) {
-        const created = new Date(profile.created_at);
         const now = new Date();
+
+        // Check manual restriction first
+        if (profile.live_restricted_until) {
+          const restrictedUntil = new Date(profile.live_restricted_until);
+          if (restrictedUntil > now) {
+            const remaining = restrictedUntil.getTime() - now.getTime();
+            const hours = Math.floor(remaining / (1000 * 60 * 60));
+            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            setRestrictionCheck({ 
+              allowed: false, 
+              waitTime: `${hours}h ${minutes}m (Admin Restricted)` 
+            });
+            return;
+          }
+        }
+
+        const created = new Date(profile.created_at);
         const diff = now.getTime() - created.getTime();
-        const hours24 = 24 * 60 * 60 * 1000;
+        const restrictionTime = 30 * 60 * 1000; // 30 minutes
         
-        if (diff < hours24) {
-          const remaining = hours24 - diff;
+        if (diff < restrictionTime) {
+          const remaining = restrictionTime - diff;
           const hours = Math.floor(remaining / (1000 * 60 * 60));
           const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
           setRestrictionCheck({ 
@@ -82,25 +105,50 @@ export default function SetupPage() {
     checkRestriction();
   }, [user]);
   
+  // Optimize: Pre-fetch LiveKit token as soon as restrictions are passed
+  useEffect(() => {
+    if (user && restrictionCheck?.allowed && streamId) {
+      console.log('[SetupPage] Pre-fetching LiveKit token for stream:', streamId);
+      const service = new LiveKitService({
+        roomName: streamId,
+        identity: user.id,
+        role: 'broadcaster',
+        allowPublish: true,
+      });
+      service.prepareToken();
+    }
+  }, [user, restrictionCheck, streamId]);
+
   // Media state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
 
   useEffect(() => {
     let localStream: MediaStream | null = null;
+
+    // Check for multiple cameras
+    navigator.mediaDevices?.enumerateDevices().then(devices => {
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        setHasMultipleCameras(videoDevices.length > 1);
+    });
 
     // Request camera access on mount
     async function getMedia() {
       // Check for getUserMedia support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         // Try to explain WHY it failed
-        console.error('[SetupPage] getUserMedia not supported in this browser/context');
+        const errorMsg = 'getUserMedia not supported in this browser/context';
+        console.error(`[SetupPage] ${errorMsg}`);
         
         const isSecure = window.isSecureContext;
-        const protocol = window.location.protocol;
         
+        // Log to Admin Dashboard
+        MobileErrorLogger.logError(new Error(errorMsg), 'SetupPage:getUserMediaCheck');
+
         if (!isSecure) {
            toast.error(
              <div className="flex flex-col gap-1">
@@ -126,8 +174,13 @@ export default function SetupPage() {
       }
 
       try {
+        // Stop previous tracks if any
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
+          video: { facingMode }, 
           audio: true 
         });
         localStream = mediaStream;
@@ -135,8 +188,15 @@ export default function SetupPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Error accessing media devices, trying audio only.", err);
+        MobileErrorLogger.logError(err, 'SetupPage:getUserMedia');
+
+        if (err.name === 'NotAllowedError') {
+             toast.error("Camera permission denied. Please allow access in browser settings.");
+             return;
+        }
+
         try {
             const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
             localStream = audioStream;
@@ -161,7 +221,7 @@ export default function SetupPage() {
         PreflightStore.setStream(localStream);
       }
     };
-  }, []);
+  }, [facingMode]); // Re-run when facing mode changes
 
   const toggleVideo = () => {
     if (stream) {
@@ -175,6 +235,10 @@ export default function SetupPage() {
       stream.getAudioTracks().forEach(track => track.enabled = !isAudioEnabled);
       setIsAudioEnabled(!isAudioEnabled);
     }
+  };
+
+  const flipCamera = () => {
+      setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
   };
 
   const handleStartStream = async () => {
@@ -209,6 +273,7 @@ export default function SetupPage() {
       const { data, error } = await supabase
         .from('streams')
         .insert({
+          id: streamId, // Use pre-generated ID
           user_id: user.id,
           title,
           category,
@@ -227,6 +292,7 @@ export default function SetupPage() {
 
       toast.success('Stream created! Going live...');
       isStartingStream.current = true;
+      // Navigate using username if available (for clean URL), otherwise ID
       navigate(`/broadcast/${data.id}`);
     } catch (err: any) {
       console.error('Error creating stream:', err);
@@ -236,6 +302,7 @@ export default function SetupPage() {
     }
   };
 
+  
   return (
     <div className="min-h-screen bg-slate-950 text-white p-8 flex items-center justify-center">
       <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -264,6 +331,16 @@ export default function SetupPage() {
               >
                 {isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
               </button>
+              
+              {hasMultipleCameras && (
+                  <button 
+                    onClick={flipCamera}
+                    className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                    title="Flip Camera"
+                  >
+                    <RefreshCw size={20} />
+                  </button>
+              )}
             </div>
           </div>
           <p className="text-center text-sm text-gray-400">
@@ -295,7 +372,7 @@ export default function SetupPage() {
                   <>
                     <h2 className="text-2xl font-bold text-white mb-2">Account in Cooldown</h2>
                     <p className="text-gray-400 mb-6">
-                      New accounts must wait 24 hours before starting a broadcast to ensure community safety.
+                      New accounts must wait 30 minutes before starting a broadcast to ensure community safety.
                     </p>
                     <div className="bg-slate-950 rounded-lg p-4 border border-white/5 inline-block mx-auto">
                       <div className="text-sm text-gray-500 uppercase tracking-wider mb-1">Time Remaining</div>
@@ -340,6 +417,7 @@ export default function SetupPage() {
                 <option value="general">General Chat</option>
                 <option value="gaming">Gaming</option>
                 <option value="music">Music</option>
+                <option value="podcast">Podcast</option>
                 <option value="debate">Debate / Battle</option>
               </select>
             </div>

@@ -30,8 +30,21 @@ const VideoViewer = () => {
   return <VideoTrack trackRef={videoTrack} className="w-full h-full object-contain" />;
 };
 
+import HLSPlayer from './HLSPlayer';
+
 export default function StreamWatchModal({ stream, onClose }: StreamWatchModalProps) {
   const user = useAuthStore(s => s.user);
+  
+  // Prefer HLS if available to avoid LiveKit token usage (Viewer only)
+  // But for Government Control, we might want low latency?
+  // User requested "watch not broadcast" and "not granting livekit tokens".
+  // So we prioritize HLS.
+  const useHLS = !!(stream.agora_channel || stream.id); // HLS usually uses ID or a specific URL. 
+  // Wait, the stream object in props has 'hls_url' usually?
+  // Let's check the interface.
+  // WatchableStream interface doesn't have hls_url. We should add it or cast.
+  
+  const hlsUrl = (stream as any).hls_url || (stream as any).hls_path;
   
   const { token, serverUrl, isLoading, error } = useLiveKitToken({
       streamId: stream.id,
@@ -39,7 +52,8 @@ export default function StreamWatchModal({ stream, onClose }: StreamWatchModalPr
       userId: user?.id || `guest-${Math.random().toString(36).slice(2)}`,
       isHost: false,
       canPublish: false,
-      enabled: true
+      enabled: !hlsUrl, // Only enable LiveKit if no HLS
+      role: 'viewer'
   });
 
   return (
@@ -52,7 +66,18 @@ export default function StreamWatchModal({ stream, onClose }: StreamWatchModalPr
           <X className="w-6 h-6" />
         </button>
         
-        {isLoading ? (
+        {hlsUrl ? (
+            <div className="w-full h-full relative group">
+                <HLSPlayer 
+                    src={hlsUrl}
+                    className="w-full h-full object-contain"
+                    autoPlay={true}
+                />
+                <div className="absolute top-4 left-4 px-2 py-1 bg-red-600 text-white text-xs font-bold rounded animate-pulse">
+                    LIVE (HLS)
+                </div>
+            </div>
+        ) : isLoading ? (
             <div className="flex items-center justify-center h-full text-white gap-2">
                 <Loader2 className="animate-spin text-green-500" />
                 <span>Connecting to LiveKit...</span>

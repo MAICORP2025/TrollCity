@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Send, User, Trash2, Shield, Crown, Sparkles, Car, Smile } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Send, User, Trash2, Shield, Crown, Sparkles, Car } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import UserNameWithAge from '../UserNameWithAge';
-import EmojiPicker, { Theme } from 'emoji-picker-react';
+import { toast } from 'sonner';
 
 interface VehicleStatus {
   has_vehicle: boolean;
@@ -48,12 +49,13 @@ interface BroadcastChatProps {
     isModerator?: boolean;
     isHost?: boolean;
     isViewer?: boolean;
+    isGuest?: boolean;
 }
 
-export default function BroadcastChat({ streamId, hostId, isModerator, isHost, isViewer = false }: BroadcastChatProps) {
+export default function BroadcastChat({ streamId, hostId, isModerator, isHost, isViewer = false, isGuest = false }: BroadcastChatProps) {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [streamMods, setStreamMods] = useState<string[]>([]);
   const { user, profile } = useAuthStore();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -186,7 +188,16 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
             };
 
             setMessages(prev => {
-                const updated = [...prev, newMsg];
+                // Remove optimistic message if it exists (match by content and user within reasonable time)
+                // Or simply filter out temp messages from this user that match content
+                const filtered = prev.filter(m => {
+                    if (m.id.startsWith('temp-') && m.user_id === newMsg.user_id && m.content === newMsg.content) {
+                        return false; 
+                    }
+                    return true;
+                });
+                
+                const updated = [...filtered, newMsg];
                 // Keep only last 50 messages to prevent memory issues and ensure visibility
                 if (updated.length > 50) return updated.slice(updated.length - 50);
                 return updated;
@@ -229,20 +240,35 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
                 setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
             });
         })
-        .subscribe();
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED' && user && profile) {
+                await viewerChannel.track({
+                    user_id: user.id,
+                    username: profile.username,
+                    avatar_url: profile.avatar_url,
+                    role: profile.role,
+                    troll_role: profile.troll_role,
+                    joined_at: new Date().toISOString()
+                });
+            }
+        });
 
     return () => { 
         supabase.removeChannel(chatChannel); 
         supabase.removeChannel(viewerChannel);
     };
-  }, [streamId, fetchVehicleStatus, isViewer]);
+  }, [streamId, fetchVehicleStatus, isViewer, user, profile]);
 
   // Removed aggressive auto-delete loop to prevent messages from disappearing due to clock skew
 
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !user || !profile) return;
+    if (!user || !profile) {
+        toast.error('You must be logged in to chat');
+        return;
+    }
+    if (!input.trim()) return;
     
     // Rate Limit Check
     const now = Date.now();
@@ -254,27 +280,68 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
     const content = input.trim();
     setInput('');
 
-    // Fetch my vehicle status ONCE
-    let myVehicle = vehicleCacheRef.current[user.id];
-    if (!myVehicle) {
-        // We can safely await this here because it's initiated by the SENDER (1 person), not receivers (1000 people)
-        myVehicle = (await fetchVehicleStatus(user.id)) || { has_vehicle: false };
-    }
-
-    await supabase.from('stream_messages').insert({
-        stream_id: streamId,
+    // Optimistic Update
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+        id: tempId,
         user_id: user.id,
         content,
-        // Denormalized Payload
-        user_name: profile.username,
-        user_avatar: profile.avatar_url,
-        user_role: profile.role,
-        user_troll_role: profile.troll_role,
-        user_created_at: profile.created_at,
-        user_rgb_expires_at: profile.rgb_username_expires_at,
-        user_glowing_username_color: profile.glowing_username_color,
-        vehicle_snapshot: myVehicle
+        created_at: new Date().toISOString(),
+        type: 'chat',
+        user_profiles: {
+            username: profile.username,
+            avatar_url: profile.avatar_url,
+            role: profile.role,
+            troll_role: profile.troll_role,
+            created_at: profile.created_at,
+            rgb_username_expires_at: profile.rgb_username_expires_at,
+            glowing_username_color: profile.glowing_username_color
+        },
+        vehicle_status: vehicleCacheRef.current[user.id] // Use cached vehicle status if available
+    };
+
+    setMessages(prev => {
+        const updated = [...prev, optimisticMessage];
+        if (updated.length > 50) return updated.slice(updated.length - 50);
+        return updated;
     });
+    setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+
+    try {
+        // Fetch my vehicle status ONCE
+        let myVehicle = vehicleCacheRef.current[user.id];
+        if (!myVehicle) {
+            // We can safely await this here because it's initiated by the SENDER (1 person), not receivers (1000 people)
+            myVehicle = (await fetchVehicleStatus(user.id)) || { has_vehicle: false };
+        }
+
+        const { error } = await supabase.from('stream_messages').insert({
+            stream_id: streamId,
+            user_id: user.id,
+            content,
+            // Denormalized Payload
+            user_name: profile.username,
+            user_avatar: profile.avatar_url,
+            user_role: profile.role,
+            user_troll_role: profile.troll_role,
+            user_created_at: profile.created_at,
+            user_rgb_expires_at: profile.rgb_username_expires_at,
+            user_glowing_username_color: profile.glowing_username_color,
+            vehicle_snapshot: myVehicle
+        });
+
+        if (error) {
+            console.error('Error sending message:', error);
+            toast.error('Failed to send message');
+            // Remove optimistic message on error
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+        }
+    } catch (err) {
+        console.error('Unexpected error sending message:', err);
+        toast.error('Failed to send message');
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+    }
   };
 
   const deleteMessage = async (msgId: string) => {
@@ -330,7 +397,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
   };
 
   return (
-    <div className="flex flex-col h-full text-white">
+    <div className="flex flex-col h-[94%] text-white">
         <div className="p-4 border-b border-white/10 font-bold bg-zinc-900/50 flex items-center gap-2">
             <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>
             Live Chat
@@ -339,7 +406,7 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-700">
             {messages.length === 0 && (
                 <div className="text-center text-zinc-500 text-sm mt-10 italic">
-                    No messages yet...
+                    No messages
                 </div>
             )}
             {messages.map(msg => {
@@ -431,36 +498,17 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
                 </div>
             ) : (
                 <>
-            {showEmojiPicker && (
-                <div className="absolute bottom-full right-0 mb-2 z-[9999] shadow-2xl rounded-xl overflow-hidden border border-white/10">
-                            <EmojiPicker 
-                                onEmojiClick={(data) => setInput(prev => prev + data.emoji)}
-                                theme={Theme.DARK}
-                                width={300}
-                                height={400}
-                            />
-                        </div>
-                    )}
-
                 <div className="relative w-full">
                     <input 
                         type="text" 
                         value={input}
                         onChange={e => setInput(e.target.value)}
-                        placeholder="Chat..."
-                        className="w-full bg-zinc-800 border-none rounded-full pl-10 pr-10 py-2.5 focus:ring-2 focus:ring-yellow-500 text-white placeholder:text-zinc-500 text-sm"
+                        placeholder="Type a message..."
+                        className="w-full bg-zinc-800 border-none rounded-full px-4 py-2.5 focus:ring-2 focus:ring-yellow-500 text-white placeholder:text-zinc-500 text-sm"
                     />
-                    
-                    <button 
-                        type="button"
-                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-yellow-400 transition-colors z-10"
-                    >
-                        <Smile size={18} />
-                    </button>
 
                     <button 
-                        type="submit" 
+                        type="submit"  
                         disabled={!input.trim()}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-yellow-500 hover:text-yellow-400 disabled:opacity-50 transition"
                     >

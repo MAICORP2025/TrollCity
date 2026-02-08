@@ -1,0 +1,835 @@
+TRAE — FINAL MASTER PROMPT PACK (ENFORCEMENT + GOVERNMENT POWERS + STREAM/GIFTCARD/GAS/GIFTS/PWA + FULL DIAGNOSTICS)
+ABSOLUTE RULE (READ FIRST)
+
+You MUST NOT modify, rename, delete, refactor, or reinterpret any existing Troll City tables, columns, enums, functions, triggers, RLS policies, economy logic, permissions, or role behavior.
+
+You may ONLY:
+
+ADD new tables
+
+ADD new enums
+
+ADD new functions/RPCs
+
+ADD enforcement checks (server-side + LiveKit + UI)
+
+ADD UI panels
+
+ADD diagnostics/tests
+
+Applications are OUT OF SCOPE.
+Payout/Cashout behavior IS IN SCOPE and is defined exclusively in PROMPT 3 below.
+
+If any requirement below conflicts with an existing system, you must implement the requirement without altering existing behavior by adding the minimum necessary new tables/functions/checks.
+
+PROMPT 1 — TRAE — REVIEW, ABUSE & ENFORCEMENT SYSTEM (FINAL)
+OBJECTIVE
+
+Implement a Review & Abuse Enforcement System that allows Troll City staff and government roles to:
+
+Review reported content and behavior
+
+Apply temporary, targeted restrictions
+
+Stop users from:
+
+Messaging
+
+Posting
+
+Broadcasting
+
+Starting or joining podcasts
+
+Joining live streams
+
+Automatically enforce restrictions platform-wide
+
+This system must be:
+
+Transparent
+
+Logged
+
+Time-bound
+
+Reversible
+
+Impossible to bypass
+
+CORE PRINCIPLE
+
+Punishment must restrict capability, not identity.
+Users are not deleted or permanently destroyed. They are limited, reviewed, and restored.
+
+ABUSE TYPES (ENUM — REQUIRED)
+
+Create enum: abuse_type
+Values:
+
+spam
+
+harassment
+
+hate_speech
+
+sexual_content
+
+violence
+
+impersonation
+
+fraud
+
+underage
+
+disruptive_behavior
+
+streaming_violation
+
+other
+
+REVIEW STATUS (ENUM — REQUIRED)
+
+Create enum: review_status
+Values:
+
+pending
+
+under_review
+
+action_taken
+
+dismissed
+
+escalated
+
+ENFORCEMENT ACTIONS (ENUM — REQUIRED)
+
+Create enum: enforcement_action
+Values:
+
+restrict_messaging
+
+restrict_posting
+
+restrict_broadcasting
+
+restrict_podcast_start
+
+restrict_podcast_join
+
+restrict_stream_join
+
+restrict_stream_start
+
+restrict_all_live
+
+warning_only
+
+temporary_suspension
+
+OPTIONAL BUT RECOMMENDED ENUM (CLARITY)
+
+Create enum: abuse_source_type
+Values:
+
+post
+
+message
+
+stream
+
+podcast
+
+profile
+
+comment
+
+other
+
+NEW TABLE: abuse_reports
+
+Stores reports from users or automated systems.
+
+Fields:
+
+id (uuid, pk)
+
+reporter_user_id (uuid, nullable)
+
+reported_user_id (uuid, required)
+
+source_type (abuse_source_type OR text if enum not created)
+
+source_id (uuid, nullable)
+
+abuse_type (abuse_type)
+
+description (text)
+
+status (review_status)
+
+created_at (timestamptz)
+
+NEW TABLE: review_cases
+
+Represents a moderation review.
+
+Fields:
+
+id (uuid, pk)
+
+abuse_report_id (uuid)
+
+assigned_reviewer_id (uuid)
+
+reviewer_role (admin, president, vice_president)
+
+status (review_status)
+
+notes (text)
+
+created_at (timestamptz)
+
+resolved_at (timestamptz)
+
+NEW TABLE: user_restrictions (CRITICAL — ENFORCEMENT ENGINE)
+
+Fields:
+
+id (uuid, pk)
+
+user_id (uuid)
+
+enforcement_action (enforcement_action)
+
+reason (text)
+
+imposed_by (uuid)
+
+imposed_role (admin, president, vice_president)
+
+starts_at (timestamptz)
+
+ends_at (timestamptz)
+
+is_active (boolean)
+
+metadata (jsonb)
+
+created_at (timestamptz)
+
+Restrictions must auto-expire when ends_at < now().
+
+ENFORCEMENT RULES (MANDATORY)
+1) Messaging Restrictions
+
+If user has restrict_messaging:
+
+Cannot send DMs
+
+Cannot send pod messages
+
+Cannot comment or reply
+
+Read-only access only
+
+2) Posting Restrictions
+
+If user has restrict_posting:
+
+Cannot create posts
+
+Cannot comment
+
+Cannot upload media
+
+3) Broadcast Restrictions
+
+If user has restrict_broadcasting:
+
+Cannot start a live stream
+
+Cannot go live anywhere
+
+“Go Live” actions blocked at API + UI level
+
+4) Podcast Restrictions
+
+If user has restrict_podcast_start: cannot start podcasts
+If user has restrict_podcast_join: cannot join podcasts
+
+5) Live Participation Restrictions
+
+If user has restrict_stream_join: cannot join any live streams
+If user has restrict_stream_start: cannot start any live stream
+If user has restrict_all_live: cannot start OR join any live session (stream, podcast, LiveKit room)
+
+6) System-Wide Suspension (TEMP ONLY)
+
+If user has temporary_suspension:
+
+All interactive actions disabled
+
+Read-only access only
+
+No auth bypass
+
+Auto-lifts when expired
+
+🚫 No permanent bans via this system
+
+ENFORCEMENT IMPLEMENTATION (CRITICAL)
+SINGLE SOURCE OF TRUTH (MANDATORY)
+
+Create a backend function/RPC for enforcement checks, e.g.:
+
+public.assert_user_can(p_user_id uuid, p_action enforcement_action, p_context jsonb default '{}'::jsonb)
+OR
+
+public.is_user_restricted(p_user_id uuid, p_action enforcement_action) returns boolean
+
+Every core action MUST call this server-side before executing:
+
+Sending messages
+
+Posting / commenting
+
+Starting broadcasts (go live)
+
+Joining streams / LiveKit rooms
+
+Starting podcasts
+
+Joining podcasts
+
+PRECEDENCE (MANDATORY)
+
+If multiple restrictions exist:
+
+temporary_suspension overrides all (read-only, blocks everything interactive)
+
+restrict_all_live overrides any individual live restrictions
+
+Otherwise apply specific restrictions
+
+AUTO-EXPIRATION RULE (MANDATORY)
+
+Enforcement must treat a restriction as active only if:
+
+is_active = true
+
+starts_at <= now()
+
+ends_at is null OR ends_at > now()
+
+Do NOT rely on background cleanup for correctness.
+
+LIVEKIT ENFORCEMENT (MANDATORY)
+
+Restrictions MUST be enforced in:
+
+LiveKit join logic
+
+LiveKit start logic
+
+Any room token creation / access grant
+
+🚫 UI-only checks are NOT sufficient.
+
+LOGGING (MANDATORY)
+
+Create table: review_actions_log
+
+Fields:
+
+actor_user_id
+
+actor_role
+
+action_taken
+
+target_user_id
+
+restriction_id
+
+metadata
+
+created_at
+
+Every restriction creation, update, early lift, expiry handling, or removal MUST be logged.
+
+USER FEEDBACK RULES
+
+Restricted users MUST:
+
+See clear notice of restriction
+
+See reason
+
+See remaining duration
+
+Be told how to appeal
+No silent punishment.
+
+ROLE PERMISSIONS (SERVER-SIDE ENFORCED)
+
+Admin for a Week:
+
+Issue warnings
+
+Apply restrictions ≤ 24 hours
+
+Cannot apply full suspensions
+
+Vice President:
+
+Apply restrictions ≤ 72 hours
+
+Suspend Admin for a Week privileges
+
+President:
+
+Apply restrictions ≤ 7 days
+
+Escalate cases
+
+Lift restrictions early
+
+Backend MUST reject attempts to exceed role limits.
+
+FINAL ENFORCEMENT STATEMENT
+
+If a restricted user can still message, post, broadcast, or join live content — the implementation is INVALID.
+
+END OF PROMPT 1
+
+PROMPT 2 — TROLL CITY GOVERNMENT — EXECUTIVE POWERS
+CORE PHILOSOPHY (IMPORTANT)
+
+Admins moderate. Presidents govern. Vice Presidents stabilize.
+
+Neither role is allowed to:
+
+Mint real currency
+
+Change conversion ratios
+
+Edit schemas
+
+Touch payouts
+
+Act invisibly
+
+Everything is public, logged, and reversible.
+
+👑 PRESIDENT — POWERS & ACTIONS
+ROLE SUMMARY
+
+Head of Troll City government. Elected/appointed position with agenda-setting power, not god mode.
+
+1) EXECUTIVE AUTHORITY
+
+President may:
+
+Propose city-wide policies
+
+Activate policy modes (predefined, toggle-based)
+Examples:
+
+Reduced fines day
+
+Increased XP weekends
+
+Boosted creator discovery
+
+Issue executive announcements
+
+Schedule official city events
+
+🚫 Cannot create new rules
+🚫 Can only toggle approved policy templates
+
+2) ECONOMIC DIRECTION (SAFE ONLY)
+
+President may:
+
+Adjust soft multipliers (within capped ranges)
+
+XP ±10%
+
+Visibility boosts
+
+Trigger temporary sinks or boosts (events)
+
+Recommend (not enforce) changes to:
+
+Platform fees
+
+Taxes
+
+Rents
+
+🚫 Cannot touch real balances
+🚫 Cannot change conversion rates
+🚫 Cannot mint or destroy coins
+
+3) JUDICIAL INFLUENCE (NOT CONTROL)
+
+President may:
+
+Refer cases to Troll Court
+
+Request expedited review
+
+Issue public recommendations (non-binding)
+
+Grant temporary pardons (removes penalties, does NOT restore seized assets)
+
+🚫 Cannot override court rulings
+
+4) APPOINTMENTS & OVERSIGHT
+
+President may:
+
+Appoint:
+
+Vice President
+
+Ministers (Economy, Culture, Safety, Media)
+
+Remove appointees (with logs)
+
+Call special sessions/hearings
+
+🚫 Appointments are time-bound
+🚫 All appointments logged and visible
+
+5) VISIBILITY & STATUS
+
+Presidential badge
+
+Unique crown/emblem
+
+Global announcement banner access
+
+Featured placement in City Hall
+
+Symbolic authority, not hidden power.
+
+🏛️ VICE PRESIDENT — POWERS & ACTIONS
+ROLE SUMMARY
+
+Stability + continuity role designed to prevent chaos, abuse, or stalls.
+
+1) SUCCESSION & BACKUP
+
+VP automatically assumes Presidential powers if:
+
+President is inactive
+
+President resigns
+
+President is removed
+
+Can temporarily act as President (flagged)
+
+2) CHECKS & BALANCES
+
+VP may:
+
+Delay executive actions (cooldown-based)
+
+Flag policy abuse for review
+
+Call emergency council votes
+
+Override temporary admin actions (once per day)
+
+🚫 Cannot cancel elections
+🚫 Cannot override court
+
+3) MODERATION OVERSIGHT (NOT RAW POWER)
+
+VP may:
+
+Review admin actions
+
+Suspend Admin-for-a-Week privileges (temporary)
+
+Escalate bad actors to super admin
+
+Freeze admin actions during emergencies
+
+4) COMMUNITY & OPERATIONS
+
+VP may:
+
+Run town halls
+
+Moderate city meetings
+
+Curate official events
+
+Liaison between creators/mods/admins/players
+
+5) VISUAL & SYMBOLIC POWER
+
+Vice Presidential badge
+
+Secondary crown/emblem
+
+City Hall placement
+
+Verified authority indicators
+
+🚫 HARD LIMITS (BOTH ROLES)
+
+Neither President nor VP may:
+
+Mint coins
+
+Edit balances
+
+Approve payouts
+
+Modify schemas
+
+Change conversion ratios
+
+Issue permanent bans
+
+Delete users
+
+Act without logs
+
+If they can “cost you money or trust”, they don’t get it.
+
+🧾 LOGGING & SAFETY (MANDATORY)
+
+All actions must write to: government_actions_log
+
+Fields:
+
+actor_user_id
+
+actor_role (President / VP)
+
+action_type
+
+target
+
+metadata
+
+created_at
+
+END OF PROMPT 2
+
+PROMPT 3 — STREAM CONTROLS, CASHOUT (GIFTCARD) FLOW, GAS/GIFTS FIXES, TROLL COURT, PWA MOBILE WIRES (CRITICAL)
+1) Stream Controls Visuals — Broadcaster-Only (No Exceptions)
+
+Rule: Any visual stream control toggles (filters, overlays, effects, visual enhancements, etc.) CANNOT be enabled/disabled by ANY user except the broadcaster/host of that stream.
+
+Requirements:
+
+Viewers/mods/officers/admins must not be able to toggle broadcaster visual controls.
+
+If a viewer tries to trigger visual controls (directly or via UI glitch), the action must be blocked and ignored.
+
+UI: controls must be hidden/disabled for non-broadcasters.
+
+2) Cashout / Payout System — Giftcard-Based, Tier-Gated, Scheduled Windows
+
+We are returning to the Giftcard cashout system.
+
+Eligibility:
+
+Any user who has reached required coin tiers can request cashout.
+
+Cashout schedule:
+
+Users may cash out ONLY on Mondays and Fridays at exactly 2:00 PM MST.
+
+Outside those windows: show “Cashouts open Monday & Friday at 2:00 PM MST” and block request submission.
+
+3) Manual Giftcard Fulfillment — Reserve/Hold Coins Until Completed
+
+We must keep the manual giftcard system.
+
+When a user submits a cashout request:
+
+Immediately deduct coins temporarily from the user balance (do not allow them to spend them).
+
+Move that amount into a Reserve/Hold bucket associated to the cashout request.
+
+Notify Secretary + Admin dashboards so they can fulfill the gift card payment manually.
+
+Once gift card is sent, admin/secretary marks the cashout as COMPLETE.
+
+On completion:
+
+Reserve coins are finalized (cashout considered paid)
+
+Cashout request is marked complete + timestamped
+
+User receives notification confirmation
+
+Important behavior rules:
+
+If cashout is rejected/cancelled, coins must be returned from Reserve back to user.
+
+While in Reserve, user’s available balance must reflect the hold (so they cannot double-spend).
+
+4) Gas Must Deduct From Troll Coins — Fix Missing Function + Schema Cache Issue
+
+Gas spend is currently failing and must deduct correctly from troll_coins.
+
+Current error:
+
+Could not find the function public.troll_bank_spend_coins_secure(p_amount, p_bucket, p_metadata, p_ref_id, p_source, p_user_id) in the schema cache
+
+Requirements:
+
+Ensure the function exists with the exact signature expected by the app, OR update the app RPC call to match the real existing function signature.
+
+After fixing, force Supabase schema cache refresh / regenerate types so the client can see the function.
+
+Gas spending must:
+
+deduct from troll_coins
+
+log the spend with metadata (bucket/source/ref)
+
+never hit “Cannot update restricted column” errors (must use approved secure RPC / ledger path)
+
+5) Gifts Are Broken — Fix Gift Spend + Ensure Broadcaster Balance Increases
+
+Gifts are “doing the same thing” (same schema cache / missing function behavior) and broadcaster balance does not increase at all now.
+
+Requirements:
+Gift send must:
+
+deduct sender coins properly via the secure spend function
+
+credit broadcaster/recipient balance immediately
+
+write the gift transaction record and ledger entry
+
+update UI balances in real-time (or near real-time) for both sender and broadcaster
+
+No silent failures:
+
+if any step fails, gift is not sent and sender coins must not be deducted.
+
+6) Troll Court — Remove Countdown (Accidental Addition)
+
+Remove the countdown in Troll Court. It was added by mistake.
+
+Strip the UI component and any dependent logic/timers.
+
+7) PWA Mobile (TCPS) — Fix UI Overlap + Wire Buttons
+A) TCPS Mobile — Close Menu + Gas Bar Overlap
+
+In PWA mobile inside TCPS, the menu and gas bar are blocking messaging UI.
+
+Requirement:
+
+On mobile TCPS, ensure:
+
+menu collapses/closes when entering chat OR when the user focuses the message input
+
+gas bar does not overlap the message composer, send button, or chat actions
+
+chat input area is always fully visible and tappable
+
+B) TCPS Mobile — Audio/Video Call Buttons Not Working
+
+Audio call + Video call buttons do nothing.
+
+Requirement:
+
+Wire both buttons to their real actions (permissions + call creation + routing).
+
+Must work on PWA mobile, not just desktop.
+
+Handle permission prompts cleanly (mic/camera).
+
+C) “All Buttons Must Work” — PWA Mobile App-Wide Wiring
+
+Global requirement:
+
+Every button in the PWA mobile version must be correctly wired.
+
+All pages must route correctly.
+
+Specifically confirm “Go Live Now” works end-to-end:
+
+triggers correct flow
+
+opens broadcast UI
+
+creates the live session
+
+updates the app state so others see the stream
+
+Do a full tap-through audit of PWA mobile navigation + key CTAs to ensure no dead buttons.
+
+ACCEPTANCE CHECKLIST (Trae must validate)
+
+Only broadcaster can toggle stream visual controls (all others blocked)
+
+Cashouts only Monday + Friday @ 2:00 PM MST
+
+Cashout request holds coins in Reserve until completed or returned on reject
+
+Gas spend deducts from troll_coins (no schema-cache function errors)
+
+Gifts deduct + credit broadcaster properly; broadcaster balance increases
+
+Troll Court countdown removed
+
+TCPS mobile: menu + gas bar not blocking message UI
+
+TCPS mobile: audio/video call buttons work
+
+PWA mobile: all buttons wired; all pages route; “Go Live Now” works
+
+END OF PROMPT 3
+
+FINAL TASKS — FULL APP DIAGNOSTICS + MIGRATIONS + LINT + GIT
+1) FULL DIAGNOSTIC TEST (MANDATORY)
+
+Run a full diagnostic test across the entire codebase to find any missing tables/columns/functions/enums referenced by code but missing from the database (schema cache issues included).
+
+This must include testing flows under these roles:
+
+admin
+
+secretary
+
+lead troll officer
+
+troll officer
+
+troller
+
+regular user
+
+pastor
+
+troll family leader
+
+2) RUN ALL MIGRATIONS (MANDATORY)
+
+Run all migrations required for all new tables/enums/functions/UI panels added in these prompts.
+Do not modify existing migrations that alter prior behavior; only add new ones as required.
+
+3) ESLINT (MANDATORY)
+
+Run ESLint and fix any issues introduced or discovered.
+
+4) GIT (MANDATORY)
+
+Commit all changes with clear commit messages and push to git (or open a PR if that is the repo policy).
+No partial commits. No untracked changes.

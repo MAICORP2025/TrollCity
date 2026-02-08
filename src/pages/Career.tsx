@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { 
   Briefcase, Calendar, Clock, Users, Shield, Video, 
   CheckCircle, FileText, Star, ArrowRight,
-  Cross, Music, Gamepad2, X
+  Cross, Music, Gamepad2, X, Store
 } from 'lucide-react'
 
 // Job position type
@@ -47,52 +47,10 @@ interface InterviewSession {
 
 const jobPositions: JobPosition[] = [
   {
-    id: 'troller',
-    title: 'Troller',
-    department: 'Broadcasting',
-    description: 'Stream content on Troll City and engage with the community',
-    requirements: [
-      'Must be 18 years or older',
-      'Ability to create engaging content',
-      'Stable internet connection',
-      'Basic streaming equipment',
-      'Good communication skills'
-    ],
-    benefits: [
-      'Earn coins from viewer engagement',
-      'Access to Troll Officer community',
-      'Potential for platform-wide promotion',
-      'Network with other creators'
-    ],
-    icon: <Video className="w-6 h-6" />,
-    color: 'from-cyan-500 to-blue-500'
-  },
-  {
-    id: 'troll_officer',
-    title: 'Troll Officer',
-    department: 'Moderation',
-    description: 'Help maintain a safe and fun community environment',
-    requirements: [
-      'Previous moderation experience',
-      'Strong understanding of community guidelines',
-      'Ability to handle difficult situations calmly',
-      'Available for regular shifts',
-      'Good judgment and decision-making skills'
-    ],
-    benefits: [
-      'Special officer role and badge',
-      'Access to officer-only channels',
-      'Contribution to platform growth',
-      'Recognition in community'
-    ],
-    icon: <Shield className="w-6 h-6" />,
-    color: 'from-purple-500 to-pink-500'
-  },
-  {
     id: 'lead_officer',
     title: 'Lead Troll Officer',
     department: 'Leadership',
-    description: 'Lead the moderation team and coordinate officer activities',
+    description: 'Senior enforcement role overseeing Troll Officers. Reviews cases, escalates decisions, and ensures city rules are applied consistently.',
     requirements: [
       'Previous Troll Officer experience',
       'Strong leadership and communication skills',
@@ -110,10 +68,31 @@ const jobPositions: JobPosition[] = [
     color: 'from-yellow-500 to-orange-500'
   },
   {
+    id: 'troll_officer',
+    title: 'Troll Officer',
+    department: 'Moderation',
+    description: 'Official city enforcer responsible for moderation, investigations, reports, and real-time response to violations.',
+    requirements: [
+      'Previous moderation experience',
+      'Strong understanding of community guidelines',
+      'Ability to handle difficult situations calmly',
+      'Available for regular shifts',
+      'Good judgment and decision-making skills'
+    ],
+    benefits: [
+      'Special officer role and badge',
+      'Access to officer-only channels',
+      'Contribution to platform growth',
+      'Recognition in community'
+    ],
+    icon: <Shield className="w-6 h-6" />,
+    color: 'from-purple-500 to-pink-500'
+  },
+  {
     id: 'pastor',
     title: 'Pastor',
     department: 'Spiritual',
-    description: 'Lead spiritual content and church-related activities',
+    description: 'Community and church leader role. Hosts services, events, and counseling while maintaining respectful and safe environments.',
     requirements: [
       'Strong faith and biblical knowledge',
       'Ability to lead discussions and studies',
@@ -131,45 +110,45 @@ const jobPositions: JobPosition[] = [
     color: 'from-green-500 to-emerald-500'
   },
   {
-    id: 'entertainer',
-    title: 'Entertainer',
-    department: 'Content',
-    description: 'Create music, performances, and entertainment content',
+    id: 'troller',
+    title: 'Troller',
+    department: 'Broadcasting',
+    description: 'Entertainer role focused on playful chaos, satire, and disruption that stays within platform rules and policies.',
     requirements: [
-      'Talents in music, comedy, or performance',
-      'Ability to entertain and engage audiences',
-      'Original content creation skills',
-      'Consistent streaming schedule',
-      'Positive and uplifting content'
+      'Must be 18 years or older',
+      'Ability to create engaging content',
+      'Stable internet connection',
+      'Basic streaming equipment',
+      'Good communication skills'
     ],
     benefits: [
-      'Featured content opportunities',
-      'Music and performance promotion',
-      'Fan engagement tools',
-      'Creative freedom'
+      'Earn coins from viewer engagement',
+      'Access to Troll Officer community',
+      'Potential for platform-wide promotion',
+      'Network with other creators'
     ],
-    icon: <Music className="w-6 h-6" />,
-    color: 'from-red-500 to-rose-500'
+    icon: <Video className="w-6 h-6" />,
+    color: 'from-cyan-500 to-blue-500'
   },
   {
-    id: 'gamer',
-    title: 'Pro Gamer',
-    department: 'Gaming',
-    description: 'Stream gaming content and compete in tournaments',
+    id: 'seller',
+    title: 'Seller',
+    department: 'Commerce',
+    description: 'Verified merchant role. Authorized to sell goods, services, or digital items within the marketplace under city rules.',
     requirements: [
-      'High-level gaming skills',
-      'Knowledge of multiple game genres',
-      'Entertaining commentary abilities',
-      'Tournament participation willingness',
-      'Regular gaming schedule'
+      'Must be verified user',
+      'Clear business plan or product list',
+      'Adherence to commerce policies',
+      'Good reputation in community',
+      'Ability to fulfill orders promptly'
     ],
     benefits: [
-      'Gaming community access',
-      'Tournament entries',
-      'Gaming gear opportunities',
-      'Competitive recognition'
+      'Authorized seller badge',
+      'Access to marketplace features',
+      'Ability to list items/services',
+      'Secure transaction processing'
     ],
-    icon: <Gamepad2 className="w-6 h-6" />,
+    icon: <Store className="w-6 h-6" />,
     color: 'from-indigo-500 to-violet-500'
   }
 ]
