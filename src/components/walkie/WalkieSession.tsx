@@ -46,12 +46,10 @@ export default function WalkieSession({ session, onEnd }: WalkieSessionProps) {
 
   // Fetch Admin IDs
   useEffect(() => {
-    import('../../lib/supabase').then(({ supabase }) => {
-      supabase.from('user_profiles').select('id').eq('is_admin', true)
-        .then(({ data }) => {
-          if (data) setAdminIds(data.map(u => u.id))
-        })
-    })
+    supabase.from('user_profiles').select('id').eq('is_admin', true)
+      .then(({ data }) => {
+        if (data) setAdminIds(data.map(u => u.id))
+      })
   }, [])
 
   // Fetch Walkie Token

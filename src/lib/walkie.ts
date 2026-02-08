@@ -153,7 +153,12 @@ export const walkieApi = {
     })
 
     if (!res.ok) {
-      const err = await res.json()
+      let err;
+      try {
+        err = await res.json()
+      } catch {
+        err = { error: `Request failed with status ${res.status}` }
+      }
       throw new Error(err.error || 'Failed to get walkie token')
     }
 

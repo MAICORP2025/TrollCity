@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { X, Shield, Users, Radio, AlertTriangle } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../lib/store'
 import { walkieApi, WalkieSession as WalkieSessionData, PagingRequest } from '../../lib/walkie'
