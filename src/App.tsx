@@ -932,6 +932,7 @@ function AppContent() {
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/pool" element={<PublicPool />} />
                   <Route path="/social/mai-talent" element={<MaiTalentPage />} />
+                  <Route path="/mai-talent" element={<Navigate to="/social/mai-talent" replace />} />
                   <Route path="/shop/:username" element={<ShopView />} />
                   <Route path="/inventory" element={<UserInventory />} />
           <Route path="/troting" element={<Troting />} />
