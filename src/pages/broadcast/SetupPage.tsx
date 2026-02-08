@@ -23,6 +23,7 @@ export default function SetupPage() {
 
   // Track if we are navigating to broadcast to prevent cleanup
   const isStartingStream = useRef(false);
+  const hasPrefetched = useRef<string | null>(null);
 
   useEffect(() => {
     async function checkRestriction() {
@@ -108,6 +109,10 @@ export default function SetupPage() {
   // Optimize: Pre-fetch LiveKit token as soon as restrictions are passed
   useEffect(() => {
     if (user && restrictionCheck?.allowed && streamId) {
+      // Fix C: Prevent double prefetch
+      if (hasPrefetched.current === streamId) return;
+      hasPrefetched.current = streamId;
+
       const safeRoom = streamId.replace(/-/g, "");
       console.log('[SetupPage] Pre-fetching LiveKit token for stream:', streamId, 'Room:', safeRoom);
       const service = new LiveKitService({
@@ -125,6 +130,7 @@ export default function SetupPage() {
         .catch(err => {
           console.error('[SetupPage] Token pre-fetch failed:', err);
           // We don't block UI here, but we'll retry on start
+          hasPrefetched.current = null; // Allow retry
         });
     }
   }, [user, restrictionCheck, streamId]);

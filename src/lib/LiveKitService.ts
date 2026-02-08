@@ -75,15 +75,25 @@ export class LiveKitService {
   private targetIdentity: string | null = null
   private lastConnectionError: string | null = null
   public publishingInProgress = false;
+  private tokenRequestPromise: Promise<any> | null = null;
+  public userId: string;
+  public hasUser: boolean;
 
   constructor(config: LiveKitServiceConfig) {
     this.config = config
     this.preflightStream = config.preflightStream
+    
+    // Fix A: Explicitly set identity and userId logic
+    // Note: this.identity is a getter wrapping config.identity, but we set userId here.
+    this.userId = config.user?.id || config.identity;
+    this.hasUser = !!this.userId;
+
     console.log('[LiveKitService created]', Date.now())
     this.log('LiveKitService initialized', {
       roomName: config.roomName,
       identity: config.identity,
-      userId: config.user?.id,
+      userId: this.userId,
+      hasUser: this.hasUser,
       allowPublish: config.allowPublish,
       role: config.role || config.user?.role,
     })
@@ -823,6 +833,21 @@ export class LiveKitService {
   }
 
   private async getToken(): Promise<any> {
+    // Dedup: If a request is already in flight, return it
+    if (this.tokenRequestPromise) {
+        this.log('🛡️ getToken: Reusing in-flight token request');
+        return this.tokenRequestPromise;
+    }
+
+    this.tokenRequestPromise = this._getTokenImplementation();
+    try {
+        return await this.tokenRequestPromise;
+    } finally {
+        this.tokenRequestPromise = null;
+    }
+  }
+
+  private async _getTokenImplementation(): Promise<any> {
     if ((this.config as any).token) {
       return { token: (this.config as any).token }
     }
@@ -839,7 +864,6 @@ export class LiveKitService {
            expiresAt: new Date(cached.expiresAt * 1000).toISOString(),
            timeLeft: cached.expiresAt - now 
          });
-         // Assume URL/allowPublish haven't changed or are standard
          return { token: cached.token, livekitUrl: LIVEKIT_URL, allowPublish: this.config.allowPublish };
       } else {
          this.log('💎 Cached token expired, fetching new one');
@@ -848,305 +872,93 @@ export class LiveKitService {
     }
 
     try {
-      // ✅ Only publish tokens when allowPublish === true (hard safety)
       const allowPublish = this.config.allowPublish === true
-
-      // Normalize role: treat internal "admin" as "broadcaster" for LiveKit token requests
       let roleToSend = this.config.role || this.config.user?.role || 'viewer'
       if (roleToSend === 'admin') roleToSend = 'broadcaster'
 
-      const requestBody = {
-        room: this.config.roomName,
-        identity: this.config.identity,
-        user_id: this.config.user?.id,
-        role: roleToSend,
-        level: this.config.user?.level || 1,
-        allowPublish,
-      }
-
-      this.log('🔑 Requesting LiveKit token...', {
-        endpoint: '/livekit-token',
-        body: requestBody,
-        allowPublish,
-        userId: this.config.user?.id,
-        hasUser: !!this.config.user
-      })
-
-      // Developer debug: show exact function payload
-      console.log('🟣 getToken() request payload:', {
-        room: this.config.roomName,
-        identity: this.config.identity,
-        allowPublish: this.config.allowPublish,
-      })
-
-      // ✅ Fix #2: Always pass Authorization to the token endpoint
-      // Get session from store first, then refresh to ensure it's valid
-      const { useAuthStore } = await import('./store')
+      // Fix B: Robust Token Fetching
       const { supabase } = await import('./supabase')
       
-      let session = useAuthStore.getState().session as any
-      
-      // ✅ Fix: Only refresh if session is missing or expired
-      if (!session?.access_token) {
-        this.log('🔑 No session in store, checking Supabase...')
-        const { data } = await supabase.auth.getSession()
-        
-        if (data.session?.access_token) {
-           session = data.session
-        } else {
-           this.log('⚠️ No active session found, refreshing...')
-           const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
-           
-           if (refreshError || !refreshData.session?.access_token) {
-             throw new Error('No valid Supabase session — cannot request token')
-           }
-           session = refreshData.session
-        }
-      }
-      
-      // Check if session is expired
-      const now = Math.floor(Date.now() / 1000)
-      if (session.expires_at && session.expires_at < now + 60) {
-        this.log('⚠️ Session expiring soon, attempting refresh...')
-        try {
-          const { data: refreshData } = await supabase.auth.refreshSession()
-          if (refreshData?.session) {
-            session = refreshData.session
-            this.log('✅ Session refreshed')
-          }
-        } catch (e) {
-          this.log('⚠️ Failed to refresh expiring session:', { error: e })
-        }
-      }
-      
-      if (!session?.access_token) {
-        throw new Error('No active session. Please sign in again.')
+      // 1. Always get a fresh session for the Authorization header
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session?.access_token) {
+         // Try refresh
+         const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+         if (refreshError || !refreshData.session?.access_token) {
+            throw new Error('No valid session found for token request');
+         }
+         sessionData.session = refreshData.session;
       }
 
-      this.log('🔑 Session validated, making API request...', {
-        hasToken: !!session.access_token,
-        tokenLength: session.access_token.length,
-        expiresAt: session.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'unknown',
-        expiresIn: session.expires_at ? `${session.expires_at - now}s` : 'unknown'
-      })
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Failed to obtain access token');
 
-      // Call external token endpoint (Vercel or Supabase)
+      // 2. Fetch token from the selected tokenUrl
       const tokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/livekit-token`;
       
-      console.log("🔥 LiveKit tokenUrl selected:", tokenUrl);
+      this.log('🔑 Requesting LiveKit token...', { tokenUrl, identity: this.identity, userId: this.userId });
 
-      // ✅ REFRESH SESSION FORCEFULLY
-      // We use refreshSession() to guarantee a valid, server-signed token
-      // getSession() might return a stale token that looks valid locally but is rejected by server
-      const { data: { session: freshSession }, error: refreshError } = await supabase.auth.refreshSession();
-      
-      if (refreshError) {
-         console.warn("⚠️ Refresh session failed, falling back to local session", refreshError);
-      }
-      
-      let accessToken: string | undefined = freshSession?.access_token || session?.access_token;
-
-      // ✅ CRITICAL: Ensure accessToken is a string, not an object
-      // Handle both direct access and nested structure
-      
-      // If access_token is an object (shouldn't happen, but defensive check)
-      if (accessToken && typeof accessToken === 'object') {
-        this.log('⚠️ access_token is an object, attempting to extract string value', accessToken)
-        // Try to get string value from object
-        if (accessToken && 'token' in accessToken && typeof (accessToken as any).token === 'string') {
-          accessToken = (accessToken as any).token
-        } else if (accessToken && 'value' in accessToken && typeof (accessToken as any).value === 'string') {
-          accessToken = (accessToken as any).value
-        } else {
-          this.log('❌ Cannot extract string from access_token object', accessToken)
-          throw new Error('Invalid session token: access_token is an object and cannot be converted to string')
-        }
-      }
-      
-      // Validate accessToken is a string
-      if (!accessToken || typeof accessToken !== 'string') {
-        this.log('❌ Invalid access token type', { 
-          type: typeof accessToken, 
-          value: accessToken,
-          isString: typeof accessToken === 'string',
-          isObject: typeof accessToken === 'object',
-          sessionKeys: session ? Object.keys(session) : 'no session',
-          sessionAccessToken: session?.access_token,
-          sessionAccessTokenType: typeof session?.access_token
-        })
-        throw new Error('Invalid session token: access_token must be a string')
-      }
-      
-      // Ensure token starts with expected JWT format
-      if (!accessToken.startsWith('eyJ')) {
-        this.log('❌ Access token does not have JWT format', {
-          tokenPreview: accessToken.substring(0, 50),
-          tokenLength: accessToken.length,
-          firstChars: accessToken.substring(0, 10)
-        })
-        throw new Error('Invalid session token format: expected JWT starting with eyJ')
-      }
-
-      this.log('🔑 Making fetch request to token endpoint...', { 
-        tokenUrl,
-        tokenLength: accessToken.length,
-        tokenPreview: accessToken.substring(0, 20) + '...'
-      })
-      
-      // ✅ Final validation: ensure Authorization header will be correct
-      const authHeader = `Bearer ${accessToken}`
-      if (authHeader.includes('[object Object]') || authHeader.includes('undefined') || authHeader.includes('null')) {
-        this.log('❌ Authorization header contains invalid value', {
-          authHeader,
-          accessTokenType: typeof accessToken,
-          accessTokenValue: accessToken
-        })
-        throw new Error('Invalid Authorization header: token is not a valid string')
-      }
-
-      // Add timeout to fetch request to prevent hanging
-      const fetchWithTimeout = Promise.race([
-        fetch(tokenUrl, {
+      const res = await fetch(tokenUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authHeader,
+            'Authorization': `Bearer ${accessToken}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
             room: this.config.roomName,
-            roomName: this.config.roomName, // Support both formats
+            roomName: this.config.roomName,
             identity: this.config.identity,
-            user_id: this.config.user?.id,
-            role: this.config.role || this.config.user?.role || 'viewer',
+            user_id: this.userId, // Use the class property we set in constructor
+            role: roleToSend,
             level: this.config.user?.level || 1,
-            allowPublish: this.config.allowPublish !== false,
+            allowPublish,
           }),
-        }),
-        new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error('Token request timeout after 20s')), 20000)
-        )
-      ])
+      });
 
-      const res = await fetchWithTimeout
+      const json = await res.json().catch(() => ({}));
 
-      this.log('🔑 Token endpoint response received', { 
-        status: res.status, 
-        statusText: res.statusText,
-        ok: res.ok 
-      })
-
-      // ✅ Parse JSON with error handling
-      const json = await res.json().catch(() => null)
-      
-      // 🔥 TEMPORARY DEBUG: Log response to see what endpoint returns
-      console.log("🔥 LiveKit token endpoint response JSON:", json);
-      console.log("🔥 Token field type:", typeof json?.token);
-      
-      // ✅ Handle case where token is wrapped in data object (Supabase Edge Function format)
-      // Some edge functions return { data: { token: ... }, error: null }
-      let token = json?.token;
-      
-      if (!token && json?.data?.token) {
-        console.log("🔥 Token found in nested data object");
-        token = json.data.token;
-      }
-      
-      // If still no token but we have a direct string response (unlikely but possible)
-      if (!token && typeof json === 'string' && json.startsWith('eyJ')) {
-        token = json;
-      }
+      this.log('🔑 Token response', { 
+          status: res.status, 
+          ok: res.ok, 
+          keys: Object.keys(json || {}) 
+      });
 
       if (!res.ok) {
-        this.log('🔑 Token endpoint returned error', { status: res.status, body: json })
-        const msg = json?.error || json?.message || `Token request failed: ${res.status}`
-        throw new Error(msg)
+          throw new Error(json.error || json.message || `Token request failed: ${res.statusText}`);
       }
 
-      // ✅ Strict token extraction - using the normalized token variable from above
-      // const token = json?.token <-- REMOVED, using 'token' variable from above logic
+      // 3. Parse response robustly
+      let token = json.token || json.jwt || json.accessToken || json.data?.token;
 
-      // ✅ STRICT VALIDATION: Token must be a string
+      // Handle nested data structures (common in Supabase Edge Functions)
+      if (!token && json.data && typeof json.data === 'object') {
+          token = json.data.token || json.data.jwt || json.data.accessToken;
+      }
+      
       if (!token || typeof token !== 'string') {
-        console.error('❌ Token response invalid:', json)
-        this.log('❌ Token extraction failed: token is not a string', {
-          token,
-          tokenType: typeof token,
-          jsonToken: json?.token,
-          fullJsonResponse: json
-        })
-        throw new Error('Token endpoint returned invalid token type')
+          console.error('🚨 Invalid token response structure:', json);
+          throw new Error('Response did not contain a valid token string');
       }
 
-      // ✅ STRICT VALIDATION: Token must be JWT format
-      if (!token.startsWith('eyJ')) {
-        console.error('❌ Token not JWT:', token.substring(0, 50))
-        this.log('❌ Token does not have valid JWT format', {
-          tokenPreview: token.substring(0, 50),
-          tokenLength: token.length,
-          firstChars: token.substring(0, 10)
-        })
-        throw new Error('Token endpoint returned non-JWT token')
-      }
-
-      // Trim whitespace
-      let trimmedToken = token.trim()
-
-      // Remove double quotes if present
-      if (trimmedToken.startsWith('"') && trimmedToken.endsWith('"')) {
-        trimmedToken = trimmedToken.slice(1, -1);
-      }
-
-      // ✅ Gold Standard: Cache the new token
+      // Cache the new token
       try {
-         const parts = trimmedToken.split('.');
+         const parts = token.split('.');
          if (parts.length >= 2) {
             const payload = JSON.parse(decodeURIComponent(escape(atob(parts[1]))));
             if (payload.exp) {
-               tokenCache.set(cacheKey, { token: trimmedToken, expiresAt: payload.exp });
-               this.log('💎 Token cached', { expiresAt: new Date(payload.exp * 1000).toISOString() });
+               tokenCache.set(cacheKey, { token, expiresAt: payload.exp });
             }
          }
       } catch (e) {
          console.warn('Failed to parse token for caching', e);
       }
 
-      this.log('✅ Token received successfully:', {
-        tokenLength: trimmedToken.length,
-        tokenPreview: trimmedToken.substring(0, 20) + '...',
-        livekitUrl: json.livekitUrl,
-        allowPublish: json.allowPublish,
-      })
+      return { token, livekitUrl: json.livekitUrl, allowPublish: json.allowPublish };
 
-      // ✅ Return ONLY the token string (not wrapped in data object)
-      this.log('✅ Token decoded for verification:', {
-        requestedRoom: this.config.roomName,
-        tokenRoom: json.room || json.r, // LiveKit uses 'r' or 'room' in JWT claims
-        tokenIdentity: json.identity || json.sub // 'sub' is standard JWT subject
-      })
-      
-      return { token: trimmedToken, livekitUrl: json.livekitUrl, allowPublish: json.allowPublish }
     } catch (error: any) {
-      this.log('❌ Token fetch failed:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      })
-
-      // Provide user-friendly error messages
-      if (error.message.includes('No valid user session') || error.message.includes('no active session')) {
-        throw new Error('Please sign in to join the stream.')
-      } else if (error.message.includes('Authentication failed') || error.message.includes('session expired')) {
-        throw new Error('Your session has expired. Please sign in again.')
-      } else if (error.message.includes('No token received from server')) {
-        throw new Error('Server configuration error. Please try again later.')
-      } else if (error.message.includes('Unable to verify user session')) {
-        throw new Error('Session validation failed. Please sign in again.')
-      } else if (error.message.includes('User profile not found')) {
-        throw new Error('User profile not found. Please contact support.')
-      }
-
-      throw new Error(`Authentication failed: ${error.message}`)
+      this.log('❌ Token fetch failed:', { message: error.message });
+      throw error;
     }
   }
 

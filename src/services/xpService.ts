@@ -1,4 +1,4 @@
-import { supabase } from '../supabaseClient'
+import { supabase } from '../lib/supabase'
 
 export const xpService = {
   /**
@@ -15,6 +15,11 @@ export const xpService = {
     if (!userId) {
       console.error('[xpService] Missing userId for grantXP');
       return { success: false, error: 'Missing userId' };
+    }
+
+    if (!supabase) {
+        console.error('[xpService] CRITICAL: Supabase client is undefined');
+        return { success: false, error: 'Supabase client not initialized' };
     }
     
     // Ensure amount is a valid integer
