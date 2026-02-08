@@ -24,6 +24,18 @@ export function useVersionCheck() {
            
            // Prevent duplicate notifications for the same version
            if (lastNotifiedRef.current !== data.buildTime) {
+             
+             // Check if we already tried to update to this version (Sticky Cache Protection)
+             const lastAttempt = localStorage.getItem('tc_update_attempt');
+             if (lastAttempt && parseInt(lastAttempt) === data.buildTime) {
+                console.warn('[VersionCheck] Sticky cache detected. Forcing hard navigation.');
+                // We tried to update to this version but are still on the old one.
+                // Force a query-param navigation to bust the browser cache.
+                localStorage.removeItem('tc_update_attempt'); // Clear it so we don't loop forever if server is wrong
+                window.location.replace(window.location.pathname + '?v=' + data.buildTime);
+                return;
+             }
+
              lastNotifiedRef.current = data.buildTime;
              
              toast.info("New Update Available!", {
@@ -32,6 +44,9 @@ export function useVersionCheck() {
                action: {
                  label: "Refresh Now",
                  onClick: async () => {
+                   // Mark that we are attempting to update to this version
+                   localStorage.setItem('tc_update_attempt', String(data.buildTime));
+
                    // Force unregister SW to ensure fresh load
                    if ('serviceWorker' in navigator) {
                      try {

@@ -116,10 +116,14 @@ self.addEventListener('fetch', (event: any) => {
         }
 
         try {
-          const networkResp = await fetch(req);
+          // Force network request to bypass browser HTTP cache for navigation
+          const networkResp = await fetch(req, {
+             cache: 'reload'
+          });
           return networkResp;
         } catch {
           const cache = await caches.open(CACHE_NAME);
+
           const cached = await cache.match(OFFLINE_URL);
           return cached || new Response('Offline', { status: 503, statusText: 'Offline' });
         }

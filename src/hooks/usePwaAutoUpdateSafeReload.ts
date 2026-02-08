@@ -31,7 +31,15 @@ export function usePwaAutoUpdateSafeReload() {
       updatePendingRef.current = true;
 
       if (isSafeToReload()) {
+        // Prevent reload loops: check if we just reloaded recently
+        const lastReload = sessionStorage.getItem('pwa_reload_ts');
+        if (lastReload && Date.now() - parseInt(lastReload) < 10000) {
+          console.warn("[PWA] Update detected immediately after reload. Ignoring to prevent loop.");
+          return;
+        }
+
         console.log("[PWA] Safe to reload, reloading now...");
+        sessionStorage.setItem('pwa_reload_ts', Date.now().toString());
         window.location.reload();
         return;
       }
@@ -53,7 +61,15 @@ export function usePwaAutoUpdateSafeReload() {
   // Re-check on route change
   useEffect(() => {
     if (updatePendingRef.current && isSafeToReload()) {
+      // Prevent reload loops here too
+      const lastReload = sessionStorage.getItem('pwa_reload_ts');
+      if (lastReload && Date.now() - parseInt(lastReload) < 10000) {
+        console.warn("[PWA] Update detected immediately after reload (route change). Ignoring.");
+        return;
+      }
+
       console.log("[PWA] Route changed to safe zone, reloading for update...");
+      sessionStorage.setItem('pwa_reload_ts', Date.now().toString());
       window.location.reload();
     }
   }, [location.pathname]);
