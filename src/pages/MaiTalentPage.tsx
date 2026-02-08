@@ -46,9 +46,44 @@ export default function MaiTalentPage() {
   const [showActive, setShowActive] = useState(false);
 
   // Access Control: Under Construction for non-admins
-  const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
+  // Allow public access now that feature is launching
+  const isAdmin = true; // profile?.role === 'admin' || profile?.is_admin === true;
 
   // Function definitions must come before useEffect
+  const fetchShowStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('mai_talent_config')
+        .select('is_live')
+        .eq('id', 1)
+        .single();
+      
+      if (data) {
+        setShowActive(data.is_live);
+      }
+    } catch (err) {
+      console.error('Error fetching show status:', err);
+    }
+  };
+
+  const toggleShowStatus = async () => {
+    try {
+      const newState = !showActive;
+      const { error } = await supabase
+        .from('mai_talent_config')
+        .update({ is_live: newState, updated_by: profile?.id })
+        .eq('id', 1);
+
+      if (error) throw error;
+      
+      setShowActive(newState);
+      toast.success(newState ? 'Show is now LIVE!' : 'Show has ended');
+    } catch (err) {
+      console.error('Error toggling show status:', err);
+      toast.error('Failed to update show status');
+    }
+  };
+
   const checkStaffStatus = async () => {
     if (!profile) return;
     if (profile.role === 'admin' || profile.role === 'moderator' || profile.role === 'troll_officer' || profile.role === 'lead_troll_officer' || profile.is_admin) {
@@ -591,7 +626,7 @@ export default function MaiTalentPage() {
                         </span>
                       </div>
                       <Button 
-                        onClick={() => setShowActive(!showActive)}
+                        onClick={toggleShowStatus}
                         className={`w-full font-bold ${showActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
                       >
                         {showActive ? 'End Show' : 'Start Live Show'}

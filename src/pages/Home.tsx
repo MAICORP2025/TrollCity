@@ -221,7 +221,7 @@ export default function Home() {
                     Explore Feed
                   </button>
                   <button
-                    onClick={() => navigate('/mai-talent')}
+                    onClick={() => navigate('/social/mai-talent')}
                     className="px-8 py-4 rounded-2xl font-semibold text-lg text-purple-100 bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 hover:border-purple-400/60 hover:bg-purple-900/60 transition-all duration-300 hover:-translate-y-0.5 shadow-[0_10px_30px_rgba(168,85,247,0.15)] flex items-center gap-2"
                   >
                     <Star className="w-5 h-5 text-purple-400" />
@@ -264,14 +264,14 @@ export default function Home() {
                   Join the action in Troll City
                 </p>
               </div>
-              <PresidentInaugurationCard />
+              {/* PresidentInaugurationCard removed */}
               <HomeLiveGrid />
             </div>
 
-            {/* Presidential Election Section */}
-            <div className="w-full mt-20">
+            {/* Presidential Election Section removed */}
+            {/* <div className="w-full mt-20">
                <PresidentialCampaignGrid />
-            </div>
+            </div> */}
           </div>
         </section>
 
