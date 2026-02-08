@@ -320,6 +320,9 @@ function AppContent() {
   // Narrow selectors to avoid returning a fresh object from the selector
   const user = useAuthStore((s) => s.user);
 
+  // Enable version checking
+  useVersionCheck();
+
   // Some legacy logic needs the full profile object in several effects
   const profile = useAuthStore((s) => s.profile);
 
