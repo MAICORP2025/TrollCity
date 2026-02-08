@@ -57,7 +57,7 @@ SET
     glowing_username_color = NULL,
     username_style = NULL,
     is_gold = false,
-    perk_tokens = 0,
+    -- perk_tokens = 0, -- REMOVED: Column does not exist
     multiplier_active = false,
     multiplier_value = 1,
     multiplier_expires = NULL,
