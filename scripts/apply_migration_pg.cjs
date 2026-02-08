@@ -16,7 +16,16 @@ async function apply() {
 
   try {
     await client.connect();
-    const sqlPath = path.join(__dirname, '../supabase/migrations/20260119000000_troll_bank_init.sql');
+    
+    // Get file from args or default
+    const fileArg = process.argv[2];
+    if (!fileArg) {
+        throw new Error('Please provide a migration file path argument');
+    }
+    
+    const sqlPath = path.resolve(process.cwd(), fileArg);
+    console.log(`Reading migration from: ${sqlPath}`);
+    
     const sql = fs.readFileSync(sqlPath, 'utf8');
     
     console.log('Running migration...');

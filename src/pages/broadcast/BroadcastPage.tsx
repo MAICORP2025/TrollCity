@@ -704,6 +704,9 @@ export default function BroadcastPage() {
       );
   }
 
+  // Force desktop layout (responsive) for all users to ensure consistent experience
+  // The "Mobile Version" was hiding too much context.
+  /*
   if (isMobile) {
       if (isStreamOffline) {
           return (
@@ -715,149 +718,12 @@ export default function BroadcastPage() {
              </div>
           );
       }
-
-      if (mode === 'viewer') {
-          return (
-              <>
-                <MobileBroadcastLayout
-                    stream={stream}
-                    isHost={false}
-                    messages={messages}
-                    seats={seats}
-                    onSendMessage={(e) => {
-                        if (!user) { navigate('?mode=signup'); e.preventDefault(); return; }
-                        sendMessage(e);
-                    }}
-                    onToggleMic={() => {}}
-                    onToggleCamera={() => {}}
-                    onFlipCamera={() => {}}
-                    onLeave={() => {}}
-                    onJoinSeat={handleJoinRequest}
-                    hostGlowingColor={broadcasterProfile?.glowing_username_color}
-                    onShare={handleShare}
-                >
-                    <HLSPlayer 
-                        src={stream.hls_path || stream.hls_url || stream.id}
-                        className="w-full h-full object-cover"
-                        autoPlay={true}
-                    />
-                    {/* Gradient Overlay for Controls Visibility */}
-                </MobileBroadcastLayout>
-                
-                {/* Gift Tray Logic for Mobile Viewer */}
-                {giftRecipientId && (
-                    <div className="fixed inset-0 z-[60]">
-                            <GiftTray 
-                            recipientId={giftRecipientId}
-                            streamId={stream.id}
-                            onClose={() => setGiftRecipientId(null)}
-                        />
-                    </div>
-                )}
-              </>
-          );
-      }
-
-      if (!token || !serverUrl) {
-          if (tokenError) {
-              return (
-                  <div className="h-screen w-full flex flex-col items-center justify-center bg-black text-white p-4">
-                      <div className="text-red-500 font-bold mb-2">Connection Error</div>
-                      <div className="text-center text-zinc-400">{tokenError}</div>
-                      <button 
-                        onClick={() => window.location.reload()}
-                        className="mt-4 px-4 py-2 bg-zinc-800 rounded hover:bg-zinc-700"
-                      >
-                        Retry
-                      </button>
-                  </div>
-              );
-          }
-          return (
-              <div className="h-screen w-full flex flex-col items-center justify-center bg-black text-white gap-4">
-                  <Loader2 className="animate-spin text-green-500" size={48} />
-                  <div className="text-zinc-500 text-sm animate-pulse">
-                        {!stream ? 'Loading stream info...' :
-                        !user ? 'Identifying user...' :
-                        !token ? 'Requesting LiveKit token...' :
-                        !serverUrl ? 'Connecting to server...' :
-                        'Initializing studio...'}
-                  </div>
-              </div>
-          );
-      }
-
-      return (
-        <>
-            <LiveKitRoom
-                token={token}
-                serverUrl={serverUrl}
-                connect={true}
-                video={!preflightStream}
-                audio={!preflightStream}
-                className="h-full w-full"
-            >
-                <RoomStateSync mode={mode} isHost={isHost} />
-                {preflightStream && (
-                    <PreflightPublisher 
-                        stream={preflightStream} 
-                        onPublished={() => PreflightStore.clear()} 
-                    />
-                )}
-                <MobileStageInner
-                    stream={stream}
-                    isHost={isHost}
-                    seats={seats}
-                    messages={messages}
-                    onSendMessage={sendMessage}
-                    onLeave={isHost ? () => {} : handleLeave}
-                    onJoinSeat={handleJoinRequest}
-                    onStartBattle={() => setShowBattleManager(true)}
-                    hostGlowingColor={broadcasterProfile?.glowing_username_color}
-                    liveViewerCount={viewerCount}
-                >
-                        <BroadcastGrid
-                        stream={stream}
-                        isHost={isHost}
-                        mode="stage" // Always render as stage (WebRTC)
-                        seats={seats}
-                        onGift={(uid) => setGiftRecipientId(uid)}
-                        onGiftAll={() => setGiftRecipientId('ALL')}
-                        onJoinSeat={handleJoinRequest}
-                        onKick={kickParticipant}
-                        broadcasterProfile={broadcasterProfile}
-                    />
-                </MobileStageInner>
-            </LiveKitRoom>
-            {/* Battle Manager Modal */}
-            {showBattleManager && (
-                <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 shadow-2xl w-full max-w-lg relative">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-white text-lg">Challenge Streamers</h3>
-                            <button onClick={() => setShowBattleManager(false)} className="text-sm text-zinc-400 hover:text-white">Close</button>
-                        </div>
-                        <BattleControlsList currentStream={stream} />
-                    </div>
-                </div>
-            )}
-            
-            {/* Gift Tray Logic for Mobile */}
-            {giftRecipientId && (
-                <div className="fixed inset-0 z-[60]">
-                     <GiftTray 
-                        recipientId={giftRecipientId}
-                        streamId={stream.id}
-                        onClose={() => setGiftRecipientId(null)}
-                    />
-                </div>
-            )}
-        </>
-      );
+      // ... Mobile layout logic commented out to force unified responsive layout
   }
+  */
 
   return (
-    <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
+    <div className="flex flex-col md:flex-row h-screen bg-black text-white overflow-hidden font-sans">
         
         {/* Main Stage / Video Area */}
         <div 
@@ -999,7 +865,7 @@ export default function BroadcastPage() {
         </div>
 
         {/* Sidebar: Chat & Leaderboard */}
-        <div className="w-80 md:w-96 flex flex-col border-l border-white/10 bg-zinc-950/90 backdrop-blur-md z-40">
+        <div className="w-full md:w-96 h-[50vh] md:h-auto flex flex-col border-t md:border-t-0 md:border-l border-white/10 bg-zinc-950/90 backdrop-blur-md z-40">
             <ErrorBoundary fallback={
                 <div className="flex flex-col items-center justify-center h-full p-4 text-center">
                     <p className="text-red-400 font-bold mb-2">Chat Crashed</p>

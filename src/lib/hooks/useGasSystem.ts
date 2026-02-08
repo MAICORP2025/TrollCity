@@ -53,6 +53,12 @@ export function useGasSystem() {
         
         // Don't consume if we are already low (prevent going negative/redundant calls before redirect)
         if (gas < 1 && !isStaff) return;
+        
+        // Staff Optimization: If already at 100%, don't make unnecessary RPC calls
+        if (isStaff && gas >= 100) {
+            console.log('[GasSystem] Staff member already at 100% gas. Skipping update.');
+            return;
+        }
 
         console.log(`[GasSystem] Consuming gas on path change: ${lastPathRef.current} -> ${path}. Current gas: ${gas}`);
 

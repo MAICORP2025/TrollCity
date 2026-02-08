@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 export function useVersionCheck() {
-  const [currentVersion, setCurrentVersion] = useState<number | null>(null);
+  const lastNotifiedRef = useRef<number | null>(null);
 
   useEffect(() => {
     // 1. Get local build time
@@ -22,26 +22,34 @@ export function useVersionCheck() {
         if (data.buildTime > localBuildTime) {
            console.log(`[VersionCheck] New version detected! Local: ${localBuildTime}, Remote: ${data.buildTime}`);
            
-           // If we haven't already notified for this version
-           if (currentVersion !== data.buildTime) {
+           // Prevent duplicate notifications for the same version
+           if (lastNotifiedRef.current !== data.buildTime) {
+             lastNotifiedRef.current = data.buildTime;
+             
              toast.info("New Update Available!", {
+               id: 'app-version-update', // Unique ID to prevent duplicates
                description: "A new version of Troll City has been deployed.",
                action: {
                  label: "Refresh Now",
-                 onClick: () => {
+                 onClick: async () => {
                    // Force unregister SW to ensure fresh load
                    if ('serviceWorker' in navigator) {
-                     navigator.serviceWorker.getRegistrations().then(regs => {
-                       for(let reg of regs) reg.unregister();
-                     });
+                     try {
+                       const regs = await navigator.serviceWorker.getRegistrations();
+                       for(let reg of regs) {
+                         await reg.unregister();
+                       }
+                     } catch (err) {
+                       console.error('Error unregistering service worker:', err);
+                     }
                    }
+                   // Force reload ignoring cache if possible (deprecated in some browsers but worth a try)
                    window.location.reload();
                  }
                },
                duration: Infinity, 
                dismissible: false
              });
-             setCurrentVersion(data.buildTime);
            }
         }
       } catch (e) {
@@ -68,5 +76,5 @@ export function useVersionCheck() {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [currentVersion]);
+  }, []);
 }

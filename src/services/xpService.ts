@@ -11,9 +11,22 @@ export const xpService = {
     sourceId: string,
     metadata: any = {}
   ) => {
+    // Safety check for inputs
+    if (!userId) {
+      console.error('[xpService] Missing userId for grantXP');
+      return { success: false, error: 'Missing userId' };
+    }
+    
+    // Ensure amount is a valid integer
+    const safeAmount = Math.floor(Number(amount) || 0);
+    if (safeAmount <= 0 && amount !== 0) { // Allow 0 XP grants if needed, but usually we want > 0
+       // If amount was intended but invalid (NaN), this catches it.
+       // If amount is 0, we might want to skip or proceed. Let's proceed with 0.
+    }
+
     const { data, error } = await supabase.rpc('grant_xp', {
       p_user_id: userId,
-      p_amount: amount,
+      p_amount: safeAmount,
       p_source: source,
       p_source_id: sourceId,
       p_metadata: metadata
