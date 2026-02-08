@@ -91,8 +91,8 @@ SET
     
     -- Verification / Other
     verification_paid_amount = 0,
-    is_trolls_night_approved = false,
-    trolls_night_rejection_count = 0,
+    -- is_trolls_night_approved = false, -- REMOVED: Column does not exist
+    -- trolls_night_rejection_count = 0, -- REMOVED: Column does not exist
     
     updated_at = NOW();
 
