@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { UserPlus, UserX, Settings, Users, X, Hand, ShieldBan, Coins, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
