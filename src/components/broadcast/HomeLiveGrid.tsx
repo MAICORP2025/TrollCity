@@ -93,14 +93,15 @@ export default function HomeLiveGrid() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {streams.map((stream) => (
-        <div
-          key={stream.id}
-          onClick={() => navigate(`/broadcast/${stream.id}`)}
-          className="group cursor-pointer bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-1"
-        >
-          {/* Thumbnail / Preview Area */}
+    <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {streams.map((stream) => (
+          <div
+            key={stream.id}
+            onClick={() => navigate(`/broadcast/${stream.id}`)}
+            className="group cursor-pointer bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-1"
+          >
+            {/* Thumbnail / Preview Area */}
           <div className="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
             {stream.thumbnail_url ? (
               <img
@@ -165,6 +166,7 @@ export default function HomeLiveGrid() {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
