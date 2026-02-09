@@ -26,10 +26,24 @@ export default function GiftAnimationOverlay({ streamId }: GiftAnimationOverlayP
 
   useEffect(() => {
     const loadGifts = async () => {
-      const { data } = await supabase.from('gifts').select('*');
+      // TRAE: Updated to use centralized purchasable_items table
+      const { data } = await supabase
+        .from('purchasable_items')
+        .select('*')
+        .eq('category', 'gift');
+        
       if (data) {
         const map: Record<string, Gift> = {};
-        data.forEach((g) => (map[g.id] = g));
+        data.forEach((g) => {
+             // Map purchasable_item to Gift interface
+             map[g.item_key] = {
+                 id: g.id,
+                 name: g.display_name,
+                 icon_url: g.metadata?.icon || '🎁',
+                 coin_price: g.coin_price,
+                 animation_type: g.metadata?.animationType || 'standard'
+             } as any;
+        });
         setGiftDefs(map);
       }
     };
@@ -131,8 +145,10 @@ function GiftAnimationItem({ event, index }: { event: GiftEvent; index: number }
         
         {/* Main Gift Visual */}
         <div className="relative bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-600 p-6 rounded-3xl shadow-[0_0_50px_rgba(245,158,11,0.6)] border-4 border-yellow-200/50 flex flex-col items-center">
-          {event.gift_data?.icon_url ? (
+          {event.gift_data?.icon_url && (event.gift_data.icon_url.startsWith('http') || event.gift_data.icon_url.startsWith('/')) ? (
             <img src={event.gift_data.icon_url} alt="Gift" className="w-24 h-24 object-contain drop-shadow-lg" />
+          ) : event.gift_data?.icon_url ? (
+            <span className="text-6xl drop-shadow-lg filter">{event.gift_data.icon_url}</span>
           ) : (
             <GiftIcon size={64} className="text-white drop-shadow-md" />
           )}
