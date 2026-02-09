@@ -58,8 +58,10 @@ export default function GasHUD() {
   const isPodRoom = location.pathname.startsWith('/pods/') && location.pathname.split('/').length > 2;
   // Also hide in TCPS to prevent blocking chat UI
   const isTCPS = location.pathname.startsWith('/tcps');
+  // Hide in Mobile Shell to prevent blocking menu buttons
+  const isMobileShell = location.pathname === '/mobile';
 
-  if (isBroadcastRoom || isPodRoom || isTCPS) {
+  if (isBroadcastRoom || isPodRoom || isTCPS || isMobileShell) {
       return null;
   }
 

@@ -10,6 +10,18 @@ import { MobileErrorLogger } from '@/lib/MobileErrorLogger';
 
 import { generateUUID } from '../../lib/uuid';
 
+// Format time as HH:MM or MM:SS
+function formatTime(seconds: number) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
 export default function SetupPage() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
@@ -17,6 +29,7 @@ export default function SetupPage() {
   const [category, setCategory] = useState('general');
   const [loading, setLoading] = useState(false);
   const [restrictionCheck, setRestrictionCheck] = useState<{ allowed: boolean; waitTime?: string; reason?: string; message?: string } | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null); // Live timer in seconds
 
   // Pre-generate stream ID for token optimization
   const [streamId] = useState(() => generateUUID());
@@ -32,37 +45,36 @@ export default function SetupPage() {
       console.log('[SetupPage] Checking restrictions for user:', user.id);
 
       // 1. Check Driver's License Status (Source: user_profiles)
-    // We strictly enforce this for ALL users, including Admins.
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('created_at, bypass_broadcast_restriction, drivers_license_status, live_restricted_until')
-      .eq('id', user.id)
-      .single();
-    
-    if (profileError) console.error('[SetupPage] Profile fetch error:', profileError);
+      // We strictly enforce this for ALL users, including Admins.
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('created_at, bypass_broadcast_restriction, drivers_license_status, live_restricted_until')
+        .eq('id', user.id)
+        .single();
+      
+      if (profileError) console.error('[SetupPage] Profile fetch error:', profileError);
 
-    const profileStatus = profile?.drivers_license_status?.toLowerCase();
-    
-    console.log('[SetupPage] License Status:', profileStatus);
+      const profileStatus = profile?.drivers_license_status?.toLowerCase();
+      
+      console.log('[SetupPage] License Status:', profileStatus);
 
-    const validStatuses = ['valid', 'active', 'approved'];
-    const isLicenseValid = profileStatus && validStatuses.includes(profileStatus);
+      const validStatuses = ['valid', 'active', 'approved'];
+      const isLicenseValid = profileStatus && validStatuses.includes(profileStatus);
 
-    if (!isLicenseValid) {
-      setRestrictionCheck({
-        allowed: false,
-        reason: 'license',
-        message: `You must have a valid Driver's License to broadcast (Admins included). Current Status: ${profileStatus || 'None'}`
-      });
-      return;
-    }
+      if (!isLicenseValid) {
+        setRestrictionCheck({
+          allowed: false,
+          reason: 'license',
+          message: `You must have a valid Driver's License to broadcast (Admins included). Current Status: ${profileStatus || 'None'}`
+        });
+        return;
+      }
 
       // Check Bypass (Admins/VIPs) - Only bypasses account age, NOT license
       if (profile?.bypass_broadcast_restriction) {
         setRestrictionCheck({ allowed: true });
         return;
       }
-
         
       if (profile?.created_at) {
         const now = new Date();
@@ -88,11 +100,11 @@ export default function SetupPage() {
         
         if (diff < restrictionTime) {
           const remaining = restrictionTime - diff;
-          const hours = Math.floor(remaining / (1000 * 60 * 60));
-          const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+          const secondsRemaining = Math.ceil(remaining / 1000);
+          setTimeRemaining(secondsRemaining);
           setRestrictionCheck({ 
             allowed: false, 
-            waitTime: `${hours}h ${minutes}m` 
+            waitTime: formatTime(secondsRemaining) 
           });
         } else {
           setRestrictionCheck({ allowed: true });
@@ -100,12 +112,56 @@ export default function SetupPage() {
       } else {
          // Fallback if no profile or created_at (shouldn't happen usually)
          setRestrictionCheck({ allowed: true });
-      }
+       }
     }
     
     checkRestriction();
   }, [user]);
   
+  // Live timer to update countdown and auto-clear when time is up
+  useEffect(() => {
+    if (timeRemaining === null || timeRemaining <= 0) return;
+    
+    const timer = setInterval(async () => {
+      setTimeRemaining(prev => {
+        if (prev === null || prev <= 1) {
+          // Time is up - re-fetch profile to check if restriction is lifted
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, []);
+  
+  // Re-check restriction when timer reaches 0
+  useEffect(() => {
+    if (timeRemaining === 0) {
+      // Trigger re-check
+      const checkEligible = async () => {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('created_at')
+          .eq('id', user?.id)
+          .single();
+        
+        if (profile?.created_at) {
+          const now = new Date();
+          const created = new Date(profile.created_at);
+          const diff = now.getTime() - created.getTime();
+          const restrictionTime = 30 * 60 * 1000; // 30 minutes
+          
+          if (diff >= restrictionTime) {
+            setRestrictionCheck({ allowed: true });
+            toast.success('You can now start broadcasting!');
+          }
+        }
+      };
+      checkEligible();
+    }
+  }, [timeRemaining, user]);
+   
   // Optimize: Pre-fetch LiveKit token as soon as restrictions are passed
   useEffect(() => {
     if (user && restrictionCheck?.allowed && streamId) {
@@ -396,9 +452,9 @@ export default function SetupPage() {
                 
                 {restrictionCheck.reason === 'license' ? (
                   <>
-                    <h2 className="text-2xl font-bold text-white mb-2">Driver&apos;s License Required</h2>
+                    <h2 className="text-2xl font-bold text-white mb-2">Driver's License Required</h2>
                     <p className="text-gray-400 mb-6">
-                      {restrictionCheck.message || "You need a valid Driver&apos;s License to start a broadcast."}
+                      {restrictionCheck.message || "You need a valid Driver's License to start a broadcast."}
                     </p>
                     <button 
                       onClick={() => navigate('/dmv')}

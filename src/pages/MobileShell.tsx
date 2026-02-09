@@ -121,7 +121,7 @@ export default function MobileShell() {
               icon={Radio}
               label="Go Live"
               sublabel="Start broadcasting"
-              path="/go-live"
+              path="/broadcast/setup"
               colorClass="text-purple-200"
               bgClass="bg-purple-600/30"
               borderClass="border-purple-500/40"
