@@ -61,7 +61,7 @@ declare module 'livekit-server-sdk' {
     constructor(url: string, apiKey: string, apiSecret: string);
     createRoom(room: { name: string; emptyTimeout?: number; metadata?: string }): Promise<{ name: string }>;
     deleteRoom(roomName: string): Promise<void>;
-    listRooms(): Promise<{ name: string }[]>;
+    listRooms(): Promise<{ name: string; numParticipants: number }[]>;
     getRoom(roomName: string): Promise<{ name: string; metadata?: string }>;
   }
 }
