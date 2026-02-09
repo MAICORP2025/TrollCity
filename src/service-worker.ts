@@ -98,6 +98,8 @@ self.addEventListener('fetch', (event: any) => {
   if (
     url.pathname.startsWith('/streams/') ||
     url.pathname.includes('.m3u8') ||
+    url.pathname.includes('/rest/v1/') ||
+    url.pathname.includes('/auth/v1/') ||
     url.pathname.includes('.ts') ||
     url.pathname.endsWith('.mp4')
   ) {

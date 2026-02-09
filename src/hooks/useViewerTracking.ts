@@ -11,7 +11,7 @@ import { getUserEntranceEffect } from '../lib/entranceEffects'
  */
 export function useViewerTracking(streamId: string | null, isHost: boolean = false, customUser: any = null) {
   const { user, profile } = useAuthStore()
-  const [viewerCount, setViewerCount] = useState<number>(0)
+  const [viewerCount, setViewerCount] = useState<number | undefined>(undefined)
   const lastDbUpdate = useRef<number>(0)
 
   // Use customUser if provided (e.g. for Guests)

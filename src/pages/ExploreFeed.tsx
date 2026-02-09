@@ -14,6 +14,7 @@ interface Broadcast {
   viewer_count: number;
   started_at: string;
   thumbnail_url?: string;
+  type: 'stream' | 'pod';
   user_profiles: {
     username: string;
     avatar_url?: string;
@@ -43,6 +44,7 @@ export default function ExploreFeed() {
       const from = targetPage * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
+      // 1. Fetch Streams
       let query = supabase
         .from('streams')
         .select(`
@@ -59,26 +61,68 @@ export default function ExploreFeed() {
         .range(from, to);
 
       if (filter !== 'all') {
+        // If filter is podcast, we might still want streams categorized as podcast
         query = query.eq('category', filter);
       }
 
-      const { data, error, count } = await query;
+      const { data: streamsData, error: streamsError, count } = await query;
+      if (streamsError) throw streamsError;
 
-      if (error) throw error;
+      const formattedStreams: Broadcast[] = (streamsData || []).map(stream => ({
+        ...stream,
+        type: 'stream'
+      }));
+
+      // 2. Fetch Pods (Only on first page and if filter allows)
+      let formattedPods: Broadcast[] = [];
+      if (targetPage === 0 && (filter === 'all' || filter === 'podcast')) {
+        const { data: podsData, error: podsError } = await supabase
+          .from('pod_rooms')
+          .select(`
+            *,
+            user_profiles:host_id (
+              username,
+              avatar_url,
+              level,
+              created_at
+            )
+          `)
+          .eq('is_live', true)
+          .order('viewer_count', { ascending: false });
+
+        if (!podsError && podsData) {
+          formattedPods = podsData.map(pod => ({
+            id: pod.id,
+            broadcaster_id: pod.host_id,
+            title: pod.title,
+            category: 'podcast',
+            viewer_count: pod.viewer_count || 0,
+            started_at: pod.started_at,
+            thumbnail_url: undefined, // Pods don't have thumbnails usually
+            type: 'pod',
+            user_profiles: pod.user_profiles
+          }));
+        }
+      }
+
+      // Combine results
+      // If filtering by podcast, show pods first, then streams
+      // If filtering by all, show pods mixed or first? Let's put pods first for visibility
+      const newBroadcasts = [...formattedPods, ...formattedStreams];
 
       if (isLoadMore) {
-        setBroadcasts(prev => [...prev, ...(data || [])]);
+        setBroadcasts(prev => [...prev, ...newBroadcasts]);
         setPage(targetPage);
       } else {
-        setBroadcasts(data || []);
+        setBroadcasts(newBroadcasts);
         setPage(0);
       }
 
-      // Check if we reached the end
+      // Check if we reached the end (based on streams count mostly, as pods are all fetched at once)
       if (count !== null) {
         setHasMore(to < count);
       } else {
-        setHasMore((data?.length || 0) === ITEMS_PER_PAGE);
+        setHasMore((streamsData?.length || 0) === ITEMS_PER_PAGE);
       }
 
     } catch (error: any) {
@@ -290,7 +334,7 @@ export default function ExploreFeed() {
 
                   {/* Title */}
                   <h3 className={`font-bold ${trollCityTheme.text.primary} line-clamp-2 group-hover:text-cyan-400 transition-colors`}>
-                    {broadcast.title || 'Untitled Stream'}
+                    {broadcast.title || (broadcast.type === 'pod' ? 'Untitled Podcast' : 'Untitled Stream')}
                   </h3>
 
                   {/* Category */}

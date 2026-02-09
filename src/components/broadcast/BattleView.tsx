@@ -113,30 +113,33 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
   const [isSuddenDeath, setIsSuddenDeath] = useState(false);
   const [hasEnded, setHasEnded] = useState(false);
 
-  const endBattle = React.useCallback(async () => {
+  const endBattle = React.useCallback(async (skipConfirmation = false) => {
       if (!battle) return;
-      if (confirm("Are you sure you want to end this battle?")) {
-          try {
-            // 1. Mark as ended
-            await supabase.from('battles').update({ status: 'ended', winner_id: user?.id }).eq('id', battle.id);
-            
-            // 2. Distribute Winnings (RPC)
-            const { data, error } = await supabase.rpc('distribute_battle_winnings', { p_battle_id: battle.id });
-            if (error) {
-                console.error("Distribution error:", error);
-                toast.error("Battle ended but payout failed.");
-            } else {
-                toast.success(`Battle Ended! Winnings distributed to ${data?.recipients || 0} participants.`);
-            }
+      
+      if (!skipConfirmation && !confirm("Are you sure you want to end this battle?")) {
+          return;
+      }
 
-            // 3. Cleanup Streams
-            // CRITICAL FIX: We set battle_id to null to trigger UI switch, but KEEP is_battle=true
-            // This prevents the webhook from ending the stream during the disconnection/reconnection gap.
-            // The BroadcastPage will reset is_battle=false once the normal stream connection is re-established.
-            await supabase.from('streams').update({ battle_id: null }).in('id', [challengerStream?.id, opponentStream?.id]);
-          } catch (e) {
-              console.error(e);
-          }
+      try {
+        // 1. Mark as ended
+        await supabase.from('battles').update({ status: 'ended', winner_id: user?.id }).eq('id', battle.id);
+        
+        // 2. Distribute Winnings (RPC)
+        const { data, error } = await supabase.rpc('distribute_battle_winnings', { p_battle_id: battle.id });
+        if (error) {
+            console.error("Distribution error:", error);
+            toast.error("Battle ended but payout failed.");
+        } else {
+            toast.success(`Battle Ended! Winnings distributed to ${data?.recipients || 0} participants.`);
+        }
+
+        // 3. Cleanup Streams
+        // CRITICAL FIX: We set battle_id to null to trigger UI switch, but KEEP is_battle=true
+        // This prevents the webhook from ending the stream during the disconnection/reconnection gap.
+        // The BroadcastPage will reset is_battle=false once the normal stream connection is re-established.
+        await supabase.from('streams').update({ battle_id: null }).in('id', [challengerStream?.id, opponentStream?.id]);
+      } catch (e) {
+          console.error(e);
       }
   }, [battle, user, challengerStream, opponentStream]);
 
@@ -165,7 +168,7 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
             setIsSuddenDeath(true);
             if (!hasEnded && (isChallengerHost || isOpponentHost)) {
                 setHasEnded(true);
-                endBattle();
+                endBattle(true); // Pass true to skip confirmation
             }
         }
     }, 1000);

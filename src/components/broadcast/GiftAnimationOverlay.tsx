@@ -60,7 +60,7 @@ export default function GiftAnimationOverlay({ streamId }: GiftAnimationOverlayP
           const event = payload.payload; // Payload structure from useGiftSystem
           
           // Refresh coin balance if we are the sender or recipient
-          refreshBalance();
+          // refreshBalance(); // DISABLED: BroadcastHeader already handles real-time updates. Avoids race condition with stale reads.
 
           // Add to animation queue
           const giftDef = giftDefs[event.gift_slug] || giftDefs[event.gift_id] || { 

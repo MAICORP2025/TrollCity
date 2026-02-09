@@ -497,9 +497,12 @@ export default function BroadcastPage() {
   // Gift Tray State
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
 
-  // Fetch Stream
+  // Fetch Stream & Subscribe to Updates
   useEffect(() => {
     if (!id) return;
+    
+    let mounted = true;
+
     const fetchStream = async () => {
       const { data, error } = await supabase
         .from('streams')
@@ -507,16 +510,18 @@ export default function BroadcastPage() {
         .eq('id', id)
         .single();
       
+      if (!mounted) return;
+
       if (error || !data) {
         console.error('Error fetching stream:', error);
-        setLoading(false);
+        toast.error('Stream not found');
+        navigate('/');
         return;
       }
-      
+
       // 🏛️ Check if this is a government stream and user is not staff
       if (isGovernmentStream(data)) {
         const userIsStaff = isStaffMember(profile);
-        console.log(`[BroadcastPage] Government stream check: category=${data.category} isStaff=${userIsStaff}`);
         
         if (!userIsStaff) {
           setAccessDenied(true);
@@ -524,13 +529,14 @@ export default function BroadcastPage() {
           return;
         }
       }
-      
+
       setStream(data);
       if (data.broadcaster) {
-          setBroadcasterProfile(data.broadcaster);
+        setBroadcasterProfile(data.broadcaster);
       }
       setLoading(false);
     };
+
     fetchStream();
 
     // Subscribe to Stream Updates (Box Count, Settings, etc.)
@@ -551,9 +557,34 @@ export default function BroadcastPage() {
         .subscribe();
 
     return () => {
+        mounted = false;
         supabase.removeChannel(channel);
     };
-  }, [id]);
+  }, [id, navigate, profile]);
+
+  // Real-time Broadcaster Profile Updates (Coin Balance)
+  useEffect(() => {
+      if (!stream?.user_id) return;
+
+      const channel = supabase.channel(`broadcaster_update_${stream.user_id}`)
+          .on(
+              'postgres_changes', 
+              { 
+                  event: 'UPDATE', 
+                  schema: 'public', 
+                  table: 'user_profiles', 
+                  filter: `id=eq.${stream.user_id}` 
+              }, 
+              (payload) => {
+                  setBroadcasterProfile((prev: any) => ({ ...prev, ...payload.new }));
+              }
+          )
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(channel);
+      }
+  }, [stream?.user_id]);
 
   // Host Balance Updater (Realtime)
   useEffect(() => {
@@ -843,7 +874,7 @@ export default function BroadcastPage() {
                             onGiftAll={() => setGiftRecipientId('ALL')}
                             onJoinSeat={handleJoinRequest} 
                             onKick={kickParticipant}
-                            broadcasterProfile={broadcasterProfile}
+                            broadcasterProfile={isHost ? profile : broadcasterProfile}
                         />
                     </ErrorBoundary>
                     

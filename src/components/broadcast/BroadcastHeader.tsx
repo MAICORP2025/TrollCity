@@ -32,6 +32,22 @@ export default function BroadcastHeader({ stream, onStartBattle, isHost, liveVie
                 }, 
                 (payload) => {
                     const newProfile = { ...profile, ...payload.new } as any;
+                    
+                    // TRAE FIX: Race condition protection
+                    // Check if the incoming update is actually newer than our current state.
+                    // This prevents stale 'postgres_changes' events from overwriting optimistic updates.
+                    const currentUpdatedAt = profile?.updated_at ? new Date(profile.updated_at).getTime() : 0;
+                    const newUpdatedAt = payload.new.updated_at ? new Date(payload.new.updated_at).getTime() : 0;
+
+                    // If timestamps are valid, enforce strict ordering
+                    if (currentUpdatedAt > 0 && newUpdatedAt > 0) {
+                        if (newUpdatedAt <= currentUpdatedAt) {
+                            // Incoming update is older or same age as our base state.
+                            // If we have optimistic updates (coins changed locally), we don't want to revert them.
+                            return;
+                        }
+                    }
+
                     // Only update if balance changed to avoid loops/renders
                     if (newProfile.troll_coins !== profile.troll_coins) {
                          setProfile(newProfile);
