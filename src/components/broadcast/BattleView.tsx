@@ -130,7 +130,10 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
             }
 
             // 3. Cleanup Streams
-            await supabase.from('streams').update({ battle_id: null, is_battle: false }).in('id', [challengerStream?.id, opponentStream?.id]);
+            // CRITICAL FIX: We set battle_id to null to trigger UI switch, but KEEP is_battle=true
+            // This prevents the webhook from ending the stream during the disconnection/reconnection gap.
+            // The BroadcastPage will reset is_battle=false once the normal stream connection is re-established.
+            await supabase.from('streams').update({ battle_id: null }).in('id', [challengerStream?.id, opponentStream?.id]);
           } catch (e) {
               console.error(e);
           }

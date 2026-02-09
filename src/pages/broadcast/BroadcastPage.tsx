@@ -49,6 +49,16 @@ const RoomStateSync = ({ mode, isHost, streamId }: { mode: 'stage' | 'viewer'; i
                     if (error) console.error('[RoomStateSync] Failed to update stream status:', error);
                     else console.log('[RoomStateSync] Stream marked as live');
                 });
+
+            // TRAE FIX: Clear is_battle flag after a delay to ensure transition webhooks are ignored.
+            // When returning from BattleView, we keep is_battle=true to prevent the webhook from ending the stream
+            // due to the brief disconnection. We clear it here after the connection is stable.
+            const timer = setTimeout(async () => {
+                const { error } = await supabase.from('streams').update({ is_battle: false }).eq('id', streamId);
+                if (!error) console.log('[RoomStateSync] Cleared battle mode flag');
+            }, 15000); // 15 seconds safety window
+
+            return () => clearTimeout(timer);
         }
     }, [isHost, room.state, streamId]);
     

@@ -266,6 +266,23 @@ Deno.serve(async (req: Request) => {
         }
 
     } else if (event === 'room_finished') {
+      // TRAE FIX: Check if stream is in battle mode before ending
+      // When switching to BattleView, the host briefly disconnects, which might trigger room_finished.
+      // We must ignore this event if the stream is in a battle.
+      const { data: streamData, error: streamError } = await supabase
+        .from('streams')
+        .select('is_battle, battle_id')
+        .eq('id', room.name)
+        .single();
+
+      if (!streamError && (streamData?.is_battle || streamData?.battle_id)) {
+        console.log(`🛡️ Stream ${room.name} is in BATTLE MODE. Ignoring room_finished event.`);
+        return new Response(JSON.stringify({ success: true, ignored: true, reason: 'battle_mode' }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Mark stream as ended
       const { error } = await supabase
         .from('streams')
