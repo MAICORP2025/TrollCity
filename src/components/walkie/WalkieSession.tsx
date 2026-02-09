@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
+import { supabase as supabaseClient } from '../../lib/supabase'
 import { useLiveKitRoom } from '../../hooks/useLiveKitRoom'
 import { Mic, MicOff, PhoneOff, User, Shield, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../../lib/store'
@@ -46,7 +47,7 @@ export default function WalkieSession({ session, onEnd }: WalkieSessionProps) {
 
   // Fetch Admin IDs
   useEffect(() => {
-    supabase.from('user_profiles').select('id').eq('is_admin', true)
+    supabaseClient.from('user_profiles').select('id').eq('is_admin', true)
       .then(({ data }) => {
         if (data) setAdminIds(data.map(u => u.id))
       })
