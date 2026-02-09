@@ -263,9 +263,11 @@ const LoadingScreen = () => (
     if (isLoading) return <LoadingScreen />;
     if (!user) return <Navigate to="/auth" replace />;
     
-    // Prevent flash of main content while profile is loading
+    // If we have a user but no profile, and we are not loading, it means the profile row is missing.
+    // We must redirect to setup to create one.
     if (!profile && location.pathname !== "/profile/setup") {
-      return <LoadingScreen />;
+      if (isLoading) return <LoadingScreen />;
+      return <Navigate to="/profile/setup" replace />;
     }
     
     if (

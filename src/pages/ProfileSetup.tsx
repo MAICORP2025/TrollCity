@@ -138,7 +138,8 @@ const ProfileSetup = () => {
       const now = new Date().toISOString()
       const { data: updatedRows, error } = await supabase
         .from('user_profiles')
-        .update({ 
+        .upsert({ 
+          id: user.id,
           username: uname, 
           full_name: fullName.trim(),
           bio: bio || null, 
@@ -147,7 +148,6 @@ const ProfileSetup = () => {
           profile_view_cost: viewCost,
           updated_at: now 
         })
-        .eq('id', user.id)
         .select('*')
       
       if (error) throw error
