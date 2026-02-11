@@ -12,6 +12,7 @@ interface FollowRow {
   following_id: string
   created_at: string
   following?: UserProfile
+  follower?: UserProfile
 }
 
 export default function Following() {
@@ -39,14 +40,14 @@ export default function Following() {
 
       const { data: followerRows } = await supabase
         .from('user_follows')
-        .select('*, following:user_profiles!user_follows_follower_id_fkey(*)')
+        .select('*, follower:user_profiles!user_follows_follower_id_fkey(*)')
         .eq('following_id', targetId)
         .order('created_at', { ascending: false })
         .limit(100)
-      // Remap so we use `following` field to represent the user profile on card
+      // Remap so we use `follower` field to represent the user profile on card
       const mappedFollowers = (followerRows || []).map((r: any) => ({
         ...r,
-        following: r.following
+        follower: r.follower
       })) as FollowRow[]
       setFollowers(mappedFollowers)
     } finally {
@@ -155,17 +156,17 @@ export default function Following() {
                       return (
                       <div key={r.id} className="p-4 bg-[#121212] rounded-lg border border-[#2C2C2C] hover:border-[#00D4FF] transition-colors">
                         <div className="flex items-center gap-3">
-                          <Link to={`/profile/${r.following?.username}`}>
+                          <Link to={`/profile/${r.follower?.username}`}>
                             <img
-                              src={r.following?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.following?.username}`}
-                              alt={r.following?.username || ''}
+                              src={r.follower?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.follower?.username}`}
+                              alt={r.follower?.username || ''}
                               className="w-10 h-10 rounded-full"
                             />
                           </Link>
                           <div>
                             <ClickableUsername 
-                              username={r.following?.username || ''} 
-                              profile={r.following} 
+                              username={r.follower?.username || ''} 
+                              profile={r.follower}
                               className="font-semibold"
                             />
                             <div className="text-xs text-[#E2E2E2]/60">Followed you {new Date(r.created_at).toLocaleDateString()}</div>

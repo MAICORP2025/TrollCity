@@ -34,7 +34,8 @@ import {
   Landmark,
   Video,
   Mic,
-  Globe
+  Globe,
+  Lock
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -311,6 +312,7 @@ export default function Sidebar() {
 
         {/* Support & Safety */}
         <SidebarGroup title={isSidebarCollapsed ? '' : "Public Services"} isCollapsed={isSidebarCollapsed} highlight={isAnyUpdated(supportPaths)}>
+          <SidebarItem icon={Lock} label="Jail" to="/jail" active={isActive('/jail')} collapsed={isSidebarCollapsed} highlight={isUpdated('/jail')} onClick={() => markAsViewed('/jail')} className="text-red-400 hover:text-red-300" />
           <SidebarItem icon={BookOpen} label="Troll Church" to="/church" active={isActive('/church')} collapsed={isSidebarCollapsed} highlight={isUpdated('/church')} onClick={() => markAsViewed('/church')} />
           {/* Pastor Dashboard - Visible to Pastors/Admins */}
           {((profile as any)?.is_pastor || profile?.role === 'admin' || (profile as any)?.is_admin) && (

@@ -8,7 +8,7 @@ import { Coins, AlertCircle, ArrowLeft, Timer } from 'lucide-react';
 export default function KickFeePage() {
     const { streamId } = useParams<{ streamId: string }>();
     const navigate = useNavigate();
-    const { user, profile, fetchProfile } = useAuthStore();
+    const { user, profile, refreshProfile } = useAuthStore();
     const [loading, setLoading] = useState(false);
     const [checkingStatus, setCheckingStatus] = useState(true);
     const [banInfo, setBanInfo] = useState<{ expires_at: string } | null>(null);
@@ -75,7 +75,7 @@ export default function KickFeePage() {
 
             if (data === true) {
                 toast.success("Fee paid! You can now re-enter.");
-                await fetchProfile(); // Update balance
+                await refreshProfile(); // Update balance
                 navigate(`/broadcast/${streamId}`);
             } else {
                 toast.error("Failed to process payment");

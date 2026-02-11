@@ -403,7 +403,7 @@ export default function PublicPool() {
                              <UserNameWithAge
                                user={{
                                  username: d.username || 'Unknown',
-                                 created_at: d.user_created_at,
+                                 created_at: d.created_at,
                                  id: d.user_id
                                }}
                                className="font-semibold text-sm text-cyan-200" 

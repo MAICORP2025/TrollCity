@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant } from '@livekit/components-react';
 import { LocalTrack } from 'livekit-client';
 import { supabase } from '../../lib/supabase';
@@ -10,9 +10,8 @@ import BroadcastChat from './BroadcastChat';
 import MuteHandler from './MuteHandler';
 import GiftAnimationOverlay from './GiftAnimationOverlay';
 import GiftTray from './GiftTray';
-import { toast } from 'sonner';
 
-// Helper to ensure media is published/unmuted for the host
+// Helper to ensure media is published/unmuted for the host (LiveKit Only)
 const BattleRoomSync = ({ isHost }: { isHost: boolean }) => {
     const { localParticipant } = useLocalParticipant();
 
@@ -61,8 +60,8 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
   const [challengerStream, setChallengerStream] = useState<Stream | null>(null);
   const [opponentStream, setOpponentStream] = useState<Stream | null>(null);
   
-  const [tokenChallenger, setTokenChallenger] = useState<string>("");
-  const [tokenOpponent, setTokenOpponent] = useState<string>("");
+  const [challengerConnection, setChallengerConnection] = useState<string>("");
+  const [opponentConnection, setOpponentConnection] = useState<string>("");
   
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
@@ -113,7 +112,7 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
   const [isSuddenDeath, setIsSuddenDeath] = useState(false);
   const [hasEnded, setHasEnded] = useState(false);
 
-  const endBattle = React.useCallback(async (skipConfirmation = false) => {
+  const endBattle = useCallback(async (skipConfirmation = false) => {
       if (!battle) return;
       
       if (!skipConfirmation && !confirm("Are you sure you want to end this battle?")) {
@@ -134,9 +133,6 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
         }
 
         // 3. Cleanup Streams
-        // CRITICAL FIX: We set battle_id to null to trigger UI switch, but KEEP is_battle=true
-        // This prevents the webhook from ending the stream during the disconnection/reconnection gap.
-        // The BroadcastPage will reset is_battle=false once the normal stream connection is re-established.
         await supabase.from('streams').update({ battle_id: null }).in('id', [challengerStream?.id, opponentStream?.id]);
       } catch (e) {
           console.error(e);
@@ -182,34 +178,33 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Using a separate effect to fetch tokens via the existing API pattern
+  // Fetch LiveKit connections (Only if needed)
   useEffect(() => {
     if (!user || !challengerStream || !opponentStream) return;
 
-    const fetchTokens = async () => {
+    const fetchConnections = async () => {
         try {
-            // Token for Challenger Room
-            const { data: dataC, error: errorC } = await supabase.functions.invoke('livekit-token', {
-                body: { room: challengerStream.id, username: user.id } // Room name is stream ID
-            });
-            if (errorC) throw errorC;
-            if (dataC?.token) setTokenChallenger(dataC.token);
+            if (challengerStream) {
+                const { data: dataC, error: errorC } = await supabase.functions.invoke('livekit-token', {
+                    body: { room: challengerStream.id, username: user.id }
+                });
+                if (!errorC && dataC?.token) setChallengerConnection(dataC.token);
+            }
 
-            // Token for Opponent Room
-            const { data: dataO, error: errorO } = await supabase.functions.invoke('livekit-token', {
-                body: { room: opponentStream.id, username: user.id }
-            });
-            if (errorO) throw errorO;
-            if (dataO?.token) setTokenOpponent(dataO.token);
+            if (opponentStream) {
+                const { data: dataO, error: errorO } = await supabase.functions.invoke('livekit-token', {
+                    body: { room: opponentStream.id, username: user.id }
+                });
+                if (!errorO && dataO?.token) setOpponentConnection(dataO.token);
+            }
 
             setLoading(false);
         } catch (e) {
-            console.error("Error fetching tokens", e);
-            // Don't set loading false immediately if we want to retry, but for now just show error state
+            console.error("Error fetching connections", e);
             setLoading(false);
         }
     };
-    fetchTokens();
+    fetchConnections();
   }, [user, challengerStream, opponentStream]);
 
   if (loading || !challengerStream || !opponentStream) {
@@ -218,13 +213,46 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
 
   const liveKitUrl = import.meta.env.VITE_LIVEKIT_URL || "wss://trollcity-722100.livekit.cloud";
 
-  const currentStream = [challengerStream, opponentStream].find(s => s?.id === currentStreamId);
-  const currentHostId = currentStream?.user_id;
-
   // Calculate percentages for bar
   const totalScore = (battle?.score_challenger || 0) + (battle?.score_opponent || 0);
   const challengerPercent = totalScore === 0 ? 50 : Math.round((battle?.score_challenger / totalScore) * 100);
   const opponentPercent = 100 - challengerPercent;
+
+  // Render Helper for a Battle Side
+  const renderSide = (stream: Stream, isHost: boolean, connection: string, side: 'challenger' | 'opponent') => {
+      // 2. LiveKit Mode (Legacy / Jail)
+      return (
+        <LiveKitRoom
+            token={connection}
+            serverUrl={liveKitUrl}
+            connect={true}
+            data-lk-theme="default"
+            style={{ height: '100%' }}
+        >
+            <BroadcastGrid 
+                stream={stream} 
+                isHost={isHost} 
+                onGift={(uid) => {
+                    setGiftRecipientId(uid);
+                    setGiftStreamId(stream.id);
+                }}
+                onGiftAll={() => {}} 
+                mode="battle"
+            />
+            <RoomAudioRenderer />
+            <MuteHandler />
+            {/* Sync Host State */}
+            <BattleRoomSync isHost={isHost} />
+            
+            {/* Chat & Gifts Overlay */}
+            <div className="absolute bottom-0 left-0 w-full h-[300px] pointer-events-auto z-10">
+                <BroadcastChat streamId={stream.id} isOverlay={true} />
+            </div>
+            
+            <GiftAnimationOverlay streamId={stream.id} />
+        </LiveKitRoom>
+      );
+  };
 
   return (
     <div className="flex flex-col h-screen bg-black overflow-hidden">
@@ -236,13 +264,11 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
                 <div className="text-right">
                     <h2 className="text-2xl font-bold text-white tracking-tight">{challengerStream.title}</h2>
                     <div className="flex items-center justify-end gap-1 text-zinc-400">
-                        {/* Removed Coins Icon to reduce confusion */}
                         <span className="font-mono text-xl font-bold">{(battle?.score_challenger || 0).toLocaleString()} pts</span>
                     </div>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-purple-600 to-blue-600 border-2 border-white/20 shadow-lg flex items-center justify-center relative">
                     <User className="text-white" />
-                    {/* Win Indicator if needed */}
                 </div>
             </div>
 
@@ -277,13 +303,12 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
                 <div className="text-left">
                     <h2 className="text-2xl font-bold text-white tracking-tight">{opponentStream.title}</h2>
                     <div className="flex items-center justify-start gap-1 text-zinc-400">
-                        {/* Removed Coins Icon */}
                         <span className="font-mono text-xl font-bold">{(battle?.score_opponent || 0).toLocaleString()} pts</span>
                     </div>
                 </div>
             </div>
             
-            {/* Progress Bar (Absolute Bottom of Header) */}
+            {/* Progress Bar */}
             <div className="absolute bottom-0 left-0 w-full h-1 bg-zinc-800 flex">
                 <div 
                     className="h-full bg-gradient-to-r from-purple-600 to-blue-600 transition-all duration-500" 
@@ -298,111 +323,24 @@ export default function BattleView({ battleId, currentStreamId }: BattleViewProp
 
         {/* Battle Arena (Split View) */}
         <div className="flex-1 flex overflow-hidden">
-            {/* Challenger Side */}
-            <div className="w-1/2 border-r border-amber-500/20 relative">
-                 {tokenChallenger && (
-                    <LiveKitRoom
-                        serverUrl={liveKitUrl}
-                        token={tokenChallenger}
-                        connect={true}
-                        video={isChallengerHost} // Only publish if host
-                        audio={isChallengerHost}
-                        className="h-full"
-                    >
-                        <BattleRoomSync isHost={isChallengerHost} />
-                        <MuteHandler streamId={challengerStream.id} />
-                        <BroadcastGrid 
-                            stream={{ ...challengerStream, box_count: 4 }} 
-                            isHost={isChallengerHost} 
-                            maxItems={4} 
-                            hideEmptySeats={true}
-                            onGift={(uid) => {
-                                setGiftRecipientId(uid);
-                                setGiftStreamId(challengerStream.id);
-                            }}
-                            onGiftAll={(ids) => {
-                                setGiftRecipientId('ALL'); // TODO: Pass ids if needed
-                                setGiftStreamId(challengerStream.id);
-                            }}
-                        />
-                        <GiftAnimationOverlay streamId={challengerStream.id} />
-                        <RoomAudioRenderer />
-                    </LiveKitRoom>
-                 )}
+            {/* Challenger Side (Left) */}
+            <div className="flex-1 border-r border-white/10 relative">
+                {renderSide(challengerStream, isChallengerHost, challengerConnection, 'challenger')}
             </div>
 
-            {/* Opponent Side */}
-            <div className="w-1/2 relative">
-                {tokenOpponent && (
-                    <LiveKitRoom
-                        serverUrl={liveKitUrl}
-                        token={tokenOpponent}
-                        connect={true}
-                        video={isOpponentHost} // Only publish if host
-                        audio={isOpponentHost}
-                        className="h-full"
-                    >
-                        <BattleRoomSync isHost={isOpponentHost} />
-                        <MuteHandler streamId={opponentStream.id} />
-                        <BroadcastGrid 
-                            stream={{ ...opponentStream, box_count: 4 }} 
-                            isHost={isOpponentHost} 
-                            maxItems={4}
-                            hideEmptySeats={true}
-                            onGift={(uid) => {
-                                setGiftRecipientId(uid);
-                                setGiftStreamId(opponentStream.id);
-                            }}
-                            onGiftAll={(ids) => {
-                                setGiftRecipientId('ALL');
-                                setGiftStreamId(opponentStream.id);
-                            }}
-                        />
-                        <GiftAnimationOverlay streamId={opponentStream.id} />
-                        <RoomAudioRenderer />
-                    </LiveKitRoom>
-                 )}
+            {/* Opponent Side (Right) */}
+            <div className="flex-1 relative">
+                {renderSide(opponentStream, isOpponentHost, opponentConnection, 'opponent')}
             </div>
-        </div>
-        
-        {/* Chat & Controls Overlay (Bottom) */}
-        {/* We reuse the Chat from the stream we are originally viewing or a unified chat? */}
-        {/* Ideally, a unified battle chat or just show the chat of the stream we entered through. */}
-        {/* For MVP, let's show the chat of the `currentStreamId`. */}
-        <div className="h-64 border-t border-zinc-800 flex bg-zinc-900">
-             <div className="w-1/3 border-r border-zinc-800 p-4">
-                 <h3 className="text-amber-500 font-bold mb-2">Battle Chat</h3>
-                 <BroadcastChat streamId={currentStreamId} hostId={currentHostId || ""} isModerator={false} />
-             </div>
-             <div className="w-2/3 p-4">
-                {/* Controls for the host if I am one */}
-                {(isChallengerHost || isOpponentHost) && (
-                    <div className="flex gap-4">
-                         <button 
-                            onClick={endBattle}
-                            className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-bold shadow-lg"
-                         >
-                            END BATTLE
-                         </button>
-                         {/* Other controls */}
-                    </div>
-                )}
-             </div>
         </div>
 
-        {giftRecipientId && giftStreamId && (
-            <div className="fixed inset-0 z-[100]">
-                <GiftTray 
-                    recipientId={giftRecipientId}
-                    streamId={giftStreamId}
-                    battleId={battleId}
-                    onClose={() => {
-                        setGiftRecipientId(null);
-                        setGiftStreamId(null);
-                    }}
-                />
-            </div>
-        )}
+        {/* Gift Tray (Global) */}
+        <GiftTray 
+            isOpen={!!giftRecipientId} 
+            onClose={() => setGiftRecipientId(null)}
+            recipientId={giftRecipientId || ''}
+            streamId={giftStreamId || ''}
+        />
     </div>
   );
 }

@@ -42,7 +42,7 @@ export function useStreamEndListener({
           if (newRecord?.status === 'ended' || newRecord?.is_live === false) {
             console.log('[useStreamEndListener] Stream ended detected, redirecting to summary...')
             if (redirectToSummary) {
-              navigate(`/stream-summary/${streamId}`)
+              navigate(`/broadcast/summary/${streamId}`)
             }
           }
         }
@@ -57,7 +57,7 @@ export function useStreamEndListener({
           if (endedStreamId === streamId) {
             console.log('[useStreamEndListener] Stream ended via broadcast, redirecting...')
             if (redirectToSummary) {
-              navigate(`/stream-summary/${streamId}`)
+              navigate(`/broadcast/summary/${streamId}`)
             }
           }
         }
@@ -78,7 +78,7 @@ export function useStreamEndListener({
         (payload) => {
           console.log('[useStreamEndListener] Stream ended log detected:', payload)
           if (redirectToSummary) {
-            navigate(`/stream-summary/${streamId}`)
+            navigate(`/broadcast/summary/${streamId}`)
           }
         }
       )

@@ -34,10 +34,10 @@ export function useBank() {
         .order('created_at', { ascending: false })
       setLoans(activeLoans || [])
 
-      // Fetch ledger (recent 50)
+      // Fetch ledger (recent 50) - explicitly select columns to avoid JSON coercion issues
       const { data: ledgers } = await supabase
         .from('coin_ledger')
-        .select('*')
+        .select('id, user_id, delta, bucket, source, reason, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50)

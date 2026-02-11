@@ -40,7 +40,13 @@ export function useCreditScore(targetUserId?: string) {
       }
     } catch (e: any) {
       console.error('Credit score fetch error:', e)
-      setError(e?.message || 'Failed to load credit score')
+      // Handle JSON coercion errors gracefully
+      if (e.message?.includes('cannot coerce') || e.code === '22P02') {
+        setError(null)
+        setData(null)
+      } else {
+        setError(e?.message || 'Failed to load credit score')
+      }
     } finally {
       setLoading(false)
     }

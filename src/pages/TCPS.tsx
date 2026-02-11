@@ -7,6 +7,8 @@ import ChatWindow from './tcps/components/ChatWindow'
 import NewMessageModal from './tcps/components/NewMessageModal'
 import IncomingCallPopup from '../components/IncomingCallPopup'
 import { supabase } from '../lib/supabase'
+import { usePresenceStore } from '../lib/presenceStore'
+import MobileShell from './MobileShell'
 
 interface SidebarConversation {
   other_user_id: string
@@ -21,6 +23,7 @@ interface SidebarConversation {
 
 export default function TCPS() {
   const { user } = useAuthStore()
+  const { onlineUserIds } = usePresenceStore()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -29,13 +32,14 @@ export default function TCPS() {
   const [activeTab, setActiveTab] = useState<string>('inbox')
   const [showNewMessageModal, setShowNewMessageModal] = useState(false)
 
-  const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({})
   const [otherUserInfo, setOtherUserInfo] = useState<{
     id: string
     username: string
     avatar_url: string | null
     created_at?: string
     is_online?: boolean
+    rgb_username_expires_at?: string | null
+    glowing_username_color?: string | null
   } | null>(null)
   
   // Incoming call state
@@ -67,39 +71,13 @@ export default function TCPS() {
             username: data.username,
             avatar_url: data.avatar_url,
             created_at: data.created_at,
-            is_online: onlineUsers[data.id] || false,
+            is_online: onlineUserIds.includes(data.id),
             rgb_username_expires_at: data.rgb_username_expires_at,
             glowing_username_color: data.glowing_username_color
           })
         }
       })
-  }, [searchParams, onlineUsers])
-
-  // Presence tracking
-  useEffect(() => {
-    if (!user?.id) return
-
-    const channel = supabase.channel('presence-channel', {
-      config: { presence: { key: user.id } }
-    })
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        const list: Record<string, boolean> = {}
-        Object.keys(state).forEach((key) => (list[key] = true))
-        setOnlineUsers(list)
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ online: true })
-        }
-      })
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [user?.id])
+  }, [searchParams, onlineUserIds])
 
   // Listen for incoming calls
   useEffect(() => {
@@ -184,13 +162,13 @@ export default function TCPS() {
             username: data.username,
             avatar_url: data.avatar_url,
             created_at: data.created_at,
-            is_online: onlineUsers[data.id] || false,
+            is_online: onlineUserIds.includes(data.id),
             rgb_username_expires_at: data.rgb_username_expires_at,
             glowing_username_color: data.glowing_username_color
           })
         }
       })
-  }, [activeConversation, onlineUsers])
+  }, [activeConversation, onlineUserIds])
 
   const handleSelectConversation = (otherId: string) => {
     setActiveConversation(otherId)
@@ -204,61 +182,70 @@ export default function TCPS() {
   }
 
   const handleConversationsLoaded = useCallback((conversations: SidebarConversation[]) => {
-    if (!activeConversation && conversations.length > 0) {
+    // Only auto-select first conversation if no user is specified in URL
+    const userParam = searchParams.get('user')
+    if (!activeConversation && !userParam && conversations.length > 0) {
       const first = conversations[0]
       setActiveConversation(first.other_user_id)
       navigate(`/tcps?user=${first.other_user_id}`, { replace: true })
     }
-  }, [activeConversation, navigate])
+  }, [activeConversation, navigate, searchParams])
+
+  const { backgrounds } = trollCityTheme
+  
+  // Convert onlineUserIds array to Record<string, boolean> for InboxSidebar
+  const onlineUsersRecord = onlineUserIds.reduce((acc, id) => ({ ...acc, [id]: true }), {})
 
   return (
-    <div className={`w-full h-[100dvh] overflow-hidden ${trollCityTheme.backgrounds.primary} flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8`}>
-      <div className={`relative flex w-full max-w-6xl ${trollCityTheme.backgrounds.card} rounded-2xl md:rounded-3xl border border-white/10 overflow-hidden flex-col md:flex-row h-full`}>
-        {/* Column 1: Sidebar with Conversations */}
-        <div className={`flex-col border-r border-white/5 ${trollCityTheme.backgrounds.glass} w-full md:w-80 lg:w-96 ${activeConversation ? 'hidden md:flex' : 'flex'}`}>
-          <InboxSidebar
-            activeConversation={activeConversation}
-            onSelectConversation={handleSelectConversation}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            onlineUsers={onlineUsers}
-            onConversationsLoaded={handleConversationsLoaded}
-            onOpenNewMessage={() => setShowNewMessageModal(true)}
-          />
+    <MobileShell>
+      <div className={`w-full h-[100dvh] overflow-hidden ${backgrounds.primary} flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8`}>
+        <div className={`relative flex w-full max-w-6xl ${trollCityTheme.backgrounds.card} rounded-2xl md:rounded-3xl border border-white/10 overflow-hidden flex-col md:flex-row h-full`}>
+          {/* Column 1: Sidebar with Conversations */}
+          <div className={`flex-col border-r border-white/5 ${trollCityTheme.backgrounds.glass} w-full md:w-80 lg:w-96 ${activeConversation ? 'hidden md:flex' : 'flex'}`}>
+            <InboxSidebar
+              activeConversation={activeConversation}
+              onSelectConversation={handleSelectConversation}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              onlineUsers={onlineUsersRecord}
+              onConversationsLoaded={handleConversationsLoaded}
+              onOpenNewMessage={() => setShowNewMessageModal(true)}
+            />
+          </div>
+
+          {/* Column 2: Chat Window */}
+          <div className={`flex-1 flex-col min-w-0 bg-transparent ${!activeConversation ? 'hidden md:flex' : 'flex'}`}>
+            <ChatWindow
+              conversationId={null} // It will be derived from users or we can pass it if we have it
+              otherUserInfo={otherUserInfo}
+              isOnline={otherUserInfo?.is_online}
+              onBack={() => {
+                setActiveConversation(null)
+                navigate('/tcps')
+              }}
+            />
+          </div>
         </div>
 
-        {/* Column 2: Chat Window */}
-        <div className={`flex-1 flex-col min-w-0 bg-transparent ${!activeConversation ? 'hidden md:flex' : 'flex'}`}>
-          <ChatWindow
-            conversationId={null} // It will be derived from users or we can pass it if we have it
-            otherUserInfo={otherUserInfo}
-            isOnline={otherUserInfo?.is_online}
-            onBack={() => {
-              setActiveConversation(null)
-              navigate('/tcps')
-            }}
-          />
-        </div>
-      </div>
-
-      <NewMessageModal
-        isOpen={showNewMessageModal}
-        onClose={() => setShowNewMessageModal(false)}
-        onSelectUser={handleNewMessage}
-      />
-
-      {incomingCall && (
-        <IncomingCallPopup
-          isOpen={!!incomingCall}
-          callerId={incomingCall.callerId}
-          callerUsername={incomingCall.callerUsername}
-          callerAvatar={incomingCall.callerAvatar}
-          callType={incomingCall.callType}
-          roomId={incomingCall.roomId}
-          onAccept={handleAcceptCall}
-          onDecline={handleDeclineCall}
+        <NewMessageModal
+          isOpen={showNewMessageModal}
+          onClose={() => setShowNewMessageModal(false)}
+          onSelectUser={handleNewMessage}
         />
-      )}
-    </div>
+
+        {incomingCall && (
+          <IncomingCallPopup
+            isOpen={!!incomingCall}
+            callerId={incomingCall.callerId}
+            callerUsername={incomingCall.callerUsername}
+            callerAvatar={incomingCall.callerAvatar}
+            callType={incomingCall.callType}
+            roomId={incomingCall.roomId}
+            onAccept={handleAcceptCall}
+            onDecline={handleDeclineCall}
+          />
+        )}
+      </div>
+    </MobileShell>
   )
 }

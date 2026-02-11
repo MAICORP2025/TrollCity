@@ -1,7 +1,7 @@
 -- Function to handle paid kicks (100 coins)
 -- Kicker pays 100 coins, Target is banned for 24 hours (unless they pay to return)
 
-CREATE OR REPLACE FUNCTION kick_user_paid(p_stream_id TEXT, p_target_user_id UUID, p_kicker_id UUID)
+CREATE OR REPLACE FUNCTION kick_user_paid(p_stream_id UUID, p_target_user_id UUID, p_kicker_id UUID)
 RETURNS JSONB AS $$
 DECLARE
     v_cost INTEGER := 100;
@@ -35,7 +35,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Cost: Maybe 100 coins? Or 50? Prompt says "kick fee page to get back into that broadcast if they dont pay".
 -- Let's assume the fee to return is also 100 coins.
 
-CREATE OR REPLACE FUNCTION pay_kick_fee(p_stream_id TEXT, p_user_id UUID)
+CREATE OR REPLACE FUNCTION pay_kick_fee(p_stream_id UUID, p_user_id UUID)
 RETURNS JSONB AS $$
 DECLARE
     v_cost INTEGER := 100;

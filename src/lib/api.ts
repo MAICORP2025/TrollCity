@@ -422,10 +422,6 @@ export async function del<T = any>(endpoint: string, params?: any, options?: Req
   return request<T>(endpoint, { ...options, method: 'DELETE', params });
 }
 
-export async function createMuxStream() {
-  return await post('/mux-create-stream')
-}
-
 export async function startRtmpRelay(roomName: string, streamKey: string) {
   return await post(API_ENDPOINTS.rtmp.start, { roomName, streamKey })
 }
@@ -437,7 +433,6 @@ const api = {
   patch, 
   delete: del, 
   request, 
-  createMuxStream, 
   startRtmpRelay,
   endpoints: API_ENDPOINTS 
 };

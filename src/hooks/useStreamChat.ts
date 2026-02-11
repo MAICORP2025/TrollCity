@@ -13,7 +13,7 @@ interface VehicleStatus {
   insurance_active?: boolean;
 }
 
-export function useStreamChat(streamId: string, isViewer: boolean = false) {
+export function useStreamChat(streamId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const { user, profile } = useAuthStore();
   const lastSentRef = useRef<number>(0);
@@ -84,12 +84,6 @@ export function useStreamChat(streamId: string, isViewer: boolean = false) {
 
     fetchMessages();
 
-    // If Viewer (Passive Mode), use Polling instead of Realtime
-    if (isViewer) {
-        const interval = setInterval(fetchMessages, 10000); // Poll every 10 seconds
-        return () => clearInterval(interval);
-    }
-
     // Active Mode: Use Realtime Subscription
     const chatChannel = supabase
         .channel(`chat_mobile:${streamId}`)
@@ -131,12 +125,35 @@ export function useStreamChat(streamId: string, isViewer: boolean = false) {
         .on('presence', { event: 'join' }, ({ newPresences }) => {
             newPresences.forEach((p: any) => {
                 const systemMsg: ChatMessage = {
-                    id: `sys-${Date.now()}-${Math.random()}`,
+                    id: `sys-join-${Date.now()}-${Math.random()}`,
                     stream_id: streamId,
                     user_id: p.user_id,
                     content: 'joined the broadcast',
                     created_at: new Date().toISOString(),
-                    type: 'system', // This requires ChatMessage to support 'system' type
+                    type: 'system', 
+                    user: {
+                        username: p.username || 'Guest',
+                        avatar_url: p.avatar_url || ''
+                    },
+                    user_profiles: {
+                        username: p.username || 'Guest',
+                        avatar_url: p.avatar_url || '',
+                        role: p.role,
+                        troll_role: p.troll_role
+                    }
+                };
+                setMessages(prev => [...prev, systemMsg]);
+            });
+        })
+        .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+            leftPresences.forEach((p: any) => {
+                const systemMsg: ChatMessage = {
+                    id: `sys-leave-${Date.now()}-${Math.random()}`,
+                    stream_id: streamId,
+                    user_id: p.user_id,
+                    content: 'left the broadcast',
+                    created_at: new Date().toISOString(),
+                    type: 'system',
                     user: {
                         username: p.username || 'Guest',
                         avatar_url: p.avatar_url || ''
@@ -157,7 +174,7 @@ export function useStreamChat(streamId: string, isViewer: boolean = false) {
         supabase.removeChannel(chatChannel); 
         supabase.removeChannel(presenceChannel);
     };
-  }, [streamId, fetchVehicleStatus, vehicleCache, isViewer]);
+  }, [streamId, fetchVehicleStatus, vehicleCache]);
 
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;

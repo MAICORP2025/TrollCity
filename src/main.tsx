@@ -4,12 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './index.css'
 import './styles/broadcast-responsive.css'
+import './styles/mobile-theme.css'
 import { LiveKitProvider } from './contexts/LiveKitProvider'
 import { AuthProvider } from './contexts/AuthProvider'
 import { GlobalAppProvider } from './contexts/GlobalAppContext'
 import { supabase } from './lib/supabase'
 import { initTelemetry } from './lib/telemetry'
 import { initMobilePlatform, isMobilePlatform } from './lib/mobilePlatform'
+import { initializeOfflineNotifications } from './services/offlineNotificationService'
 
 // App version for cache busting
 const env = import.meta.env
@@ -42,6 +44,10 @@ try {
 if (typeof window !== 'undefined') {
   (window as any).__ENV = env
   initTelemetry()
+  
+  // Initialize offline notification system
+  // This will deliver queued notifications when user comes back online
+  // initializeOfflineNotifications()
 }
 
 const rootElement = document.getElementById('root')

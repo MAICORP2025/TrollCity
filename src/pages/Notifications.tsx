@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
+import { getGlowingTextStyle } from '@/lib/perkEffects'
 import { supabase } from '../lib/supabase'
 import { Bell, X, Dot, CheckCircle, Video, Gift, User, MessageCircle, Shield, Car, DollarSign, FileText, Gavel } from 'lucide-react'
 import { toast } from 'sonner'

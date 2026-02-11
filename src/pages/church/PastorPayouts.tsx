@@ -29,7 +29,6 @@ export default function PastorPayouts() {
       const { error } = await supabase.rpc('submit_cashout_request', {
         p_user_id: profile.id,
         p_amount_coins: selectedTier.coins,
-        p_usd_value: selectedTier.usd,
         p_provider: 'PayPal',
         p_delivery_method: 'PayPal Transfer',
         p_payout_details: profile.payout_paypal_email

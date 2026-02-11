@@ -17,14 +17,15 @@ DROP FUNCTION IF EXISTS public.purchase_rgb_broadcast(UUID, BOOLEAN);
 CREATE OR REPLACE FUNCTION public.join_seat_atomic(
     p_stream_id UUID,
     p_seat_index INTEGER,
-    p_price INTEGER
+    p_price INTEGER,
+    p_user_id UUID DEFAULT auth.uid()
 )
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    v_user_id UUID := auth.uid();
+    v_user_id UUID := p_user_id;
     v_user_balance INTEGER;
     v_active_session_id UUID;
     v_already_paid BOOLEAN := FALSE;

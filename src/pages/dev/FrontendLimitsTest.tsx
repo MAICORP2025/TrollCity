@@ -79,7 +79,7 @@ export default function FrontendLimitsTest() {
         lastTime.current = time;
 
         // Get Memory (Chrome only)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const memory = (performance as any).memory;
         const jsHeapSize = memory ? Math.round(memory.usedJSHeapSize / 1024 / 1024) : undefined;
 

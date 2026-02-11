@@ -105,13 +105,6 @@ export interface UserProfile {
 
   // Profile Costs
   
-  // TMV System
-  gas_balance?: number
-  drivers_license_status?: string
-  drivers_license_expiry?: string
-  message_cost?: number
-  profile_view_cost?: number
-
   // Age system
   age_days?: number
 
@@ -160,11 +153,14 @@ export interface UserProfile {
   // Empire Partner
   empire_role?: string | null // 'partner' when approved as Empire Partner
   empire_partner?: boolean // New field for partner status
+  is_empire_partner?: boolean
+  is_president?: boolean
   partner_status?: string | null // 'approved', 'pending', 'rejected'
 
   // Moderation fields
   is_banned?: boolean
   is_officer?: boolean
+  is_president?: boolean
 
   // Verification fields
   is_verified?: boolean
@@ -214,6 +210,13 @@ export interface UserProfile {
   drivers_license_expiry?: string | null
   gas_balance?: number
   last_gas_update?: string | null
+  message_cost?: number;
+  profile_view_cost?: number;
+  temp_admin_coins_balance?: number;
+  free_coin_balance?: number;
+  bypass_broadcast_restriction?: boolean;
+  phone?: string;
+  id_verification_status?: string;
 }
 
 
@@ -354,6 +357,7 @@ export enum UserRole {
   USER = 'user',
   MODERATOR = 'moderator',
   ADMIN = 'admin',
+  OWNER = 'owner',
   HR_ADMIN = 'hr_admin',
   LEAD_TROLL_OFFICER = 'lead_troll_officer',
   TROLL_OFFICER = 'troll_officer',
@@ -363,7 +367,11 @@ export enum UserRole {
   SECRETARY = 'secretary',
   PRESIDENT = 'president',
   VICE_PRESIDENT = 'vice_president',
-  TEMP_CITY_ADMIN = 'temp_city_admin'
+  TEMP_CITY_ADMIN = 'temp_city_admin',
+  TROLL_CITY_SECRETARY = 'troll_city_secretary',
+  TROLL_CITY_TREASURER = 'troll_city_treasurer',
+  TEMP_ADMIN = 'temp_admin',
+  EXECUTIVE_SECRETARY = 'executive_secretary',
 }
 
 export enum Permission {
@@ -471,6 +479,19 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   [UserRole.HR_ADMIN]: [
     // HR Admin has user management permissions
     Permission.MANAGE_USERS,
+    Permission.MODERATE_CHAT,
+    Permission.MODERATE_STREAMS,
+    Permission.MANAGE_REPORTS,
+    Permission.ISSUE_WARNINGS,
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE
+  ],
+  [UserRole.TEMP_CITY_ADMIN]: [
+    Permission.MANAGE_USERS,
+    Permission.MANAGE_CONTENT,
+    Permission.MANAGE_FINANCES,
+    Permission.MANAGE_SYSTEM,
     Permission.MODERATE_CHAT,
     Permission.MODERATE_STREAMS,
     Permission.MANAGE_REPORTS,

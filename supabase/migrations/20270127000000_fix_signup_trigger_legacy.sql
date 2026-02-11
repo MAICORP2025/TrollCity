@@ -1,10 +1,10 @@
 -- Clean up legacy triggers and functions that might be causing errors
 -- The user reported "handle_new_user error", implying a legacy function exists
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
 -- Also drop the correct function name just in case we need to update it
-DROP FUNCTION IF EXISTS public.handle_user_signup();
+-- DROP FUNCTION IF EXISTS public.handle_user_signup();
 
 -- Redefine the correct handler with robust defaults
 CREATE OR REPLACE FUNCTION public.handle_user_signup()
@@ -94,7 +94,7 @@ END;
 $$;
 
 -- Attach the correct trigger
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_user_signup();
+-- CREATE TRIGGER on_auth_user_created
+--   AFTER INSERT ON auth.users
+--   FOR EACH ROW
+--   EXECUTE FUNCTION public.handle_user_signup();

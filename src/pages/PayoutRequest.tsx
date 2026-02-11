@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuthStore } from "../lib/store";
+import { useBank } from "@/lib/hooks/useBank";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { DollarSign, ArrowRight } from "lucide-react";
@@ -8,6 +9,8 @@ import { TIERS, FIXED_FEE_USD, getRateForCoins } from "../lib/payoutTiers";
 
 export default function PayoutRequest() {
   const { user, profile, refreshProfile } = useAuthStore() as any;
+  const { creditInfo } = useBank();
+  const creditUsed = creditInfo.used;
   const [coins, setCoins] = useState("");
   const [loading, setLoading] = useState(false);
   const payoutWindowOpen = isPayoutWindowOpen();

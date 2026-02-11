@@ -73,7 +73,7 @@ export default function PresidentPage() {
       toast.error('Please enter a campaign slogan');
       return;
     }
-    await signupCandidate(currentElection.id, slogan);
+    await signupCandidate(currentElection.id, slogan, '', '');
     setSlogan('');
   };
 

@@ -4,6 +4,7 @@ import { User, Plus, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import BroadcastLevelBar from './BroadcastLevelBar';
 import { getGlowingTextStyle } from '../../lib/perkEffects';
+import MobileHUD from '../mobile/MobileHUD';
 
 interface TopLiveBarProps {
   stream: Stream;
@@ -14,6 +15,7 @@ interface TopLiveBarProps {
   onFollow?: () => void;
   onClose?: () => void;
   className?: string;
+  compact?: boolean;
 }
 
 export default function TopLiveBar({
@@ -24,17 +26,45 @@ export default function TopLiveBar({
   isFollowing = false,
   onFollow,
   onClose,
-  className
+  className,
+  compact = false,
 }: TopLiveBarProps) {
-  // We'll assume the timer hook is available or we'll implement a simple one if not
-  // For now let's just use a static timer or the hook if I create it.
-  // The plan said "useLiveTimer" is in "hooks", so I should probably create that hook too.
-  
+  if (compact) {
+    return (
+      <div className={cn("flex items-center justify-between px-3 py-2 bg-gradient-to-b from-black/60 to-transparent", className)}>
+        {/* Left: Host Info */}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            {hostAvatar ? (
+              <img src={hostAvatar} alt={hostName} className="w-8 h-8 rounded-full border border-pink-500" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-600">
+                <User size={14} className="text-zinc-400" />
+              </div>
+            )}
+            <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 bg-pink-600 text-[9px] font-bold px-1 rounded-sm leading-tight text-white">
+              LIVE
+            </div>
+          </div>
+          <span 
+            className="text-xs font-bold text-white truncate max-w-[80px]"
+            style={hostGlowingColor ? getGlowingTextStyle(hostGlowingColor) : undefined}
+          >
+            {hostName}
+          </span>
+        </div>
+
+        {/* Right: HUD */}
+        <MobileHUD compact />
+      </div>
+    );
+  }
+
   return (
-    <div className={cn("fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-12 pb-4 bg-gradient-to-b from-black/60 to-transparent pointer-events-none", className)}>
+    <div className={cn("flex items-center justify-between px-4 pt-12 pb-4 bg-gradient-to-b from-black/60 to-transparent", className)}>
       
       {/* Left: Host Info Pill */}
-      <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md rounded-full p-1 pr-4 pointer-events-auto">
+      <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md rounded-full p-1 pr-4">
         <div className="relative">
           {hostAvatar ? (
             <img src={hostAvatar} alt={hostName} className="w-9 h-9 rounded-full border border-pink-500" />
@@ -56,7 +86,7 @@ export default function TopLiveBar({
             {hostName}
           </span>
           <span className="text-[10px] text-zinc-300 flex items-center gap-1">
-             {stream.viewer_count.toLocaleString()} Viewers
+            {stream.viewer_count?.toLocaleString() || 0} Viewers
           </span>
         </div>
 
@@ -70,25 +100,20 @@ export default function TopLiveBar({
         )}
       </div>
 
-      {/* Center: Level Bar */}
-      <div className="absolute left-1/2 -translate-x-1/2 top-14 pointer-events-auto">
+      {/* Center: Level Bar (only on larger screens) */}
+      <div className="hidden md:block">
         <BroadcastLevelBar broadcasterId={stream.user_id} />
       </div>
 
-      {/* Right: Close / Viewer List */}
-      <div className="flex items-center gap-2 pointer-events-auto">
-        <div className="flex -space-x-2 overflow-hidden">
-           {/* Placeholder for top viewers - in real app pass these as props */}
-           {[1,2,3].map(i => (
-             <div key={i} className="w-8 h-8 rounded-full border-2 border-black bg-zinc-800" />
-           ))}
-        </div>
+      {/* Right: HUD + Close */}
+      <div className="flex items-center gap-3">
+        <MobileHUD compact />
         
         <button 
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white/80 hover:bg-white/20 transition-colors"
+          onClick={onClose}
+          className="w-9 h-9 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white/80 hover:bg-white/20 transition-colors"
         >
-            <X size={18} />
+          <X size={18} />
         </button>
       </div>
     </div>

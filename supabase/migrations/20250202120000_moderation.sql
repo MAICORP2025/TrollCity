@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS public.stream_bans (
   stream_id UUID REFERENCES public.streams(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   reason TEXT,
+  banned_by UUID REFERENCES auth.users(id),
+  expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(stream_id, user_id)
 );

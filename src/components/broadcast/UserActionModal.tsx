@@ -4,6 +4,9 @@ import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
 import { shouldBlockKick } from '../../lib/insuranceSystem';
+import { useAuthStore } from '../../lib/store';
+import { useNavigate } from 'react-router-dom';
+import { useChatStore } from '../../lib/chatStore';
 
 function getTierColor(tier: string) {
   switch (tier) {
@@ -49,6 +52,8 @@ export default function UserActionModal({
   const [targetRole, setTargetRole] = React.useState<string | null>(role || null);
   const [fetchedTier, setFetchedTier] = React.useState<string | null>(null);
   const [fetchedAvatar, setFetchedAvatar] = React.useState<string | null>(null);
+  const [isFollowing, setIsFollowing] = React.useState(false);
+  const { user: currentUser } = useAuthStore.getState();
 
   React.useEffect(() => {
     const fetchProfile = async () => {
@@ -74,6 +79,20 @@ export default function UserActionModal({
         if (creditData) {
             setFetchedTier(creditData.tier);
         }
+
+        // Check follow status
+        if (currentUser) {
+            const { data: followData, error: followError } = await supabase
+                .from('user_follows')
+                .select('*')
+                .eq('follower_id', currentUser.id)
+                .eq('following_id', userId)
+                .single();
+            
+            if (followData) {
+                setIsFollowing(true);
+            }
+        }
     };
     fetchProfile();
   }, [userId, username, role, createdAt]);
@@ -81,6 +100,8 @@ export default function UserActionModal({
   const displayName = username || fetchedUsername || userId;
   const displayCreatedAt = createdAt || fetchedCreatedAt || undefined;
   const isTargetStaff = targetRole === 'admin' || targetRole === 'moderator' || targetRole === 'staff';
+  const navigate = useNavigate();
+  const hasModActions = isHost || isModerator;
 
   const handleKick = async () => {
     if (isTargetStaff) {
@@ -199,6 +220,8 @@ export default function UserActionModal({
         }
     }
   };
+
+  const openChatBubble = useChatStore((state) => state.openChatBubble);
 
   const handleMessage = () => {
     openChatBubble(userId, displayName, fetchedAvatar);

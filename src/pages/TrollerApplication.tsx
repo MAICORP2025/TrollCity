@@ -28,7 +28,7 @@ export default function TrollerApplication() {
   }
 
   const submit = async (e?: React.FormEvent) => {
-    e?.preventDefault()
+    if (e) e.preventDefault()
     if (!profile) return toast.error('Please sign in')
     
     const requiredFields = ['fullName', 'email', 'age', 'bio', 'contentStyle', 'goals', 'availability']
@@ -69,12 +69,12 @@ export default function TrollerApplication() {
       const { error } = await supabase.from('applications').insert([applicationData])
       
       if (error) {
-        console.error('[Troller App] Submission error:', error)
-        toast.error(error.message || 'Failed to submit application')
         throw error
       }
       
       toast.success('Application submitted successfully! We will review your application and get back to you within 3-5 business days.')
+      
+      // Reset form safely
       setFormData({
         fullName: '',
         email: '',
@@ -90,13 +90,27 @@ export default function TrollerApplication() {
         socialMedia: ''
       })
       setAgreedToGuidelines(false)
-    } catch (err) {
+      
+    } catch (err: any) {
+      // Ignore abort errors which can happen on navigation or double-clicks
+      if (err.name === 'AbortError' || err.message?.includes('aborted') || err.code === 20) {
+          console.warn('Request aborted (safe to ignore)')
+          return
+      }
       console.error('Submit error:', err)
-      toast.error('Failed to submit application')
+      toast.error(err.message || 'Failed to submit application. Please try again.')
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }
+  
+  // Track mount status to prevent state updates on unmounted component
+  const mountedRef = React.useRef(true)
+  React.useEffect(() => {
+    return () => { mountedRef.current = false }
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-8">

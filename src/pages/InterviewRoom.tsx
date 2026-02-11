@@ -139,7 +139,7 @@ export default function InterviewRoom() {
   const { profile } = useAuthStore()
   const [interview, setInterview] = useState<Interview | null>(null)
   const [loading, setLoading] = useState(true)
-  const [token, setToken] = useState<string>("")
+  const [connection, setConnection] = useState<string>("")
   const [isAdmin, setIsAdmin] = useState(false)
   
   // Hire Modal State
@@ -175,8 +175,8 @@ export default function InterviewRoom() {
 
         setIsAdmin(isInterviewer)
 
-        // Get LiveKit Token
-        const { data: tokenData, error: tokenError } = await supabase.functions.invoke('livekit-token', {
+        // Get Connection Details
+        const { data: connectionData, error: connectionError } = await supabase.functions.invoke('livekit-token', {
           body: {
             roomName: roomId,
             username: profile.username || profile.id,
@@ -184,13 +184,13 @@ export default function InterviewRoom() {
           }
         })
 
-        if (tokenError || !tokenData?.token) {
-          console.error("Token error:", tokenError)
+        if (connectionError || !connectionData?.token) {
+          console.error("Connection error:", connectionError)
           toast.error("Failed to connect to video server")
           return
         }
 
-        setToken(tokenData.token)
+        setConnection(connectionData.token)
 
         // If pending and admin joins, update status to active
         if (isInterviewer && data.status === 'pending') {
@@ -363,11 +363,11 @@ export default function InterviewRoom() {
         )}
       </div>
 
-      {token && (
+      {connection && (
         <LiveKitRoom
           video={true}
           audio={true}
-          token={token}
+          token={connection}
           serverUrl={import.meta.env.VITE_LIVEKIT_URL}
           data-lk-theme="default"
           className="flex-1 w-full flex flex-col items-center"
@@ -397,6 +397,7 @@ export default function InterviewRoom() {
                 <Input
                   type="number"
                   value={hrRate}
+                  disabled={hiring}
                   onChange={(e) => setHrRate(e.target.value)}
                   className="pl-10 bg-black/40 border-purple-800 text-white"
                 />

@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useAuthStore } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
 import { usePresenceStore } from '../../lib/presenceStore';
-import { Users, Tv, Globe, GripHorizontal, X, ChevronUp, ChevronDown, Minimize2, Maximize2, Headphones, ExternalLink, RefreshCw } from 'lucide-react';
+import { useChatStore } from '../../lib/chatStore';
+import { Users, Tv, Globe, GripHorizontal, X, ChevronUp, ChevronDown, Minimize2, Maximize2, Headphones, ExternalLink, RefreshCw, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ScrollArea } from '../ui/scroll-area';
@@ -21,6 +22,7 @@ export default function GlobalUserCounter() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
   const { onlineCount, onlineUserIds } = usePresenceStore(); // Read from store instead of channel
+  const { openChatBubble } = useChatStore();
   const [inStreamCount, setInStreamCount] = useState(0);
   const [inPodCount, setInPodCount] = useState(0);
   
@@ -52,8 +54,7 @@ export default function GlobalUserCounter() {
       profile?.role === 'troll_officer' ||
       profile?.is_troll_officer ||
       profile?.role === 'secretary' ||
-      profile?.role === 'lead_troll_officer' ||
-      profile?.role === 'pastor' // Including Pastor as potential staff if needed, but sticking to core for now
+      profile?.role === 'lead_troll_officer'
   );
 
   // Handle Window Resize for initial positioning safety
@@ -499,6 +500,16 @@ export default function GlobalUserCounter() {
                                                 <ExternalLink className="w-4 h-4" />
                                             </button>
                                         )}
+                                        <button 
+                                            onClick={() => {
+                                                openChatBubble(u.user_id, u.username, u.avatar_url || null);
+                                                setActiveCategory(null);
+                                            }}
+                                            className="p-2 hover:bg-purple-500/20 text-gray-400 hover:text-purple-500 rounded-md transition-colors"
+                                            title="Send Message"
+                                        >
+                                            <MessageSquare className="w-4 h-4" />
+                                        </button>
                                         <button 
                                             onClick={() => {
                                                 navigate(`/profile/${u.username}`);

@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 
 const DatabaseBackup = lazy(() => import('./DatabaseBackup'))
@@ -16,6 +16,8 @@ const CourtDocketsManager = lazy(() => import('./CourtDocketsManager'))
 const StorePriceEditor = lazy(() => import('./components/StorePriceEditor'))
 const TournamentManager = lazy(() => import('./components/TournamentManager'))
 const AdminManualOrders = lazy(() => import('./AdminManualOrders'))
+const WeeklyReportsView = lazy(() => import('./WeeklyReportsView'))
+// const JailTestSimulator = lazy(() => import("./JailTestSimulator"));
 
 export interface AdminRoute {
   id: string
@@ -214,5 +216,33 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-green-500/10',
     tileBorderColor: 'border-green-500/30',
     category: 'economy'
+  },
+  {
+    id: 'weekly-reports',
+    title: 'Weekly Reports',
+    path: '/admin/reports/weekly',
+    component: WeeklyReportsView,
+    roles: [UserRole.ADMIN, UserRole.SECRETARY, UserRole.LEAD_TROLL_OFFICER],
+    description: 'View weekly reports from officers',
+    icon: <FileText className="w-5 h-5 text-blue-200" />,
+    tileColor: 'text-blue-200',
+    tileBgColor: 'bg-blue-500/10',
+    tileBorderColor: 'border-blue-500/30',
+    category: 'moderation'
+  },
+  /*
+  {
+    id: 'jail-test-simulator',
+    title: 'Jail Test Simulator',
+    path: '/admin/jail-test',
+    component: JailTestSimulator,
+    roles: [UserRole.ADMIN],
+    description: 'Test jail system functionality',
+    icon: <Lock className="w-5 h-5 text-red-200" />,
+    tileColor: 'text-red-200',
+    tileBgColor: 'bg-red-500/10',
+    tileBorderColor: 'border-red-500/30',
+    category: 'moderation'
   }
+  */
 ]

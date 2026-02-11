@@ -1,6 +1,8 @@
 -- Update coin rate to 0.5 per minute and fix types
 
 -- 0. Drop triggers and views that depend on the columns
+DROP MATERIALIZED VIEW IF EXISTS public.user_earnings_summary;
+DROP VIEW IF EXISTS public.earnings_view;
 DROP VIEW IF EXISTS public.creator_earnings;
 DROP VIEW IF EXISTS public.monthly_earnings_breakdown;
 DROP TRIGGER IF EXISTS trg_sync_trollstown_coins ON public.user_profiles;
@@ -190,3 +192,154 @@ CREATE OR REPLACE VIEW "public"."monthly_earnings_breakdown" WITH ("security_inv
   WHERE (("p"."is_broadcaster" = true) OR ("p"."total_earned_coins" > 0))
   GROUP BY "p"."id", "p"."username", ("date_trunc"('month'::"text", "g"."created_at"))
   ORDER BY ("date_trunc"('month'::"text", "g"."created_at")) DESC, ("sum"("g"."coins_spent")) DESC;
+
+-- Recreate earnings_view
+CREATE OR REPLACE VIEW public.earnings_view AS
+ WITH gift_earnings AS (
+         SELECT gifts.receiver_id AS user_id,
+            sum(gifts.cost) AS total_coins_earned,
+            count(*) AS gift_count,
+            date_trunc('month'::text, gifts.created_at) AS month
+           FROM gifts
+          WHERE gifts.receiver_id IS NOT NULL
+          GROUP BY gifts.receiver_id, (date_trunc('month'::text, gifts.created_at))
+        ), transaction_earnings AS (    
+         SELECT coin_transactions.user_id,
+            sum(coin_transactions.amount) AS total_coins_earned,
+            count(*) AS transaction_count,
+            date_trunc('month'::text, coin_transactions.created_at) AS month    
+           FROM coin_transactions       
+          WHERE (coin_transactions.type = ANY (ARRAY['gift_receive'::text, 'gift'::text])) AND coin_transactions.amount > 0
+          GROUP BY coin_transactions.user_id, (date_trunc('month'::text, coin_transactions.created_at))
+        ), combined_earnings AS (       
+         SELECT COALESCE(g.user_id, t.user_id) AS user_id,
+            COALESCE(g.month, t.month) AS month,
+            COALESCE(g.total_coins_earned::numeric, 0::numeric) + COALESCE(t.total_coins_earned, 0::bigint)::numeric AS total_coins,
+            COALESCE(g.gift_count, 0::bigint) + COALESCE(t.transaction_count, 0::bigint) AS transaction_count
+           FROM gift_earnings g
+             FULL JOIN transaction_earnings t ON g.user_id = t.user_id AND g.month = t.month
+        ), payout_summary AS (
+         SELECT payout_requests.user_id,
+            date_trunc('month'::text, payout_requests.created_at) AS month,     
+            sum(
+                CASE
+                    WHEN payout_requests.status = 'paid'::text THEN COALESCE(payout_requests.cash_amount, 0::numeric)   
+                    ELSE 0::numeric     
+                END) AS paid_out_usd,   
+            sum(
+                CASE
+                    WHEN payout_requests.status = 'pending'::text THEN COALESCE(payout_requests.cash_amount, 0::numeric)
+                    ELSE 0::numeric     
+                END) AS pending_usd,    
+            sum(
+                CASE
+                    WHEN payout_requests.status = 'approved'::text THEN COALESCE(payout_requests.cash_amount, 0::numeric)
+                    ELSE 0::numeric     
+                END) AS approved_usd,   
+            count(*) FILTER (WHERE payout_requests.status = 'paid'::text) AS paid_count,
+            count(*) FILTER (WHERE payout_requests.status = 'pending'::text) AS pending_count
+           FROM payout_requests
+          GROUP BY payout_requests.user_id, (date_trunc('month'::text, payout_requests.created_at))
+        ), yearly_payouts AS (
+         SELECT payout_requests.user_id,
+            date_part('year'::text, payout_requests.created_at)::integer AS year,
+            sum(COALESCE(payout_requests.cash_amount, 0::numeric)) AS total_paid_usd,
+            count(*) AS payout_count    
+           FROM payout_requests
+          WHERE payout_requests.status = 'paid'::text
+          GROUP BY payout_requests.user_id, (date_part('year'::text, payout_requests.created_at))
+        )
+ SELECT p.id,
+    p.username,
+    p.total_earned_coins,
+    p.troll_coins,
+    COALESCE(ce.total_coins, 0::numeric) AS current_month_earnings,
+    COALESCE(ce.transaction_count, 0::bigint) AS current_month_transactions,    
+    COALESCE(ps.paid_out_usd, 0::numeric) AS current_month_paid_out,
+    COALESCE(ps.pending_usd, 0::numeric) AS current_month_pending,
+    COALESCE(ps.approved_usd, 0::numeric) AS current_month_approved,
+    COALESCE(ps.paid_count, 0::bigint) AS current_month_paid_count,
+    COALESCE(ps.pending_count, 0::bigint) AS current_month_pending_count,       
+    COALESCE(yp.total_paid_usd, 0::numeric) AS yearly_paid_usd,
+    COALESCE(yp.payout_count, 0::bigint) AS yearly_payout_count,
+    COALESCE(yp.year, date_part('year'::text, now())::integer) AS tax_year,     
+        CASE
+            WHEN COALESCE(yp.total_paid_usd, 0::numeric) >= 600::numeric THEN 'over_threshold'::text
+            WHEN COALESCE(yp.total_paid_usd, 0::numeric) >= 500::numeric THEN 'nearing_threshold'::text
+            ELSE 'below_threshold'::text
+        END AS irs_threshold_status,    
+    ( SELECT max(pr.created_at) AS max  
+           FROM payout_requests pr      
+          WHERE pr.user_id = p.id AND pr.status = 'paid'::text) AS last_payout_at,
+    ( SELECT count(*) AS count
+           FROM payout_requests pr      
+          WHERE pr.user_id = p.id AND pr.status = 'pending'::text) AS pending_requests_count,
+    ( SELECT sum(COALESCE(pr.cash_amount, 0::numeric)) AS sum
+           FROM payout_requests pr      
+          WHERE pr.user_id = p.id AND pr.status = 'paid'::text) AS lifetime_paid_usd
+   FROM user_profiles p
+     LEFT JOIN combined_earnings ce ON ce.user_id = p.id AND ce.month = date_trunc('month'::text, now())
+     LEFT JOIN payout_summary ps ON ps.user_id = p.id AND ps.month = date_trunc('month'::text, now())
+     LEFT JOIN yearly_payouts yp ON yp.user_id = p.id AND yp.year = date_part('year'::text, now())::integer
+  WHERE p.is_broadcaster = true OR p.total_earned_coins > 0::numeric;
+
+-- Recreate user_earnings_summary
+CREATE MATERIALIZED VIEW public.user_earnings_summary AS
+ WITH user_stats AS (
+         SELECT u.id AS user_id,        
+            u.username,
+            u.created_at AS user_created_at,
+            COALESCE(u.troll_coins, 0::numeric) AS current_coin_balance,
+            GREATEST(COALESCE(u.troll_coins, 0::numeric) - COALESCE(u.bonus_coin_balance, 0::numeric), 0::numeric) AS coins_eligible_for_cashout,
+            COALESCE(u.bonus_coin_balance, 0::numeric) AS coins_locked,
+            u.is_banned,
+            u.role
+           FROM user_profiles u
+        ), ledger_stats AS (
+         SELECT coin_ledger.user_id,    
+            COALESCE(sum(
+                CASE
+                    WHEN coin_ledger.delta > 0::numeric THEN coin_ledger.delta  
+                    ELSE 0::numeric     
+                END), 0::numeric) AS total_coins_earned,
+            COALESCE(sum(
+                CASE
+                    WHEN coin_ledger.delta < 0::numeric THEN abs(coin_ledger.delta)
+                    ELSE 0::numeric     
+                END), 0::numeric) AS total_coins_spent,
+            COALESCE(max(
+                CASE
+                    WHEN coin_ledger.bucket = 'paid'::text AND coin_ledger.source = 'cashout'::text THEN coin_ledger.created_at
+                    ELSE NULL::timestamp with time zone
+                END), NULL::timestamp with time zone) AS last_cashout_date      
+           FROM coin_ledger
+          GROUP BY coin_ledger.user_id  
+        ), weekly_earnings AS (
+         SELECT coin_ledger.user_id,    
+            COALESCE(sum(coin_ledger.delta), 0::numeric) AS weekly_earned       
+           FROM coin_ledger
+          WHERE coin_ledger.delta > 0::numeric AND coin_ledger.created_at > (now() - '7 days'::interval)
+          GROUP BY coin_ledger.user_id  
+        )
+ SELECT us.user_id,
+    us.username,
+    COALESCE(ls.total_coins_earned, 0::numeric) AS total_coins_earned,
+    COALESCE(ls.total_coins_spent, 0::numeric) AS total_coins_spent,
+    us.current_coin_balance,
+    us.coins_eligible_for_cashout,      
+    us.coins_locked,
+    ls.last_cashout_date,
+    COALESCE(we.weekly_earned, 0::numeric) AS weekly_avg_earnings,
+        CASE
+            WHEN us.coins_eligible_for_cashout >= 12000 AND (now() - us.user_created_at) > '30 days'::interval AND (us.is_banned IS FALSE OR us.is_banned IS NULL) THEN true
+            ELSE false
+        END AS is_cashout_eligible,     
+    now() AS last_refreshed_at
+   FROM user_stats us
+     LEFT JOIN ledger_stats ls ON us.user_id = ls.user_id
+     LEFT JOIN weekly_earnings we ON us.user_id = we.user_id;
+
+-- Recreate indexes for user_earnings_summary
+CREATE UNIQUE INDEX idx_user_earnings_summary_user_id ON public.user_earnings_summary USING btree (user_id);
+CREATE INDEX idx_user_earnings_summary_eligible ON public.user_earnings_summary USING btree (is_cashout_eligible);
+

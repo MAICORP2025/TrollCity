@@ -131,7 +131,7 @@ export default function MaiTalentPage() {
           .from('mai_talent_auditions')
           .select(`
             *,
-            user:user_profiles(username, avatar_url, created_at)
+            user:user_profiles!mai_talent_auditions_user_id_fkey(username, avatar_url, created_at)
           `)
           .in('status', ['approved', 'featured']);
         

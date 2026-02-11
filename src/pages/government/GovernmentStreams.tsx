@@ -136,7 +136,13 @@ export default function GovernmentStreams() {
       // Merge data
       const streamsWithOfficers = streamsData.map(stream => ({
         ...stream,
-        active_officers: officerLogs?.filter(log => log.stream_id === stream.id) || []
+        broadcaster: (Array.isArray(stream.broadcaster) ? stream.broadcaster[0] : stream.broadcaster) || { username: 'Unknown', avatar_url: '' },
+        active_officers: officerLogs
+          ?.filter(log => log.stream_id === stream.id)
+          .map((log: any) => ({
+            ...log,
+            officer: (Array.isArray(log.officer) ? log.officer[0] : log.officer) || { username: 'Unknown', avatar_url: '' }
+          })) || []
       }));
 
       setStreams(streamsWithOfficers);
@@ -170,7 +176,11 @@ export default function GovernmentStreams() {
 
       const { data, error } = await query;
       if (error) throw error;
-      setPods(data as any); 
+      const transformedPods = data.map(pod => ({
+        ...pod,
+        host: (Array.isArray(pod.host) ? pod.host[0] : pod.host) || { username: 'Unknown', avatar_url: '' }
+      }));
+      setPods(transformedPods as any); 
     } catch (err) {
         console.error(err);
         toast.error('Failed to load pods');
@@ -485,8 +495,7 @@ function StreamCard({
                 <UserNameWithAge
                   user={{
                     username: log.officer?.username || 'Unknown',
-                    id: log.officer_id,
-                    created_at: log.officer?.created_at
+                    id: log.officer_id
                   }}
                   className="text-[10px] text-emerald-300 font-medium"
                 />

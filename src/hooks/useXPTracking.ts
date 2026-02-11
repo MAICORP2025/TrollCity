@@ -20,13 +20,10 @@ export function useXPTracking() {
   const updateWatchTime = useCallback(async (streamId: string) => {
     if (!user) return;
     try {
-        // Call backend RPC to grant XP for watching
-        // Using 'grant_xp' as a generic RPC if it exists, or just log for now
-        await supabase.rpc('grant_xp', {
-            p_user_id: user.id,
-            p_amount: 5, // 5 XP per update (e.g. minute)
-            p_source: 'watch',
-            p_source_id: streamId
+        // Call backend RPC to track watch time and grant XP securely
+        // Rate limiting is handled server-side
+        await supabase.rpc('track_watch_time', {
+            p_stream_id: streamId
         });
     } catch (error) {
         console.error('Error updating watch XP:', error);

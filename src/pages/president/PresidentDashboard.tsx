@@ -102,6 +102,7 @@ export default function PresidentDashboard() {
                     type="number" 
                     className="pl-6 bg-slate-950 border-slate-800"
                     value={payoutAmount}
+                    disabled={loading}
                     onChange={(e) => setPayoutAmount(e.target.value)}
                   />
                 </div>
@@ -172,6 +173,7 @@ export default function PresidentDashboard() {
                     placeholder="UUID..." 
                     className="bg-slate-950 border-slate-800 font-mono text-sm"
                     value={vpId}
+                    disabled={loading}
                     onChange={(e) => setVpId(e.target.value)}
                   />
                   <Button 

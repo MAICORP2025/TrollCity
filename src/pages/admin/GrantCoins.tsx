@@ -30,6 +30,7 @@ const GrantCoins: React.FC = () => {
   const [grantHistory, setGrantHistory] = useState<any[]>([])
   const [historyFilter, setHistoryFilter] = useState<'all' | 'free' | 'paid'>('all')
   const [recentUsers, setRecentUsers] = useState<any[]>([])
+  const [isRecentUsersExpanded, setIsRecentUsersExpanded] = useState(false)
   const isAdmin = !!profile && (profile.role === 'admin' || profile.is_admin)
 
   useEffect(() => {
@@ -189,7 +190,8 @@ const GrantCoins: React.FC = () => {
       } else {
         const { error } = await supabase.rpc('add_free_coins', {
           p_user_id: targetUser.id,
-          p_amount: Math.round(amount)
+          p_amount: Math.round(amount).toString(),
+          p_description: trimmedReason
         })
 
         if (error) {
@@ -306,35 +308,49 @@ const GrantCoins: React.FC = () => {
             )}
 
             {!targetUser && recentUsers.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Recent Users</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {recentUsers.map(user => (
-                    <button
-                      key={user.id}
-                      type="button"
-                      onClick={() => setTargetUser(user)}
-                      className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 hover:border-zinc-700 transition-all text-left group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-zinc-800 group-hover:bg-zinc-700 flex items-center justify-center transition-colors">
-                          <User className="w-4 h-4 text-gray-400 group-hover:text-white" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-300 group-hover:text-white">{user.username}</div>
-                          <div className="text-[10px] text-gray-500">
-                            ID: {user.id.slice(0, 8)}...
+              <div className="mt-4 border border-zinc-800 rounded-lg overflow-hidden">
+                <button 
+                  type="button"
+                  onClick={() => setIsRecentUsersExpanded(!isRecentUsersExpanded)}
+                  className="w-full flex items-center justify-between p-3 bg-zinc-900/50 hover:bg-zinc-800 transition-colors text-xs font-semibold text-gray-400 uppercase tracking-wider"
+                >
+                  <span>Recent Users ({recentUsers.length})</span>
+                  {isRecentUsersExpanded ? (
+                    <span className="text-lg">−</span>
+                  ) : (
+                    <span className="text-lg">+</span>
+                  )}
+                </button>
+                
+                {isRecentUsersExpanded && (
+                  <div className="p-3 bg-zinc-900/30 grid grid-cols-1 md:grid-cols-2 gap-2 border-t border-zinc-800">
+                    {recentUsers.map(user => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => setTargetUser(user)}
+                        className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 hover:border-zinc-700 transition-all text-left group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-zinc-800 group-hover:bg-zinc-700 flex items-center justify-center transition-colors">
+                            <User className="w-4 h-4 text-gray-400 group-hover:text-white" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-300 group-hover:text-white">{user.username}</div>
+                            <div className="text-[10px] text-gray-500">
+                              ID: {user.id.slice(0, 8)}...
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-purple-400 font-medium">
-                          {user.troll_coins?.toLocaleString()} <span className="text-[10px] opacity-70">TC</span>
+                        <div className="text-right">
+                          <div className="text-xs text-purple-400 font-medium">
+                            {user.troll_coins?.toLocaleString()} <span className="text-[10px] opacity-70">TC</span>
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -34,6 +34,16 @@ END $$;
 -- 2. Core Credit Card Functions
 -- ==========================================
 
+-- Drop old functions to avoid signature conflicts
+DROP FUNCTION IF EXISTS public.draw_credit_internal(UUID, BIGINT);
+DROP FUNCTION IF EXISTS public.draw_credit(BIGINT);
+DROP FUNCTION IF EXISTS public.try_pay_with_credit_card(UUID, BIGINT, TEXT, JSONB);
+DROP FUNCTION IF EXISTS public.pay_credit_card(BIGINT);
+DROP FUNCTION IF EXISTS public.purchase_from_ktauto(INTEGER, TEXT);
+DROP FUNCTION IF EXISTS public.purchase_from_ktauto(INTEGER, TEXT, BOOLEAN);
+DROP FUNCTION IF EXISTS public.purchase_shop_item(TEXT, TEXT, INTEGER, JSONB);
+DROP FUNCTION IF EXISTS public.purchase_shop_item(TEXT, TEXT, INTEGER, BOOLEAN, JSONB);
+
 -- Internal helper to actually increase debt
 CREATE OR REPLACE FUNCTION public.draw_credit_internal(
     p_user_id UUID,
@@ -227,6 +237,7 @@ $$;
 -- 3. Cashout Block
 -- ==========================================
 
+DROP FUNCTION IF EXISTS request_payout(uuid, bigint);
 CREATE OR REPLACE FUNCTION request_payout(p_user_id uuid, p_coins_to_redeem bigint)
 RETURNS json
 LANGUAGE plpgsql

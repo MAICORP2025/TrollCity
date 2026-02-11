@@ -1,25 +1,71 @@
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with, accept, origin",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE, PATCH",
+
+// For Deno/Vercel Edge Functions, we can't use process.env directly
+// The VERCEL_URL is injected by Vercel's runtime
+const getVercelUrl = (): string => {
+  try {
+    // @ts-ignore - VERCEL_URL is injected by Vercel
+    return typeof VERCEL_URL !== 'undefined' ? `https://${VERCEL_URL}` : '';
+  } catch {
+    return '';
+  }
 };
+
+const getVercelBranchUrl = (): string => {
+  try {
+    // @ts-ignore - VERCEL_BRANCH_URL is injected by Vercel
+    return typeof VERCEL_BRANCH_URL !== 'undefined' ? `https://${VERCEL_BRANCH_URL}` : '';
+  } catch {
+    return '';
+  }
+};
+
+const allowedOrigins = [
+  'http://localhost:5176',
+  'http://localhost:5177',
+  'http://localhost:3001',
+  'http://localhost:3000',
+  'https://troll-city.vercel.app',
+  getVercelUrl(),
+  getVercelBranchUrl()
+].filter((origin): origin is string => Boolean(origin));
+
+// Default CORS headers with wildcard origin
+const defaultCorsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-requested-with, accept, origin, content-length',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
+  'Access-Control-Allow-Credentials': 'true',
+  'Vary': 'Origin'
+};
+
+// Dynamic CORS headers based on origin
+export function corsHeaders(origin?: string | null): Record<string, string> {
+  if (!origin) {
+    return defaultCorsHeaders;
+  }
+  const validOrigin = allowedOrigins.includes(origin) ? origin : defaultCorsHeaders['Access-Control-Allow-Origin'];
+  return {
+    ...defaultCorsHeaders,
+    'Access-Control-Allow-Origin': validOrigin,
+  };
+}
 
 export function handleCorsPreflight() {
   return new Response("ok", {
     status: 200,
     headers: {
-      ...corsHeaders,
+      ...corsHeaders(),
       "Content-Type": "text/plain",
       "Cache-Control": "max-age=0, s-maxage=0, no-cache, no-store, must-revalidate",
     },
   });
 }
 
-export function withCors(body: any, status = 200) {
+export function withCors(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
-      ...corsHeaders,
+      ...corsHeaders(),
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
     },

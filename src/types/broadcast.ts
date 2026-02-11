@@ -8,6 +8,7 @@ export interface Stream {
   category: string;
   status: StreamStatus;
   is_battle: boolean;
+  battle_id?: string;
   viewer_count: number;
   box_count: number;
   layout_mode: LayoutMode;

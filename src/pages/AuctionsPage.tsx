@@ -163,6 +163,7 @@ export default function AuctionsPage() {
                         className="pl-8 bg-zinc-950 border-zinc-700"
                         value={bidAmount[auction.id] || ''}
                         onChange={(e) => setBidAmount({...bidAmount, [auction.id]: e.target.value})}
+                        disabled={bidding === auction.id}
                       />
                     </div>
                     <Button 

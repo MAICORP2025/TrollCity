@@ -20,6 +20,7 @@ const Header = () => {
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   // Load all users on component mount - REMOVED for performance
   // We will search dynamically instead
@@ -97,14 +98,47 @@ const Header = () => {
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          event: 'INSERT',
           schema: 'public',
           table: 'notifications',
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          // console.log('Notification update received:', payload)
-          fetchNotifications()
+          // New notification - increment count immediately
+          const newNotif = payload.new as any;
+          if (!newNotif.is_read && !newNotif.is_dismissed) {
+            setUnreadNotifications(prev => prev + 1);
+          }
+          // Also fetch to ensure sync
+          fetchNotifications();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          // Update event - fetch to get accurate count
+          fetchNotifications();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          // Delete event - decrement count immediately
+          setUnreadNotifications(prev => Math.max(0, prev - 1));
+          // Also fetch to ensure sync
+          fetchNotifications();
         }
       )
       .subscribe()
@@ -222,7 +256,8 @@ const Header = () => {
                   {searchResults.map((user) => (
                     <div
                       key={user.id}
-                      onClick={() => {
+                      onMouseDown={(e) => {
+                        e.preventDefault(); // Prevent onBlur from firing
                         navigate(`/profile/${user.username}`)
                         setSearchQuery('')
                         setShowUserDropdown(false)

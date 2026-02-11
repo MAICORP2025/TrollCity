@@ -1,3 +1,4 @@
+DROP FUNCTION IF EXISTS public.pay_bank_loan(uuid, int);
 CREATE OR REPLACE FUNCTION public.pay_bank_loan(p_loan_id uuid, p_amount int)
 RETURNS json
 LANGUAGE plpgsql

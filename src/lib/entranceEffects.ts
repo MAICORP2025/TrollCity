@@ -373,42 +373,20 @@ export async function purchaseEntranceEffect(userId: string, effectKey: Entrance
       return { success: false, error: 'Not enough Troll Coins' };
     }
 
-    const purchasedAt = new Date().toISOString();
-
-    const flowResult = await runStandardPurchaseFlow({
-      userId,
-      amount: effectConfig.cost,
-      transactionType: 'entrance_effect',
-      description: `Purchased ${effectConfig.name} entrance effect`,
-      metadata: {
-        effect_id: effectKey,
-        effect_name: effectConfig.name
-      },
-      ensureOwnership: async (client) => {
-        const { error: insertError } = await client
-          .from('user_entrance_effects')
-          .insert({
-            user_id: userId,
-            effect_id: effectKey,
-            purchased_at: purchasedAt
-          });
-
-        if (insertError) {
-          console.error('Effect ownership error:', insertError);
-          await client.rpc('add_coins', {
-            p_user_id: userId,
-            p_amount: effectConfig.cost,
-            p_coin_type: 'paid'
-          });
-          return { success: false, error: 'Failed to add effect ownership' };
-        }
-
-        return { success: true };
-      }
+    // Use Atomic Server-Side Purchase
+    const { data, error } = await supabase.rpc('purchase_entrance_effect', {
+      p_effect_id: effectKey,
+      p_cost: effectConfig.cost,
+      p_name: effectConfig.name
     });
 
-    if (!flowResult.success) {
-      return { success: false, error: flowResult.error || 'Purchase failed' };
+    if (error) {
+       console.error('Entrance effect purchase error:', error);
+       return { success: false, error: error.message || 'Purchase failed' };
+    }
+
+    if (data && !data.success) {
+       return { success: false, error: data.error || data.message || 'Purchase failed' };
     }
 
     return { success: true };
@@ -557,6 +535,7 @@ export async function canAffordEntranceEffect(userId: string, effectKey: Entranc
  * Automatically determines the appropriate effect based on role hierarchy
  */
 export async function triggerUserEntranceEffect(userId: string, targetElement?: HTMLElement): Promise<void> {
+
   try {
     const { effectKey, isRoleBased } = await getUserEntranceEffect(userId);
 

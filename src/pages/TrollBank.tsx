@@ -11,7 +11,7 @@ import { trollCityTheme } from '@/styles/trollCityTheme'
 export default function TrollBank() {
   const { profile } = useAuthStore()
   const { balances, refreshCoins } = useCoins()
-  const { loans, ledger, tiers, refresh, applyForLoan, payLoan, payCreditCard, creditInfo } = useBank()
+  const { loans, ledger, tiers, fetchBankData, applyForLoan, payLoan, payCreditCard, creditInfo } = useBank()
   const activeLoan = loans && loans.length > 0 ? loans[0] : null
   
   const [bankBalance, setBankBalance] = useState<number | null>(null)

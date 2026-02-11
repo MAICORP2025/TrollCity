@@ -37,7 +37,18 @@ CREATE POLICY "Users can manage own views" ON public.user_sidebar_views
     FOR ALL USING (auth.uid() = user_id);
 
 -- Add to realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.sidebar_updates;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'sidebar_updates'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.sidebar_updates;
+  END IF;
+END
+$$;
 
 -- Helper RPC to mark as viewed
 CREATE OR REPLACE FUNCTION public.mark_sidebar_viewed(p_path TEXT)

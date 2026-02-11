@@ -25,11 +25,11 @@ END;
 $$;
 
 -- Ensure the credit trigger is correct
-DROP TRIGGER IF EXISTS on_auth_user_created_credit ON auth.users;
-CREATE TRIGGER on_auth_user_created_credit
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.create_user_credit_on_signup();
+-- DROP TRIGGER IF EXISTS on_auth_user_created_credit ON auth.users;
+-- CREATE TRIGGER on_auth_user_created_credit
+--   AFTER INSERT ON auth.users
+--   FOR EACH ROW
+--   EXECUTE FUNCTION public.create_user_credit_on_signup();
 
 
 -- 2. Fix and attach handle_user_signup
@@ -115,8 +115,8 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_user_signup();
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- CREATE TRIGGER on_auth_user_created
+--   AFTER INSERT ON auth.users
+--   FOR EACH ROW
+--   EXECUTE FUNCTION public.handle_user_signup();

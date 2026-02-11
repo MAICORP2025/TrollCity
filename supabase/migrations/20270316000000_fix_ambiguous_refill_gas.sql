@@ -1,8 +1,4 @@
 -- Fix Ambiguous refill_gas function
--- Drop all possible variations to ensure a clean slate
-DROP FUNCTION IF EXISTS public.refill_gas(INTEGER);
-DROP FUNCTION IF EXISTS public.refill_gas(NUMERIC);
-DROP FUNCTION IF EXISTS public.refill_gas(DOUBLE PRECISION);
 
 -- Recreate the canonical version (NUMERIC)
 CREATE OR REPLACE FUNCTION public.refill_gas(p_amount_percent NUMERIC)

@@ -60,6 +60,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Helper: approve manual order and credit coins via wallet ledger
+DROP FUNCTION IF EXISTS public.approve_manual_order(uuid, uuid, text);
 create or replace function public.approve_manual_order(
   p_order_id uuid,
   p_admin_id uuid,

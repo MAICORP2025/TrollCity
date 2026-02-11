@@ -22,13 +22,21 @@ export default function SessionMonitor() {
 
     // Initial check
     const checkSession = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('active_sessions')
         .select('is_active')
         .eq('session_id', sessionId)
-        .single()
+        .maybeSingle()
 
-      if (data && data.is_active === false) {
+      // If no session found (error or null data), session doesn't exist or was deleted
+      // This can happen if session was cleaned up or is a stale localStorage value
+      if (error || !data) {
+        console.log('[SessionMonitor] Session not found or error:', error?.message)
+        // Optionally force logout or just ignore
+        return
+      }
+
+      if (data.is_active === false) {
         console.log('[SessionMonitor] Session is marked inactive. Logging out.')
         toast.error('Session expired. You have logged in on another device.')
         logout()

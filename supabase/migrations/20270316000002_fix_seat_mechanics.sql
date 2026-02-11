@@ -1,5 +1,4 @@
 -- RPC: Join Seat Atomic
-DROP FUNCTION IF EXISTS public.join_seat_atomic(UUID, INTEGER, INTEGER);
 CREATE OR REPLACE FUNCTION public.join_seat_atomic(p_stream_id UUID, p_seat_index INTEGER, p_price INTEGER)
 RETURNS TABLE (success BOOLEAN, message TEXT) 
 LANGUAGE plpgsql
@@ -55,7 +54,7 @@ BEGIN
 
     -- Handle Payment if needed
     IF v_seat_price > 0 THEN
-        IF (SELECT troll_coins FROM public.user_profiles WHERE user_id = v_user_id) < v_seat_price THEN
+        IF (SELECT troll_coins FROM public.user_profiles WHERE id = v_user_id) < v_seat_price THEN
             RETURN QUERY SELECT false, 'Insufficient coins'::TEXT;
             RETURN;
         END IF;
@@ -63,13 +62,13 @@ BEGIN
         -- Deduct coins
         UPDATE public.user_profiles 
         SET troll_coins = troll_coins - v_seat_price 
-        WHERE user_id = v_user_id;
+        WHERE id = v_user_id;
         
         -- Pay Host (optional, maybe partial?) - For now just burn/transfer logic can be added here
         -- Update stream owner balance?
         UPDATE public.user_profiles
         SET troll_coins = troll_coins + v_seat_price
-        WHERE user_id = (SELECT user_id FROM public.streams WHERE id = p_stream_id);
+        WHERE id = (SELECT user_id FROM public.streams WHERE id = p_stream_id);
     END IF;
 
     -- Insert Session

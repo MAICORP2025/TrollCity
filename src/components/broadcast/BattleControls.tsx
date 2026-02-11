@@ -53,18 +53,12 @@ export default function BattleControls({ currentStream }: BattleControlsProps) {
     setMatchStatus('searching');
 
     try {
-        // Use RPC to find a valid opponent (excludes recent opponents, busy streams, etc.)
         const { data: target, error } = await supabase.rpc('find_match_candidate', {
             p_stream_id: currentStream.id
         });
         
         if (error) throw error;
         
-        // rpc returns a single row if using maybeSingle or an array? 
-        // RETURNS TABLE returns rows. We used LIMIT 1.
-        // If no rows, data might be [] or null depending on client.
-        
-        // Since we used RETURNS TABLE, it returns an array of objects.
         const opponent = Array.isArray(target) && target.length > 0 ? target[0] : null;
 
         if (!opponent) {

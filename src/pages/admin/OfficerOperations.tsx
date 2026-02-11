@@ -12,6 +12,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { supabase, UserRole } from '../../lib/supabase';
+import { useAuthStore } from '../../lib/store'; // Import useAuthStore
 import { toast } from 'sonner';
 import RequireRole from '../../components/RequireRole';
 import { formatFullDateTime12hr } from '../../utils/timeFormat';
@@ -62,9 +63,21 @@ interface PanicAlert {
   created_at: string;
 }
 
+interface ScheduleSlot {
+  id: string;
+  officer_id: string;
+  officer?: { username: string };
+  shift_date: string;
+  shift_start_time: string;
+  shift_end_time: string;
+  status: string;
+}
+
 export default function OfficerOperations() {
+  const user = useAuthStore((state) => state.user); // Get user from store
   const [activeTab, setActiveTab] = useState('shifts');
   const [shifts, setShifts] = useState<OfficerShift[]>([]);
+  const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
   const [patrols, setPatrols] = useState<OfficerPatrol[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [panicAlerts, setPanicAlerts] = useState<PanicAlert[]>([]);
@@ -101,6 +114,18 @@ export default function OfficerOperations() {
     } catch (err) {
       console.error('Error loading shifts:', err);
       // toast.error('Failed to load shifts');
+    }
+  }, []);
+
+  const loadSchedule = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-actions', {
+        body: { action: 'get_officer_shift_slots' }
+      });
+      if (error) throw error;
+      setScheduleSlots(data.slots || []);
+    } catch (err) {
+      console.error('Error loading schedule:', err);
     }
   }, []);
 
@@ -152,34 +177,54 @@ export default function OfficerOperations() {
     }
   }, []);
 
-  const loadData = useCallback(async () => {
-    try {
+  useEffect(() => {
+    const init = async () => {
       setLoading(true);
       await Promise.all([
         loadShifts(),
+        loadSchedule(),
         loadPatrols(),
         loadChatMessages(),
         loadPanicAlerts(),
         loadOfficers()
       ]);
-    } catch (error) {
-      console.error('Error loading officer operations data:', error);
-    } finally {
       setLoading(false);
-    }
-  }, [loadShifts, loadPatrols, loadChatMessages, loadPanicAlerts, loadOfficers]);
+    };
+    init();
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab, loadData]);
-
-  useEffect(() => {
+    // Polling every 30s
     const interval = setInterval(() => {
+      loadShifts();
+      loadSchedule();
+      loadPatrols();
       loadChatMessages();
       loadPanicAlerts();
     }, 30000);
+
     return () => clearInterval(interval);
-  }, [loadChatMessages, loadPanicAlerts]);
+  }, [loadShifts, loadSchedule, loadPatrols, loadChatMessages, loadPanicAlerts, loadOfficers]);
+
+  // Realtime subscription for chat
+  useEffect(() => {
+    const channel = supabase
+      .channel('officer-chat-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'officer_chat_messages'
+        },
+        () => {
+          loadChatMessages();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadChatMessages]);
 
   const syncMessages = async () => {
     if (!window.confirm('Sync legacy direct messages into the new inbox?')) return;
@@ -364,9 +409,10 @@ export default function OfficerOperations() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex space-x-1 bg-zinc-800 p-1 rounded-lg">
+          <div className="flex space-x-1 bg-zinc-800 p-1 rounded-lg overflow-x-auto">
             {[
-              { id: 'shifts', name: 'Shift Scheduling', icon: Calendar },
+              { id: 'shifts', name: 'Shift Logs', icon: Calendar },
+              { id: 'schedule', name: 'Master Schedule', icon: Calendar },
               { id: 'patrols', name: 'Patrol Assignments', icon: MapPin },
               { id: 'chat', name: 'Officer Chat', icon: MessageSquare },
               { id: 'panic', name: 'Panic Alerts', icon: AlertTriangle }
@@ -374,7 +420,7 @@ export default function OfficerOperations() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-400 hover:text-white hover:bg-zinc-700'
@@ -395,11 +441,7 @@ export default function OfficerOperations() {
           {activeTab === 'shifts' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold">Recent Officer Shifts</h2>
-                <Link to="/admin/schedule" className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white no-underline">
-                  <Calendar className="w-4 h-4" />
-                  View Schedule
-                </Link>
+                <h2 className="text-xl font-bold">Officer Shifts</h2>
               </div>
 
               <div className="bg-zinc-900/50 rounded-lg overflow-hidden">
@@ -440,6 +482,51 @@ export default function OfficerOperations() {
                         <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                           No shifts found
                         </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'schedule' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold">Master Schedule</h2>
+              </div>
+              <div className="bg-zinc-900/50 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-zinc-800">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Officer</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Time</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scheduleSlots.map((slot) => (
+                      <tr key={slot.id} className="border-t border-zinc-700">
+                        <td className="px-4 py-3">{slot.officer?.username || 'Unknown'}</td>
+                        <td className="px-4 py-3">{new Date(slot.shift_date).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                           {slot.shift_start_time} - {slot.shift_end_time}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            slot.status === 'booked' ? 'bg-green-600' : 'bg-gray-600'
+                          }`}>
+                            {slot.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {scheduleSlots.length === 0 && (
+                      <tr>
+                         <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                           No active schedule slots found
+                         </td>
                       </tr>
                     )}
                   </tbody>

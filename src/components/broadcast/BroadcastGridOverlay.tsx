@@ -92,7 +92,7 @@ export default function BroadcastGridOverlay({
                     >
                          <div className="flex flex-col items-center text-white/70 hover:text-white">
                             <Plus size={32} />
-                            <span className="text-xs mt-2 font-bold">Join Stage</span>
+                            <span className="text-xs mt-2 font-bold">Join seat</span>
                             {stream.seat_price > 0 && (
                                 <div className="flex items-center gap-1 bg-black/60 px-2 py-1 rounded-full mt-2 border border-yellow-500/30">
                                     <Coins size={12} className="text-yellow-500" />

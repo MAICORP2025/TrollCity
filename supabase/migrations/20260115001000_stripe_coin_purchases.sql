@@ -25,9 +25,11 @@ BEGIN
       ADD COLUMN IF NOT EXISTS stripe_price_id text,
       ADD COLUMN IF NOT EXISTS amount_cents integer;
 
-    UPDATE public.coin_packages
-    SET amount_cents = round((price_usd * 100))::int
-    WHERE amount_cents IS NULL AND price_usd IS NOT NULL;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coin_packages' AND column_name = 'price_usd') THEN
+      EXECUTE 'UPDATE public.coin_packages SET amount_cents = round((price_usd * 100))::int WHERE amount_cents IS NULL AND price_usd IS NOT NULL';
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coin_packages' AND column_name = 'price') THEN
+      EXECUTE 'UPDATE public.coin_packages SET amount_cents = round((price * 100))::int WHERE amount_cents IS NULL AND price IS NOT NULL';
+    END IF;
   END IF;
 END $$;
 

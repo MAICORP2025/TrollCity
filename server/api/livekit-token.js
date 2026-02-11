@@ -35,9 +35,9 @@ module.exports = async (req, res) => {
     if (!room) return sendJson(res, 400, { error: 'Missing room' });
     if (!identity || identity === 'null') identity = String(body.user_id || 'guest');
 
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-const livekitUrl = process.env.LIVEKIT_CLOUD_URL || process.env.LIVEKIT_URL;
+    const apiKey = process.env.LIVEKIT_API_KEY || process.env.VITE_LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET || process.env.VITE_LIVEKIT_API_SECRET;
+    const livekitUrl = process.env.LIVEKIT_CLOUD_URL || process.env.LIVEKIT_URL || process.env.VITE_LIVEKIT_URL || process.env.VITE_LIVEKIT_CLOUD_URL;
 
     console.log("[livekit-token] LIVEKIT CONFIG CHECK", { 
       livekitUrl, 

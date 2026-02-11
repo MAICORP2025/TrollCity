@@ -39,13 +39,32 @@ export function useGiftSystem(
   }
 
   const sendGift = async (gift: GiftItem, overrideReceiverId?: string): Promise<boolean | { success: boolean; bonus?: any }> => {
-    if (!user || !profile) { 
-      toast.error('You must be logged in to send gifts.')
-      return false 
+    const targetReceiverId = overrideReceiverId || receiverId || streamerId
+
+    if (!user || !profile) {
+      // Handle guest gifting
+      if (streamerId && streamId) {
+        const { data: result, error: rpcError } = await supabase.rpc('send_guest_gift', {
+          p_guest_id: streamerId, // Using streamerId as a temporary guest ID
+          p_receiver_id: targetReceiverId,
+          p_stream_id: streamId || null,
+          p_gift_id: gift.id, // Pass the UUID
+          p_cost: gift.coinCost,
+          p_quantity: 1
+        });
+
+        if (rpcError) {
+          throw rpcError;
+        }
+
+        return true;
+      } else {
+        toast.error('You must be logged in to send gifts.');
+        return false;
+      }
     }
 
     // Use receiverId if provided, otherwise fallback to streamerId
-    const targetReceiverId = overrideReceiverId || receiverId || streamerId
 
     // Validate balance based on gift type (paid or free)
     const currency = gift.currency || 'troll_coins'
@@ -74,13 +93,13 @@ export function useGiftSystem(
       // ✅ REAL COIN LOGIC: Use send_premium_gift RPC
       // This handles: Balance check, Cost deduction, Cashback (Random + 5%), Receiver Credit (95%), Status (RGB/Gold), Logs
       const { data: result, error: rpcError } = await supabase.rpc('send_premium_gift', {
-        p_sender_id: user.id,
-        p_receiver_id: targetReceiverId,
-        p_stream_id: streamId || null,
-        p_gift_id: gift.id,
-        p_cost: gift.coinCost,
-        p_quantity: 1
-      })
+        p_sender_id: user.id,         // uuid
+        p_receiver_id: targetReceiverId,     // uuid
+        p_stream_id: streamId,         // uuid
+        p_gift_id: String(gift.id),     // text
+        p_cost: Number(gift.coinCost),     // numeric (use Number, not BigInt)
+        p_quantity: 1,          // integer
+      });
 
       console.log('[GiftDebugger] RPC Result:', { result, rpcError })
 
@@ -112,7 +131,7 @@ export function useGiftSystem(
       if (result.gold_awarded) {
         toast.success('LEGENDARY! GOLD STATUS PERMANENTLY UNLOCKED!')
       }
-      
+       
       // Update local profile balance immediately
       if (profile) {
         useAuthStore.getState().setProfile({
@@ -131,8 +150,9 @@ export function useGiftSystem(
         (async () => {
           try {
             const channel = supabase.channel(`stream_events_${streamId}`)
-            channel.subscribe(async (status) => {
-              if (status === 'SUBSCRIBED') {
+            
+            // If channel is already active (e.g. GiftAnimationOverlay is using it), reuse it
+            if (channel.state === 'joined') {
                 await channel.send({
                   type: 'broadcast',
                   event: 'gift_sent',
@@ -151,10 +171,33 @@ export function useGiftSystem(
                     stream_id: streamId
                   }
                 })
-                // Short delay to ensure message goes out before cleanup
-                setTimeout(() => supabase.removeChannel(channel), 1000)
-              }
-            })
+            } else {
+                // Otherwise, subscribe temporarily
+                channel.subscribe(async (status) => {
+                  if (status === 'SUBSCRIBED') {
+                    await channel.send({
+                      type: 'broadcast',
+                      event: 'gift_sent',
+                      payload: {
+                        id: generateUUID(),
+                        sender_id: user.id,
+                        sender_username: profile.username || 'Anonymous',
+                        sender_avatar: profile.avatar_url,
+                        sender_role: profile.role,
+                        sender_troll_role: profile.troll_role,
+                        gift_slug: gift.slug || toGiftSlug(gift.name),
+                        gift_name: gift.name,
+                        amount: gift.coinCost,
+                        quantity: 1,
+                        timestamp: Date.now(),
+                        stream_id: streamId
+                      }
+                    })
+                    // Short delay to ensure message goes out before cleanup
+                    setTimeout(() => supabase.removeChannel(channel), 1000)
+                  }
+                })
+            }
           } catch (err) {
             console.warn('Failed to broadcast gift event:', err)
           }
@@ -194,7 +237,7 @@ export function useGiftSystem(
       }
 
       // (Legacy Combo/Bonus Logic Removed per MASTER SYSTEM PROMPT)
-      
+       
       toast.success(`Gift sent: ${gift.name}`)
 
       // BROADCAST HUGE GIFT (Global Banner)
@@ -244,7 +287,7 @@ export function useGiftSystem(
           }
         })();
       }
-      
+       
       try {
         if (gift.category === 'Family') {
           const { data: streamerMember } = await supabase
@@ -286,10 +329,38 @@ export function useGiftSystem(
             }
           }
         }
+
+        // BATTLE SCORING - Update battle scores when gifts are sent during battle
+        if (activeBattleId && streamId) {
+          try {
+            const { data: battleData } = await supabase
+              .from('battles')
+              .select('id, challenger_stream_id, opponent_stream_id, status')
+              .eq('id', activeBattleId)
+              .eq('status', 'active')
+              .maybeSingle();
+
+            if (battleData) {
+              const isChallenger = battleData.challenger_stream_id === streamId;
+               
+              await supabase.rpc('register_battle_score', {
+                p_battle_id: activeBattleId,
+                p_sender_id: user.id,
+                p_receiver_id: targetReceiverId,
+                p_gift_cost: gift.coinCost,
+                p_is_challenger: isChallenger
+              });
+               
+              console.log('[BattleScoring] Score updated for battle:', activeBattleId, { isChallenger, giftCost: gift.coinCost });
+            }
+          } catch (battleErr) {
+            console.warn('Battle scoring failed:', battleErr);
+          }
+        }
       } catch (warErr) {
         console.warn('Family war gift handling failed', warErr)
       }
-      
+       
       // (Legacy Bonus Milestone Check Removed)
 
       // Identity event hook — Gift sent
@@ -304,10 +375,10 @@ export function useGiftSystem(
             streamer_id: streamerId
           }
         })
-        
+         
         // Process XP for Gifter and Streamer (New Logic)
         const { senderResult } = await processGiftXp(user.id, targetReceiverId, gift.coinCost)
-        
+         
         if (senderResult?.leveledUp) {
           toast.success(`🎉 Level Up! You reached Level ${senderResult.newLevel}!`)
           // Trigger badge toast if needed handled in processGiftXp via db, but UI toast here is good
@@ -315,9 +386,9 @@ export function useGiftSystem(
       } catch (err) {
         console.error('Error recording gift event:', err)
       }
-      
+       
       // Return bonus info if awarded, otherwise return true
-      
+       
       // Auto-track family task: Gift Raid (Gifts Sent)
       if (user?.id) {
         // Fire and forget

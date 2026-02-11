@@ -93,7 +93,8 @@ export default function RentalMarket() {
         .neq('user_id', user.id); // Don't show my own houses (I can't rent from myself)
 
       if (housesError) throw housesError;
-      setListings(houses || []);
+      const formattedListings = houses?.map(h => ({ ...h, catalog: h.catalog?.[0] })) || [];
+      setListings(formattedListings);
 
     } catch (error) {
       console.error('Error fetching market:', error);

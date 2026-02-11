@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename)
 const MIGRATIONS_DIR = path.resolve(__dirname, '../supabase/migrations')
 // Start from this migration timestamp to avoid re-running very old ones
 // This matches the start of the previous hardcoded list
-const START_MIGRATION = '20200101000000'
+const START_MIGRATION = '20270502000002'
 
 async function run() {
   const databaseUrl = process.env.DATABASE_URL
@@ -24,6 +24,9 @@ async function run() {
   try {
     await client.connect()
     console.log('Connected to database.')
+    
+    // Set search path explicitly to ensure functions are created in public by default if not qualified
+    await client.query('SET search_path TO public, auth, extensions;')
 
     // Get all SQL files
     const files = fs.readdirSync(MIGRATIONS_DIR)

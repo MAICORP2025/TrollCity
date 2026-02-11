@@ -9,6 +9,7 @@ export const trollCityTheme = {
     card: 'bg-slate-900/60 backdrop-blur-xl',
     glass: 'bg-white/5 backdrop-blur-xl',
     modal: 'bg-slate-950/95 backdrop-blur-2xl',
+    input: 'bg-slate-800/50',
   },
   
   // Gradient Overlays (for depth)
@@ -52,6 +53,9 @@ export const trollCityTheme = {
     secondary: 'text-slate-300',
     muted: 'text-slate-400',
     mutedDark: 'text-slate-500',
+    highlight: 'text-cyan-400',
+    accent: 'text-purple-400',
+    heading: 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400',
     gradient: 'bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent',
   },
   
@@ -60,6 +64,7 @@ export const trollCityTheme = {
     hover: 'hover:-translate-y-0.5 transition-all duration-300',
     hoverScale: 'hover:scale-105 transition-transform duration-300',
     active: 'bg-slate-800/70',
+    disabled: 'opacity-50 cursor-not-allowed',
   },
 
   // Button Styles (lighter version without padding/rounding)

@@ -1,12 +1,61 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
-import { UserRole } from '../lib/supabase';
+import { UserRole, supabase } from '../lib/supabase';
+import { toast } from 'sonner';
 
 const AdminOfficerQuickMenu: React.FC = () => {
   const { profile, showLegacySidebar, setShowLegacySidebar } = useAuthStore();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const [isOnDuty, setIsOnDuty] = useState(false);
+  const [loadingDuty, setLoadingDuty] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && profile?.id) {
+      checkDutyStatus();
+    }
+  }, [isOpen, profile?.id]);
+
+  const checkDutyStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('on_duty')
+        .eq('id', profile!.id)
+        .single();
+      
+      if (data) {
+        setIsOnDuty(data.on_duty || false);
+      }
+    } catch (error) {
+      console.error('Error checking duty status:', error);
+    }
+  };
+
+  const toggleDuty = async () => {
+    if (loadingDuty) return;
+    setLoadingDuty(true);
+    try {
+      const newStatus = !isOnDuty;
+      const { error } = await supabase.rpc('toggle_staff_duty', {
+        status: newStatus
+      });
+
+      if (error) throw error;
+
+      setIsOnDuty(newStatus);
+      toast.success(newStatus ? 'You are now ON DUTY' : 'You are now OFF DUTY');
+      
+      // Force a heartbeat to update status immediately
+      await supabase.rpc('heartbeat_presence');
+    } catch (error) {
+      console.error('Error toggling duty:', error);
+      toast.error('Failed to update duty status');
+    } finally {
+      setLoadingDuty(false);
+    }
+  };
 
   if (!profile) return null;
 
@@ -103,6 +152,33 @@ const AdminOfficerQuickMenu: React.FC = () => {
       {isOpen && (
         <div className="absolute top-full mt-2 right-0 w-64 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-lg z-50 max-h-[80vh] overflow-y-auto custom-scrollbar">
           <div className="py-2">
+            {/* Duty Toggle for Staff */}
+            {(isOfficer || isLeadOfficer || isAdmin) && (
+              <div className="px-4 py-2 border-b border-[#333] mb-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-300">
+                    Status: <span className={isOnDuty ? "text-green-400" : "text-gray-500"}>{isOnDuty ? 'ON DUTY' : 'OFF DUTY'}</span>
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDuty();
+                    }}
+                    disabled={loadingDuty}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-[#1a1a1a] ${
+                      isOnDuty ? 'bg-green-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`${
+                        isOnDuty ? 'translate-x-6' : 'translate-x-1'
+                      } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {quickActions.map((action, index) => (
               <button
                 key={index}

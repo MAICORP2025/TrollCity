@@ -81,7 +81,7 @@ export const checkBalance = async (
         currentBalance = profile.troll_coins || 0
         break
       case 'free':
-        currentBalance = profile.troll_coins || 0
+        currentBalance = profile.total_earned_coins || 0
         break
       case 'either':
         currentBalance = (profile.troll_coins || 0) + (profile.troll_coins || 0)

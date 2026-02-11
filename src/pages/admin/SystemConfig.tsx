@@ -117,29 +117,6 @@ const SystemConfig: React.FC = () => {
       );
     }
 
-    // Walkie Talkie: Officer Admin Paging Override
-    if (setting_key === 'allow_officer_admin_paging') {
-      const isEnabled = setting_value?.enabled || false;
-      return (
-        <div className="flex items-center gap-3 p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-          <div className="flex-1">
-             <h4 className="font-bold text-purple-300">Allow Officer Paging Override</h4>
-             <p className="text-sm text-gray-400">If enabled, High Ranking Officers can page Admins in Standard Mode.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={isEnabled ? "text-green-400 font-bold" : "text-gray-500"}>
-              {isEnabled ? "ALLOWED" : "RESTRICTED"}
-            </span>
-            <button
-              onClick={() => handleUpdate(setting_key, { enabled: !isEnabled })}
-              className={`px-4 py-2 rounded font-bold transition-colors ${isEnabled ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}
-            >
-              {isEnabled ? "DISABLE" : "ENABLE"}
-            </button>
-          </div>
-        </div>
-      )
-    }
 
     // Default JSON editor for everything else
     return (

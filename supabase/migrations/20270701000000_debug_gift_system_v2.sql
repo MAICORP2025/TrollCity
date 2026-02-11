@@ -117,7 +117,8 @@ BEGIN
     IF v_receiver_credit > 0 THEN
         UPDATE public.user_profiles
         SET troll_coins = troll_coins + v_receiver_credit,
-            total_coins_earned = COALESCE(total_coins_earned, 0) + v_receiver_credit
+            total_earned_coins = COALESCE(total_earned_coins, 0) + v_receiver_credit,
+            updated_at = now()  -- IMPORTANT: Trigger real-time updates
         WHERE id = p_receiver_id;
 
         -- Log Receiver Transaction

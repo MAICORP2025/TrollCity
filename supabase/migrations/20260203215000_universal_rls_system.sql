@@ -101,7 +101,7 @@ END $$;
 -- ============================================================================
 
 -- Get current user's ID safely (returns NULL if not authenticated)
-DROP FUNCTION IF EXISTS public.current_user_id();
+-- DROP FUNCTION IF EXISTS public.current_user_id();
 CREATE OR REPLACE FUNCTION public.current_user_id()
 RETURNS UUID AS $$
 BEGIN
@@ -112,7 +112,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if user is currently authenticated
-DROP FUNCTION IF EXISTS public.is_authenticated();
+-- DROP FUNCTION IF EXISTS public.is_authenticated();
 CREATE OR REPLACE FUNCTION public.is_authenticated()
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -122,7 +122,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if user is NOT banned (global read-only check)
 -- If banned_at IS NOT NULL → user is globally read-only
-DROP FUNCTION IF EXISTS public.is_not_banned(UUID);
+-- DROP FUNCTION IF EXISTS public.is_not_banned(UUID);
 CREATE OR REPLACE FUNCTION public.is_not_banned(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -140,7 +140,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if user is NOT suspended (no writes anywhere)
 -- If suspended_until > now() → no writes anywhere
-DROP FUNCTION IF EXISTS public.is_not_suspended(UUID);
+-- DROP FUNCTION IF EXISTS public.is_not_suspended(UUID);
 CREATE OR REPLACE FUNCTION public.is_not_suspended(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -159,7 +159,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if user has a specific role (using EXISTING profile columns)
 -- Checks both profile columns and optional user_roles table
-DROP FUNCTION IF EXISTS public.has_role(TEXT, UUID);
+-- DROP FUNCTION IF EXISTS public.has_role(TEXT, UUID);
 CREATE OR REPLACE FUNCTION public.has_role(p_role_name TEXT, p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -196,47 +196,34 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if user is admin (using EXISTING profile columns)
 -- Includes temporary admin override with expiration
-DROP FUNCTION IF EXISTS public.is_admin(UUID);
+-- DROP FUNCTION IF EXISTS public.is_admin(UUID);
 CREATE OR REPLACE FUNCTION public.is_admin(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
     IF p_user_id IS NULL THEN
         RETURN false;
     END IF;
-    
-    -- Check via profile column first
-    IF EXISTS (
+
+    RETURN EXISTS (
         SELECT 1 FROM public.user_profiles
         WHERE id = p_user_id
-        AND is_admin = true
-    ) THEN
-        RETURN true;
-    END IF;
-    
-    -- Check via user_role_grants table
-    IF EXISTS (
+        AND (
+            is_admin = true
+            OR admin_override_until IS NOT NULL AND admin_override_until > NOW()
+        )
+    ) OR EXISTS (
         SELECT 1 FROM public.user_role_grants ur
         JOIN public.system_roles r ON ur.role_id = r.id
         WHERE ur.user_id = p_user_id
         AND r.is_admin = true
         AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
         AND ur.revoked_at IS NULL
-    ) THEN
-        RETURN true;
-    END IF;
-    
-    -- Check temporary admin override (must have expiration)
-    RETURN EXISTS (
-        SELECT 1 FROM public.user_profiles
-        WHERE id = p_user_id
-        AND admin_override_until IS NOT NULL
-        AND admin_override_until > NOW()
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if user is staff member (using EXISTING profile columns)
-DROP FUNCTION IF EXISTS public.is_staff(UUID);
+-- DROP FUNCTION IF EXISTS public.is_staff(UUID);
 CREATE OR REPLACE FUNCTION public.is_staff(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -277,7 +264,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if staff member is currently on duty (clocked in)
 -- Officers can only act when clocked_in = true
-DROP FUNCTION IF EXISTS public.is_staff_on_duty(UUID);
+-- DROP FUNCTION IF EXISTS public.is_staff_on_duty(UUID);
 CREATE OR REPLACE FUNCTION public.is_staff_on_duty(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -295,7 +282,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Combined check: user can perform writes (not banned, not suspended)
-DROP FUNCTION IF EXISTS public.can_write(UUID);
+-- DROP FUNCTION IF EXISTS public.can_write(UUID);
 CREATE OR REPLACE FUNCTION public.can_write(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -305,7 +292,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Check if user meets minimum level requirement
-DROP FUNCTION IF EXISTS public.has_min_level(INTEGER, UUID);
+-- DROP FUNCTION IF EXISTS public.has_min_level(INTEGER, UUID);
 CREATE OR REPLACE FUNCTION public.has_min_level(p_min_level INTEGER, p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -326,7 +313,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 -- ============================================================================
 
 -- Global ban check function - applied to ALL write policies
-DROP FUNCTION IF EXISTS public.global_write_check(UUID);
+-- DROP FUNCTION IF EXISTS public.global_write_check(UUID);
 CREATE OR REPLACE FUNCTION public.global_write_check(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN

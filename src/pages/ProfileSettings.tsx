@@ -1,5 +1,6 @@
 import React from 'react'
 import { useAuthStore } from '../lib/store'
+import { supabase } from '@/lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { Settings, Boxes, Sparkles, KeyRound } from 'lucide-react'
 import { useState, useEffect } from 'react'

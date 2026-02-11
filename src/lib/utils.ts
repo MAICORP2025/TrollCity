@@ -1,16 +1,20 @@
-import { clsx, type ClassValue } from "clsx"
+import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-
+ 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCompactNumber(num: number): string {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'm'
+export const isAuthRoute = (pathname: string) => {
+  return pathname.startsWith('/auth') || pathname.startsWith('/callback') || pathname.startsWith('/profile/setup');
+};
+
+export function formatCompactNumber(number: number) {
+  if (number < 1000) {
+    return number.toString();
   }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
-  }
-  return num.toLocaleString()
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    compactDisplay: 'short',
+  }).format(number);
 }

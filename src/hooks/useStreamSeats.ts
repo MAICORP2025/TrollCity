@@ -156,6 +156,7 @@ export function useStreamSeats(streamId: string | undefined, userId?: string, br
         p_stream_id: streamId,
         p_seat_index: seatIndex,
         p_price: price,
+        p_user_id: effectiveUserId
       });
 
       if (error) throw error;

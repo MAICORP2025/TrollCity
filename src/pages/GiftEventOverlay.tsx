@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { OFFICIAL_GIFTS } from '../lib/giftConstants'
+import { OFFICIAL_GIFTS, GiftItem } from '../lib/giftConstants'
 import GiftSoundPlayer from './GiftSoundPlayer'
 
 interface GiftEventOverlayProps {
@@ -35,7 +35,6 @@ export default function GiftEventOverlay({ gift }: GiftEventOverlayProps) {
 
     const enhancedGift: EnhancedGift = {
       ...official,
-      tier: official.tier as any, // TS cast
       instanceId: `${Date.now()}-${Math.random()}`,
       sender_username: gift.sender_username || 'Anonymous',
       sender_avatar: gift.sender_avatar,

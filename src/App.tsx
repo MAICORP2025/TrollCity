@@ -12,6 +12,8 @@ import GlobalGiftBanner from "./components/GlobalGiftBanner";
 import GlobalPayoutBanner from "./components/GlobalPayoutBanner";
 import BroadcastAnnouncement from "./components/BroadcastAnnouncement";
 import GlobalPodBanner from "./components/GlobalPodBanner";
+import BugAlertPopup from "./components/BugAlertPopup";
+import { useBugAlertStore } from "./stores/useBugAlertStore";
 import DailyChurchNotification from "./components/church/DailyChurchNotification";
 import GlobalEventsBanner from "./components/GlobalEventsBanner";
 import { useGlobalApp } from "./contexts/GlobalAppContext";
@@ -131,7 +133,7 @@ const KickFeePage = lazy(() => import("./pages/broadcast/KickFeePage"));
 const KickFee = lazy(() => import("./pages/KickFee"));
 const BanFee = lazy(() => import("./pages/BanFee"));
 const TrollCourtSession = lazy(() => import("./pages/TrollCourtSession"));
-const TromodyShow = lazy(() => import("./pages/TromodyShow"));
+
 const Call = lazy(() => import("./pages/Call"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Trollifications = lazy(() => import("./pages/Trollifications"));
@@ -199,7 +201,7 @@ const CashoutManager = lazy(() => import("./pages/admin/CashoutManager"));
 const CriticalAlertsManager = lazy(() => import("./pages/admin/CriticalAlertsManager"));
 const OfficerManager = lazy(() => import("./pages/admin/OfficerManager"));
 const AdminTrollTownDeeds = lazy(() => import("./pages/admin/AdminTrollTownDeeds"));
-const LeadOfficerDashboard = lazy(() => import("./pages/lead-officer/LeadOfficerDashboard").then(module => ({ default: module.LeadOfficerDashboard })));
+const LeadOfficerDashboard = lazy(() => import("./pages/lead-officer/LeadOfficerDashboard"));
 const ShopPartnerPage = lazy(() => import("./pages/ShopPartnerPage"));
 const UniverseEventPage = lazy(() => import("./pages/UniverseEventPage"));
 
@@ -388,6 +390,27 @@ function AppContent() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
+
+  // Bug Alert real-time subscription for admins
+  useEffect(() => {
+    const { subscribeToRealtime, unsubscribeFromRealtime, fetchAlerts } = useBugAlertStore.getState();
+    
+    // Only set up subscription if user is admin
+    if (user && profile?.role === 'admin') {
+      console.log('[BugAlert] Admin detected, setting up real-time subscription');
+      
+      // Subscribe to real-time bug alerts
+      subscribeToRealtime(user.id, true);
+      
+      // Fetch initial alerts
+      fetchAlerts({ status: 'active' });
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      unsubscribeFromRealtime();
+    };
+  }, [user, profile?.role]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -915,7 +938,7 @@ function AppContent() {
                   <Route path="/dev/battle" element={<BattlePreview />} />
                   <Route path="/dev/stress-test" element={<FrontendLimitsTest />} />
 
-                  <Route path="/mobile" element={<MobileShell />} />
+                  <Route path="/mobile" element={<MobileShell><Outlet /></MobileShell>} />
                   <Route path="/live" element={<LandingHome />} />
                   <Route path="/messages" element={<Navigate to="/tcps" replace />} />
                   <Route path="/tcps" element={<TCPS />} />
@@ -962,7 +985,6 @@ function AppContent() {
                   <Route path="/kick-fee" element={<KickFee />} />
                   <Route path="/ban-fee" element={<BanFee />} />
                   <Route path="/troll-court/session" element={<TrollCourtSession />} />
-                  <Route path="/tromody" element={<TromodyShow />} />
                   <Route path="/live/:streamId" element={<Navigate to="/live" replace />} />
                   <Route path="/interview/:roomId" element={<InterviewRoom />} />
                   <Route path="/stream/:id" element={<Navigate to="/live" replace />} />
@@ -1017,7 +1039,7 @@ function AppContent() {
                   <Route path="/family/wars" element={<FamilyWarsPage />} />
 
                   {/* 🏰 Troll Family Ecosystem */}
-                  <Route path="/family/lounge" element={<FamilyLounge />} />
+                  <Route path="/family/lounge" element={<FamilyLounge user={profile || undefined} />} />
                   <Route path="/family/wars-hub" element={<FamilyWarsHub />} />
                   <Route path="/family/leaderboard" element={<FamilyLeaderboard />} />
                   <Route path="/family/shop" element={<FamilyShop />} />
@@ -1621,6 +1643,7 @@ function AppContent() {
               </ErrorBoundary>
         <ChatBubble />
         <GlobalPodBanner />
+        <BugAlertPopup />
       </AppLayout>
 
       {/* Profile setup modal */}

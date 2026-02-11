@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-// PayPal removed
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
@@ -7,12 +6,13 @@ import { useCoins } from '@/lib/hooks/useCoins';
 import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { useAllCreditScores } from '../lib/hooks/useAllCreditScores';
 // import { toast } from 'sonner';
-import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, Gem } from 'lucide-react';
+import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, Gem, X } from 'lucide-react';
 import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
 import { ENTRANCE_EFFECTS_DATA } from '../lib/entranceEffects';
 import { deductCoins } from '@/lib/coinTransactions';
 import { purchaseCallMinutes } from '@/lib/callMinutes';
 import { useLiveContextStore } from '../lib/liveContextStore';
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 import { trollCityTheme } from '@/styles/trollCityTheme';
 import ManualPaymentModal from '@/components/broadcast/ManualPaymentModal';
@@ -153,8 +153,16 @@ export default function CoinStore() {
   const [manualPaymentModalOpen, setManualPaymentModalOpen] = useState(false);
   // Default to Venmo as requested
   const [selectedProviderId, setSelectedProviderId] = useState('venmo');
+  const [showPayPal, setShowPayPal] = useState(false);
 
   const handleManualPurchase = (pkg) => {
+    // PayPal handling
+    if (selectedProviderId === 'paypal') {
+        setSelectedPackage(pkg);
+        setShowPayPal(true);
+        return;
+    }
+
     // Check for cooldown on CashApp/Venmo
     if (['cashapp', 'venmo'].includes(selectedProviderId)) {
       const lastRequest = localStorage.getItem('last_manual_request_time');
@@ -203,6 +211,11 @@ export default function CoinStore() {
   const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
   const isSecretary = profile?.role === 'secretary' || profile?.troll_role === 'secretary';
   const isOfficer = profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.is_lead_officer === true || profile?.troll_role === 'troll_officer' || profile?.troll_role === 'lead_troll_officer';
+  const isEmployee = isAdmin || isSecretary || isOfficer;
+
+  // Employee discounts
+  const EMPLOYEE_CALL_DISCOUNT = 0.5; // 50% off call minutes
+  const EMPLOYEE_COIN_DISCOUNT = 0.015; // 1.5% off coin packs
 
   const formatCountdown = (targetDate) => {
     if (!targetDate) return null;
@@ -1394,6 +1407,16 @@ export default function CoinStore() {
                   Coin Packages
                 </h2>
 
+                {isEmployee && (
+                  <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-3">
+                    <span className="text-2xl">🎉</span>
+                    <div>
+                      <div className="font-bold text-green-400">Employee Discount Applied</div>
+                      <div className="text-sm text-gray-300">Secretaries, Lead Troll Officers, and Troll Officers get <span className="font-bold text-green-400">1.5% OFF</span> all coin packs!</div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-start gap-3">
                   <AlertTriangle className="w-6 h-6 text-yellow-500 shrink-0 mt-0.5" />
                   <div>
@@ -1410,7 +1433,10 @@ export default function CoinStore() {
                   {MANUAL_PROVIDERS.map(p => (
                     <button
                       key={p.id}
-                      onClick={() => setSelectedProviderId(p.id)}
+                      onClick={() => {
+                        setSelectedProviderId(p.id);
+                        setShowPayPal(false);
+                      }}
                       className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 border transition-colors ${selectedProviderId === p.id ? 'bg-purple-600 text-white border-purple-400' : 'bg-[#181825] text-gray-300 border-[#2C2C2C] hover:bg-[#232336]'}`}
                     >
                       <span>{p.icon}</span>
@@ -1419,35 +1445,133 @@ export default function CoinStore() {
                   ))}
                 </div>
                 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {coinPackages.map((pkg) => (
-                      <div key={pkg.id} className={`bg-black/40 p-4 rounded-lg border ${pkg.promo ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : (pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20')} relative overflow-hidden group`}>
-                        {(pkg.popular || pkg.bestValue || pkg.promo) && (
-                          <div className={`absolute top-3 right-3 ${pkg.promo ? 'bg-green-500' : 'bg-yellow-500'} text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider`}>
-                            {pkg.promo ? 'Limited Offer' : (pkg.popular ? 'Popular' : 'Best Value')}
-                          </div>
-                        )}
-                        <div className="flex flex-col items-center text-center p-2">
-                          <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
-                          <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
-                          <div className="text-lg font-semibold text-green-400 mb-1">{pkg.price}</div>
-                          <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
-                          
-                          <button
-                            onClick={() => {
-                              handleManualPurchase(pkg);
-                            }}
-                            className={`w-full py-2 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                              MANUAL_PROVIDERS.find(p => p.id === selectedProviderId)?.color || 'bg-purple-600'
-                            } hover:brightness-110`}
-                          >
-                            Buy with {MANUAL_PROVIDERS.find(p => p.id === selectedProviderId)?.name}
-                          </button>
+                {showPayPal && selectedPackage ? (
+                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                     <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <span className="text-2xl">🅿️</span> PayPal Checkout
+                            </h3>
+                            <button onClick={() => setShowPayPal(false)} className="p-1 hover:bg-zinc-800 rounded-full">
+                                <X className="w-6 h-6 text-zinc-400" />
+                            </button>
                         </div>
-                      </div>
-                    ))}
+                        
+                        <div className="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-gray-400">Package</span>
+                                <span className="font-bold text-yellow-400">{selectedPackage.coins.toLocaleString()} Coins</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-400">Total</span>
+                                <span className="font-bold text-white text-xl">${isEmployee ? (selectedPackage.price.replace('$', '') * (1 - EMPLOYEE_COIN_DISCOUNT)).toFixed(2) : selectedPackage.price.replace('$', '')}</span>
+                            </div>
+                        </div>
+
+                        <PayPalScriptProvider options={{ 
+                            clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || "sb",
+                            currency: "USD",
+                            intent: "capture"
+                        }}>
+                            <PayPalButtons 
+                                style={{ layout: "vertical", color: "gold", shape: "pill", label: "paypal", height: 48 }}
+                                createOrder={async (data, actions) => {
+                                  try {
+                                      const price = isEmployee ? (selectedPackage.price.replace('$', '') * (1 - EMPLOYEE_COIN_DISCOUNT)).toFixed(2) : selectedPackage.price.replace('$', '');
+                                      const { data: orderData, error } = await supabase.functions.invoke('paypal-create-order', {
+                                        body: {
+                                          amount: price,
+                                          coins: selectedPackage.coins,
+                                          user_id: user?.id,
+                                          package_id: selectedPackage.id
+                                        }
+                                      });
+                                      if (error) throw error;
+                                      if (!orderData?.orderId) throw new Error("Order creation failed");
+                                      return orderData.orderId;
+                                  } catch (err) {
+                                      console.error("PayPal Create Error:", err);
+                                      toast.error("Failed to initialize PayPal: " + (err.message || "Unknown error"));
+                                      return "";
+                                  }
+                                }}
+                                onApprove={async (data, actions) => {
+                                  try {
+                                      const { error } = await supabase.functions.invoke('paypal-complete-order', {
+                                        body: {
+                                          orderId: data.orderID,
+                                          userId: user?.id,
+                                          packageId: selectedPackage.id
+                                        }
+                                      });
+                                      if (error) throw error;
+                                      toast.success(`Successfully purchased ${selectedPackage.coins.toLocaleString()} coins!`);
+                                      setShowPayPal(false);
+                                      refreshCoins();
+                                  } catch (err) {
+                                      console.error("PayPal Capture Error:", err);
+                                      toast.error("Payment verification failed. Please contact support.");
+                                  }
+                                }}
+                                onCancel={() => setShowPayPal(false)}
+                                onError={(err) => {
+                                    console.error("PayPal Error:", err);
+                                    toast.error("PayPal encountered an error");
+                                    setShowPayPal(false);
+                                }}
+                            />
+                        </PayPalScriptProvider>
+                     </div>
+                   </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {coinPackages.map((pkg) => {
+                      // Parse the USD price
+                      const priceMatch = pkg.price.match(/\$(\d+\.?\d*)/);
+                      const originalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
+                      const discountedPrice = isEmployee ? originalPrice * (1 - EMPLOYEE_COIN_DISCOUNT) : originalPrice;
+                      
+                      return (
+                        <div key={pkg.id} className={`bg-black/40 p-4 rounded-lg border ${pkg.promo ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : (pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20')} relative overflow-hidden group ${isEmployee ? 'border-green-500/30' : ''}`}>
+                          {isEmployee && (
+                            <div className="absolute top-3 left-3 bg-green-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                              1.5% OFF
+                            </div>
+                          )}
+                          {(pkg.popular || pkg.bestValue || pkg.promo) && !isEmployee && (
+                            <div className={`absolute top-3 right-3 ${pkg.promo ? 'bg-green-500' : 'bg-yellow-500'} text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider`}>
+                              {pkg.promo ? 'Limited Offer' : (pkg.popular ? 'Popular' : 'Best Value')}
+                            </div>
+                          )}
+                          <div className="flex flex-col items-center text-center p-2">
+                            <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
+                            <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
+                            {isEmployee ? (
+                              <div className="mb-1">
+                                <span className="text-lg font-semibold text-gray-400 line-through">{pkg.price}</span>
+                                <span className="text-lg font-semibold text-green-400 ml-2">${discountedPrice.toFixed(2)}</span>
+                              </div>
+                            ) : (
+                              <div className="text-lg font-semibold text-green-400 mb-1">{pkg.price}</div>
+                            )}
+                            <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
+                            
+                            <button
+                              onClick={() => {
+                                const purchasePkg = isEmployee ? { ...pkg, price: `${discountedPrice.toFixed(2)}` } : pkg;
+                                handleManualPurchase(purchasePkg);
+                              }}
+                              className={`w-full py-2 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${isEmployee ? 'bg-green-600 hover:bg-green-500' : (MANUAL_PROVIDERS.find(p => p.id === selectedProviderId)?.color || 'bg-purple-600')} hover:brightness-110`}
+                            >
+                              Buy with {MANUAL_PROVIDERS.find(p => p.id === selectedProviderId)?.name}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-              </>
+              )}
+            </>
             )}
 
             {/* Entrance Effects */}
@@ -1655,48 +1779,69 @@ export default function CoinStore() {
                   <ShoppingCart className="w-5 h-5 text-purple-400" />
                   Call Minutes
                 </h2>
+                {isEmployee && (
+                  <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-3">
+                    <span className="text-2xl">🎉</span>
+                    <div>
+                      <div className="font-bold text-green-400">Employee Discount Applied</div>
+                      <div className="text-sm text-gray-300">Secretaries, Lead Troll Officers, and Troll Officers get <span className="font-bold text-green-400">50% OFF</span> all call minutes!</div>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                    <div>
                      <h3 className="text-lg font-semibold mb-3 text-blue-300">Audio Calls</h3>
                      <div className="space-y-3">
-                       {callPackages.audio.map(pkg => (
-                         <div key={pkg.id} className="flex justify-between items-center bg-black/30 p-3 rounded border border-white/10">
-                           <div>
-                             <div className="font-medium">{pkg.name}</div>
-                             <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
+                       {callPackages.audio.map(pkg => {
+                         const discountedPrice = isEmployee ? Math.round(pkg.totalCost * (1 - EMPLOYEE_CALL_DISCOUNT)) : pkg.totalCost;
+                         return (
+                           <div key={pkg.id} className={`flex justify-between items-center bg-black/30 p-3 rounded border ${isEmployee ? 'border-green-500/30' : 'border-white/10'}`}>
+                             <div>
+                               <div className="font-medium">{pkg.name}</div>
+                               <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
+                               {isEmployee && (
+                                 <div className="text-xs text-green-400 font-medium">Employee: {formatCoins(discountedPrice)}</div>
+                               )}
+                             </div>
+                             <button
+                               onClick={() => buyCallMinutes({...pkg, type: 'audio', totalCost: discountedPrice})}
+                               disabled={loadingPackage === pkg.id}
+                               className={`px-3 py-1 rounded text-xs flex items-center gap-2 ${isEmployee ? 'bg-green-600 hover:bg-green-500' : 'bg-zinc-700 hover:bg-zinc-600'}`}
+                             >
+                               <span className={isEmployee ? 'text-white' : 'text-yellow-400'}>{formatCoins(isEmployee ? discountedPrice : pkg.totalCost)}</span>
+                               {loadingPackage === pkg.id ? '...' : 'Buy'}
+                             </button>
                            </div>
-                           <button
-                             onClick={() => buyCallMinutes({...pkg, type: 'audio'})}
-                             disabled={loadingPackage === pkg.id}
-                             className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs flex items-center gap-2"
-                           >
-                             <span className="text-yellow-400">{formatCoins(pkg.totalCost)}</span>
-                             {loadingPackage === pkg.id ? '...' : 'Buy'}
-                           </button>
-                         </div>
-                       ))}
+                         );
+                       })}
                      </div>
                    </div>
                    
                    <div>
                      <h3 className="text-lg font-semibold mb-3 text-pink-300">Video Calls</h3>
                      <div className="space-y-3">
-                       {callPackages.video.map(pkg => (
-                         <div key={pkg.id} className="flex justify-between items-center bg-black/30 p-3 rounded border border-white/10">
-                           <div>
-                             <div className="font-medium">{pkg.name}</div>
-                             <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
+                       {callPackages.video.map(pkg => {
+                         const discountedPrice = isEmployee ? Math.round(pkg.totalCost * (1 - EMPLOYEE_CALL_DISCOUNT)) : pkg.totalCost;
+                         return (
+                           <div key={pkg.id} className={`flex justify-between items-center bg-black/30 p-3 rounded border ${isEmployee ? 'border-green-500/30' : 'border-white/10'}`}>
+                             <div>
+                               <div className="font-medium">{pkg.name}</div>
+                               <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
+                               {isEmployee && (
+                                 <div className="text-xs text-green-400 font-medium">Employee: {formatCoins(discountedPrice)}</div>
+                               )}
+                             </div>
+                             <button
+                               onClick={() => buyCallMinutes({...pkg, type: 'video', totalCost: discountedPrice})}
+                               disabled={loadingPackage === pkg.id}
+                               className={`px-3 py-1 rounded text-xs flex items-center gap-2 ${isEmployee ? 'bg-green-600 hover:bg-green-500' : 'bg-zinc-700 hover:bg-zinc-600'}`}
+                             >
+                               <span className={isEmployee ? 'text-white' : 'text-yellow-400'}>{formatCoins(isEmployee ? discountedPrice : pkg.totalCost)}</span>
+                               {loadingPackage === pkg.id ? '...' : 'Buy'}
+                             </button>
                            </div>
-                           <button
-                             onClick={() => buyCallMinutes({...pkg, type: 'video'})}
-                             disabled={loadingPackage === pkg.id}
-                             className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs flex items-center gap-2"
-                           >
-                             <span className="text-yellow-400">{formatCoins(pkg.totalCost)}</span>
-                             {loadingPackage === pkg.id ? '...' : 'Buy'}
-                           </button>
-                         </div>
-                       ))}
+                         );
+                       })}
                      </div>
                    </div>
                 </div>

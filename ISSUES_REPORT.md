@@ -1,10 +1,39 @@
 # 🔍 Application Issues Report
-**Generated:** November 26, 2025  
-**Status:** All critical issues resolved ✅
+**Last Updated:** February 9, 2026
+**Status:** ⚠️ Performance Issues Detected
 
 ---
 
-## ✅ RESOLVED ISSUES
+## 🚨 NEW CRITICAL FINDINGS (Feb 9, 2026)
+
+### 1. Performance & Correctness Pass
+- **Scope**: All application routes (40+)
+- **Tool**: Playwright (Headless Chromium) & Protocol Load Test
+
+#### A. Resource Exhaustion (`net::ERR_INSUFFICIENT_RESOURCES`)
+- **Symptoms**: After visiting ~20-30 pages rapidly, the browser fails to load subsequent resources.
+- **Cause**: Connection leaks. Components are likely opening Supabase Realtime channels or `fetch` requests without properly canceling them on unmount.
+- **Impact**: Users browsing quickly will eventually see broken images/data or a white screen.
+
+#### B. "4 Users Crash" Investigation
+- **Observation**: User reports crashes with as few as 4 concurrent users.
+- **Root Causes**:
+    1. **Broadcast Storm**: `GlobalPresenceTracker` and `BroadcastPage` both listen to global events. Every presence update triggers a DB write (`heartbeat_presence`), which triggers a Realtime broadcast, causing a re-render loop (O(N^2) traffic).
+    2. **Viewer Limit Logic**: `BroadcastLimitEnforcer` hard-codes a limit of 10 viewers. It force-navigates users away, appearing as a crash.
+
+#### C. Specific Route Failures
+- **`/cityhall` & `/living`**: Consistently fail with `TypeError: Failed to fetch`. Likely due to `usePresidentSystem` failing under load.
+- **`trackIP` Failure**: The IP tracking logic in `App.tsx` fails on almost every page load during testing.
+
+### Recommendations
+1. **Debounce Presence Updates**: Ensure `heartbeat_presence` is not called more than once per minute per user.
+2. **Optimize Subscriptions**: Verify `supabase.removeChannel()` is called in *every* `useEffect` cleanup.
+3. **Fix IP Tracking**: Wrap `trackIP` in a try/catch or remove if unnecessary for every page load.
+
+---
+
+## ✅ RESOLVED ISSUES (Archive)
+**Generated:** November 26, 2025
 
 ### 1. **Orphaned Auth User** ✅ FIXED
 - **Issue:** User `udryve2025@gmail.com` existed in auth but not in database

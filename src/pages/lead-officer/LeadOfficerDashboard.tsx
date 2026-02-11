@@ -11,6 +11,7 @@ import WeeklyReportsList from '../../components/WeeklyReportsList'
 import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
 import TimeOffRequestsList from './TimeOffRequestsList'
+
 import '../../styles/LeadOfficerDashboard.css'
 
 import { InterviewSchedulerModal } from '../../components/admin/InterviewSchedulerModal'
@@ -57,7 +58,7 @@ type AutoClockoutSession = {
 
 
 
-export function LeadOfficerDashboard() {
+export default function LeadOfficerDashboard() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
   const [applicants, setApplicants] = useState<Applicant[]>([])
@@ -651,6 +652,15 @@ export function LeadOfficerDashboard() {
 
       {activeTab === 'hr' && (
         <div className="space-y-8">
+          {/* Personnel Management */}
+          <section className="rounded-2xl border border-purple-800 bg-black/40 p-6">
+            <h2 className="text-xl font-semibold text-purple-200 mb-4 flex items-center gap-2">
+              <User className="w-5 h-5" />
+              Personnel Management
+            </h2>
+            
+          </section>
+
           {/* Time Off Requests */}
           <section className="rounded-2xl border border-orange-800 bg-black/40 p-6">
             <TimeOffRequestsList />

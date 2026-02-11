@@ -2,7 +2,7 @@
 -- Description: Implements atomic seat reservation, paid seats, kick grace period, and court lawsuits.
 
 -- Ensure btree_gist extension exists for EXCLUDE constraints
-CREATE EXTENSION IF NOT EXISTS btree_gist;
+-- CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- 1. Create stream_seat_sessions table (The "Ledger" for seats)
 CREATE TABLE IF NOT EXISTS public.stream_seat_sessions (

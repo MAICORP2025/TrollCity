@@ -193,9 +193,8 @@ export default function Career() {
 
           if (error) throw error
           setApplications(data || [])
-        } 
-        else if (activeTab === 'all_applications' && isAdminOrLead) {
-          const { data, error } = await supabase
+        } else if (activeTab === 'all_applications' && isAdminOrLead) {
+            const { data, error } = await supabase
             .from('applications')
             .select(`
               id,
@@ -203,13 +202,14 @@ export default function Career() {
               status,
               created_at,
               reviewed_at,
+              answers,
               user:user_profiles!applications_user_id_fkey (
                 username,
-                full_name
+                full_name,
+                avatar_url
               )
             `)
             .order('created_at', { ascending: false })
-            .limit(50)
 
           if (error) throw error
           setApplications(data || [])
@@ -265,41 +265,7 @@ export default function Career() {
     fetchInterviews()
   }, [isAdminOrLead])
 
-  // Fetch ALL applications for admin/lead
-  useEffect(() => {
-    const fetchAllApplications = async () => {
-      if (!isAdminOrLead || activeTab !== 'all_applications') return
 
-      try {
-        setLoading(true)
-        const { data, error } = await supabase
-          .from('applications')
-          .select(`
-            id,
-            type,
-            status,
-            created_at,
-            reviewed_at,
-            answers,
-            user:user_profiles!applications_user_id_fkey (
-              username,
-              full_name,
-              avatar_url
-            )
-          `)
-          .order('created_at', { ascending: false })
-
-        if (error) throw error
-        setApplications(data || [])
-      } catch (error) {
-        console.error('Error fetching all applications:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchAllApplications()
-  }, [isAdminOrLead, activeTab])
 
   const handleApply = (position: JobPosition) => {
     if (!user) {
@@ -627,7 +593,7 @@ export default function Career() {
 
         {activeTab === 'all_applications' && isAdminOrLead && (
           <div className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] overflow-hidden">
-            {allApplications.length === 0 ? (
+            {applications.length === 0 ? (
               <div className="p-12 text-center">
                 <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-white mb-2">No Applications Found</h3>
@@ -635,7 +601,7 @@ export default function Career() {
               </div>
             ) : (
               <div className="divide-y divide-[#2C2C2C]">
-                {allApplications.map((app) => {
+                {applications.map((app) => {
                   const position = jobPositions.find(p => p.id === app.type)
                   return (
                     <div key={app.id} className="p-6 flex items-center justify-between hover:bg-[#252525] transition-colors">

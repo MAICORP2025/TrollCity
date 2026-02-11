@@ -10,6 +10,20 @@ export default function GlobalPresenceTracker() {
   useEffect(() => {
     if (!user?.id) return;
 
+    // Initial heartbeat
+    const sendHeartbeat = async () => {
+      try {
+        await supabase.rpc('heartbeat_presence');
+      } catch (err) {
+        console.error('Heartbeat failed:', err);
+      }
+    };
+
+    sendHeartbeat();
+
+    // Heartbeat every 30 seconds
+    const interval = setInterval(sendHeartbeat, 30000);
+
     const channel = supabase.channel('global_online_users', {
       config: {
         presence: {
@@ -35,6 +49,7 @@ export default function GlobalPresenceTracker() {
       });
 
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [user?.id, setOnlineCount, setOnlineUserIds]);

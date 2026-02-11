@@ -5,8 +5,23 @@ import { getEntranceEffectConfig, getRoleBasedEffectConfig, type EntranceEffectK
 
 /**
  * Main entrance animation trigger
+ * 
+ * Requirements:
+ * - Only trigger inside broadcast/watch page/component
+ * - Guard against triggering outside broadcast context
  */
 export async function playEntranceAnimation(userId: string, effectKey: string, targetElement?: HTMLElement) {
+  // Guard: Prevent effects outside of broadcast/stream context
+  if (typeof window !== 'undefined') {
+    const isBroadcast = window.location.pathname.includes('/broadcast/') ||
+                        window.location.pathname.includes('/watch/') ||
+                        window.location.pathname.includes('/stream/');
+    if (!isBroadcast) {
+      console.log(`[EntranceAnimation] Not triggering - not on broadcast page: ${window.location.pathname}`);
+      return;
+    }
+  }
+  
   // Try role-based effect first
   let effectConfig = getRoleBasedEffectConfig(effectKey);
 
@@ -78,11 +93,23 @@ export async function playEntranceAnimation(userId: string, effectKey: string, t
 
 /**
  * Play sound effect for entrance
+ * Fixes 416 Range errors by:
+ * - Not setting currentTime until metadata is loaded
+ * - Making play idempotent (only play once)
+ * - Properly cleaning up resources
  */
 async function playSoundEffect(soundKey: string) {
   const soundUrl = `/sounds/entrance/${soundKey}.mp3`;
+  
   try {
-    const response = await fetch(soundUrl);
+    // Fetch the audio file
+    const response = await fetch(soundUrl, {
+      method: 'GET',
+      headers: {
+        'Range': 'bytes=0-' // Request full file, not partial ranges
+      }
+    });
+    
     if (!response.ok) {
       console.log(`Sound file not found (${response.status}): ${soundUrl}`);
       return;
@@ -96,13 +123,47 @@ async function playSoundEffect(soundKey: string) {
 
     const objectUrl = URL.createObjectURL(blob);
     const audio = new Audio(objectUrl);
-    audio.volume = 0.6;
-    audio.addEventListener('ended', () => URL.revokeObjectURL(objectUrl));
-
-    audio.play().catch(err => {
-      console.log('Audio play failed (likely user interaction required):', err);
+    
+    // Track if we've already attempted to play
+    let hasPlayed = false;
+    
+    const playAudio = () => {
+      if (hasPlayed) return; // Idempotent: only play once
+      hasPlayed = true;
+      
+      audio.volume = 0.6;
+      
+      // Only play after metadata is loaded
+      if (audio.readyState >= 1) { // HAVE_METADATA = 1
+        audio.play().catch(err => {
+          console.log('Audio play failed (likely user interaction required):', err);
+          URL.revokeObjectURL(objectUrl);
+        });
+      } else {
+        // Wait for metadata before playing
+        audio.addEventListener('canplay', () => {
+          audio.play().catch(err => {
+            console.log('Audio play failed:', err);
+            URL.revokeObjectURL(objectUrl);
+          });
+        }, { once: true });
+      }
+    };
+    
+    // Clean up on end
+    audio.addEventListener('ended', () => {
       URL.revokeObjectURL(objectUrl);
     });
+    
+    // Also clean up on error
+    audio.addEventListener('error', () => {
+      console.log(`Audio error for ${soundUrl}`);
+      URL.revokeObjectURL(objectUrl);
+    }, { once: true });
+    
+    // Attempt to play
+    playAudio();
+    
   } catch (err) {
     console.log('Sound effect failed:', err);
   }

@@ -82,6 +82,7 @@ export async function hasProtection(userId: string, protectionType: ProtectionTy
   );
 }
 
+
 /**
  * Purchase insurance plan
  */

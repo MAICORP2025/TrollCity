@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { PreflightStore } from '../lib/preflightStore';
 
 // Simple in-memory cache + in-flight dedupe to avoid repeated token fetches
 type CachedToken = {
@@ -201,10 +202,8 @@ export function useLiveKitToken({
                 streamId, // Guest endpoint expects streamId sometimes
                 identity: userId,
                 user_id: userId,
-                // FORCE ADMIN ROLE to bypass server-side role checks if we need to publish
-                role: role || ((isHost || canPublish) ? 'admin' : 'viewer'),
-                allowPublish: canPublish,
-                canPublish: canPublish,
+                // Role is determined server-side now for security
+                // allowPublish: canPublish, // (Ignored by server now too, but keeping for legacy compat if needed)
                 }),
                 signal: controller.signal
             });

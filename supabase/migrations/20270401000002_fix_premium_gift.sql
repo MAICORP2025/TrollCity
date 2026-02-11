@@ -50,7 +50,8 @@ BEGIN
     v_receiver_credit := FLOOR(v_total_cost * 0.95);
     IF v_receiver_credit > 0 THEN
         UPDATE public.user_profiles 
-        SET troll_coins = troll_coins + v_receiver_credit 
+        SET troll_coins = troll_coins + v_receiver_credit,
+            updated_at = now()  -- IMPORTANT: Trigger real-time updates
         WHERE id = p_receiver_id;
         
         -- Log receiver credit
@@ -63,7 +64,8 @@ BEGIN
         v_cashback := FLOOR(v_total_cost * 0.05);
         IF v_cashback > 0 THEN
             UPDATE public.user_profiles 
-            SET troll_coins = troll_coins + v_cashback 
+            SET troll_coins = troll_coins + v_cashback,
+                updated_at = now()  -- IMPORTANT: Trigger real-time updates
             WHERE id = p_sender_id;
             
             v_sender_balance := v_sender_balance + v_cashback;

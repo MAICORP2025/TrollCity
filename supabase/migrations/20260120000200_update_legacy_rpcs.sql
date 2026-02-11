@@ -1,6 +1,7 @@
 -- Update legacy RPCs to use Troll Bank pipeline
 
 -- 1. Update add_troll_coins (Used by Square, PayPal, admin tools)
+DROP FUNCTION IF EXISTS public.add_troll_coins(uuid, integer);
 CREATE OR REPLACE FUNCTION public.add_troll_coins(
     user_id_input uuid,
     coins_to_add integer
@@ -25,6 +26,7 @@ END;
 $$;
 
 -- 2. Update add_free_coins (Used by TrollSurprise, TrollWalking, etc.)
+DROP FUNCTION IF EXISTS public.add_free_coins(uuid, integer);
 CREATE OR REPLACE FUNCTION public.add_free_coins(
     p_user_id uuid,
     p_amount integer

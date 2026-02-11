@@ -64,14 +64,10 @@ export default function BroadcastLockdownControl() {
     const newState = !locked;
 
     try {
-      // We use upsert to handle case where setting doesn't exist yet
-      const { error } = await supabase
-        .from('admin_settings')
-        .upsert({
-          setting_key: 'broadcast_lockdown_enabled',
-          setting_value: { enabled: newState },
-          description: 'Controls whether only admin can broadcast or everyone can'
-        }, { onConflict: 'setting_key' });
+      // Use Secure RPC for admin action
+      const { error } = await supabase.rpc('admin_toggle_broadcast_lockdown', {
+        p_enabled: newState
+      });
 
       if (error) throw error;
 

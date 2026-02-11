@@ -3,6 +3,7 @@ import { X, Minus, Check, CheckCheck } from 'lucide-react'
 import { supabase, createConversation, getConversationMessages, markConversationRead } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { useChatStore } from '../lib/chatStore'
+import { usePresenceStore } from '../lib/presenceStore'
 import UserNameWithAge from './UserNameWithAge'
 import MessageInput from '../pages/tcps/components/MessageInput'
 import { toast } from 'sonner'
@@ -25,6 +26,7 @@ interface Message {
 export default function ChatBubble() {
   const { user, profile } = useAuthStore()
   const { isOpen, activeUserId, activeUsername, activeUserAvatar, closeChatBubble } = useChatStore()
+  const { onlineUserIds } = usePresenceStore()
   
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -48,7 +50,16 @@ export default function ChatBubble() {
   useEffect(() => {
     if (!isOpen || !user?.id || !activeUserId) return
 
+    let mounted = true
+    const currentActiveUserId = activeUserId
+
     const initChat = async () => {
+      // Reset conversation ID and messages when switching users
+      if (actualConversationId !== null) {
+        setActualConversationId(null)
+        setMessages([])
+      }
+      
       // Fetch active user's created_at
       if (activeUserId) {
         supabase
@@ -57,7 +68,7 @@ export default function ChatBubble() {
           .eq('id', activeUserId)
           .single()
           .then(({ data }) => {
-            if (data) {
+            if (mounted && data) {
                 setActiveUserCreatedAt(data.created_at)
                 setActiveUserGlowingColor(data.glowing_username_color)
             }
@@ -85,7 +96,8 @@ export default function ChatBubble() {
          if (shared) {
            targetConvId = shared.conversation_id
          } else {
-           // Create new conversation
+           // Create new conversation only if still for the same user
+           if (currentActiveUserId !== activeUserId) return
            try {
               const newConv = await createConversation([activeUserId])
               targetConvId = newConv.id
@@ -97,10 +109,16 @@ export default function ChatBubble() {
          }
       }
 
-      setActualConversationId(targetConvId)
+      if (mounted) {
+        setActualConversationId(targetConvId)
+      }
     }
 
     initChat()
+    
+    return () => {
+      mounted = false
+    }
   }, [isOpen, activeUserId, user?.id])
 
   const scrollToBottom = useCallback(() => {
@@ -186,30 +204,30 @@ export default function ChatBubble() {
              avatar_url: null,
              rgb_username_expires_at: null,
              glowing_username_color: null
-          }
-          
-          if (newMsgRaw.sender_id === user?.id) {
-             senderInfo = {
-               username: profile?.username || 'You',
-               avatar_url: profile?.avatar_url || null,
-               rgb_username_expires_at: profile?.rgb_username_expires_at || null,
-               glowing_username_color: profile?.glowing_username_color || null
-             }
-          } else if (newMsgRaw.sender_id === activeUserId) {
-             // Optimization: Use active chat store data if available
-             senderInfo = {
-               username: activeUsername || 'Unknown',
-               avatar_url: activeUserAvatar || null,
-               rgb_username_expires_at: null, // Store might not have this, but it's better than a fetch
-               glowing_username_color: activeUserGlowingColor || null
-             }
-             
-             // Optional: Background refresh if we really need updated data (e.g. RGB)
-             // But for chat bubble speed, this is sufficient.
-          } else {
-             const { data } = await supabase.from('user_profiles').select('username,avatar_url,rgb_username_expires_at,glowing_username_color,created_at').eq('id', newMsgRaw.sender_id).single()
-             if (data) senderInfo = data as any
-          }
+           }
+           
+           if (newMsgRaw.sender_id === user?.id) {
+              senderInfo = {
+                username: profile?.username || 'You',
+                avatar_url: profile?.avatar_url || null,
+                rgb_username_expires_at: profile?.rgb_username_expires_at || null,
+                glowing_username_color: profile?.glowing_username_color || null
+              }
+           } else if (newMsgRaw.sender_id === activeUserId) {
+              // Optimization: Use active chat store data if available
+              senderInfo = {
+                username: activeUsername || 'Unknown',
+                avatar_url: activeUserAvatar || null,
+                rgb_username_expires_at: null, // Store might not have this, but it's better than a fetch
+                glowing_username_color: activeUserGlowingColor || null
+              }
+              
+              // Optional: Background refresh if we really need updated data (e.g. RGB)
+              // But for chat bubble speed, this is sufficient.
+           } else {
+              const { data } = await supabase.from('user_profiles').select('username,avatar_url,rgb_username_expires_at,glowing_username_color,created_at').eq('id', newMsgRaw.sender_id).single()
+              if (data) senderInfo = data as any
+           }
 
           const newMsg: Message = {
             id: newMsgRaw.id,
@@ -349,7 +367,7 @@ export default function ChatBubble() {
               alt={activeUsername || ''}
               className="w-10 h-10 rounded-full border-2 border-white/20"
             />
-            <div className="absolute -bottom-1 -right-1 bg-green-500 w-3 h-3 rounded-full border-2 border-purple-600" />
+            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-purple-600 ${activeUserId && onlineUserIds.includes(activeUserId) ? 'bg-green-500' : 'bg-gray-500'}`} />
           </div>
         </button>
       </div>
@@ -369,7 +387,7 @@ export default function ChatBubble() {
               alt={activeUsername || ''}
               className="w-8 h-8 rounded-full border border-purple-500/20"
             />
-            <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#1F1F2E]" />
+                         <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#1F1F2E] ${activeUserId && onlineUserIds.includes(activeUserId) ? 'bg-green-500' : 'bg-gray-500'}`} />
           </div>
           <div>
             {activeUsername && (
@@ -381,9 +399,18 @@ export default function ChatBubble() {
                 className="font-bold text-white hover:text-purple-400 transition-colors text-sm"
               />
             )}
-            <div className="text-[10px] text-green-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-              Online
+            <div className="text-[10px] flex items-center gap-1">
+              {activeUserId && onlineUserIds.includes(activeUserId) ? (
+                <>
+                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                  <span className="text-green-400">Online</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-1.5 h-1.5 bg-gray-500 rounded-full" />
+                  <span className="text-gray-500">Offline</span>
+                </>
+              )}
             </div>
           </div>
         </div>

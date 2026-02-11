@@ -25,6 +25,10 @@ interface PurchasableItem {
   is_active: boolean;
   frontend_source: string;
   transaction_count?: number; // Joined later if needed
+  units_sold?: number;
+  total_usd_earned?: number;
+  total_coins_earned?: number;
+  last_purchased_at?: string;
 }
 
 interface RevenueStat {

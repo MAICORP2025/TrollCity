@@ -57,7 +57,7 @@ BEGIN
   -- 4. Credit Receiver (95% share)
   UPDATE user_profiles
   SET troll_coins = troll_coins + FLOOR(v_cost * 0.95),
-      total_coins_earned = COALESCE(total_coins_earned, 0) + FLOOR(v_cost * 0.95)
+      total_earned_coins = COALESCE(total_earned_coins, 0) + FLOOR(v_cost * 0.95)
   WHERE id = p_receiver_id;
 
   -- 5. Apply Status

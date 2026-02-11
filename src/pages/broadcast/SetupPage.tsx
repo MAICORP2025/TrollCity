@@ -122,12 +122,17 @@ export default function SetupPage() {
   useEffect(() => {
     if (timeRemaining === null || timeRemaining <= 0) return;
     
-    const timer = setInterval(async () => {
+    const timer = setInterval(() => {
       setTimeRemaining(prev => {
         if (prev === null || prev <= 1) {
           // Time is up - re-fetch profile to check if restriction is lifted
           return 0;
         }
+        // Update the displayed waitTime in real-time
+        setRestrictionCheck(prevCheck => prevCheck ? {
+          ...prevCheck,
+          waitTime: formatTime(prev - 1)
+        } : prevCheck);
         return prev - 1;
       });
     }, 1000);

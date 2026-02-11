@@ -203,17 +203,6 @@ export const LiveKitProvider = ({ children }: { children: React.ReactNode }) => 
               return next;
             });
 
-            if (!participant.isLocal && participant.identity) {
-              try {
-                const { triggerUserEntranceEffect } = await import(
-                  "../lib/entranceEffects"
-                );
-                await triggerUserEntranceEffect(participant.identity);
-              } catch (err) {
-                console.warn("Failed to trigger entrance effect:", err);
-              }
-            }
-
             options.onParticipantJoined?.(participant);
           },
 

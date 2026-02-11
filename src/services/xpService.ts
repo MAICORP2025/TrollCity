@@ -17,6 +17,12 @@ export const xpService = {
       return { success: false, error: 'Missing userId' };
     }
 
+    // Skip XP grants for guest IDs (non-UUID format like TC-XXXX)
+    if (userId.startsWith('TC-')) {
+      console.log('[xpService] Guest user detected, skipping XP grant');
+      return { success: true, data: { message: 'Guest skipped' } };
+    }
+
     if (!supabase) {
         console.error('[xpService] CRITICAL: Supabase client is undefined');
         return { success: false, error: 'Supabase client not initialized' };

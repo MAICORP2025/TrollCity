@@ -1,18 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Stream, ChatMessage } from '../../types/broadcast';
-import TopLiveBar from './TopLiveBar';
-import FloatingActionCluster from './FloatingActionCluster';
-import ChatBottomSheet from './ChatBottomSheet';
-import MoreControlsDrawer from './MoreControlsDrawer';
-import ParticipantStrip from './ParticipantStrip';
+import { useMobileLayout, useSafeAreaHeight } from '../../hooks/useMobileLayout.ts';
+import { cn } from '../../lib/utils';
 import { SeatSession } from '../../hooks/useStreamSeats';
+import TopLiveBar from './TopLiveBar';
+import ChatBottomSheet from './ChatBottomSheet';
+import GiftTray from './GiftTray';
+import ParticipantStrip from './ParticipantStrip';
+import BroadcastControls from './BroadcastControls';
+import FloatingActionCluster from './FloatingActionCluster';
+import MoreControlsDrawer from './MoreControlsDrawer';
+import { MessageSquare } from 'lucide-react';
 
 interface MobileBroadcastLayoutProps {
   stream: Stream;
   isHost: boolean;
   messages: ChatMessage[];
   seats: Record<number, SeatSession>;
-  children: React.ReactNode; // The video/grid content
+  children: React.ReactNode;
   onSendMessage: (text: string) => void;
   onToggleMic: () => void;
   onToggleCamera: () => void;
@@ -21,6 +26,8 @@ interface MobileBroadcastLayoutProps {
   onJoinSeat: (index: number) => void;
   hostGlowingColor?: string;
   onShare?: () => void;
+  isMicEnabled?: boolean;
+  isCamEnabled?: boolean;
 }
 
 export default function MobileBroadcastLayout({
@@ -36,86 +43,286 @@ export default function MobileBroadcastLayout({
   onLeave,
   onJoinSeat,
   hostGlowingColor,
-  onShare
+  onShare,
+  isMicEnabled = true,
+  isCamEnabled = true,
 }: MobileBroadcastLayoutProps) {
+  const { isMobile, safeArea } = useMobileLayout();
+  const { headerHeight, dockHeight } = useSafeAreaHeight();
+  
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isMuted, setIsMuted] = useState(false); // Local state for UI toggle simulation if needed
-  const [isCameraOff, setIsCameraOff] = useState(false);
+  // Removed local isMuted/isCameraOff state to rely on props
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isGiftOpen, setIsGiftOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [isMinimized, setIsMinimized] = useState(false);
 
-  // Handlers wrapper
-  const handleToggleMic = () => {
-      setIsMuted(!isMuted);
-      onToggleMic();
-  };
+  // Track unread messages when chat is closed
+  useEffect(() => {
+    if (!isChatOpen && messages.length > 0) {
+      setUnreadMessages((prev) => Math.min(prev + 1, 9));
+    }
+  }, [messages.length, isChatOpen]);
 
-  const handleToggleCamera = () => {
-      setIsCameraOff(!isCameraOff);
-      onToggleCamera();
-  };
+  // Clear unread when chat opens
+  useEffect(() => {
+    if (isChatOpen) {
+      setUnreadMessages(0);
+    }
+  }, [isChatOpen]);
+
+  const handleToggleMic = useCallback(() => {
+    onToggleMic();
+  }, [onToggleMic]);
+
+  const handleToggleCamera = useCallback(() => {
+    onToggleCamera();
+  }, [onToggleCamera]);
+
+  const handleLeave = useCallback(() => {
+    if (confirm(isHost ? 'End this broadcast?' : 'Leave this broadcast?')) {
+      onLeave();
+    }
+  }, [isHost, onLeave]);
+
+  const handleGift = useCallback(() => {
+    setIsGiftOpen(true);
+  }, []);
+
+  // Calculate stage height based on viewport
+  const stageHeight = `calc(100dvh - ${headerHeight}px - ${isMinimized ? '60' : dockHeight}px)`;
+
+  if (!isMobile) {
+    // Desktop layout - return original structure
+    return (
+      <div className="relative h-screen w-full bg-black overflow-hidden">
+        {children}
+        <TopLiveBar
+          stream={stream}
+          hostName={isHost ? 'You' : 'Host'}
+          hostGlowingColor={hostGlowingColor}
+          onClose={onLeave}
+          className="z-20"
+        />
+        <BroadcastControls
+          stream={stream}
+          isHost={isHost}
+          isOnStage={isHost}
+          chatOpen={isChatOpen}
+          toggleChat={() => setIsChatOpen(!isChatOpen)}
+          onGiftHost={handleGift}
+          onLeave={handleLeave}
+          onShare={onShare}
+        />
+        {isChatOpen && (
+          <ChatBottomSheet
+            messages={messages}
+            onSendMessage={onSendMessage}
+            isOpen={isChatOpen}
+          />
+        )}
+        <MoreControlsDrawer
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+          isMuted={!isMicEnabled}
+          isCameraOff={!isCamEnabled}
+          onToggleMic={handleToggleMic}
+          onToggleCamera={handleToggleCamera}
+          onFlipCamera={onFlipCamera}
+          onLeave={handleLeave}
+          isHost={isHost}
+        />
+        {isGiftOpen && (
+          <GiftTray
+            recipientId={stream.user_id}
+            streamId={stream.id}
+            onClose={() => setIsGiftOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="relative h-[100dvh] w-full bg-black overflow-hidden flex flex-col font-sans text-white">
-      
-      {/* 1. Background Video Layer */}
-      <div className="absolute inset-0 z-0">
-         {children}
+    <div 
+      className="relative h-dvh w-full bg-black overflow-hidden flex flex-col font-sans text-white"
+      style={{ 
+        paddingBottom: safeArea.bottom,
+        minHeight: '100dvh'
+      }}
+    >
+      {/* 1. Top HUD - Sticky Header */}
+      <div 
+        className="absolute top-0 left-0 right-0 z-50"
+        style={{ 
+          paddingTop: safeArea.top,
+        }}
+      >
+        <TopLiveBar
+          stream={stream}
+          hostName={isHost ? 'You' : 'Host'}
+          hostGlowingColor={hostGlowingColor}
+          onClose={handleLeave}
+          className=""
+        />
       </div>
 
-      {/* 2. Gradient Overlay for readability */}
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/40 via-transparent to-black/60 z-10" />
+      {/* 2. Stage Area - Main Video Content */}
+      <div 
+        className="relative z-10 w-full"
+        style={{ 
+          height: stageHeight,
+          marginTop: headerHeight,
+        }}
+      >
+        {/* Video Layer */}
+        <div className="absolute inset-0">
+          {children}
+        </div>
+        
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/20 via-transparent to-black/40" />
 
-      {/* 3. Top Bar */}
-      <TopLiveBar 
-        stream={stream} 
-        hostName={stream.user_id === isHost ? 'You' : 'Host'} // Replace with actual username lookup if available
-        hostGlowingColor={hostGlowingColor}
-        onClose={onLeave}
-        className="z-20"
-      />
-
-      {/* 4. Middle Area (Empty for interactions) */}
-      <div className="flex-1 relative z-20 pointer-events-none">
-         {/* Participant Strip (Guests) */}
-         <div className="absolute top-20 left-0 right-0 pointer-events-auto">
-             <ParticipantStrip seats={seats} onJoinRequest={onJoinSeat} />
-         </div>
+        {/* Participant Strip (Guests) */}
+        <div className="absolute top-4 left-0 right-0 z-20">
+          <ParticipantStrip 
+            seats={seats} 
+            onJoinRequest={onJoinSeat}
+          />
+        </div>
       </div>
 
-      {/* 5. Bottom Area */}
-      <div className="w-full z-20 flex flex-col justify-end pb-safe-bottom">
-         
-         <div className="flex items-end justify-between px-4 pb-2">
-             {/* Chat Area (Left/Center) */}
-            <div className="flex-1 mr-16 pointer-events-none">
-                <ChatBottomSheet 
-                   messages={messages} 
-                    onSendMessage={onSendMessage} 
-                    className="pointer-events-auto"
-                 />
-             </div>
+      {/* 3. Chat - Toggleable Overlay */}
+      {isChatOpen && (
+        <div className="absolute inset-0 z-40 bg-black/60" onClick={() => setIsChatOpen(false)}>
+          <div 
+            className="absolute right-0 top-0 bottom-0 bg-zinc-900 animate-slide-in-right w-80"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ChatBottomSheet
+              messages={messages}
+              onSendMessage={onSendMessage}
+              className="h-full"
+            />
+          </div>
+        </div>
+      )}
 
-             {/* Right Action Cluster */}
-             <div className="pb-4 pointer-events-auto">
-                <FloatingActionCluster 
-                    isHost={isHost}
-                    onMenu={() => setIsDrawerOpen(true)}
-                    onLike={() => {}}
-                    onGift={() => {}}
-                    onShare={onShare}
-                />
+      {/* 4. Bottom Dock - Controls */}
+      <div 
+        className={cn(
+          "absolute bottom-0 left-0 right-0 z-30",
+          isMinimized ? "pb-safe-bottom" : ""
+        )}
+        style={{ paddingBottom: safeArea.bottom }}
+      >
+        {isMinimized ? (
+          // Minimized state - just show toggle button
+          <button
+            onClick={() => setIsMinimized(false)}
+            className="w-full py-3 bg-zinc-900/90 backdrop-blur-xl border-t border-white/10 flex items-center justify-center gap-2"
+          >
+            <span className="text-xs text-white/60">Controls</span>
+            <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-white/80">Tap to expand</span>
+          </button>
+        ) : (
+          // Full controls
+          <div className="bg-gradient-to-t from-black/95 via-black/90 to-transparent pt-4 pb-2">
+            {/* Gift Tray Overlay */}
+            {isGiftOpen && (
+              <div className="absolute bottom-full left-0 right-0 pb-2" onClick={() => setIsGiftOpen(false)}>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <GiftTray
+                    recipientId={stream.user_id}
+                    streamId={stream.id}
+                    onClose={() => setIsGiftOpen(false)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Action Buttons Row */}
+            <div className="flex items-end justify-between px-4">
+              {/* Left: Chat Toggle */}
+              <button
+                onClick={() => setIsChatOpen(true)}
+                className="relative w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/10 transition-colors"
+              >
+                <MessageSquare size={20} />
+                {unreadMessages > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center">
+                    {unreadMessages > 9 ? '9+' : unreadMessages}
+                  </span>
+                )}
+              </button>
+
+              {/* Center: Floating Actions */}
+              <FloatingActionCluster
+                isHost={isHost}
+                onLike={() => {}}
+                onGift={handleGift}
+                onShare={onShare}
+                onMenu={() => setIsDrawerOpen(true)}
+              />
+
+              {/* Right: Minimize Button */}
+              <button
+                onClick={() => setIsMinimized(true)}
+                className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/60 hover:text-white transition-colors"
+              >
+                <span className="text-xs font-bold">−</span>
+              </button>
             </div>
-         </div>
+
+            {/* Primary Controls Row */}
+            <div className="flex items-center justify-center gap-4 mt-4 pb-2">
+              <button
+                onClick={handleToggleMic}
+                className={cn(
+                  "w-14 h-14 rounded-full flex items-center justify-center transition-all",
+                  isMuted 
+                    ? "bg-red-500/20 text-red-500 border border-red-500/30" 
+                    : "bg-white/10 text-white border border-white/10 hover:bg-white/20"
+                )}
+              >
+                {isMuted ? <span className="text-xl">🔇</span> : <span className="text-xl">🎤</span>}
+              </button>
+              
+              <button
+                onClick={handleToggleCamera}
+                className={cn(
+                  "w-14 h-14 rounded-full flex items-center justify-center transition-all",
+                  isCameraOff 
+                    ? "bg-red-500/20 text-red-500 border border-red-500/30" 
+                    : "bg-white/10 text-white border border-white/10 hover:bg-white/20"
+                )}
+              >
+                {isCameraOff ? <span className="text-xl">📷</span> : <span className="text-xl">📹</span>}
+              </button>
+
+              {isHost && (
+                <button
+                  onClick={handleLeave}
+                  className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg hover:bg-red-700 transition-colors"
+                >
+                  <span className="text-xl">📴</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      <MoreControlsDrawer 
+      {/* 5. More Controls Drawer Overlay */}
+      <MoreControlsDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        isMuted={isMuted}
-        isCameraOff={isCameraOff}
+        isMuted={!isMicEnabled}
+        isCameraOff={!isCamEnabled}
         onToggleMic={handleToggleMic}
         onToggleCamera={handleToggleCamera}
         onFlipCamera={onFlipCamera}
-        onLeave={onLeave}
+        onLeave={handleLeave}
         isHost={isHost}
       />
     </div>

@@ -85,7 +85,7 @@ BEGIN
         UPDATE public.user_profiles 
         SET 
             troll_coins = COALESCE(troll_coins, 0) + v_receiver_credit,
-            total_coins_earned = COALESCE(total_coins_earned, 0) + v_receiver_credit
+            total_earned_coins = COALESCE(total_earned_coins, 0) + v_receiver_credit
         WHERE id = p_receiver_id
         RETURNING troll_coins INTO v_receiver_new_balance;
         

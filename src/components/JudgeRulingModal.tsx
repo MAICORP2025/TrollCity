@@ -17,6 +17,8 @@ export default function JudgeRulingModal({ isOpen, onClose, caseData, onSuccess 
   const [awardAmount, setAwardAmount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
+  const isImpeachment = caseData?.category === 'IMPEACHMENT';
+
   if (!isOpen || !caseData) return null;
 
   const handleRuling = async () => {

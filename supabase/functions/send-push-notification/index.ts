@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3?target=deno";
+// @ts-ignore
 import webpush from "https://esm.sh/web-push@3.6.7";
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -8,6 +9,9 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@trollcity.app";
+// OneSignal Configuration (FREE!)
+const ONESIGNAL_APP_ID = Deno.env.get("ONESIGNAL_APP_ID") ?? "5eec8cd7-849b-4e7c-b143-d6e2bf50c39a";
+const ONESIGNAL_REST_API_KEY = Deno.env.get("ONESIGNAL_REST_API_KEY") ?? "";
 
 interface PushRequest {
   user_id: string;
@@ -19,247 +23,186 @@ interface PushRequest {
   image?: string;
   tag?: string;
   data?: Record<string, unknown>;
+  priority?: string;
 }
 
-interface UserFollow {
-  follower_id: string;
-}
-
-interface ConversationMember {
-  user_id: string;
-}
-
+interface UserFollow { follower_id: string; }
+interface ConversationMember { user_id: string; }
 interface WebPushSubscription {
   endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
+  keys: { p256dh: string; auth: string; };
   user_id: string;
   is_active: boolean;
 }
 
-Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { 
-      status: 200, 
+// Send push via OneSignal REST API
+async function sendOneSignalPush(
+  playerIds: string[],
+  title: string,
+  body: string,
+  url?: string,
+  data?: Record<string, unknown>
+): Promise<{ success: number; failed: number }> {
+  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) {
+    console.log("OneSignal not configured - skipping");
+    return { success: 0, failed: 0 };
+  }
+
+  try {
+    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
       headers: {
-        ...corsHeaders,
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with, accept, origin, content-length",
-      }
+        "Authorization": `Basic ${ONESIGNAL_REST_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        app_id: ONESIGNAL_APP_ID,
+        include_player_ids: playerIds,
+        headings: { en: title },
+        contents: { en: body },
+        url: url || "https://trollcity.app",
+        data: data || {},
+        ttl: 86400,
+        priority: 10,
+      }),
     });
+
+    const result = await response.json();
+    if (result.id) {
+      return { success: playerIds.length, failed: 0 };
+    }
+    console.error("OneSignal error:", result);
+    return { success: 0, failed: playerIds.length };
+  } catch (error) {
+    console.error("OneSignal request error:", error);
+    return { success: 0, failed: playerIds.length };
+  }
+}
+
+async function isUserOnline(supabase: any, userId: string): Promise<boolean> {
+  const { data } = await supabase.from("user_presence").select("last_seen_at, status").eq("user_id", userId).single();
+  if (!data) return false;
+  const lastSeen = new Date(data.last_seen_at);
+  return lastSeen >= new Date(Date.now() - 90 * 1000) && data.status !== 'offline';
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: { ...corsHeaders, "Access-Control-Allow-Headers": "*" } });
   }
 
   try {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("Supabase keys not set");
-      return new Response(JSON.stringify({ error: "Server configuration error: Supabase keys missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-      console.error("VAPID keys not set");
-      return new Response(JSON.stringify({ error: "Server configuration error: VAPID keys missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Server configuration error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const bodyJson = await req.json().catch(() => ({}));
     
-    // Parse body carefully
-    let bodyJson;
-    try {
-      bodyJson = await req.json();
-    } catch (e) {
-      return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    let { user_id, user_ids, title, body, url, icon, image, data, broadcast_followers_id, conversation_id, sender_id, type } = bodyJson as any;
 
-    const { 
-      user_ids, 
-      broadcast_followers_id, 
-      conversation_id, 
-      sender_id, 
-      badge, 
-      tag, 
-      type,
-      table,
-      record 
-    } = bodyJson as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string, record?: any, table?: string };
-
-    let { 
-      user_id, 
-      title, 
-      body, 
-      url, 
-      icon, 
-      image, 
-      data, 
-      create_db_notification 
-    } = bodyJson as PushRequest & { user_ids?: string[], broadcast_followers_id?: string, conversation_id?: string, sender_id?: string, create_db_notification?: boolean, type?: string, record?: any, table?: string };
-
-    // Handle Supabase Database Webhook payload
-    if (type === 'INSERT' && table === 'notifications' && record) {
-      const record = bodyJson.record;
-      console.log("Processing Webhook for notification:", record.id);
-      
-      user_id = record.user_id;
-      title = record.title;
-      body = record.message;
-      
-      // Parse metadata if needed
-      if (record.metadata) {
-        url = record.metadata.url || record.metadata.action_url;
-        icon = record.metadata.icon;
-        image = record.metadata.image;
-        data = record.metadata;
+    // Handle webhook
+    if (bodyJson.type === 'INSERT' && bodyJson.table === 'notifications' && bodyJson.record) {
+      const rec = bodyJson.record;
+      user_id = rec.user_id;
+      title = rec.title;
+      body = rec.message;
+      if (rec.metadata) {
+        url = rec.metadata.url || rec.metadata.action_url;
+        icon = rec.metadata.icon;
+        image = rec.metadata.image;
+        data = rec.metadata;
       }
-      
-      // Prevent infinite loop: do not create another DB notification
-      create_db_notification = false;
     }
 
-    if ((!user_id && (!user_ids || user_ids.length === 0) && !broadcast_followers_id && !conversation_id) || !title || !body) {
+    if ((!user_id && (!user_ids || !user_ids.length) && !broadcast_followers_id && !conversation_id) || !title || !body) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     let targetUserIds: string[] = [];
-
-    if (user_id) {
-      targetUserIds = [user_id];
-    } else if (user_ids && user_ids.length > 0) {
-      targetUserIds = user_ids;
-    } else if (broadcast_followers_id) {
-      // Fetch followers
-      const { data: followers, error: followersError } = await supabase
-        .from("user_follows")
-        .select("follower_id")
-        .eq("following_id", broadcast_followers_id);
-      
-      if (followersError) {
-        console.error("Error fetching followers:", followersError);
-        return new Response(JSON.stringify({ error: "Database error fetching followers" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      targetUserIds = (followers as UserFollow[]).map((f: UserFollow) => f.follower_id);
+    if (user_id) targetUserIds = [user_id];
+    else if (user_ids?.length) targetUserIds = user_ids;
+    else if (broadcast_followers_id) {
+      const { data: f } = await supabase.from("user_follows").select("follower_id").eq("following_id", broadcast_followers_id);
+      targetUserIds = f?.map((x: any) => x.follower_id) || [];
     } else if (conversation_id) {
-      // Fetch conversation members
-      const { data: members, error: membersError } = await supabase
-        .from("conversation_members")
-        .select("user_id")
-        .eq("conversation_id", conversation_id);
-        
-      if (membersError) {
-        console.error("Error fetching conversation members:", membersError);
-        return new Response(JSON.stringify({ error: "Database error fetching members" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data: m } = await supabase.from("conversation_members").select("user_id").eq("conversation_id", conversation_id);
+      targetUserIds = m?.map((x: any) => x.user_id).filter((id: string) => id !== sender_id) || [];
+    }
+
+    if (!targetUserIds.length) {
+      return new Response(JSON.stringify({ message: "No targets", success: true, count: 0 }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Get tokens
+    const { data: webSubs } = await supabase.from("web_push_subscriptions").select("user_id, endpoint, keys").in("user_id", targetUserIds).eq("is_active", true);
+    const { data: oneSignalTokens } = await supabase.from("onesignal_tokens").select("user_id, token").in("user_id", targetUserIds).eq("is_active", true);
+
+    // Organize by user
+    const userData = new Map<string, { web: any[]; oneSignal: string[] }>();
+    targetUserIds.forEach(uid => userData.set(uid, { web: [], oneSignal: [] }));
+    webSubs?.forEach((s: any) => userData.get(s.user_id)?.web.push(s));
+    oneSignalTokens?.forEach((t: any) => userData.get(t.user_id)?.oneSignal.push(t.token));
+
+    const notificationData = { url, icon, badge: bodyJson.badge, image, tag: bodyJson.tag, ...data };
+    let webSent = 0, webFailed = 0, oneSignalSent = 0, oneSignalFailed = 0;
+    const offlineUsers: string[] = [];
+
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    const webPayload = JSON.stringify({ title, body, url: url ?? "/", icon: icon ?? "/icons/icon-192.png", badge: bodyJson.badge ?? "/icons/icon-72.png", image, tag: bodyJson.tag, data: notificationData });
+
+    for (const [userId, tokens] of userData) {
+      const online = await isUserOnline(supabase, userId);
+
+      // Send to OneSignal (works offline!)
+      if (tokens.oneSignal.length) {
+        const result = await sendOneSignalPush(tokens.oneSignal, title, body, url, notificationData);
+        oneSignalSent += result.success;
+        oneSignalFailed += result.failed;
       }
-      // Filter out sender if provided
-      targetUserIds = (members as ConversationMember[]).map((m: ConversationMember) => m.user_id).filter((id: string) => id !== sender_id);
-    }
 
-    if (targetUserIds.length === 0) {
-      return new Response(JSON.stringify({ message: "No targets found", success: true, count: 0 }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // Optional: Create DB notifications
-    if (create_db_notification && targetUserIds.length > 0) {
-      const notifications = targetUserIds.map(uid => ({
-        user_id: uid,
-        type: type || 'system',
-        title,
-        message: body,
-        metadata: { url }, // Simple metadata
-        is_read: false,
-        created_at: new Date().toISOString()
-      }));
-
-      const { error: insertError } = await supabase.from('notifications').insert(notifications);
-      if (insertError) {
-        console.error("Error inserting notifications:", insertError);
-        // Continue to send push even if DB insert fails
-      }
-    }
-
-    // 1. Get subscriptions for users
-    const { data: subscriptionsData, error: subError } = await supabase
-      .from("web_push_subscriptions")
-      .select("*")
-      .in("user_id", targetUserIds)
-      .eq("is_active", true);
-
-    if (subError) {
-      console.error("Error fetching subscriptions:", subError);
-      return new Response(JSON.stringify({ error: "Database error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const subscriptions = subscriptionsData as WebPushSubscription[] | null;
-
-    if (!subscriptions || subscriptions.length === 0) {
-      return new Response(JSON.stringify({ message: "No active subscriptions found", success: true, count: 0 }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // 2. Send push to all subscriptions
-    const payload = JSON.stringify({
-      title,
-      body,
-      url: url ?? "/",
-      icon: icon ?? "/icons/icon-192.png",
-      badge: badge ?? "/icons/icon-72.png",
-      image,
-      tag,
-      data
-    });
-
-    webpush.setVapidDetails(
-      VAPID_SUBJECT,
-      VAPID_PUBLIC_KEY,
-      VAPID_PRIVATE_KEY
-    );
-
-    const results = await Promise.allSettled(
-      (subscriptions || []).map(async (sub: WebPushSubscription) => {
-        try {
-          await webpush.sendNotification(
-            {
-              endpoint: sub.endpoint,
-              keys: {
-                auth: sub.keys.auth,
-                p256dh: sub.keys.p256dh,
-              },
-            },
-            payload
-          );
-          
-          return { status: "fulfilled", endpoint: sub.endpoint };
-        } catch (error: any) {
-          console.error("WebPush send error:", error);
-          if (error.statusCode === 410 || error.statusCode === 404) {
-            // Subscription is gone, delete it
-            await supabase
-              .from("web_push_subscriptions")
-              .delete()
-              .eq("endpoint", sub.endpoint);
-            return { status: "rejected", reason: "Gone", endpoint: sub.endpoint };
+      // Send to web push only if online
+      if (online && tokens.web.length) {
+        const results = await Promise.allSettled(tokens.web.map(async (sub: any) => {
+          try {
+            await webpush.sendNotification({ endpoint: sub.endpoint, keys: { auth: sub.keys.auth, p256dh: sub.keys.p256dh } }, webPayload);
+            return { status: "fulfilled" };
+          } catch (e: any) {
+            if (e.statusCode === 410 || e.statusCode === 404) {
+              await supabase.from("web_push_subscriptions").delete().eq("endpoint", sub.endpoint);
+            }
+            return { status: "rejected", reason: e.statusCode };
           }
-          throw error;
-        }
-      })
-    );
+        }));
+        webSent += results.filter(r => r.status === "fulfilled").length;
+        webFailed += results.filter(r => r.status === "rejected").length;
+      } else if (!online && tokens.web.length) {
+        offlineUsers.push(userId);
+      }
+    }
 
-    const successCount = results.filter(r => r.status === "fulfilled").length;
-    const failureCount = results.length - successCount;
-
-    return new Response(JSON.stringify({ 
-      success: true, 
-      sent: successCount, 
-      failed: failureCount,
-      total: results.length 
-    }), { 
-      status: 200, 
-      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    // Queue for users with no tokens
+    const noTokens = targetUserIds.filter(uid => {
+      const t = userData.get(uid);
+      return !t || (!t.web.length && !t.oneSignal.length);
     });
+
+    for (const uid of [...offlineUsers, ...noTokens]) {
+      await supabase.from("offline_notifications").insert({
+        user_id: uid, type: type || 'system', title, message: body, metadata: notificationData, created_at: new Date().toISOString()
+      }).catch(() => {});
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      sent: { web_push: webSent, onesignal: oneSignalSent, total: webSent + oneSignalSent },
+      failed: { web_push: webFailed, onesignal: oneSignalFailed },
+      queued: offlineUsers.length + noTokens.length,
+      source: 'onesignal'
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (e) {
-    console.error("send-push-notification fatal:", e);
-    return new Response(JSON.stringify({
-      error: "send_push_failed",
-      message: e instanceof Error ? e.message : String(e),
-    }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    console.error("Error:", e);
+    return new Response(JSON.stringify({ error: "failed", message: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

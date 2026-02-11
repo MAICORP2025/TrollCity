@@ -285,6 +285,36 @@ Deno.serve(async (req) => {
         result = { success: true };
         break;
       }
+
+      case "get_officer_chat_messages": {
+        const { limit = 50 } = params;
+        
+        // Try to fetch with explicit join
+        const { data, error } = await supabaseAdmin
+          .from('officer_chat_messages')
+          .select(`
+            *,
+            sender:user_profiles(username, role)
+          `)
+          .order('created_at', { ascending: false })
+          .limit(limit);
+
+        if (error) {
+            console.error('Error fetching chat:', error);
+            throw error;
+        }
+        
+        // Hydrate/Map if needed
+        const mapped = data.map((msg: any) => ({
+          ...msg,
+          // Handle both aliased and unaliased possibilities just in case
+          username: msg.sender?.username || msg.user_profiles?.username || 'Officer',
+          role: msg.sender?.role || msg.user_profiles?.role
+        }));
+
+        result = { messages: mapped };
+        break;
+      }
       
       case "find_opponent": {
          const { data, error } = await supabaseAdmin.rpc('find_opponent', {

@@ -221,22 +221,18 @@ serve(async (req: Request) => {
     }
 
     // ✅ FIX role matching — allow publisher as well
-    let canPublish = Boolean(allowPublish);
-    const roleParam = String(params.role || "").toLowerCase();
-
-    if (roleParam === "broadcaster" || roleParam === "publisher" || roleParam === "admin") {
+    let canPublish = false;
+    
+    // Strict role check from DB profile
+    if (profile.is_broadcaster || profile.is_admin || profile.role === 'broadcaster' || profile.role === 'admin') {
       canPublish = true;
     }
-    // if (profile?.is_broadcaster || profile?.is_admin) canPublish = true;
 
-    // ✅ FORCE CAN PUBLISH IF REQUESTED
-    if (allowPublish) canPublish = true;
+    // Guest check is handled above in the catch block (guests are denied publish)
 
     console.log("[livekit-token] params:", {
       room,
       identity,
-      roleParam,
-      allowPublish,
       canPublish,
       level,
     });
@@ -342,9 +338,7 @@ serve(async (req: Request) => {
         url: livekitUrl,
         room,
         identity: String(identity),
-        allowPublish: canPublish,
         publishAllowed: canPublish,
-        roleParam,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

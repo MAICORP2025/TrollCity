@@ -230,12 +230,8 @@ export default function KickFee() {
 
       {showCoinStore && (
         <CoinStoreModal
+          isOpen={showCoinStore}
           onClose={() => setShowCoinStore(false)}
-          onPurchase={() => {
-            refreshProfile?.();
-            // Don't close immediately, let them buy more if they want? 
-            // Or close it? Usually keep open or user closes.
-          }}
         />
       )}
     </div>

@@ -62,9 +62,6 @@ export default function DistrictNavigation() {
         { feature_name: 'Leaderboard', route_path: '/leaderboard', required_role: 'user' },
         { feature_name: 'Troll City Wall', route_path: '/wall', required_role: 'user' }
       ],
-      entertainment_district: [
-        { feature_name: 'Tromody Show', route_path: '/tromody', required_role: 'user' },
-      ],
       commerce_district: [
         { feature_name: 'Coin Store', route_path: '/store', required_role: 'user' },
         { feature_name: 'Marketplace', route_path: '/marketplace', required_role: 'user' },

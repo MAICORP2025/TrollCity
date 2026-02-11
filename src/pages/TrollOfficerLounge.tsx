@@ -4,8 +4,6 @@ import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { downloadPayrollPDF } from '../lib/officerPayrollPDF'
 import OfficerStreamGrid from '../components/officer/OfficerStreamGrid'
-import { walkieApi } from '../lib/walkie'
-import WalkieDirectory from '../components/walkie/WalkieDirectory'
 import {
   Eye,
   Ban,
@@ -22,7 +20,7 @@ import {
   ChevronDown,
   FileText,
   User,
-  Radio
+
 } from 'lucide-react'
 import { trollCityTheme } from '../styles/trollCityTheme'
 
@@ -37,11 +35,15 @@ type Stream = {
 
 type OfficerChatMessage = {
   id: string
-  user_id: string
-  message: string
+  sender_id: string
+  content: string
   created_at: string
   username?: string
   role?: string
+  sender?: {
+    username?: string
+    role?: string
+  }
 }
 
 type OfficerStats = {
@@ -119,7 +121,7 @@ export default function TrollOfficerLounge() {
   const [officerChat, setOfficerChat] = useState<OfficerChatMessage[]>([])
   const [newOfficerMessage, setNewOfficerMessage] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'moderation' | 'families' | 'calls' | 'requests'>('moderation')
+  const [activeTab, setActiveTab] = useState<'moderation' | 'families' | 'calls' | 'requests' | 'comms'>('moderation')
   const [familiesList, setFamiliesList] = useState<any[]>([])
   const [payrollReports, setPayrollReports] = useState<any[]>([])
 
@@ -305,13 +307,26 @@ export default function TrollOfficerLounge() {
   // Officer Chat - Polling
   useEffect(() => {
     const fetchChat = async () => {
-      const { data } = await supabase
-        .from('officer_chat_messages')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50)
-      if (data) {
-        setOfficerChat(data.reverse())
+      try {
+        // Direct query to bypass potential edge function issues
+        const { data, error } = await supabase
+          .from('officer_chat_messages')
+          .select('*, sender:user_profiles!sender_id(username, role)')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (error) throw error
+        
+        if (data) {
+          const mappedMessages = data.map((msg: any) => ({
+            ...msg,
+            username: msg.sender?.username || 'Officer',
+            role: msg.sender?.role
+          }))
+          setOfficerChat(mappedMessages.reverse())
+        }
+      } catch (err) {
+        console.error('Failed to fetch officer chat', err)
       }
     }
     
@@ -354,16 +369,21 @@ export default function TrollOfficerLounge() {
     if (!newOfficerMessage.trim() || !user) return
     setChatLoading(true)
     
-    const { error } = await supabase.functions.invoke('officer-actions', {
-      body: {
-        action: 'send_officer_chat',
-        message: newOfficerMessage,
-        username: profile?.username
-      }
-    })
+    // Direct insert to bypass edge function
+    const { error } = await supabase
+      .from('officer_chat_messages')
+      .insert({
+        sender_id: user.id,
+        content: newOfficerMessage.trim(),
+        priority: 'normal'
+      })
 
-    if (error) toast.error('Failed to send message')
-    else setNewOfficerMessage('')
+    if (error) {
+      console.error('Error sending message:', error)
+      toast.error('Failed to send message')
+    } else {
+      setNewOfficerMessage('')
+    }
     setChatLoading(false)
   }
 
@@ -870,22 +890,6 @@ export default function TrollOfficerLounge() {
             </div>
           )}
 
-          {activeTab === 'comms' && (
-            <div className="h-full flex flex-col">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <Radio size={20} className="text-green-500" />
-                Officer Walkie Directory
-              </h2>
-              <div className={`${trollCityTheme.backgrounds.card} rounded-xl border ${trollCityTheme.borders.glass} flex-1 overflow-hidden p-4`}>
-                <p className={`text-sm ${trollCityTheme.text.muted} mb-4`}>
-                  Select an officer to page directly. Connection is secured via LiveKit.
-                </p>
-                <div className="h-[calc(100%-3rem)]">
-                   <WalkieDirectory onPage={handlePage} />
-                </div>
-              </div>
-            </div>
-          )}
         </main>
 
         {/* RIGHT SIDEBAR - OFFICER CHAT */}
@@ -895,16 +899,25 @@ export default function TrollOfficerLounge() {
               <MessageSquare size={16} /> Officer Comms
             </h3>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {officerChat.map((msg) => (
-              <div key={msg.id} className={`${trollCityTheme.backgrounds.glass} p-3 rounded-lg border ${trollCityTheme.borders.glass}`}>
-                <div className="flex justify-between items-baseline mb-1">
-                  <span className="text-xs font-bold text-blue-400">{msg.username}</span>
-                  <span className={`text-[10px] ${trollCityTheme.text.mutedDark}`}>{new Date(msg.created_at).toLocaleTimeString()}</span>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-black/40">
+            {officerChat.length === 0 ? (
+              <div className="text-center text-gray-500 mt-10">No messages yet.</div>
+            ) : (
+              officerChat.map((msg) => (
+                <div key={msg.id} className="flex flex-col gap-1 bg-white/5 p-2 rounded-lg border border-white/10">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-blue-400 text-xs">
+                      {msg.sender?.username || msg.username || 'Officer'}
+                      {msg.sender?.role && <span className="ml-2 opacity-50 text-[10px] uppercase border border-white/20 px-1 rounded">{msg.sender.role}</span>}
+                    </span>
+                    <span className="text-[10px] text-gray-500">
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-200 break-words">{msg.content}</p>
                 </div>
-                <p className={`text-sm ${trollCityTheme.text.secondary} leading-relaxed`}>{msg.message}</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
           <div className={`p-4 ${trollCityTheme.backgrounds.glass} border-t ${trollCityTheme.borders.glass}`}>
             <div className="flex gap-2">

@@ -2,15 +2,6 @@
 class AudioManager {
   private originalVolumes: Map<HTMLMediaElement, number> = new Map();
   private isDucked: boolean = false;
-  private walkieElements: Set<HTMLMediaElement> = new Set();
-
-  registerWalkieElement(element: HTMLMediaElement) {
-    this.walkieElements.add(element);
-  }
-
-  unregisterWalkieElement(element: HTMLMediaElement) {
-    this.walkieElements.delete(element);
-  }
 
   duck() {
     if (this.isDucked) return;
@@ -20,9 +11,6 @@ class AudioManager {
     
     mediaElements.forEach((el) => {
       const mediaEl = el as HTMLMediaElement;
-      
-      // Skip walkie elements
-      if (this.walkieElements.has(mediaEl)) return;
       
       // Store original volume if not already stored (and if not muted)
       if (!this.originalVolumes.has(mediaEl)) {

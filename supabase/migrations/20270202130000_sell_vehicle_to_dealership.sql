@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.vehicles_catalog (
     armor INTEGER,
     color_from TEXT,
     color_to TEXT,
-    image_url TEXT,
+    image TEXT,
     overlay_video_url TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     CONSTRAINT vehicles_catalog_name_key UNIQUE(name),
@@ -87,7 +87,7 @@ END $$;
 -- 2. Populate vehicles_catalog with data from src/data/vehicles.ts
 -- Using ON CONFLICT to update prices if they changed
 INSERT INTO public.vehicles_catalog 
-(name, slug, tier, style, price, speed, armor, color_from, color_to, image_url, model_url, category) 
+(name, slug, tier, style, price, speed, armor, color_from, color_to, image, model_url, category) 
 VALUES
 ('Troll Compact S1', 'troll_compact_s1', 'Starter', 'Compact modern starter sedan', 5000, 40, 20, '#38bdf8', '#22c55e', '/assets/cars/troll_compact_s1.png', '/models/vehicles/troll_compact_s1.glb', 'Car'),
 ('Midline XR', 'midline_xr', 'Mid', 'Mid-size SUV / crossover', 12000, 60, 35, '#fbbf24', '#f87171', '/assets/cars/midline_xr.png', '/models/vehicles/midline_xr.glb', 'Car'),

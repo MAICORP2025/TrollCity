@@ -124,6 +124,11 @@ export class LiveKitService {
     return this.room.localParticipant.videoTrackPublications.size > 0
   }
 
+  private isAudioPublishing(): boolean {
+    if (!this.room?.localParticipant) return false
+    return this.room.localParticipant.audioTrackPublications.size > 0
+  }
+
   private hasLocalTracks(): boolean {
     return !!this.localVideoTrack || !!this.localAudioTrack
   }
@@ -1062,7 +1067,7 @@ export class LiveKitService {
       const isCurrentlyEnabled = this.room.localParticipant.isMicrophoneEnabled
       const enabled = !isCurrentlyEnabled
 
-      if (enabled && !this.isPublishing()) {
+      if (enabled && !this.isAudioPublishing()) {
         const audio = await this.captureAudioTrack()
         if (audio) {
           this.localAudioTrack = audio
@@ -1071,11 +1076,6 @@ export class LiveKitService {
       }
 
       await this.room.localParticipant.setMicrophoneEnabled(enabled)
-
-      if (!enabled && this.localAudioTrack) {
-        this.localAudioTrack.stop()
-        this.localAudioTrack = null
-      }
 
       this.updateLocalParticipantState()
       this.log(`Microphone toggled: ${isCurrentlyEnabled} -> ${enabled}`)

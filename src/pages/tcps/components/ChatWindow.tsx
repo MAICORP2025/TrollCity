@@ -55,6 +55,7 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
   
   // Refs for scroll restoration
   const prevScrollHeightRef = useRef<number>(0)
+  const prevScrollTopRef = useRef<number>(0)
   const isFetchingOlderRef = useRef(false)
 
   // Close menu on click outside
@@ -136,8 +137,17 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
 
   // Initialize or fetch conversation
   useEffect(() => {
+    let mounted = true
+    const currentOtherUserId = otherUserInfo?.id
+
     const initChat = async () => {
       if (!user?.id || !otherUserInfo?.id) return
+
+      // Reset conversation ID and messages when switching users
+      if (actualConversationId !== null && conversationId === null) {
+        setActualConversationId(null)
+        setMessages([])
+      }
 
       // If we have a direct conversationId, use it. 
       // Otherwise, try to find one or create one?
@@ -166,7 +176,8 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
            if (shared) {
              targetConvId = shared.conversation_id
            } else {
-             // Create new conversation
+             // Create new conversation only if still for the same user
+             if (currentOtherUserId !== otherUserInfo.id) return
              try {
                 const newConv = await createConversation([otherUserInfo.id])
                 targetConvId = newConv.id
@@ -179,10 +190,16 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
         }
       }
 
-      setActualConversationId(targetConvId)
+      if (mounted) {
+        setActualConversationId(targetConvId)
+      }
     }
 
     initChat()
+    
+    return () => {
+      mounted = false
+    }
   }, [conversationId, otherUserInfo?.id, user?.id])
 
   const scrollToBottom = useCallback(() => {
@@ -344,7 +361,13 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
         async (payload) => {
           const newMsgRaw = payload.new
           // Fetch sender info
-          let senderInfo = {
+          let senderInfo: {
+            username: string
+            avatar_url: string | null
+            rgb_username_expires_at: string | null
+            glowing_username_color: string | null
+            created_at?: string
+          } = {
              username: 'Unknown',
              avatar_url: null,
              rgb_username_expires_at: null,

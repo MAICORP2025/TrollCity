@@ -1,6 +1,7 @@
 -- Upgrade coins to NUMERIC(20, 2) to fix integer overflow and support decimals
 
 -- 1. Drop dependent views and triggers
+DROP MATERIALIZED VIEW IF EXISTS public.user_earnings_summary;
 DROP VIEW IF EXISTS public.economy_summary;
 DROP VIEW IF EXISTS public.earnings_view;
 DROP VIEW IF EXISTS public.monthly_earnings_breakdown;
@@ -77,6 +78,9 @@ END $$;
 
 -- 3. Update RPC functions to accept NUMERIC
 
+DROP FUNCTION IF EXISTS public.add_troll_coins(uuid, numeric);
+DROP FUNCTION IF EXISTS public.add_troll_coins(uuid, integer);
+DROP FUNCTION IF EXISTS public.add_troll_coins(uuid, bigint);
 -- add_troll_coins
 CREATE OR REPLACE FUNCTION "public"."add_troll_coins"("user_id_input" "uuid", "coins_to_add" numeric) RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
@@ -105,6 +109,9 @@ end;
 $$;
 
 -- add_paid_coins
+DROP FUNCTION IF EXISTS public.add_paid_coins(uuid, numeric);
+DROP FUNCTION IF EXISTS public.add_paid_coins(uuid, integer);
+DROP FUNCTION IF EXISTS public.add_paid_coins(uuid, bigint);
 CREATE OR REPLACE FUNCTION "public"."add_paid_coins"("user_id_input" "uuid", "coins_to_add" numeric) RETURNS "void"
     LANGUAGE "sql"
     SET "search_path" TO 'public', 'extensions'
@@ -208,6 +215,8 @@ END;
 $$;
 
 -- troll_bank_apply_for_loan (Updated to use NUMERIC)
+DROP FUNCTION IF EXISTS public.troll_bank_apply_for_loan(integer);
+DROP FUNCTION IF EXISTS public.troll_bank_apply_for_loan(numeric);
 CREATE OR REPLACE FUNCTION public.troll_bank_apply_for_loan(
     p_requested_coins numeric -- Changed from int to numeric
 )
@@ -442,3 +451,63 @@ CREATE OR REPLACE VIEW public.earnings_view AS
      LEFT JOIN payout_summary ps ON ps.user_id = p.id AND ps.month = date_trunc('month'::text, now())
      LEFT JOIN yearly_payouts yp ON yp.user_id = p.id AND yp.year = date_part('year'::text, now())::integer
   WHERE p.is_broadcaster = true OR p.total_earned_coins > 0::numeric;
+
+-- Recreate user_earnings_summary
+CREATE MATERIALIZED VIEW public.user_earnings_summary AS
+ WITH user_stats AS (
+         SELECT u.id AS user_id,        
+            u.username,
+            u.created_at AS user_created_at,
+            COALESCE(u.troll_coins, 0::numeric) AS current_coin_balance,
+            GREATEST(COALESCE(u.troll_coins, 0::numeric) - COALESCE(u.bonus_coin_balance, 0::numeric), 0::numeric) AS coins_eligible_for_cashout,
+            COALESCE(u.bonus_coin_balance, 0::numeric) AS coins_locked,
+            u.is_banned,
+            u.role
+           FROM user_profiles u
+        ), ledger_stats AS (
+         SELECT coin_ledger.user_id,    
+            COALESCE(sum(
+                CASE
+                    WHEN coin_ledger.delta > 0::numeric THEN coin_ledger.delta  
+                    ELSE 0::numeric     
+                END), 0::numeric) AS total_coins_earned,
+            COALESCE(sum(
+                CASE
+                    WHEN coin_ledger.delta < 0::numeric THEN abs(coin_ledger.delta)
+                    ELSE 0::numeric     
+                END), 0::numeric) AS total_coins_spent,
+            COALESCE(max(
+                CASE
+                    WHEN coin_ledger.bucket = 'paid'::text AND coin_ledger.source = 'cashout'::text THEN coin_ledger.created_at
+                    ELSE NULL::timestamp with time zone
+                END), NULL::timestamp with time zone) AS last_cashout_date      
+           FROM coin_ledger
+          GROUP BY coin_ledger.user_id  
+        ), weekly_earnings AS (
+         SELECT coin_ledger.user_id,    
+            COALESCE(sum(coin_ledger.delta), 0::numeric) AS weekly_earned       
+           FROM coin_ledger
+          WHERE coin_ledger.delta > 0::numeric AND coin_ledger.created_at > (now() - '7 days'::interval)
+          GROUP BY coin_ledger.user_id  
+        )
+ SELECT us.user_id,
+    us.username,
+    COALESCE(ls.total_coins_earned, 0::numeric) AS total_coins_earned,
+    COALESCE(ls.total_coins_spent, 0::numeric) AS total_coins_spent,
+    us.current_coin_balance,
+    us.coins_eligible_for_cashout,      
+    us.coins_locked,
+    ls.last_cashout_date,
+    COALESCE(we.weekly_earned, 0::numeric) AS weekly_avg_earnings,
+        CASE
+            WHEN us.coins_eligible_for_cashout >= 12000 AND (now() - us.user_created_at) > '30 days'::interval AND (us.is_banned IS FALSE OR us.is_banned IS NULL) THEN true
+            ELSE false
+        END AS is_cashout_eligible,     
+    now() AS last_refreshed_at
+   FROM user_stats us
+     LEFT JOIN ledger_stats ls ON us.user_id = ls.user_id
+     LEFT JOIN weekly_earnings we ON us.user_id = we.user_id;
+
+-- Recreate indexes for user_earnings_summary
+CREATE UNIQUE INDEX idx_user_earnings_summary_user_id ON public.user_earnings_summary USING btree (user_id);
+CREATE INDEX idx_user_earnings_summary_eligible ON public.user_earnings_summary USING btree (is_cashout_eligible);

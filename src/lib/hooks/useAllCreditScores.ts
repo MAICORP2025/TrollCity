@@ -46,9 +46,12 @@ export function useAllCreditScores(currentUserId) {
         const mine = allScores.find((row) => row.user_id === currentUserId);
         const others = allScores.filter((row) => row.user_id !== currentUserId);
         setScores(mine ? [mine, ...others] : others);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching all credit scores:', err);
-        setScores([]);
+        // Handle JSON coercion errors gracefully
+        if (err.message?.includes('cannot coerce') || err.code === '22P02') {
+          setScores([]);
+        }
       } finally {
         setLoading(false);
       }

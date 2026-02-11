@@ -8,7 +8,7 @@ import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
 import { useAuthStore } from '../../lib/store'
 import ChatBubble from '../ChatBubble'
-import WalkieContainer from '../walkie/WalkieContainer'
+
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -27,6 +27,7 @@ export default function AppLayout({
   const showLegacySidebar = useAuthStore((s) => s.showLegacySidebar)
   const isAuthPage = location.pathname.startsWith('/auth');
   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/broadcast/');
+  const isKeyboardVisible = false;
 
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function AppLayout({
         </main>
 
         {/* Mobile Bottom Navigation - Fixed at bottom */}
-        {effectiveShowBottomNav && (
+        {effectiveShowBottomNav && !isKeyboardVisible && (
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-30">
             <BottomNavigation />
           </div>
@@ -74,9 +75,6 @@ export default function AppLayout({
 
         {/* Global Chat Bubble */}
         <ChatBubble />
-        
-        {/* Walkie Talkie System */}
-        <WalkieContainer />
       </div>
     </div>
   )

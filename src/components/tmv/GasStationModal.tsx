@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
+import { deductCoins } from '@/lib/coinTransactions';
 import { X, Fuel, Users, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
@@ -74,22 +75,22 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
   const handleRefill = async (amount: number) => {
     setLoading(true);
     try {
-      // Secure Refill: Spend coins then add gas
+      // Secure Refill: Spend coins then add gas using centralized deductCoins
       const cost = Math.ceil((amount / 5) * 300);
       
-      // 1. Spend Coins (Secure RPC)
-      const { data: spendData, error: spendError } = await supabase.rpc('troll_bank_spend_coins_secure', {
-        p_user_id: profile.id,
-        p_amount: cost,
-        p_bucket: 'paid',
-        p_source: 'gas_refill',
-        p_ref_id: null,
-        p_metadata: { amount_percent: amount }
+      // Deduct coins using the same function as coin store items
+      const deductResult = await deductCoins({
+        userId: profile.id,
+        amount: cost,
+        type: 'gas_refill',
+        metadata: { amount_percent: amount }
       });
 
-      if (spendError) throw spendError;
+      if (!deductResult.success) {
+        throw new Error(deductResult.error || 'Failed to deduct coins');
+      }
 
-      // 2. Add Gas (consume_gas with negative amount)
+      // Add Gas (consume_gas with negative amount)
       // consume_gas logic: gas = gas - p_amount. So passing -amount adds gas.
       const { data: gasData, error: gasError } = await supabase.rpc('consume_gas', { p_amount: -amount });
       
@@ -165,66 +166,66 @@ export default function GasStationModal({ isOpen, onClose }: { isOpen: boolean; 
 
            {tab === 'refill' && (
              <div className="space-y-4">
-                
-                {/* Registration Display */}
-                {activeCar && activeCar.registration_expires_at && (
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <Calendar className="w-4 h-4" />
-                      <span className="text-sm">Vehicle Registration</span>
-                    </div>
-                    <span className={`font-mono font-bold ${
-                        new Date(activeCar.registration_expires_at) < new Date() ? 'text-red-500' : 'text-green-400'
-                    }`}>
-                      {Math.max(0, Math.ceil((new Date(activeCar.registration_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))}d Left
-                    </span>
-                  </div>
-                )}
-
-                <div className="text-center mb-4">
-                   <p className="text-gray-400">Current Tank</p>
-                   <div className="text-4xl font-bold text-white flex justify-center items-end gap-1">
-                     {Math.floor(gas)}<span className="text-lg text-yellow-500 mb-1">%</span>
+                 
+                 {/* Registration Display */}
+                 {activeCar && activeCar.registration_expires_at && (
+                   <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                     <div className="flex items-center gap-2 text-gray-400">
+                       <Calendar className="w-4 h-4" />
+                       <span className="text-sm">Vehicle Registration</span>
+                     </div>
+                     <span className={`font-mono font-bold ${
+                         new Date(activeCar.registration_expires_at) < new Date() ? 'text-red-500' : 'text-green-400'
+                     }`}>
+                       {Math.max(0, Math.ceil((new Date(activeCar.registration_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))}d Left
+                     </span>
                    </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                   {options.map(pct => {
-                     if (gas + pct > 100) {
-                         // Optional: Handle overflow logic visually if needed
-                     }
-                     
-                     const cost = Math.ceil((pct / 5) * 300);
-                     const wouldOverflow = gas >= 100;
-                     
-                     return (
-                       <button
-                         key={pct}
-                         disabled={wouldOverflow || loading}
-                         onClick={() => handleRefill(pct)}
-                         className="flex flex-col items-center p-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl border border-zinc-700 transition"
-                       >
-                         <span className="text-lg font-bold text-white">+{pct}%</span>
-                         <span className="text-xs text-yellow-400">{cost} Coins</span>
-                       </button>
-                     );
-                   })}
-                   <button
-                     disabled={gas >= 100 || loading}
-                     onClick={() => handleRefill(100 - gas)}
-                     className="col-span-2 flex flex-col items-center p-3 bg-green-900/50 hover:bg-green-900/70 border border-green-700 rounded-xl transition"
-                   >
-                      <span className="text-lg font-bold text-white">Fill Tank</span>
-                      <span className="text-xs text-green-300">
-                        {Math.ceil(((100 - gas) / 5) * 300)} Coins
-                      </span>
-                   </button>
-                </div>
-                
-                <p className="text-xs text-center text-gray-500 mt-4">
-                  Staff members refill for free.
-                </p>
-             </div>
+                 )}
+
+                 <div className="text-center mb-4">
+                    <p className="text-gray-400">Current Tank</p>
+                    <div className="text-4xl font-bold text-white flex justify-center items-end gap-1">
+                      {Math.floor(gas)}<span className="text-lg text-yellow-500 mb-1">%</span>
+                    </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-3">
+                    {options.map(pct => {
+                      if (gas + pct > 100) {
+                          // Optional: Handle overflow logic visually if needed
+                      }
+                      
+                      const cost = Math.ceil((pct / 5) * 300);
+                      const wouldOverflow = gas >= 100;
+                      
+                      return (
+                        <button
+                          key={pct}
+                          disabled={wouldOverflow || loading}
+                          onClick={() => handleRefill(pct)}
+                          className="flex flex-col items-center p-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl border border-zinc-700 transition"
+                        >
+                          <span className="text-lg font-bold text-white">+{pct}%</span>
+                          <span className="text-xs text-yellow-400">{cost} Coins</span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      disabled={gas >= 100 || loading}
+                      onClick={() => handleRefill(100 - gas)}
+                      className="col-span-2 flex flex-col items-center p-3 bg-green-900/50 hover:bg-green-900/70 border border-green-700 rounded-xl transition"
+                    >
+                       <span className="text-lg font-bold text-white">Fill Tank</span>
+                       <span className="text-xs text-green-300">
+                         {Math.ceil(((100 - gas) / 5) * 300)} Coins
+                       </span>
+                    </button>
+                 </div>
+                 
+                 <p className="text-xs text-center text-gray-500 mt-4">
+                   Staff members refill for free.
+                 </p>
+              </div>
            )}
 
            {tab === 'request' && (

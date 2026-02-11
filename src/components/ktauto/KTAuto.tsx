@@ -48,7 +48,6 @@ export default function KTAuto() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch Cars Catalog from the dealership view
         const { data: carsData, error: carsError } = await supabase
           .from('v_dealership_catalog')
           .select('*')

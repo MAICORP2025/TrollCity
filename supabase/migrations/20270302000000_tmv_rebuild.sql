@@ -45,6 +45,18 @@ CREATE TABLE public.user_vehicles (
     impound_reason TEXT,
     CONSTRAINT condition_check CHECK (condition >= 0 AND condition <= 100)
 );
+CREATE TABLE public.user_vehicles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    catalog_id INTEGER NOT NULL REFERENCES public.vehicles_catalog(id),
+    purchased_at TIMESTAMPTZ DEFAULT NOW(),
+    condition INTEGER DEFAULT 100, -- 0-100%
+    mods JSONB DEFAULT '{}'::jsonb, -- Engine, Handling, Cosmetic upgrades
+    is_impounded BOOLEAN DEFAULT FALSE,
+    impounded_at TIMESTAMPTZ,
+    impound_reason TEXT,
+    CONSTRAINT condition_check CHECK (condition >= 0 AND condition <= 100)
+);
 
 -- Vehicle Titles (Proof of Ownership)
 CREATE TABLE public.vehicle_titles (
@@ -172,29 +184,7 @@ INSERT INTO public.tmv_fee_schedule (fee_type, amount) VALUES
 ('insurance_premium', 2000),
 ('plate_change', 20);
 
--- Catalog (Populated from src/data/vehicles.ts)
-INSERT INTO public.vehicles_catalog (id, name, tier, style, price, speed, armor, color_from, color_to, image, model_url) VALUES
-(1, 'Troll Compact S1', 'Starter', 'Compact modern starter sedan', 5000, 40, 20, '#38bdf8', '#22c55e', '/assets/cars/troll_compact_s1.png', '/models/vehicles/troll_compact_s1.glb'),
-(2, 'Midline XR', 'Mid', 'Mid-size SUV / crossover', 12000, 60, 35, '#fbbf24', '#f87171', '/assets/cars/midline_xr.png', '/models/vehicles/midline_xr.glb'),
-(3, 'Urban Drift R', 'Mid', 'Aggressive street tuner coupe', 18000, 75, 30, '#a855f7', '#ec4899', '/assets/cars/urban_drift_r.png', '/models/vehicles/urban_drift_r.glb'),
-(4, 'Ironclad GT', 'Luxury', 'Heavy luxury muscle car', 45000, 85, 60, '#94a3b8', '#475569', '/assets/cars/ironclad_gt.png', '/models/vehicles/ironclad_gt.glb'),
-(5, 'Vanta LX', 'Luxury', 'High-end performance motorcycle', 60000, 92, 35, '#1e293b', '#000000', '/assets/cars/vanta_lx.png', '/models/vehicles/vanta_lx.glb'),
-(6, 'Phantom X', 'Super', 'Stealth supercar', 150000, 110, 40, '#4c1d95', '#8b5cf6', '/assets/cars/phantom_x.png', '/models/vehicles/phantom_x.glb'),
-(7, 'Obsidian One Apex', 'Elite / Hyper', 'Ultra-elite hypercar', 180000, 120, 45, '#111827', '#0f172a', '/assets/cars/vehicle_1_original.png', '/models/vehicles/obsidian_one_apex.glb'),
-(8, 'Titan Enforcer', 'Legendary / Armored', 'Heavily armored enforcement vehicle', 500000, 60, 100, '#0b0f1a', '#111827', '/assets/cars/vehicle_2_original.png', '/models/vehicles/titan_enforcer.glb'),
-(9, 'Neon Hatch S', 'Street', 'Compact hatchback for city runs', 8000, 48, 22, '#22d3ee', '#3b82f6', '/assets/cars/vehicle_3_original.png', '/models/vehicles/neon_hatch_s.glb'),
-(10, 'Courier Spark Bike', 'Street', 'Delivery bike built for fast runs', 7000, 55, 16, '#f59e0b', '#f97316', '/assets/cars/vehicle_4_original.png', '/models/vehicles/courier_spark_bike.glb'),
-(11, 'Apex Trail SUV', 'Mid', 'Sport SUV with rugged stance', 22000, 70, 45, '#60a5fa', '#1d4ed8', '/assets/cars/vehicle_5_original.png', '/models/vehicles/apex_trail_suv.glb'),
-(12, 'Quantum Veil', 'Super', 'Experimental prototype hypercar', 220000, 130, 38, '#7c3aed', '#ec4899', '/assets/cars/vehicle_6_original.png', '/models/vehicles/quantum_veil.glb'),
-(13, 'Driftline Pulse Bike', 'Mid', 'Drift-ready performance bike', 16000, 78, 20, '#06b6d4', '#3b82f6', '/assets/cars/vehicle_7_original.png', '/models/vehicles/driftline_pulse_bike.glb'),
-(14, 'Regal Meridian', 'Luxury', 'Executive luxury sedan', 85000, 88, 50, '#0f172a', '#334155', '/assets/cars/vehicle_8_original.png', '/models/vehicles/regal_meridian.glb'),
-(15, 'Luxe Voyager', 'Luxury', 'Luxury cruiser bike', 78000, 86, 32, '#1f2937', '#111827', '/assets/cars/vehicle_1_original.png', '/models/vehicles/luxe_voyager.glb'),
-(16, 'Eclipse Seraph', 'Super', 'Exotic supercar', 260000, 138, 42, '#312e81', '#9333ea', '/assets/cars/vehicle_6_original.png', '/models/vehicles/eclipse_seraph.glb')
-ON CONFLICT (id) DO UPDATE SET
-name = EXCLUDED.name,
-price = EXCLUDED.price,
-image = EXCLUDED.image,
-model_url = EXCLUDED.model_url;
+
 
 
 -- 5. Helper Function: Generate Plate
@@ -440,7 +430,6 @@ BEGIN
     LEFT JOIN public.vehicle_insurance_policies vi ON uv.id = vi.user_vehicle_id
     LEFT JOIN public.user_driver_licenses udl ON uv.user_id = udl.user_id
     WHERE uv.user_id = p_target_user_id
-    ORDER BY uv.purchased_at DESC
-    LIMIT 1; -- Show most recent car for now, or maybe the one they are "driving" (future)
+    ORDER BY uv.purchased_at DESC;
 END;
 $$;

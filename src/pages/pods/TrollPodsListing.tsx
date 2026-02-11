@@ -15,7 +15,7 @@ interface PodRoom {
   host_id: string;
   viewer_count: number;
   started_at: string;
-  hls_url?: string;
+  livekit_room_id?: string;
   host?: {
     username: string;
     avatar_url: string;
@@ -105,6 +105,8 @@ export default function TrollPodsListing() {
         return;
       }
 
+      const livekitRoomId = `pod_${generateUUID()}`;
+
       const { data, error } = await supabase
         .from('pod_rooms')
         .insert({
@@ -112,6 +114,7 @@ export default function TrollPodsListing() {
           host_id: user.id,
           is_live: true,
           started_at: new Date().toISOString(),
+          livekit_room_id: livekitRoomId,
         })
         .select()
         .single();

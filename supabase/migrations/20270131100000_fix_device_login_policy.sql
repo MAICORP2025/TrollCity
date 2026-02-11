@@ -35,7 +35,7 @@ BEGIN
     -- Insert new session
     INSERT INTO active_sessions (user_id, session_id, device_info, ip_address, user_agent)
     VALUES (p_user_id, p_session_id, p_device_info, p_ip_address, p_user_agent)
-    ON CONFLICT (session_id) DO UPDATE
+    ON CONFLICT (user_id, session_id) DO UPDATE
     SET is_active = TRUE, last_active = NOW(), device_info = p_device_info, 
         ip_address = p_ip_address, user_agent = p_user_agent;
 END;

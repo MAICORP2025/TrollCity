@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { subscribeToNtfyGlobal } from '../lib/ntfySubscribe';
 import { trollCityTheme } from '@/styles/trollCityTheme';
 import { useActiveBroadcasts } from '@/hooks/useActiveBroadcasts';
+import { useThemeAudio } from '../contexts/ThemeAudioContext';
 import { 
   Play, 
   Users, 
@@ -18,8 +19,6 @@ import {
 } from 'lucide-react';
 import HomeLiveGrid from '@/components/broadcast/HomeLiveGrid';
 import BroadcastLockdownControl from '@/components/admin/BroadcastLockdownControl';
-import PresidentialCampaignGrid from '@/components/president/PresidentialCampaignGrid';
-import PresidentInaugurationCard from '@/components/president/PresidentInaugurationCard';
 
 // Animated gradient background
 const AnimatedGradient = () => {
@@ -116,11 +115,18 @@ export default function Home() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const hasActiveContent = useActiveBroadcasts();
+  // Theme audio disabled - entrance effect should not play on home page
+  
   // Auto-scroll to top and subscribe to push notifications on page load
   useEffect(() => {
     window.scrollTo(0, 0);
     subscribeToNtfyGlobal();
   }, []);
+
+  // 🎵 Play theme song on mount (only for unauthenticated users)
+  useEffect(() => {
+    // Theme audio disabled - entrance effect should not play on home page
+  }, [user]);
 
   const features = [
     {

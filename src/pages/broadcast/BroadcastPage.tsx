@@ -6,6 +6,9 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { useLiveKitToken } from '../../hooks/useLiveKitToken';
 import { useViewerTracking } from '../../hooks/useViewerTracking';
+import { ListenerEntranceEffect } from '../../hooks/useListenerEntranceEffect';
+import { PublishEntranceOnJoin } from '../../hooks/usePublishEntranceOnJoin';
+import { ListenForEntrances } from '../../hooks/useListenForEntrances';
 import { Stream, ChatMessage } from '../../types/broadcast';
 import BroadcastGrid from '../../components/broadcast/BroadcastGrid';
 import BroadcastChat from '../../components/broadcast/BroadcastChat';
@@ -18,7 +21,8 @@ import { Loader2, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStreamSeats, SeatSession } from '../../hooks/useStreamSeats';
 import { useStreamEndListener } from '../../hooks/useStreamEndListener';
-import HLSPlayer from '../../components/broadcast/HLSPlayer';
+import { coinOptimizer } from '../../lib/coinRotation';
+import VideoViewer from '../../components/broadcast/VideoViewer';
 import BattleView from '../../components/broadcast/BattleView';
 import BattleControlsList from '../../components/broadcast/BattleControlsList';
 import PreflightPublisher from '../../components/broadcast/PreflightPublisher';
@@ -33,6 +37,7 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 const RoomStateSync = ({ mode, isHost, streamId }: { mode: 'stage' | 'viewer'; isHost: boolean; streamId: string }) => {
     const { localParticipant } = useLocalParticipant();
     const room = useRoomContext();
+    const lastModeRef = useRef(mode);
     
     // ✅ Fix D: Update status to 'live' after successful connection
     useEffect(() => {
@@ -66,38 +71,39 @@ const RoomStateSync = ({ mode, isHost, streamId }: { mode: 'stage' | 'viewer'; i
         if (!localParticipant) return;
 
         const syncState = async () => {
+            const isModeChange = lastModeRef.current !== mode;
+            lastModeRef.current = mode;
+
             try {
                 if (mode === 'stage') {
-                    // Force enable media when joining stage to ensure visibility
-                    // This fixes the "invisible guest" issue where tracks might not start automatically
-                    
-                    // Ensure track is published if not already
-                    const tracks = localParticipant.tracks;
-                    if (tracks) {
-                        for (const pub of tracks.values()) {
-                            if (pub.track?.kind === 'video' && pub.isMuted) {
-                                await pub.track.unmute();
+                    // Force enable media ONLY when joining stage (transitioning from viewer)
+                    // This prevents re-enabling mic when user manually mutes (which triggers this effect)
+                    if (isModeChange) {
+                        // Ensure track is published if not already
+                        for (const pub of localParticipant.trackPublications.values()) {
+                            if (pub.kind === 'video' && pub.isMuted) {
+                                await pub.unmute();
                             }
-                            if (pub.track?.kind === 'audio' && pub.isMuted) {
-                                await pub.track.unmute();
+                            if (pub.kind === 'audio' && pub.isMuted) {
+                                await pub.unmute();
                             }
                         }
-                    }
 
-                    if (!localParticipant.isCameraEnabled) {
-                        console.log('[RoomStateSync] Joining stage: Enabling Camera');
-                        try {
-                            await localParticipant.setCameraEnabled(true);
-                        } catch (e) {
-                            console.warn('[RoomStateSync] Failed to enable camera (likely not connected yet):', e);
+                        if (!localParticipant.isCameraEnabled) {
+                            console.log('[RoomStateSync] Joining stage: Enabling Camera');
+                            try {
+                                await localParticipant.setCameraEnabled(true);
+                            } catch (e) {
+                                console.warn('[RoomStateSync] Failed to enable camera (likely not connected yet):', e);
+                            }
                         }
-                    }
-                    if (!localParticipant.isMicrophoneEnabled) {
-                        console.log('[RoomStateSync] Joining stage: Enabling Mic');
-                        try {
-                            await localParticipant.setMicrophoneEnabled(true);
-                        } catch (e) {
-                            console.warn('[RoomStateSync] Failed to enable mic (likely not connected yet):', e);
+                        if (!localParticipant.isMicrophoneEnabled) {
+                            console.log('[RoomStateSync] Joining stage: Enabling Mic');
+                            try {
+                                await localParticipant.setMicrophoneEnabled(true);
+                            } catch (e) {
+                                console.warn('[RoomStateSync] Failed to enable mic (likely not connected yet):', e);
+                            }
                         }
                     }
                 } else {
@@ -105,7 +111,7 @@ const RoomStateSync = ({ mode, isHost, streamId }: { mode: 'stage' | 'viewer'; i
                     // STRICT RULE: Downgrade role and stop all streams
                     console.log('[RoomStateSync] Downgrading to viewer: Stopping all tracks');
                     
-                    const tracks = localParticipant.tracks;
+                    const tracks = localParticipant.trackPublications;
                     if (tracks) {
                         for (const pub of tracks.values()) {
                             if (pub.track) {
@@ -378,6 +384,35 @@ export default function BroadcastPage() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [showBattleManager, setShowBattleManager] = useState(false);
   const [preflightStream, setPreflightStream] = useState<MediaStream | null>(null);
+  const handleBoxCountUpdate = async (newCount: number) => {
+    if (!stream || !isHost) return;
+
+    const currentCount = stream.box_count || 1;
+    const requiredBoxes = Object.values(seats).filter(s => s.status === 'active').length;
+
+    if (newCount < requiredBoxes || newCount < 1 || newCount > 9) {
+      toast.warning(
+        newCount < 1
+        ? "Cannot have less than 1 box."
+        : newCount > 9
+        ? "Maximum of 9 boxes allowed."
+        : "Cannot remove a box that is currently in use."
+      );
+      return;
+    }
+
+    // Optimistic UI update
+    const oldStream = { ...stream };
+    setStream({ ...stream, box_count: newCount });
+
+    const { error } = await supabase.rpc('set_stream_box_count', { p_stream_id: stream.id, p_new_box_count: newCount });
+
+    if (error) {
+      toast.error("Failed to update box count. Please try again.");
+      setStream(oldStream); // Rollback on failure
+      console.error("Failed to update box count:", error);
+    }
+  };
 
   useEffect(() => {
       const stream = PreflightStore.getStream();
@@ -408,7 +443,10 @@ export default function BroadcastPage() {
   // 'viewer' = Passive Viewer -> Subscribes only (Low Latency WebRTC)
   const mode = (isHost || (mySession?.status === 'active')) ? 'stage' : 'viewer';
   
-  const { messages, sendMessage } = useStreamChat(id || '', mode === 'viewer');
+  // Can publish only if on stage (Host or Active Seat)
+  const canPublish = mode === 'stage';
+  
+  const { messages, sendMessage } = useStreamChat(id || '');
 
   // Guest Timer & Tracking - HANDLED ABOVE
   
@@ -451,7 +489,7 @@ export default function BroadcastPage() {
     userId: effectiveUserId,
     roomName: id,
     // Only request publish permissions if on stage (Host or Active Seat)
-    canPublish: mode === 'stage',
+    canPublish,
     enabled: !!stream,
     isGuest
   });
@@ -714,11 +752,11 @@ export default function BroadcastPage() {
   }
 
   if (!stream) {
-      const isUsername = !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paramId || '');
+      const isUsername = !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '');
       return (
           <div className="h-screen w-full flex flex-col items-center justify-center bg-black text-white">
             <h2 className="text-2xl font-bold mb-2">
-                {isUsername ? `${paramId} is offline` : 'Stream not found'}
+                {isUsername ? `${id} is offline` : 'Stream not found'}
             </h2>
             <button 
                 onClick={() => navigate('/')}
@@ -841,7 +879,25 @@ export default function BroadcastPage() {
                     isHost={isHost} 
                     mode={mode} 
                     isStaff={isStaffMember(profile)} 
-                    profileLoading={!!user && !profile}
+                />
+                <ListenerEntranceEffect
+                    streamId={id || ''}
+                    isHost={isHost}
+                    isGuest={isGuest && !mySession}
+                    canPublish={canPublish}
+                    userId={effectiveUserId}
+                    username={profile?.username}
+                />
+                
+                {/* Broadcast-wide entrance effects - publish and listen */}
+                <PublishEntranceOnJoin
+                    streamId={id || ''}
+                    userId={effectiveUserId}
+                    username={profile?.username || effectiveUserId}
+                />
+                <ListenForEntrances
+                    streamId={id || ''}
+                    localUserId={effectiveUserId}
                 />
                     
                     {/* Guest Preview Timer UI */}
@@ -863,6 +919,7 @@ export default function BroadcastPage() {
                         onStartBattle={() => setShowBattleManager(true)} 
                         liveViewerCount={viewerCount}
                     />
+                    {/* <VideoViewer />  -- Removed to fix layout duplication with BroadcastGrid */}
                     <BroadcastEffectsLayer streamId={stream.id} />
                     <ErrorBoundary>
                         <BroadcastGrid
@@ -890,6 +947,7 @@ export default function BroadcastPage() {
                                 onGiftHost={() => setGiftRecipientId(stream.user_id)}
                                 onLeave={isHost ? undefined : handleLeave}
                                 onShare={handleShare}
+                                onBoxCountUpdate={handleBoxCountUpdate}
                             />
                         </div>
                     </div>

@@ -1,11 +1,10 @@
-
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
   // 1. Handle Preflight Options
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req.headers.get("origin")) });
   }
 
   try {
@@ -22,7 +21,7 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -39,7 +38,7 @@ Deno.serve(async (req) => {
     if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -55,7 +54,7 @@ Deno.serve(async (req) => {
     if (profileError || !profile) {
       return new Response(JSON.stringify({ error: "Profile not found" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -71,7 +70,7 @@ Deno.serve(async (req) => {
     if (!isAdmin && !isSecretary) {
       return new Response(JSON.stringify({ error: "Forbidden: Insufficient permissions" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -507,6 +506,33 @@ Deno.serve(async (req) => {
         const { userId, updates, coinAdjustment, roleUpdate } = params;
         if (!userId) throw new Error("Missing userId");
 
+        // 2. Role Update
+        if (roleUpdate) {
+            const { newRole, reason } = roleUpdate;
+            if (newRole) {
+                // SECURITY: Protect Owner Account
+                // Fetch target user email to verify identity
+                const { data: targetUserRes, error: targetError } = await supabaseAdmin.auth.admin.getUserById(userId);
+                if (targetError) throw targetError;
+                
+                const OWNER_EMAIL = 'trollcity2025@gmail.com';
+                const isTargetOwner = targetUserRes.user.email?.toLowerCase() === OWNER_EMAIL;
+                const isActorOwner = user.email?.toLowerCase() === OWNER_EMAIL;
+
+                if (isTargetOwner && !isActorOwner) {
+                     throw new Error("CRITICAL: You cannot change the role of the Owner account.");
+                }
+
+                const { error: roleError } = await supabaseAdmin.rpc('set_user_role', {
+                    target_user: userId,
+                    new_role: newRole,
+                    reason: reason || `Admin update by ${user.id}`,
+                    acting_admin_id: user.id
+                });
+                if (roleError) throw roleError;
+            }
+        }
+
         // 1. Basic Profile Update (Secure RPC)
         if (updates && Object.keys(updates).length > 0) {
           const { error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
@@ -517,20 +543,6 @@ Deno.serve(async (req) => {
           });
           
           if (error) throw error;
-        }
-
-        // 2. Role Update
-        if (roleUpdate) {
-            const { newRole, reason } = roleUpdate;
-            if (newRole) {
-                const { error: roleError } = await supabaseAdmin.rpc('set_user_role', {
-                    target_user: userId,
-                    new_role: newRole,
-                    reason: reason || `Admin update by ${user.id}`,
-                    acting_admin_id: user.id
-                });
-                if (roleError) throw roleError;
-            }
         }
 
         // 3. Coin Adjustment
@@ -982,7 +994,10 @@ Deno.serve(async (req) => {
             .order('created_at', { ascending: false })
             .limit(limit);
 
-        if (error) throw error;
+        if (error) {
+            console.error('Error fetching chat:', error);
+            throw error;
+        }
         result = { messages: data };
         break;
       }
@@ -1014,7 +1029,10 @@ Deno.serve(async (req) => {
             priority: 'normal'
           });
 
-        if (error) throw error;
+        if (error) {
+            console.error('Error sending chat:', error);
+            throw error;
+        }
         result = { success: true };
         break;
       }
@@ -1817,7 +1835,7 @@ Deno.serve(async (req) => {
         if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
         const { search, limit = 100 } = params;
 
-        const { data, error } = await supabaseAdmin.rpc('get_admin_user_wallets_secure', {
+        const { data, error } = await supabaseClient.rpc('get_admin_user_wallets_secure', {
             p_search: search || null,
             p_limit: limit
         });
@@ -2188,17 +2206,263 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // --- License Management (Admin/Secretary) ---
+      case "suspend_license_with_summon": {
+        // Allow admin, secretary, or troll_officer to suspend license with court summon
+        if (!isAdmin && !isSecretary && profile.role !== 'troll_officer') {
+          throw new Error("Unauthorized: Admin, Secretary, or Troll Officer only");
+        }
+        const { targetUserId, action, reason } = params;
+        if (!targetUserId || !action) throw new Error("Missing required fields");
+
+        // 1. Suspend/Reinstate license using existing RPC
+        const { error: suspendError } = await supabaseAdmin.rpc('admin_suspend_license', {
+          p_target_user_id: targetUserId,
+          p_action: action // 'suspend', 'revoke', 'reinstate'
+        });
+
+        if (suspendError) throw suspendError;
+
+        // 2. If suspending (not reinstating), create court summon
+        if (action === 'suspend' || action === 'revoke') {
+          // Get current court session
+          const { data: courtSession } = await supabaseAdmin
+            .from('court_sessions')
+            .select('id')
+            .in('status', ['live', 'active', 'waiting'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (courtSession?.id) {
+            // Create court summon
+            const { error: summonError } = await supabaseAdmin
+              .from('court_summons')
+              .insert({
+                summoned_user_id: courtSession.created_by,
+                session_id: courtSession.id,
+                case_type: 'TrollCity Policy Violation',
+                status: 'pending',
+                reason: reason || 'License suspended - Court appearance required',
+                created_by: user.id
+              });
+
+            if (summonError) {
+              console.error('Failed to create court summon:', summonError);
+            }
+          }
+        }
+
+        // Log action
+        await supabaseAdmin.rpc('log_admin_action', {
+          p_action_type: 'license_suspend_with_summon',
+          p_target_id: targetUserId,
+          p_details: { action, reason }
+        });
+
+        result = { success: true, action };
+        break;
+      }
+
+      // --- Repossession Actions (Admin Only) ---
+      case "repossess_property": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { propertyId, reason } = params;
+        if (!propertyId) throw new Error("Missing propertyId");
+
+        const { data, error } = await supabaseAdmin.rpc('repossess_property', {
+          p_property_id: propertyId,
+          p_admin_id: user.id,
+          p_reason: reason || 'Loan default - property repossessed'
+        });
+
+        if (error) throw error;
+
+        // Log action
+        await supabaseAdmin.rpc('log_admin_action', {
+          p_action_type: 'property_repossession',
+          p_target_id: propertyId,
+          p_details: { reason, result: data }
+        });
+
+        result = { success: true, data };
+        break;
+      }
+
+      case "repossess_vehicle": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { vehicleId, reason } = params;
+        if (!vehicleId) throw new Error("Missing vehicleId");
+
+        const { data, error } = await supabaseAdmin.rpc('repossess_vehicle', {
+          p_vehicle_id: vehicleId,
+          p_admin_id: user.id,
+          p_reason: reason || 'Loan default - vehicle repossessed'
+        });
+
+        if (error) throw error;
+
+        // Log action
+        await supabaseAdmin.rpc('log_admin_action', {
+          p_action_type: 'vehicle_repossession',
+          p_target_id: vehicleId,
+          p_details: { reason, result: data }
+        });
+
+        result = { success: true, data };
+        break;
+      }
+
+      case "issue_loan_default_summon": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { targetUserId, summonType, reason } = params;
+        if (!targetUserId) throw new Error("Missing targetUserId");
+
+        const { data, error } = await supabaseAdmin.rpc('issue_loan_default_summon', {
+          p_user_id: targetUserId,
+          p_admin_id: user.id,
+          p_summon_type: summonType || 'loan_default_hearing',
+          p_reason: reason || 'Loan default - Court appearance required'
+        });
+
+        if (error) throw error;
+
+        // Log action
+        await supabaseAdmin.rpc('log_admin_action', {
+          p_action_type: 'loan_default_summon',
+          p_target_id: targetUserId,
+          p_details: { summonType, reason, result: data }
+        });
+
+        result = { success: true, data };
+        break;
+      }
+
+      case "restore_repossessed_asset": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { assetId, assetType, targetUserId } = params;
+        if (!assetId || !assetType || !targetUserId) {
+          throw new Error("Missing required fields: assetId, assetType, targetUserId");
+        }
+
+        const { data, error } = await supabaseAdmin.rpc('restore_repossessed_asset', {
+          p_asset_id: assetId,
+          p_asset_type: assetType,
+          p_user_id: targetUserId,
+          p_admin_id: user.id
+        });
+
+        if (error) throw error;
+
+        // Log action
+        await supabaseAdmin.rpc('log_admin_action', {
+          p_action_type: 'restore_repossessed_asset',
+          p_target_id: assetId,
+          p_details: { assetType, targetUserId, result: data }
+        });
+
+        result = { success: true, data };
+        break;
+      }
+
+      case "get_delinquent_users": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+
+        const { data, error } = await supabaseAdmin.rpc('get_delinquent_loan_users');
+        if (error) throw error;
+
+        result = { delinquentUsers: data };
+        break;
+      }
+
+      case "get_user_assets": {
+        const { userId } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        // Fetch user's properties
+        const { data: properties, error: propError } = await supabaseAdmin
+          .from('properties')
+          .select('*, user_profiles!owner_user_id(username)')
+          .eq('owner_user_id', userId);
+
+        if (propError) throw propError;
+
+        // Fetch user's vehicles
+        const { data: vehicles, error: vehError } = await supabaseAdmin
+          .from('user_vehicles')
+          .select('*, vehicles_catalog(name)')
+          .eq('user_id', userId);
+
+        if (vehError) throw vehError;
+
+        // Fetch user's loans
+        const { data: loans, error: loanError } = await supabaseAdmin
+          .from('loans')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'active');
+
+        if (loanError) throw loanError;
+
+        result = { properties, vehicles, loans };
+        break;
+      }
+
+      // --- Officer Chat (Admin/Lead Officer/Troll Officer) ---
+      case "send_officer_chat": {
+        const { message } = params;
+        if (!message) throw new Error("Missing message");
+        
+        const { error } = await supabaseAdmin
+          .from('officer_chat_messages')
+          .insert({
+            sender_id: user.id,
+            content: message,
+            priority: 'normal'
+          });
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      case "get_officer_chat_messages": {
+        const { limit = 50 } = params;
+        
+        const { data, error } = await supabaseAdmin
+          .from('officer_chat_messages')
+          .select(`
+            *,
+            sender:user_profiles(username, role)
+          `)
+          .order('created_at', { ascending: false })
+          .limit(limit);
+
+        if (error) {
+          console.error('Error fetching chat:', error);
+          throw error;
+        }
+        
+        const mapped = data?.map((msg: any) => ({
+          ...msg,
+          username: msg.sender?.username || msg.user_profiles?.username || 'Officer',
+          role: msg.sender?.role || msg.user_profiles?.role
+        })) || [];
+
+        result = { messages: mapped };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
 
     return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
     });
   }
 });

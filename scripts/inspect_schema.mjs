@@ -15,7 +15,9 @@ async function inspect() {
     
     // Check user_profiles
     const { data: profiles, error: pError } = await supabase.from('user_profiles').select('*').limit(1);
-    if (profiles && profiles.length > 0) console.log('User Profiles Keys:', Object.keys(profiles[0]));
+    if (profiles && profiles.length > 0) {
+        console.log('User Profiles Keys (filtered):', Object.keys(profiles[0]).filter(k => k.includes('coin') || k.includes('free') || k.includes('balance')));
+    }
     else console.log('User Profiles Error/Empty:', pError);
 
     // Check streams

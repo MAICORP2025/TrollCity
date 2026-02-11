@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { trollCityTheme } from '../lib/themes';
+import { trollCityTheme } from '../styles/trollCityTheme';
 import { toast } from 'sonner';
 import { Car, AlertTriangle, ArrowLeft, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

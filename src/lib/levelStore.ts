@@ -39,6 +39,24 @@ export const useLevelStore = create<LevelState>((set, get) => ({
 
   fetchLevelData: async (userId: string) => {
     set({ loading: true })
+    
+    // Skip level fetch for guest IDs (non-UUID format like TC-XXXX)
+    if (!userId || userId.startsWith('TC-')) {
+      console.log('Guest user detected, skipping level fetch');
+      set({
+        currentLevel: 1,
+        currentXp: 0,
+        totalXp: 0,
+        nextLevelXp: 100,
+        prestigeCount: 0,
+        perkTokens: 0,
+        unlockedPerks: [],
+        dailyLog: { date: new Date().toISOString().split('T')[0], chat_xp: 0, watch_xp: 0 },
+        loading: false
+      });
+      return;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('user_stats')

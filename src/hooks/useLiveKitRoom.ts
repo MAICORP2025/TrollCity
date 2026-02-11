@@ -318,15 +318,7 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
         metadata: parseParticipantMetadata(participant.metadata),
       })
 
-      // Trigger entrance effect for remote participants (not local)
-      if (!participant.isLocal && participant.identity) {
-        try {
-          const { triggerUserEntranceEffect } = await import('../lib/entranceEffects')
-          await triggerUserEntranceEffect(participant.identity)
-        } catch (error) {
-          console.warn('Failed to trigger entrance effect:', error)
-        }
-      }
+
     },
     [updateParticipantState]
   )

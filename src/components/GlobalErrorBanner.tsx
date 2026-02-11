@@ -1,8 +1,12 @@
 import React from 'react';
 import { useGlobalApp } from '../contexts/GlobalAppContext';
+import { reportError } from '../lib/supabase';
+
+import { useAuthStore } from '../lib/store';
 
 const GlobalErrorBanner: React.FC = () => {
   const { error, clearError } = useGlobalApp();
+  const profile = useAuthStore((s) => s.profile);
 
   if (!error) return null;
 
@@ -18,15 +22,24 @@ const GlobalErrorBanner: React.FC = () => {
             <p className="text-sm opacity-90">{error}</p>
           </div>
         </div>
-        <button
-          onClick={clearError}
-          className="flex-shrink-0 ml-4 p-1 rounded hover:bg-red-700 transition-colors"
-          aria-label="Dismiss error"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => reportError({ message: `User reported error: ${error}`, context: { username: profile?.username } })}
+            className="flex-shrink-0 ml-4 p-1 rounded hover:bg-red-700 transition-colors"
+            aria-label="Send to admin"
+          >
+            Send to Admin
+          </button>
+          <button
+            onClick={clearError}
+            className="flex-shrink-0 ml-4 p-1 rounded hover:bg-red-700 transition-colors"
+            aria-label="Dismiss error"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

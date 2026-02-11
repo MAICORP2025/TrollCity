@@ -9,6 +9,7 @@ export type WallPostType =
   | 'family_announce'
   | 'badge_earned'
   | 'system'
+  | 'announcement'
 
 export interface WallPost {
   id: string

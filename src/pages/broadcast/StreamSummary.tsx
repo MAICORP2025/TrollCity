@@ -1,11 +1,60 @@
-import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Trophy, Users, Heart, Gift } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import { Home, Trophy, Users, Heart, Gift, Loader2 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 export default function StreamSummary() {
   const navigate = useNavigate();
   const location = useLocation();
-  const stats = location.state || { viewers: 0, likes: 0, gifts: 0 };
+  const { streamId } = useParams();
+  const [stats, setStats] = useState(location.state || null);
+  const [loading, setLoading] = useState(!location.state);
+
+  useEffect(() => {
+    if (stats) return;
+    if (!streamId) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchStreamStats = async () => {
+      try {
+        const { data: stream, error } = await supabase
+          .from('streams')
+          .select('title, viewer_count')
+          .eq('id', streamId)
+          .single();
+
+        if (error) throw error;
+
+        // Try to fetch extended stats if available, otherwise default to 0
+        // Since we don't have a guaranteed stats table for every stream yet, we use what we have
+        setStats({
+          title: stream.title || 'Broadcast Ended',
+          viewers: stream.viewer_count || 0,
+          likes: 0, // Not stored on streams table by default usually
+          gifts: 0  // Would need aggregation query
+        });
+      } catch (err) {
+        console.error('Error fetching stream stats:', err);
+        setStats({ title: 'Stream Ended', viewers: 0, likes: 0, gifts: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStreamStats();
+  }, [streamId, stats]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-purple-500" />
+      </div>
+    );
+  }
+
+  const displayStats = stats || { viewers: 0, likes: 0, gifts: 0, title: 'Stream Ended' };
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
@@ -15,22 +64,22 @@ export default function StreamSummary() {
         </div>
         
         <h1 className="text-3xl font-bold mb-2">Broadcast Ended</h1>
-        <p className="text-zinc-400 mb-8">{stats.title || "Great stream! Here's how it went:"}</p>
+        <p className="text-zinc-400 mb-8">{displayStats.title || "Great stream! Here's how it went:"}</p>
 
         <div className="grid grid-cols-3 gap-4 w-full mb-8">
             <div className="bg-black/40 rounded-xl p-4 flex flex-col items-center border border-white/5">
                 <Users className="text-blue-400 mb-2" size={24} />
-                <span className="text-2xl font-bold">{stats.viewers || 0}</span>
+                <span className="text-2xl font-bold">{displayStats.viewers || 0}</span>
                 <span className="text-xs text-zinc-500 uppercase tracking-wider">Viewers</span>
             </div>
             <div className="bg-black/40 rounded-xl p-4 flex flex-col items-center border border-white/5">
                 <Heart className="text-pink-500 mb-2" size={24} />
-                <span className="text-2xl font-bold">{stats.likes || 0}</span>
+                <span className="text-2xl font-bold">{displayStats.likes || 0}</span>
                 <span className="text-xs text-zinc-500 uppercase tracking-wider">Likes</span>
             </div>
             <div className="bg-black/40 rounded-xl p-4 flex flex-col items-center border border-white/5">
                 <Gift className="text-yellow-500 mb-2" size={24} />
-                <span className="text-2xl font-bold">{stats.gifts || 0}</span>
+                <span className="text-2xl font-bold">{displayStats.gifts || 0}</span>
                 <span className="text-xs text-zinc-500 uppercase tracking-wider">Gifts</span>
             </div>
         </div>

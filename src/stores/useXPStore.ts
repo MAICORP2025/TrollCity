@@ -85,6 +85,22 @@ export const useXPStore = create<XPState>((set) => {
       set({ isLoading: true })
       try {
         console.log('Fetching XP for user:', userId)
+        
+        // Skip XP fetch for guest IDs (non-UUID format like TC-XXXX)
+        if (!userId || userId.startsWith('TC-')) {
+          console.log('Guest user detected, skipping XP fetch');
+          set({
+            xpTotal: 0,
+            level: 1,
+            buyerLevel: 1,
+            streamLevel: 1,
+            xpToNext: 100,
+            progress: 0,
+            isLoading: false
+          });
+          return;
+        }
+        
         const { data, error } = await supabase
           .from('user_stats')
           .select('*')

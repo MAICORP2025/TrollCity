@@ -2,12 +2,15 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import { useParticipants, useTracks, VideoTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Stream } from '../../types/broadcast';
-import { User, Coins, Plus, MicOff, VideoOff } from 'lucide-react';
+import { User, Coins, Plus, MicOff, VideoOff, Lock } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import UserActionModal from './UserActionModal';
+
+import BroadcasterStatsModal from './BroadcasterStatsModal';
 import { SeatSession } from '../../hooks/useStreamSeats';
 import { getGlowingTextStyle } from '../../lib/perkEffects';
 import { useParticipantAttributes } from '../../hooks/useParticipantAttributes';
+import { toast } from 'sonner';
 
 interface BroadcastGridProps {
   stream: Stream;
@@ -42,6 +45,7 @@ export default function BroadcastGrid({
   const cameraTracks = useTracks([Track.Source.Camera]);
   const audioTracks = useTracks([Track.Source.Microphone]); // Monitor audio tracks for mute state
   const [selectedUserForAction, setSelectedUserForAction] = useState<string | null>(null);
+  const [showHostStats, setShowHostStats] = useState(false);
 
   // Deduplicate user IDs (prevents redundant attribute lookups)
   const userIds = useMemo(() => {
@@ -103,12 +107,13 @@ export default function BroadcastGrid({
   return (
     <div
       className={cn(
-        'grid gap-4 w-full h-full p-4',
+        'grid gap-2 w-full h-full p-2',
         effectiveBoxCount === 1 && 'grid-cols-1 grid-rows-1',
         effectiveBoxCount === 2 && 'grid-cols-1 md:grid-cols-2 grid-rows-1',
-        effectiveBoxCount === 3 && 'grid-cols-2 md:grid-cols-3 grid-rows-2',
+        effectiveBoxCount === 3 && 'grid-cols-2 grid-rows-2',
         effectiveBoxCount === 4 && 'grid-cols-2 grid-rows-2',
-        effectiveBoxCount >= 5 && 'grid-cols-2 md:grid-cols-3 grid-rows-2'
+        effectiveBoxCount >= 5 && 'grid-cols-2 grid-rows-3',
+        effectiveBoxCount === 6 && 'grid-cols-3 grid-rows-2'
       )}
     >
       {boxes.map((seatIndex) => {
@@ -139,7 +144,7 @@ export default function BroadcastGrid({
         // Use real-time attributes if available
         const userAttrs = userId ? attributes[userId] : null;
 
-        let boxClass = 'relative bg-black/50 rounded-xl overflow-hidden border border-white/10';
+        let boxClass = 'relative bg-black/50 rounded-xl overflow-hidden border border-white/10 transition-all duration-300';
 
         const hasGold =
           !!displayProfile?.is_gold || userAttrs?.activePerks?.includes('perk_gold_username' as any);
@@ -153,9 +158,9 @@ export default function BroadcastGrid({
 
         if (hasGold) {
           boxClass =
-            'relative bg-black/50 rounded-xl overflow-hidden border-2 border-yellow-500 shadow-[0_0_15px_rgba(255,215,0,0.3)]';
+            'relative bg-black/50 rounded-xl overflow-hidden border-2 border-yellow-500 shadow-[0_0_15px_rgba(255,215,0,0.3)] transition-all duration-300';
         } else if (hasRgbProfile || hasStreamRgb) {
-          boxClass = 'relative bg-black/50 rounded-xl overflow-hidden rgb-box';
+          boxClass = 'relative bg-black/50 rounded-xl overflow-hidden rgb-box transition-all duration-300';
         }
 
         return (
@@ -163,13 +168,20 @@ export default function BroadcastGrid({
             key={seatIndex}
             className={boxClass}
             onClick={() => {
-              if (userId) setSelectedUserForAction(userId);
+              if (isStreamHost && seatIndex === 0) {
+                 setShowHostStats(true);
+              } else if (userId) {
+                 setSelectedUserForAction(userId);
+              }
             }}
             role={userId ? 'button' : undefined}
             tabIndex={userId ? 0 : -1}
             onKeyDown={(e) => {
               if (!userId) return;
-              if (e.key === 'Enter' || e.key === ' ') setSelectedUserForAction(userId);
+              if (e.key === 'Enter' || e.key === ' ') {
+                 if (isStreamHost && seatIndex === 0) setShowHostStats(true);
+                 else setSelectedUserForAction(userId);
+              }
             }}
           >
             {/* Render Video if Participant Exists and Track is active */}
@@ -224,6 +236,11 @@ export default function BroadcastGrid({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      // Allow host to click to trigger onJoinSeat (which might open invite menu or similar)
+                      // if (isHost && seatIndex !== 0) {
+                      //     toast.info("Seat is open for guests to join!");
+                      //     return;
+                      // }
                       onJoinSeat(seatIndex);
                     }}
                     className="flex flex-col items-center text-zinc-500 hover:text-white transition-colors"
@@ -250,63 +267,67 @@ export default function BroadcastGrid({
               </div>
             )}
 
-            {/* Metadata Overlay */}
+            {/* Metadata Overlay (Bubble Style) - Moved to Top Left to avoid controls */}
             {userId && (
-              <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-between">
-                <div className="flex flex-col min-w-0">
-                  <div className="text-white text-sm font-bold truncate">
-                    {(() => {
-                      const profile =
-                        isStreamHost && broadcasterProfile ? broadcasterProfile : seat?.user_profile;
+              <div className="absolute top-3 left-3 flex items-center gap-2 max-w-[85%] z-10 pointer-events-none">
+                <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2 shadow-lg">
+                  <div className="flex flex-col min-w-0">
+                    <div className="text-white text-sm font-bold truncate flex items-center gap-2">
+                        {(() => {
+                        const profile =
+                            isStreamHost && broadcasterProfile ? broadcasterProfile : seat?.user_profile;
 
-                      const name = isStreamHost
-                        ? broadcasterProfile?.username || 'Host'
-                        : participant?.name || profile?.username || 'User';
+                        const name = isStreamHost
+                            ? broadcasterProfile?.username || 'Host'
+                            : participant?.name || profile?.username || 'User';
 
-                      let className = 'text-white';
-                      let style: CSSProperties | undefined = undefined;
+                        let className = 'text-white';
+                        let style: CSSProperties | undefined = undefined;
 
-                      if (profile) {
-                        if (profile.is_gold) {
-                          className = 'gold-username';
-                        } else if (
-                          profile.rgb_username_expires_at &&
-                          new Date(profile.rgb_username_expires_at) > new Date()
-                        ) {
-                          className = 'rgb-username';
-                        } else if (profile.glowing_username_color) {
-                          style = getGlowingTextStyle(profile.glowing_username_color);
-                          className = 'font-bold';
-                        } else if (userAttrs?.activePerks?.includes('perk_global_highlight' as any)) {
-                          className = 'glowing-username';
-                        } else if (['admin', 'moderator', 'secretary'].includes(profile.role || '')) {
-                          className = 'silver-username';
+                        if (profile) {
+                            if (profile.is_gold) {
+                            className = 'gold-username';
+                            } else if (
+                            profile.rgb_username_expires_at &&
+                            new Date(profile.rgb_username_expires_at) > new Date()
+                            ) {
+                            className = 'rgb-username';
+                            } else if (profile.glowing_username_color) {
+                            style = getGlowingTextStyle(profile.glowing_username_color);
+                            className = 'font-bold';
+                            } else if (userAttrs?.activePerks?.includes('perk_global_highlight' as any)) {
+                            className = 'glowing-username';
+                            } else if (['admin', 'moderator', 'secretary'].includes(profile.role || '')) {
+                            className = 'silver-username';
+                            }
                         }
-                      }
 
-                      return (
-                        <span className={className} style={style}>
-                          {name}
-                          {isStreamHost && (
-                            <span className="ml-1 text-[10px] bg-red-600 px-1 rounded text-white font-normal align-middle">
-                              HOST
+                        return (
+                            <span className={className} style={style}>
+                            {name}
                             </span>
-                          )}
-                        </span>
-                      );
-                    })()}
+                        );
+                        })()}
+                        
+                        {isStreamHost && (
+                            <span className="text-[9px] bg-red-600 px-1 rounded text-white font-bold uppercase tracking-wider">
+                            HOST
+                            </span>
+                        )}
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-1 text-yellow-500 text-xs">
+                  
+                  {/* Coins in Bubble */}
+                  <div className="flex items-center gap-1 text-yellow-500 text-xs border-l border-white/10 pl-2 ml-1">
                     <Coins size={10} />
                     <span>{(displayProfile?.troll_coins || 0).toLocaleString()}</span>
                   </div>
                 </div>
 
-                {/* Mic Status Indicator */}
+                {/* Mic Status Indicator (Outside Bubble) */}
                 {!isMicOn && (
                   <div
-                    className="ml-2 bg-red-500/80 p-1.5 rounded-full backdrop-blur-md shadow-sm"
+                    className="bg-red-500/90 p-1.5 rounded-full backdrop-blur-md shadow-sm animate-in zoom-in duration-200"
                     title="Mic Muted"
                   >
                     <MicOff size={14} className="text-white" />
@@ -315,7 +336,7 @@ export default function BroadcastGrid({
               </div>
             )}
 
-            {/* Action Modal (rendered conditionally; no isOpen prop assumed) */}
+            {/* Action Modal -> Now UserStatsModal */}
             {selectedUserForAction && selectedUserForAction === userId && userId && (
               <UserActionModal
                 onClose={() => setSelectedUserForAction(null)}
@@ -333,6 +354,15 @@ export default function BroadcastGrid({
           </div>
         );
       })}
+      
+      {/* Broadcaster Stats Modal */}
+      {showHostStats && isHost && (
+          <BroadcasterStatsModal 
+              stream={stream} 
+              onClose={() => setShowHostStats(false)} 
+              broadcasterProfile={broadcasterProfile} 
+          />
+      )}
     </div>
   );
 }

@@ -25,8 +25,16 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
-        // Count unique user_ids
-        const count = Object.keys(state).length
+        
+        // Count unique user_ids (deduplicate multiple tabs/connections)
+        const uniqueUsers = new Set();
+        Object.values(state).forEach((presences: any) => {
+            presences.forEach((p: any) => {
+                if (p.user_id) uniqueUsers.add(p.user_id);
+            });
+        });
+        
+        const count = uniqueUsers.size;
         setViewerCount(count)
 
         // If Host OR Officer/Admin, update DB (throttled)

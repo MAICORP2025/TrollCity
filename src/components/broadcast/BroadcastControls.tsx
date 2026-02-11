@@ -20,9 +20,11 @@ interface BroadcastControlsProps {
   onGiftHost: () => void;
   onLeave?: () => void;
   onShare?: () => void;
+  requiredBoxes?: number;
+  onBoxCountUpdate?: (count: number) => void;
 }
 
-export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave, onShare }: BroadcastControlsProps) {
+export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave, onShare, requiredBoxes = 1, onBoxCountUpdate }: BroadcastControlsProps) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const { user, isAdmin, profile } = useAuthStore();
   const [seatPrice, setSeatPrice] = useState(stream.seat_price || 0);
@@ -46,7 +48,7 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
   const canManageStream = isHost || isStaff;
   // Only Host can control stream settings (Visuals, Price, Boxes)
   // Staff can moderate (ban users), but NOT change stream settings
-  const canEditStream = isHost; 
+  const canEditStream = isHost || isStaff; 
 
   const togglePerk = async (perkId: string) => {
     if (!user) return;
@@ -174,30 +176,23 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
     updateStreamConfig(seatPrice, newLocked, true); // Explicitly show toast for manual action
   };
   
-  const updateBoxCount = async (increment: boolean) => {
+  const updateBoxCount = (newCount: number) => {
     if (!canEditStream) return;
-    
-    // Ensure clean integer
-    const currentCount = typeof stream.box_count === 'number' 
-        ? Math.floor(stream.box_count) 
-        : parseInt(String(stream.box_count || 1), 10);
 
-    if (isNaN(currentCount)) return;
+    // Enforce limits
+    const minLimit = Math.max(1, requiredBoxes);
+    if (newCount < minLimit) {
+      toast.error("Cannot reduce boxes below occupied seats");
+      return;
+    }
+    if (newCount > 6) {
+      toast.error("Maximum 6 boxes allowed");
+      return;
+    }
 
-    const newCount = increment ? currentCount + 1 : currentCount - 1;
-    if (newCount < 1 || newCount > 6) return;
-
-    try {
-        const { error } = await supabase
-          .from('streams')
-          .update({ box_count: Math.floor(newCount) })
-          .eq('id', stream.id);
-
-        if (error) throw error;
-        // Optimistic update if needed, but the parent component usually re-renders with new stream data
-    } catch (err: any) {
-        console.error("Failed to update box count:", err);
-        toast.error("Failed to update box count");
+    // Call the parent handler
+    if (onBoxCountUpdate) {
+      onBoxCountUpdate(newCount);
     }
   };
 
@@ -407,16 +402,6 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                     Controls
                 </h3>
                 
-                {canManageStream && (
-                    <button 
-                        onClick={() => setShowBannedList(!showBannedList)}
-                        className={cn("p-2 rounded-full transition-colors", showBannedList ? "bg-red-500/20 text-red-400" : "hover:bg-white/10 text-zinc-400")}
-                        title="Banned Users"
-                    >
-                        <UserX size={20} />
-                    </button>
-                )}
-                
                 {/* Viewer Count */}
                 <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/5">
                     <Eye size={16} className="text-blue-400" />
@@ -616,16 +601,16 @@ export default function BroadcastControls({ stream, isHost, isOnStage, chatOpen,
                         </span>
                         <div className="flex items-center gap-3">
                             <button 
-                                onClick={() => updateBoxCount(false)}
-                                disabled={stream.box_count <= 1 || !canEditStream}
+                                onClick={() => updateBoxCount((stream.box_count || 1) - 1)}
+                                disabled={!canEditStream || (stream.box_count || 1) <= Math.max(1, requiredBoxes)}
                                 className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white transition disabled:opacity-50"
                             >
                                 <Minus size={16} />
                             </button>
                             <span className="font-bold text-white min-w-[20px] text-center">{stream.box_count}</span>
                             <button 
-                                onClick={() => updateBoxCount(true)}
-                                disabled={stream.box_count >= 6 || !canEditStream}
+                                onClick={() => updateBoxCount((stream.box_count || 1) + 1)}
+                                disabled={!canEditStream || (stream.box_count || 1) >= 6}
                                 className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white transition disabled:opacity-50"
                             >
                                 <Plus size={16} />

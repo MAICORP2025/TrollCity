@@ -249,8 +249,8 @@ export default function ExploreFeed() {
         ) : broadcasts.length === 0 ? (
           <div className={`text-center py-20 ${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-3xl`}>
             <Radio className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-            <h3 className={`text-2xl font-bold ${trollCityTheme.text.primary} mb-2`}>No Live Streams</h3>
-            <p className={trollCityTheme.text.muted}>Check back later or be the first to go live!</p>
+            <h3 className={`text-2xl font-bold ${trollCityTheme.text.primary} mb-2`}>No one is live right now</h3>
+            <p className={trollCityTheme.text.muted}>Check back later to see who is streaming.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

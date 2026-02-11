@@ -2,7 +2,7 @@
 -- This ensures that every gift sent is recorded as a transaction in the central ledger
 -- fulfilling the "Revenue & Inventory Sync" requirement.
 
-CREATE OR REPLACE FUNCTION public.send_premium_gift(
+CREATE OR REPLACE FUNCTION public.send_premium_gift_by_id(
   p_sender_id UUID,
   p_receiver_id UUID,
   p_stream_id UUID,

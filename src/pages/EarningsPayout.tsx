@@ -150,7 +150,9 @@ export default function EarningsPayout() {
       try {
         const { data, error } = await supabase.rpc('request_visa_redemption', {
             p_user_id: profile.id,
-            p_tier_id: selectedTierId
+            p_tier_id: selectedTierId,
+            p_full_name: fullName,
+            p_payout_details: payoutDetails
         });
 
       if (error) {
@@ -237,7 +239,9 @@ export default function EarningsPayout() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm mb-1">Payout Method</label>
-              <div className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-3 py-2 text-sm">PayPal</div>
+              <div className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-3 py-2 text-sm text-gray-300">
+                Digital Visa Card
+              </div>
             </div>
             <div>
               <label className="block text-sm mb-1">Full Name</label>
@@ -249,13 +253,13 @@ export default function EarningsPayout() {
               />
             </div>
             <div>
-              <label className="block text-sm mb-1">Payout Details</label>
+              <label className="block text-sm mb-1">Email Address</label>
               <input
                 type="text"
                 className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-3 py-2 text-sm"
                 value={payoutDetails}
                 onChange={e => setPayoutDetails(e.target.value)}
-                placeholder={placeholderForMethod(payoutMethod)}
+                placeholder="Email for Visa Card delivery"
               />
             </div>
           </div>
@@ -265,7 +269,7 @@ export default function EarningsPayout() {
             onClick={handleSubmit}
             className="w-full mt-2 bg-gradient-to-r from-purple-600 to-indigo-500 text-white py-2 rounded-lg flex items-center justify-center gap-2"
           >
-            {loading ? 'Submitting…' : <><Send className="w-4 h-4" />Submit Cashout Request</>}
+            {loading ? 'Submitting…' : <><Send className="w-4 h-4" />Request Visa Card</>}
           </button>
         </div>
 

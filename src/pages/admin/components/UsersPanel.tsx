@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../../../lib/supabase";
+import { supabase, UserRole } from "../../../lib/supabase";
 import { toast } from "sonner";
 import UserActions from "./UserActions";
 import UserNameWithAge from "../../../components/UserNameWithAge";
@@ -15,7 +15,7 @@ interface AdminUser {
   email: string;
   avatar_url?: string;
   is_banned: boolean;
-  role: string;
+  role: UserRole;
   created_at?: string;
   glowing_username_color?: string;
   rgb_username_expires_at?: string;

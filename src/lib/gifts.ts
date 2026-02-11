@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import { toast } from 'sonner'
+import { xpService } from '../services/xpService'
+import { XP_RATES } from './xp'
 
 /**
  * Send a gift from one user to another
@@ -19,6 +21,13 @@ export const sendGift = async (
   coins: number,
   itemName?: string
 ): Promise<boolean> => {
+  // Skip for guest IDs
+  if (senderId.startsWith('TC-')) {
+    console.error('Error sending gift: Guest users cannot send gifts');
+    toast.error('Please log in to send gifts');
+    return false;
+  }
+  
   try {
     const { data, error } = await supabase.rpc('spend_coins', {
       p_sender_id: senderId,
@@ -57,6 +66,30 @@ export const sendGift = async (
       }
       
       return false
+    }
+
+    // Grant XP to sender (gifter) - 25% of coin amount
+    const gifterXp = Math.floor(coins * XP_RATES.GIFTER);
+    if (gifterXp > 0) {
+      await xpService.grantXP(
+        senderId,
+        gifterXp,
+        'gift_sent',
+        `gift_${Date.now()}`,
+        { coins, item: itemName || 'Gift' }
+      );
+    }
+    
+    // Grant XP to receiver (streamer) - 100% of coin amount
+    const streamerXp = Math.floor(coins * XP_RATES.STREAMER);
+    if (streamerXp > 0) {
+      await xpService.grantXP(
+        receiverId,
+        streamerXp,
+        'gift_received',
+        `gift_${Date.now()}`,
+        { coins, sender_id: senderId }
+      );
     }
 
     toast.success(`🎁 Gift sent successfully!`)

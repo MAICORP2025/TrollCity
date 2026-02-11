@@ -159,7 +159,7 @@ Deno.serve(async (req: Request) => {
 
     // Total coins in circulation (sum of all user balances)
     const circulationData = await safeQuery(() =>
-      supabase.from("profiles").select("coins_balance, troll_coins") as Promise<QueryResult<any>>
+      supabase.from("profiles").select("coins_balance, troll_coins").not("role", "in", '("admin","owner","hr_admin","temp_admin","temp_city_admin")') as Promise<QueryResult<any>>
     );
 
     // Gift coins given
@@ -180,7 +180,7 @@ Deno.serve(async (req: Request) => {
     // ========== FINANCIAL STATS ==========
     // Total liability coins (sum of all user coin balances - NOT HARDCODED)
     const liabilityData = await safeQuery(() =>
-      supabase.from("profiles").select("coins_balance, troll_coins") as Promise<QueryResult<any>>
+      supabase.from("profiles").select("coins_balance, troll_coins").not("role", "in", '("admin","owner","hr_admin","temp_admin","temp_city_admin")') as Promise<QueryResult<any>>
     );
 
     // Platform profit in USD from transactions

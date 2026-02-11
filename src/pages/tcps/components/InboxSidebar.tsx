@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { useChatStore } from '../../../lib/chatStore'
 import UserNameWithAge from '../../../components/UserNameWithAge'
+import { toast } from 'sonner'
 
 interface SidebarConversation {
   other_user_id: string

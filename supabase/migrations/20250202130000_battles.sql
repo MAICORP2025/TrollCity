@@ -51,8 +51,28 @@ BEGIN
 
   -- Link both streams to this battle
   UPDATE public.streams 
-  SET battle_id = p_battle_id 
+  SET battle_id = p_battle_id, is_battle = true
   WHERE id IN (v_battle.challenger_stream_id, v_battle.opponent_stream_id);
+
+  -- Notify clients of the change
+  PERFORM pg_notify(
+    'realtime', 
+    json_build_object(
+        'table', 'streams',
+        'type', 'UPDATE',
+        'record', json_build_object('id', v_battle.challenger_stream_id, 'battle_id', p_battle_id),
+        'old_record', json_build_object('id', v_battle.challenger_stream_id, 'battle_id', null)
+    )::text
+  );
+  PERFORM pg_notify(
+    'realtime', 
+    json_build_object(
+        'table', 'streams',
+        'type', 'UPDATE',
+        'record', json_build_object('id', v_battle.opponent_stream_id, 'battle_id', p_battle_id),
+        'old_record', json_build_object('id', v_battle.opponent_stream_id, 'battle_id', null)
+    )::text
+  );
 
   RETURN TRUE;
 END;

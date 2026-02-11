@@ -13,7 +13,7 @@ const DISTRICT_DATA: { [key: string]: { display_name: string; description: strin
   },
   entertainment_district: {
     display_name: 'Entertainment District',
-    description: 'Where the Tromody Show and other entertainment venues are located.'
+    description: 'Where live entertainment and shows are hosted.'
   },
   commerce_district: {
     display_name: 'Commerce District',
@@ -89,9 +89,7 @@ export default function DistrictTour() {
         { feature_name: 'Leaderboard', route_path: '/leaderboard' },
         { feature_name: 'Troll City Wall', route_path: '/wall' }
       ],
-      entertainment_district: [
-        { feature_name: 'Tromody Show', route_path: '/tromody' }
-      ],
+      entertainment_district: [],
       commerce_district: [
         { feature_name: 'Coin Store', route_path: '/store' },
         { feature_name: 'Marketplace', route_path: '/marketplace' },

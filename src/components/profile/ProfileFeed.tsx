@@ -62,7 +62,7 @@ export default function ProfileFeed({ userId }: ProfileFeedProps) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const onEmojiClick = (emojiData: EmojiClickData) => {
+  const onEmojiClick = (emojiData: any) => {
     setContent(prev => prev + emojiData.emoji);
     setShowEmojiPicker(false);
   };

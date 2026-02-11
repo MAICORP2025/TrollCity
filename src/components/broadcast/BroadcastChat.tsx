@@ -152,12 +152,6 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
     };
     fetchMessages();
 
-    // If Viewer (Passive Mode), use Polling instead of Realtime
-    if (isViewer) {
-        const interval = setInterval(fetchMessages, 10000); // Poll every 10 seconds
-        return () => clearInterval(interval);
-    }
-
     // Subscribe to Chat Messages
     const chatChannel = supabase
         .channel(`chat:${streamId}`)
@@ -240,18 +234,31 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
                 setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
             });
         })
-        .subscribe(async (status) => {
-            if (status === 'SUBSCRIBED' && user && profile) {
-                await viewerChannel.track({
-                    user_id: user.id,
-                    username: profile.username,
-                    avatar_url: profile.avatar_url,
-                    role: profile.role,
-                    troll_role: profile.troll_role,
-                    joined_at: new Date().toISOString()
+        .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+            leftPresences.forEach((p: any) => {
+                const systemMsg: Message = {
+                    id: `sys-leave-${Date.now()}-${Math.random()}`,
+                    user_id: p.user_id,
+                    content: 'left the broadcast',
+                    created_at: new Date().toISOString(),
+                    type: 'system',
+                    user_profiles: {
+                        username: p.username || 'Guest',
+                        avatar_url: p.avatar_url || '',
+                        created_at: p.joined_at,
+                        role: p.role,
+                        troll_role: p.troll_role
+                    }
+                };
+                setMessages(prev => {
+                    const updated = [...prev, systemMsg];
+                    if (updated.length > 50) return updated.slice(updated.length - 50);
+                    return updated;
                 });
-            }
-        });
+                setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+            });
+        })
+        .subscribe();
 
     return () => { 
         supabase.removeChannel(chatChannel); 

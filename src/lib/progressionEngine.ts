@@ -18,6 +18,12 @@ export type DnaEventType =
   | 'HIGH_SPENDER_EVENT'
 
 export async function addXp(userId: string, amount: number, reason?: string) {
+  // Skip for guest IDs
+  if (!userId || userId.startsWith('TC-')) {
+    console.log('Guest user detected, skipping XP add');
+    return { data: null, error: null };
+  }
+  
   const { data, error } = await supabase.rpc('add_xp', { p_user_id: userId, p_amount: Math.max(0, Math.floor(amount)), p_reason: reason || null })
 
   // Family XP earning hook: Allocate XP to family stats

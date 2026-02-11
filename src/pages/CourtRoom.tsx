@@ -582,6 +582,12 @@ export default function CourtRoom() {
     };
   }, [courtId]);
 
+  const isJudge =
+    profile?.role === 'admin' ||
+    profile?.role === 'lead_troll_officer' ||
+    profile?.is_admin ||
+    profile?.is_lead_officer;
+
   // Duration Limit (1 hour)
   useEffect(() => {
     if (courtSession?.created_at) {
@@ -601,15 +607,6 @@ export default function CourtRoom() {
         return () => clearInterval(interval);
     }
   }, [courtSession, isJudge]);
-
-
-
-  // Check if user is a judge (admin or lead officer)
-  const isJudge =
-    profile?.role === 'admin' ||
-    profile?.role === 'lead_troll_officer' ||
-    profile?.is_admin ||
-    profile?.is_lead_officer;
 
   // Get the effective role for display (prioritize is_admin flag)
   const getEffectiveRole = () => {
@@ -1099,6 +1096,15 @@ export default function CourtRoom() {
             ban_expires: sentenceDetails.duration
           })
           .eq('id', defendant);
+      }
+      if (sentenceType === 'jail') {
+        const releaseTime = new Date();
+        releaseTime.setHours(releaseTime.getHours() + sentenceDetails.duration);
+        await supabase.from('jail').insert({
+          user_id: defendant,
+          release_time: releaseTime.toISOString(),
+          reason: sentenceDetails.reason,
+        });
       }
     } catch (err) {
       console.error('Error applying sentence:', err);

@@ -15,7 +15,6 @@ app.use(express.json());
 // Import handlers
 const livekitTokenHandler = require('./api/livekit-token');
 const telemetryHandler = require('./api/telemetryHandler');
-const walkieTokenHandler = require('./api/walkie-token');
 
 // API Routes
 
@@ -54,11 +53,6 @@ app.get('/api/paypal/test', (req, res) => {
 // LiveKit Token
 app.post('/api/livekit-token', async (req, res) => {
   await livekitTokenHandler(req, res);
-});
-
-// Walkie Token (Staff Only)
-app.post('/api/walkie-token', async (req, res) => {
-  await walkieTokenHandler(req, res);
 });
 
 // Telemetry

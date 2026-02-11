@@ -56,6 +56,7 @@ export type CoinTransactionType =
   | 'insurance_purchase'
   | 'entrance_effect'
   | 'perk_purchase'
+  | 'gas_refill'
   | 'refund'
   | 'reward'
   | 'lucky_gift_win'
@@ -293,6 +294,9 @@ export async function deductCoins(params: {
       // This ensures we use the same logic as house/car purchases and fix the "flashing" bug
       console.log('[deductCoins] Calling try_pay_coins_secure:', { userId, amount: normalizedAmount, type })
       
+      // FIX: Removed "RPC Fallback Hell". 
+      // We now strictly use try_pay_coins_secure. 
+      // If this fails, the transaction fails. We do NOT fall back to legacy/insecure RPCs.
       const { data: paySuccess, error: payError } = await sb.rpc('try_pay_coins_secure', {
         p_amount: normalizedAmount,
         p_reason: type,
@@ -301,59 +305,6 @@ export async function deductCoins(params: {
 
       if (payError) {
         console.error('[deductCoins] try_pay_coins_secure error:', payError)
-        const errMsg = payError.message || ''
-        
-        // Fallback for missing function OR permission errors (RLS)
-        // "Cannot update restricted column" is a common RLS error when RPC is not SECURITY DEFINER
-        if (
-          (errMsg.includes('function') && errMsg.includes('not found')) ||
-          errMsg.includes('Could not find the function') ||
-          errMsg.includes('restricted column') ||
-          errMsg.includes('permission denied')
-        ) {
-             console.log('[deductCoins] Fallback to legacy troll_bank_spend_coins_secure due to:', errMsg)
-             const { data: bankResult, error: bankError } = await sb.rpc('troll_bank_spend_coins_secure', {
-                p_user_id: userId,
-                p_amount: normalizedAmount,
-                p_bucket: 'paid',
-                p_source: type,
-                p_ref_id: null,
-                p_metadata: metadataPayload || {}
-             })
-             
-             if (bankError || (bankResult && !bankResult.success)) {
-                 // Double fallback: try deduct_user_troll_coins (simplest RPC)
-                 console.log('[deductCoins] Secondary fallback to deduct_user_troll_coins')
-                 const { data: simpleResult, error: simpleError } = await sb.rpc('deduct_user_troll_coins', {
-                    p_user_id: userId,
-                    p_amount: normalizedAmount.toString(),
-                    p_coin_type: 'troll_coins'
-                 })
-                 
-                 if (simpleError) {
-                    return { success: false, newBalance: null, transaction: null, error: simpleError.message || bankError?.message || payError.message }
-                 }
-                 
-                 // Success via simple RPC
-                 const parsedBalance = safeNumber(simpleResult)
-                 return { 
-                    success: true, 
-                    newBalance: parsedBalance, 
-                    transaction: { 
-                        id: `tx_${Date.now()}`,
-                        user_id: userId,
-                        amount: -normalizedAmount,
-                        type: type,
-                        created_at: new Date().toISOString()
-                    } 
-                 }
-             }
-             
-             // Success via legacy bank
-             const newBalance = bankResult.new_balance
-             return { success: true, newBalance, transaction: { id: bankResult.ledger_id } }
-        }
-        
         return { success: false, newBalance: null, transaction: null, error: payError.message }
       }
 
@@ -389,66 +340,11 @@ export async function deductCoins(params: {
       }
     }
 
-    // Legacy path for non-Troll Coins (e.g. Trollmonds)
-    const amountParam = normalizedAmount.toString()
-    const { data: rpcBalance, error: deductError } = await sb.rpc('deduct_user_troll_coins', {
-      p_user_id: userId,
-      p_amount: amountParam,
-      p_coin_type: coinType || 'troll_coins'
-    })
-
-    if (deductError) {
-      console.error('deductCoins: RPC error', deductError)
-      return { success: false, newBalance: null, transaction: null, error: deductError.message || 'Failed to deduct coins' }
-    }
-
-    const parsedBalance = safeNumber(rpcBalance)
-    let newBalance: number | string | null = parsedBalance
-    if (newBalance === null && rpcBalance !== null && rpcBalance !== undefined) {
-      newBalance = typeof rpcBalance === 'string' ? rpcBalance : String(rpcBalance)
-    }
-
-    const balanceAfterForRecord = formatBalanceForRecord(
-      balanceAfter ?? newBalance ?? null
-    )
-
-    const transaction = await recordCoinTransaction({
-      userId,
-      amount: -normalizedAmount,
-      type,
-      coinType,
-      description,
-      metadata,
-      balanceAfter: balanceAfterForRecord,
-      platformProfit,
-      liability,
-      supabaseClient: sb
-    })
-
-    // Update global store if the deduction was for the current user
-    // This ensures UI components (like Sidebar) reflect the change immediately
-    try {
-      const { profile, setProfile } = useAuthStore.getState()
-      if (profile && profile.id === userId && newBalance !== null) {
-        const numericBalance = Number(newBalance)
-        if (!isNaN(numericBalance)) {
-          // Update the specific coin balance based on coinType
-          const updatedProfile = { ...profile }
-          
-          updatedProfile.troll_coins = numericBalance
-          
-          setProfile(updatedProfile)
-        }
-      }
-    } catch (e) {
-      console.warn('deductCoins: Failed to update local store', e)
-    }
-
     return {
-      success: true,
-      newBalance,
-      transaction,
-      error: null
+        success: false,
+        newBalance: null,
+        transaction: null,
+        error: `Invalid coinType: ${coinType}. Only troll_coins is supported.`
     }
   } catch (err: any) {
     console.error('deductCoins exception:', err)
@@ -477,7 +373,7 @@ export async function addCoins(params: {
   liability?: number
   sourceId?: string
 }) {
-  const { userId, amount, type, coinType = 'troll_coins', description: _description, metadata, supabaseClient, platformProfit: _platformProfit, liability: _liability, sourceId } = params
+  const { userId, amount, type, coinType = 'troll_coins', description, metadata, supabaseClient, platformProfit, liability, sourceId } = params
   const finalCoinType = coinType || 'troll_coins'
 
   const sb = supabaseClient || supabase
@@ -515,7 +411,25 @@ export async function addCoins(params: {
       insurance_purchase: 'paid',
       entrance_effect: 'paid',
       perk_purchase: 'paid',
+      gas_refill: 'paid',
       troll_town_sale: 'paid'
+    }
+
+    // Special handling for Admin Grants (Secure RPC)
+    if (type === 'admin_grant') {
+      const { data, error } = await sb.rpc('admin_grant_coins', {
+        p_target_id: userId,
+        p_amount: amount,
+        p_reason: description || 'Admin Grant'
+      });
+      
+      if (error) {
+        console.error('addCoins: Admin grant failed', error);
+        return { success: false, newBalance: currentBalance, transaction: null, error: error.message };
+      }
+      
+      // We don't get the exact new balance back easily, so we estimate
+      return { success: true, newBalance: currentBalance + amount, transaction: null };
     }
 
     const bucket = bucketMap[type] || 'promo' // Default to promo for safety

@@ -1,37 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../../../lib/supabase'
+import { supabase, UserProfile } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
 import { User, Coins, Award, Shield, Save, X, Search } from 'lucide-react'
 import UserNameWithAge from '../../../components/UserNameWithAge'
 import UserDetailsModal from '../../../components/admin/UserDetailsModal'
-
-interface UserProfile {
-  id: string
-  username: string
-  email?: string
-  role: string
-  troll_coins: number
-  free_coin_balance: number
-  level: number
-  is_troll_officer: boolean
-  is_lead_officer?: boolean
-  is_admin: boolean
-  is_troller: boolean
-  created_at: string
-  updated_at?: string
-  full_name?: string | null
-  phone?: string | null
-  onboarding_completed?: boolean | null
-  terms_accepted?: boolean | null
-  id_verification_status?: string | null
-  bypass_broadcast_restriction?: boolean
-  glowing_username_color?: string
-  rgb_username_expires_at?: string
-  is_gold?: boolean
-  username_style?: string
-  badge?: string
-}
 
 interface UserManagementPanelProps {
   title?: string

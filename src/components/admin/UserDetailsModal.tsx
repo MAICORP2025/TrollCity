@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
 import {
   X,
@@ -11,7 +12,9 @@ import {
   User,
   DollarSign,
   Bell,
-  Upload
+  Upload,
+  Gavel,
+  Car
 } from 'lucide-react'
 
 interface UserDetailsModalProps {
@@ -88,9 +91,12 @@ interface UserComprehensiveData {
 }
 
 export default function UserDetailsModal({ userId, username, onClose }: UserDetailsModalProps) {
+  const { profile: adminProfile } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [userData, setUserData] = useState<UserComprehensiveData | null>(null)
   const [sendingPrompt, setSendingPrompt] = useState(false)
+  const [suspendingLicense, setSuspendingLicense] = useState(false)
+  const [licenseStatus, setLicenseStatus] = useState<string>('none')
 
   const loadUserData = useCallback(async () => {
     setLoading(true)
@@ -107,6 +113,9 @@ export default function UserDetailsModal({ userId, username, onClose }: UserDeta
         toast.error('User profile not found')
         return
       }
+
+      // Set license status from profile
+      setLicenseStatus(profile.drivers_license_status || 'none')
 
       // Fetch tax info
       const { data: taxInfo } = await supabase
@@ -242,6 +251,44 @@ export default function UserDetailsModal({ userId, username, onClose }: UserDeta
       toast.error('Failed to send prompt')
     } finally {
       setSendingPrompt(false)
+    }
+  }
+
+  // Check if user can manage licenses
+  const canManageLicense = adminProfile && (
+    adminProfile.role === 'admin' ||
+    adminProfile.role === 'secretary' ||
+    adminProfile.role === 'troll_officer' ||
+    adminProfile.is_admin === true
+  )
+
+  const handleLicenseAction = async (licenseAction: 'suspend' | 'revoke' | 'reinstate') => {
+    if (!confirm(`Are you sure you want to ${licenseAction} this user's license?`)) return
+
+    setSuspendingLicense(true)
+    try {
+      const reason = licenseAction === 'suspend' || licenseAction === 'revoke'
+        ? `License ${licenseAction}ed by ${adminProfile?.username || 'admin'}`
+        : undefined
+
+      const { error } = await supabase.functions.invoke('admin-actions', {
+        body: {
+          action: 'suspend_license_with_summon',
+          targetUserId: userId,
+          license_action: licenseAction,
+          reason
+        }
+      })
+
+      if (error) throw error
+
+      toast.success(`License ${licenseAction}ed successfully`)
+      loadUserData() // Reload to get updated license status
+    } catch (error: any) {
+      console.error('Error managing license:', error)
+      toast.error(error.message || `Failed to ${licenseAction} license`)
+    } finally {
+      setSuspendingLicense(false)
     }
   }
 
@@ -504,6 +551,55 @@ export default function UserDetailsModal({ userId, username, onClose }: UserDeta
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* License Management */}
+          <div className="bg-zinc-900 rounded-lg border border-white/10 p-4">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Car className="w-5 h-5 text-blue-400" />
+              License Management
+            </h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-gray-400">Driver&apos;s License</div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    licenseStatus === 'suspended' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                    licenseStatus === 'revoked' ? 'bg-red-900/20 text-red-300 border border-red-500/30' :
+                    licenseStatus === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                    licenseStatus === 'expired' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                    'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                  }`}>
+                    {licenseStatus.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              {canManageLicense && (
+                <div className="flex gap-2 pt-2">
+                  {licenseStatus !== 'suspended' && licenseStatus !== 'revoked' && (
+                    <button
+                      onClick={() => handleLicenseAction('suspend')}
+                      disabled={suspendingLicense}
+                      className="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-200 text-xs rounded border border-red-700 flex items-center gap-1 transition-colors disabled:opacity-50"
+                    >
+                      <Gavel size={12} />
+                      {suspendingLicense ? 'Processing...' : 'Suspend License'}
+                    </button>
+                  )}
+                  {(licenseStatus === 'suspended' || licenseStatus === 'revoked') && (
+                    <button
+                      onClick={() => handleLicenseAction('reinstate')}
+                      disabled={suspendingLicense}
+                      className="px-3 py-1.5 bg-green-900/50 hover:bg-green-900 text-green-200 text-xs rounded border border-green-700 flex items-center gap-1 transition-colors disabled:opacity-50"
+                    >
+                      <CheckCircle size={12} />
+                      {suspendingLicense ? 'Processing...' : 'Reinstate License'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

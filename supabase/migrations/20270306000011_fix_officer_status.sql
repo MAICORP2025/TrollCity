@@ -8,18 +8,9 @@ DECLARE
     v_active_session_id uuid;
     v_is_active boolean;
 BEGIN
-    -- Check if officer is active (not suspended)
-    SELECT is_officer_active INTO v_is_active
-    FROM user_profiles
-    WHERE id = p_officer_id;
-
-    -- If we want to enforce suspension preventing clock-in:
-    -- IF v_is_active IS FALSE THEN
-    --    RETURN jsonb_build_object('success', false, 'message', 'Officer is suspended');
-    -- END IF;
-    -- However, since we are migrating from a broken state where everyone is false, 
-    -- we might want to skip this check or ensure we migrate data first.
-    -- For now, let's just REMOVE the auto-update of is_officer_active.
+    IF NOT is_officer_active(p_officer_id) THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Officer is not active');
+    END IF;
     
     -- Check if officer already has an active session
     SELECT id INTO v_active_session_id

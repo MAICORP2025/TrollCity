@@ -184,6 +184,7 @@ END;
 $$;
 
 -- 7. Update is_staff to include temp_city_admin
+DROP FUNCTION IF EXISTS public.is_staff(UUID);
 CREATE OR REPLACE FUNCTION public.is_staff(p_user_id UUID DEFAULT public.current_user_id())
 RETURNS BOOLEAN AS $$
 BEGIN

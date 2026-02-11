@@ -38,7 +38,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
   const [callDuration, setCallDuration] = useState(0);
   const [lowMinutesWarning, setLowMinutesWarning] = useState(false);
   const [livekitUrl, setLivekitUrl] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [connection, setConnection] = useState<string | null>(null);
   const [isEnding, setIsEnding] = useState(false);
   const [isStartingCall, setIsStartingCall] = useState(false);
   const dialCtxRef = useRef<AudioContext | null>(null);
@@ -170,13 +170,15 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
     } catch (error) {
       console.error('Error ending call:', error);
     } finally {
-      navigate('/messages');
+      // Force a hard refresh to ensure all video/audio contexts are completely cleared
+      // This prevents the "blue screen" / leftover UI glitch
+      window.location.href = '/messages';
     }
   }, [roomId, user, navigate, otherUserId, callType, isEnding]);
 
   // Initialize LiveKit connection
   useEffect(() => {
-    if (!roomId || !user || !livekitUrl || !token) return;
+    if (!roomId || !user || !livekitUrl || !connection) return;
 
     let newRoom: Room | null = null;
 
@@ -257,7 +259,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
           endCall();
         });
 
-        await newRoom.connect(livekitUrl, token);
+        await newRoom.connect(livekitUrl, connection);
         roomRef.current = newRoom;
       } catch (err: any) {
         console.error('Call connection error:', err);
@@ -311,68 +313,68 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         dialCtxRef.current = null;
       }
     };
-  }, [roomId, user, livekitUrl, token, callType, isVideoOff, navigate, endCall]);
+  }, [roomId, user, livekitUrl, connection, callType, isVideoOff, navigate, endCall]);
 
-  // Get LiveKit token
+  // Get Connection Details
   useEffect(() => {
     if (!roomId || !user) return;
 
-    const getToken = async () => {
+    const getConnection = async () => {
       try {
-        const tokenResponse = await api.post('/livekit-token', {
+        const connectionResponse = await api.post('/livekit-token', {
           room: roomId,
           identity: user.email || user.id,
           isHost: true,
           canPublish: true, // Explicitly request publish permission
         });
 
-        console.log('[Call] Token response:', { 
-          success: tokenResponse.success,
-          hasToken: !!tokenResponse.token,
-          hasDataToken: !!tokenResponse.data?.token,
-          keys: Object.keys(tokenResponse)
+        console.log('[Call] Connection response:', { 
+          success: connectionResponse.success,
+          hasConnection: !!connectionResponse.token,
+          hasData: !!connectionResponse.data?.token,
+          keys: Object.keys(connectionResponse)
         });
 
-        if (tokenResponse.error) {
-          throw new Error(tokenResponse.error);
+        if (connectionResponse.error) {
+          throw new Error(connectionResponse.error);
         }
 
         // Handle both flat and nested structure
-        let tokenVal = tokenResponse.token || tokenResponse.data?.token;
+        let connectionVal = connectionResponse.token || connectionResponse.data?.token;
         
-        if (!tokenVal || typeof tokenVal !== 'string') {
-          console.error('[Call] Invalid token received:', tokenResponse);
-          throw new Error('Invalid token format received from server');
+        if (!connectionVal || typeof connectionVal !== 'string') {
+          console.error('[Call] Invalid connection details received:', connectionResponse);
+          throw new Error('Invalid connection format received from server');
         }
 
-        // Clean up token - remove whitespace and potential double quotes
-        tokenVal = tokenVal.trim();
-        if (tokenVal.startsWith('"') && tokenVal.endsWith('"')) {
-            tokenVal = tokenVal.slice(1, -1);
+        // Clean up connection string - remove whitespace and potential double quotes
+        connectionVal = connectionVal.trim();
+        if (connectionVal.startsWith('"') && connectionVal.endsWith('"')) {
+            connectionVal = connectionVal.slice(1, -1);
         }
 
-        const serverUrl = tokenResponse.livekitUrl || tokenResponse.serverUrl || tokenResponse.url || tokenResponse.data?.livekitUrl;
+        const serverUrl = connectionResponse.livekitUrl || connectionResponse.serverUrl || connectionResponse.url || connectionResponse.data?.livekitUrl;
         
         if (!serverUrl) {
-          throw new Error('LiveKit server URL not found');
+          throw new Error('Server URL not found');
         }
 
-        console.log('[Call] Token received successfully', { 
-          tokenLen: tokenVal.length, 
-          tokenPreview: tokenVal.substring(0, 10) + '...',
+        console.log('[Call] Connection details received successfully', { 
+          connectionLen: connectionVal.length, 
+          connectionPreview: connectionVal.substring(0, 10) + '...',
           serverUrl 
         });
 
         setLivekitUrl(serverUrl);
-        setToken(tokenVal);
+        setConnection(connectionVal);
       } catch (err: any) {
-        console.error('Token error:', err);
+        console.error('Connection error:', err);
         toast.error('Failed to initialize call');
         navigate('/tcps');
       }
     };
 
-    getToken();
+    getConnection();
   }, [roomId, user, navigate]);
 
   const startCall = async () => {

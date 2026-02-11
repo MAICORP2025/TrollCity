@@ -262,7 +262,7 @@ export default function TrollFamily() {
                         user={{
                           username: familyStatus.current_wife.username,
                           id: familyStatus.current_wife.user_id,
-                          created_at: usersCreatedAt[familyStatus.current_wife.user_id]
+                          created_at: usersProfiles[familyStatus.current_wife.user_id]?.created_at
                         }}
                         className="text-white font-semibold"
                       />

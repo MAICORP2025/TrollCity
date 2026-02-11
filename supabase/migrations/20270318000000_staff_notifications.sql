@@ -49,7 +49,8 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies to ensure clean slate
 DROP POLICY IF EXISTS "Users can view their own notifications" ON public.notifications;
-DROP POLICY IF EXISTS "Users can update own notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can update own notifications" ON public.notifications; -- Legacy cleanup
 DROP POLICY IF EXISTS "Service role can insert notifications" ON public.notifications;
 DROP POLICY IF EXISTS "Authenticated can insert notifications" ON public.notifications;
 

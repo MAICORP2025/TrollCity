@@ -48,12 +48,12 @@ export function useGiftSystem(
       });
 
       // Use the new send_premium_gift RPC with Cashback/RGB logic
-      const { data, error } = await supabase.rpc('send_premium_gift', {
+      // p_cost is removed as it's now looked up server-side for security
+      const { data, error } = await supabase.rpc('send_gift_in_stream', {
         p_sender_id: user.id,
         p_receiver_id: finalRecipientId,
         p_stream_id: streamId || null,
         p_gift_id: gift.slug || gift.id,
-        p_cost: gift.coinCost,
         p_quantity: quantity
       });
 
@@ -64,8 +64,30 @@ export function useGiftSystem(
       if (data && data.success) {
         toast.success(`Sent ${gift.name}!`);
         
+        // Broadcast event for animations (Optimistic + RPC backup)
+        // RPC might not trigger broadcast immediately or correctly for all clients
+        // We manually broadcast here to ensure immediate visual feedback
+        const channel = supabase.channel(`stream_events_${streamId}`);
+        await channel.send({
+            type: 'broadcast',
+            event: 'gift_sent',
+            payload: {
+                id: generateUUID(),
+                gift_id: gift.id,
+                gift_slug: gift.slug,
+                gift_name: gift.name,
+                amount: gift.coinCost * quantity,
+                sender_id: user.id,
+                receiver_id: finalRecipientId,
+                timestamp: new Date().toISOString()
+            }
+        });
+        
         // Refresh profile to update balance (Optimistic)
         refreshProfile(); 
+        
+        // XP is now granted server-side within send_premium_gift to prevent farming exploits
+        // Client-side XP calls removed.
         
         // NO manual insert into stream_gifts. 
         // The ledger processor will handle history and stats.

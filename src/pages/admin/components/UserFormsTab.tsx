@@ -1,25 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase, UserProfile } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { FileText, AlertCircle, Bell, Check, Search, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import UserNameWithAge from '../../../components/UserNameWithAge';
 import UserDetailsModal from '../../../components/admin/UserDetailsModal';
 
-interface UserFormStatus {
-  id: string;
-  username: string;
-  email: string;
-  full_name: string | null;
-  tax_info: any | null; // Adjust based on actual schema
-  w9_status: string | null; // e.g., 'pending', 'submitted', 'verified'
-  onboarding_completed: boolean;
-  avatar_url: string | null;
-}
-
 export default function UserFormsTab() {
   const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState<UserFormStatus[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [filter, setFilter] = useState<'all' | 'incomplete'>('incomplete');
   const [search, setSearch] = useState('');
   const [viewingUser, setViewingUser] = useState<{ id: string; username: string } | null>(null);
@@ -68,25 +57,15 @@ export default function UserFormsTab() {
       }
 
       // 3. Map them together
-      const mappedUsers = profiles.map(u => {
-        const taxInfo = taxInfos?.find(t => t.user_id === u.id);
-        const hasTaxInfo = !!taxInfo;
-        const _isTaxCompleted = taxInfo?.w9_status === 'verified' || taxInfo?.w9_status === 'submitted';
-        
-        // Determine w9 status
-        let w9Status = 'pending';
-        if (taxInfo?.w9_status) w9Status = taxInfo.w9_status;
-        else if (hasTaxInfo) w9Status = 'submitted';
-
+      const profilesWithTax = profiles.map(p => {
+        const taxInfo = taxInfos?.find(t => t.user_id === p.id);
         return {
-          ...u,
-          email: 'Hidden (Privacy)', 
-          tax_info: taxInfo,
-          w9_status: w9Status
+          ...p,
+          w9_status: taxInfo?.w9_status || 'pending',
         };
       });
 
-      setUsers(mappedUsers as any);
+      setUsers(profilesWithTax as any);
     } catch (err) {
       console.error('Error fetching user forms:', err);
       toast.error('Failed to load user forms');
