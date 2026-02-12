@@ -510,7 +510,7 @@ const Auth = ({ embedded = false, onClose, initialMode }: AuthProps = {}) => {
                 </h3>
                 <p className="text-slate-300 mb-6 text-sm">
                   {activeEvent 
-                    ? `Our current event "${activeEvent.event_name}" is limited to ${activeEvent.signup_cap} participants. We've reached the limit!` 
+                    ? `Early access for "${activeEvent.event_name}" is limited to ${activeEvent.signup_cap} participants. We've reached the limit for early access! You can join the waitlist or wait for the full public launch in 48 hours.` 
                     : "We limit new registrations to 100 users per day to ensure the best experience for our citizens."}
                 </p>
                 
