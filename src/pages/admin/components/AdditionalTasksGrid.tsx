@@ -47,6 +47,7 @@ interface AdditionalTasksGridProps {
   onOpenEmpireApplications?: () => void
   onOpenReferralBonuses?: () => void
   onOpenAdminPool?: () => void
+  onOpenTrollmersTournament?: () => void
   onSelectTab?: (tabId: string) => void
   counts?: {
     intake?: number
@@ -74,6 +75,7 @@ export default function AdditionalTasksGrid({
   onOpenEmpireApplications,
   onOpenReferralBonuses,
   onOpenAdminPool,
+  onOpenTrollmersTournament,
   onSelectTab,
   counts = {}
 }: AdditionalTasksGridProps) {
@@ -298,6 +300,15 @@ export default function AdditionalTasksGrid({
           color: 'text-amber-400',
           bgColor: 'bg-amber-500/10',
           borderColor: 'border-amber-500/20'
+        },
+        {
+          icon: <Award className="w-5 h-5" />,
+          label: 'Trollmers Tournament',
+          description: 'Manage Trollmers competitions',
+          action: onOpenTrollmersTournament || (() => {}),
+          color: 'text-rose-400',
+          bgColor: 'bg-rose-500/10',
+          borderColor: 'border-rose-500/20'
         },
         {
           icon: <Vote className="w-5 h-5" />,

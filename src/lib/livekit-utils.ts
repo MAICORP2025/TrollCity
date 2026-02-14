@@ -4,10 +4,10 @@ import api, { API_ENDPOINTS } from './api'
 
 export interface LiveKitTokenResponse {
   token: string
-  livekitUrl: string
-  room: string
-  identity: string
-  allowPublish: boolean
+  url: string
+  room?: string
+  identity?: string
+  allowPublish?: boolean
 }
 
 export interface LiveKitDiagnosticResult {
@@ -149,13 +149,11 @@ export async function getLiveKitToken(
     throw new Error('User not authenticated')
   }
 
-  if (!profile?.id || !profile?.username || !profile?.role) {
+  if (!profile?.id) {
     console.error('[getLiveKitToken] Profile incomplete:', {
       id: profile?.id,
-      username: profile?.username,
-      role: profile?.role,
     })
-    throw new Error('Profile not fully loaded. Required: id, username, role')
+    throw new Error('Profile not fully loaded. Required: id')
   }
 
   try {
@@ -167,23 +165,19 @@ export async function getLiveKitToken(
     }
 
     const body = {
-      roomName,
-      participantName: profile.username,
-      allowPublish,
-      level: profile.level || 1,
-      user_id: profile.id,
-      username: profile.username,
-      role: profile.role,
+      room: roomName,
+      identity: profile.id,
+      role: allowPublish ? 'host' : 'guest',
     }
 
     const response = await api.post<LiveKitTokenResponse>(API_ENDPOINTS.livekit.token, body)
 
-    if (!response.success || !response.data) {
+    if (!response.success || !response.token || !response.url) {
       console.error('[getLiveKitToken] Token request failed:', response)
       throw new Error(response.error || 'Failed to fetch LiveKit token')
     }
 
-    const tokenData = response.data
+    const tokenData = response as LiveKitTokenResponse
     console.log('[getLiveKitToken] Token obtained', {
       room: tokenData.room,
       allowPublish: tokenData.allowPublish,

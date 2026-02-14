@@ -71,7 +71,15 @@ export default function TrollCityWall() {
         .order('created_at', { ascending: false })
         .limit(MAX_POSTS)
 
-      if (error) throw error
+      if (error) {
+        // If it's a 401/403 and user is not logged in, we might still want to show posts if RLS is disabled
+        // but typically error loading posts should only be toasted if it's a real database error
+        if (error.code === 'PGRST116') {
+          setPosts([])
+          return
+        }
+        throw error
+      }
 
       if (data) {
         const postIds = data.map(p => p.id)
@@ -155,7 +163,11 @@ export default function TrollCityWall() {
       }
     } catch (err: any) {
       console.error('Error loading wall posts:', err)
-      toast.error('Failed to load wall posts')
+      // Only show error toast if it's not a common auth/guest issue
+      // or if RLS being disabled is expected to work but failed for other reasons
+      if (err.message !== 'JWT expired' && err.code !== '42501') {
+        toast.error('Failed to load wall posts')
+      }
     } finally {
       setLoading(false)
     }

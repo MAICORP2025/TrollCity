@@ -1,6 +1,5 @@
 import { Room, RoomEvent, Track } from 'livekit-client'
 import api from './api'
-import { LIVEKIT_URL } from './LiveKitConfig'
 
 export interface RoomConfig {
   roomName: string
@@ -21,15 +20,6 @@ export interface RoomInstance {
 class RoomManager {
   private rooms: Map<string, RoomInstance> = new Map()
   private livekitUrl: string | null = null
-  
-  async initializeLiveKitUrl() {
-    if (this.livekitUrl) return this.livekitUrl
-
-    // Use environment variable or fallback to configured URL
-    this.livekitUrl = import.meta.env.VITE_LIVEKIT_URL || LIVEKIT_URL
-    console.log(`[RoomManager] Using LiveKit URL: ${this.livekitUrl}`)
-    return this.livekitUrl
-  }
 
   async createBroadcastRoom(userId: string, username: string, _category: string): Promise<RoomInstance> {
     const roomName = `broadcast-${userId}-${Date.now()}`
@@ -67,20 +57,18 @@ class RoomManager {
     try {
       console.log(`[RoomManager] Creating room: ${config.roomName}`)
       
-      await this.initializeLiveKitUrl()
-      if (!this.livekitUrl) {
-        throw new Error('LiveKit URL not configured')
-      }
-
       const tokenResponse = await api.post('/livekit-token', {
         room: config.roomName,
-        roomName: config.roomName,
-        participantName: config.participantName,
-        allowPublish: config.allowPublish,
+        identity: config.userId || config.participantName,
+        role: config.allowPublish ? 'host' : 'guest',
       })
 
       if (tokenResponse.error || !tokenResponse.token) {
         throw new Error(tokenResponse.error || 'Failed to get LiveKit token')
+      }
+
+      if (!tokenResponse.url) {
+        throw new Error('LiveKit URL missing from token response')
       }
 
       console.log(`[RoomManager] Got token for room: ${config.roomName}`)
@@ -91,6 +79,7 @@ class RoomManager {
         stopLocalTrackOnUnpublish: true,
       })
 
+      this.livekitUrl = tokenResponse.url
       await room.connect(this.livekitUrl, tokenResponse.token)
       
       const instanceId = `${config.roomName}-${Date.now()}`

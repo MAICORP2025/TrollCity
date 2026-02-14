@@ -324,8 +324,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         const connectionResponse = await api.post('/livekit-token', {
           room: roomId,
           identity: user.email || user.id,
-          isHost: true,
-          canPublish: true, // Explicitly request publish permission
+          role: 'host',
         });
 
         console.log('[Call] Connection response:', { 
@@ -353,7 +352,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
             connectionVal = connectionVal.slice(1, -1);
         }
 
-        const serverUrl = connectionResponse.livekitUrl || connectionResponse.serverUrl || connectionResponse.url || connectionResponse.data?.livekitUrl;
+        const serverUrl = connectionResponse.url || connectionResponse.data?.url;
         
         if (!serverUrl) {
           throw new Error('Server URL not found');

@@ -7,14 +7,14 @@ import {
   createLocalAudioTrack,
   Track,
 } from 'livekit-client'
-import { LIVEKIT_URL, defaultLiveKitOptions } from './LiveKitConfig'
+import { defaultLiveKitOptions } from './LiveKitConfig'
 import { toast } from 'sonner'
 
 // Fix D: Audio toggle for debugging
 const ENABLE_AUDIO_PUBLISH = true;
 
 // Gold Standard: Cache LiveKit tokens per room/identity
-const tokenCache = new Map<string, { token: string, expiresAt: number }>();
+const tokenCache = new Map<string, { token: string, expiresAt: number, url: string }>();
 
 export interface LiveKitParticipant {
   identity: string
@@ -150,16 +150,16 @@ export class LiveKitService {
    * Pre-fetches the LiveKit token and caches it.
    * Call this when you anticipate a connection (e.g., in a setup screen).
    */
-  public async prepareToken(): Promise<string> {
+  public async prepareToken(): Promise<{ token: string; url: string }> {
     try {
       this.log('🚀 Pre-fetching token...');
       const result = await this.getToken();
       
-      if (!result?.token) {
+      if (!result?.token || !result?.url) {
         throw new Error('No token returned from getToken');
       }
       
-      return result.token;
+      return { token: result.token, url: result.url };
     } catch (error) {
       this.log('⚠️ Failed to pre-fetch token', { error });
       throw error;
@@ -451,7 +451,10 @@ export class LiveKitService {
       });
 
       // Step 4: Connect to room
-      const targetUrl = this.config.url || LIVEKIT_URL;
+      const targetUrl = this.config.url;
+      if (!targetUrl) {
+        throw new Error('LiveKit URL missing from token response');
+      }
       this.log('Connecting to LiveKit room...', { url: targetUrl, roomName: this.config.roomName, identity: this.config.identity })
 
       // ✅ STRICT VALIDATION: Ensure token is a string before passing to room.connect()
@@ -541,7 +544,7 @@ export class LiveKitService {
           name: err?.name,
           stack: err?.stack,
           code: err?.code,
-          url: LIVEKIT_URL,
+          url: targetUrl,
           roomName: this.config.roomName,
           identity: this.config.identity,
           tokenLength: token?.length,
@@ -869,7 +872,8 @@ export class LiveKitService {
            expiresAt: new Date(cached.expiresAt * 1000).toISOString(),
            timeLeft: cached.expiresAt - now 
          });
-         return { token: cached.token, livekitUrl: LIVEKIT_URL, allowPublish: this.config.allowPublish };
+         this.config.url = cached.url;
+         return { token: cached.token, url: cached.url, allowPublish: this.config.allowPublish };
       } else {
          this.log('💎 Cached token expired, fetching new one');
          tokenCache.delete(cacheKey);
@@ -878,8 +882,7 @@ export class LiveKitService {
 
     try {
       const allowPublish = this.config.allowPublish === true
-      let roleToSend = this.config.role || this.config.user?.role || 'viewer'
-      if (roleToSend === 'admin') roleToSend = 'broadcaster'
+      const roleToSend = allowPublish ? 'host' : 'guest'
 
       // Fix B: Robust Token Fetching
       const { supabase } = await import('./supabase')
@@ -899,11 +902,18 @@ export class LiveKitService {
       if (!accessToken) throw new Error('Failed to obtain access token');
 
       // 2. Fetch token from the selected tokenUrl
-      const tokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/livekit-token`;
-      
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        throw new Error('Missing VITE_SUPABASE_URL for LiveKit token endpoint');
+      }
+
+      const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
+
       this.log('🔑 Requesting LiveKit token...', { tokenUrl, identity: this.identity, userId: this.userId });
 
-      const res = await fetch(tokenUrl, {
+      let res: Response;
+      try {
+        res = await fetch(tokenUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -912,14 +922,14 @@ export class LiveKitService {
           },
           body: JSON.stringify({
             room: this.config.roomName,
-            roomName: this.config.roomName,
             identity: this.config.identity,
-            user_id: this.userId, // Use the class property we set in constructor
             role: roleToSend,
-            level: this.config.user?.level || 1,
-            allowPublish,
           }),
-      });
+        });
+      } catch (fetchErr: any) {
+        console.error('🚨 Fetch failed for tokenUrl:', tokenUrl, fetchErr);
+        throw new Error(`Failed to reach token server: ${fetchErr.message}. Verify VITE_SUPABASE_URL.`);
+      }
 
       const json = await res.json().catch(() => ({}));
 
@@ -935,6 +945,7 @@ export class LiveKitService {
 
       // 3. Parse response robustly
       let token = json.token || json.jwt || json.accessToken || json.data?.token;
+      const url = json.url || json.data?.url;
 
       // Handle nested data structures (common in Supabase Edge Functions)
       if (!token && json.data && typeof json.data === 'object') {
@@ -946,20 +957,26 @@ export class LiveKitService {
           throw new Error('Response did not contain a valid token string');
       }
 
+      if (!url || typeof url !== 'string') {
+        console.error('🚨 Invalid token response structure (missing url):', json);
+        throw new Error('Response did not contain a valid LiveKit URL');
+      }
+
       // Cache the new token
       try {
          const parts = token.split('.');
          if (parts.length >= 2) {
             const payload = JSON.parse(decodeURIComponent(escape(atob(parts[1]))));
             if (payload.exp) {
-               tokenCache.set(cacheKey, { token, expiresAt: payload.exp });
+              tokenCache.set(cacheKey, { token, expiresAt: payload.exp, url });
             }
          }
       } catch (e) {
          console.warn('Failed to parse token for caching', e);
       }
 
-      return { token, livekitUrl: json.livekitUrl, allowPublish: json.allowPublish };
+        this.config.url = url;
+        return { token, url, allowPublish: json.allowPublish };
 
     } catch (error: any) {
       this.log('❌ Token fetch failed:', { message: error.message });

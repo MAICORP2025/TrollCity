@@ -12,6 +12,9 @@ interface GoalMetric {
 
 interface EligibilityData {
   eligible: boolean;
+  bonus_eligible?: boolean;
+  bypass?: boolean;
+  reason?: string;
   season_name: string;
   metrics: Record<string, GoalMetric>;
 }
@@ -73,7 +76,8 @@ export const CreatorSeasonalGoals = () => {
   if (loading) return <div className="animate-pulse h-48 bg-purple-900/10 rounded-xl border border-purple-500/20"></div>;
   if (!data) return null;
 
-  const metrics = Object.entries(data.metrics);
+  const metrics = Object.entries(data.metrics || {});
+  const bonusEligible = data.bonus_eligible ?? data.eligible;
 
   return (
     <div className="bg-gradient-to-br from-purple-900/20 to-black/40 rounded-xl border border-purple-500/30 p-6">
@@ -85,12 +89,18 @@ export const CreatorSeasonalGoals = () => {
             <p className="text-xs text-gray-400">Complete all weekly tasks for a +2.5% payout bonus!</p>
           </div>
         </div>
-        {data.eligible && (
+        {bonusEligible && (
           <div className="flex items-center gap-2 bg-troll-green/20 text-troll-green px-3 py-1 rounded-full text-xs font-bold border border-troll-green/30">
             <CheckCircle2 className="w-4 h-4" /> BONUS ACTIVE
           </div>
         )}
       </div>
+
+      {data.bypass && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          Staff bypass enabled. Seasonal bonus does not apply to staff accounts.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {metrics.map(([key, metric]) => {

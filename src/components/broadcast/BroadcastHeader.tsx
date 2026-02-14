@@ -102,7 +102,7 @@ export default function BroadcastHeader({ stream, onStartBattle, isHost, liveVie
     };
 
     return (
-        <div className="absolute top-16 left-4 right-4 z-50 flex items-center justify-end pointer-events-none">
+        <div className="absolute top-16 left-4 right-4 z-50 flex items-center justify-end gap-3 pointer-events-none">
             {/* Left: Coin Balance - REMOVED from left to avoid covering LIVE indicator, now on right */}
             <div className="pointer-events-auto bg-black/40 backdrop-blur-md border border-yellow-500/30 rounded-full px-4 py-2 flex items-center gap-2 shadow-lg shadow-black/20">
                 <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/50">
@@ -115,6 +115,18 @@ export default function BroadcastHeader({ stream, onStartBattle, isHost, liveVie
                     </span>
                 </div>
             </div>
+
+            {isHost && onStartBattle && (
+                <button
+                    onClick={onStartBattle}
+                    className="pointer-events-auto flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 shadow-lg shadow-red-500/20 transition-all"
+                >
+                    <Swords size={16} />
+                    <span className="text-xs font-bold">
+                        {stream.stream_kind === 'trollmers' ? 'HEAD TO HEAD' : 'BATTLE'}
+                    </span>
+                </button>
+            )}
 
             {/* Right: Stream Stats - HIDDEN for now to keep header clean and avoid overlap with sidebar on desktop */}
             <div className="hidden items-center gap-3">
@@ -135,15 +147,6 @@ export default function BroadcastHeader({ stream, onStartBattle, isHost, liveVie
                     <span className="text-xs font-bold text-pink-500">{likes}</span>
                 </button>
 
-                {isHost && onStartBattle && (
-                    <button 
-                        onClick={onStartBattle}
-                        className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-1.5 shadow-lg shadow-red-500/20 transition-all pointer-events-auto"
-                    >
-                        <Swords size={14} />
-                        <span className="text-xs font-bold">BATTLE</span>
-                    </button>
-                )}
             </div>
         </div>
     );

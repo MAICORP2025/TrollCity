@@ -83,6 +83,8 @@ export interface UserProfile {
   officer_role?: string | null // 'lead_officer', 'owner', or null
   officer_level?: number // 1=Junior, 2=Senior, 3=Commander, 4=Elite Commander, 5=HQ Master
   officer_tier_badge?: string // 'blue', 'orange', 'red', 'purple', 'gold'
+  officer_rank?: string | null
+  assigned_zip_count?: number
   
   // Unified Role
   troll_role?: string | null

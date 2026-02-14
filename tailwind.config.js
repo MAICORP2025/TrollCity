@@ -106,7 +106,41 @@ export default {
         'troll-green': '0 0 15px rgba(42, 168, 255, 0.5), 0 0 30px rgba(42, 168, 255, 0.3)',
         'troll-gold': '0 0 15px rgba(255, 58, 200, 0.5), 0 0 30px rgba(255, 58, 200, 0.3)',
       },
+      spacing: {
+        'safe-top': 'env(safe-area-inset-top)',
+        'safe-bottom': 'env(safe-area-inset-bottom)',
+        'safe-left': 'env(safe-area-inset-left)',
+        'safe-right': 'env(safe-area-inset-right)',
+      },
     },
   },
-  plugins: [],
+  plugins: [
+    function ({ addUtilities }) {
+      addUtilities({
+        '.pt-safe': {
+          paddingTop: 'env(safe-area-inset-top)',
+        },
+        '.pb-safe': {
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        },
+        '.pl-safe': {
+          paddingLeft: 'env(safe-area-inset-left)',
+        },
+        '.pr-safe': {
+          paddingRight: 'env(safe-area-inset-right)',
+        },
+        '.px-safe': {
+          paddingLeft: 'env(safe-area-inset-left)',
+          paddingRight: 'env(safe-area-inset-right)',
+        },
+        '.py-safe': {
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        },
+        '.p-safe': {
+          padding: 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
+        },
+      });
+    },
+  ],
 };

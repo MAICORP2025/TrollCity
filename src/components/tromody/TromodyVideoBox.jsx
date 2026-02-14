@@ -24,19 +24,19 @@ export default function TromodyVideoBox({
   const getLiveKitToken = useCallback(async () => {
     try {
       const roomName = getRoomName();
-      const identity = user?.username || `user-${Date.now()}`;
+      const identity = user?.id || user?.username || `user-${Date.now()}`;
       
       const response = await api.post('/livekit-token', {
         room: roomName,
-        identity: identity,
-        name: user?.username || 'Anonymous'
+        identity,
+        role: isCurrentUser ? 'host' : 'guest'
       });
 
       if (response.error || !response.token) {
         throw new Error(response.error || 'Failed to get LiveKit token');
       }
 
-      const serverUrl = response.livekitUrl || response.serverUrl;
+      const serverUrl = response.url || response.data?.url;
       if (!serverUrl) {
         throw new Error('LiveKit server URL not found');
       }
@@ -46,7 +46,7 @@ export default function TromodyVideoBox({
       console.error('Error getting LiveKit token:', err);
       throw err;
     }
-  }, [getRoomName, user?.username]);
+  }, [getRoomName, isCurrentUser, user?.id, user?.username]);
 
   // Connect to LiveKit room
   const connectToRoom = useCallback(async () => {

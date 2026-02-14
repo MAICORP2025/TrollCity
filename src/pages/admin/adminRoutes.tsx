@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 
 const DatabaseBackup = lazy(() => import('./DatabaseBackup'))
@@ -11,6 +11,8 @@ const UserFormsTab = lazy(() => import('./components/UserFormsTab'))
 const AdminErrors = lazy(() => import('./AdminErrors'))
 const AdminCallsTab = lazy(() => import('./components/AdminCallsTab'))
 const OfficerOperations = lazy(() => import('./OfficerOperations'))
+const OfficerPayrollReports = lazy(() => import('./OfficerPayrollReports'))
+const ZipGovernanceDashboard = lazy(() => import('./ZipGovernanceDashboard'))
 const AdminSupportTicketsPage = lazy(() => import('./AdminSupportTicketsPage'))
 const CourtDocketsManager = lazy(() => import('./CourtDocketsManager'))
 const StorePriceEditor = lazy(() => import('./components/StorePriceEditor'))
@@ -88,6 +90,32 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileColor: 'text-indigo-200',
     tileBgColor: 'bg-indigo-500/10',
     tileBorderColor: 'border-indigo-500/30',
+    category: 'system'
+  },
+  {
+    id: 'officer-payroll-reports',
+    title: 'Officer Payroll',
+    path: '/admin/officer-payroll',
+    component: OfficerPayrollReports,
+    roles: [UserRole.ADMIN, UserRole.SECRETARY],
+    description: 'Review weekly payroll payouts and frozen officers',
+    icon: <DollarSign className="w-5 h-5 text-emerald-200" />,
+    tileColor: 'text-emerald-200',
+    tileBgColor: 'bg-emerald-500/10',
+    tileBorderColor: 'border-emerald-500/30',
+    category: 'economy'
+  },
+  {
+    id: 'zip-governance',
+    title: 'Zip Governance',
+    path: '/admin/zip-governance',
+    component: ZipGovernanceDashboard,
+    roles: [UserRole.ADMIN],
+    description: 'Manage zip jurisdictions and officer hierarchy',
+    icon: <MapPin className="w-5 h-5 text-amber-200" />,
+    tileColor: 'text-amber-200',
+    tileBgColor: 'bg-amber-500/10',
+    tileBorderColor: 'border-amber-500/30',
     category: 'system'
   },
   {

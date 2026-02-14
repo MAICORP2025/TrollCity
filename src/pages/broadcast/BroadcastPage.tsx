@@ -598,6 +598,12 @@ export default function BroadcastPage() {
   };
 
   const handleJoinRequest = async (seatIndex: number) => {
+      // Block manual seat joining for Trollmers (head-to-head via matchmaking only)
+      if (stream?.stream_kind === 'trollmers') {
+          toast.error('Trollmers battles are head-to-head via matchmaking only. Use "Find Random Match" to challenge!');
+          return;
+      }
+      
       if (!user) {
           navigate('/auth?mode=signup');
           return;
@@ -781,7 +787,7 @@ export default function BroadcastPage() {
                     connect={true}
                     video={mode === 'stage'}
                     audio={mode === 'stage'}
-                className="flex-1 relative"
+                className="flex-1 relative flex flex-col"
             >
                 <RoomStateSync mode={mode} isHost={isHost} streamId={id || ''} />
                 <BroadcastLimitEnforcer 
@@ -815,27 +821,31 @@ export default function BroadcastPage() {
                             onPublished={() => PreflightStore.clear()} 
                         />
                     )}
-                    <BroadcastHeader 
-                        stream={stream} 
-                        isHost={isHost} 
-                        onStartBattle={() => setShowBattleManager(true)} 
-                        liveViewerCount={viewerCount}
-                    />
+                    <div className="flex-shrink-0">
+                        <BroadcastHeader 
+                            stream={stream} 
+                            isHost={isHost} 
+                            onStartBattle={() => setShowBattleManager(true)} 
+                            liveViewerCount={viewerCount}
+                        />
+                    </div>
                     {/* <VideoViewer />  -- Removed to fix layout duplication with BroadcastGrid */}
                     <BroadcastEffectsLayer streamId={stream.id} />
                     <ErrorBoundary>
-                        <BroadcastGrid
-                            stream={stream}
-                            isHost={isHost}
-                            mode="stage" // Always render as stage (WebRTC)
-                            seats={seats}
-                            onGift={(uid) => setGiftRecipientId(uid)}
-                            onGiftAll={() => setGiftRecipientId('ALL')}
-                            onJoinSeat={handleJoinRequest} 
-                            onKick={kickParticipant}
-                            broadcasterProfile={isHost ? profile : broadcasterProfile}
-                            seatPriceOverride={hasPaidSeat ? 0 : stream.seat_price}
-                        />
+                        <div className="flex-1 relative min-h-0">
+                            <BroadcastGrid
+                                stream={stream}
+                                isHost={isHost}
+                                mode="stage" // Always render as stage (WebRTC)
+                                seats={seats}
+                                onGift={(uid) => setGiftRecipientId(uid)}
+                                onGiftAll={() => setGiftRecipientId('ALL')}
+                                onJoinSeat={handleJoinRequest} 
+                                onKick={kickParticipant}
+                                broadcasterProfile={isHost ? profile : broadcasterProfile}
+                                seatPriceOverride={hasPaidSeat ? 0 : stream.seat_price}
+                            />
+                        </div>
                     </ErrorBoundary>
                     
                     {/* Controls Overlay - Visible to everyone (with different options) */}

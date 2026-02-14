@@ -198,6 +198,7 @@ const ExecutiveIntake = lazy(() => import("./pages/admin/ExecutiveIntake"));
 const ExecutiveReports = lazy(() => import("./pages/admin/ExecutiveReports"));
 const AdminManualOrders = lazy(() => import("./pages/admin/AdminManualOrders"));
 const CashoutManager = lazy(() => import("./pages/admin/CashoutManager"));
+const TrollmersTournament = lazy(() => import("./pages/admin/TrollmersTournament"));
 const CriticalAlertsManager = lazy(() => import("./pages/admin/CriticalAlertsManager"));
 const OfficerManager = lazy(() => import("./pages/admin/OfficerManager"));
 const AdminTrollTownDeeds = lazy(() => import("./pages/admin/AdminTrollTownDeeds"));
@@ -258,12 +259,13 @@ const LoadingScreen = () => (
     const user = useAuthStore((s) => s.user);
     const profile = useAuthStore((s) => s.profile);
     const isLoading = useAuthStore((s) => s.isLoading);
+    const isRefreshing = useAuthStore((s) => s.isRefreshing);
     const { isJailed } = useJailMode(user?.id);
     const location = useLocation();
     
     useGasSystem(); // Enable Gas System
 
-    if (isLoading) return <LoadingScreen />;
+    if (isLoading || isRefreshing) return <LoadingScreen />;
     if (!user) return <Navigate to="/auth" replace />;
 
     // 🚔 Jail Guard
@@ -996,7 +998,7 @@ function AppContent() {
                   <Route path="/mobile" element={<MobileShell><Outlet /></MobileShell>} />
                   <Route path="/live" element={<LandingHome />} />
                   <Route path="/messages" element={<Navigate to="/tcps" replace />} />
-                  <Route path="/tcps" element={<TCPS />} />
+                  <Route path="/tcps" element={<MobileShell><TCPS /></MobileShell>} />
           <Route path="/city-hall" element={<CityHall />} />
                   <Route path="/universe-event" element={<UniverseEventPage />} />
                   <Route path="/events/universe" element={<Navigate to="/universe-event" replace />} />
@@ -1374,6 +1376,14 @@ function AppContent() {
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <AdminPoolTab />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/trollmers-tournament"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <TrollmersTournament />
                         </RequireRole>
                       }
                     />

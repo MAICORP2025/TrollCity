@@ -122,6 +122,14 @@ export default function TrollPodsListing() {
 
       if (error) throw error;
 
+      // Ensure host is a participant for RLS-protected reads
+      await supabase.from('pod_room_participants').insert({
+        room_id: data.id,
+        user_id: user.id,
+        role: 'host',
+        is_hand_raised: false
+      });
+
       // Broadcast Pod Start (Global Banner)
       // Fire and forget
       const channel = supabase.channel('global_pod_notifications');

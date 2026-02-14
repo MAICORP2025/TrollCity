@@ -10,7 +10,7 @@ import {
   createLocalAudioTrack,
   createLocalVideoTrack,
 } from 'livekit-client'
-import { LIVEKIT_URL, defaultLiveKitOptions } from '../lib/LiveKitConfig'
+import { defaultLiveKitOptions } from '../lib/LiveKitConfig'
 import api from '../lib/api'
 
 export type LiveKitParticipantState = {
@@ -45,7 +45,7 @@ export type LiveKitRoomOptions = LiveKitRoomConfig & { enabled?: boolean }
 
 type LiveKitTokenResponse = {
   token: string
-  livekitUrl?: string
+  url?: string
   room?: string
   allowPublish?: boolean
 }
@@ -72,11 +72,8 @@ const decodeJWTPayload = (token: string): Record<string, any> | null => {
 
 const buildTokenBody = (roomName: string, user: LiveKitRoomConfig['user'], allowPublish: boolean) => ({
   room: roomName,
-  participantName: user?.username || user?.id,
   identity: user?.id, // Always use user.id for stable identity
-  role: user?.role || 'viewer',
-  level: user?.level || 1,
-  allowPublish,
+  role: allowPublish ? 'host' : 'guest',
 })
 
 const parseParticipantMetadata = (metadata?: string): Record<string, unknown> | undefined => {
@@ -105,15 +102,9 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
 
   const fetchToken = useCallback(
     async (publish: boolean): Promise<LiveKitTokenResponse> => {
-      // If a token is provided directly, use it
+      // Tokens must come from the Edge function to ensure URL consistency
       if (providedToken) {
-        console.log('[useLiveKitRoom] Using provided token')
-        return {
-          token: providedToken,
-          livekitUrl: LIVEKIT_URL, // Use default URL or one from config if added
-          room: roomName,
-          allowPublish: publish
-        }
+        throw new Error('Direct tokens are disabled. Use livekit-token Edge function instead.')
       }
 
       if (!roomName || !user?.id) {
@@ -144,7 +135,7 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
         success: true,
         tokenLength: data?.token?.length || 0,
         hasToken: !!data?.token,
-        livekitUrl: data?.livekitUrl,
+        url: data?.url,
         room: data?.room,
         allowPublish: data?.allowPublish,
         rawResponse: data,
@@ -162,6 +153,10 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
         }
         console.error('[useLiveKitRoom] Invalid token response:', errorDetails)
         throw new Error(`Invalid token response: ${JSON.stringify(errorDetails)}`)
+      }
+
+      if (!data.url) {
+        throw new Error('LiveKit URL missing from token response')
       }
 
       // Trim token to prevent decoding errors
@@ -450,7 +445,7 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
       identity: user?.id, // Using stable identity
       allowPublish,
       autoPublish,
-      livekitUrl: LIVEKIT_URL
+      url: tokenResponse.url
     })
     setConnectionStatus('connecting')
     setError(null)
@@ -464,7 +459,10 @@ export function useLiveKitRoom(config: LiveKitRoomOptions) {
         console.log(`[useLiveKitRoom] 🔄 Connection attempt ${retryCount + 1}/${maxRetries + 1}`)
         
         const tokenResponse = await fetchToken(allowPublish)
-        const targetUrl = tokenResponse.livekitUrl || LIVEKIT_URL
+        const targetUrl = tokenResponse.url
+        if (!targetUrl) {
+          throw new Error('LiveKit URL missing from token response')
+        }
 
         console.log('[useLiveKitRoom] Connecting to LiveKit:', {
           url: targetUrl,

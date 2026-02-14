@@ -334,26 +334,28 @@ export default function CourtRoom() {
       const canPublishInitial = isJudge || isOfficer || ["defendant", "accuser", "witness", "attorney"].includes(profile?.role);
       
       // Get token
-      const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
-      const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
-      const edgeTokenUrl = edgeBase ? `${edgeBase}/livekit-token` : null;
-      const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        throw new Error('Missing VITE_SUPABASE_URL for LiveKit token endpoint');
+      }
+      const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
 
       const authSession = await supabase.auth.getSession();
       const accessToken = authSession.data.session?.access_token;
+      if (!accessToken) {
+        throw new Error('No active session');
+      }
 
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken || ''}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           room: courtId,
           identity: user.id,
-          user_id: user.id,
-          role: profile?.role,
-          allowPublish: canPublishInitial
+          role: canPublishInitial ? 'host' : 'guest'
         }),
       });
 
@@ -362,8 +364,11 @@ export default function CourtRoom() {
       }
 
       const data = await response.json();
+      if (!data?.token || !data?.url) {
+        throw new Error('Invalid LiveKit token response');
+      }
       setToken(data.token);
-      setServerUrl(data.livekitUrl || data.serverUrl || import.meta.env.VITE_LIVEKIT_URL);
+      setServerUrl(data.url);
 
     } catch (err) {
       console.error('Error initializing courtroom:', err);
@@ -647,10 +652,11 @@ export default function CourtRoom() {
       }
 
       // Get token from Vercel endpoint
-      const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
-      const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
-      const edgeTokenUrl = edgeBase ? `${edgeBase}/livekit-token` : null;
-      const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        throw new Error('Missing VITE_SUPABASE_URL for LiveKit token endpoint');
+      }
+      const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
 
       const session = await supabase.auth.getSession();
       const accessToken = session.data.session?.access_token;
@@ -666,9 +672,7 @@ export default function CourtRoom() {
         body: JSON.stringify({
           room: courtId,
           identity: user.id,
-          user_id: user.id,
-          role: profile?.role,
-          allowPublish: true,
+          role: 'host',
         }),
       });
 
@@ -678,8 +682,11 @@ export default function CourtRoom() {
       }
 
       const data = await response.json();
-      setToken(data?.token);
-      setServerUrl(data?.livekitUrl || data?.serverUrl || import.meta.env.VITE_LIVEKIT_URL);
+      if (!data?.token || !data?.url) {
+        throw new Error('Invalid LiveKit token response');
+      }
+      setToken(data.token);
+      setServerUrl(data.url);
       setJoinBoxRequested(true);
       toast.success('Joined a court box');
     } catch (err) {
@@ -711,10 +718,11 @@ export default function CourtRoom() {
       if (sessionError) throw sessionError;
 
       // Get token from Vercel endpoint
-      const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
-      const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
-      const edgeTokenUrl = edgeBase ? `${edgeBase}/livekit-token` : null;
-      const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        throw new Error('Missing VITE_SUPABASE_URL for LiveKit token endpoint');
+      }
+      const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
 
       const session = await supabase.auth.getSession();
       const accessToken = session.data.session?.access_token;
@@ -729,9 +737,7 @@ export default function CourtRoom() {
         body: JSON.stringify({
           room: targetCourtId,
           identity: user.id,
-          user_id: user.id,
-          role: profile?.role,
-          allowPublish: true,
+          role: 'host',
         }),
       });
 
@@ -741,11 +747,14 @@ export default function CourtRoom() {
       }
 
       const tokenData = await tokenResponse.json();
+      if (!tokenData?.token || !tokenData?.url) {
+        throw new Error('Invalid LiveKit token response');
+      }
       const resolvedSessionId = sessionData?.id || targetCourtId;
       setCourtSession(sessionData || { id: resolvedSessionId, status: 'active' });
       setBoxCount(Math.min(6, Math.max(2, sessionData?.maxBoxes || 2)));
-      setToken(tokenData?.token);
-      setServerUrl(tokenData?.livekitUrl || tokenData?.serverUrl || import.meta.env.VITE_LIVEKIT_URL);
+      setToken(tokenData.token);
+      setServerUrl(tokenData.url);
       toast.success('Court session started');
       if (resolvedSessionId !== courtId) {
         navigate(`/court/${resolvedSessionId}`);

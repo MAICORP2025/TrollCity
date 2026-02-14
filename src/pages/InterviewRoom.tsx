@@ -140,6 +140,7 @@ export default function InterviewRoom() {
   const [interview, setInterview] = useState<Interview | null>(null)
   const [loading, setLoading] = useState(true)
   const [connection, setConnection] = useState<string>("")
+  const [livekitUrl, setLivekitUrl] = useState<string>("")
   const [isAdmin, setIsAdmin] = useState(false)
   
   // Hire Modal State
@@ -178,19 +179,20 @@ export default function InterviewRoom() {
         // Get Connection Details
         const { data: connectionData, error: connectionError } = await supabase.functions.invoke('livekit-token', {
           body: {
-            roomName: roomId,
-            username: profile.username || profile.id,
-            canPublish: isInterviewer || isApplicant
+            room: roomId,
+            identity: profile.id,
+            role: (isInterviewer || isApplicant) ? 'host' : 'guest'
           }
         })
 
-        if (connectionError || !connectionData?.token) {
+        if (connectionError || !connectionData?.token || !connectionData?.url) {
           console.error("Connection error:", connectionError)
           toast.error("Failed to connect to video server")
           return
         }
 
         setConnection(connectionData.token)
+        setLivekitUrl(connectionData.url)
 
         // If pending and admin joins, update status to active
         if (isInterviewer && data.status === 'pending') {
@@ -363,12 +365,12 @@ export default function InterviewRoom() {
         )}
       </div>
 
-      {connection && (
+      {connection && livekitUrl && (
         <LiveKitRoom
           video={true}
           audio={true}
           token={connection}
-          serverUrl={import.meta.env.VITE_LIVEKIT_URL}
+          serverUrl={livekitUrl}
           data-lk-theme="default"
           className="flex-1 w-full flex flex-col items-center"
           onDisconnected={() => {

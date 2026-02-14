@@ -91,6 +91,18 @@ export default function WallPostPage() {
     const url = `${window.location.origin}/wall/${post.id}`
     navigator.clipboard.writeText(url)
     toast.success('Link copied to clipboard!')
+
+    if (user?.id) {
+      supabase
+        .from('troll_wall_post_shares')
+        .insert({ post_id: post.id, user_id: user.id })
+        .then(({ error }) => {
+          if (error) {
+            console.warn('Failed to record share:', error)
+          }
+        })
+        .catch((err) => console.warn('Failed to record share:', err))
+    }
   }
 
   if (loading) {

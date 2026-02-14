@@ -24,7 +24,7 @@ function formatTime(seconds: number) {
 
 export default function SetupPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('general');
   const [loading, setLoading] = useState(false);
@@ -184,9 +184,9 @@ export default function SetupPage() {
       });
       
       service.prepareToken()
-        .then(token => {
+        .then(({ token, url }) => {
           console.log('[SetupPage] Token pre-fetched successfully');
-          PreflightStore.setToken(token, safeRoom);
+          PreflightStore.setToken(token, safeRoom, url);
         })
         .catch(err => {
           console.error('[SetupPage] Token pre-fetch failed:', err);
@@ -203,6 +203,20 @@ export default function SetupPage() {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [followerCount, setFollowerCount] = useState<number>(0);
+
+  // Fetch follower count for Trollmers eligibility
+  useEffect(() => {
+    async function fetchFollowerCount() {
+      if (!user?.id) return;
+      const { count } = await supabase
+        .from('user_follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', user.id);
+      setFollowerCount(count || 0);
+    }
+    fetchFollowerCount();
+  }, [user?.id]);
 
   useEffect(() => {
     let localStream: MediaStream | null = null;
@@ -325,6 +339,21 @@ export default function SetupPage() {
     }
     if (!user) return;
 
+    // Validate Trollmers eligibility
+    if (category === 'trollmers') {
+      // Admin bypass for follower requirement (testing purposes)
+      const isAdmin = profile?.role === 'admin';
+      
+      if (!isAdmin && followerCount < 100) {
+        toast.error('Trollmers requires 100+ followers');
+        return;
+      }
+      if (!isVideoEnabled) {
+        toast.error('Trollmers requires camera enabled');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       // 0. Check global broadcast limit
@@ -359,8 +388,8 @@ export default function SetupPage() {
             role: 'broadcaster',
             allowPublish: true,
           });
-          const token = await service.prepareToken();
-          PreflightStore.setToken(token, safeRoom);
+          const { token, url } = await service.prepareToken();
+          PreflightStore.setToken(token, safeRoom, url);
         } catch (err: any) {
           console.error('[SetupPage] Critical: Failed to prepare token', err);
           toast.error(`Stream setup failed: ${err.message}`);
@@ -382,6 +411,8 @@ export default function SetupPage() {
           user_id: user.id,
           title,
           category,
+          stream_kind: category === 'trollmers' ? 'trollmers' : 'regular',
+          camera_ready: isVideoEnabled,
           status: 'starting', // Wait for LiveKit connection
           is_live: true,
           started_at: new Date().toISOString(),
@@ -524,8 +555,46 @@ export default function SetupPage() {
                 <option value="music">Music</option>
                 <option value="podcast">Podcast</option>
                 <option value="debate">Debate / Battle</option>
+                <option value="trollmers">🏆 Trollmers Head-to-Head</option>
               </select>
             </div>
+
+            {category === 'trollmers' && (
+              <div className="bg-gradient-to-r from-amber-500/10 to-rose-500/10 border border-amber-500/30 rounded-xl p-4 space-y-2">
+                {profile?.role === 'admin' && (
+                  <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-2 mb-2">
+                    <p className="text-xs text-green-300 font-bold">🛡️ ADMIN MODE: Follower requirement bypassed for testing</p>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Followers:</span>
+                  <span className={`font-bold ${followerCount >= 100 || profile?.role === 'admin' ? 'text-green-400' : 'text-red-400'}`}>
+                    {followerCount} / 100 {profile?.role === 'admin' && '(Admin Bypass ✓)'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Camera Ready:</span>
+                  <span className={`font-bold ${isVideoEnabled ? 'text-green-400' : 'text-red-400'}`}>
+                    {isVideoEnabled ? '✓ Yes' : '✗ No'}
+                  </span>
+                </div>
+                {(followerCount < 100 && profile?.role !== 'admin') && !isVideoEnabled && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    ⚠️ Trollmers requires 100+ followers and camera enabled
+                  </p>
+                )}
+                {(followerCount < 100 && profile?.role !== 'admin') && isVideoEnabled && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    ⚠️ Trollmers requires 100+ followers
+                  </p>
+                )}
+                {followerCount >= 100 && !isVideoEnabled && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    ⚠️ Trollmers requires camera enabled
+                  </p>
+                )}
+              </div>
+            )}
 
             <button
               onClick={handleStartStream}

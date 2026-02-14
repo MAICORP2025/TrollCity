@@ -3,7 +3,6 @@ import { useAuthStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
 import { DollarSign, Clock, TrendingUp, Calendar, Award, Target } from 'lucide-react'
-import { calculateOfficerBaseCoins, calculateTotalOfficerEarnings } from '../../lib/officerPay'
 import OfficerPoolPanel from './components/OfficerPoolPanel'
 
 interface WorkSession {
@@ -18,10 +17,24 @@ interface WorkSession {
 
 interface EarningsBreakdown {
   basePay: number
+  bonusPay: number
+  salaryPaid: number
   liveEarnings: number
   courtBonuses: number
   otherBonuses: number
   total: number
+}
+
+interface PayrollLog {
+  id: string
+  pay_period_start: string
+  pay_period_end: string
+  base_pay: number
+  bonus_pay: number
+  total_paid: number
+  status: string
+  reason: string | null
+  created_at: string
 }
 
 export default function OfficerPayrollDashboard() {
@@ -29,6 +42,8 @@ export default function OfficerPayrollDashboard() {
   const [workSessions, setWorkSessions] = useState<WorkSession[]>([])
   const [earningsBreakdown, setEarningsBreakdown] = useState<EarningsBreakdown>({
     basePay: 0,
+    bonusPay: 0,
+    salaryPaid: 0,
     liveEarnings: 0,
     courtBonuses: 0,
     otherBonuses: 0,
@@ -99,9 +114,23 @@ export default function OfficerPayrollDashboard() {
 
       setWorkSessions(sessionsData)
 
+      const startDateString = startDate.toISOString().split('T')[0]
+      const { data: payrollData, error: payrollError } = await supabase
+        .from('officer_payroll_logs')
+        .select('id, pay_period_start, pay_period_end, base_pay, bonus_pay, total_paid, status, reason, created_at')
+        .eq('officer_id', user.id)
+        .gte('pay_period_start', startDateString)
+        .order('pay_period_start', { ascending: false })
+
+      if (payrollError) {
+        console.warn('Payroll logs unavailable:', payrollError.message)
+      }
+
       // Calculate earnings breakdown
-      const totalHours = sessionsData.reduce((sum: number, session: { hours_worked?: number }) => sum + (session.hours_worked || 0), 0)
-      const basePay = calculateOfficerBaseCoins(totalHours)
+      const payrollRows = (payrollData as PayrollLog[]) || []
+      const basePay = payrollRows.reduce((sum, log) => sum + (log.base_pay || 0), 0)
+      const bonusPay = payrollRows.reduce((sum, log) => sum + (log.bonus_pay || 0), 0)
+      const salaryPaid = payrollRows.reduce((sum, log) => sum + (log.total_paid || 0), 0)
 
       // Calculate live streaming earnings from officer streams
       const { data: officerStreams } = await supabase
@@ -133,10 +162,12 @@ export default function OfficerPayrollDashboard() {
 
       const otherBonuses = moderationEvents?.reduce((sum, event) => sum + (event.bonus_coins || 0), 0) || 0
 
-      const total = calculateTotalOfficerEarnings(totalHours, liveEarnings, courtBonuses, otherBonuses)
+      const total = salaryPaid + liveEarnings + courtBonuses + otherBonuses
 
       setEarningsBreakdown({
         basePay,
+        bonusPay,
+        salaryPaid,
         liveEarnings,
         courtBonuses,
         otherBonuses,
@@ -226,6 +257,17 @@ export default function OfficerPayrollDashboard() {
             <p className="text-xs text-gray-500 mt-1">hours worked</p>
           </div>
 
+          <div className="bg-zinc-900 rounded-xl p-4 border border-emerald-500/30">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className="w-5 h-5 text-emerald-400" />
+              <span className="text-sm text-gray-400">Salary Paid</span>
+            </div>
+            <p className="text-2xl font-bold text-emerald-400">
+              {earningsBreakdown.salaryPaid.toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">base + bonus</p>
+          </div>
+
           <div className="bg-zinc-900 rounded-xl p-4 border border-purple-500/30">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp className="w-5 h-5 text-purple-400" />
@@ -256,6 +298,14 @@ export default function OfficerPayrollDashboard() {
             Earnings Breakdown
           </h2>
           <div className="space-y-3">
+            <div className="flex justify-between items-center py-2 border-b border-zinc-800">
+              <span className="text-gray-300">Base Salary</span>
+              <span className="text-emerald-400 font-semibold">{earningsBreakdown.basePay.toLocaleString()} coins</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-zinc-800">
+              <span className="text-gray-300">Salary Bonus</span>
+              <span className="text-emerald-300 font-semibold">{earningsBreakdown.bonusPay.toLocaleString()} coins</span>
+            </div>
             <div className="flex justify-between items-center py-2 border-b border-zinc-800">
               <span className="text-gray-300">Live Streaming Earnings</span>
               <span className="text-purple-400 font-semibold">{earningsBreakdown.liveEarnings.toLocaleString()} coins</span>
@@ -337,6 +387,8 @@ export default function OfficerPayrollDashboard() {
         <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-700">
           <h3 className="text-lg font-semibold mb-3 text-yellow-400">💰 Officer Compensation Structure</h3>
           <div className="space-y-2 text-zinc-300 text-sm">
+            <p>• <strong>Base Salary:</strong> Weekly salary based on role (startup/low burn model)</p>
+            <p>• <strong>Salary Bonus:</strong> 10% weekly bonus on base salary</p>
             <p>• <strong>Live Earnings:</strong> Additional coins from live streaming activities</p>
             <p>• <strong>Court Bonuses:</strong> Rewards for court moderation and rulings</p>
             <p>• <strong>Other Bonuses:</strong> Special rewards for outstanding service</p>

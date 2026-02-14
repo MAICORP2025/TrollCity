@@ -74,16 +74,15 @@ export function useLiveKitToken({
     try {
         // Safety check for circular dependency issues
         if (PreflightStore) {
-            const preflight = PreflightStore.getToken();
-            if (preflight.token && preflight.roomName === safeRoomName) {
-                console.log('[useLiveKitToken] 💎 Using preflight token for room:', safeRoomName);
-                setToken(preflight.token);
-                setRoom(safeRoomName);
-                // Use default URL or fallback as PreflightStore doesn't persist URL
-                setServerUrl(import.meta.env.VITE_LIVEKIT_URL || import.meta.env.VITE_LIVEKIT_TOKEN_URL?.replace('/token', '') || "");
-                setIdentity(userId || 'host');
-                return;
-            }
+          const preflight = PreflightStore.getToken();
+          if (preflight.token && preflight.roomName === safeRoomName && preflight.url) {
+            console.log('[useLiveKitToken] 💎 Using preflight token for room:', safeRoomName);
+            setToken(preflight.token);
+            setRoom(safeRoomName);
+            setServerUrl(preflight.url);
+            setIdentity(userId || 'host');
+            return;
+          }
         }
     } catch (err) {
         console.warn('[useLiveKitToken] PreflightStore access failed:', err);
@@ -120,14 +119,16 @@ export function useLiveKitToken({
           return;
         }
 
-        // Determine Endpoint
-        let tokenUrl = '';
-        if (isGuest) {
-             tokenUrl = '/api/livekit-guest-token';
-        } else {
-             tokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL || 
-                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/livekit-token`;
-        }
+           if (isGuest) {
+             throw new Error('Guest LiveKit access is disabled. Please sign in.');
+           }
+
+           const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+           if (!supabaseUrl) {
+            throw new Error('Missing VITE_SUPABASE_URL for LiveKit token endpoint');
+           }
+
+           const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
 
         console.log('[useLiveKitToken] Fetching token from:', tokenUrl, {
             roomName,
@@ -135,13 +136,13 @@ export function useLiveKitToken({
             isHost,
             canPublish,
             isGuest,
-            role: (isHost || canPublish) ? 'broadcaster' : 'viewer'
+          role: (isHost || canPublish) ? 'host' : 'guest'
         });
 
         const promise = (async (): Promise<CachedToken> => {
           let accessToken = '';
 
-          if (!isGuest) {
+            if (!isGuest) {
               const storeSession = useAuthStore.getState().session as any;
               const expiresAt = storeSession?.expires_at;
               const now = Math.floor(Date.now() / 1000);
@@ -174,10 +175,14 @@ export function useLiveKitToken({
                     throw new Error('No active session - please sign in again');
                   }
                   accessToken = freshSession.access_token;
-              } else {
+                } else {
                   accessToken = storeSession.access_token;
+                }
               }
-          }
+
+              if (!accessToken) {
+                throw new Error('No active session - please sign in again');
+              }
 
            console.log('[useLiveKitToken] Session ready (or guest), fetching token...');
           
@@ -192,21 +197,16 @@ export function useLiveKitToken({
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
             };
-            if (!isGuest && accessToken) {
-                headers['Authorization'] = `Bearer ${accessToken}`;
-            }
+            headers['Authorization'] = `Bearer ${accessToken}`;
 
             const response = await fetch(tokenUrl, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
-                roomName: safeRoomName,
-                streamId, // Guest endpoint expects streamId sometimes
+                room: safeRoomName,
                 identity: userId,
-                user_id: userId,
+                role: (isHost || canPublish) ? 'host' : 'guest',
                 attributes,
-                // Role is determined server-side now for security
-                // allowPublish: canPublish, // (Ignored by server now too, but keeping for legacy compat if needed)
                 }),
                 signal: controller.signal
             });
@@ -234,12 +234,16 @@ export function useLiveKitToken({
                 tokenValue = tokenValue.slice(1, -1);
             }
 
-            const urlValue = data.url || data.livekitUrl || data.ws_url || import.meta.env.VITE_LIVEKIT_URL || null;
+            const urlValue = data.url || data.data?.url || null;
             const identityValue = data.identity || data.data?.identity || null;
             const roomValue = data.room || data.roomName || data.data?.room || null;
 
             if (!tokenValue) {
-                throw new Error('Token not found in response');
+              throw new Error('Token not found in response');
+            }
+
+            if (!urlValue) {
+              throw new Error('LiveKit URL not found in response');
             }
 
             // Cache briefly to avoid duplicate requests during rapid renders

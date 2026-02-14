@@ -213,6 +213,22 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
       }
       profileData = fetchedProfile
 
+      if (profileData && !profileData.username) {
+        const metadataUsername = data.user.user_metadata?.username
+        if (metadataUsername) {
+          const { data: updatedProfile, error: updateError } = await supabase
+            .from('user_profiles')
+            .update({ username: metadataUsername })
+            .eq('id', data.user.id)
+            .select('*')
+            .maybeSingle()
+
+          if (!updateError && updatedProfile) {
+            profileData = updatedProfile
+          }
+        }
+      }
+
       if (profileData) {
         // Check if admin BEFORE setting profile
         const _isAdmin = profileData.role === 'admin' || profileData.is_admin === true;
@@ -275,6 +291,21 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
           }
         }
         if (prof) {
+          if (!prof.username) {
+            const metadataUsername = data.user.user_metadata?.username
+            if (metadataUsername) {
+              const { data: updatedProfile, error: updateError } = await supabase
+                .from('user_profiles')
+                .update({ username: metadataUsername })
+                .eq('id', data.user.id)
+                .select('*')
+                .maybeSingle()
+
+              if (!updateError && updatedProfile) {
+                prof = updatedProfile
+              }
+            }
+          }
           setProfile(prof)
           if (prof.username) {
             toast.success('Welcome back!', { duration: 2000 })

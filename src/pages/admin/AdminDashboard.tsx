@@ -729,11 +729,11 @@ export default function AdminDashboard() {
 
   const testLiveKitStreaming = async () => {
     try {
-      // Get token from Vercel endpoint
-      const vercelTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
-      const edgeBase = import.meta.env.VITE_EDGE_FUNCTIONS_URL;
-      const edgeTokenUrl = edgeBase ? `${edgeBase}/livekit-token` : null;
-      const tokenUrl = vercelTokenUrl || edgeTokenUrl || "/api/livekit-token";
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        throw new Error('VITE_SUPABASE_URL environment variable is not set');
+      }
+      const tokenUrl = `${supabaseUrl}/functions/v1/livekit-token`;
 
       const session = await supabase.auth.getSession();
       const accessToken = session.data.session?.access_token;
@@ -748,9 +748,8 @@ export default function AdminDashboard() {
         },
         body: JSON.stringify({
           room: 'admin-test',
-          identity: profile?.username || 'admin',
-          user_id: profile?.id,
-          allowPublish: true,
+          identity: profile?.id || profile?.username || 'admin',
+          role: 'host',
         }),
       });
 
@@ -760,7 +759,7 @@ export default function AdminDashboard() {
       }
 
       const data = await response.json();
-      if (!data?.token) {
+      if (!data?.token || !data?.url) {
         setLiveKitStatus({ ok: false, error: 'Token error' })
         toast.error('LiveKit test failed')
       } else {
@@ -914,6 +913,7 @@ export default function AdminDashboard() {
   const handleOpenEmpireApplications = () => navigate('/admin/empire-applications')
   const handleOpenReferralBonuses = () => navigate('/admin/referral-bonuses')
   const handleOpenAdminPool = () => navigate('/admin/pool')
+  const handleOpenTrollmersTournament = () => navigate('/admin/trollmers-tournament')
 
   const redirectRoutes = useMemo(
     () =>
@@ -1248,6 +1248,7 @@ export default function AdminDashboard() {
             onOpenControlPanel={handleOpenControlPanel}
             onOpenGrantCoins={handleOpenGrantCoins}
             onOpenAdminPool={handleOpenAdminPool}
+            onOpenTrollmersTournament={handleOpenTrollmersTournament}
             onOpenFinanceDashboard={handleOpenFinanceDashboard}
             onOpenCreateSchedule={handleOpenCreateSchedule}
             onOpenOfficerShifts={handleOpenOfficerShifts}

@@ -25,7 +25,10 @@ export function useDailyLoginPost() {
 
   // Check if user has already posted today
   const checkDailyPostStatus = useCallback(async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      setCanPostToday(true)
+      return
+    }
 
     try {
       const { data, error } = await supabase
@@ -37,8 +40,15 @@ export function useDailyLoginPost() {
         .limit(1)
         .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') {
+      if (error && error.code !== 'PGRST116' && error.code !== '42501') {
         console.error('Error checking daily post status:', error)
+        return
+      }
+
+      // If it's a permission error (42501), it just means we're not logged in or RLS blocked us
+      // which is fine for public view
+      if (error?.code === '42501') {
+        setCanPostToday(true)
         return
       }
 

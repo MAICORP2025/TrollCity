@@ -263,6 +263,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
   const [opponentStream, setOpponentStream] = useState<Stream | null>(null);
   const [participantInfo, setParticipantInfo] = useState<any>(null);
   const [token, setToken] = useState<string>("");
+  const [livekitUrl, setLivekitUrl] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showResults, setShowResults] = useState(false);
   
@@ -368,24 +369,17 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
                 setParticipantInfo(pData || { role: 'viewer', team: null });
 
                 // 4. Fetch LiveKit Token for the SHARED room
-                const attributes = pData ? {
-                    team: pData.team,
-                    role: pData.role,
-                    seatIndex: pData.seat_index?.toString(),
-                    sourceStreamId: pData.source_stream_id
-                } : { role: 'viewer' };
-
                 const { data: tokenData, error: tokenError } = await supabase.functions.invoke('livekit-token', {
                     body: { 
-                        room: `battle-${battleId}`, 
-                        username: effectiveUserId,
-                        attributes,
-                        allowPublish: pData?.role === 'host' || pData?.role === 'stage'
+                    room: `battle-${battleId}`, 
+                    identity: effectiveUserId,
+                    role: (pData?.role === 'host' || pData?.role === 'stage') ? 'host' : 'guest'
                     }
                 });
 
-                if (!tokenError && tokenData?.token) {
-                    setToken(tokenData.token);
+                if (!tokenError && tokenData?.token && tokenData?.url) {
+                  setToken(tokenData.token);
+                  setLivekitUrl(tokenData.url);
                 }
             }
         } catch (e) {
@@ -576,7 +570,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (loading || !battle || !challengerStream || !opponentStream || !token) {
+  if (loading || !battle || !challengerStream || !opponentStream || !token || !livekitUrl) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-black text-amber-500 gap-4">
         <Loader2 className="animate-spin" size={48} />
@@ -584,8 +578,6 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
       </div>
     );
   }
-
-  const liveKitUrl = import.meta.env.VITE_LIVEKIT_URL || "wss://trollcity-722100.livekit.cloud";
 
   // Score percentages
   const totalScore = (battle?.score_challenger || 0) + (battle?.score_opponent || 0);
@@ -685,8 +677,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
 
         {/* SHARED LIVEKIT ROOM */}
         <LiveKitRoom
-            token={token}
-            serverUrl={liveKitUrl}
+          token={token}
+          serverUrl={livekitUrl}
             connect={true}
             className="flex-1 flex flex-col relative"
         >

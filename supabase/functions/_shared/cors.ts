@@ -24,6 +24,8 @@ const allowedOrigins = [
   'http://localhost:5177',
   'http://localhost:3001',
   'http://localhost:3000',
+  'https://matrollcity.com',
+  'https://www.matrollcity.com',
   'https://maitrollcity.com',
   'https://www.maitrollcity.com',
   'https://troll-city.vercel.app',
@@ -48,7 +50,7 @@ export function corsHeaders(origin?: string | null): Record<string, string> {
   const isAllowed = allowedOrigins.includes(origin);
   const validOrigin = isAllowed ? origin : '*';
   
-  const headers = {
+  const headers: Record<string, string> = {
     ...defaultCorsHeaders,
     'Access-Control-Allow-Origin': validOrigin,
   };

@@ -840,14 +840,16 @@ export default function TrollPodRoom() {
   const canPublish = isHost || myRole === 'speaker';
   const isStaff = profile?.role === 'admin' || profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.is_admin || profile?.is_troll_officer || false;
 
+  const livekitRoomId = room?.livekit_room_id || roomId;
+
   const { token, serverUrl, isLoading, error } = useLiveKitToken({
-    streamId: roomId,
-    roomName: roomId,
+    streamId: livekitRoomId,
+    roomName: livekitRoomId,
     userId: currentUser?.id,
     isHost: isHost,
     canPublish: canPublish,
     isGuest: isGuest,
-    enabled: true // Always fetch token for everyone (LiveKit only)
+    enabled: Boolean(livekitRoomId && currentUser?.id)
   });
 
   if (!room) return <div className="flex items-center justify-center h-screen bg-black text-white">Loading room...</div>;

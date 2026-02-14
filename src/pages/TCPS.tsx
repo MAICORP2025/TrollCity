@@ -8,7 +8,6 @@ import NewMessageModal from './tcps/components/NewMessageModal'
 import IncomingCallPopup from '../components/IncomingCallPopup'
 import { supabase } from '../lib/supabase'
 import { usePresenceStore } from '../lib/presenceStore'
-import MobileShell from './MobileShell'
 
 interface SidebarConversation {
   other_user_id: string
@@ -197,8 +196,7 @@ export default function TCPS() {
   const onlineUsersRecord = onlineUserIds.reduce((acc, id) => ({ ...acc, [id]: true }), {})
 
   return (
-    <MobileShell>
-      <div className={`w-full h-[100dvh] overflow-hidden ${backgrounds.primary} flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8`}>
+    <div className={`w-full h-[100dvh] overflow-hidden ${backgrounds.primary} flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8`}>
         <div className={`relative flex w-full max-w-6xl ${trollCityTheme.backgrounds.card} rounded-2xl md:rounded-3xl border border-white/10 overflow-hidden flex-col md:flex-row h-full`}>
           {/* Column 1: Sidebar with Conversations */}
           <div className={`flex-col border-r border-white/5 ${trollCityTheme.backgrounds.glass} w-full md:w-80 lg:w-96 ${activeConversation ? 'hidden md:flex' : 'flex'}`}>
@@ -246,6 +244,5 @@ export default function TCPS() {
           />
         )}
       </div>
-    </MobileShell>
-  )
-}
+    )
+  }

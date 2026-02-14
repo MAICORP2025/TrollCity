@@ -6,6 +6,7 @@ import { getFamilySeasonStats } from '../lib/familySeasons'
 import { useXPStore } from '../stores/useXPStore'
 import { useCreditScore } from '../lib/hooks/useCreditScore'
 import CreditScoreBadge from '../components/CreditScoreBadge'
+import { CreatorSeasonalGoals } from '../components/CreatorSeasonalGoals'
 import { Crown, Sword, Trophy, Coins, Star, Shield, Zap, ShoppingBag, Store, Package, DollarSign, TrendingUp } from 'lucide-react'
 import { STORE_USD_PER_COIN } from '../lib/coinMath'
 
@@ -29,9 +30,9 @@ interface UserStats {
 
 export default function Stats() {
   const { user, profile } = useAuthStore()
-  const { balances, loading: _coinsLoading } = useCoins()
+  const { balances, loading: coinsLoading } = useCoins()
   const { xpTotal, level, xpToNext, progress, fetchXP, subscribeToXP, unsubscribe } = useXPStore()
-  const { data: _creditData, loading: _creditLoading } = useCreditScore()
+  const { data: creditData, loading: creditLoading } = useCreditScore()
   const [stats, setStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -181,6 +182,8 @@ export default function Stats() {
             </button>
           </div>
         </div>
+
+        <CreatorSeasonalGoals />
 
         {loading || coinsLoading ? (
           <div className="text-center py-12 text-gray-400">Loading stats...</div>

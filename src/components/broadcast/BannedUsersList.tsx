@@ -247,6 +247,7 @@ export default function BannedUsersList({ streamId, onClose }: BannedUsersListPr
             ) : activeTab === 'banned' ? (
                 bannedUsers.length === 0 ? (
                     <div className="text-center py-8 text-zinc-500 text-sm">
+                        <Eye size={16} className="mx-auto mb-2 text-zinc-600" />
                         No banned users
                     </div>
                 ) : (
@@ -291,8 +292,7 @@ export default function BannedUsersList({ streamId, onClose }: BannedUsersListPr
                 )
             ) : (
                 activeViewers.length === 0 ? (
-                    <div className="text-center py-8 text-zinc-500 text-sm">
-                        No active viewers
+                    <div className="text-center py-8 text-zinc-500 text-sm">                        <User size={16} className="mx-auto mb-2 text-zinc-600" />                        No active viewers
                     </div>
                 ) : (
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">

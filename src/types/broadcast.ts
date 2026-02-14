@@ -6,6 +6,8 @@ export interface Stream {
   user_id: string;
   title: string;
   category: string;
+  stream_kind?: 'regular' | 'trollmers';
+  camera_ready?: boolean;
   status: StreamStatus;
   is_battle: boolean;
   battle_id?: string;
