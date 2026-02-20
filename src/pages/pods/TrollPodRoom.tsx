@@ -4,15 +4,19 @@ import { supabase } from '../../lib/supabase';
 import { Mic, MicOff, Users, MessageSquare, Hand, UserMinus, UserPlus, Settings, Coins, Map } from 'lucide-react';
 
 import { toast } from 'sonner';
-import { LiveKitRoom, useParticipants, useRoomContext, RoomAudioRenderer } from '@livekit/components-react';
-import '@livekit/components-styles';
-import { useLiveKitToken } from '../../hooks/useLiveKitToken';
 import { useAuthStore } from '../../lib/store';
 import { emitEvent as triggerEvent } from '../../lib/events';
 import PodParticipantBox from './PodParticipantBox';
 import PodChatBox from './PodChatBox';
 import PodHostControlPanel from './PodHostControlPanel';
+import AgoraRTC, {
+  IAgoraRTCClient,
+  ILocalAudioTrack,
+  IRemoteAudioTrack,
+} from 'agora-rtc-sdk-ng';
 import TrollsTownControl from '../../components/TrollsTownControl';
+import { IAgoraRTCRemoteUser, ILocalAudioTrack, ILocalVideoTrack } from 'agora-rtc-sdk-ng';
+
 
 interface Room {
   id: string;
@@ -30,7 +34,6 @@ interface PodParticipant {
   room_id: string;
   user_id: string;
   role: 'host' | 'speaker' | 'listener' | 'officer';
-  is_muted: boolean;
   is_hand_raised: boolean;
   user?: {
     username: string;
@@ -38,40 +41,17 @@ interface PodParticipant {
   };
 }
 
-// --- Active Speaker / Host View (LiveKit) ---
-const PodRoomContent = ({ 
-  room, 
-  currentUser, 
-  isHost,
-  participantsData,
-  participantCount,
-  onRequestSpeak,
-  onApproveRequest,
-  onRemoveSpeaker,
-  onCancelRequest,
-  isStaff,
-  canPublish,
-  isGuest
-}: { 
-  room: Room, 
-  currentUser: any, 
-  isHost: boolean,
-  participantsData: PodParticipant[],
-  participantCount: number,
-  onRequestSpeak: () => void,
-  onApproveRequest: (userId: string) => void,
-  onRemoveSpeaker: (userId: string) => void,
-  onCancelRequest: () => void,
-  isStaff: boolean,
-  canPublish: boolean,
-  isGuest?: boolean
-}) => {
-  const participants = useParticipants();
-  const liveKitRoom = useRoomContext();
-  const [showChat, setShowChat] = useState(true);
-  const [showHostPanel, setShowHostPanel] = useState(false);
-  const [trollsTownControlOpen, setTrollsTownControlOpen] = useState(false);
-  const navigate = useNavigate();
+// --- Active Speaker / Host View ---
+function PodRoomContent({ room, participants, localAudioTrack, remoteUsers, isHost, canPublish, onLeave, muxPlaybackId }) {
+    const { user: currentUser } = useAuthStore();
+  const [isMicOn, setIsMicOn] = useState(localAudioTrack ? !localAudioTrack.muted : false);
+
+  const toggleMic = async () => {
+    if (localAudioTrack) {
+      await localAudioTrack.setMuted(!localAudioTrack.muted);
+      setIsMicOn(!localAudioTrack.muted);
+    }
+  };
 
   // Derived state
   const myRecord = participantsData.find(p => p.user_id === currentUser?.id);
@@ -102,7 +82,7 @@ const PodRoomContent = ({
   // 2. Viewer Limit Check (10 viewers)
   useEffect(() => {
     // If I am a listener (not host/speaker) and count > 10, warn or kick
-    // Note: participantCount includes host/speakers. 
+    // Note: participantCount includes host/speakers.
     // If strict 10 viewers + host + guests, limit might be higher.
     // Assuming "10 viewers" means total people watching who are not speakers.
     
@@ -130,24 +110,6 @@ const PodRoomContent = ({
 
     return () => clearInterval(interval);
   }, [currentUser, room.id]);
-
-  // Instant Mute / Permission Enforcement
-  useEffect(() => {
-    const p = liveKitRoom.localParticipant;
-    if (!p) return;
-
-    // 1. If I am not a speaker/host, I should NOT be publishing audio
-    if (!canPublish && p.isMicrophoneEnabled) {
-        console.log('[TrollPod] Enforcing listener mute');
-        p.setMicrophoneEnabled(false);
-    }
-
-    // 2. If I am muted by host
-    if (myRecord?.is_muted && p.isMicrophoneEnabled) {
-       p.setMicrophoneEnabled(false);
-       toast.error('You have been muted by the host.');
-    }
-  }, [myRecord?.is_muted, canPublish, liveKitRoom.localParticipant]);
 
   const handlePromoteOfficer = async (userId: string) => {
     if (!isHost) return;
@@ -196,15 +158,6 @@ const PodRoomContent = ({
       }
   };
 
-  const handleMute = async (identity: string) => {
-    if (!isHost && !isOfficer) return;
-    await supabase
-      .from('pod_room_participants')
-      .update({ is_muted: true })
-      .eq('room_id', room.id)
-      .eq('user_id', identity);
-    toast.success('Mute command sent');
-  };
 
   const handleLeave = async () => {
     if (!currentUser?.id || !room?.id) return;
@@ -220,7 +173,6 @@ const PodRoomContent = ({
 
                 if (error) throw error;
                 
-                liveKitRoom.disconnect();
                 setTimeout(() => navigate('/pods'), 500);
             } catch (err) {
                 console.error(err);
@@ -236,7 +188,6 @@ const PodRoomContent = ({
                 .eq('user_id', currentUser.id);
         } catch (e) { console.error(e); }
         
-        liveKitRoom.disconnect();
     }
   };
 
@@ -251,7 +202,6 @@ const PodRoomContent = ({
 
             if (error) throw error;
             
-            liveKitRoom.disconnect();
             setTimeout(() => navigate('/pods'), 500);
             toast.success('Pod ended by Staff');
         } catch (err) {
@@ -394,49 +344,54 @@ const PodRoomContent = ({
         </div>
 
         {/* Participant Grid (Only Speakers/Host) */}
-        {/* We filter LiveKit participants to only show those who are publishing or are host/speakers in DB */}
         <div className="flex-1 p-4 overflow-y-auto bg-gradient-to-b from-gray-900 to-black">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
-            {participants.map((p) => {
-               const isParticipantHost = p.identity === room.host_id;
-               const isSelf = p.identity === currentUser?.id;
-               
-               // Check Supabase role
-               const sbUser = participantsData.find(pd => pd.user_id === p.identity);
-               const isSpeakerRole = sbUser?.role === 'speaker';
+          {!canPublish && muxPlaybackId ? (
+            <div className="flex items-center justify-center h-full">
+              <mux-player playback-id={muxPlaybackId} stream-type="live" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
+              {participantsData.map((p) => {
+                const isSelf = p.user_id === currentUser?.id;
+                const isParticipantHost = p.user_id === room.host_id;
+                const sbUser = participantsData.find((pd) => pd.user_id === p.user_id);
+                const isSpeakerRole = sbUser?.role === 'speaker';
 
-               // Only render if they are host, approved speaker
-               // Listeners should NOT be in the grid, even if they have audio tracks (unless they are speakers)
-               if (!isParticipantHost && !isSpeakerRole) return null; 
+                if (!isParticipantHost && !isSpeakerRole && p.role !== 'officer') return null;
 
-               return (
-                 <PodParticipantBox
-                   key={p.identity}
-                   participant={p}
-                   isHost={isParticipantHost}
-                   isOfficer={participantsData.find(pd => pd.user_id === p.identity)?.role === 'officer'}
-                   isSelf={isSelf}
-                   onKick={isHost || isOfficer ? handleKick : undefined}
-                   onBan={isHost || isOfficer ? handleBan : undefined}
-                   onMute={isHost || isOfficer ? handleMute : undefined}
-                   onDemote={isHost || isOfficer ? onRemoveSpeaker : undefined}
-                   onPromoteOfficer={isHost ? handlePromoteOfficer : undefined}
-                   onDisableChat={isHost || isOfficer ? handleDisableChat : undefined}
-                 />
-               );
-            })}
-          </div>
+                const remoteUser = remoteUsers.find((user) => String(user.uid) === p.user_id);
+                const audioTrack = isSelf ? localAudioTrack : remoteUser?.audioTrack;
+
+                return (
+                  <PodParticipantBox
+                    key={p.user_id}
+                    participant={p}
+                    isHost={isParticipantHost}
+                    isOfficer={p.role === 'officer'}
+                    isSelf={isSelf}
+                    onKick={isHost || isOfficer ? handleKick : undefined}
+                    onBan={isHost || isOfficer ? handleBan : undefined}
+                    onDemote={isHost || isOfficer ? onRemoveSpeaker : undefined}
+                    onPromoteOfficer={isHost ? handlePromoteOfficer : undefined}
+                    onDisableChat={isHost || isOfficer ? handleDisableChat : undefined}
+                    audioTrack={audioTrack as ILocalAudioTrack | IRemoteAudioTrack | undefined}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
         
         {/* Controls Bar (Bottom) */}
         <div className="h-24 bg-gray-900/90 backdrop-blur-md border-t border-gray-800 flex items-center justify-center gap-8">
             {isSpeaker ? (
                 <>
-                    <button 
-                        className={`p-4 rounded-full transition-all duration-200 transform hover:scale-105 ${liveKitRoom.localParticipant.isMicrophoneEnabled ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-500/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20'}`}
-                        onClick={() => liveKitRoom.localParticipant.setMicrophoneEnabled(!liveKitRoom.localParticipant.isMicrophoneEnabled)}
+                    <button
+                        onClick={toggleMic}
+                        className="flex flex-col items-center gap-1 text-xs text-gray-400 hover:text-white"
                     >
-                        {liveKitRoom.localParticipant.isMicrophoneEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                        {isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                        <span>{isMicOn ? 'Mute' : 'Unmute'}</span>
                     </button>
                     {!isHost && (
                          <button 
@@ -495,8 +450,6 @@ const PodRoomContent = ({
          />
       </div>
       
-      <RoomAudioRenderer />
-      
       {showHostPanel && (
         <PodHostControlPanel 
             roomId={room.id}
@@ -522,6 +475,91 @@ export default function TrollPodRoom() {
   const { user: currentUser, profile } = useAuthStore();
   const [participantsData, setParticipantsData] = useState<PodParticipant[]>([]);
   const [participantCount, setParticipantCount] = useState(0);
+    const [agoraClient, setAgoraClient] = useState<IAgoraRTCClient | null>(null);
+  const [localAudioTrack, setLocalAudioTrack] = useState<ILocalAudioTrack | null>(null);
+  const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
+  const [muxPlaybackId, setMuxPlaybackId] = useState<string | null>(null);
+
+  const isHost = room?.host_id === currentUser?.id;
+  const myRecord = participantsData.find((p) => p.user_id === currentUser?.id);
+  const canPublish = isHost || myRecord?.role === 'speaker' || myRecord?.role === 'officer';
+
+  useEffect(() => {
+    if (!roomId || !currentUser) return;
+
+    const roomName = `pod-${roomId}`;
+    const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    setAgoraClient(client);
+
+    const joinChannel = async () => {
+      if (canPublish) {
+        const { data, error } = await supabase
+          .from('current_user_is_following')
+          .select('token')
+          .eq('room_name', roomName)
+          .single();
+
+        if (error || !data) {
+          console.error('Error fetching token', error);
+          return;
+        }
+
+        await client.join(
+          process.env.NEXT_PUBLIC_AGORA_APP_ID!,
+          roomName,
+          data.token,
+          currentUser.id
+        );
+
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        await client.publish([audioTrack]);
+        setLocalAudioTrack(audioTrack);
+      } else {
+        const { data, error } = await supabase
+          .from('rooms')
+          .select('mux_playback_id')
+          .eq('name', roomName)
+          .single();
+
+        if (error || !data) {
+          console.error('Error fetching mux playback id', error);
+          return;
+        }
+        setMuxPlaybackId(data.mux_playback_id);
+      }
+    };
+
+    joinChannel();
+
+    const handleUserPublished = async (
+      user: IAgoraRTCRemoteUser,
+      mediaType: 'audio' | 'video'
+    ) => {
+      await client.subscribe(user, mediaType);
+      if (mediaType === 'audio') {
+        setRemoteUsers((prevUsers) => [...prevUsers.filter(u => u.uid !== user.uid), user]);
+        if (user.audioTrack) {
+            user.audioTrack.play();
+        }
+      }
+    };
+
+    const handleUserUnpublished = (user: IAgoraRTCRemoteUser) => {
+      setRemoteUsers((prevUsers) =>
+        prevUsers.filter((remoteUser) => remoteUser.uid !== user.uid)
+      );
+    };
+
+    client.on('user-published', handleUserPublished);
+    client.on('user-unpublished', handleUserUnpublished);
+
+    return () => {
+      client.off('user-published', handleUserPublished);
+      client.off('user-unpublished', handleUserUnpublished);
+      localAudioTrack?.close();
+      client.leave();
+    };
+  }, [roomId, canPublish, currentUser]);
   
   // Fetch Room Info
   useEffect(() => {
@@ -833,56 +871,27 @@ export default function TrollPodRoom() {
       }
   };
 
-  // LiveKit Token Logic
-  const isHost = currentUser?.id === room?.host_id;
   const isGuest = !currentUser;
-  const myRole = participantsData.find(p => p.user_id === currentUser?.id)?.role;
-  const canPublish = isHost || myRole === 'speaker';
-  const isStaff = profile?.role === 'admin' || profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.is_admin || profile?.is_troll_officer || false;
+  const isStaff = profile?.is_staff || false;
 
-  const livekitRoomId = room?.livekit_room_id || roomId;
-
-  const { token, serverUrl, isLoading, error } = useLiveKitToken({
-    streamId: livekitRoomId,
-    roomName: livekitRoomId,
-    userId: currentUser?.id,
-    isHost: isHost,
-    canPublish: canPublish,
-    isGuest: isGuest,
-    enabled: Boolean(livekitRoomId && currentUser?.id)
-  });
-
-  if (!room) return <div className="flex items-center justify-center h-screen bg-black text-white">Loading room...</div>;
-  
-  if (isLoading) return <div className="flex items-center justify-center h-screen bg-black text-white">Connecting to Pod...</div>;
-  if (error) return <div className="flex items-center justify-center h-screen bg-black text-white">Error: {error}</div>;
-  if (!token || !serverUrl) return <div className="flex items-center justify-center h-screen bg-black text-white">Initializing connection...</div>;
+  if (!room) { return <div className="flex items-center justify-center h-screen bg-black text-white">Loading Pod...</div>; }
 
   return (
-    <LiveKitRoom
-      token={token}
-      serverUrl={serverUrl}
-      connect={true}
-      video={false} // Pods are audio-only
-      audio={canPublish} // Only publish audio if host/speaker
-      data-lk-theme="default"
-      style={{ height: '100vh' }}
-      onDisconnected={() => navigate('/pods')}
-    >
-      <PodRoomContent 
-        room={room} 
-        currentUser={currentUser} 
-        isHost={isHost} 
-        participantsData={participantsData}
-        participantCount={participantCount}
-        onRequestSpeak={handleRequestSpeak}
-        onApproveRequest={handleApproveRequest}
-        onRemoveSpeaker={handleRemoveSpeaker}
-        onCancelRequest={handleCancelRequest}
-        isStaff={isStaff}
-        canPublish={canPublish}
-        isGuest={isGuest}
-      />
-    </LiveKitRoom>
+    <PodRoomContent
+      room={room!}
+      currentUser={currentUser}
+      isHost={isHost}
+      participantsData={participantsData}
+      participantCount={participantCount}
+      onRequestSpeak={handleRequestSpeak}
+      onApproveRequest={handleApproveRequest}
+      onRemoveSpeaker={handleRemoveSpeaker}
+      onCancelRequest={handleCancelRequest}
+      isStaff={isStaff}
+      canPublish={canPublish}
+      isGuest={isGuest}
+      remoteUsers={remoteUsers}
+      localTracks={localAudioTrack ? [localAudioTrack] : []}
+    />
   );
 }

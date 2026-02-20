@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'livekit-client';
-import api from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff } from 'lucide-react';
+import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack, IRemoteUser } from 'agora-rtc-sdk-ng';
 
 interface CallProps {
   roomId?: string;
@@ -30,15 +29,17 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
   const callType = (propCallType || paramType || 'audio') as 'audio' | 'video';
   const otherUserId = propOtherUserId || paramUserId || '';
 
-  const roomRef = useRef<Room | null>(null);
+  const clientRef = useRef<IAgoraRTCClient | null>(null);
+  const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
+  const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
   const [isCallStarted, setIsCallStarted] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(callType === 'audio');
   const [minutes, setMinutes] = useState({ audio: 0, video: 0 });
   const [callDuration, setCallDuration] = useState(0);
   const [lowMinutesWarning, setLowMinutesWarning] = useState(false);
-  const [livekitUrl, setLivekitUrl] = useState<string | null>(null);
-  const [connection, setConnection] = useState<string | null>(null);
+  const [agoraAppId, setAgoraAppId] = useState<string | null>(null);
+  const [agoraToken, setAgoraToken] = useState<string | null>(null);
   const [isEnding, setIsEnding] = useState(false);
   const [isStartingCall, setIsStartingCall] = useState(false);
   const dialCtxRef = useRef<AudioContext | null>(null);
@@ -161,9 +162,17 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
           .eq('id', roomId);
       }
       
-      if (roomRef.current) {
-        roomRef.current.disconnect();
-        roomRef.current = null;
+      if (clientRef.current) {
+        if (localAudioTrackRef.current) {
+          localAudioTrackRef.current.close();
+          localAudioTrackRef.current = null;
+        }
+        if (localVideoTrackRef.current) {
+          localVideoTrackRef.current.close();
+          localVideoTrackRef.current = null;
+        }
+        clientRef.current.leave();
+        clientRef.current = null;
       }
       
       toast.success('Call ended');
@@ -176,18 +185,74 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
     }
   }, [roomId, user, otherUserId, callType, isEnding]);
 
-  // Initialize LiveKit connection
+  // Initialize Agora connection
   useEffect(() => {
-    if (!roomId || !user || !livekitUrl || !connection) return;
+    if (!roomId || !user || !agoraAppId || !agoraToken) return;
 
-    let newRoom: Room | null = null;
+    let client: IAgoraRTCClient | null = null;
 
     const connectCall = async () => {
       try {
-        newRoom = new Room({
-          adaptiveStream: true,
-          dynacast: true,
+        client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+        clientRef.current = client;
+
+        // Handle remote users
+        client.on('user-published', async (user, mediaType) => {
+          await client!.subscribe(user, mediaType);
+          if (mediaType === 'video') {
+            const remoteVideoTrack = user.videoTrack;
+            if (remoteVideoTrack && remoteVideoRef.current) {
+              remoteVideoTrack.play(remoteVideoRef.current);
+            }
+          }
+          if (mediaType === 'audio') {
+            const remoteAudioTrack = user.audioTrack;
+            if (remoteAudioTrack) {
+              remoteAudioTrack.play();
+            }
+          }
+          // Stop dial tone when any remote track arrives
+          if (dialAudioRef.current) {
+            try {
+              dialAudioRef.current.pause();
+              dialAudioRef.current.currentTime = 0;
+            } catch (error) {
+              void error;
+            }
+          }
+          if (dialOscRef.current) {
+            try {
+              dialOscRef.current.stop();
+              dialOscRef.current.disconnect();
+            } catch (error) {
+              void error;
+            }
+            dialOscRef.current = null;
+          }
+          if (dialCtxRef.current) {
+            try {
+              dialCtxRef.current.close();
+            } catch (error) {
+              void error;
+            }
+            dialCtxRef.current = null;
+          }
         });
+
+        client.on('user-unpublished', (user) => {
+          if (user.videoTrack) {
+            user.videoTrack.stop();
+          }
+          if (user.audioTrack) {
+            user.audioTrack.stop();
+          }
+        });
+
+        client.on('user-left', () => {
+          // Optionally handle user left event, e.g., clear remote video
+        });
+
+        await client.join(agoraAppId, roomId, agoraToken, user.id);
 
         // Start outgoing dial tone until remote audio or video is received
         try {
@@ -215,54 +280,8 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
           }
         }
 
-        newRoom.on(RoomEvent.Connected, () => {
-          console.log('✅ Connected to call room');
-
-          // Handle remote tracks
-          newRoom!.on(RoomEvent.TrackSubscribed, (track, _publication, _participant) => {
-            if (track.kind === 'video' && remoteVideoRef.current) {
-              track.attach(remoteVideoRef.current);
-            } else if (track.kind === 'audio') {
-              track.attach();
-            }
-            // Stop dial tone when any remote track arrives
-            if (dialAudioRef.current) {
-              try {
-                dialAudioRef.current.pause();
-                dialAudioRef.current.currentTime = 0;
-              } catch (error) {
-                void error;
-              }
-            }
-            if (dialOscRef.current) {
-              try {
-                dialOscRef.current.stop();
-                dialOscRef.current.disconnect();
-              } catch (error) {
-                void error;
-              }
-              dialOscRef.current = null;
-            }
-            if (dialCtxRef.current) {
-              try {
-                dialCtxRef.current.close();
-              } catch (error) {
-                void error;
-              }
-              dialCtxRef.current = null;
-            }
-          });
-        });
-
-        newRoom.on(RoomEvent.Disconnected, () => {
-          console.log('❌ Disconnected from call');
-          endCall();
-        });
-
-        await newRoom.connect(livekitUrl, connection);
-        roomRef.current = newRoom;
       } catch (err: any) {
-        console.error('Call connection error:', err);
+        console.error('Agora connection error:', err);
         toast.error('Failed to connect to call');
         navigate('/tcps');
       }
@@ -275,9 +294,20 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
     const currentAudio = dialAudioRef.current;
 
     return () => {
-      if (newRoom) {
-        newRoom.disconnect();
-      }
+      const leaveChannel = async () => {
+        if (clientRef.current) {
+          if (localAudioTrackRef.current) {
+            await localAudioTrackRef.current.close();
+          }
+          if (localVideoTrackRef.current) {
+            await localVideoTrackRef.current.close();
+          }
+          await clientRef.current.leave();
+          clientRef.current = null;
+        }
+      };
+      leaveChannel();
+
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);
       }
@@ -313,61 +343,38 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
         dialCtxRef.current = null;
       }
     };
-  }, [roomId, user, livekitUrl, connection, callType, isVideoOff, navigate, endCall]);
+  }, [roomId, user, agoraAppId, agoraToken, callType, navigate]);
 
-  // Get Connection Details
+  // Get Agora Connection Details
   useEffect(() => {
     if (!roomId || !user) return;
 
     const getConnection = async () => {
       try {
-        const connectionResponse = await api.post('/livekit-token', {
-          room: roomId,
-          identity: user.email || user.id,
-          role: 'host',
+        // TODO: Replace with actual Agora token generation endpoint
+        const agoraTokenResponse = await supabase.functions.invoke('agora-token', {
+          body: JSON.stringify({
+            channelName: roomId,
+            role: 1, // Publisher
+            uid: user.id, // Use user ID as UID
+          }),
         });
 
-        console.log('[Call] Connection response:', { 
-          success: connectionResponse.success,
-          hasConnection: !!connectionResponse.token,
-          hasData: !!connectionResponse.data?.token,
-          keys: Object.keys(connectionResponse)
-        });
-
-        if (connectionResponse.error) {
-          throw new Error(connectionResponse.error);
+        if (agoraTokenResponse.error) {
+          throw new Error(agoraTokenResponse.error.message);
         }
 
-        // Handle both flat and nested structure
-        let connectionVal = connectionResponse.token || connectionResponse.data?.token;
-        
-        if (!connectionVal || typeof connectionVal !== 'string') {
-          console.error('[Call] Invalid connection details received:', connectionResponse);
-          throw new Error('Invalid connection format received from server');
+        const { token, app_id } = agoraTokenResponse.data.token;
+
+        if (!token || !app_id) {
+          console.error('[Call] Invalid Agora token details received:', agoraTokenResponse);
+          throw new Error('Invalid Agora token or App ID received from server');
         }
 
-        // Clean up connection string - remove whitespace and potential double quotes
-        connectionVal = connectionVal.trim();
-        if (connectionVal.startsWith('"') && connectionVal.endsWith('"')) {
-            connectionVal = connectionVal.slice(1, -1);
-        }
-
-        const serverUrl = connectionResponse.url || connectionResponse.data?.url;
-        
-        if (!serverUrl) {
-          throw new Error('Server URL not found');
-        }
-
-        console.log('[Call] Connection details received successfully', { 
-          connectionLen: connectionVal.length, 
-          connectionPreview: connectionVal.substring(0, 10) + '...',
-          serverUrl 
-        });
-
-        setLivekitUrl(serverUrl);
-        setConnection(connectionVal);
+        setAgoraToken(token);
+        setAgoraAppId(app_id);
       } catch (err: any) {
-        console.error('Connection error:', err);
+        console.error('Agora Token error:', err);
         toast.error('Failed to initialize call');
         navigate('/tcps');
       }
@@ -377,25 +384,24 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
   }, [roomId, user, navigate]);
 
   const startCall = async () => {
-    if (!roomRef.current || isStartingCall) return;
+    if (!clientRef.current || isStartingCall || !user) return;
     setIsStartingCall(true);
 
     try {
       callStartTimeRef.current = new Date();
       setIsCallStarted(true);
 
-      // Publish audio track
-      if (callType === 'audio' || !isVideoOff) {
-        const audioTrack = await createLocalAudioTrack();
-        await roomRef.current.localParticipant.publishTrack(audioTrack);
-      }
+      // Create and publish local tracks
+      const [microphoneTrack, cameraTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+      localAudioTrackRef.current = microphoneTrack;
+      localVideoTrackRef.current = cameraTrack;
 
-      // Publish video track if video call
-      if (callType === 'video' && !isVideoOff) {
-        const videoTrack = await createLocalVideoTrack({ facingMode: 'user' });
-        await roomRef.current.localParticipant.publishTrack(videoTrack);
+      if (callType === 'audio') {
+        await clientRef.current.publish(microphoneTrack);
+      } else if (callType === 'video') {
+        await clientRef.current.publish([microphoneTrack, cameraTrack]);
         if (videoRef.current) {
-          videoTrack.attach(videoRef.current);
+          cameraTrack.play(videoRef.current);
           videoRef.current.muted = true;
         }
       }
@@ -448,16 +454,24 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
   };
 
   const toggleMute = async () => {
-    if (!roomRef.current?.localParticipant) return;
+    if (!localAudioTrackRef.current) return;
     const enabled = !isMuted;
-    await roomRef.current.localParticipant.setMicrophoneEnabled(!enabled);
+    if (enabled) {
+      await localAudioTrackRef.current.setMuted(false);
+    } else {
+      await localAudioTrackRef.current.setMuted(true);
+    }
     setIsMuted(enabled);
   };
 
   const toggleVideo = async () => {
-    if (!roomRef.current?.localParticipant || callType === 'audio') return;
+    if (!localVideoTrackRef.current || callType === 'audio') return;
     const enabled = isVideoOff;
-    await roomRef.current.localParticipant.setCameraEnabled(enabled);
+    if (enabled) {
+      await localVideoTrackRef.current.setMuted(false);
+    } else {
+      await localVideoTrackRef.current.setMuted(true);
+    }
     setIsVideoOff(!enabled);
   };
 

@@ -1,20 +1,26 @@
 import { useEffect } from 'react';
-import { useLocalParticipant } from '@livekit/components-react';
+import { useRoom } from '../../hooks/useRoom';
 import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../lib/store';
 import { toast } from 'sonner';
 
 export default function MuteHandler({ streamId }: { streamId: string }) {
-    const { localParticipant } = useLocalParticipant();
+    const { localAudioTrack, isMicrophoneEnabled, toggleMicrophone } = useRoom();
+    const { user } = useAuthStore();
+    const userId = user?.id;
 
     useEffect(() => {
         if (!streamId || !streamId.trim()) return;
-        if (!localParticipant) return;
+        if (!localAudioTrack) return;
+
+        // TODO: Get the actual user ID. Assuming a placeholder for now.
+        const currentUserId = userId; // Replace with actual user ID
 
         // Check initial mute
         const checkMute = async () => {
-             const { data } = await supabase.from('stream_mutes').select('id').eq('stream_id', streamId).eq('user_id', localParticipant.identity).maybeSingle();
+             const { data } = await supabase.from('stream_mutes').select('id').eq('stream_id', streamId).eq('user_id', currentUserId).maybeSingle();
              if (data) {
-                 localParticipant.setMicrophoneEnabled(false);
+                 if (isMicrophoneEnabled) { toggleMicrophone(); }
                  toast.error("You have been muted by a moderator.");
              }
         };
@@ -28,8 +34,8 @@ export default function MuteHandler({ streamId }: { streamId: string }) {
                 filter: `stream_id=eq.${streamId}` 
             }, (payload) => {
                 const data = (payload as any).new;
-                if (data && data.user_id === localParticipant.identity) {
-                    localParticipant.setMicrophoneEnabled(false);
+                if (data && data.user_id === currentUserId) {
+                    if (isMicrophoneEnabled) { toggleMicrophone(); }
                     toast.error("You have been muted by a moderator.");
                 }
             })
@@ -40,15 +46,15 @@ export default function MuteHandler({ streamId }: { streamId: string }) {
                 filter: `stream_id=eq.${streamId}` 
             }, (payload) => {
                  const data = (payload as any).old;
-                 if (data && data.user_id === localParticipant.identity) {
-                     localParticipant.setMicrophoneEnabled(true);
+                 if (data && data.user_id === currentUserId) {
+                     if (!isMicrophoneEnabled) { toggleMicrophone(); }
                      toast.success("You have been unmuted.");
                  }
             })
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [streamId, localParticipant]);
+    }, [streamId, userId, localAudioTrack, isMicrophoneEnabled, toggleMicrophone]);
 
     return null;
 }

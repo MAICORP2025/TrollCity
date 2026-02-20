@@ -17,6 +17,7 @@ interface StreamRow {
   title?: string;
   room_name?: string;
   category?: string;
+  mux_playback_id?: string; // Added for Mux playback
   broadcaster?: {
     username: string;
     avatar_url: string;
@@ -35,7 +36,18 @@ export default function OfficerStreamGrid() {
       const { data, error } = await supabase
         .from('streams')
         .select(`
-          *,
+          id,
+          broadcaster_id,
+          status,
+          is_live,
+          current_viewers,
+          total_gifts_coins,
+          total_likes,
+          start_time,
+          title,
+          room_name,
+          category,
+          mux_playback_id,
           broadcaster:user_profiles!broadcaster_id(username, avatar_url)
         `)
         .or('is_live.eq.true,status.eq.live')
@@ -149,7 +161,7 @@ export default function OfficerStreamGrid() {
               {/* Actions */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <button
-                  onClick={() => setSelectedStream(stream)}
+                  onClick={() => setSelectedStream({ id: stream.id, agora_channel: stream.id, title: stream.title, mux_playback_id: stream.mux_playback_id })}
                   className="flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition-colors"
                 >
                   <Eye className="w-3.5 h-3.5" />

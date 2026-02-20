@@ -1,6 +1,5 @@
-import { useMemo, useState, type CSSProperties } from 'react';
-import { useParticipants, useTracks, VideoTrack } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { useMemo, useState, type CSSProperties, useRef, useEffect, memo, useCallback } from 'react';
+import { ILocalVideoTrack, ILocalAudioTrack, IRemoteUser, IRemoteVideoTrack, IRemoteAudioTrack } from 'agora-rtc-sdk-ng';
 import { Stream } from '../../types/broadcast';
 import { User, Coins, Plus, MicOff, VideoOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -25,7 +24,42 @@ interface BroadcastGridProps {
   broadcasterProfile?: any;
   hideEmptySeats?: boolean;
   seatPriceOverride?: number;
+  localTracks: [ILocalVideoTrack | undefined, ILocalAudioTrack | undefined];
+  remoteUsers: IRemoteUser[];
+  localUserId: string;
+  toggleCamera: () => void;
+  toggleMicrophone: () => void;
 }
+
+const AgoraVideoPlayer = memo(({ videoTrack }: { videoTrack: ILocalVideoTrack | IRemoteVideoTrack }) => {
+  const videoRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoTrack.play(videoRef.current);
+    }
+    return () => {
+      videoTrack.stop();
+    };
+  }, [videoTrack]);
+
+  return <div ref={videoRef} className="w-full h-full object-cover"></div>;
+});
+
+const AgoraAudioPlayer = memo(({ audioTrack }: { audioTrack: ILocalAudioTrack | IRemoteAudioTrack }) => {
+  const audioRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioTrack.play(audioRef.current);
+    }
+    return () => {
+      audioTrack.stop();
+    };
+  }, [audioTrack]);
+
+  return <div ref={audioRef}></div>;
+});
 
 export default function BroadcastGrid({
   stream,
@@ -41,10 +75,12 @@ export default function BroadcastGrid({
   broadcasterProfile,
   hideEmptySeats = false,
   seatPriceOverride,
+  localTracks,
+  remoteUsers,
+  localUserId,
+  toggleCamera,
+  toggleMicrophone,
 }: BroadcastGridProps) {
-  const allParticipants = useParticipants();
-  const cameraTracks = useTracks([Track.Source.Camera]);
-  const audioTracks = useTracks([Track.Source.Microphone]); // Monitor audio tracks for mute state
   const [selectedUserForAction, setSelectedUserForAction] = useState<string | null>(null);
   const [showHostStats, setShowHostStats] = useState(false);
 
@@ -59,6 +95,37 @@ export default function BroadcastGrid({
   }, [stream.user_id, seats]);
 
   const attributes = useParticipantAttributes(userIds, stream.id);
+
+  const getParticipantAndTracks = useCallback((userId: string | undefined) => {
+    if (!userId) return { participant: undefined, videoTrack: undefined, audioTrack: undefined, isLocal: false };
+
+    let participant: IRemoteUser | undefined;
+    let videoTrack: ILocalVideoTrack | IRemoteVideoTrack | undefined;
+    let audioTrack: ILocalAudioTrack | IRemoteAudioTrack | undefined;
+    let isLocal = false;
+
+    if (userId === localUserId) {
+      // Local user
+      isLocal = true;
+      videoTrack = localTracks[0];
+      audioTrack = localTracks[1];
+      // For local participant, we don't have an IRemoteUser object, so we'll use a dummy one for consistent typing
+      // and to carry the identity for attribute lookup
+      participant = { uid: localUserId, hasAudio: !!audioTrack, hasVideo: !!videoTrack, audioTrack, videoTrack } as IRemoteUser;
+    } else {
+      // Remote user
+      participant = remoteUsers.find(u => u.uid === userId);
+      if (participant) {
+        videoTrack = participant.videoTrack;
+        audioTrack = participant.audioTrack;
+      }
+    }
+    
+    const isMicOn = audioTrack ? audioTrack.enabled : false;
+    const isCamOn = videoTrack ? videoTrack.enabled : false;
+
+    return { participant, videoTrack, audioTrack, isLocal, isMicOn, isCamOn };
+  }, [localUserId, localTracks, remoteUsers]);
 
   // Calculate how many boxes we must render (never hide occupied seats)
   const seatKeys = Object.keys(seats);
@@ -129,12 +196,7 @@ export default function BroadcastGrid({
         const isStreamHost = userId === stream.user_id;
 
         // Find participant + tracks
-        const participant = allParticipants.find((p) => p.identity === userId);
-        const track = cameraTracks.find((t) => t.participant.identity === userId);
-        const audioTrack = audioTracks.find((t) => t.participant.identity === userId);
-
-        const isMicOn = audioTrack ? !audioTrack.publication.isMuted : false;
-        const isCamOn = track ? !track.publication.isMuted : false;
+        const { participant, videoTrack, audioTrack, isLocal, isMicOn, isCamOn } = getParticipantAndTracks(userId);
 
         // Determine profile used for visuals
         let displayProfile = seat?.user_profile;
@@ -155,12 +217,12 @@ export default function BroadcastGrid({
             new Date(displayProfile.rgb_username_expires_at) > new Date()) ||
           userAttrs?.activePerks?.includes('perk_rgb_username' as any);
 
-        const hasStreamRgb = !!stream.has_rgb_effect && !(participant?.metadata && JSON.parse(participant.metadata).rgb_disabled);
+        const hasStreamRgb = !!stream.has_rgb_effect;
 
         if (hasGold) {
           boxClass =
             'relative bg-black/50 rounded-xl overflow-hidden border-2 border-yellow-500 shadow-[0_0_15px_rgba(255,215,0,0.3)] transition-all duration-300';
-        } else if (hasRgbProfile || hasStreamRgb) {
+        } else if (hasRgbProfile || (hasStreamRgb && !isLocal)) {
           boxClass = 'relative bg-black/50 rounded-xl overflow-hidden rgb-box transition-all duration-300';
         }
 
@@ -186,15 +248,11 @@ export default function BroadcastGrid({
             }}
           >
             {/* Render Video if Participant Exists and Track is active */}
-            {track && isCamOn && (
-              <VideoTrack
-                trackRef={track}
-                className={cn('w-full h-full object-cover', track.participant.isLocal && 'scale-x-[-1]')}
+            {videoTrack && isCamOn ? (
+              <AgoraVideoPlayer
+                videoTrack={videoTrack}
               />
-            )}
-
-            {/* Video Off / Audio Only State */}
-            {userId && participant && (!track || !isCamOn) && (
+            ) : userId && participant ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/90">
                 <div className="relative">
                   <img
@@ -218,17 +276,16 @@ export default function BroadcastGrid({
                   Camera Off
                 </span>
               </div>
-            )}
-
-            {/* Fallback / Loading - Only if participant NOT found yet */}
-            {userId && !participant && (
+            ) : userId && !participant ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="animate-pulse bg-zinc-800 w-full h-full" />
                 <span className="absolute text-xs text-white/50">
                   {isStreamHost ? 'Host Connecting...' : 'Connecting...'}
                 </span>
               </div>
-            )}
+            ) : null}
+
+            {audioTrack && <AgoraAudioPlayer audioTrack={audioTrack} />}
 
             {/* Empty Seat */}
             {!userId && (

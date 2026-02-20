@@ -1,27 +1,19 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
-import { 
-  LiveKitRoom, 
-  RoomAudioRenderer, 
-  StartAudio, 
-  VideoTrack,
-  useParticipants,
-  useTracks,
-  useLocalParticipant
-} from '@livekit/components-react'
-import { Track, Participant } from 'livekit-client'
-import '@livekit/components-styles'
+import { useAgoraRoom } from '../hooks/useRoom'
+import AgoraRTC, { IRemoteUser, ILocalVideoTrack, ILocalAudioTrack } from 'agora-rtc-sdk-ng'
 import { Button } from '../components/ui/button'
 import { toast } from 'sonner'
 import { User, DollarSign, CheckCircle, XCircle, Trash2, Mic, MicOff, Video, VideoOff } from 'lucide-react'
+import { IRemoteAudioTrack } from 'agora-rtc-sdk-ng'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 
-type Interview = {
+  type Interview = {
   id: string
   applicant_id: string
   application_id?: string
@@ -34,59 +26,97 @@ type Interview = {
   }
 }
 
+interface InterviewGridProps {
+  interview: Interview;
+  isAdmin: boolean;
+  localTracks: [AgoraRTC.ILocalVideoTrack | undefined, AgoraRTC.ILocalAudioTrack | undefined];
+  remoteUsers: IRemoteUser[];
+  toggleCamera: () => void;
+  toggleMicrophone: () => void;
+  localUserId: string;
+  applicantId: string;
+}
+
 // Inner component to render the interview grid
-function InterviewGrid({ interview, isAdmin: _isAdmin }: { interview: Interview, isAdmin: boolean }) {
-  const participants = useParticipants();
-  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone]);
-  const { localParticipant } = useLocalParticipant();
+function InterviewGrid({ 
+  interview, 
+  isAdmin: _isAdmin,
+  localTracks,
+  remoteUsers,
+  toggleCamera,
+  toggleMicrophone,
+  localUserId,
+  applicantId
+}: InterviewGridProps) {
+  const localVideoTrack = localTracks[0];
+  const localAudioTrack = localTracks[1];
 
   // Find participants
-  // We identify the applicant by their username (identity). 
-  // The interviewer is anyone else who has admin/lead privileges (but simplified: anyone else in the room who is publishing)
-  const applicant = participants.find(p => p.identity === interview.applicant?.username);
-  
-  // The interviewer is the other person (not the applicant). 
-  // If multiple admins join, we might show them all, but for now let's pick the first non-applicant.
-  const interviewer = participants.find(p => p.identity !== interview.applicant?.username);
+  const isLocalUserApplicant = localUserId === applicantId;
+  const applicantRemoteUser = remoteUsers.find(user => user.uid === applicantId);
+  const interviewerRemoteUser = remoteUsers.find(user => user.uid !== applicantId && user.uid !== localUserId);
 
-  const getVideoTrack = (p?: Participant) => {
-    if (!p) return null;
-    return tracks.find(t => t.participant.identity === p.identity && t.source === Track.Source.Camera);
-  };
+  const applicantDisplay = isLocalUserApplicant
+    ? { user: { username: interview.applicant?.username || 'Applicant' }, videoTrack: localVideoTrack, audioTrack: localAudioTrack, isLocal: true }
+    : (applicantRemoteUser ? { user: { username: interview.applicant?.username || 'Applicant' }, videoTrack: applicantRemoteUser.videoTrack, audioTrack: applicantRemoteUser.audioTrack, isLocal: false } : undefined);
 
-  const interviewerTrack = getVideoTrack(interviewer);
-  const applicantTrack = getVideoTrack(applicant);
+  const interviewerDisplay = !isLocalUserApplicant
+    ? { user: { username: interview.interviewer_id || 'Interviewer' }, videoTrack: localVideoTrack, audioTrack: localAudioTrack, isLocal: true }
+    : (interviewerRemoteUser ? { user: { username: 'Interviewer' }, videoTrack: interviewerRemoteUser.videoTrack, audioTrack: interviewerRemoteUser.audioTrack, isLocal: false } : undefined);
+
+
 
   const renderParticipantBox = (
-    title: string, 
-    colorClass: string, 
-    participant?: Participant, 
-    trackRef?: any
+    title: string,
+    colorClass: string,
+    videoTrack: ILocalVideoTrack | IRemoteVideoTrack | undefined,
+    audioTrack: ILocalAudioTrack | IRemoteAudioTrack | undefined,
+    isLocal: boolean,
+    username: string,
   ) => {
-    const isLocal = participant?.identity === localParticipant.identity;
-    const isMicOn = participant?.isMicrophoneEnabled;
-    const isCamOn = participant?.isCameraEnabled;
+    const videoRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      if (videoRef.current && videoTrack) {
+        videoTrack.play(videoRef.current);
+      }
+      return () => {
+        if (videoTrack) {
+          videoTrack.stop();
+        }
+      };
+    }, [videoTrack]);
+
+    useEffect(() => {
+      if (audioTrack && !isLocal) {
+        // Remote audio tracks need to be played explicitly
+        audioTrack.play();
+      }
+      return () => {
+        if (audioTrack && !isLocal) {
+          audioTrack.stop();
+        }
+      };
+    }, [audioTrack, isLocal]);
+
+    const isMicOn = audioTrack && !audioTrack.muted;
+    const isCamOn = videoTrack && !videoTrack.muted;
 
     return (
       <div className={`bg-gray-900 rounded-xl overflow-hidden border ${colorClass} aspect-video relative group`}>
         <div className={`absolute top-4 left-4 z-10 bg-black/60 px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-2 backdrop-blur-sm ${colorClass.replace('border-', 'text-')}`}>
           {title}
-          {participant && (
-            <div className="flex gap-1 ml-2">
-               {isMicOn ? <Mic size={14} className="text-green-400" /> : <MicOff size={14} className="text-red-400" />}
-            </div>
-          )}
+          <div className="flex gap-1 ml-2">
+             {isMicOn ? <Mic size={14} className="text-green-400" /> : <MicOff size={14} className="text-red-400" />}
+          </div>
         </div>
         
-        {participant && trackRef ? (
-          <VideoTrack 
-            trackRef={trackRef} 
-            className="w-full h-full object-cover" 
-          />
+        {videoTrack ? (
+          <div ref={videoRef} className="w-full h-full object-cover"></div>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-500 flex-col gap-2">
             <User size={48} />
-            <p>Waiting for {title.toLowerCase()}...</p>
+            <p>Waiting for {username}...</p>
           </div>
         )}
 
@@ -97,7 +127,7 @@ function InterviewGrid({ interview, isAdmin: _isAdmin }: { interview: Interview,
                size="icon" 
                variant={isMicOn ? "ghost" : "destructive"} 
                className="h-10 w-10 rounded-full"
-               onClick={() => localParticipant.setMicrophoneEnabled(!isMicOn)}
+               onClick={toggleMicrophone}
              >
                {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
              </Button>
@@ -105,7 +135,7 @@ function InterviewGrid({ interview, isAdmin: _isAdmin }: { interview: Interview,
                size="icon" 
                variant={isCamOn ? "ghost" : "destructive"} 
                className="h-10 w-10 rounded-full"
-               onClick={() => localParticipant.setCameraEnabled(!isCamOn)}
+               onClick={toggleCamera}
              >
                {isCamOn ? <Video size={20} /> : <VideoOff size={20} />}
              </Button>
@@ -117,17 +147,21 @@ function InterviewGrid({ interview, isAdmin: _isAdmin }: { interview: Interview,
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl flex-1">
-      {renderParticipantBox(
+      {interviewerDisplay && renderParticipantBox(
         "Interviewer (Admin/Lead)", 
         "border-purple-800", 
-        interviewer, 
-        interviewerTrack
+        interviewerDisplay.videoTrack,
+        interviewerDisplay.audioTrack,
+        interviewerDisplay.isLocal,
+        interviewerDisplay.user.username
       )}
-      {renderParticipantBox(
+      {applicantDisplay && renderParticipantBox(
         "Applicant", 
         "border-blue-800", 
-        applicant, 
-        applicantTrack
+        applicantDisplay.videoTrack,
+        applicantDisplay.audioTrack,
+        applicantDisplay.isLocal,
+        applicantDisplay.user.username
       )}
     </div>
   );
@@ -139,8 +173,8 @@ export default function InterviewRoom() {
   const { profile } = useAuthStore()
   const [interview, setInterview] = useState<Interview | null>(null)
   const [loading, setLoading] = useState(true)
+  const { join, localTracks, remoteUsers, leave, toggleCamera, toggleMicrophone } = useAgoraRoom()
   const [connection, setConnection] = useState<string>("")
-  const [livekitUrl, setLivekitUrl] = useState<string>("")
   const [isAdmin, setIsAdmin] = useState(false)
   
   // Hire Modal State
@@ -177,22 +211,22 @@ export default function InterviewRoom() {
         setIsAdmin(isInterviewer)
 
         // Get Connection Details
-        const { data: connectionData, error: connectionError } = await supabase.functions.invoke('livekit-token', {
+        const { data: connectionData, error: connectionError } = await supabase.functions.invoke('agora-token', {
           body: {
-            room: roomId,
-            identity: profile.id,
-            role: (isInterviewer || isApplicant) ? 'host' : 'guest'
+            channel: roomId,
+            uid: profile.id,
+            role: (isInterviewer || isApplicant) ? 'publisher' : 'audience'
           }
         })
 
-        if (connectionError || !connectionData?.token || !connectionData?.url) {
+        if (connectionError || !connectionData?.token) {
           console.error("Connection error:", connectionError)
           toast.error("Failed to connect to video server")
           return
         }
 
         setConnection(connectionData.token)
-        setLivekitUrl(connectionData.url)
+        join(roomId, connectionData.token)
 
         // If pending and admin joins, update status to active
         if (isInterviewer && data.status === 'pending') {
@@ -365,23 +399,19 @@ export default function InterviewRoom() {
         )}
       </div>
 
-      {connection && livekitUrl && (
-        <LiveKitRoom
-          video={true}
-          audio={true}
-          token={connection}
-          serverUrl={livekitUrl}
-          data-lk-theme="default"
-          className="flex-1 w-full flex flex-col items-center"
-          onDisconnected={() => {
-             toast.info("Disconnected from interview")
-             navigate('/lead-officer')
-          }}
-        >
-           <InterviewGrid interview={interview!} isAdmin={isAdmin} />
-           <RoomAudioRenderer />
-           <StartAudio label="Click to enable audio" />
-        </LiveKitRoom>
+      {connection && (
+        <div className="flex-1 w-full flex flex-col items-center">
+           <InterviewGrid 
+    interview={interview!} 
+    isAdmin={isAdmin} 
+    localTracks={localTracks} 
+    remoteUsers={remoteUsers}
+    toggleCamera={toggleCamera} 
+    toggleMicrophone={toggleMicrophone}
+    localUserId={profile.id}
+    applicantId={interview?.applicant_id}
+/>
+        </div>
       )}
 
       {/* Hire Modal */}

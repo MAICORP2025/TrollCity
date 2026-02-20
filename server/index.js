@@ -13,7 +13,8 @@ app.use(cors());
 app.use(express.json());
 
 // Import handlers
-const livekitTokenHandler = require('./api/livekit-token');
+
+const agoraTokenHandler = require('./api/agora-token');
 const telemetryHandler = require('./api/telemetryHandler');
 
 // API Routes
@@ -21,19 +22,6 @@ const telemetryHandler = require('./api/telemetryHandler');
 // Health Check
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// LiveKit Test
-app.get('/api/livekit/test', (req, res) => {
-  const apiKey = process.env.LIVEKIT_API_KEY;
-  const apiSecret = process.env.LIVEKIT_API_SECRET;
-  const livekitUrl = process.env.LIVEKIT_CLOUD_URL || process.env.LIVEKIT_URL;
-
-  if (apiKey && apiSecret && livekitUrl) {
-    res.status(200).json({ status: 'ok', message: 'LiveKit configured' });
-  } else {
-    res.status(500).json({ status: 'error', message: 'LiveKit configuration missing' });
-  }
 });
 
 // PayPal Test
@@ -50,12 +38,11 @@ app.get('/api/paypal/test', (req, res) => {
   }
 });
 
-// LiveKit Token
-app.post('/api/livekit-token', async (req, res) => {
-  await livekitTokenHandler(req, res);
+// Telemetry
+app.post('/api/agora-token', async (req, res) => {
+  await agoraTokenHandler(req, res);
 });
 
-// Telemetry
 app.post('/api/telemetry', async (req, res) => {
   await telemetryHandler(req, res);
 });

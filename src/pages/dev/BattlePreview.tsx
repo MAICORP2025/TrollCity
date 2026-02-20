@@ -1,7 +1,7 @@
 import React from 'react';
 import { User, Coins, Plus } from 'lucide-react';
 
-// Mock Grid Component (Pure UI, no LiveKit)
+// Mock Grid Component (Pure UI)
 const MockBattleGrid = ({ title, hostName, score }: { title: string, hostName: string, score: number, isLeft: boolean }) => {
   return (
     <div className="h-full flex flex-col p-4">

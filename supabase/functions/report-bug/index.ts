@@ -5,7 +5,7 @@ interface BugReportRequest {
   title: string
   description: string
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
-  category: 'livekit' | 'broadcast' | 'auth' | 'database' | 'payment' | 'chat' | 'ui' | 'performance' | 'security' | 'other'
+  category: 'broadcast' | 'auth' | 'database' | 'payment' | 'chat' | 'ui' | 'performance' | 'security' | 'other'
   error_message?: string
   stack_trace?: string
   affected_components?: string[]

@@ -345,7 +345,7 @@ export default function Sidebar() {
               className="text-purple-400 hover:text-purple-300"
             />
           )}
-          <SidebarItem icon={Car} label="TMV" to="/tmv" active={isActive('/tmv')} collapsed={isSidebarCollapsed} highlight={isUpdated('/tmv') || needsLicense} onClick={() => markAsViewed('/tmv')} />
+
           <SidebarItem icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} collapsed={isSidebarCollapsed} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} />
           <SidebarItem icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} collapsed={isSidebarCollapsed} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} />
         </SidebarGroup>

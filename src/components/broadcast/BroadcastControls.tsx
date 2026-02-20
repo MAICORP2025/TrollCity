@@ -7,10 +7,10 @@ import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import BannedUsersList from './BannedUsersList';
 import ThemeSelector from './ThemeSelector';
-import { useLocalParticipant } from '@livekit/components-react';
 import { useAuthStore } from '../../lib/store';
 import { useParticipantAttributes } from '../../hooks/useParticipantAttributes';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ICameraVideoTrack, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
 
 interface BroadcastControlsProps {
   stream: Stream;
@@ -25,11 +25,16 @@ interface BroadcastControlsProps {
   requiredBoxes?: number;
   onBoxCountUpdate?: (count: number) => void;
   liveViewerCount?: number;
+  localTracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | null;
+  toggleCamera: () => void;
+  toggleMicrophone: () => void;
 }
 
-export default function BroadcastControls({ stream, isHost, isModerator = false, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave, onShare, requiredBoxes = 1, onBoxCountUpdate, liveViewerCount }: BroadcastControlsProps) {
+export default function BroadcastControls({ stream, isHost, isModerator = false, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave, onShare, requiredBoxes = 1, onBoxCountUpdate, liveViewerCount, localTracks, toggleCamera, toggleMicrophone }: BroadcastControlsProps) {
   const navigate = useNavigate();
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+  const [audioTrack, videoTrack] = localTracks || [];
+  const isMicOn = audioTrack ? !audioTrack.muted : false;
+  const isCamOn = videoTrack ? !videoTrack.muted : false;
   const { user, isAdmin, profile } = useAuthStore();
   const [seatPrice, setSeatPrice] = useState(stream.seat_price || 0);
   const [locked, setLocked] = useState(stream.are_seats_locked || false);
@@ -43,37 +48,14 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
   const [isMinimized, setIsMinimized] = useState(false);
   const [showStreamControls, setShowStreamControls] = useState(true);
 
+
+
   // Sync likes from stream
   useEffect(() => {
     if (typeof (stream as any).total_likes === 'number') {
         setLikes((stream as any).total_likes);
     }
   }, [stream]);
-
-  const toggleMic = async () => {
-    if (localParticipant) {
-      try {
-        const newVal = !isMicrophoneEnabled;
-        console.log('[BroadcastControls] Toggling mic:', { current: isMicrophoneEnabled, target: newVal });
-        await localParticipant.setMicrophoneEnabled(newVal);
-        
-        // Force state verification after toggle
-        setTimeout(() => {
-          const actualState = localParticipant.isMicrophoneEnabled;
-          console.log('[BroadcastControls] Mic state after toggle:', actualState);
-          if (actualState !== newVal) {
-            console.warn('[BroadcastControls] Mic state mismatch, forcing again');
-            localParticipant.setMicrophoneEnabled(newVal);
-          }
-        }, 300);
-      } catch (e) {
-        console.error('Failed to toggle mic:', e);
-        toast.error('Failed to toggle microphone');
-      }
-    } else {
-      console.warn('[BroadcastControls] toggleMic called but no localParticipant');
-    }
-  };
   const attributes = useParticipantAttributes(user ? [user.id] : [], stream.id);
   const myAttributes = user ? attributes[user.id] : null;
   const activePerks = myAttributes?.activePerks || [];
@@ -140,16 +122,6 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
     setLocked(stream.are_seats_locked || false);
     setHasRgb(stream.has_rgb_effect || false);
   }, [stream]);
-
-  const toggleCam = async () => {
-    if (localParticipant) {
-      const newVal = !isCameraEnabled;
-      await localParticipant.setCameraEnabled(newVal);
-    }
-  };
-
-  const isMicOn = isMicrophoneEnabled;
-  const isCamOn = isCameraEnabled;
 
 
   const updateStreamConfig = React.useCallback(async (price: number, isLocked: boolean, showToast: boolean = true) => {
@@ -439,6 +411,24 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
                     </span>
                 </div>
 
+                {/* Box Count Controls */}
+                {canEditStream && (
+                    <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/5">
+                        <LayoutGrid size={16} className="text-purple-400" />
+                        <span className="text-sm font-bold text-white">
+                            {stream.box_count || 1}
+                        </span>
+                        <div className="flex items-center gap-1">
+                            <button onClick={() => updateBoxCount((stream.box_count || 1) - 1)} className="p-1 hover:bg-white/20 rounded-full disabled:opacity-50 disabled:cursor-not-allowed" disabled={(stream.box_count || 1) <= requiredBoxes}>
+                                <Minus size={12} />
+                            </button>
+                            <button onClick={() => updateBoxCount((stream.box_count || 1) + 1)} className="p-1 hover:bg-white/20 rounded-full disabled:opacity-50 disabled:cursor-not-allowed" disabled={(stream.box_count || 1) >= 6}>
+                                <Plus size={12} />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Like Count */}
                 <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/5">
                     <Heart size={16} className="text-pink-500 fill-pink-500/20" />
@@ -459,7 +449,7 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
                  {isOnStage && (
                     <>
                         <button
-                            onClick={(e) => { e.stopPropagation(); toggleMic(); }}
+                            onClick={(e) => { e.stopPropagation(); toggleMicrophone(); }}
                             className={cn(
                                 "p-2 rounded-lg transition-colors group relative",
                                 isMicOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-500/20 text-red-500 hover:bg-red-500/30"
@@ -469,7 +459,7 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
                             {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
                         </button>
                         <button
-                            onClick={(e) => { e.stopPropagation(); toggleCam(); }}
+                            onClick={(e) => { e.stopPropagation(); toggleCamera(); }}
                             className={cn(
                                 "p-2 rounded-lg transition-colors group relative mr-2",
                                 isCamOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-500/20 text-red-500 hover:bg-red-500/30"

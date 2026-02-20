@@ -7,8 +7,8 @@ export const API_ENDPOINTS = {
   payments: {
     status: `${EDGE_URL}/payments-status`,
   },
-  livekit: {
-    token: `${EDGE_URL}/livekit-token`,
+  agora: {
+    token: `${EDGE_URL}/agora-token`,
   },
   admin: {
     trollDrop: `${EDGE_URL}/admin/troll-drop`,

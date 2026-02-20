@@ -25,6 +25,7 @@ export interface Stream {
   active_theme_url?: string;
   hls_path?: string;
   hls_url?: string;
+  mux_playback_id?: string;
 }
 
 export interface StreamGuest {

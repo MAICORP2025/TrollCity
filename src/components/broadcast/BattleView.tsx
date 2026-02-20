@@ -1,13 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { 
-  LiveKitRoom, 
-  RoomAudioRenderer, 
-  useLocalParticipant, 
-  useParticipants,
-  useTracks,
-  VideoTrack,
-} from '@livekit/components-react';
-import { LocalTrack, Track, Participant } from 'livekit-client';
+
+import AgoraRTC, { IRemoteUser, IRemoteVideoTrack, IRemoteAudioTrack, ILocalVideoTrack, ILocalAudioTrack } from "agora-rtc-sdk-ng";
+
 import { supabase } from '../../lib/supabase';
 import { Stream } from '../../types/broadcast';
 import { useAuthStore } from '../../lib/store';
@@ -21,92 +15,62 @@ import { cn } from '../../lib/utils';
 
 // --- Sub-components for the new architecture ---
 
-/**
- * Ensures the host/guest is unmuted when joining the battle room
- */
-const BattleRoomSync = ({ isBroadcaster }: { isBroadcaster: boolean }) => {
-    const { localParticipant } = useLocalParticipant();
+const AgoraVideoPlayer = ({ videoTrack, isLocal }: { videoTrack?: ILocalVideoTrack | IRemoteVideoTrack; isLocal: boolean }) => {
+  const videoRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-      if (!localParticipant || !isBroadcaster) return;
+  useEffect(() => {
+    if (videoTrack && videoRef.current) {
+      videoTrack.play(videoRef.current);
+      if (isLocal) {
+        // Apply mirror effect for local video
+        videoRef.current.style.transform = 'scaleX(-1)';
+      } else {
+        videoRef.current.style.transform = '';
+      }
+    }
 
-      let attempts = 0;
-      const maxAttempts = 10;
-      const intervalMs = 1000;
+    return () => {
+      if (videoTrack) {
+        videoTrack.stop();
+      }
+    };
+  }, [videoTrack, isLocal]);
 
-      const syncState = async () => {
-        try {
-          const publications = localParticipant.getTrackPublications();
-          if (publications) {
-            for (const pub of publications.values()) {
-              if (pub.track?.kind === 'video' && pub.isMuted) {
-                await (pub.track as LocalTrack).unmute();
-              }
-              if (pub.track?.kind === 'audio' && pub.isMuted) {
-                await (pub.track as LocalTrack).unmute();
-              }
-            }
-          }
-
-          if (!localParticipant.isCameraEnabled) {
-            await localParticipant.setCameraEnabled(true);
-          }
-          if (!localParticipant.isMicrophoneEnabled) {
-            await localParticipant.setMicrophoneEnabled(true);
-          }
-        } catch (error) {
-          console.error('[BattleRoomSync] Error syncing state:', error);
-        }
-      };
-
-      const tick = async () => {
-        attempts += 1;
-        await syncState();
-
-        const ready = localParticipant.isCameraEnabled && localParticipant.isMicrophoneEnabled;
-        if (ready || attempts >= maxAttempts) {
-          clearInterval(timer);
-        }
-      };
-
-      const timer = setInterval(tick, intervalMs);
-      tick();
-
-      return () => clearInterval(timer);
-    }, [isBroadcaster, localParticipant]);
-
-    return null;
+  return <div ref={videoRef} className="w-full h-full object-cover"></div>;
 };
 
-/**
- * Individual participant tile in the battle arena
- */
-const BattleParticipantTile = ({ 
-  participant, 
-  side 
-}: { 
-  participant: Participant; 
-  side: 'challenger' | 'opponent' 
-}) => {
-  const tracks = useTracks([Track.Source.Camera]);
-  const track = tracks.find((t) => t.participant.identity === participant.identity);
-  
-  const metadata = useMemo(() => {
-    try {
-      return JSON.parse(participant.metadata || '{}');
-    } catch {
-      return {};
-    }
-  }, [participant.metadata]);
-
+interface AgoraBattleParticipant {
+  identity: string;
+  name: string;
+  isLocal: boolean;
+  videoTrack?: ILocalVideoTrack | IRemoteVideoTrack;
+  audioTrack?: ILocalAudioTrack | IRemoteAudioTrack;
+  isMicrophoneEnabled: boolean;
+  isCameraEnabled: boolean;
+  metadata: any;
+  role?: 'host' | 'stage' | 'viewer';
+  team?: 'challenger' | 'opponent';
+  sourceStreamId?: string;
+  seatIndex?: number;
+}
+const BattleParticipantTile = ({
+  identity,
+  name,
+  isLocal,
+  videoTrack,
+  audioTrack,
+  isMicrophoneEnabled,
+  isCameraEnabled,
+  metadata,
+  side
+}: AgoraBattleParticipant & { side: 'challenger' | 'opponent' }) => {
   const isHost = metadata.role === 'host';
-  const isMuted = !participant.isMicrophoneEnabled;
-  const isVideoMuted = track?.publication?.isMuted ?? false;
-  const isVideoOn = !!track && !isVideoMuted;
+  const isMicMuted = !isMicrophoneEnabled;
+  const isVideoOn = isCameraEnabled && !!videoTrack;
 
-  console.log(`[BattleParticipantTile] Rendering ${participant.identity}:`, {
-    hasTrack: !!track,
-    isCameraEnabled: participant.isCameraEnabled,
+  console.log(`[BattleParticipantTile] Rendering ${identity}:`, {
+    hasVideoTrack: !!videoTrack,
+    isCameraEnabled,
     metadata
   });
 
@@ -117,9 +81,9 @@ const BattleParticipantTile = ({
       side === 'challenger' ? "hover:border-purple-500/50" : "hover:border-emerald-500/50"
     )}>
       {isVideoOn ? (
-        <VideoTrack
-          trackRef={track}
-          className={cn('w-full h-full object-cover', participant.isLocal && 'scale-x-[-1]')}
+        <AgoraVideoPlayer
+          videoTrack={videoTrack}
+          isLocal={isLocal}
         />
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
@@ -128,7 +92,7 @@ const BattleParticipantTile = ({
            </div>
            <div className="flex items-center gap-2 text-zinc-400 text-xs">
               <VideoOff size={14} />
-                <span>{track ? 'Loading video...' : 'Camera Off'}</span>
+                <span>Camera Off</span>
            </div>
         </div>
       )}
@@ -140,14 +104,14 @@ const BattleParticipantTile = ({
             "text-xs font-bold",
             isHost ? "text-amber-400" : "text-white"
           )}>
-            {participant.name || 'Anonymous'}
+            {name || 'Anonymous'}
           </span>
           {isHost && (
             <span className="text-[8px] bg-red-600 px-1 rounded text-white font-bold uppercase">HOST</span>
           )}
         </div>
         
-        {isMuted && (
+        {isMicMuted && (
           <div className="bg-red-500 p-1 rounded-full">
             <MicOff size={12} className="text-white" />
           </div>
@@ -160,51 +124,123 @@ const BattleParticipantTile = ({
 /**
  * The main split arena component
  */
-const BattleArena = ({ onGift }: { onGift: (uid: string, sourceStreamId: string) => void }) => {
-  const participants = useParticipants();
+interface BattleArenaProps {
+  onGift: (uid: string, sourceStreamId: string) => void;
+  battleId: string;
+  localAudioTrack: ILocalAudioTrack | null;
+  localVideoTrack: ILocalVideoTrack | null;
+  remoteUsers: IRemoteUser[];
+}
+
+const BattleArena = ({ onGift, battleId, localAudioTrack, localVideoTrack, remoteUsers }: BattleArenaProps) => {
+  const { user } = useAuthStore();
+  const [allBattleParticipants, setAllBattleParticipants] = useState<AgoraBattleParticipant[]>([]);
   
-  const categorized = useMemo(() => {
-    const teams = {
-      challenger: { host: null as Participant | null, guests: [] as Participant[] },
-      opponent: { host: null as Participant | null, guests: [] as Participant[] }
+  useEffect(() => {
+    const fetchParticipantData = async () => {
+      // Helper to fetch participant details from Supabase
+      const getSupabaseParticipant = async (userId: string) => {
+        const { data, error } = await supabase
+          .from('battle_participants')
+          .select('*')
+          .eq('battle_id', battleId)
+          .eq('user_id', userId)
+          .single();
+        if (error) console.error(`Failed to fetch battle_participant for user ${userId}:`, error);
+        return data;
+      };
+
+      const participantsData: AgoraBattleParticipant[] = [];
+
+      // Local participant
+      if (user) {
+        const localSupabaseParticipant = await getSupabaseParticipant(user.id);
+        let localMetadata = {};
+        if (localSupabaseParticipant?.metadata) {
+            try {
+                localMetadata = JSON.parse(localSupabaseParticipant.metadata);
+            } catch (e) {
+                console.error("Failed to parse metadata for local user:", user.id, e);
+            }
+        }
+        participantsData.push({
+          identity: user.id,
+          name: localSupabaseParticipant?.username || user.username || 'You',
+          isLocal: true,
+          videoTrack: localVideoTrack,
+          audioTrack: localAudioTrack,
+          isMicrophoneEnabled: localAudioTrack?.enabled,
+          isCameraEnabled: localVideoTrack?.enabled,
+          metadata: localMetadata,
+          role: localSupabaseParticipant?.role,
+          team: localSupabaseParticipant?.team,
+          sourceStreamId: localMetadata.sourceStreamId,
+          seatIndex: localMetadata.seatIndex,
+        });
+      }
+
+      // Remote participants
+      for (const remoteUser of remoteUsers) {
+        const remoteSupabaseParticipant = await getSupabaseParticipant(remoteUser.uid.toString());
+        let remoteMetadata = {};
+        if (remoteSupabaseParticipant?.metadata) {
+            try {
+                remoteMetadata = JSON.parse(remoteSupabaseParticipant.metadata);
+            } catch (e) {
+                console.error("Failed to parse metadata for remote user:", remoteUser.uid, e);
+            }
+        }
+        participantsData.push({
+          identity: remoteUser.uid.toString(),
+          name: remoteSupabaseParticipant?.username || `User ${remoteUser.uid}`,
+          isLocal: false,
+          videoTrack: remoteUser.videoTrack,
+          audioTrack: remoteUser.audioTrack,
+          isMicrophoneEnabled: remoteUser.audioTrack?.enabled,
+          isCameraEnabled: remoteUser.videoTrack?.enabled,
+          metadata: remoteMetadata,
+          role: remoteSupabaseParticipant?.role,
+          team: remoteSupabaseParticipant?.team,
+          sourceStreamId: remoteMetadata.sourceStreamId,
+          seatIndex: remoteMetadata.seatIndex,
+        });
+      }
+      setAllBattleParticipants(participantsData);
     };
 
-    participants.forEach(p => {
-      try {
-        const meta = JSON.parse(p.metadata || '{}');
-        const team = meta.team as 'challenger' | 'opponent';
-        const role = meta.role;
+    fetchParticipantData();
+  }, [remoteUsers, user, localAudioTrack, localVideoTrack, battleId]);
 
-        if (team === 'challenger' || team === 'opponent') {
-          if (role === 'host') {
-            teams[team].host = p;
-          } else if (role === 'stage') {
-            teams[team].guests.push(p);
-          }
+  const categorized = useMemo(() => {
+    const teams = {
+      challenger: { host: null as AgoraBattleParticipant | null, guests: [] as AgoraBattleParticipant[] },
+      opponent: { host: null as AgoraBattleParticipant | null, guests: [] as AgoraBattleParticipant[] }
+    };
+
+    allBattleParticipants.forEach(p => {
+      if (p.team === 'challenger' || p.team === 'opponent') {
+        if (p.role === 'host') {
+          teams[p.team].host = p;
+        } else if (p.role === 'stage') {
+          teams[p.team].guests.push(p);
         }
-      } catch {}
+      }
     });
 
-    // Sort guests by seat index if available
-    const sortBySeat = (a: Participant, b: Participant) => {
-      const metaA = JSON.parse(a.metadata || '{}');
-      const metaB = JSON.parse(b.metadata || '{}');
-      return (metaA.seatIndex || 0) - (metaB.seatIndex || 0);
+    const sortBySeat = (a: AgoraBattleParticipant, b: AgoraBattleParticipant) => {
+      return (a.seatIndex || 0) - (b.seatIndex || 0);
     };
     
     teams.challenger.guests.sort(sortBySeat);
     teams.opponent.guests.sort(sortBySeat);
 
     return teams;
-  }, [participants]);
+  }, [allBattleParticipants]);
 
-  const handleGiftClick = (p: Participant) => {
-    try {
-      const meta = JSON.parse(p.metadata || '{}');
-      if (meta.sourceStreamId) {
-        onGift(p.identity, meta.sourceStreamId);
-      }
-    } catch {}
+  const handleGiftClick = (p: AgoraBattleParticipant) => {
+    if (p.sourceStreamId) {
+      onGift(p.identity, p.sourceStreamId);
+    }
   };
 
   return (
@@ -213,13 +249,13 @@ const BattleArena = ({ onGift }: { onGift: (uid: string, sourceStreamId: string)
       <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2 scrollbar-hide">
         {categorized.challenger.host && (
           <div onClick={() => handleGiftClick(categorized.challenger.host!)} className="cursor-pointer">
-            <BattleParticipantTile participant={categorized.challenger.host} side="challenger" />
+            <BattleParticipantTile {...categorized.challenger.host} side="challenger" />
           </div>
         )}
         <div className="grid grid-cols-2 gap-4">
           {categorized.challenger.guests.map(p => (
             <div key={p.identity} onClick={() => handleGiftClick(p)} className="cursor-pointer">
-              <BattleParticipantTile participant={p} side="challenger" />
+              <BattleParticipantTile {...p} side="challenger" />
             </div>
           ))}
         </div>
@@ -232,13 +268,13 @@ const BattleArena = ({ onGift }: { onGift: (uid: string, sourceStreamId: string)
       <div className="flex-1 flex flex-col gap-4 overflow-y-auto pl-2 scrollbar-hide">
         {categorized.opponent.host && (
           <div onClick={() => handleGiftClick(categorized.opponent.host!)} className="cursor-pointer">
-            <BattleParticipantTile participant={categorized.opponent.host} side="opponent" />
+            <BattleParticipantTile {...categorized.opponent.host} side="opponent" />
           </div>
         )}
         <div className="grid grid-cols-2 gap-4">
           {categorized.opponent.guests.map(p => (
             <div key={p.identity} onClick={() => handleGiftClick(p)} className="cursor-pointer">
-              <BattleParticipantTile participant={p} side="opponent" />
+              <BattleParticipantTile {...p} side="opponent" />
             </div>
           ))}
         </div>
@@ -263,9 +299,12 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
   const [opponentStream, setOpponentStream] = useState<Stream | null>(null);
   const [participantInfo, setParticipantInfo] = useState<any>(null);
   const [token, setToken] = useState<string>("");
-  const [livekitUrl, setLivekitUrl] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showResults, setShowResults] = useState(false);
+  const [agoraClient, setAgoraClient] = useState<IAgoraRTCClient | null>(null);
+  const [localAudioTrack, setLocalAudioTrack] = useState<ILocalAudioTrack | null>(null);
+  const [localVideoTrack, setLocalVideoTrack] = useState<ILocalVideoTrack | null>(null);
+  const [remoteUsers, setRemoteUsers] = useState<IRemoteUser[]>([]);
   
   const { user } = useAuthStore();
   const effectiveUserId = viewerId || user?.id;
@@ -284,6 +323,65 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
       timestamp: new Date().toISOString()
     });
   }, [battleId, currentStreamId, effectiveUserId, participantInfo, challengerStream?.id, opponentStream?.id]);
+
+  useEffect(() => {
+    const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    setAgoraClient(client);
+
+    const joinBattle = async () => {
+      if (!battle || !effectiveUserId) return;
+
+      const roomName = `battle-${battle.id}`;
+
+      if (isBroadcaster) {
+        try {
+          const { data, error } = await supabase.functions.invoke('get-agora-token', {
+            body: { channelName: roomName, userId: effectiveUserId },
+          });
+          if (error) throw error;
+
+          await client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, roomName, data.token, effectiveUserId);
+
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+          const videoTrack = await AgoraRTC.createCameraVideoTrack();
+
+          setLocalAudioTrack(audioTrack);
+          setLocalVideoTrack(videoTrack);
+
+          await client.publish([audioTrack, videoTrack]);
+        } catch (error) {
+          console.error("Failed to join battle as publisher:", error);
+          toast.error("Couldn't connect to the battle.");
+        }
+      } else {
+        // For now, viewers will also join Agora to see the battle.
+        // This can be changed to Mux if a single stream is preferred for viewers.
+        await client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, roomName, null, effectiveUserId);
+      }
+    };
+
+    const handleUserPublished = async (user: IRemoteUser, mediaType: 'audio' | 'video') => {
+      await client.subscribe(user, mediaType);
+      setRemoteUsers((prev) => [...prev, user]);
+    };
+
+    const handleUserUnpublished = (user: IRemoteUser) => {
+      setRemoteUsers((prev) => prev.filter((u) => u.uid !== user.uid));
+    };
+
+    client.on('user-published', handleUserPublished);
+    client.on('user-unpublished', handleUserUnpublished);
+
+    joinBattle();
+
+    return () => {
+      client.off('user-published', handleUserPublished);
+      client.off('user-unpublished', handleUserUnpublished);
+      localAudioTrack?.close();
+      localVideoTrack?.close();
+      client.leave();
+    };
+  }, [battle, effectiveUserId, isBroadcaster]);
 
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
   const [giftStreamId, setGiftStreamId] = useState<string | null>(null);
@@ -368,18 +466,17 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
                 
                 setParticipantInfo(pData || { role: 'viewer', team: null });
 
-                // 4. Fetch LiveKit Token for the SHARED room
-                const { data: tokenData, error: tokenError } = await supabase.functions.invoke('livekit-token', {
-                    body: { 
-                    room: `battle-${battleId}`, 
+                // 4. Fetch Agora Token for the SHARED room
+                const { data: tokenData, error: tokenError } = await supabase.functions.invoke('agora-token', {
+                    body: {
+                    room: `battle-${battleId}`,
                     identity: effectiveUserId,
                     role: (pData?.role === 'host' || pData?.role === 'stage') ? 'host' : 'guest'
                     }
                 });
 
-                if (!tokenError && tokenData?.token && tokenData?.url) {
+                if (!tokenError && tokenData?.token) { // Agora token doesn't have 'url'
                   setToken(tokenData.token);
-                  setLivekitUrl(tokenData.url);
                 }
             }
         } catch (e) {
@@ -570,7 +667,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (loading || !battle || !challengerStream || !opponentStream || !token || !livekitUrl) {
+  if (loading || !battle || !challengerStream || !opponentStream || !token) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-black text-amber-500 gap-4">
         <Loader2 className="animate-spin" size={48} />
@@ -676,13 +773,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
         </div>
 
         {/* SHARED LIVEKIT ROOM */}
-        <LiveKitRoom
-          token={token}
-          serverUrl={livekitUrl}
-            connect={true}
-            className="flex-1 flex flex-col relative"
-        >
-            <MemoBattleArena onGift={handleGiftSelect} />
+
+            <MemoBattleArena 
+            onGift={handleGiftSelect} 
+            battleId={battleId} 
+            localAudioTrack={localAudioTrack}
+            localVideoTrack={localVideoTrack}
+            remoteUsers={remoteUsers}
+          />
 
             {/* Central Floating Timer */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50 flex flex-col items-center">
@@ -765,7 +863,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
                     </div>
                 </div>
             )}
-        </LiveKitRoom>
+
 
         {/* Gift Tray */}
         {giftRecipientId && (

@@ -8,7 +8,6 @@ export type BugAlertSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type BugAlertStatus = 'active' | 'acknowledged' | 'resolved' | 'dismissed';
 
 export type BugAlertCategory = 
-  | 'livekit' 
   | 'broadcast' 
   | 'auth' 
   | 'database' 

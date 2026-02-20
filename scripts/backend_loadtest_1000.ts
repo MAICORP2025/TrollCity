@@ -79,9 +79,6 @@ interface TestReport {
   scope: string;
   environment: string;
   run_id: string;
-  livekit_used: boolean;
-  livekit_tokens_minted: number;
-  livekit_connects: number;
   config: Record<string, unknown>;
   runs: RunReport[];
   summary: Record<string, unknown>;
@@ -183,9 +180,6 @@ const report: TestReport = {
   scope: String(CONFIG.label || 'backend-loadtest'),
   environment: 'production',
   run_id: RUN_ID,
-  livekit_used: false,
-  livekit_tokens_minted: 0,
-  livekit_connects: 0,
   config: CONFIG,
   runs: [],
   summary: {}

@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, Suspense, useState, useRef, lazy } from "react";
+import React, { useEffect, Suspense, useState, useRef } from "react";
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
 
@@ -39,6 +39,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 import AppLayout from "./components/layout/AppLayout";
 
+
 import { lazyWithRetry } from "./utils/lazyImport";
 
 // Static pages (fast load)
@@ -51,200 +52,198 @@ import ExitPage from "./pages/ExitPage";
 
 import TrollBank from "./pages/TrollBank";
 import CityHall from "./pages/CityHall";
-const SetupPage = lazy(() => import("./pages/broadcast/SetupPage"));
-const BroadcastPage = lazy(() => import("./pages/broadcast/BroadcastPage"));
-const StreamSummary = lazy(() => import("./pages/broadcast/StreamSummary"));
-const BattlePreview = lazy(() => import("./pages/dev/BattlePreview"));
-const FrontendLimitsTest = lazy(() => import("./pages/dev/FrontendLimitsTest"));
-const LivingPage = lazy(() => import("./pages/LivingPage"));
-const ChurchPage = lazy(() => import("./pages/ChurchPage"));
-const PastorDashboard = lazy(() => import("./pages/church/PastorDashboard"));
-const XPSimulatorPage = lazy(() => import("./pages/dev/XPSimulatorPage"));
-const BadgePopup = lazy(() => import("./components/BadgePopup"));
+const SetupPage = lazyWithRetry(() => import("./pages/broadcast/SetupPage"));
+const BroadcastPage = lazyWithRetry(() => import("./pages/broadcast/BroadcastPage"));
+const StreamSummary = lazyWithRetry(() => import("./pages/broadcast/StreamSummary"));
+const BattlePreview = lazyWithRetry(() => import("./pages/dev/BattlePreview"));
+const FrontendLimitsTest = lazyWithRetry(() => import("./pages/dev/FrontendLimitsTest"));
+const LivingPage = lazyWithRetry(() => import("./pages/LivingPage"));
+const ChurchPage = lazyWithRetry(() => import("./pages/ChurchPage"));
+const PastorDashboard = lazyWithRetry(() => import("./pages/church/PastorDashboard"));
+const XPSimulatorPage = lazyWithRetry(() => import("./pages/dev/XPSimulatorPage"));
+const BadgePopup = lazyWithRetry(() => import("./components/BadgePopup"));
 
 
 
 // Sidebar pages (instant load)
-const TCPS = lazy(() => import("./pages/TCPS"));
-const TrollPodsListing = lazy(() => import("./pages/pods/TrollPodsListing"));
-const TrollPodRoom = lazy(() => import("./pages/pods/TrollPodRoom"));
+const TCPS = lazyWithRetry(() => import("./pages/TCPS"));
+const TrollPodsListing = lazyWithRetry(() => import("./pages/pods/TrollPodsListing"));
+const TrollPodRoom = lazyWithRetry(() => import("./pages/pods/TrollPodRoom"));
 
 // Lazy-loaded pages
 const MobileShell = lazyWithRetry(() => import("./pages/MobileShell"));
-const Following = lazy(() => import("./pages/Following"));
-const ExploreFeed = lazy(() => import("./pages/ExploreFeed"));
-const CoinStore = lazy(() => import("./pages/CoinStore"));
-const Marketplace = lazy(() => import("./pages/Marketplace"));
-const PublicPool = lazy(() => import("./pages/PublicPool"));
-const UserInventory = lazy(() => import("./pages/UserInventory"));
-const Troting = lazy(() => import("./pages/Troting"));
-const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
-const SellOnTrollCity = lazy(() => import("./pages/SellOnTrollCity"));
-const Leaderboard = lazy(() => import("./pages/Leaderboard"));
-const TrollCityWall = lazy(() => import("./pages/TrollCityWall"));
-const WallPostPage = lazy(() => import("./pages/WallPostPage"));
-const TrollCourt = lazy(() => import("./pages/TrollCourt"));
-const PresidentPage = lazy(() => import("./pages/President"));
-const PresidentDashboard = lazy(() => import("./pages/president/PresidentDashboard"));
-const SecretaryDashboard = lazy(() => import("./pages/president/SecretaryDashboard"));
-const EmpirePartnerDashboard = lazy(() => import("./pages/EmpirePartnerDashboard"));
+const Following = lazyWithRetry(() => import("./pages/Following"));
+const ExploreFeed = lazyWithRetry(() => import("./pages/ExploreFeed"));
+const CoinStore = lazyWithRetry(() => import("./pages/CoinStore"));
+const Marketplace = lazyWithRetry(() => import("./pages/Marketplace"));
+const PublicPool = lazyWithRetry(() => import("./pages/PublicPool"));
+const UserInventory = lazyWithRetry(() => import("./pages/UserInventory"));
+const Troting = lazyWithRetry(() => import("./pages/Troting"));
+const ProfileSettings = lazyWithRetry(() => import("./pages/ProfileSettings"));
+const SellOnTrollCity = lazyWithRetry(() => import("./pages/SellOnTrollCity"));
+const Leaderboard = lazyWithRetry(() => import("./pages/Leaderboard"));
+const TrollCityWall = lazyWithRetry(() => import("./pages/TrollCityWall"));
+const WallPostPage = lazyWithRetry(() => import("./pages/WallPostPage"));
+const TrollCourt = lazyWithRetry(() => import("./pages/TrollCourt"));
+const PresidentPage = lazyWithRetry(() => import("./pages/President"));
+const PresidentDashboard = lazyWithRetry(() => import("./pages/president/PresidentDashboard"));
+const SecretaryDashboard = lazyWithRetry(() => import("./pages/president/SecretaryDashboard"));
+
 // Gift store pages removed
-const Application = lazy(() => import("./pages/Application"));
-const ApplicationPage = lazy(() => import("./pages/ApplicationPage"));
-const TrollsTownPage = lazy(() => import("./pages/TrollsTownPage"));
-const DistrictTour = lazy(() => import("./pages/DistrictTour"));
-const TrollOfficerLounge = lazy(() => import("./pages/TrollOfficerLounge"));
-const FoundingOfficerTrial = lazy(() => import("./pages/FoundingOfficerTrial"));
-const OfficerModeration = lazy(() => import("./pages/OfficerModeration"));
-const TrollFamily = lazy(() => import("./pages/TrollFamily"));
-const FamilyLounge = lazy(() => import("./pages/FamilyLounge.jsx"));
-const FamilyWarsHub = lazy(() => import("./pages/FamilyWarsHub.jsx"));
-const FamilyLeaderboard = lazy(() => import("./pages/FamilyLeaderboard.jsx"));
-const FamilyShop = lazy(() => import("./pages/FamilyShop.jsx"));
-const FamilyBrowse = lazy(() => import("./pages/FamilyBrowse"));
-const Support = lazy(() => import("./pages/Support"));
-const JailPage = lazy(() => import("./pages/JailPage"));
-const Safety = lazy(() => import("./pages/Safety"));
-const AdminRFC = lazy(() => import("./components/AdminRFC"));
-const AdminEarningsDashboard = lazy(() => import("./pages/admin/AdminEarningsDashboard"));
-const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
-const ApplicationsPage = lazy(() => import("./pages/admin/Applications"));
-const AdminMarketplace = lazy(() => import("./pages/admin/AdminMarketplace"));
-const AdminOfficerReports = lazy(() => import("./pages/admin/AdminOfficerReports"));
-const MaiTalentPage = lazy(() => import("./pages/MaiTalentPage"));
-const StoreDebug = lazy(() => import("./pages/admin/StoreDebug"));
-const Changelog = lazy(() => import("./pages/Changelog"));
-const AccessDenied = lazy(() => import("./pages/AccessDenied"));
-const ReferralBonusPanel = lazy(() => import("./pages/admin/ReferralBonusPanel"));
-const SecretaryConsole = lazy(() => import("./pages/secretary/SecretaryConsole"));
+const Application = lazyWithRetry(() => import("./pages/Application"));
+const ApplicationPage = lazyWithRetry(() => import("./pages/ApplicationPage"));
+const TrollsTownPage = lazyWithRetry(() => import("./pages/TrollsTownPage"));
+const DistrictTour = lazyWithRetry(() => import("./pages/DistrictTour"));
+const TrollOfficerLounge = lazyWithRetry(() => import("./pages/TrollOfficerLounge"));
+const FoundingOfficerTrial = lazyWithRetry(() => import("./pages/FoundingOfficerTrial"));
+const OfficerModeration = lazyWithRetry(() => import("./pages/OfficerModeration"));
+const TrollFamily = lazyWithRetry(() => import("./pages/TrollFamily"));
+const FamilyLounge = lazyWithRetry(() => import("./pages/FamilyLounge.jsx"));
+const FamilyWarsHub = lazyWithRetry(() => import("./pages/FamilyWarsHub.jsx"));
+const FamilyLeaderboard = lazyWithRetry(() => import("./pages/FamilyLeaderboard.jsx"));
+const FamilyShop = lazyWithRetry(() => import("./pages/FamilyShop.jsx"));
+const FamilyBrowse = lazyWithRetry(() => import("./pages/FamilyBrowse"));
+const Support = lazyWithRetry(() => import("./pages/Support"));
+const JailPage = lazyWithRetry(() => import("./pages/JailPage"));
+const Safety = lazyWithRetry(() => import("./pages/Safety"));
+const AdminRFC = lazyWithRetry(() => import("./components/AdminRFC"));
+const AdminEarningsDashboard = lazyWithRetry(() => import("./pages/admin/AdminEarningsDashboard"));
+const AdminDashboard = lazyWithRetry(() => import("./pages/admin/AdminDashboard"));
+const ApplicationsPage = lazyWithRetry(() => import("./pages/admin/Applications"));
+const AdminMarketplace = lazyWithRetry(() => import("./pages/admin/AdminMarketplace"));
+const AdminOfficerReports = lazyWithRetry(() => import("./pages/admin/AdminOfficerReports"));
+const MaiTalentPage = lazyWithRetry(() => import("./pages/MaiTalentPage"));
+const StoreDebug = lazyWithRetry(() => import("./pages/admin/StoreDebug"));
+const Changelog = lazyWithRetry(() => import("./pages/Changelog"));
+const AccessDenied = lazyWithRetry(() => import("./pages/AccessDenied"));
+const ReferralBonusPanel = lazyWithRetry(() => import("./pages/admin/ReferralBonusPanel"));
+const SecretaryConsole = lazyWithRetry(() => import("./pages/secretary/SecretaryConsole"));
 import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 
-const TaxOnboarding = lazy(() => import("./pages/TaxOnboarding"));
-const MyEarnings = lazy(() => import("./pages/MyEarnings"));
-const EarningsPage = lazy(() => import("./pages/EarningsPage"));
-const VerificationPage = lazy(() => import("./pages/VerificationPage"));
-const VerificationComplete = lazy(() => import("./pages/VerificationComplete"));
-const PayoutStatus = lazy(() => import("./pages/PayoutStatus"));
-const AdminLaunchTrial = lazy(() => import("./pages/admin/LaunchTrial"));
+const TaxOnboarding = lazyWithRetry(() => import("./pages/TaxOnboarding"));
+const MyEarnings = lazyWithRetry(() => import("./pages/MyEarnings"));
+const EarningsPage = lazyWithRetry(() => import("./pages/EarningsPage"));
+const VerificationPage = lazyWithRetry(() => import("./pages/VerificationPage"));
+const VerificationComplete = lazyWithRetry(() => import("./pages/VerificationComplete"));
+const PayoutStatus = lazyWithRetry(() => import("./pages/PayoutStatus"));
+const AdminLaunchTrial = lazyWithRetry(() => import("./pages/admin/LaunchTrial"));
 
 
 const JoinPage = lazyWithRetry(() => import("./pages/Join"));
-const KickFeePage = lazy(() => import("./pages/broadcast/KickFeePage"));
-const KickFee = lazy(() => import("./pages/KickFee"));
-const BanFee = lazy(() => import("./pages/BanFee"));
-const TrollCourtSession = lazy(() => import("./pages/TrollCourtSession"));
+const KickFeePage = lazyWithRetry(() => import("./pages/broadcast/KickFeePage"));
+const KickFee = lazyWithRetry(() => import("./pages/KickFee"));
+const BanFee = lazyWithRetry(() => import("./pages/BanFee"));
+const TrollCourtSession = lazyWithRetry(() => import("./pages/TrollCourtSession"));
 
-const Call = lazy(() => import("./pages/Call"));
-const Notifications = lazy(() => import("./pages/Notifications"));
-const Trollifications = lazy(() => import("./pages/Trollifications"));
-const OfficerScheduling = lazy(() => import("./pages/OfficerScheduling"));
-const InterviewRoom = lazy(() => import("./pages/InterviewRoom"));
-const OfficerPayrollDashboard = lazy(() => import("./pages/officer/OfficerPayrollDashboard"));
-const OfficerDashboard = lazy(() => import("./pages/officer/OfficerDashboard"));
-const OfficerOWCDashboard = lazy(() => import("./pages/OfficerOWCDashboard"));
-const OfficerVote = lazy(() => import("./pages/OfficerVote"));
-const GovernmentStreams = lazy(() => import("./pages/government/GovernmentStreams"));
-const ReportDetailsPage = lazy(() => import("./pages/ReportDetailsPage"));
-const TrollFamilyCity = lazy(() => import("./pages/TrollFamilyCity"));
-const FamilyProfilePage = lazy(() => import("./pages/FamilyProfilePage"));
-const FamilyWarsPage = lazy(() => import("./pages/FamilyWarsPage"));
-const FamilyChatPage = lazy(() => import("./pages/FamilyChatPage"));
-const TransactionHistory = lazy(() => import("./pages/TransactionHistory"));
-const CashoutPage = lazy(() => import("./pages/CashoutPage"));
-const FamilyApplication = lazy(() => import("./pages/FamilyApplication"));
-const OfficerApplication = lazy(() => import("./pages/OfficerApplication"));
-const TrollerApplication = lazy(() => import("./pages/TrollerApplication"));
-const Career = lazy(() => import("./pages/Career"));
-const LeadOfficerApplication = lazy(() => import("./pages/LeadOfficerApplication"));
-const PastorApplication = lazy(() => import("./pages/PastorApplication"));
-const ShopEarnings = lazy(() => import("./pages/ShopEarnings"));
-const AdminPayoutMobile = lazy(() => import("./pages/admin/AdminPayoutMobile"));
-const MobileAdminDashboard = lazy(() => import("./pages/admin/MobileAdminDashboard"));
-const PaymentsDashboard = lazy(() => import("./pages/admin/PaymentsDashboard"));
-const EconomyDashboard = lazy(() => import("./pages/admin/EconomyDashboard"));
-const TaxUpload = lazy(() => import("./pages/TaxUpload"));
-const TaxReviewPanel = lazy(() => import("./pages/admin/TaxReviewPanel"));
-const PaymentCallback = lazy(() => import("./pages/PaymentCallback"));
-const CoinsComplete = lazy(() => import("./pages/CoinsComplete"));
-const PayoutSetupPage = lazy(() => import("./pages/PayoutSetupPage"));
-const Withdraw = lazy(() => import("./pages/Withdraw"));
-const Profile = lazy(() => import("./pages/Profile"));
-const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
-const BadgesPage = lazy(() => import("./pages/BadgesPage"));
-const Stats = lazy(() => import("./pages/Stats"));
-const EmpirePartnerApply = lazy(() => import("./pages/EmpirePartnerApply"));
-const EarningsDashboard = lazy(() => import("./pages/EarningsDashboard"));
-const CreatorOnboarding = lazy(() => import("./pages/CreatorOnboarding"));
-const CreatorSwitchProgram = lazy(() => import("./pages/CreatorSwitchProgram"));
-const PolicyCenter = lazy(() => import("./pages/PolicyCenter"));
-const TermsOfServiceLegal = lazy(() => import("./pages/legal/TermsOfService"));
-const PrivacyPolicyLegal = lazy(() => import("./pages/legal/PrivacyPolicy"));
-const RefundPolicyLegal = lazy(() => import("./pages/legal/RefundPolicy"));
-const PayoutPolicyLegal = lazy(() => import("./pages/legal/PayoutPolicy"));
-const SafetyGuidelinesLegal = lazy(() => import("./pages/legal/SafetyGuidelines"));
-const CreatorEarnings = lazy(() => import("./pages/legal/CreatorEarnings"));
-const GamblingDisclosure = lazy(() => import("./pages/legal/GamblingDisclosure"));
-const PartnerProgram = lazy(() => import("./pages/legal/PartnerProgram"));
-const Wallet = lazy(() => import("./pages/Wallet"));
-const PayoutRequest = lazy(() => import("./pages/PayoutRequest"));
-const AdminPayoutDashboard = lazy(() => import("./pages/admin/components/AdminPayoutDashboard"));
-const AdminLiveOfficersTracker = lazy(() => import("./pages/admin/AdminLiveOfficersTracker"));
-const AdminVerifiedUsers = lazy(() => import("./pages/admin/AdminVerifiedUsers"));
-const AdminVerificationReview = lazy(() => import("./pages/admin/AdminVerificationReview"));
-const AdminPoliciesDocs = lazy(() => import("./pages/admin/AdminPoliciesDocs"));
-const ExecutiveSecretaries = lazy(() => import("./pages/admin/ExecutiveSecretaries"));
-const GiftCardsManager = lazy(() => import("./pages/admin/GiftCardsManager"));
-const ExecutiveIntake = lazy(() => import("./pages/admin/ExecutiveIntake"));
-const ExecutiveReports = lazy(() => import("./pages/admin/ExecutiveReports"));
-const AdminManualOrders = lazy(() => import("./pages/admin/AdminManualOrders"));
-const CashoutManager = lazy(() => import("./pages/admin/CashoutManager"));
-const TrollmersTournament = lazy(() => import("./pages/admin/TrollmersTournament"));
-const CriticalAlertsManager = lazy(() => import("./pages/admin/CriticalAlertsManager"));
-const OfficerManager = lazy(() => import("./pages/admin/OfficerManager"));
-const AdminTrollTownDeeds = lazy(() => import("./pages/admin/AdminTrollTownDeeds"));
-const LeadOfficerDashboard = lazy(() => import("./pages/lead-officer/LeadOfficerDashboard"));
-const ShopPartnerPage = lazy(() => import("./pages/ShopPartnerPage"));
-const UniverseEventPage = lazy(() => import("./pages/UniverseEventPage"));
+const Call = lazyWithRetry(() => import("./pages/Call"));
+const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
+const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
+const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
+const InterviewRoom = lazyWithRetry(() => import("./pages/InterviewRoom"));
+const OfficerPayrollDashboard = lazyWithRetry(() => import("./pages/officer/OfficerPayrollDashboard"));
+const OfficerDashboard = lazyWithRetry(() => import("./pages/officer/OfficerDashboard"));
+const OfficerOWCDashboard = lazyWithRetry(() => import("./pages/OfficerOWCDashboard"));
+const OfficerVote = lazyWithRetry(() => import("./pages/OfficerVote"));
+const GovernmentStreams = lazyWithRetry(() => import("./pages/government/GovernmentStreams"));
+const ReportDetailsPage = lazyWithRetry(() => import("./pages/ReportDetailsPage"));
+const TrollFamilyCity = lazyWithRetry(() => import("./pages/TrollFamilyCity"));
+const FamilyProfilePage = lazyWithRetry(() => import("./pages/FamilyProfilePage"));
+const FamilyWarsPage = lazyWithRetry(() => import("./pages/FamilyWarsPage"));
+const FamilyChatPage = lazyWithRetry(() => import("./pages/FamilyChatPage"));
+const TransactionHistory = lazyWithRetry(() => import("./pages/TransactionHistory"));
+const CashoutPage = lazyWithRetry(() => import("./pages/CashoutPage"));
+const FamilyApplication = lazyWithRetry(() => import("./pages/FamilyApplication"));
+const OfficerApplication = lazyWithRetry(() => import("./pages/OfficerApplication"));
+const TrollerApplication = lazyWithRetry(() => import("./pages/TrollerApplication"));
+const Career = lazyWithRetry(() => import("./pages/Career"));
+const LeadOfficerApplication = lazyWithRetry(() => import("./pages/LeadOfficerApplication"));
+const PastorApplication = lazyWithRetry(() => import("./pages/PastorApplication"));
+const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
+const AdminPayoutMobile = lazyWithRetry(() => import("./pages/admin/AdminPayoutMobile"));
+const MobileAdminDashboard = lazyWithRetry(() => import("./pages/admin/MobileAdminDashboard"));
+const PaymentsDashboard = lazyWithRetry(() => import("./pages/admin/PaymentsDashboard"));
+const EconomyDashboard = lazyWithRetry(() => import("./pages/admin/EconomyDashboard"));
+const TaxUpload = lazyWithRetry(() => import("./pages/TaxUpload"));
+const TaxReviewPanel = lazyWithRetry(() => import("./pages/admin/TaxReviewPanel"));
+const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
+const CoinsComplete = lazyWithRetry(() => import("./pages/CoinsComplete"));
+const PayoutSetupPage = lazyWithRetry(() => import("./pages/PayoutSetupPage"));
+const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
+const Profile = lazyWithRetry(() => import("./pages/Profile"));
+const ProfileSetup = lazyWithRetry(() => import("./pages/ProfileSetup"));
+const BadgesPage = lazyWithRetry(() => import("./pages/BadgesPage"));
+const Stats = lazyWithRetry(() => import("./pages/Stats"));
 
-const ShopView = lazy(() => import("./pages/ShopView"));
-const CourtRoom = lazy(() => import("./pages/CourtRoom"));
-const InterviewRoomPage = lazy(() => import("./pages/InterviewRoomPage"));
-const AdminInterviewDashboard = lazy(() => import("./pages/AdminInterviewDashboard"));
-const PasswordReset = lazy(() => import("./pages/PasswordReset"));
-const CreditScorePage = lazy(() => import("./pages/CreditScorePage"));
-const TMVPage = lazy(() => import("./pages/TMVPage"));
+const EarningsDashboard = lazyWithRetry(() => import("./pages/EarningsDashboard"));
+const CreatorOnboarding = lazyWithRetry(() => import("./pages/CreatorOnboarding"));
+const CreatorSwitchProgram = lazyWithRetry(() => import("./pages/CreatorSwitchProgram"));
+const PolicyCenter = lazyWithRetry(() => import("./pages/PolicyCenter"));
+const TermsOfServiceLegal = lazyWithRetry(() => import("./pages/legal/TermsOfService"));
+const PrivacyPolicyLegal = lazyWithRetry(() => import("./pages/legal/PrivacyPolicy"));
+const RefundPolicyLegal = lazyWithRetry(() => import("./pages/legal/RefundPolicy"));
+const PayoutPolicyLegal = lazyWithRetry(() => import("./pages/legal/PayoutPolicy"));
+const SafetyGuidelinesLegal = lazyWithRetry(() => import("./pages/legal/SafetyGuidelines"));
+const CreatorEarnings = lazyWithRetry(() => import("./pages/legal/CreatorEarnings"));
+const GamblingDisclosure = lazyWithRetry(() => import("./pages/legal/GamblingDisclosure"));
+const PartnerProgram = lazyWithRetry(() => import("./pages/legal/PartnerProgram"));
+const Wallet = lazyWithRetry(() => import("./pages/Wallet"));
+const PayoutRequest = lazyWithRetry(() => import("./pages/PayoutRequest"));
+const AdminPayoutDashboard = lazyWithRetry(() => import("./pages/admin/components/AdminPayoutDashboard"));
+const AdminLiveOfficersTracker = lazyWithRetry(() => import("./pages/admin/AdminLiveOfficersTracker"));
+const AdminVerifiedUsers = lazyWithRetry(() => import("./pages/admin/AdminVerifiedUsers"));
+const AdminVerificationReview = lazyWithRetry(() => import("./pages/admin/AdminVerificationReview"));
+const AdminPoliciesDocs = lazyWithRetry(() => import("./pages/admin/AdminPoliciesDocs"));
+const ExecutiveSecretaries = lazyWithRetry(() => import("./pages/admin/ExecutiveSecretaries"));
+const GiftCardsManager = lazyWithRetry(() => import("./pages/admin/GiftCardsManager"));
+const ExecutiveIntake = lazyWithRetry(() => import("./pages/admin/ExecutiveIntake"));
+const ExecutiveReports = lazyWithRetry(() => import("./pages/admin/ExecutiveReports"));
+const AdminManualOrders = lazyWithRetry(() => import("./pages/admin/AdminManualOrders"));
+const CashoutManager = lazyWithRetry(() => import("./pages/admin/CashoutManager"));
+const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersTournament"));
+const CriticalAlertsManager = lazyWithRetry(() => import("./pages/admin/CriticalAlertsManager"));
+const OfficerManager = lazyWithRetry(() => import("./pages/admin/OfficerManager"));
+const AdminTrollTownDeeds = lazyWithRetry(() => import("./pages/admin/AdminTrollTownDeeds"));
+const LeadOfficerDashboard = lazyWithRetry(() => import("./pages/lead-officer/LeadOfficerDashboard"));
+const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
+const UniverseEventPage = lazyWithRetry(() => import("./pages/UniverseEventPage"));
+
+const ShopView = lazyWithRetry(() => import("./pages/ShopView"));
+const CourtRoom = lazyWithRetry(() => import("./pages/CourtRoom"));
+const InterviewRoomPage = lazyWithRetry(() => import("./pages/InterviewRoomPage"));
+const AdminInterviewDashboard = lazyWithRetry(() => import("./pages/AdminInterviewDashboard"));
+const PasswordReset = lazyWithRetry(() => import("./pages/PasswordReset"));
+const CreditScorePage = lazyWithRetry(() => import("./pages/CreditScorePage"));
+
 
 // Admin pages
-const BanManagement = lazy(() => import("./pages/admin/BanManagement"));
-const RoleManagement = lazy(() => import("./pages/admin/RoleManagement"));
-const MediaLibrary = lazy(() => import("./pages/admin/MediaLibrary"));
-const ChatModeration = lazy(() => import("./pages/admin/ChatModeration"));
-const Announcements = lazy(() => import("./pages/admin/Announcements"));
-const SendNotifications = lazy(() => import("./pages/admin/SendNotifications"));
-const ExportData = lazy(() => import("./pages/admin/ExportData"));
-const UserSearch = lazy(() => import("./pages/admin/UserSearch"));
-const ReportsQueue = lazy(() => import("./pages/admin/ReportsQueue"));
-const StreamMonitorPage = lazy(() => import("./pages/admin/StreamMonitorPage"));
-const TrotingAdminPage = lazy(() => import("./pages/admin/TrotingAdminPage"));
-const PaymentLogs = lazy(() => import("./pages/admin/PaymentLogs"));
-const StorePriceEditor = lazy(() => import("./pages/admin/components/StorePriceEditor"));
-const AdminFinanceDashboard = lazy(() => import("./pages/admin/AdminFinanceDashboard"));
-const CreateSchedule = lazy(() => import("./pages/admin/CreateSchedule"));
-const OfficerShifts = lazy(() => import("./pages/admin/OfficerShifts"));
-const EmpireApplicationsPage = lazy(() => import("./pages/admin/EmpireApplicationsPage"));
-import { useGasSystem } from "./lib/hooks/useGasSystem";
-import GasHUD from "./components/tmv/GasHUD";
+const BanManagement = lazyWithRetry(() => import("./pages/admin/BanManagement"));
+const RoleManagement = lazyWithRetry(() => import("./pages/admin/RoleManagement"));
+const MediaLibrary = lazyWithRetry(() => import("./pages/admin/MediaLibrary"));
+const ChatModeration = lazyWithRetry(() => import("./pages/admin/ChatModeration"));
+const Announcements = lazyWithRetry(() => import("./pages/admin/Announcements"));
+const SendNotifications = lazyWithRetry(() => import("./pages/admin/SendNotifications"));
+const ExportData = lazyWithRetry(() => import("./pages/admin/ExportData"));
+const UserSearch = lazyWithRetry(() => import("./pages/admin/UserSearch"));
+const ReportsQueue = lazyWithRetry(() => import("./pages/admin/ReportsQueue"));
+const StreamMonitorPage = lazyWithRetry(() => import("./pages/admin/StreamMonitorPage"));
+const TrotingAdminPage = lazyWithRetry(() => import("./pages/admin/TrotingAdminPage"));
+const PaymentLogs = lazyWithRetry(() => import("./pages/admin/PaymentLogs"));
+const StorePriceEditor = lazyWithRetry(() => import("./pages/admin/components/StorePriceEditor"));
+const AdminFinanceDashboard = lazyWithRetry(() => import("./pages/admin/AdminFinanceDashboard"));
+const CreateSchedule = lazyWithRetry(() => import("./pages/admin/CreateSchedule"));
+const OfficerShifts = lazyWithRetry(() => import("./pages/admin/OfficerShifts"));
 
-const ReferralBonuses = lazy(() => import("./pages/admin/ReferralBonuses"));
-const ControlPanel = lazy(() => import("./pages/admin/ControlPanel"));
-const TestDiagnosticsPage = lazy(() => import("./pages/admin/TestDiagnosticsPage"));
-const ResetMaintenance = lazy(() => import("./pages/admin/ResetMaintenance"));
-const AdminHR = lazy(() => import("./pages/admin/AdminHR"));
-const UserFormsTab = lazy(() => import("./pages/admin/components/UserFormsTab"));
-const BucketsDashboard = lazy(() => import("./pages/admin/BucketsDashboard"));
-const GrantCoins = lazy(() => import("./pages/admin/GrantCoins"));
-const OfficerOperations = lazy(() => import("./pages/admin/OfficerOperations"));
-const CreatorSwitchApprovals = lazy(() => import("./pages/admin/components/CreatorSwitchApprovals"));
+
+const ReferralBonuses = lazyWithRetry(() => import("./pages/admin/ReferralBonuses"));
+const ControlPanel = lazyWithRetry(() => import("./pages/admin/ControlPanel"));
+const TestDiagnosticsPage = lazyWithRetry(() => import("./pages/admin/TestDiagnosticsPage"));
+const ResetMaintenance = lazyWithRetry(() => import("./pages/admin/ResetMaintenance"));
+const AdminHR = lazyWithRetry(() => import("./pages/admin/AdminHR"));
+const UserFormsTab = lazyWithRetry(() => import("./pages/admin/components/UserFormsTab"));
+const BucketsDashboard = lazyWithRetry(() => import("./pages/admin/BucketsDashboard"));
+const GrantCoins = lazyWithRetry(() => import("./pages/admin/GrantCoins"));
+const OfficerOperations = lazyWithRetry(() => import("./pages/admin/OfficerOperations"));
+const CreatorSwitchApprovals = lazyWithRetry(() => import("./pages/admin/components/CreatorSwitchApprovals"));
 
 const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
@@ -263,7 +262,7 @@ const LoadingScreen = () => (
     const { isJailed } = useJailMode(user?.id);
     const location = useLocation();
     
-    useGasSystem(); // Enable Gas System
+    
 
     if (isLoading || isRefreshing) return <LoadingScreen />;
     if (!user) return <Navigate to="/auth" replace />;
@@ -308,7 +307,7 @@ const LoadingScreen = () => (
     }
     return (
       <>
-        <GasHUD />
+        
         <Outlet />
       </>
     );
@@ -1020,7 +1019,6 @@ function AppContent() {
                   <Route path="/credit-scores" element={<CreditScorePage />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/jail" element={<JailPage />} />
-                  <Route path="/tmv" element={<TMVPage />} />
                   <Route path="/wall" element={<TrollCityWall />} />
                   <Route path="/wall/:postId" element={<WallPostPage />} />
                   <Route path="/profile/setup" element={<ProfileSetup />} />
@@ -1058,9 +1056,7 @@ function AppContent() {
 
                    
                   {/* 👥 Empire Partner Program */}
-                  <Route path="/empire-partner" element={<EmpirePartnerDashboard />} />
-                  <Route path="/empire-partner/apply" element={<EmpirePartnerApply />} />
-
+   
 
                   {/* 💳 Payment Methods */}
                   <Route path="/add-card" element={<Navigate to="/profile/setup" replace />} />
@@ -1642,15 +1638,7 @@ function AppContent() {
                         </RequireRole>
                       }
                     />
-                    <Route
-                      path="/admin/empire-applications"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <EmpireApplicationsPage />
-                        </RequireRole>
-                      }
-                    />
-                    <Route
+                                      <Route
                       path="/admin/referral-bonuses"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>

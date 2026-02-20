@@ -26,8 +26,8 @@ export async function getActiveStreams(): Promise<Array<{id: string, broadcaster
 /**
  * End all active broadcasts (admin function)
  * This marks all live streams as ended in the database
- * Note: This only updates the database - LiveKit room disconnections require
- * the host to disconnect or admin to use LiveKit admin tools
+ * Note: This only updates the database - room disconnections require
+ * the host to disconnect or admin to use Agora admin tools
  * 
  * @returns Promise<{success: boolean, endedCount: number, streams: Array<{id: string, broadcaster_id: string}>}>
  */

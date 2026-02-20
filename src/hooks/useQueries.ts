@@ -31,7 +31,6 @@ export function useLiveStreams() {
         category: s.category,
         current_viewers: s.current_viewers,
         is_live: true,
-        livekit_url: null, // Removed from select
         start_time: s.start_time,
         thumbnail_url: s.thumbnail_url,
         stream_momentum: s.stream_momentum || { momentum: 0 },
@@ -85,7 +84,7 @@ export function useStream(streamId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('streams')
-        .select('*, livekit_room_id, broadcaster:user_profiles!broadcaster_id(*)')
+        .select('*, broadcaster:user_profiles!broadcaster_id(*)')
         .eq('id', streamId)
         .maybeSingle()
 

@@ -1,6 +1,6 @@
  import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useLiveKit } from '@/hooks/useLiveKit'
+import { useAgoraRoom } from '@/hooks/useRoom'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 export default function JoinPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { connect, startPublishing } = useLiveKit()
+  const { join: joinAgoraRoom, publish: publishAgoraTracks } = useAgoraRoom()
   const { profile } = useAuthStore()
 
   const [token, setToken] = useState<string | null>(null)
@@ -39,27 +39,18 @@ export default function JoinPage() {
           return
         }
 
-        // Connect using token override in LiveKitProvider
-        // room is present in token record
         const room = data.room
-        // Build a minimal user identity for guest
-        const guestUser = { id: `guest-${Date.now()}`, username: profile?.username || 'Guest' }
-
-        // Use context connect with tokenOverride
-        const connected = await connect(room, guestUser, { allowPublish: true, tokenOverride: token })
-        if (!connected) {
-          toast.error('Failed to join room')
-          setLoading(false)
-          return
-        }
+        
+        // Connect using Agora token
+        await joinAgoraRoom(token, room)
 
         // Start publishing local camera/mic
         try {
           console.log('🎥 Attempting to start publishing camera/mic...')
-          await startPublishing()
+          await publishAgoraTracks()
           console.log('✅ Camera/mic publishing started successfully')
         } catch (err: any) {
-          console.warn('startPublishing failed:', err)
+          console.warn('publishAgoraTracks failed:', err)
           // Don't show error toast for join page - let the broadcast page handle it
           if (err.message?.includes('permission') || err.message?.includes('camera') || err.message?.includes('microphone')) {
             console.log('⚠️ Camera/mic permission or device issue detected')
@@ -85,7 +76,7 @@ export default function JoinPage() {
     }
 
     join()
-  }, [token, connect, startPublishing, navigate, profile])
+  }, [token, joinAgoraRoom, publishAgoraTracks, navigate, profile])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#07070A] text-white">

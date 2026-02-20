@@ -1,38 +1,23 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
-import api, { API_ENDPOINTS } from "../../../lib/api";
 import { toast } from "sonner";
 import { RefreshCw, Users, Clock, Database, Video, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import StreamWatchModal, { WatchableStream } from "../../../components/broadcast/StreamWatchModal";
 
 const StreamMonitor = () => {
-  const [liveKitRooms, setLiveKitRooms] = useState<any[]>([]);
   const [dbStreams, setDbStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedStream, setSelectedStream] = useState<any | null>(null);
   const [viewingStream, setViewingStream] = useState<WatchableStream | null>(null);
-  const [participants, setParticipants] = useState<any[]>([]);
-  const [loadingParticipants, setLoadingParticipants] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch real LiveKit rooms via Edge Function
-      const response = await api.request(API_ENDPOINTS.livekit.api, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'list_rooms' })
-      });
-      
-      const { data: rooms, error: lkError } = response;
-      
-      if (lkError) throw new Error(lkError);
-      setLiveKitRooms(rooms || []);
-
-      // 2. Fetch DB streams
+      // 1. Fetch DB streams
       const { data: dbData, error: dbError } = await supabase
         .from("streams")
-        .select("id, title, broadcaster_id, status, created_at")
+        .select("id, title, broadcaster_id, status, created_at, mux_playback_id")
         .eq("status", "live");
 
       if (dbError) throw dbError;
@@ -52,69 +37,16 @@ const StreamMonitor = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch participants when a room is selected
-  useEffect(() => {
-    if (selectedStream && selectedStream.source === 'livekit') {
-      fetchParticipants(selectedStream.roomName);
-    } else {
-      setParticipants([]);
-    }
-  }, [selectedStream]);
-
-  const fetchParticipants = async (roomName: string) => {
-    setLoadingParticipants(true);
-    try {
-      const response = await api.request(API_ENDPOINTS.livekit.api, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'get_participants', room: roomName })
-      });
-      const { data, error } = response;
-      if (error) throw new Error(error);
-      setParticipants(data || []);
-    } catch (err) {
-      console.error('Error fetching participants:', err);
-      toast.error('Failed to load participants');
-    } finally {
-      setLoadingParticipants(false);
-    }
-  };
-
-  // Merge data for display
+  // Merge data for display (now only from DB)
   const mergedStreams = React.useMemo(() => {
-    const combined = new Map();
-
-    // Add LiveKit rooms first
-    liveKitRooms.forEach(room => {
-      combined.set(room.name, {
-        id: room.name, // assuming room.name is stream.id
-        roomName: room.name,
-        liveKitData: room,
-        dbData: null,
-        source: 'livekit',
-        status: 'active'
-      });
-    });
-
-    // Merge DB streams
-    dbStreams.forEach(stream => {
-      if (combined.has(stream.id)) {
-        const existing = combined.get(stream.id);
-        existing.dbData = stream;
-        existing.source = 'both';
-      } else {
-        combined.set(stream.id, {
-          id: stream.id,
-          roomName: stream.id,
-          liveKitData: null,
-          dbData: stream,
-          source: 'db_only',
-          status: 'zombie' // In DB but not in LiveKit
-        });
-      }
-    });
-
-    return Array.from(combined.values());
-  }, [liveKitRooms, dbStreams]);
+    return dbStreams.map(stream => ({
+      id: stream.id,
+      roomName: stream.id,
+      dbData: stream,
+      source: 'db_only',
+      status: 'active' // Assuming if it's in DB and live, it's active
+    }));
+  }, [dbStreams]);
 
   return (
     <div className="space-y-4">
@@ -153,25 +85,24 @@ const StreamMonitor = () => {
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <h5 className="font-semibold text-white">
-                        {stream.dbData?.title || stream.liveKitData?.name || 'Untitled Stream'}
+                        {stream.dbData?.title || 'Untitled Stream'}
                       </h5>
                       <p className="text-xs text-gray-400">
                         Broadcaster: <span className="text-purple-300">{stream.dbData?.broadcaster_id || 'Unknown'}</span>
                       </p>
                     </div>
-                    {stream.source === 'both' && <span className="px-2 py-0.5 rounded text-[10px] bg-green-500/20 text-green-400 border border-green-500/30">Healthy</span>}
-                    {stream.source === 'db_only' && <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30">DB Zombie</span>}
-                    {stream.source === 'livekit' && <span className="px-2 py-0.5 rounded text-[10px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">Ghost (No DB)</span>}
+                    {stream.source === 'db_only' && <span className="px-2 py-0.5 rounded text-[10px] bg-green-500/20 text-green-400 border border-green-500/30">Healthy</span>}
                   </div>
 
                   <div className="flex gap-4 text-xs text-gray-400">
                     <div className="flex items-center gap-1">
                       <Users className="w-3 h-3" />
-                      {stream.liveKitData?.numParticipants || 0} Viewers
+                      
+                      {stream.dbData?.participants || 0} Viewers
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {stream.liveKitData?.creationTime ? formatDistanceToNow(new Date(stream.liveKitData.creationTime * 1000)) : 'N/A'}
+                      {stream.dbData?.created_at ? formatDistanceToNow(new Date(stream.dbData.created_at)) : 'N/A'}
                     </div>
                   </div>
                 </div>
@@ -198,7 +129,9 @@ const StreamMonitor = () => {
                         onClick={() => setViewingStream({
                             id: selectedStream.id,
                             room_name: selectedStream.roomName,
-                            title: selectedStream.dbData?.title
+                            title: selectedStream.dbData?.title,
+                            agora_channel: selectedStream.dbData?.id, // Agora channel uses stream ID
+                            mux_playback_id: selectedStream.dbData?.mux_playback_id
                         })}
                         className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
                     >
@@ -212,72 +145,18 @@ const StreamMonitor = () => {
                    <div className="bg-black/20 p-3 rounded-lg border border-white/5">
                       <div className="text-xs text-gray-500 mb-1">Source</div>
                       <div className="flex items-center gap-2">
-                        {selectedStream.source === 'both' ? (
-                          <>
-                            <Video className="w-4 h-4 text-green-400" />
-                            <Database className="w-4 h-4 text-green-400" />
-                            <span className="text-sm">Synced</span>
-                          </>
-                        ) : selectedStream.source === 'db_only' ? (
-                          <>
-                            <Database className="w-4 h-4 text-red-400" />
-                            <span className="text-sm text-red-400">DB Only</span>
-                          </>
-                        ) : (
-                          <>
-                            <Video className="w-4 h-4 text-yellow-400" />
-                            <span className="text-sm text-yellow-400">LiveKit Only</span>
-                          </>
-                        )}
+                          <Database className="w-4 h-4 text-green-400" />
+                          <span className="text-sm">DB Only</span>
                       </div>
                    </div>
                    <div className="bg-black/20 p-3 rounded-lg border border-white/5">
                       <div className="text-xs text-gray-500 mb-1">Uptime</div>
                       <div className="text-sm font-mono">
-                        {selectedStream.liveKitData?.creationTime 
-                          ? formatDistanceToNow(new Date(selectedStream.liveKitData.creationTime * 1000))
+                        {selectedStream.dbData?.created_at
+                          ? formatDistanceToNow(new Date(selectedStream.dbData.created_at))
                           : 'Not Live'}
                       </div>
                    </div>
-                </div>
-
-                {/* Raw Data Toggle */}
-                <details className="group">
-                  <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-300 mb-2 select-none">
-                    Show Raw LiveKit Data
-                  </summary>
-                  <pre className="text-[10px] bg-black/50 p-2 rounded overflow-x-auto text-green-400 font-mono">
-                    {JSON.stringify(selectedStream.liveKitData, null, 2)}
-                  </pre>
-                </details>
-
-                {/* Participants List */}
-                <div>
-                  <h5 className="font-semibold text-white mb-3 flex items-center justify-between">
-                    <span>Participants</span>
-                    <span className="text-xs bg-white/10 px-2 py-0.5 rounded text-gray-400">
-                      {participants.length}
-                    </span>
-                  </h5>
-                  
-                  {loadingParticipants ? (
-                    <div className="flex justify-center p-4"><RefreshCw className="w-5 h-5 animate-spin text-gray-500" /></div>
-                  ) : participants.length === 0 ? (
-                    <div className="text-sm text-gray-500 italic">No participants found</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {participants.map((p: any) => (
-                        <div key={p.sid} className="bg-black/20 p-2 rounded flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                             <div className={`w-2 h-2 rounded-full ${p.state === 'CONNECTED' ? 'bg-green-500' : 'bg-gray-500'}`} />
-                             <span className="text-gray-300">{p.identity}</span>
-                             {p.permission?.canPublish && <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1 rounded">PUB</span>}
-                          </div>
-                          <span className="text-xs text-gray-500 font-mono">{p.sid.substring(0, 8)}...</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
               </div>

@@ -1,119 +1,119 @@
-import { useState, useEffect, useRef } from 'react'
-import { Room, RoomEvent, RemoteParticipant, LocalParticipant } from 'livekit-client'
+import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack, IRemoteAudioTrack, IRemoteVideoTrack, ILocalVideoTrack, ILocalAudioTrack, ILocalTrack, IAgoraRTCRemoteUser } from "agora-rtc-sdk-ng";
+import { useState, useRef, useEffect } from "react";
+
+type IRemoteUser = IAgoraRTCRemoteUser;
 
 interface UseRoomOptions {
-  url?: string
-  token?: string
-  onConnected?: (room: Room) => void
-  onDisconnected?: () => void
+  url?: string;
+  token?: string;
+  onConnected?: (room: IAgoraRTCClient) => void;
+  onDisconnected?: () => void;
 }
 
 export function useRoom({ url, token, onConnected, onDisconnected }: UseRoomOptions = {}) {
-  const [room, _setRoom] = useState<Room | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
-  const [participants, setParticipants] = useState<RemoteParticipant[]>([])
-  const [localParticipant, setLocalParticipant] = useState<LocalParticipant | null>(null)
-  const [viewerCount, setViewerCount] = useState(0)
-  const [isCameraEnabled, setIsCameraEnabled] = useState(true)
-  const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(true)
-  const roomRef = useRef<Room | null>(null)
+  const [room, _setRoom] = useState<IAgoraRTCClient | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [remoteUsers, setRemoteUsers] = useState<IRemoteUser[]>([]);
+  const [localAudioTrack, setLocalAudioTrack] = useState<ILocalAudioTrack | null>(null);
+  const [localVideoTrack, setLocalVideoTrack] = useState<ILocalVideoTrack | null>(null);
+  const [viewerCount, setViewerCount] = useState(0);
+  const [isCameraEnabled, setIsCameraEnabled] = useState(true);
+  const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(true);
+  const roomRef = useRef<IAgoraRTCClient | null>(null);
 
   useEffect(() => {
-    if (!url || !token) return
+    if (!url || !token) return;
 
     const connect = async () => {
       try {
-        const newRoom = new Room({
-          adaptiveStream: true,
-          dynacast: true,
-        })
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
-        // Set up event listeners
-        newRoom.on(RoomEvent.Connected, () => {
-          console.log('Room connected')
-          setIsConnected(true)
-          setLocalParticipant(newRoom.localParticipant)
-          setIsCameraEnabled(newRoom.localParticipant.isCameraEnabled)
-          setIsMicrophoneEnabled(newRoom.localParticipant.isMicrophoneEnabled)
-          onConnected?.(newRoom)
-        })
+        client.on("user-published", async (user, mediaType) => {
+          await client.subscribe(user, mediaType);
+          if (mediaType === "video") {
+            const remoteVideoTrack = user.videoTrack;
+            // Play the remote video track
+            // FIXME: Pass a valid HTML element to play the video
+            remoteVideoTrack?.play(null as any);
+          }
+          if (mediaType === "audio") {
+            const remoteAudioTrack = user.audioTrack;
+            // Play the remote audio track
+            remoteAudioTrack?.play();
+          }
+          setRemoteUsers((prev) => {
+            if (prev.find((p) => p.uid === user.uid)) return prev;
+            return [...prev, user];
+          });
+          setViewerCount((prev) => prev + 1);
+        });
 
-        newRoom.on(RoomEvent.Disconnected, () => {
-          console.log('Room disconnected')
-          setIsConnected(false)
-          setParticipants([])
-          setLocalParticipant(null)
-          setViewerCount(0)
-          onDisconnected?.()
-        })
+        client.on("user-unpublished", (user) => {
+          setRemoteUsers((prev) => prev.filter((p) => p.uid !== user.uid));
+          setViewerCount((prev) => Math.max(0, prev - 1));
+        });
 
-        newRoom.on(RoomEvent.ParticipantConnected, (participant) => {
-          console.log('Participant connected:', participant.identity)
-          setParticipants((prev) => {
-            if (prev.find((p) => p.identity === participant.identity)) return prev
-            return [...prev, participant as RemoteParticipant]
-          })
-          setViewerCount((prev) => prev + 1)
-        })
+        await client.join(token, url, null);
+        roomRef.current = client;
+        _setRoom(client);
+        setIsConnected(true);
+        onConnected?.(client);
 
-        newRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
-          console.log('Participant disconnected:', participant.identity)
-          setParticipants((prev) => prev.filter((p) => p.identity !== participant.identity))
-          setViewerCount((prev) => Math.max(0, prev - 1))
-        })
+        // Create and publish local tracks
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        const videoTrack = await AgoraRTC.createCameraVideoTrack();
+        await client.publish([audioTrack, videoTrack]);
+        setLocalAudioTrack(audioTrack);
+        setLocalVideoTrack(videoTrack);
 
-        newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-          console.log('Track subscribed:', track.kind, participant.identity)
-        })
+        setIsCameraEnabled(videoTrack.enabled);
+        setIsMicrophoneEnabled(audioTrack.enabled);
 
-        newRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
-          console.log('Track unsubscribed:', track.kind)
-        })
-
-        // DISABLED: All connections must route through LiveKitService
-        // await newRoom.connect(url, token)
-        // roomRef.current = newRoom
-        // setRoom(newRoom)
-        console.warn('useRoom direct connect disabled - use LiveKitService')
       } catch (error) {
-        console.error('Failed to connect to room:', error)
+        console.error("Failed to connect to room:", error);
       }
-    }
+    };
 
-    connect()
+    connect();
 
     return () => {
       if (roomRef.current) {
-        roomRef.current.disconnect()
-        roomRef.current = null
+        roomRef.current.leave();
+        roomRef.current = null;
       }
-    }
-  }, [url, token, onConnected, onDisconnected])
+      if (localAudioTrack) {
+        localAudioTrack.close();
+      }
+      if (localVideoTrack) {
+        localVideoTrack.close();
+      }
+    };
+  }, [url, token, onConnected, onDisconnected, localAudioTrack, localVideoTrack]);
 
   const toggleCamera = async () => {
-    if (!room?.localParticipant) return
-    const enabled = !room.localParticipant.isCameraEnabled
-    await room.localParticipant.setCameraEnabled(enabled)
-    setIsCameraEnabled(enabled)
-  }
+    if (localVideoTrack) {
+      await localVideoTrack.setEnabled(!isCameraEnabled);
+      setIsCameraEnabled(!isCameraEnabled);
+    }
+  };
 
   const toggleMicrophone = async () => {
-    if (!room?.localParticipant) return
-    const enabled = !room.localParticipant.isMicrophoneEnabled
-    await room.localParticipant.setMicrophoneEnabled(enabled)
-    setIsMicrophoneEnabled(enabled)
-  }
+    if (localAudioTrack) {
+      await localAudioTrack.setEnabled(!isMicrophoneEnabled);
+      setIsMicrophoneEnabled(!isMicrophoneEnabled);
+    }
+  };
 
   return {
     room,
     isConnected,
-    participants,
-    localParticipant,
+    participants: remoteUsers,
+    localParticipant: { isCameraEnabled, isMicrophoneEnabled, audioTrack: localAudioTrack, videoTrack: localVideoTrack },
     viewerCount,
     isCameraEnabled,
     isMicrophoneEnabled,
     toggleCamera,
     toggleMicrophone,
-  }
+  };
 }
 

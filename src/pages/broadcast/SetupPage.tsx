@@ -5,7 +5,7 @@ import { useAuthStore } from '@/lib/store';
 import { PreflightStore } from '@/lib/preflightStore';
 import { Video, VideoOff, Mic, MicOff, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { LiveKitService } from '@/lib/LiveKitService';
+ 
 import { MobileErrorLogger } from '@/lib/MobileErrorLogger';
 
 import { generateUUID } from '../../lib/uuid';
@@ -28,173 +28,15 @@ export default function SetupPage() {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('general');
   const [loading, setLoading] = useState(false);
-  const [restrictionCheck, setRestrictionCheck] = useState<{ allowed: boolean; waitTime?: string; reason?: string; message?: string } | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null); // Live timer in seconds
-
   // Pre-generate stream ID for token optimization
   const [streamId] = useState(() => generateUUID());
 
   // Track if we are navigating to broadcast to prevent cleanup
   const isStartingStream = useRef(false);
   const hasPrefetched = useRef<string | null>(null);
-
-  useEffect(() => {
-    async function checkRestriction() {
-      if (!user) return;
-      
-      console.log('[SetupPage] Checking restrictions for user:', user.id);
-
-      // 1. Check Driver's License Status (Source: user_profiles)
-      // We strictly enforce this for ALL users, including Admins.
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('created_at, bypass_broadcast_restriction, drivers_license_status, live_restricted_until')
-        .eq('id', user.id)
-        .single();
-      
-      if (profileError) console.error('[SetupPage] Profile fetch error:', profileError);
-
-      const profileStatus = profile?.drivers_license_status?.toLowerCase();
-      
-      console.log('[SetupPage] License Status:', profileStatus);
-
-      const validStatuses = ['valid', 'active', 'approved'];
-      const isLicenseValid = profileStatus && validStatuses.includes(profileStatus);
-
-      if (!isLicenseValid) {
-        setRestrictionCheck({
-          allowed: false,
-          reason: 'license',
-          message: `You must have a valid Driver's License to broadcast (Admins included). Current Status: ${profileStatus || 'None'}`
-        });
-        return;
-      }
-
-      // Check Bypass (Admins/VIPs) - Only bypasses account age, NOT license
-      if (profile?.bypass_broadcast_restriction) {
-        setRestrictionCheck({ allowed: true });
-        return;
-      }
-        
-      if (profile?.created_at) {
-        const now = new Date();
-
-        // Check manual restriction first
-        if (profile.live_restricted_until) {
-          const restrictedUntil = new Date(profile.live_restricted_until);
-          if (restrictedUntil > now) {
-            const remaining = restrictedUntil.getTime() - now.getTime();
-            const hours = Math.floor(remaining / (1000 * 60 * 60));
-            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-            setRestrictionCheck({ 
-              allowed: false, 
-              waitTime: `${hours}h ${minutes}m (Admin Restricted)` 
-            });
-            return;
-          }
-        }
-
-        const created = new Date(profile.created_at);
-        const diff = now.getTime() - created.getTime();
-        const restrictionTime = 30 * 60 * 1000; // 30 minutes
-        
-        if (diff < restrictionTime) {
-          const remaining = restrictionTime - diff;
-          const secondsRemaining = Math.ceil(remaining / 1000);
-          setTimeRemaining(secondsRemaining);
-          setRestrictionCheck({ 
-            allowed: false, 
-            waitTime: formatTime(secondsRemaining) 
-          });
-        } else {
-          setRestrictionCheck({ allowed: true });
-        }
-      } else {
-         // Fallback if no profile or created_at (shouldn't happen usually)
-         setRestrictionCheck({ allowed: true });
-       }
-    }
-    
-    checkRestriction();
-  }, [user]);
-  
-  // Live timer to update countdown and auto-clear when time is up
-  useEffect(() => {
-    if (timeRemaining === null || timeRemaining <= 0) return;
-    
-    const timer = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (prev === null || prev <= 1) {
-          // Time is up - re-fetch profile to check if restriction is lifted
-          return 0;
-        }
-        // Update the displayed waitTime in real-time
-        setRestrictionCheck(prevCheck => prevCheck ? {
-          ...prevCheck,
-          waitTime: formatTime(prev - 1)
-        } : prevCheck);
-        return prev - 1;
-      });
-    }, 1000);
-    
-    return () => clearInterval(timer);
-  }, [timeRemaining]);
-  
-  // Re-check restriction when timer reaches 0
-  useEffect(() => {
-    if (timeRemaining === 0 && user?.id) {
-      // Trigger re-check
-      const checkEligible = async () => {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('created_at')
-          .eq('id', user.id)
-          .single();
-        
-        if (profile?.created_at) {
-          const now = new Date();
-          const created = new Date(profile.created_at);
-          const diff = now.getTime() - created.getTime();
-          const restrictionTime = 30 * 60 * 1000; // 30 minutes
-          
-          if (diff >= restrictionTime) {
-            setRestrictionCheck({ allowed: true });
-            toast.success('You can now start broadcasting!');
-          }
-        }
-      };
-      checkEligible();
-    }
-  }, [timeRemaining, user?.id]);
    
-  // Optimize: Pre-fetch LiveKit token as soon as restrictions are passed
-  useEffect(() => {
-    if (user && restrictionCheck?.allowed && streamId) {
-      // Fix C: Prevent double prefetch
-      if (hasPrefetched.current === streamId) return;
-      hasPrefetched.current = streamId;
 
-      const safeRoom = streamId.replace(/-/g, "");
-      console.log('[SetupPage] Pre-fetching LiveKit token for stream:', streamId, 'Room:', safeRoom);
-      const service = new LiveKitService({
-        roomName: safeRoom,
-        identity: user.id,
-        role: 'broadcaster',
-        allowPublish: true,
-      });
-      
-      service.prepareToken()
-        .then(({ token, url }) => {
-          console.log('[SetupPage] Token pre-fetched successfully');
-          PreflightStore.setToken(token, safeRoom, url);
-        })
-        .catch(err => {
-          console.error('[SetupPage] Token pre-fetch failed:', err);
-          // We don't block UI here, but we'll retry on start
-          hasPrefetched.current = null; // Allow retry
-        });
-    }
-  }, [user, restrictionCheck, streamId]);
+
 
   // Media state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -234,7 +76,6 @@ export default function SetupPage() {
         // Try to explain WHY it failed
         const errorMsg = 'getUserMedia not supported in this browser/context';
         console.error(`[SetupPage] ${errorMsg}`);
-        
         const isSecure = window.isSecureContext;
         
         // Log to Admin Dashboard
@@ -339,65 +180,8 @@ export default function SetupPage() {
     }
     if (!user) return;
 
-    // Validate Trollmers eligibility
-    if (category === 'trollmers') {
-      // Admin bypass for follower requirement (testing purposes)
-      const isAdmin = profile?.role === 'admin';
-      
-      if (!isAdmin && followerCount < 100) {
-        toast.error('Trollmers requires 100+ followers');
-        return;
-      }
-      if (!isVideoEnabled) {
-        toast.error('Trollmers requires camera enabled');
-        return;
-      }
-    }
-
     setLoading(true);
     try {
-      // 0. Check global broadcast limit
-      // Check for active event limits first
-      const { data: eventData } = await supabase.rpc('get_active_event');
-      const event = eventData?.[0];
-      const maxBroadcasts = event ? event.max_broadcasts : 5;
-
-      const { count, error: countError } = await supabase
-        .from('streams')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'live');
-
-      if (countError) throw countError;
-
-      if (count !== null && count >= maxBroadcasts) {
-        toast.error(`System Limit: Maximum of ${maxBroadcasts} concurrent broadcasts allowed${event ? ' during this event' : ''}.`);
-        setLoading(false);
-        return;
-      }
-
-      // Ensure token is ready
-      const safeRoom = streamId.replace(/-/g, "");
-      const preflight = PreflightStore.getToken();
-      
-      if (!preflight.token || preflight.roomName !== safeRoom) {
-        try {
-          console.log('[SetupPage] Token missing/mismatch, fetching before start...');
-          const service = new LiveKitService({
-            roomName: safeRoom,
-            identity: user.id,
-            role: 'broadcaster',
-            allowPublish: true,
-          });
-          const { token, url } = await service.prepareToken();
-          PreflightStore.setToken(token, safeRoom, url);
-        } catch (err: any) {
-          console.error('[SetupPage] Critical: Failed to prepare token', err);
-          toast.error(`Stream setup failed: ${err.message}`);
-          setLoading(false);
-          return;
-        }
-      }
-
       // Create stream record with HLS URL pre-populated
       // Note: We use the ID returned by insert, so we do this in two steps or use client-generated ID.
       // Since we rely on Supabase ID generation usually, we insert first then update, OR we assume a pattern.
@@ -413,7 +197,7 @@ export default function SetupPage() {
           category,
           stream_kind: category === 'trollmers' ? 'trollmers' : 'regular',
           camera_ready: isVideoEnabled,
-          status: 'starting', // Wait for LiveKit connection
+          status: 'starting',
           is_live: true,
           started_at: new Date().toISOString(),
           box_count: 1, // Default to just host
@@ -424,12 +208,12 @@ export default function SetupPage() {
 
       if (error) throw error;
 
-      // Removed HLS Path update logic as we are LiveKit-only
+
 
       toast.success('Stream created! Going live...');
       isStartingStream.current = true;
       // Navigate using username if available (for clean URL), otherwise ID
-      navigate(`/watch/${data.id}`);
+      navigate(`/broadcast/${data.id}`);
     } catch (err: any) {
       console.error('Error creating stream:', err);
       toast.error(err.message || 'Failed to start stream');
@@ -485,46 +269,7 @@ export default function SetupPage() {
         </div>
 
         {/* Form Section */}
-        {restrictionCheck && !restrictionCheck.allowed ? (
-            <div className="space-y-6 bg-slate-900/50 p-8 rounded-3xl border border-red-500/30 shadow-xl text-center flex flex-col justify-center">
-                <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
-                  <AlertTriangle className="w-8 h-8 text-red-500" />
-                </div>
-                
-                {restrictionCheck.reason === 'license' ? (
-                  <>
-                    <h2 className="text-2xl font-bold text-white mb-2">Driver&apos;s License Required</h2>
-                    <p className="text-gray-400 mb-6">
-                      {restrictionCheck.message || "You need a valid Driver&apos;s License to start a broadcast."}
-                    </p>
-                    <button 
-                      onClick={() => navigate('/dmv')}
-                      className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition-colors text-white font-bold"
-                    >
-                      Go to DMV
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <h2 className="text-2xl font-bold text-white mb-2">Account in Cooldown</h2>
-                    <p className="text-gray-400 mb-6">
-                      New accounts must wait 30 minutes before starting a broadcast to ensure community safety.
-                    </p>
-                    <div className="bg-slate-950 rounded-lg p-4 border border-white/5 inline-block mx-auto">
-                      <div className="text-sm text-gray-500 uppercase tracking-wider mb-1">Time Remaining</div>
-                      <div className="text-2xl font-mono text-red-400 font-bold">{restrictionCheck.waitTime}</div>
-                    </div>
-                  </>
-                )}
-
-                <button 
-                  onClick={() => navigate('/')}
-                  className="mt-4 w-full py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-colors text-gray-300 hover:text-white"
-                >
-                  Return to Home
-                </button>
-            </div>
-        ) : (
+        
         <div className="space-y-6 bg-slate-900/50 p-8 rounded-3xl border border-white/5 shadow-xl">
           <div>
             <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-yellow-400 to-amber-600 bg-clip-text text-transparent">Go Live</h1>
@@ -612,7 +357,6 @@ export default function SetupPage() {
             </button>
           </div>
         </div>
-        )}
       </div>
     </div>
   );

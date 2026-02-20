@@ -67,30 +67,6 @@ export default function MyGarage() {
     }
   }, [user, fetchVehicles]);
 
-  const handleUpdatePlate = async (vehicleId: string) => {
-    if (!newPlate || newPlate.length < 3 || newPlate.length > 8) {
-      toast.error('Plate must be 3-8 characters');
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.rpc('update_vehicle_plate', {
-        p_user_vehicle_id: vehicleId,
-        p_new_plate: newPlate
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.message);
-
-      toast.success(data.message);
-      setEditingPlateId(null);
-      setNewPlate('');
-      fetchVehicles();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update plate');
-    }
-  };
-
   const fetchVehicles = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -136,6 +112,30 @@ export default function MyGarage() {
       setLoading(false);
     }
   }, [user?.id]);
+
+  const handleUpdatePlate = async (vehicleId: string) => {
+    if (!newPlate || newPlate.length < 3 || newPlate.length > 8) {
+      toast.error('Plate must be 3-8 characters');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('update_vehicle_plate', {
+        p_user_vehicle_id: vehicleId,
+        p_new_plate: newPlate
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.message);
+
+      toast.success(data.message);
+      setEditingPlateId(null);
+      setNewPlate('');
+      fetchVehicles();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update plate');
+    }
+  };
 
   const handleSell = async (vehicle: Vehicle) => {
     const sellPrice = calculateSellPrice(vehicle);

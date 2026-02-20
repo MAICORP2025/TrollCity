@@ -1,16 +1,16 @@
-import React from 'react';
-import { X, AlertTriangle, Loader2 } from 'lucide-react';
-import { LiveKitRoom, VideoTrack, useTracks } from '@livekit/components-react';
-import '@livekit/components-styles';
-import { Track } from 'livekit-client';
-import { useLiveKitToken } from '../../hooks/useLiveKitToken';
+import React, { useEffect } from 'react';
+import { X, AlertTriangle } from 'lucide-react';
+
 import { useAuthStore } from '../../lib/store';
 import { ListenerEntranceEffect } from '../../hooks/useListenerEntranceEffect';
+import MuxViewerPlayer from './MuxViewerPlayer';
+
 
 export interface WatchableStream {
   id: string;
   room_name?: string;
-  agora_channel?: string;
+  agora_channel: string;
+  mux_playback_id?: string;
   title?: string;
 }
 
@@ -19,30 +19,8 @@ interface StreamWatchModalProps {
   onClose: () => void;
 }
 
-const VideoViewer = () => {
-  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], { onlySubscribed: true });
-  // Show first video track
-  const videoTrack = tracks.find(t => t.source === Track.Source.Camera || t.source === Track.Source.ScreenShare);
-  
-  if (!videoTrack) {
-      return <div className="flex items-center justify-center h-full text-zinc-500">Waiting for video...</div>;
-  }
-  
-  return <VideoTrack trackRef={videoTrack} className="w-full h-full object-contain" />;
-};
-
 export default function StreamWatchModal({ stream, onClose }: StreamWatchModalProps) {
   const { user, profile } = useAuthStore(s => ({ user: s.user, profile: s.profile }));
-  
-  const { token, serverUrl, isLoading, error } = useLiveKitToken({
-      streamId: stream.id,
-      roomName: stream.id,
-      userId: user?.id || `guest-${Math.random().toString(36).slice(2)}`,
-      isHost: false,
-      canPublish: false,
-      enabled: true,
-      role: 'viewer'
-  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
@@ -54,36 +32,29 @@ export default function StreamWatchModal({ stream, onClose }: StreamWatchModalPr
           <X className="w-6 h-6" />
         </button>
         
-        {isLoading ? (
-            <div className="flex items-center justify-center h-full text-white gap-2">
-                <Loader2 className="animate-spin text-green-500" />
-                <span>Connecting to stream...</span>
-            </div>
-        ) : error ? (
-             <div className="flex flex-col items-center justify-center h-full text-white gap-2">
-                <AlertTriangle className="text-red-500 w-8 h-8" />
-                <div className="text-red-400">Could not connect to the stream.</div>
-             </div>
+        {stream.mux_playback_id ? (
+          <MuxViewerPlayer
+            playbackId={stream.mux_playback_id}
+            autoPlay={true}
+            muted={false}
+            streamType="live"
+          />
         ) : (
-            <LiveKitRoom
-                token={token}
-                serverUrl={serverUrl}
-                connect={true}
-                video={true}
-                audio={true}
-                className="w-full h-full"
-            >
-                <VideoViewer />
-                <ListenerEntranceEffect
-                    streamId={stream.id}
-                    isHost={false}
-                    isGuest={!user}
-                    canPublish={false}
-                    userId={user?.id || null}
-                    username={profile?.username}
-                />
-            </LiveKitRoom>
+          <div className="flex flex-col items-center justify-center h-full text-white gap-2">
+            <AlertTriangle className="text-yellow-500 w-8 h-8" />
+            <div className="text-white/70">No Mux playback ID available for this stream.</div>
+            <div className="text-white/50 text-sm">This stream might not be configured for public viewing.</div>
+          </div>
         )}
+
+        <ListenerEntranceEffect
+            streamId={stream.id}
+            isHost={false}
+            isGuest={!user}
+            canPublish={false}
+            userId={user?.id || null}
+            username={profile?.username}
+        />
       </div>
     </div>
   );

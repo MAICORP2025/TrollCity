@@ -134,9 +134,6 @@ export default defineConfig(({ mode: _mode }) => ({
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('zustand')) {
               return 'vendor';
             }
-            if (id.includes('livekit')) {
-              return 'livekit';
-            }
             if (id.includes('@supabase')) {
               return 'supabase';
             }

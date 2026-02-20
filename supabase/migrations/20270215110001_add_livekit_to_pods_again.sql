@@ -1,1 +1,0 @@
-ALTER TABLE public.pod_rooms ADD COLUMN livekit_room_id TEXT;

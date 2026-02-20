@@ -651,7 +651,7 @@ export default function TrollOfficerLounge() {
                     <div className={`lg:col-span-2 bg-black rounded-xl border ${trollCityTheme.borders.glass} aspect-video flex items-center justify-center relative overflow-hidden`}>
                        <p className="text-gray-600 text-sm">Video Feed Preview</p>
                        {/* 
-                         We can add a real video player here using LiveKit component 
+                          
                          similar to Viewer page but muted/small 
                        */}
                     </div>

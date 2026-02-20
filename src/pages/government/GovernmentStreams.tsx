@@ -38,6 +38,7 @@ interface StreamRow {
   current_viewers?: number;
   title: string;
   hls_url?: string;
+  mux_playback_id?: string; // Add mux_playback_id
   broadcaster: {
     username: string;
     avatar_url: string;
@@ -97,6 +98,7 @@ export default function GovernmentStreams() {
           room_name,
           category,
           start_time,
+          mux_playback_id,
           broadcaster:user_profiles!broadcaster_id(username, avatar_url)
         `)
         .order('created_at', { ascending: false }) // Show newest first

@@ -1,5 +1,5 @@
 {
-  "name": "trollcity-livekit-vercel",
+  "name": "trollcity-server",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -12,7 +12,6 @@
     "@supabase/supabase-js": "^2.93.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "livekit-server-sdk": "^2.15.0"
+    "express": "^4.18.2"
   }
 }

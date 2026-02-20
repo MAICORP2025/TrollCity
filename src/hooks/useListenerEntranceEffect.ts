@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { useConnectionState } from "@livekit/components-react";
+
 import { getUserEntranceEffect } from "../lib/entranceEffects";
 
 // ✅ Survives component remounts within the same tab session
@@ -21,8 +21,8 @@ export function useListenerEntranceEffect({
   canPublish: boolean;
   username?: string;
 }) {
-  const connectionState = useConnectionState();
-  const isConnected = connectionState === "connected";
+  
+  const isConnected = true; // Temporarily set to true for refactoring, will be replaced with Mux logic
   const location = useLocation();
 
   const isBroadcastPage =
@@ -92,13 +92,9 @@ export function useListenerEntranceEffect({
     if (isConnected) trigger();
   }, [isBroadcastPage, streamId, isConnected, trigger]);
 
-  return { connectionState, isConnected };
+  return { isConnected };
 }
 
-/**
- * Component wrapper for useListenerEntranceEffect hook.
- * Must be rendered inside <LiveKitRoom> to have access to connection state.
- */
 export function ListenerEntranceEffect({
   streamId,
   isHost,

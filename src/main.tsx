@@ -5,7 +5,7 @@ import App from './App'
 import './index.css'
 import './styles/broadcast-responsive.css'
 import './styles/mobile-theme.css'
-import { LiveKitProvider } from './contexts/LiveKitProvider'
+
 import { AuthProvider } from './contexts/AuthProvider'
 import { GlobalAppProvider } from './contexts/GlobalAppContext'
 import { supabase } from './lib/supabase'
@@ -268,13 +268,13 @@ const queryClient = new QueryClient({
 createRoot(rootElement).render(
   <QueryClientProvider client={queryClient}>
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <LiveKitProvider>
+      
         <AuthProvider>
           <GlobalAppProvider>
             <App />
           </GlobalAppProvider>
         </AuthProvider>
-      </LiveKitProvider>
+      
     </BrowserRouter>
   </QueryClientProvider>
 )

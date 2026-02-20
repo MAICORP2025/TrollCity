@@ -56,7 +56,7 @@ export default function BroadcastGridOverlay({
              userId = stream.user_id;
              // We don't have seat info for host, but we know it's them.
              // We can mock the profile if needed, or rely on them being online?
-             // For Overlay (Viewer Mode), we can't see them if they aren't in LiveKit?
+             
              // Wait, Viewer Mode uses HLS. The Overlay is just for INTERACTION (clicking profiles).
              // If Host is not in "seats" DB table, we can't get their profile easily here unless we fetch it.
              // BUT, we can just let them be clickable if we know their ID.

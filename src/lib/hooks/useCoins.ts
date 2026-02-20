@@ -179,7 +179,7 @@ export function useCoins() {
       // (useful for wheel spins, badges, effects where coins are consumed)
       const { data, error: rpcError } = await supabase.rpc('spend_coins', {
         p_sender_id: params.senderId,
-        p_receiver_id: params.receiverId || params.senderId, // If no receiver, use sender (coins consumed)
+        p_receiver_id: params.receiverId,
         p_coin_amount: params.amount,
         p_source: params.source,
         p_item: params.item || params.source,
