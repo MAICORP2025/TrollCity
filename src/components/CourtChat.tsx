@@ -46,9 +46,8 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
           id,
           content,
           created_at,
-          agent_role,
           user_id,
-          message_type,
+          meta,
           user_profiles:user_id (username)
         `)
         .eq('case_id', courtId)
@@ -60,15 +59,19 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
         return;
       }
 
-      const formatted = data.map((m: any) => ({
-        id: m.id,
-        user: m.agent_role === 'User' ? (m.user_profiles?.username || 'Unknown') : m.agent_role,
-        text: m.content,
-        timestamp: new Date(m.created_at),
-        isSystem: m.agent_role === 'System',
-        role: m.agent_role,
-        messageType: m.message_type,
-      }));
+      const formatted = data.map((m: any) => {
+        const agentRole = m.meta?.agent_role;
+        const messageType = m.meta?.message_type;
+        return {
+          id: m.id,
+          user: agentRole === 'User' ? (m.user_profiles?.username || 'Unknown') : agentRole,
+          text: m.content,
+          timestamp: new Date(m.created_at),
+          isSystem: agentRole === 'System',
+          role: agentRole,
+          messageType: messageType,
+        };
+      });
       setMessages(formatted);
     };
 
@@ -87,10 +90,12 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
         },
         async (payload) => {
           const m = payload.new as any;
-          
+          const agentRole = m.meta?.agent_role;
+          const messageType = m.meta?.message_type;
+
           // If it's a user message, we might need to fetch the username if not present
-          let username = m.agent_role;
-          if (m.agent_role === 'User' && m.user_id) {
+          let username = agentRole;
+          if (agentRole === 'User' && m.user_id) {
              if (m.user_id === user?.id) {
                 username = profile?.username || 'Me';
                 profileCache.current[m.user_id] = username;
@@ -105,15 +110,22 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
              }
           }
 
-          setMessages(prev => [...prev, {
+          const newMessage = {
             id: m.id,
             user: username,
             text: m.content,
             timestamp: new Date(m.created_at),
-            isSystem: m.agent_role === 'System',
-            role: m.agent_role,
-            messageType: m.message_type,
-          }]);
+            isSystem: agentRole === 'System',
+            role: agentRole,
+            messageType: messageType,
+          };
+
+          setMessages(prev => {
+            if (prev.some(msg => msg.id === newMessage.id)) {
+                return prev;
+            }
+            return [...prev, newMessage];
+          });
         }
       )
       .subscribe();
@@ -131,23 +143,48 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
     setInputValue(''); // optimistic clear
 
     try {
-      // Determine role (Judge vs User)
-      // Check if user is the judge of this case? 
-      // For simplicity, admins/officers are "Judge" if they want, but let's stick to 'User' unless system explicitly sets it.
-      // Actually, let's check profile role.
-      
       const isJudge = profile?.role === 'admin' || profile?.is_lead_officer || profile?.is_admin; // Simplified
-      
-      const { error } = await supabase.from('court_ai_messages').insert({
+      const messageRole = isJudge ? 'Judge' : 'User';
+
+      const { data, error } = await supabase.from('court_ai_messages').insert({
         case_id: courtId,
         user_id: user.id,
-        agent_role: isJudge ? 'Judge' : 'User', // Or just 'User' and let the UI decide display? 
-                                                // The prompt logic uses 'Judge' to know authority.
-        message_type: 'chat',
-        content: text
-      });
+        role: 'user',
+        content: text,
+        meta: { agent_role: messageRole, message_type: 'chat' },
+      }).select(`
+        id,
+        content,
+        created_at,
+        user_id,
+        meta,
+        user_profiles:user_id (username)
+      `).single();
 
       if (error) throw error;
+
+      if (data) {
+        const m = data as any;
+        const agentRole = m.meta?.agent_role;
+        const messageType = m.meta?.message_type;
+        
+        const newMessage: Message = {
+            id: m.id,
+            user: m.user_profiles?.username || 'Me',
+            text: m.content,
+            timestamp: new Date(m.created_at),
+            isSystem: agentRole === 'System',
+            role: agentRole,
+            messageType: messageType,
+        };
+
+        setMessages(prev => {
+            if (prev.some(msg => msg.id === newMessage.id)) {
+                return prev;
+            }
+            return [...prev, newMessage];
+        });
+      }
       
     } catch (err) {
       console.error('Failed to send message:', err);

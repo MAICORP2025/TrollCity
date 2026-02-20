@@ -81,6 +81,8 @@ const UserInventory = lazyWithRetry(() => import("./pages/UserInventory"));
 const Troting = lazyWithRetry(() => import("./pages/Troting"));
 const ProfileSettings = lazyWithRetry(() => import("./pages/ProfileSettings"));
 const SellOnTrollCity = lazyWithRetry(() => import("./pages/SellOnTrollCity"));
+const SellerOrders = lazyWithRetry(() => import("./pages/SellerOrders"));
+const MyOrders = lazyWithRetry(() => import("./pages/MyOrders"));
 const Leaderboard = lazyWithRetry(() => import("./pages/Leaderboard"));
 const TrollCityWall = lazyWithRetry(() => import("./pages/TrollCityWall"));
 const WallPostPage = lazyWithRetry(() => import("./pages/WallPostPage"));
@@ -138,6 +140,7 @@ const TrollCourtSession = lazyWithRetry(() => import("./pages/TrollCourtSession"
 const Call = lazyWithRetry(() => import("./pages/Call"));
 const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
 const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
+const Trollifieds = lazyWithRetry(() => import("./pages/Trollifieds"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
 const InterviewRoom = lazyWithRetry(() => import("./pages/InterviewRoom"));
 const OfficerPayrollDashboard = lazyWithRetry(() => import("./pages/officer/OfficerPayrollDashboard"));
@@ -341,6 +344,8 @@ function AppContent() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<ServiceWorker | null>(null);
+  const [initialProfileLoaded, setInitialProfileLoaded] = useState(false);
+  const userIdRef = useRef<string | null>(null);
 
 
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
@@ -355,6 +360,17 @@ function AppContent() {
     isReconnecting,
     reconnectMessage,
   } = useGlobalApp();
+
+  // Initial profile load
+  useEffect(() => {
+    if (user?.id && !initialProfileLoaded && userIdRef.current !== user.id) {
+      console.log(`Found user, refreshing profile ${user.id}`);
+      refreshProfile();
+      eligibilityRefresh(user.id);
+      setInitialProfileLoaded(true);
+      userIdRef.current = user.id;
+    }
+  }, [user, initialProfileLoaded, refreshProfile, eligibilityRefresh]);
 
   // Handle Service Worker navigation requests (e.g. from push notifications)
   useEffect(() => {
@@ -735,8 +751,7 @@ function AppContent() {
     }
   }, [user?.id]);
 
-  // 🔹 Real-time Profile Updates (Debounced to prevent double renders)
-  useDebouncedProfileUpdate(user?.id)
+  
 
   useEffect(() => {
     const onError = (event: ErrorEvent) => {
@@ -1006,6 +1021,7 @@ function AppContent() {
                   <Route path="/following" element={<Following />} />
                   <Route path="/following/:userId" element={<Following />} />
                   <Route path="/trollifications" element={<Trollifications />} />
+                  <Route path="/trollifieds" element={<Trollifieds />} />
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/pool" element={<PublicPool />} />
                   <Route path="/social/mai-talent" element={<MaiTalentPage />} />
@@ -1081,6 +1097,8 @@ function AppContent() {
                   <Route path="/transactions" element={<TransactionHistory />} />
                   <Route path="/shop-partner" element={<ShopPartnerPage />} />
                   <Route path="/sell" element={<SellOnTrollCity />} />
+                  <Route path="/seller/orders" element={<SellerOrders />} />
+                  <Route path="/my-orders" element={<MyOrders />} />
                   <Route path="/seller/earnings" element={<ShopEarnings />} />
                   {/* Gift store routes removed */}
 

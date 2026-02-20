@@ -25,8 +25,11 @@ function redactPII(text: string): string {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const cors = corsHeaders(origin);
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
 
   try {
@@ -41,7 +44,7 @@ serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -65,7 +68,7 @@ serve(async (req) => {
     if (!isAuthorized) {
        return new Response(JSON.stringify({ error: "Forbidden: Authorized personnel only" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -97,7 +100,7 @@ serve(async (req) => {
              const waitSeconds = Math.ceil((COOLDOWN_MS - timeDiff) / 1000);
              return new Response(JSON.stringify({ error: `Rate limit: Please wait ${waitSeconds}s before regenerating.` }), {
                 status: 429,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
              });
         }
     }
@@ -173,13 +176,13 @@ serve(async (req) => {
 
     // Return result
     return new Response(JSON.stringify({ success: true, data: parsedResult }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   }
 });

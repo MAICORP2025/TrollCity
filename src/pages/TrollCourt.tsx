@@ -13,6 +13,24 @@ import UserSearchDropdown from '../components/UserSearchDropdown'
 import { generateUUID } from '../lib/uuid'
 
 
+const CASE_TYPE_MAP: Record<string, string> = {
+  'Harassment / Threats': 'harassment_threats',
+  'Hate Speech / Discrimination': 'hate_speech_discrimination',
+  'Nudity / Sexual Content': 'nudity_sexual_content',
+  'Doxxing / Personal Info': 'doxxing_personal_info',
+  'Scamming / Fraud': 'scamming_fraud',
+  'Chargeback / Payment Abuse': 'chargeback_payment_abuse',
+  'Gift Manipulation / Fake gifting': 'gift_manipulation',
+  'Ban Evasion': 'ban_evasion',
+  'Family War Dispute': 'family_war_dispute',
+  'Streamer Misconduct': 'streamer_misconduct',
+  'Officer Misconduct': 'officer_misconduct',
+  'Appeal Case': 'appeal_case',
+  'Copyright / Content Claim': 'copyright_content_claim',
+  'TrollCourt Civil Case': 'trollcourt_civil_case',
+  'TrollCity Policy Violation': 'trollcity_policy_violation'
+};
+
 export default function TrollCourt() {
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
@@ -37,7 +55,7 @@ export default function TrollCourt() {
     'Harassment / Threats',
     'Hate Speech / Discrimination',
     'Nudity / Sexual Content',
-    'Doxxing / Personal Info',
+    'doxxing / Personal Info',
     'Scamming / Fraud',
     'Chargeback / Payment Abuse',
     'Gift Manipulation / Fake gifting',
@@ -98,34 +116,44 @@ export default function TrollCourt() {
       }
     }
     fetchMyCivilCases()
-  }, [user, isFileLawsuitModalOpen, profile, selectedCaseForRuling]) // Reload when modal closes (potentially filed new case)
+  }, [user, isFileLawsuitModalOpen, selectedCaseForRuling]) // Reload when modal closes (potentially filed new case)
 
-  // Search users
-  useEffect(() => {
-    const searchUsers = async () => {
-      setIsSearchingUsers(true)
-      try {
-        let query = supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url')
-          .limit(50)
-
-        if (searchQuery.length >= 3) {
-          query = query.ilike('username', `%${searchQuery}%`)
-        }
-
-        const { data } = await query
-        if (data) setUserList(data)
-      } catch (err) {
-        console.error('Error searching users:', err)
-      } finally {
-        setIsSearchingUsers(false)
-      }
-    }
-    
-    const timer = setTimeout(searchUsers, 300)
-    return () => clearTimeout(timer)
-  }, [searchQuery])
+  useEffect(() => { 
+   // ✅ Do NOT search if query too short 
+   if (!searchQuery || searchQuery.trim().length < 3) { 
+     setUserList([]) 
+     return 
+   } 
+ 
+   let cancelled = false 
+ 
+   const searchUsers = async () => { 
+     setIsSearchingUsers(true) 
+ 
+     try { 
+       const { data, error } = await supabase 
+         .from('user_profiles') 
+         .select('id, username, avatar_url') 
+         .ilike('username', `%${searchQuery.trim()}%`) 
+         .limit(20) 
+ 
+       if (!cancelled && data) { 
+         setUserList(data) 
+       } 
+     } catch (err) { 
+       console.error('User search error:', err) 
+     } finally { 
+       if (!cancelled) setIsSearchingUsers(false) 
+     } 
+   } 
+ 
+   const timer = setTimeout(searchUsers, 400) 
+ 
+   return () => { 
+     cancelled = true 
+     clearTimeout(timer) 
+   } 
+ }, [searchQuery])
 
   const loadCourtState = useCallback(async () => {
     try {
@@ -186,14 +214,30 @@ export default function TrollCourt() {
         setPendingSummons([])
       }
     }
-  }, [user?.id])
+  }, [user?.id, setCourtSession, setPendingSummons])
 
-  // Load current court session (global) on mount
+  // Load current court session (global) on mount and subscribe to realtime updates
   useEffect(() => {
     loadCourtState()
-    const id = window.setInterval(loadCourtState, 5000)
-    return () => window.clearInterval(id)
-  }, [user?.id, loadCourtState])
+
+    const channel = supabase
+      .channel('court-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'court_sessions' },
+        () => loadCourtState()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'court_summons' },
+        () => loadCourtState()
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id])
 
   const openCreateModal = () => {
     if (!canStartCourt) return
@@ -203,11 +247,15 @@ export default function TrollCourt() {
   }
 
   const handleSummonOrStart = async () => {
-    if (!canStartCourt || !user) return
+    if (!user?.id) {
+      toast.error("User not authenticated");
+      return;
+    }
 
     setIsStartingSession(true)
     try {
       let activeSessionId = courtSession?.id
+      const dbCaseType = CASE_TYPE_MAP[selectedCaseType] || 'trollcity_policy_violation';
 
       // 1. If no active session, start one
       if (!activeSessionId) {
@@ -223,14 +271,22 @@ export default function TrollCourt() {
         if (startError) throw startError
         const resolvedSessionId = data?.id || newSessionId
         activeSessionId = resolvedSessionId
-        setCourtSession(data)
+        setCourtSession(data || {
+          id: activeSessionId,
+          created_at: new Date().toISOString()
+        });
       }
 
       // 2. If a case type and defendant are selected, create the official case
-      if (selectedCaseType && selectedUser && activeSessionId) {
+      if (selectedUser && activeSessionId && dbCaseType) {
         try {
+          console.log("Creating case:", {
+            uiType: selectedCaseType,
+            dbType: dbCaseType
+          });
+
           const { error: caseError } = await supabase.rpc('create_court_case', {
-            p_case_type: selectedCaseType,
+            p_case_type: dbCaseType,
             p_plaintiff_id: user.id,
             p_defendant_id: selectedUser.id,
             p_court_session_id: activeSessionId
@@ -238,8 +294,24 @@ export default function TrollCourt() {
           
           if (caseError) {
             console.error('Error creating case record:', caseError)
-            toast.error('Session active, but failed to create case record')
+            toast.error(`Failed to create case: ${caseError.message}`)
           } else {
+            // After creating the case, fetch it to get the ID and update the session
+            const { data: newCase } = await supabase
+              .from('court_cases')
+              .select('id')
+              .eq('court_session_id', activeSessionId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
+
+            if (newCase?.id) {
+              await supabase
+                .from('court_sessions')
+                .update({ case_id: newCase.id })
+                .eq('id', activeSessionId);
+            }
+
             toast.success(courtSession ? 'User Summoned to Current Session' : 'Court Session Started & Case Docketed')
           }
         } catch (e) {
@@ -248,7 +320,7 @@ export default function TrollCourt() {
       }
 
       setIsCreateModalOpen(false)
-      if (!courtSession && activeSessionId) {
+      if (activeSessionId) {
          navigate(`/court/${activeSessionId}`)
       }
     } catch (startError) {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Store, ShoppingCart, Coins, DollarSign, Truck, FileText, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Plus, Edit, Trash, Package } from 'lucide-react'
+import { Store, ShoppingCart, ShoppingBag, Car, Coins, DollarSign, Truck, FileText, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Plus, Edit, Trash, Package, Wrench } from 'lucide-react'
 
 export default function SellOnTrollCity() {
   console.log('🛍️ SellOnTrollCity component rendering');
@@ -13,11 +13,16 @@ export default function SellOnTrollCity() {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(true)
   const [earnings, setEarnings] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState('requirements')
+  const [activeTab, setActiveTab] = useState('overview')
+  const [trollifiedsTab, setTrollifiedsTab] = useState<'marketplace' | 'vehicles' | 'services' | 'business'>('marketplace')
   const [applicationLoading, setApplicationLoading] = useState(false)
   const [existingApplication, setExistingApplication] = useState<any>(null)
   const isVerifiedSeller = existingApplication?.status === 'approved'
   const [products, setProducts] = useState<any[]>([])
+  const [marketplaceListings, setMarketplaceListings] = useState<any[]>([])
+  const [vehicleListings, setVehicleListings] = useState<any[]>([])
+  const [serviceListings, setServiceListings] = useState<any[]>([])
+  const [businessProfiles, setBusinessProfiles] = useState<any[]>([])
   
   // Seller application form state
   const [storeName, setStoreName] = useState('')
@@ -96,16 +101,6 @@ export default function SellOnTrollCity() {
       .maybeSingle()
 
     setExistingApplication(appData)
-    // setApplicationSubmitted(!!appData) // Fix: setApplicationSubmitted is not defined in the read snippet, but I should probably leave it if it was there or check.
-    // Wait, the read snippet showed `setApplicationSubmitted(!!appData)` in line 64?
-    // Let me check the read snippet again.
-    // Line 64: `setApplicationSubmitted(!!appData)`
-    // But `setApplicationSubmitted` was NOT in the variable declarations I saw (lines 10-41).
-    // I missed checking where it came from.
-    // It might be a missing variable declaration error too!
-    // But let's stick to what I see.
-    // I will use `setApplicationSubmitted` if it exists.
-    // Actually, I'll copy the existing body and just wrap it.
     
     const { data } = await supabase
       .from('trollcity_shops')
@@ -113,6 +108,14 @@ export default function SellOnTrollCity() {
       .eq('owner_id', user!.id)
       .maybeSingle()
     setShop(data)
+
+    // Set the appropriate tab based on user status
+    // If user has a shop or is approved, show overview/dashboard
+    if (data || appData?.status === 'approved') {
+      setActiveTab('overview')
+    } else {
+      setActiveTab('requirements')
+    }
 
     // Load earnings and products data if shop exists
     if (data) {
@@ -161,6 +164,12 @@ export default function SellOnTrollCity() {
 
     setApplicationLoading(true)
     try {
+      // product_types is a text[] column, so we need to pass an array
+      // Split by comma or return empty array if no input
+      const productTypesArray = productTypes.trim()
+        ? productTypes.trim().split(',').map(t => t.trim()).filter(t => t)
+        : []
+
       const { error } = await supabase
         .from('applications')
         .insert([{
@@ -168,7 +177,7 @@ export default function SellOnTrollCity() {
           type: 'seller',
           store_name: storeName.trim(),
           store_description: storeDescription.trim(),
-          product_types: productTypes.trim(),
+          product_types: productTypesArray,
           contact_email: contactEmail.trim(),
           status: 'pending'
         }])
@@ -337,33 +346,39 @@ export default function SellOnTrollCity() {
 
         {/* Tab Navigation */}
         <div className="flex justify-center">
-          <div className="bg-[#1A1A1A] rounded-lg p-1 border border-[#2C2C2C]">
+          <div className="bg-[#1A1A1A] rounded-lg p-1 border border-[#2C2C2C] flex flex-wrap justify-center gap-1">
             {isVerifiedSeller || shop ? (
               <>
                 <button
                   onClick={() => setActiveTab('overview')}
-                  className={`px-6 py-2 rounded-md transition-colors ${activeTab === 'overview' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'overview' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
                 >
                   Overview
                 </button>
-                {shop && (
+                {(shop || isVerifiedSeller) && (
                   <button
                     onClick={() => setActiveTab('dashboard')}
-                    className={`px-6 py-2 rounded-md transition-colors ${activeTab === 'dashboard' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'dashboard' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
                   >
-                    Dashboard
+                    Shop
                   </button>
                 )}
                 <button
+                  onClick={() => setActiveTab('trollifieds')}
+                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'trollifieds' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                  Trollifieds
+                </button>
+                <button
                   onClick={() => setActiveTab('requirements')}
-                  className={`px-6 py-2 rounded-md transition-colors ${activeTab === 'requirements' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'requirements' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
                 >
                   Requirements
                 </button>
-                {shop && (
+                {(shop || isVerifiedSeller) && (
                   <button
                     onClick={() => setActiveTab('earnings')}
-                    className={`px-6 py-2 rounded-md transition-colors ${activeTab === 'earnings' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'earnings' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
                   >
                     Earnings
                   </button>
@@ -480,7 +495,7 @@ export default function SellOnTrollCity() {
           </div>
         )}
 
-        {activeTab === 'dashboard' && shop && (
+        {activeTab === 'dashboard' && (shop || isVerifiedSeller) && (
           <div className="grid lg:grid-cols-3 gap-8">
             {/* Form */}
             <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C] h-fit">
@@ -646,8 +661,8 @@ export default function SellOnTrollCity() {
                       <div className="flex items-start gap-3">
                         <DollarSign className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
                         <div>
-                          <h3 className="font-semibold text-yellow-400 mb-1">Weekly Platform Fee</h3>
-                          <p className="text-gray-300 text-sm">Platform access requires a weekly fee paid in Troll Coins. If you cannot afford the fee, pause your shop anytime to avoid charges.</p>
+                          <h3 className="font-semibold text-yellow-400 mb-1">$10/Month Platform Fee</h3>
+                          <p className="text-gray-300 text-sm">$10/month (billed monthly). No fees from items sold - you keep 100% of your earnings!</p>
                         </div>
                       </div>
                     </div>
@@ -767,7 +782,171 @@ export default function SellOnTrollCity() {
           </div>
         )}
 
-        {activeTab === 'earnings' && shop && (
+        {activeTab === 'trollifieds' && (
+          <div className="space-y-6">
+            {/* Trollifieds Tab Navigation */}
+            <div className="flex justify-center">
+              <div className="bg-[#0D0D0D] rounded-lg p-1 border border-[#2C2C2C] flex gap-1">
+                <button
+                  onClick={() => setTrollifiedsTab('marketplace')}
+                  className={`px-4 py-2 rounded-md transition-colors ${trollifiedsTab === 'marketplace' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                  Marketplace
+                </button>
+                <button
+                  onClick={() => setTrollifiedsTab('vehicles')}
+                  className={`px-4 py-2 rounded-md transition-colors ${trollifiedsTab === 'vehicles' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                  Vehicles
+                </button>
+                <button
+                  onClick={() => setTrollifiedsTab('services')}
+                  className={`px-4 py-2 rounded-md transition-colors ${trollifiedsTab === 'services' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                  Services
+                </button>
+                <button
+                  onClick={() => setTrollifiedsTab('business')}
+                  className={`px-4 py-2 rounded-md transition-colors ${trollifiedsTab === 'business' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                  My Business
+                </button>
+              </div>
+            </div>
+
+            {/* Legal Disclaimer for Trollifieds */}
+            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-yellow-400 mb-1">Legal Disclaimer</h3>
+                  <p className="text-gray-300 text-sm">
+                    Troll City does not verify packages or physical goods. Sellers are solely responsible for items shipped. 
+                    Illegal items are prohibited and may be reported to authorities. Troll City assumes no liability.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Marketplace Listings */}
+            {trollifiedsTab === 'marketplace' && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5 text-green-400" />
+                    Create Marketplace Listing
+                  </h2>
+                  <p className="text-gray-400 text-sm mb-4">
+                    List physical items for sale in the Trollifieds marketplace
+                  </p>
+                  <div className="text-center py-8">
+                    <ShoppingBag className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400 mb-4">Create marketplace listings</p>
+                    <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg">
+                      Create Listing
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4">Your Marketplace Listings</h2>
+                  <div className="text-center py-8 text-gray-500">
+                    <Package className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                    <p>No marketplace listings yet</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Vehicle Listings */}
+            {trollifiedsTab === 'vehicles' && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <Car className="w-5 h-5 text-blue-400" />
+                    Create Vehicle Listing
+                  </h2>
+                  <p className="text-gray-400 text-sm mb-4">
+                    List vehicles for sale in the Trollifieds marketplace
+                  </p>
+                  <div className="text-center py-8">
+                    <Car className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400 mb-4">Create vehicle listings</p>
+                    <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg">
+                      Add Vehicle
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4">Your Vehicle Listings</h2>
+                  <div className="text-center py-8 text-gray-500">
+                    <Car className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                    <p>No vehicle listings yet</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Services */}
+            {trollifiedsTab === 'services' && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <Wrench className="w-5 h-5 text-orange-400" />
+                    Create Service Listing
+                  </h2>
+                  <p className="text-gray-400 text-sm mb-4">
+                    Offer services such as tutoring, repairs, cleaning, etc.
+                  </p>
+                  <div className="text-center py-8">
+                    <Wrench className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400 mb-4">Create service listings</p>
+                    <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg">
+                      Add Service
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4">Your Service Listings</h2>
+                  <div className="text-center py-8 text-gray-500">
+                    <Wrench className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                    <p>No service listings yet</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Business Profile */}
+            {trollifiedsTab === 'business' && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <Store className="w-5 h-5 text-purple-400" />
+                    Business Profile
+                  </h2>
+                  <p className="text-gray-400 text-sm mb-4">
+                    Create a business profile to offer services in Trollifieds
+                  </p>
+                  <div className="text-center py-8">
+                    <Store className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400 mb-4">Create your business profile</p>
+                    <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg">
+                      Create Business
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+                  <h2 className="text-xl font-semibold mb-4">Your Business</h2>
+                  <div className="text-center py-8 text-gray-500">
+                    <Store className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                    <p>No business profile yet</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'earnings' && (shop || isVerifiedSeller) && (
           <div className="space-y-6">
             <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">

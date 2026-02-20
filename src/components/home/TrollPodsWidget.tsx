@@ -34,6 +34,7 @@ export default function TrollPodsWidget({ onRequireAuth }: TrollPodsWidgetProps)
         const { data, error } = await supabase
           .from('pod_rooms')
           .select('id, title, host_id, is_live, viewer_count, started_at')
+          .is('ended_at', null)
           .order('is_live', { ascending: false })
           .order('started_at', { ascending: false })
           .limit(6)

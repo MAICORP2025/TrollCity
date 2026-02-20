@@ -283,10 +283,9 @@ export async function generateCourtAiResponse(
     
     await supabase.from('court_ai_messages').insert({
       case_id: caseId,
-      agent_role: role,
-      message_type: parsed.message_type,
+      role: 'assistant',
       content: parsed.message_content,
-      json_data: parsed,
+      meta: { ...parsed, agent_role: role },
       created_at: new Date().toISOString()
     });
 

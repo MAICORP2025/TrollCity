@@ -61,12 +61,6 @@ export default function MyGarage() {
   const [editingPlateId, setEditingPlateId] = useState<string | null>(null);
   const [newPlate, setNewPlate] = useState('');
 
-  useEffect(() => {
-    if (user) {
-      fetchVehicles();
-    }
-  }, [user, fetchVehicles]);
-
   const fetchVehicles = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -112,6 +106,12 @@ export default function MyGarage() {
       setLoading(false);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (user) {
+      fetchVehicles();
+    }
+  }, [user, fetchVehicles]);
 
   const handleUpdatePlate = async (vehicleId: string) => {
     if (!newPlate || newPlate.length < 3 || newPlate.length > 8) {

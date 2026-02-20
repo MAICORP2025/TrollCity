@@ -10,7 +10,14 @@ import BroadcastChat from '../../components/broadcast/BroadcastChat'
 import BroadcastControls from '../../components/broadcast/BroadcastControls'
 import BroadcastHeader from '../../components/broadcast/BroadcastHeader'
 import BattleView from '../../components/broadcast/BattleView'
+import BattleControls from '../../components/broadcast/BattleControls'
 import ErrorBoundary from '../../components/ErrorBoundary'
+import GiftBoxModal from '../../components/broadcast/GiftBoxModal'
+import GiftAnimationOverlay from '../../components/broadcast/GiftAnimationOverlay'
+import PinnedProductOverlay from '../../components/broadcast/PinnedProductOverlay'
+import PinProductModal from '../../components/broadcast/PinProductModal'
+import { BroadcastGift } from '../../hooks/useBroadcastRealtime'
+import { useBroadcastPinnedProducts } from '../../hooks/useBroadcastPinnedProducts'
 
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -44,6 +51,24 @@ function BroadcastPage() {
   const [muxPlaybackId, setMuxPlaybackId] = useState<string | null>(null)
   const [isJoining, setIsJoining] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(true)
+  const [isBattleMode, setIsBattleMode] = useState(false)
+  
+  // Gift system state
+  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
+  const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
+
+  // Pin product modal state
+  const [isPinProductModalOpen, setIsPinProductModalOpen] = useState(false)
+
+  // Determine host status early (needed for pinned products hook)
+  const isHost = stream?.user_id === user?.id
+
+  // Pinned products hook
+  const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
+    streamId: streamId || '',
+    userId: user?.id,
+    isHost,
+  })
 
   const agoraClientRef = useRef<IAgoraRTCClient | null>(null)
 
@@ -51,7 +76,6 @@ function BroadcastPage() {
   const { seats, mySession: userSeat, joinSeat, leaveSeat } =
     useStreamSeats(stream?.id, user?.id)
 
-  const isHost = stream?.user_id === user?.id
   const canPublish = isHost || !!userSeat
   const mode = userSeat ? 'stage' : 'viewer'
 
@@ -107,9 +131,44 @@ function BroadcastPage() {
         (payload) => {
           if (!payload.new) return;
           setStream(payload.new as Stream);
+          // Navigate to home when stream ends - for ALL clients
           if (payload.new.status === 'ended') {
-            navigate(`/summary/${streamId}`);
+            console.log('[BroadcastPage] Stream ended, navigating to home');
+            navigate('/');
           }
+        }
+      )
+      // Listen for gift events
+      .on(
+        'broadcast',
+        { event: 'gift_sent' },
+        (payload) => {
+          const giftData = payload.payload;
+          console.log('[BroadcastPage] Gift received:', giftData);
+          
+          const newGift: BroadcastGift = {
+            id: giftData.id || `gift-${Date.now()}`,
+            gift_id: giftData.gift_id,
+            gift_name: giftData.gift_name,
+            gift_icon: giftData.gift_icon || '🎁',
+            amount: giftData.amount,
+            sender_id: giftData.sender_id,
+            sender_name: giftData.sender_name || 'Someone',
+            receiver_id: giftData.receiver_id,
+            created_at: giftData.timestamp || new Date().toISOString(),
+          };
+          
+          setRecentGifts(prev => [...prev, newGift]);
+        }
+      )
+      // Listen for like events
+      .on(
+        'broadcast',
+        { event: 'like_sent' },
+        (payload) => {
+          console.log('[BroadcastPage] Like received:', payload.payload);
+          // Trigger a UI update for likes - the stream subscription will handle the actual count
+          setStream((prev: any) => prev ? { ...prev, total_likes: (prev.total_likes || 0) + 1 } : null);
         }
       )
       .subscribe();
@@ -235,7 +294,7 @@ function BroadcastPage() {
   }
 
   const onGift = (userId: string) => {
-    toast.info(`Gift sent to ${userId}`)
+    setIsGiftModalOpen(true);
   }
 
   const onGiftAll = (ids: string[]) => {
@@ -252,6 +311,35 @@ function BroadcastPage() {
     if (error) {
       toast.error('Failed to update box count.');
       console.error(error);
+    }
+  };
+
+  const handleLike = async () => {
+    if (!user) {
+      navigate('/auth?mode=signup');
+      return;
+    }
+    if (isHost) {
+        toast.error("Broadcasters cannot like their own broadcast");
+        return;
+    }
+
+    try {
+        // Try to insert into stream_likes if table exists
+        const { error } = await supabase.from('stream_likes').insert({
+            stream_id: stream.id,
+            user_id: user.id
+        });
+
+        if (error) {
+            // If duplicate like (unique constraint), maybe just ignore or toggle?
+            // Assuming we just want to count likes, we might ignore unique constraint errors
+            if (error.code !== '23505') { // 23505 is unique violation
+                console.error("Like error:", error);
+            }
+        }
+    } catch (e) {
+        console.error(e);
     }
   };
 
@@ -301,6 +389,7 @@ function BroadcastPage() {
           stream={stream}
           isHost={isHost}
           liveViewerCount={remoteUsers.length}
+          handleLike={handleLike}
         />
 
         <div className="flex flex-1 overflow-hidden">
@@ -331,8 +420,10 @@ function BroadcastPage() {
                 onGiftAll={onGiftAll}
                 toggleCamera={toggleCamera}
                 toggleMicrophone={toggleMicrophone}
-              />
-            )}
+            />
+          )}
+
+          {isBattleMode && <BattleControls currentStream={stream} />}
 
             <BroadcastControls
               stream={stream}
@@ -343,11 +434,13 @@ function BroadcastPage() {
               onGiftHost={() => onGift(stream.user_id)}
               onLeave={leaveSeat}
               onBoxCountUpdate={handleBoxCountChange}
+              handleLike={handleLike}
+              toggleBattleMode={() => setIsBattleMode(!isBattleMode)}
               localTracks={localTracks}
               toggleCamera={toggleCamera}
               toggleMicrophone={toggleMicrophone}
+              onPinProduct={() => setIsPinProductModalOpen(true)}
             />
-
           </div>
 
           <BroadcastChat
@@ -359,6 +452,46 @@ function BroadcastPage() {
 
         </div>
       </div>
+
+      {/* Gift Modal */}
+      <GiftBoxModal
+        isOpen={isGiftModalOpen}
+        onClose={() => setIsGiftModalOpen(false)}
+        recipientId={stream?.user_id || ''}
+        streamId={streamId || ''}
+        onGiftSent={(gift) => {
+          console.log('Gift sent:', gift);
+        }}
+      />
+
+      {/* Gift Animation Overlay */}
+      <GiftAnimationOverlay
+        gifts={recentGifts}
+        onAnimationComplete={(giftId) => {
+          setRecentGifts(prev => prev.filter(g => g.id !== giftId));
+        }}
+      />
+
+      {/* Pinned Product Overlay (for viewers) */}
+      {!isHost && pinnedProducts.length > 0 && (
+        <PinnedProductOverlay
+          pinnedProducts={pinnedProducts}
+        />
+      )}
+
+      {/* Pin Product Modal (for host) */}
+      <PinProductModal
+        isOpen={isPinProductModalOpen}
+        onClose={() => setIsPinProductModalOpen(false)}
+        onProductPinned={async (productId) => {
+          const result = await pinProduct(productId);
+          if (result.success) {
+            // Product pinned successfully
+          } else {
+            // Handle error
+          }
+        }}
+      />
     </ErrorBoundary>
   )
 }

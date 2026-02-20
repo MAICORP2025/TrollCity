@@ -82,13 +82,12 @@ export async function startCourtSession(params: StartCourtSessionParams): Promis
       hls_url: getHlsUrl(targetId)
     }
 
-    const updateOrInsert = waitingSession
+    const response = waitingSession
       ? await supabase
           .from('court_sessions')
           .update(payload)
           .eq('id', waitingSession.id)
           .select('*')
-          .single()
       : await supabase
           .from('court_sessions')
           .insert({
@@ -98,14 +97,19 @@ export async function startCourtSession(params: StartCourtSessionParams): Promis
             ...payload
           })
           .select('*')
-          .single()
 
-    if (updateOrInsert.error) {
-      console.error('Error creating court session:', updateOrInsert.error)
-      return { data: null, error: updateOrInsert.error }
+    if (response.error) {
+      console.error('Error creating court session:', response.error)
+      return { data: null, error: response.error }
     }
 
-    const data = updateOrInsert.data
+    if (!response.data || response.data.length === 0) {
+      const err = new Error('Court session was not created or updated successfully.');
+      console.error(err, { response });
+      return { data: null, error: err };
+    }
+    
+    const data = response.data[0];
     return {
       data: {
         id: data.id,

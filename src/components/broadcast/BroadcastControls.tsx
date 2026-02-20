@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stream } from '../../types/broadcast';
 import { supabase } from '../../lib/supabase';
-import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp, Share2 } from 'lucide-react';
+import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp, Share2, Package } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import BannedUsersList from './BannedUsersList';
@@ -24,13 +24,16 @@ interface BroadcastControlsProps {
   onShare?: () => void;
   requiredBoxes?: number;
   onBoxCountUpdate?: (count: number) => void;
+  handleLike: () => void;
+  toggleBattleMode: () => void;
   liveViewerCount?: number;
   localTracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | null;
   toggleCamera: () => void;
   toggleMicrophone: () => void;
+  onPinProduct?: () => void;
 }
 
-export default function BroadcastControls({ stream, isHost, isModerator = false, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave, onShare, requiredBoxes = 1, onBoxCountUpdate, liveViewerCount, localTracks, toggleCamera, toggleMicrophone }: BroadcastControlsProps) {
+export default function BroadcastControls({ stream, isHost, isModerator = false, isOnStage, chatOpen, toggleChat, onGiftHost, onLeave, onShare, requiredBoxes = 1, onBoxCountUpdate, handleLike, liveViewerCount, localTracks, toggleCamera, toggleMicrophone, onPinProduct }: BroadcastControlsProps) {
   const navigate = useNavigate();
   const [audioTrack, videoTrack] = localTracks || [];
   const isMicOn = audioTrack ? !audioTrack.muted : false;
@@ -275,45 +278,7 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
     }
   };
 
-  const handleLike = async () => {
-    if (!user) {
-      navigate('/auth?mode=signup');
-      return;
-    }
-    if (isLiking) return;
-    if (isHost) {
-        toast.error("Broadcasters cannot like their own broadcast");
-        return;
-    }
-    setIsLiking(true);
-    
-    // Optimistic update
-    setLikes(prev => prev + 1);
 
-    try {
-        // Try to insert into stream_likes if table exists
-        const { error } = await supabase.from('stream_likes').insert({
-            stream_id: stream.id,
-            user_id: user.id
-        });
-
-        if (error) {
-            // If duplicate like (unique constraint), maybe just ignore or toggle?
-            // Assuming we just want to count likes, we might ignore unique constraint errors
-            if (error.code !== '23505') { // 23505 is unique violation
-                console.error("Like error:", error);
-            }
-        }
-        
-        // Also try to update total_likes on stream if column exists
-        // We can do this via RPC to be safe, or just let a trigger handle it
-        // For now, we'll assume a trigger handles counting or we just rely on realtime updates
-    } catch (e) {
-        console.error(e);
-    } finally {
-        setTimeout(() => setIsLiking(false), 500); // Debounce
-    }
-  };
 
   return (
     <div className={cn(
@@ -434,14 +399,6 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
                     <Heart size={16} className="text-pink-500 fill-pink-500/20" />
                     <span className="text-sm font-bold text-white">{likes}</span>
                 </div>
-
-                {/* My Balance */}
-                {user && (
-                    <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/5" title="My Troll Coins">
-                        <Coins size={16} className="text-yellow-500" />
-                        <span className="text-sm font-bold text-white">{(profile?.troll_coins || 0).toLocaleString()}</span>
-                    </div>
-                )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -558,6 +515,20 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
                         title="My Effects"
                     >
                         <Sparkles size={20} />
+                    </button>
+                 )}
+
+                 {/* Pin Product (Host Only) */}
+                 {isHost && onPinProduct && (
+                     <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onPinProduct();
+                        }}
+                        className="p-2 rounded-lg hover:bg-white/5 text-zinc-400 transition-colors flex items-center gap-2"
+                        title="Pin Product"
+                    >
+                        <Package size={20} />
                     </button>
                  )}
 
@@ -702,40 +673,6 @@ export default function BroadcastControls({ stream, isHost, isModerator = false,
                             )} />
                          </button>
                     </div>
-                    )}
-
-                    {/* Guest RGB Toggle (Only if Stream has RGB enabled) */}
-                    {!isHost && hasRgb && isOnStage && (
-                        <div className="bg-black/40 rounded-xl p-3 border border-white/5 flex items-center justify-between">
-                            <span className="text-zinc-400 text-sm font-medium flex items-center gap-2">
-                                <Palette size={16} className="text-purple-400" />
-                                My RGB
-                            </span>
-                            <button 
-                                onClick={() => {
-                                    const currentMeta = localParticipant?.metadata ? JSON.parse(localParticipant.metadata) : {};
-                                    const isCurrentlyDisabled = currentMeta.rgb_disabled === true;
-                                    
-                                    const newMeta = {
-                                        ...currentMeta,
-                                        rgb_disabled: !isCurrentlyDisabled
-                                    };
-                                    
-                                    localParticipant?.setMetadata(JSON.stringify(newMeta));
-                                    toast.success(isCurrentlyDisabled ? "RGB Enabled" : "RGB Disabled");
-                                }}
-                                className={cn(
-                                    "w-12 h-6 rounded-full transition-colors relative flex items-center", 
-                                    // If NOT disabled, it is ON (green)
-                                    !(localParticipant?.metadata && JSON.parse(localParticipant.metadata).rgb_disabled) ? "bg-green-500" : "bg-zinc-700"
-                                )}
-                                title="Toggle your RGB border"
-                            >
-                                <div className={cn("absolute left-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm", 
-                                    !(localParticipant?.metadata && JSON.parse(localParticipant.metadata).rgb_disabled) && "translate-x-6"
-                                )} />
-                            </button>
-                        </div>
                     )}
                 </div>
                 </motion.div>

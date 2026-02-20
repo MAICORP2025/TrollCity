@@ -10,9 +10,10 @@ interface BroadcastHeaderProps {
     onStartBattle?: () => void;
     isHost: boolean;
     liveViewerCount?: number;
+    handleLike: () => void;
 }
 
-export default function BroadcastHeader({ stream, onStartBattle, isHost, liveViewerCount }: BroadcastHeaderProps) {
+export default function BroadcastHeader({ stream, onStartBattle, isHost, liveViewerCount, handleLike }: BroadcastHeaderProps) {
     const { profile, setProfile } = useAuthStore();
     const [likes, setLikes] = React.useState(0);
     const [isLiking, setIsLiking] = React.useState(false);
@@ -82,24 +83,7 @@ export default function BroadcastHeader({ stream, onStartBattle, isHost, liveVie
         }
     }, [stream]);
 
-    // Optimistic Like Handler
-    const handleLike = async () => {
-        if (isLiking) return;
-        setIsLiking(true);
-        const newCount = likes + 1;
-        setLikes(newCount);
 
-        try {
-            // Fire and forget RPC or update
-            const { error } = await supabase.rpc('increment_stream_likes', { stream_id: stream.id });
-            if (error) throw error;
-        } catch (e) {
-            console.error('Failed to like stream', e);
-            // Revert on error? Nah, keep it optimistic for now to avoid jumpiness
-        } finally {
-            setTimeout(() => setIsLiking(false), 500);
-        }
-    };
 
     return (
         <div className="absolute top-16 left-4 right-4 z-50 flex items-center justify-end gap-3 pointer-events-none">

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Scale, AlertCircle, LogOut, Send, Gavel } from "lucide-react";
 import { courtSystem, CourtSession } from "@/lib/courtSystem";
-import { roomManager, RoomInstance } from "@/lib/roomManager";
 import { useAuthStore } from "@/lib/store";
 
 export default function TrollCourtSession() {
@@ -11,9 +10,7 @@ export default function TrollCourtSession() {
   const [activeSession, setActiveSession] = useState<CourtSession | null>(null);
   const [chatMessages, setChatMessages] = useState<{ user: string; message: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [courtRoomRef, setCourtRoomRef] = useState<RoomInstance | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
-  const courtRoomRefRef = useRef<RoomInstance | null>(null);
 
   const currentUser = {
     id: user?.id || "user-default",
@@ -25,7 +22,6 @@ export default function TrollCourtSession() {
 
   const initializeInstantCourt = useCallback(async () => {
     if (isInitializing) return;
-    if (courtRoomRefRef.current) return;
     if (activeSession) return;
 
     setIsInitializing(true);
@@ -33,11 +29,6 @@ export default function TrollCourtSession() {
     try {
       console.log("[TrollCourt] Initializing court instantly...");
       
-      const courtRoom = await roomManager.createCourtRoom();
-      setCourtRoomRef(courtRoom);
-      courtRoomRefRef.current = courtRoom;
-      console.log(`✅ [TrollCourt] Court room created instantly: ${courtRoom.roomName}`);
-
       const session = courtSystem.startCourtSession(
         {
           id: currentUser.id,
@@ -68,9 +59,6 @@ export default function TrollCourtSession() {
     }
 
     return () => {
-      if (courtRoomRefRef.current) {
-        roomManager.disconnectRoom(courtRoomRefRef.current.id);
-      }
     };
   }, [isJudge, user, initializeInstantCourt]);
 
@@ -96,13 +84,6 @@ export default function TrollCourtSession() {
 
     setTimeout(() => {
       alert("Court session ended. Verdict recorded.");
-      if (courtRoomRef) {
-        roomManager.disconnectRoom(courtRoomRef.id);
-      }
-      if (courtRoomRefRef.current) {
-        roomManager.disconnectRoom(courtRoomRefRef.current.id);
-        courtRoomRefRef.current = null;
-      }
       if (activeSession) {
         courtSystem.endCourtSession(activeSession.id);
       }
@@ -225,21 +206,12 @@ export default function TrollCourtSession() {
                   <p className="text-gray-400">Participants</p>
                   <p className="font-bold">{activeSession.summoned.length}</p>
                 </div>
-                <div>
-                  <p className="text-gray-400">Room</p>
-                  <p className="font-bold text-xs break-all">{courtRoomRef?.roomName}</p>
-                </div>
                 <button
                   onClick={() => {
                     console.log("🛑 [TrollCourt] Force ending session...");
-                    if (courtRoomRefRef.current) {
                     if (activeSession) {
                       courtSystem.endCourtSession(activeSession.id);
                     }
-                      roomManager.disconnectRoom(courtRoomRefRef.current.id);
-                      courtRoomRefRef.current = null;
-                    }
-                    setCourtRoomRef(null);
                     setActiveSession(null);
                     setChatMessages([]);
                     navigate("/");

@@ -106,23 +106,36 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
       if (onTyping) onTyping(false)
     }
 
-    // Proactively notify receiver via broadcast for instant UI update
-    if (channelRef.current) {
+      const tempId = `temp-${Date.now()}`;
+      const newMessage = {
+        id: tempId,
+        conversation_id: conversationId,
+        sender_id: profile.id,
+        content: currentMessage,
+        created_at: new Date().toISOString(),
+        read_at: null,
+        sender_username: profile.username,
+        sender_avatar_url: profile.avatar_url,
+        sender_rgb_expires_at: profile.rgb_username_expires_at,
+        sender_glowing_username_color: profile.glowing_username_color,
+        isPending: true,
+      };
+
+      if (onNewMessage) {
+        onNewMessage(newMessage);
+      }
+
+      // Proactively notify receiver via broadcast for instant UI update
+      if (channelRef.current) {
         channelRef.current.send({
             type: 'broadcast',
             event: 'new-message',
             payload: {
-                id: `temp-${Date.now()}`,
-                sender_id: profile.id,
-                content: currentMessage,
-                created_at: new Date().toISOString(),
-                sender_username: profile.username,
-                sender_avatar_url: profile.avatar_url,
-                sender_rgb_expires_at: profile.rgb_username_expires_at,
-                sender_glowing_username_color: profile.glowing_username_color
+                ...newMessage, // Send the same object
+                id: tempId, // Ensure tempId is sent
             }
         })
-    }
+      }
 
     try {
       // Handle OPS group message

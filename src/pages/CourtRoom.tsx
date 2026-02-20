@@ -255,6 +255,15 @@ const CourtVideoGrid = ({ maxTiles, localTracks, remoteUsers, toggleCamera, togg
 
 const isValidUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value || '');
 
+function uidFromString(str: string) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 const getAgoraToken = async (room: string, identity: string) => {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   if (!supabaseUrl) {
@@ -320,36 +329,33 @@ export default function CourtRoom() {
                          ["defendant", "accuser", "witness", "attorney"].includes(profile?.role);
   const canPublish = roleCanPublish || joinBoxRequested;
 
-  useEffect(() => {
-    if (!user || !courtId) return;
+  const handleConnectionStateChange = (
+    curState: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTING',
+    revState: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTING'
+  ) => {
+    console.log(`[CourtRoom] Connection state change: ${revState} -> ${curState}`);
 
-    // Aggressive validation of courtId
-    if (!isValidUuid(courtId)) {
-      toast.error("Invalid Courtroom ID.");
-      navigate("/troll-court");
-      return;
+    if (curState === 'RECONNECTING') {
+      toast.info('Connection lost. Attempting to reconnect...');
+    } else if (curState === 'CONNECTED' && revState === 'RECONNECTING') {
+      toast.success('Reconnected to the court session.');
+    } else if (curState === 'DISCONNECTED') {
+      toast.warning('You have been disconnected. The app will try to reconnect automatically.');
+      console.log(
+        '[CourtRoom] Temporarily disconnected. The Agora SDK will handle the reconnection process.'
+      );
     }
+  };
 
+  // Agora connection management
+  useEffect(() => {
+    if (!courtId || !user) return;
+
+    let isCancelled = false;
     const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
     setAgoraClient(client);
 
-    const join = async () => {
-      try {
-        const token = canPublish ? await getAgoraToken(courtId, user.id) : null;
-        await client.join(import.meta.env.VITE_AGORA_APP_ID!, courtId, token, canPublish ? user.id : null);
-        
-        if (canPublish) {
-          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-          const videoTrack = await AgoraRTC.createCameraVideoTrack();
-          setLocalTracks([videoTrack, audioTrack]);
-          await client.publish([videoTrack, audioTrack]);
-        }
-      } catch (error) {
-        console.error("Agora connection failed:", error);
-        toast.error("Failed to connect to the court session. Please try again.");
-        navigate("/troll-court");
-      }
-    };
+    const localTracksToPublish: (ILocalVideoTrack | ILocalAudioTrack)[] = [];
 
     const handleUserPublished = async (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
       await client.subscribe(user, mediaType);
@@ -362,14 +368,73 @@ export default function CourtRoom() {
 
     client.on('user-published', handleUserPublished);
     client.on('user-unpublished', handleUserUnpublished);
+    client.on('connection-state-change', handleConnectionStateChange);
 
-    join();
+    const joinAndPublish = async () => {
+      try {
+        const token = canPublish ? await getAgoraToken(courtId, user.id) : null;
+        const uid = canPublish ? user.id : null;
+
+        await client.join(import.meta.env.VITE_AGORA_APP_ID!, courtId, token, uid);
+        if (isCancelled) return;
+        console.log("[CourtRoom] Joined channel");
+
+        if (canPublish) {
+          let audioTrack: ILocalAudioTrack | undefined;
+          let videoTrack: ILocalVideoTrack | undefined;
+
+          try {
+            audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            localTracksToPublish.push(audioTrack);
+          } catch (err) {
+            console.warn("Mic not available — continuing without audio", err);
+            if ((err as any).code === 'DEVICE_NOT_FOUND') {
+              toast.warning("Microphone not found. You will join as a listener.");
+            }
+          }
+
+          try {
+            videoTrack = await AgoraRTC.createCameraVideoTrack();
+            localTracksToPublish.push(videoTrack);
+          } catch (err) {
+            console.warn("Camera not available — continuing without video", err);
+            if ((err as any).code === 'DEVICE_NOT_FOUND') {
+              toast.warning("Camera not found. You will join without video.");
+            }
+          }
+          
+          if (isCancelled) return;
+          setLocalTracks([videoTrack, audioTrack]);
+
+          if (localTracksToPublish.length > 0) {
+            await client.publish(localTracksToPublish);
+          }
+          console.log("[CourtRoom] Tracks published:", localTracksToPublish.length);
+        }
+      } catch (error: any) {
+        if (error.code === 'OPERATION_ABORTED') {
+          console.warn('Agora join operation was aborted, likely due to a fast re-render. This is being handled.');
+          return;
+        }
+        console.error("Agora connection failed:", error);
+        toast.error("Failed to connect to the court session. Please try again.");
+        navigate("/troll-court");
+      }
+    };
+
+    joinAndPublish();
 
     return () => {
+      isCancelled = true;
       client.off('user-published', handleUserPublished);
       client.off('user-unpublished', handleUserUnpublished);
-      localTracks[0]?.close();
-      localTracks[1]?.close();
+      client.off('connection-state-change', handleConnectionStateChange);
+      
+      for (const track of localTracksToPublish) {
+        track.stop();
+        track.close();
+      }
+      
       client.leave();
     };
   }, [courtId, user, canPublish, navigate]);
