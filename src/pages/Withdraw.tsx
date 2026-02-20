@@ -19,7 +19,7 @@ export default function Withdraw() {
       .from("user_profiles")
       .select("troll_coins, total_earned_coins")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     // Use troll_coins for withdrawals (withdrawable coins)
     setBalance(data?.troll_coins || data?.total_earned_coins || 0);

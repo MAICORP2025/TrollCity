@@ -204,7 +204,7 @@ function ProfileInner() {
         supabase.from('user_perks').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
         supabase.from('user_entrance_effects').select('*').eq('user_id', uid),
         supabase.from('user_insurances').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
-        supabase.from('call_minutes').select('*').eq('user_id', uid).single(),
+        supabase.from('call_minutes').select('*').eq('user_id', uid).maybeSingle(),
         supabase.from('properties').select('*').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
         supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
         supabase.from('user_vehicles').select('*, vehicles_catalog(*)').eq('user_id', uid).order('purchased_at', { ascending: false }),

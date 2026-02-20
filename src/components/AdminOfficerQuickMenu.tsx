@@ -17,7 +17,7 @@ const AdminOfficerQuickMenu: React.FC = () => {
         .from('user_profiles')
         .select('on_duty')
         .eq('id', profile!.id)
-        .single();
+        .maybeSingle();
       
       if (data) {
         setIsOnDuty(data.on_duty || false);

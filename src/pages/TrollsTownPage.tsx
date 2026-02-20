@@ -567,9 +567,9 @@ const TrollsTownPage: React.FC = () => {
           is_starter: true
         })
         .select('*')
-        .single()
+        .maybeSingle()
 
-      if (createError) {
+      if (createError || !newProperty) {
         throw createError
       }
 
@@ -599,7 +599,7 @@ const TrollsTownPage: React.FC = () => {
           property_name: null
         })
         .select('*')
-        .single()
+        .maybeSingle()
 
       if (!deedError && deed) {
         setMyDeed(deed as DeedRow)

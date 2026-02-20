@@ -145,7 +145,7 @@ const BattleArena = ({ onGift, battleId, localAudioTrack, localVideoTrack, remot
           .select('*')
           .eq('battle_id', battleId)
           .eq('user_id', userId)
-          .single();
+          .maybeSingle();
         if (error) console.error(`Failed to fetch battle_participant for user ${userId}:`, error);
         return data;
       };
@@ -340,7 +340,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
           });
           if (error) throw error;
 
-          await client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, roomName, data.token, effectiveUserId);
+          await client.join(import.meta.env.VITE_AGORA_APP_ID!, roomName, data.token, effectiveUserId);
 
           const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
           const videoTrack = await AgoraRTC.createCameraVideoTrack();
@@ -356,7 +356,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
       } else {
         // For now, viewers will also join Agora to see the battle.
         // This can be changed to Mux if a single stream is preferred for viewers.
-        await client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, roomName, null, effectiveUserId);
+        await client.join(import.meta.env.VITE_AGORA_APP_ID!, roomName, null, effectiveUserId);
       }
     };
 
@@ -437,8 +437,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
     const initBattle = async () => {
         try {
             // 1. Fetch Battle
-            const { data: battleData } = await supabase.from('battles').select('*').eq('id', battleId).single();
-            if (!battleData) return;
+            const { data: battleData, error: battleError } = await supabase.from('battles').select('*').eq('id', battleId).maybeSingle();
+            if (battleError || !battleData) return;
             setBattle(battleData);
 
             if (battleData.status === 'ended') {
@@ -457,12 +457,15 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
 
             // 3. Fetch My Participant Info
             if (effectiveUserId) {
-                const { data: pData } = await supabase
+                const { data: pData, error: pError } = await supabase
                     .from('battle_participants')
                     .select('*')
                     .eq('battle_id', battleId)
                     .eq('user_id', effectiveUserId)
-                    .single();
+                    .maybeSingle();
+                if (pError) {
+                    console.error("Error fetching participant data", pError);
+                }
                 
                 setParticipantInfo(pData || { role: 'viewer', team: null });
 

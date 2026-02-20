@@ -41,13 +41,11 @@ export default function BroadcastLockdownControl() {
         .from('admin_settings')
         .select('setting_value')
         .eq('setting_key', 'broadcast_lockdown_enabled')
-        .single();
+        .maybeSingle();
 
       if (error) {
         // If not found, it defaults to false, or we might need to insert it (handled by migration usually)
-        if (error.code !== 'PGRST116') {
-            console.error('Error fetching lockdown status:', error);
-        }
+        console.error('Error fetching lockdown status:', error);
         return;
       }
 

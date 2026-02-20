@@ -167,11 +167,17 @@ export default function ChatWindow({ conversationId, otherUserInfo, isOnline, on
     if (!otherUserInfo?.id) return
     
     const checkOtherUser = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
         .select('role, is_admin')
         .eq('id', otherUserInfo.id)
-        .single()
+        .maybeSingle()
+      
+      if (error || !data) {
+        console.error('Error checking other user admin status', error);
+        setIsOtherUserAdmin(false);
+        return;
+      }
       
       if (data) {
         setIsOtherUserAdmin(data.role === 'admin' || data.is_admin === true)

@@ -68,7 +68,7 @@ function BroadcastPage() {
         .from('streams')
         .select('*')
         .eq('id', streamId)
-        .single()
+        .maybeSingle()
 
       if (error || !data) {
         setError('Stream not found.')
@@ -105,6 +105,7 @@ function BroadcastPage() {
           filter: `id=eq.${streamId}`
         },
         (payload) => {
+          if (!payload.new) return;
           setStream(payload.new as Stream);
           if (payload.new.status === 'ended') {
             navigate(`/summary/${streamId}`);
@@ -169,7 +170,7 @@ function BroadcastPage() {
           if (error) throw error
 
           await client.join(
-            process.env.NEXT_PUBLIC_AGORA_APP_ID!,
+            import.meta.env.VITE_AGORA_APP_ID!,
             stream.id,
             data.token,
             user.id

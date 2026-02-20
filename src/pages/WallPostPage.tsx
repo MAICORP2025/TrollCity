@@ -26,7 +26,7 @@ export default function WallPostPage() {
           .from('troll_wall_posts')
           .select('*, user_profiles(username, avatar_url, is_admin, is_troll_officer, is_og_user)')
           .eq('id', postId)
-          .single()
+          .maybeSingle()
 
         if (error) throw error
 
@@ -41,7 +41,7 @@ export default function WallPostPage() {
               .select('id')
               .eq('post_id', postId)
               .eq('user_id', user.id)
-              .single()
+              .maybeSingle()
             userLiked = !!likeData
           }
 

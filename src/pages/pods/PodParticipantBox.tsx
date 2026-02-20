@@ -44,11 +44,15 @@ export default function PodParticipantBox({
   useEffect(() => {
     // Fetch profile
     const fetchProfile = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
         .select('username, avatar_url')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
+      if (error) {
+        console.error("Error fetching user profile", error);
+        return;
+      }
       if (data) setUserProfile(data);
     };
     fetchProfile();

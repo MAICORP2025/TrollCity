@@ -56,7 +56,7 @@ export default function MaiTalentPage() {
         .from('mai_talent_config')
         .select('is_live')
         .eq('id', 1)
-        .single();
+        .maybeSingle();
       
       if (data) {
         setShowActive(data.is_live);

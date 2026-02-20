@@ -186,11 +186,14 @@ export default function ModerationPanel({ targetUserId, roomId }: ModerationPane
           <Action label="Ban User" color="bg-red-700" onClick={handleBan} />
           <Action label="Ban IP Address" color="bg-red-900" onClick={async () => {
             // Fetch IP first if possible
-             const { data } = await supabase
+             const { data, error } = await supabase
               .from('user_profiles')
               .select('last_known_ip')
               .eq('id', targetUserId)
-              .single()
+              .maybeSingle()
+            if (error) {
+                console.error("Error fetching user IP", error);
+            }
             
             if (data?.last_known_ip) {
               setTargetIP(data.last_known_ip)

@@ -411,9 +411,9 @@ export default function TrollCityWall() {
         .from('user_profiles')
         .select('role, is_admin, is_troll_officer, is_lead_officer')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
-      if (profileError) {
+      if (profileError || !userProfile) {
         console.error('Error fetching profile for delete:', profileError)
         toast.error('Failed to verify delete permissions')
         return

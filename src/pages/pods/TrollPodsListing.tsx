@@ -118,9 +118,11 @@ export default function TrollPodsListing() {
           agora_channel_name: agoraChannelName,
         })
         .select()
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error || !data) {
+        throw error || new Error('Failed to create pod room and get result.');
+      }
 
       // Ensure host is a participant for RLS-protected reads
       await supabase.from('pod_room_participants').insert({

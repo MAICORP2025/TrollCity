@@ -174,9 +174,21 @@ export default function TrollOfficerLounge() {
         .from('user_profiles')
         .select('officer_reputation_score, total_coins_earned, officer_tier_badge')
         .eq('id', viewingOfficerId)
-        .single()
+        .maybeSingle()
 
-      if (!error && data) {
+      if (error || !data) {
+        console.error('Error fetching officer stats', error)
+        // Do not toast here, as it could be annoying if it fails silently.
+        // Resetting stats might be a good idea.
+        setOfficerStats({
+          kicks: 0,
+          bans: 0,
+          mutes: 0,
+          coinsEarned: 0,
+          reputation: 0,
+          rank: 'Bronze I'
+        })
+      } else {
         setOfficerStats(prev => ({
           ...prev,
           reputation: data.officer_reputation_score || 0,

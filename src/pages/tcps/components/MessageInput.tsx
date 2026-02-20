@@ -30,11 +30,17 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
     if (!otherUserId) return
     
     const checkOtherUser = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
         .select('role, is_admin')
         .eq('id', otherUserId)
-        .single()
+        .maybeSingle()
+
+      if (error || !data) {
+        console.error('Error checking other user admin status', error);
+        setIsOtherUserAdmin(false);
+        return;
+      }
       
       if (data) {
         setIsOtherUserAdmin(data.role === 'admin' || data.is_admin === true)
@@ -130,13 +136,13 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
       
       // Regular DM message
       // Check if user needs to pay to message
-      const { data: toUser } = await supabase
+      const { data: toUser, error: toUserError } = await supabase
         .from('user_profiles')
         .select('id, username, message_cost, role, is_troll_officer, is_troller')
         .eq('id', otherUserId)
-        .single()
+        .maybeSingle()
 
-      if (!toUser) {
+      if (toUserError || !toUser) {
         toast.error('User not found')
         setSending(false)
         return

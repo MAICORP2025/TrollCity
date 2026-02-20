@@ -204,7 +204,7 @@ export default function SetupPage() {
           layout_mode: 'grid'
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 

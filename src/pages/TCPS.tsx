@@ -61,8 +61,12 @@ export default function TCPS() {
       .from('user_profiles')
       .select('id, username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color')
       .eq('id', param)
-      .single()
-      .then(({ data }) => {
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          console.error('Error loading user from URL', error);
+          return;
+        }
         if (data) {
           setActiveConversation(data.id)
           setOtherUserInfo({
@@ -153,8 +157,12 @@ export default function TCPS() {
       .from('user_profiles')
       .select('id, username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color')
       .eq('id', activeConversation)
-      .single()
-      .then(({ data }) => {
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          console.error('Error loading other user info', error);
+          return;
+        }
         if (data) {
           setOtherUserInfo({
             id: data.id,

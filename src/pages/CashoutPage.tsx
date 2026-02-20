@@ -124,7 +124,7 @@ const CashoutPage: React.FC = () => {
           .from('user_tax_info')
           .select('w9_status')
           .eq('user_id', user?.id)
-          .single();
+          .maybeSingle();
         
         const isVerified = taxInfo?.w9_status === 'verified' || profile.w9_status === 'verified';
         if (!isVerified) {

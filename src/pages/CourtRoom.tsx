@@ -274,7 +274,7 @@ const getAgoraToken = async (room: string, identity: string) => {
       'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({
-      room: room,
+      channel: room, // Changed from 'room' to 'channel'
       identity: identity,
       role: 'host',
     }),
@@ -321,27 +321,33 @@ export default function CourtRoom() {
   const canPublish = roleCanPublish || joinBoxRequested;
 
   useEffect(() => {
-    if (!user || !courtId || !isValidUuid(courtId)) return;
+    if (!user || !courtId) return;
+
+    // Aggressive validation of courtId
+    if (!isValidUuid(courtId)) {
+      toast.error("Invalid Courtroom ID.");
+      navigate("/troll-court");
+      return;
+    }
 
     const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
     setAgoraClient(client);
 
     const join = async () => {
-      if (canPublish) {
-        try {
-          const token = await getAgoraToken(courtId, user.id);
-          await client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, courtId, token, user.id);
+      try {
+        const token = canPublish ? await getAgoraToken(courtId, user.id) : null;
+        await client.join(import.meta.env.VITE_AGORA_APP_ID!, courtId, token, canPublish ? user.id : null);
+        
+        if (canPublish) {
           const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
           const videoTrack = await AgoraRTC.createCameraVideoTrack();
           setLocalTracks([videoTrack, audioTrack]);
           await client.publish([videoTrack, audioTrack]);
-        } catch (error) {
-          console.error("Failed to auto-join as publisher:", error);
-          toast.error("Couldn't connect as a publisher. Joining as viewer.");
-          await client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, courtId, null, user.id);
         }
-      } else {
-        await client.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, courtId, null, user.id);
+      } catch (error) {
+        console.error("Agora connection failed:", error);
+        toast.error("Failed to connect to the court session. Please try again.");
+        navigate("/troll-court");
       }
     };
 
@@ -366,7 +372,7 @@ export default function CourtRoom() {
       localTracks[1]?.close();
       client.leave();
     };
-  }, [courtId, user, canPublish]);
+  }, [courtId, user, canPublish, navigate]);
 
   const roomIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -377,8 +383,8 @@ export default function CourtRoom() {
   }, [courtId]);
   
   // Court functionality state
-  const [activeCase, setActiveCase] = useState(null);
-  const [courtPhase, setCourtPhase] = useState('waiting'); // waiting, opening, evidence, deliberation, verdict
+  const [activeCase, setActiveCase] = useState<any>(null);
+  const [courtState, setCourtState] = useState<any>(null);
   const [evidence, setEvidence] = useState([]);
   const [defendant, setDefendant] = useState(null);
   const [judge, setJudge] = useState(null);
@@ -478,75 +484,111 @@ export default function CourtRoom() {
 
 
 
-  // Keep box count in sync for all viewers using Realtime (Push) instead of Polling (Pull)
+  // HARDENED - Multi-step loading and Realtime listeners for court state
   useEffect(() => {
-    if (!courtId) return;
-    if (courtId === 'active' || !isValidUuid(courtId)) return;
-    
-    // Initial fetch to ensure we have the latest state
-    const fetchInitialState = async () => {
-      try {
-        const { data } = await supabase
-          .from('court_sessions')
-          .select('max_boxes,status')
-          .eq('id', courtId)
-          .maybeSingle();
+    if (!courtId || !isValidUuid(courtId)) return;
 
-        if (data) {
-          if (data.status && !['active', 'live', 'waiting'].includes(data.status)) {
-            toast.info('Court session ended');
-            navigate('/troll-court');
-            return;
-          }
-          if (typeof data.max_boxes === 'number') {
-             setBoxCount((prev) => {
-               const newCount = Math.min(4, Math.max(2, data.max_boxes));
-               return newCount !== prev ? newCount : prev;
-             });
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching initial court state:', err);
+    // 1. Fetch the session, then the case, then the state
+    const fetchFullCourtState = async () => {
+      // Step 1: Get the court session
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('court_sessions')
+        .select('*')
+        .eq('id', courtId)
+        .maybeSingle();
+
+      if (sessionError || !sessionData) {
+        toast.error("Court session not found or an error occurred.");
+        console.error("Error fetching court session:", sessionError?.message);
+        navigate('/troll-court');
+        return;
       }
+      setCourtSession(sessionData);
+
+      if (sessionData.status && !['active', 'live', 'waiting'].includes(sessionData.status)) {
+        toast.info('This court session has concluded.');
+        navigate('/troll-court');
+        return;
+      }
+      
+      const caseId = sessionData.case_id;
+      if (!caseId || !isValidUuid(caseId)) {
+          toast.error("Invalid case ID associated with this session.");
+          navigate('/troll-court');
+          return;
+      }
+
+      // Step 2: Get the court case
+      const { data: caseData, error: caseError } = await supabase
+        .from('court_cases')
+        .select('*')
+        .eq('id', caseId)
+        .single(); // A session MUST have a case.
+
+      if (caseError || !caseData) {
+        toast.error("Could not load the associated court case.");
+        console.error("Error fetching court case:", caseError?.message);
+        navigate('/troll-court');
+        return;
+      }
+      setActiveCase(caseData);
+
+      // Step 3: Get the court session state
+      const { data: stateData, error: stateError } = await supabase
+        .from('court_session_state')
+        .select('*')
+        .eq('case_id', caseId)
+        .maybeSingle(); // Use maybeSingle due to potential (but unlikely) race conditions
+
+      if (stateError || !stateData) {
+        // This should be rare now due to the auto-create trigger
+        toast.warning("Could not load court session state. The system will attempt to recover.");
+        console.error("Error fetching court session state:", stateError?.message);
+        // We don't navigate away here, as the trigger should fix this.
+      }
+      setCourtState(stateData);
+      setBoxCount(Math.min(4, Math.max(2, sessionData.max_boxes || 2)));
     };
     
-    fetchInitialState();
+    fetchFullCourtState();
 
-    const channel = supabase
+    // REALTIME LISTENERS
+    const sessionChannel = supabase
       .channel(`court_session_updates_${courtId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'court_sessions',
-          filter: `id=eq.${courtId}`,
-        },
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'court_sessions', filter: `id=eq.${courtId}` },
         (payload) => {
+          if (!payload || !payload.new) return; // Guard against null payload
           const newData = payload.new as any;
+          
           if (newData.status && !['active', 'live', 'waiting'].includes(newData.status)) {
             toast.info('Court session ended');
             navigate('/troll-court');
             return;
           }
+          
           if (typeof newData.max_boxes === 'number') {
             const newBoxCount = Math.min(4, Math.max(2, newData.max_boxes));
-            setBoxCount((prev) => {
-              if (prev !== newBoxCount) {
-                console.log('[CourtRoom] BoxCount updated via Realtime:', newBoxCount);
-                return newBoxCount;
-              }
-              return prev;
-            });
+            setBoxCount(prev => prev !== newBoxCount ? newBoxCount : prev);
           }
         }
-      )
-      .subscribe();
+      ).subscribe();
+      
+    const stateChannel = supabase
+      .channel(`court_state_updates_${courtId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'court_session_state', filter: `case_id=eq.${(courtSession as any)?.case_id}` },
+        (payload) => {
+            if (!payload || !payload.new) return; // Guard against null payload
+            console.log("Received court_session_state update:", payload.new);
+            setCourtState(payload.new);
+        }
+      ).subscribe();
+
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(sessionChannel);
+      supabase.removeChannel(stateChannel);
     };
-  }, [courtId, navigate]);
+  }, [courtId, navigate, user]);
 
   useEffect(() => {
     console.log('[CourtRoom] Component mounted with courtId:', courtId);
@@ -589,7 +631,7 @@ export default function CourtRoom() {
       }
 
       const token = await getAgoraToken(courtId, user.id);
-      await agoraClient.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, courtId, token, user.id);
+      await agoraClient.join(import.meta.env.VITE_AGORA_APP_ID!, courtId, token, user.id);
       const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
       const videoTrack = await AgoraRTC.createCameraVideoTrack();
       setLocalTracks([videoTrack, audioTrack]);
@@ -624,7 +666,7 @@ export default function CourtRoom() {
       toast.info('You have left the box and stopped publishing.');
       // Rejoin as viewer if needed, or simply leave the channel
       if (courtId && user) {
-        await agoraClient.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, courtId, null, user.id);
+        await agoraClient.join(import.meta.env.VITE_AGORA_APP_ID!, courtId, null, user.id);
       }
     } catch (error: any) {
       console.error('Failed to leave box and unpublish:', error);
@@ -633,91 +675,7 @@ export default function CourtRoom() {
   };
 
 
-  useEffect(() => {
-    const fetchCourtSession = async () => {
-      if (!courtId || !isValidUuid(courtId)) return;
-      const { data, error } = await supabase
-        .from('court_sessions')
-        .select(`
-          *,
-          cases (*),
-          judge_profile:judge_id(username),
-          defendant_profile:defendant_id(username)
-        `)
-        .eq('id', courtId)
-        .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching court session:', error);
-        toast.error('Failed to load court session.');
-        navigate('/troll-court');
-        return;
-      }
-      if (data) {
-        setCourtSession({
-          ...data,
-          judge_username: data.judge_profile?.username,
-          defendant_username: data.defendant_profile?.username,
-        });
-        setBoxCount(Math.min(4, Math.max(2, data.max_boxes || 2)));
-        if (data.cases) {
-          setActiveCase(data.cases);
-          setCourtPhase(data.cases.status || 'waiting');
-          setEvidence(data.cases.evidence || []);
-          setDefendant(data.cases.defendant_id);
-          setJudge(data.cases.judge_id);
-          setVerdict(data.cases.verdict || null);
-        }
-
-        // Check if user is already a publisher based on initial courtSession data
-        const isUserPublisher = (data.judge_id === user?.id || data.defendant_id === user?.id || data.accuser_id === user?.id); // Extend this logic as needed
-        setJoinBoxRequested(isUserPublisher);
-      } else {
-        toast.error('Court session not found.');
-        navigate('/troll-court');
-      }
-    };
-    fetchCourtSession();
-
-    const channel = supabase
-      .channel(`court_session:${courtId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen to all events
-          schema: 'public',
-          table: 'court_sessions',
-          filter: `id=eq.${courtId}`,
-        },
-        (payload) => {
-          const newData = payload.new as any;
-          if (newData) {
-            setCourtSession((prev: any) => ({
-              ...prev,
-              ...newData,
-              judge_username: newData.judge_profile?.username || prev?.judge_username,
-              defendant_username: newData.defendant_profile?.username || prev?.defendant_username,
-            }));
-            if (newData.cases) {
-              setActiveCase(newData.cases);
-              setCourtPhase(newData.cases.status || 'waiting');
-              setEvidence(newData.cases.evidence || []);
-              setDefendant(newData.cases.defendant_id);
-              setJudge(newData.cases.judge_id);
-              setVerdict(newData.cases.verdict || null);
-            }
-            if (typeof newData.max_boxes === 'number') {
-              setBoxCount(Math.min(4, Math.max(2, newData.max_boxes)));
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [courtId, user, navigate]);
 
   const toggleGeminiModal = () => setIsGeminiModalOpen(!isGeminiModalOpen);
   const toggleDocketModal = () => setShowDocketModal(!showDocketModal);
@@ -785,12 +743,12 @@ export default function CourtRoom() {
           <div className="mb-6 bg-gray-800 p-4 rounded-lg shadow-lg">
             <h2 className="text-xl font-semibold mb-2">Session Details</h2>
             <p><strong>Status:</strong> {courtSession.status}</p>
-            {courtSession.cases && (
+            {courtSession.court_cases && courtSession.court_cases[0] && (
               <div className="mt-4">
-                <h3 className="text-lg font-medium">Active Case: {courtSession.cases.title}</h3>
+                <h3 className="text-lg font-medium">Active Case: {courtSession.court_cases[0].title}</h3>
                 <p><strong>Defendant:</strong> {courtSession.defendant_username || 'N/A'}</p>
                 <p><strong>Judge:</strong> {courtSession.judge_username || 'N/A'}</p>
-                <p><strong>Phase:</strong> {courtPhase}</p>
+                <p><strong>Phase:</strong> {courtState?.phase || 'waiting'}</p>
                 {activeCase?.description && <p><strong>Description:</strong> {activeCase.description}</p>}
                 {verdict && <p><strong>Verdict:</strong> {verdict}</p>}
               </div>

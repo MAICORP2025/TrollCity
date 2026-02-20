@@ -224,9 +224,9 @@ export default function AdminDashboard() {
           .from('user_profiles')
           .select('role, is_admin')
           .eq('id', session.user.id)
-          .single()
+          .maybeSingle()
 
-        if (error) {
+        if (error || !profileData) {
           console.error('Error checking admin access:', error)
           setAdminCheckLoading(false)
           setIsAuthorized(false)
@@ -417,7 +417,7 @@ export default function AdminDashboard() {
       const { data: summary, error: summaryError } = await supabase
         .from('economy_summary')
         .select('*')
-        .single()
+        .maybeSingle()
       
       if (!summaryError && summary) {
         // We could use this summary directly if we had a place for it, 

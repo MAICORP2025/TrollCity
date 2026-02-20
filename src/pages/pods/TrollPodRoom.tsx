@@ -42,8 +42,27 @@ interface PodParticipant {
 }
 
 // --- Active Speaker / Host View ---
-function PodRoomContent({ room, participants, localAudioTrack, remoteUsers, isHost, canPublish, onLeave, muxPlaybackId }) {
-    const { user: currentUser } = useAuthStore();
+function PodRoomContent({ 
+  room, 
+  participantsData, 
+  participantCount,
+  currentUser,
+  isHost,
+  isStaff,
+  isGuest,
+  canPublish,
+  localAudioTrack, 
+  remoteUsers, 
+  muxPlaybackId,
+  onRequestSpeak,
+  onApproveRequest,
+  onRemoveSpeaker,
+  onCancelRequest,
+}) {
+  const navigate = useNavigate();
+  const [showChat, setShowChat] = useState(true);
+  const [showHostPanel, setShowHostPanel] = useState(false);
+  const [trollsTownControlOpen, setTrollsTownControlOpen] = useState(false);
   const [isMicOn, setIsMicOn] = useState(localAudioTrack ? !localAudioTrack.muted : false);
 
   const toggleMic = async () => {
@@ -230,11 +249,12 @@ function PodRoomContent({ room, participants, localAudioTrack, remoteUsers, isHo
             
             // Check if hand raised changed from false to true
             if (newRec.is_hand_raised && !oldRec.is_hand_raised) {
-                 const { data: userProfile } = await supabase
+                 const { data: userProfile, error } = await supabase
                     .from('user_profiles')
                     .select('username')
                     .eq('id', newRec.user_id)
-                    .single();
+                    .maybeSingle();
+                 if (error) return;
                  
                  const name = userProfile?.username || 'A listener';
                  
@@ -254,11 +274,12 @@ function PodRoomContent({ room, participants, localAudioTrack, remoteUsers, isHo
             filter: `room_id=eq.${room.id}`
         }, async (payload: any) => {
              if (payload.new.is_hand_raised) {
-                 const { data: userProfile } = await supabase
+                 const { data: userProfile, error } = await supabase
                     .from('user_profiles')
                     .select('username')
                     .eq('id', payload.new.user_id)
-                    .single();
+                    .maybeSingle();
+                 if (error) return;
                  
                  const name = userProfile?.username || 'A listener';
                  
@@ -497,7 +518,7 @@ export default function TrollPodRoom() {
           .from('current_user_is_following')
           .select('token')
           .eq('room_name', roomName)
-          .single();
+          .maybeSingle();
 
         if (error || !data) {
           console.error('Error fetching token', error);
@@ -505,7 +526,7 @@ export default function TrollPodRoom() {
         }
 
         await client.join(
-          process.env.NEXT_PUBLIC_AGORA_APP_ID!,
+          import.meta.env.VITE_AGORA_APP_ID!,
           roomName,
           data.token,
           currentUser.id
@@ -519,7 +540,7 @@ export default function TrollPodRoom() {
           .from('rooms')
           .select('mux_playback_id')
           .eq('name', roomName)
-          .single();
+          .maybeSingle();
 
         if (error || !data) {
           console.error('Error fetching mux playback id', error);
@@ -891,7 +912,8 @@ export default function TrollPodRoom() {
       canPublish={canPublish}
       isGuest={isGuest}
       remoteUsers={remoteUsers}
-      localTracks={localAudioTrack ? [localAudioTrack] : []}
+      localAudioTrack={localAudioTrack}
+      muxPlaybackId={muxPlaybackId}
     />
   );
 }
