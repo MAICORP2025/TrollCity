@@ -27,7 +27,7 @@ export function useCreditScore(targetUserId?: string) {
       // Fetch credit_score and trends from user_credit
           const { data: row, error: err } = await supabase
             .from('user_credit')
-            .select('user_id, score, tier, trend_7d, trend_30d')
+            .select('user_id, score, tier, trend_7d, trend_30d, updated_at')
             .eq('user_id', userId)
             .maybeSingle()
 
