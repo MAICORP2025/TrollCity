@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Scale, AlertCircle, LogOut, Send, Gavel } from "lucide-react";
 import { courtSystem, CourtSession } from "@/lib/courtSystem";
-import { roomManager, RoomInstance } from "../lib/roomManager";
+import { roomManager, RoomInstance } from "@/lib/roomManager";
 import { useAuthStore } from "@/lib/store";
 
 export default function TrollCourtSession() {
