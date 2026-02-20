@@ -36,3 +36,8 @@ gixnow
 
 # Vercel
 .vercel
+
+# Unreal Engine related files and webcache
+trolltown_unreal/
+*.uproject
+

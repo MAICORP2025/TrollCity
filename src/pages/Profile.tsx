@@ -981,7 +981,7 @@ function ProfileInner() {
             <CreditScoreBadge
               score={creditData?.score}
               tier={creditData?.tier}
-              trend7d={creditData?.trend_7d}
+              trend30d={creditData?.trend_30d}
               loading={creditLoading}
             />
           </div>
