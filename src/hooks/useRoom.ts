@@ -114,6 +114,21 @@ export function useRoom({ url, token, onConnected, onDisconnected }: UseRoomOpti
     isMicrophoneEnabled,
     toggleCamera,
     toggleMicrophone,
+    // Legacy API aliases for backwards compatibility
+    join: () => {}, // No-op - connection is automatic when url/token provided
+    localTracks: [localVideoTrack, localAudioTrack],
+    remoteUsers,
+    leave: () => {
+      if (roomRef.current) {
+        roomRef.current.leave();
+        roomRef.current = null;
+      }
+    },
   };
+}
+
+// Legacy alias for backwards compatibility
+export function useAgoraRoom() {
+  return useRoom({});
 }
 

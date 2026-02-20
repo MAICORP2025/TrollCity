@@ -1,0 +1,791 @@
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../lib/store'
+import { supabase } from '../lib/supabase'
+import { toast } from 'sonner'
+import { 
+  Search, MapPin, Filter, Grid, List, Car, Wrench, ShoppingBag, 
+  MessageCircle, DollarSign, Clock, Star, CheckCircle, AlertTriangle,
+  ChevronDown, X, Image as ImageIcon, Send, Phone, Mail, Globe,
+  Navigation, Heart, Eye, ChevronLeft, ChevronRight
+} from 'lucide-react'
+
+// Category definitions
+const MARKETPLACE_CATEGORIES = [
+  { id: 'electronics', label: 'Electronics', icon: '📱' },
+  { id: 'clothing', label: 'Clothing', icon: '👕' },
+  { id: 'furniture', label: 'Furniture', icon: '🪑' },
+  { id: 'vehicles', label: 'Vehicles', icon: '🚗' },
+  { id: 'sports', label: 'Sports', icon: '⚽' },
+  { id: 'toys', label: 'Toys & Games', icon: '🎮' },
+  { id: 'home', label: 'Home & Garden', icon: '🏡' },
+  { id: 'beauty', label: 'Beauty', icon: '💄' },
+  { id: 'books', label: 'Books', icon: '📚' },
+  { id: 'other', label: 'Other', icon: '📦' },
+]
+
+const SERVICE_CATEGORIES = [
+  { id: 'mechanic', label: 'Mechanics', icon: '🔧' },
+  { id: 'mover', label: 'Movers', icon: '📦' },
+  { id: 'electrician', label: 'Electricians', icon: '⚡' },
+  { id: 'plumber', label: 'Plumbers', icon: '🚿' },
+  { id: 'barber', label: 'Barbers', icon: '💇' },
+  { id: 'cleaning', label: 'Cleaning', icon: '🧹' },
+  { id: 'tutor', label: 'Tutors', icon: '📖' },
+  { id: 'photographer', label: 'Photographers', icon: '📷' },
+  { id: 'event_planner', label: 'Event Planners', icon: '🎉' },
+  { id: 'contractor', label: 'Contractors', icon: '🏗️' },
+  { id: 'freelancer', label: 'Freelancers', icon: '💼' },
+  { id: 'other', label: 'Other', icon: '🔨' },
+]
+
+const VEHICLE_MAKES = [
+  'Acura', 'Audi', 'BMW', 'Buick', 'Cadillac', 'Chevrolet', 'Chrysler',
+  'Dodge', 'Ford', 'GMC', 'Honda', 'Hyundai', 'Infiniti', 'Jaguar',
+  'Jeep', 'Kia', 'Lexus', 'Lincoln', 'Mazda', 'Mercedes-Benz', 'Nissan',
+  'Porsche', 'Ram', 'Subaru', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo'
+]
+
+// Types
+interface MarketplaceItem {
+  id: string
+  seller_id: string
+  title: string
+  description: string
+  price_coins: number
+  price_usd: number
+  category: string
+  condition: string
+  delivery_type: string
+  city: string
+  state: string
+  images: string[]
+  stock: number
+  status: string
+  created_at: string
+  seller?: {
+    username: string
+    avatar_url?: string
+  }
+  distance_km?: number
+}
+
+interface VehicleListing {
+  id: string
+  seller_id: string
+  title: string
+  price_coins: number
+  price_usd: number
+  make: string
+  model: string
+  year: number
+  mileage: number
+  condition: string
+  body_type: string
+  fuel_type: string
+  transmission: string
+  color: string
+  description: string
+  city: string
+  state: string
+  images: string[]
+  status: string
+  created_at: string
+  seller?: {
+    username: string
+    avatar_url?: string
+  }
+  distance_km?: number
+}
+
+interface BusinessProfile {
+  id: string
+  owner_id: string
+  business_name: string
+  description: string
+  category: string
+  phone: string
+  email: string
+  website: string
+  city: string
+  state: string
+  logo_url: string
+  banner_url: string
+  verified: boolean
+  rating: number
+  total_reviews: number
+  status: string
+  created_at: string
+  distance_km?: number
+}
+
+interface ServiceListing {
+  id: string
+  business_id: string
+  title: string
+  description: string
+  price_type: string
+  price_coins: number
+  price_usd: number
+  category: string
+  is_remote: boolean
+  city: string
+  state: string
+  images: string[]
+  status: string
+  created_at: string
+  business_name?: string
+  business_rating?: number
+  distance_km?: number
+}
+
+export default function Trollifieds() {
+  const { user } = useAuthStore()
+  const navigate = useNavigate()
+  
+  // View state
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'vehicles' | 'services'>('marketplace')
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid')
+  
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [category, setCategory] = useState<string | null>(null)
+  const [condition, setCondition] = useState<string | null>(null)
+  const [deliveryType, setDeliveryType] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<'newest' | 'price_low' | 'price_high' | 'distance'>('newest')
+  
+  // Data state
+  const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([])
+  const [vehicleListings, setVehicleListings] = useState<VehicleListing[]>([])
+  const [businesses, setBusinesses] = useState<BusinessProfile[]>([])
+  const [services, setServices] = useState<ServiceListing[]>([])
+  
+  // Loading state
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  
+  // Map state
+  const [showMap, setShowMap] = useState(false)
+  const [userLocation, setUserLocation] = useState<{lat: number, lon: number} | null>(null)
+  const [mapRadius, setMapRadius] = useState(50) // km
+  
+  // Messaging state
+  const [messageModal, setMessageModal] = useState<{open: boolean, recipientId?: string, listingId?: string, listingType?: string}>({open: false})
+  const [messageText, setMessageText] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
+  
+  // Legal disclaimer
+  const [showDisclaimer, setShowDisclaimer] = useState(false)
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(false)
+
+  // Get user location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          })
+        },
+        () => {
+          // Default to a central US location if permission denied
+          setUserLocation({ lat: 39.8283, lon: -98.5795 })
+        }
+      )
+    }
+  }, [])
+
+  // Load data based on active tab
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      if (activeTab === 'marketplace') {
+        let query = supabase
+          .from('marketplace_items')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(100)
+
+        if (category) query = query.eq('category', category)
+        if (searchQuery) query = query.ilike('title', `%${searchQuery}%`)
+        
+        const { data, error } = await query
+        if (error) throw error
+        setMarketplaceItems(data || [])
+      } else if (activeTab === 'vehicles') {
+        let query = supabase
+          .from('vehicle_listings')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(50)
+
+        if (searchQuery) query = query.ilike('title', `%${searchQuery}%`)
+        
+        const { data, error } = await query
+        if (error) throw error
+        setVehicleListings(data || [])
+      } else if (activeTab === 'services') {
+        // Load businesses and services
+        const { data: businessesData } = await supabase
+          .from('business_profiles')
+          .select('*')
+          .eq('status', 'active')
+          .order('rating', { ascending: false })
+          .limit(50)
+
+        const { data: servicesData } = await supabase
+          .from('service_listings')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(50)
+
+        // Get business names for services
+        const businessIds = [...new Set((servicesData || []).map(s => s.business_id))]
+        const { data: businessProfiles } = await supabase
+          .from('business_profiles')
+          .select('id, business_name, rating')
+          .in('id', businessIds)
+
+        const businessMap = (businessProfiles || []).reduce((acc, b) => {
+          acc[b.id] = b
+          return acc
+        }, {})
+
+        const servicesWithBusiness = (servicesData || []).map(s => ({
+          ...s,
+          business_name: businessMap[s.business_id]?.business_name,
+          business_rating: businessMap[s.business_id]?.rating
+        }))
+
+        setBusinesses(businessesData || [])
+        setServices(servicesWithBusiness)
+      }
+    } catch (err) {
+      console.error('Error loading data:', err)
+      toast.error('Failed to load listings')
+    } finally {
+      setLoading(false)
+    }
+  }, [activeTab, category, searchQuery])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // Realtime subscriptions
+  useEffect(() => {
+    const tableName = activeTab === 'marketplace' ? 'marketplace_items' : 
+                      activeTab === 'vehicles' ? 'vehicle_listings' : 'service_listings'
+    
+    const channel = supabase
+      .channel(`trollifieds_${activeTab}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: tableName },
+        () => {
+          loadData()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [activeTab, loadData])
+
+  // Filtered and sorted items
+  const filteredItems = useMemo(() => {
+    let items: any[] = []
+    
+    if (activeTab === 'marketplace') {
+      items = [...marketplaceItems]
+    } else if (activeTab === 'vehicles') {
+      items = [...vehicleListings]
+    } else if (activeTab === 'services') {
+      items = services
+    }
+
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      items = items.filter(item => 
+        item.title?.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query) ||
+        item.business_name?.toLowerCase().includes(query) ||
+        item.make?.toLowerCase().includes(query) ||
+        item.model?.toLowerCase().includes(query)
+      )
+    }
+
+    // Sort
+    items.sort((a, b) => {
+      switch (sortBy) {
+        case 'price_low':
+          return (a.price_usd || 0) - (b.price_usd || 0)
+        case 'price_high':
+          return (b.price_usd || 0) - (a.price_usd || 0)
+        case 'distance':
+          return (a.distance_km || 999) - (b.distance_km || 999)
+        default:
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      }
+    })
+
+    return items
+  }, [activeTab, marketplaceItems, vehicleListings, services, searchQuery, sortBy])
+
+  // Send message
+  const handleSendMessage = async () => {
+    if (!user) {
+      navigate('/auth')
+      return
+    }
+
+    if (!messageText.trim()) {
+      toast.error('Please enter a message')
+      return
+    }
+
+    setSendingMessage(true)
+    try {
+      const { error } = await supabase.rpc('send_marketplace_message', {
+        p_recipient_id: messageModal.recipientId,
+        p_listing_id: messageModal.listingId,
+        p_listing_type: messageModal.listingType,
+        p_message: messageText.trim()
+      })
+
+      if (error) throw error
+
+      toast.success('Message sent!')
+      setMessageModal({ open: false })
+      setMessageText('')
+    } catch (err: any) {
+      console.error('Error sending message:', err)
+      toast.error('Failed to send message')
+    } finally {
+      setSendingMessage(false)
+    }
+  }
+
+  // Open message modal
+  const openMessageModal = (recipientId: string, listingId?: string, listingType?: string) => {
+    if (!user) {
+      navigate('/auth')
+      return
+    }
+    setMessageModal({ open: true, recipientId, listingId, listingType })
+  }
+
+  // Get price display
+  const getPriceDisplay = (item: any) => {
+    if (item.price_coins && item.price_usd) {
+      return (
+        <span className="text-yellow-400 font-bold">
+          💰 {item.price_coins.toLocaleString()} coins
+          <span className="text-gray-400 text-sm ml-2">(${item.price_usd})</span>
+        </span>
+      )
+    } else if (item.price_usd) {
+      return <span className="text-green-400 font-bold">${item.price_usd?.toLocaleString()}</span>
+    } else if (item.price_coins) {
+      return <span className="text-yellow-400 font-bold">💰 {item.price_coins.toLocaleString()} coins</span>
+    }
+    return <span className="text-blue-400 font-bold">Contact for price</span>
+  }
+
+  // Get first image from images array
+  const getImage = (item: any) => {
+    if (item.images && item.images.length > 0) {
+      return item.images[0]
+    }
+    if (item.image_url) {
+      return item.image_url
+    }
+    return null
+  }
+
+  // Format date
+  const formatDate = (date: string) => {
+    const d = new Date(date)
+    const now = new Date()
+    const diff = now.getTime() - d.getTime()
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    
+    if (days === 0) return 'Today'
+    if (days === 1) return 'Yesterday'
+    if (days < 7) return `${days} days ago`
+    return d.toLocaleDateString()
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
+      {/* Header */}
+      <div className="bg-[#1A1A1A] border-b border-[#2C2C2C] sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-green-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">
+                Trollifieds
+              </h1>
+              <span className="text-xs bg-purple-600 px-2 py-1 rounded-full">Local Marketplace</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/sell')}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium text-sm flex items-center gap-2"
+              >
+                <DollarSign className="w-4 h-4" />
+                Sell Item
+              </button>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search marketplace, vehicles, services..."
+              className="w-full pl-10 pr-4 py-3 bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg focus:border-purple-500 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-700 rounded"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-2 mb-4 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('marketplace')}
+              className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'marketplace' 
+                  ? 'bg-purple-600 text-white' 
+                  : 'bg-[#0D0D0D] text-gray-400 hover:text-white'
+              }`}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              Marketplace
+            </button>
+            <button
+              onClick={() => setActiveTab('vehicles')}
+              className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'vehicles' 
+                  ? 'bg-purple-600 text-white' 
+                  : 'bg-[#0D0D0D] text-gray-400 hover:text-white'
+              }`}
+            >
+              <Car className="w-4 h-4" />
+              Vehicles
+            </button>
+            <button
+              onClick={() => setActiveTab('services')}
+              className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'services' 
+                  ? 'bg-purple-600 text-white' 
+                  : 'bg-[#0D0D0D] text-gray-400 hover:text-white'
+              }`}
+            >
+              <Wrench className="w-4 h-4" />
+              Services
+            </button>
+
+            <div className="flex-1" />
+
+            {/* Sort */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none"
+            >
+              <option value="newest">Newest First</option>
+              <option value="price_low">Price: Low to High</option>
+              <option value="price_high">Price: High to Low</option>
+              <option value="distance">Nearest First</option>
+            </select>
+
+            {/* View Toggle */}
+            <div className="flex bg-[#0D0D0D] rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded ${viewMode === 'grid' ? 'bg-purple-600' : 'text-gray-400'}`}
+              >
+                <Grid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowMap(!showMap)}
+                className={`p-2 rounded ${showMap ? 'bg-purple-600' : 'text-gray-400'}`}
+              >
+                <MapPin className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Category Filters */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2">
+            <button
+              onClick={() => setCategory(null)}
+              className={`px-3 py-1 rounded-full text-sm whitespace-nowrap ${
+                !category ? 'bg-purple-600 text-white' : 'bg-[#0D0D0D] text-gray-400'
+              }`}
+            >
+              All
+            </button>
+            {(activeTab === 'marketplace' ? MARKETPLACE_CATEGORIES : 
+              activeTab === 'services' ? SERVICE_CATEGORIES : 
+              [{ id: 'all', label: 'All Makes', icon: '🚗' }]).map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setCategory(cat.id === 'all' ? null : cat.id)}
+                className={`px-3 py-1 rounded-full text-sm whitespace-nowrap flex items-center gap-1 ${
+                  category === cat.id ? 'bg-purple-600 text-white' : 'bg-[#0D0D0D] text-gray-400 hover:text-white'
+                }`}
+              >
+                <span>{cat.icon}</span>
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Legal Disclaimer Banner */}
+      <div className="bg-yellow-900/20 border-b border-yellow-500/30 px-4 py-2">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <p className="text-yellow-300 text-sm">
+            ⚠️ Troll City does not verify packages or physical goods. Sellers are solely responsible for items shipped. 
+            Illegal items are prohibited and may be reported to authorities.
+          </p>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Results Count */}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-gray-400">
+            {filteredItems.length} {activeTab === 'marketplace' ? 'items' : 
+             activeTab === 'vehicles' ? 'vehicles' : 'services'} found
+          </p>
+          {userLocation && (
+            <p className="text-gray-500 text-sm flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              Nearest location detected
+            </p>
+          )}
+        </div>
+
+        {/* Loading State */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] p-4 animate-pulse">
+                <div className="aspect-video bg-gray-700 rounded-lg mb-4" />
+                <div className="h-4 bg-gray-700 rounded w-3/4 mb-2" />
+                <div className="h-4 bg-gray-700 rounded w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="text-6xl mb-4">🔍</div>
+            <h3 className="text-xl font-bold mb-2">No listings found</h3>
+            <p className="text-gray-400 mb-4">Try adjusting your search or filters</p>
+            <button
+              onClick={() => {
+                setSearchQuery('')
+                setCategory(null)
+              }}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
+            >
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredItems.map((item: any) => (
+              <div 
+                key={item.id} 
+                className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] overflow-hidden hover:border-purple-500/50 transition-colors group"
+              >
+                {/* Image */}
+                <div className="aspect-video bg-[#0D0D0D] relative overflow-hidden">
+                  {getImage(item) ? (
+                    <img
+                      src={getImage(item)}
+                      alt={item.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23222" width="100" height="100"/%3E%3Ctext fill="%23666" font-size="20" x="50" y="55" text-anchor="middle"%3ENo Image%3C/text%3E%3C/svg%3E'
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-12 h-12 text-gray-600" />
+                    </div>
+                  )}
+                  {/* Condition Badge */}
+                  {item.condition && (
+                    <span className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-xs capitalize">
+                      {item.condition}
+                    </span>
+                  )}
+                  {/* Distance Badge */}
+                  {item.distance_km && (
+                    <span className="absolute top-2 right-2 bg-black/70 px-2 py-1 rounded text-xs flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {item.distance_km.toFixed(1)} km
+                    </span>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="p-4">
+                  <h3 className="font-bold text-white mb-1 line-clamp-1">{item.title}</h3>
+                  {item.business_name && (
+                    <p className="text-purple-400 text-sm mb-1">{item.business_name}</p>
+                  )}
+                  {item.make && item.model && (
+                    <p className="text-gray-400 text-sm mb-1">{item.year} {item.make} {item.model}</p>
+                  )}
+                  {item.description && (
+                    <p className="text-gray-500 text-sm mb-2 line-clamp-2">{item.description}</p>
+                  )}
+                  
+                  {/* Price */}
+                  <div className="mb-3">
+                    {getPriceDisplay(item)}
+                  </div>
+
+                  {/* Location & Time */}
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {item.city}, {item.state}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {formatDate(item.created_at)}
+                    </span>
+                  </div>
+
+                  {/* Rating */}
+                  {item.business_rating && (
+                    <div className="flex items-center gap-1 mb-3">
+                      <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                      <span className="text-sm font-medium">{item.business_rating.toFixed(1)}</span>
+                      <span className="text-gray-500 text-xs">({item.total_reviews || 0})</span>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openMessageModal(
+                        item.seller_id || item.owner_id, 
+                        item.id, 
+                        activeTab
+                      )}
+                      className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      Message
+                    </button>
+                    {activeTab !== 'services' && (
+                      <button className="px-3 py-2 bg-[#0D0D0D] hover:bg-[#2C2C2C] rounded-lg">
+                        <Heart className="w-4 h-4 text-gray-400" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Map View (Placeholder - would integrate with Leaflet) */}
+        {showMap && (
+          <div className="mt-6 bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] p-4">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-purple-400" />
+              Nearby Listings Map
+            </h3>
+            <div className="aspect-video bg-[#0D0D0D] rounded-lg flex items-center justify-center">
+              <div className="text-center">
+                <MapPin className="w-12 h-12 text-gray-600 mx-auto mb-2" />
+                <p className="text-gray-400">Map view with Leaflet/OpenStreetMap</p>
+                <p className="text-gray-500 text-sm">Free, no account required</p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-4">
+              <label className="text-sm text-gray-400">Search Radius:</label>
+              <input
+                type="range"
+                min="10"
+                max="200"
+                value={mapRadius}
+                onChange={(e) => setMapRadius(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="text-sm">{mapRadius} km</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Message Modal */}
+      {messageModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Send Message</h3>
+              <button
+                onClick={() => setMessageModal({ open: false })}
+                className="p-1 hover:bg-[#2C2C2C] rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <textarea
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder="Write your message..."
+              className="w-full h-32 bg-[#0D0D0D] border border-[#2C2C2C] rounded-lg p-3 focus:border-purple-500 outline-none resize-none"
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setMessageModal({ open: false })}
+                className="flex-1 px-4 py-2 bg-[#0D0D0D] hover:bg-[#2C2C2C] rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendMessage}
+                disabled={sendingMessage || !messageText.trim()}
+                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-lg flex items-center justify-center gap-2"
+              >
+                {sendingMessage ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
