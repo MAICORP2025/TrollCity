@@ -14,7 +14,7 @@ import { Mic, MicOff, Video, VideoOff, User } from "lucide-react";
 import { Button } from "../components/ui/button";
 import CourtGeminiModal from "../components/CourtGeminiModal";
 import CourtDocketModal from "../components/CourtDocketModal";
-import { generateSummaryFeedback } from "../lib/courtAi";
+import { generateSummaryFeedback, CourtAgentRole } from "../lib/courtAi";
 import { getGlowingTextStyle } from "../lib/perkEffects";
 
 import AgoraRTC, { IAgoraRTCClient, IAgoraRTCRemoteUser, ILocalVideoTrack, ILocalAudioTrack, IRemoteAudioTrack, IRemoteVideoTrack } from 'agora-rtc-sdk-ng';
@@ -72,6 +72,12 @@ const CourtParticipantLabel = ({ uid, username: initialUsername }: { uid: string
   );
 };
 
+type CombinedUserTrack = {
+  uid: string | number;
+  videoTrack?: ILocalVideoTrack | IRemoteVideoTrack;
+  audioTrack?: ILocalAudioTrack | IRemoteAudioTrack;
+};
+
 const CourtVideoGrid = ({ maxTiles, localTracks, remoteUsers, toggleCamera, toggleMicrophone, localUserId, courtSession }: {
   maxTiles: number;
   localTracks: [ILocalVideoTrack | undefined, ILocalAudioTrack | undefined];
@@ -85,14 +91,14 @@ const CourtVideoGrid = ({ maxTiles, localTracks, remoteUsers, toggleCamera, togg
   const localAudioTrack = localTracks[1];
 
   // Logic to determine who is judge, defendant, etc.
-  const judgeUser = remoteUsers.find(user => user.uid === courtSession?.judge_id) ||
+  const judgeUser: CombinedUserTrack | undefined = remoteUsers.find(user => user.uid === courtSession?.judge_id) ||
                    (localUserId === courtSession?.judge_id ? { uid: localUserId, videoTrack: localVideoTrack, audioTrack: localAudioTrack } : undefined);
   
-  const defendantUser = remoteUsers.find(user => user.uid === courtSession?.defendant_id) ||
+  const defendantUser: CombinedUserTrack | undefined = remoteUsers.find(user => user.uid === courtSession?.defendant_id) ||
                         (localUserId === courtSession?.defendant_id ? { uid: localUserId, videoTrack: localVideoTrack, audioTrack: localAudioTrack } : undefined);
 
-  const participantUsers = remoteUsers.filter(user => 
-    user.uid !== courtSession?.judge_id && 
+  let participantUsers: CombinedUserTrack[] = remoteUsers.filter(user =>
+    user.uid !== courtSession?.judge_id &&
     user.uid !== courtSession?.defendant_id
   );
 
@@ -106,7 +112,7 @@ const CourtVideoGrid = ({ maxTiles, localTracks, remoteUsers, toggleCamera, togg
     videoTrack: ILocalVideoTrack | IRemoteVideoTrack | undefined,
     audioTrack: ILocalAudioTrack | IRemoteAudioTrack | undefined,
     isLocal: boolean,
-    uid: string,
+    uid: string | number,
     username: string,
   ) => {
     const videoRef = useRef<HTMLDivElement>(null);
@@ -133,8 +139,8 @@ const CourtVideoGrid = ({ maxTiles, localTracks, remoteUsers, toggleCamera, togg
       };
     }, [audioTrack, isLocal]);
 
-    const isMicOn = audioTrack && audioTrack.enabled;
-    const isCamOn = videoTrack && videoTrack.enabled;
+    const isMicOn = audioTrack ? ('enabled' in audioTrack ? audioTrack.enabled : true) : false;
+    const isCamOn = videoTrack ? ('enabled' in videoTrack ? videoTrack.enabled : true) : false;
 
     return (
       <div className={`bg-gray-900 rounded-xl overflow-hidden border ${colorClass} aspect-video relative group`}>
@@ -174,7 +180,7 @@ const CourtVideoGrid = ({ maxTiles, localTracks, remoteUsers, toggleCamera, togg
             </Button>
           </div>
         )}
-        <CourtParticipantLabel uid={uid} username={username} />
+        <CourtParticipantLabel uid={uid as string} username={username} />
       </div>
     );
   };
@@ -245,14 +251,9 @@ const CourtVideoGrid = ({ maxTiles, localTracks, remoteUsers, toggleCamera, togg
       ))}
     </div>
   );
+}
 
-
-
-  
-  const isValidUuid = (value?: string | null) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value || ''
-  );
+const isValidUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value || '');
 
 const getAgoraToken = async (room: string, identity: string) => {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -309,14 +310,11 @@ export default function CourtRoom() {
    const [localTracks, setLocalTracks] = useState<[ILocalVideoTrack | undefined, ILocalAudioTrack | undefined]>([undefined, undefined]);
    const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
 
-  const isJudge =
-    profile?.role === 'admin' ||
-    profile?.role === 'lead_troll_officer' ||
-    profile?.is_admin ||
-    profile?.is_lead_officer;
-
-  // Server-side token enforces publish permissions; client mirrors as a UX hint.
-  // Judges can always publish, and users with court roles can publish
+   const isJudge =
+     profile?.role === 'admin' ||
+     profile?.role === 'lead_troll_officer' ||
+     profile?.is_admin ||
+     profile?.is_lead_officer;
   const isOfficer = profile?.role === 'troll_officer' || profile?.is_troll_officer;
   const roleCanPublish = Boolean(isJudge) || Boolean(isOfficer) ||
                          ["defendant", "accuser", "witness", "attorney"].includes(profile?.role);
@@ -446,11 +444,7 @@ export default function CourtRoom() {
   const [showDocketModal, setShowDocketModal] = useState(false);
 
 
-  const isJudge =
-    profile?.role === 'admin' ||
-    profile?.role === 'lead_troll_officer' ||
-    profile?.is_admin ||
-    profile?.is_lead_officer;
+
 
   // Duration Limit (1 hour)
   useEffect(() => {
@@ -481,7 +475,6 @@ export default function CourtRoom() {
     return profile?.role || 'user';
   };
 
-  const effectiveRole = getEffectiveRole();
 
 
 
@@ -577,11 +570,336 @@ export default function CourtRoom() {
   };
 
   const handleJoinBox = async () => {
-    if (!user || !courtId) return;
-    if (joinBoxLoading) return;
-    if (activeBoxCount >= boxCount) {
-      toast.error('All court boxes are full');
-      return;
+    setJoinBoxLoading(true);
+    try {
+      if (!agoraClient || !user || !courtId) {
+        throw new Error('Agora client, user, or courtId not available.');
+      }
+
+      // Check if already publishing
+      if (localTracks[0] && localTracks[1]) {
+        toast.info('You are already publishing your video and audio.');
+        setJoinBoxLoading(false);
+        return;
+      }
+
+      // If already joined as viewer, leave first
+      if (agoraClient.connectionState === 'CONNECTED') {
+        await agoraClient.leave();
+      }
+
+      const token = await getAgoraToken(courtId, user.id);
+      await agoraClient.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, courtId, token, user.id);
+      const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      const videoTrack = await AgoraRTC.createCameraVideoTrack();
+      setLocalTracks([videoTrack, audioTrack]);
+      await agoraClient.publish([videoTrack, audioTrack]);
+      setJoinBoxRequested(true);
+      toast.success('Successfully joined the box and started publishing!');
+    } catch (error: any) {
+      console.error('Failed to join box and publish:', error);
+      toast.error(`Failed to join box: ${error.message || 'Unknown error'}`);
+    } finally {
+      setJoinBoxLoading(false);
     }
-  }
+  };
+
+  const handleLeaveBox = async () => {
+    try {
+      if (!agoraClient) {
+        throw new Error('Agora client not available.');
+      }
+      if (localTracks[0]) {
+        await localTracks[0].close();
+        await localTracks[0].stop();
+      }
+      if (localTracks[1]) {
+        await localTracks[1].close();
+        await localTracks[1].stop();
+      }
+      setLocalTracks([undefined, undefined]);
+      await agoraClient.unpublish();
+      await agoraClient.leave();
+      setJoinBoxRequested(false);
+      toast.info('You have left the box and stopped publishing.');
+      // Rejoin as viewer if needed, or simply leave the channel
+      if (courtId && user) {
+        await agoraClient.join(process.env.NEXT_PUBLIC_AGORA_APP_ID!, courtId, null, user.id);
+      }
+    } catch (error: any) {
+      console.error('Failed to leave box and unpublish:', error);
+      toast.error(`Failed to leave box: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+
+  useEffect(() => {
+    const fetchCourtSession = async () => {
+      if (!courtId || !isValidUuid(courtId)) return;
+      const { data, error } = await supabase
+        .from('court_sessions')
+        .select(`
+          *,
+          cases (*),
+          judge_profile:judge_id(username),
+          defendant_profile:defendant_id(username)
+        `)
+        .eq('id', courtId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching court session:', error);
+        toast.error('Failed to load court session.');
+        navigate('/troll-court');
+        return;
+      }
+      if (data) {
+        setCourtSession({
+          ...data,
+          judge_username: data.judge_profile?.username,
+          defendant_username: data.defendant_profile?.username,
+        });
+        setBoxCount(Math.min(4, Math.max(2, data.max_boxes || 2)));
+        if (data.cases) {
+          setActiveCase(data.cases);
+          setCourtPhase(data.cases.status || 'waiting');
+          setEvidence(data.cases.evidence || []);
+          setDefendant(data.cases.defendant_id);
+          setJudge(data.cases.judge_id);
+          setVerdict(data.cases.verdict || null);
+        }
+
+        // Check if user is already a publisher based on initial courtSession data
+        const isUserPublisher = (data.judge_id === user?.id || data.defendant_id === user?.id || data.accuser_id === user?.id); // Extend this logic as needed
+        setJoinBoxRequested(isUserPublisher);
+      } else {
+        toast.error('Court session not found.');
+        navigate('/troll-court');
+      }
+    };
+    fetchCourtSession();
+
+    const channel = supabase
+      .channel(`court_session:${courtId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events
+          schema: 'public',
+          table: 'court_sessions',
+          filter: `id=eq.${courtId}`,
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          if (newData) {
+            setCourtSession((prev: any) => ({
+              ...prev,
+              ...newData,
+              judge_username: newData.judge_profile?.username || prev?.judge_username,
+              defendant_username: newData.defendant_profile?.username || prev?.defendant_username,
+            }));
+            if (newData.cases) {
+              setActiveCase(newData.cases);
+              setCourtPhase(newData.cases.status || 'waiting');
+              setEvidence(newData.cases.evidence || []);
+              setDefendant(newData.cases.defendant_id);
+              setJudge(newData.cases.judge_id);
+              setVerdict(newData.cases.verdict || null);
+            }
+            if (typeof newData.max_boxes === 'number') {
+              setBoxCount(Math.min(4, Math.max(2, newData.max_boxes)));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [courtId, user, navigate]);
+
+  const toggleGeminiModal = () => setIsGeminiModalOpen(!isGeminiModalOpen);
+  const toggleDocketModal = () => setShowDocketModal(!showDocketModal);
+
+  const localUserId = user?.id || '';
+
+  const localUserIsJudge = localUserId === courtSession?.judge_id;
+
+  // Placeholder for sending messages - replace with actual chat integration
+  const sendMessage = (message: string) => {
+    console.log("Sending message:", message);
+    // Logic to send message via WebSocket or other means
+  };
+
+
+  const [summaryFeedbackState, setSummaryFeedbackState] = useState<{ summaryId: string; feedback: string } | null>(null);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+
+  const handleGenerateSummaryFeedback = async (summaryId: string, summaryContent: string) => {
+    if (!summaryId || !summaryContent) return;
+    setIsSubmittingFeedback(true);
+    try {
+      await generateSummaryFeedback(summaryFeedbackState.summaryId, user?.id || '', effectiveRole as CourtAgentRole, summaryFeedbackState.feedback);
+      toast.success("Feedback generated successfully!");
+      // Note: The feedback is saved to the database by the function itself
+      // We could fetch updated summaries here if needed
+    } catch (error) {
+      console.error("Error generating feedback:", error);
+      toast.error("Error generating feedback.");
+    } finally {
+      setIsSubmittingFeedback(false);
+      setSummaryFeedbackState(null); // Close feedback modal/state
+    }
+  };
+
+  const handleSummarizeCourt = async () => {
+    setIsSubmittingSummary(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('summarize-court', {
+        body: JSON.stringify({ courtId: courtId }),
+      });
+      if (error) throw error;
+      if (data && data.summary) {
+        setSummaries(prev => [...prev, { id: data.summaryId, content: data.summary, created_at: new Date().toISOString() }]);
+        toast.success("Court summarized successfully!");
+      } else {
+        toast.error("Failed to summarize court.");
+      }
+    } catch (error) {
+      console.error("Error summarizing court:", error);
+      toast.error("Error summarizing court.");
+    } finally {
+      setIsSubmittingSummary(false);
+    }
+  };
+  
+  return (
+    <RequireRole roles={[UserRole.ADMIN, UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, UserRole.USER]} fallbackPath="/access-denied">
+      <div className="min-h-screen bg-gray-900 text-white p-4">
+        <h1 className="text-3xl font-bold text-center mb-6 tc-neon-text">
+          Courtroom {courtId}
+        </h1>
+
+        {courtSession && (
+          <div className="mb-6 bg-gray-800 p-4 rounded-lg shadow-lg">
+            <h2 className="text-xl font-semibold mb-2">Session Details</h2>
+            <p><strong>Status:</strong> {courtSession.status}</p>
+            {courtSession.cases && (
+              <div className="mt-4">
+                <h3 className="text-lg font-medium">Active Case: {courtSession.cases.title}</h3>
+                <p><strong>Defendant:</strong> {courtSession.defendant_username || 'N/A'}</p>
+                <p><strong>Judge:</strong> {courtSession.judge_username || 'N/A'}</p>
+                <p><strong>Phase:</strong> {courtPhase}</p>
+                {activeCase?.description && <p><strong>Description:</strong> {activeCase.description}</p>}
+                {verdict && <p><strong>Verdict:</strong> {verdict}</p>}
+              </div>
+            )}
+          </div>
+        )}
+
+        <CourtVideoGrid
+          maxTiles={boxCount}
+          localTracks={localTracks}
+          remoteUsers={remoteUsers}
+          toggleCamera={toggleCamera}
+          toggleMicrophone={toggleMicrophone}
+          localUserId={user?.id || ''}
+          courtSession={courtSession}
+        />
+
+        <div className="flex justify-center gap-4 mt-4">
+          <Button onClick={handleJoinBox} disabled={joinBoxLoading || joinBoxRequested}>
+            {joinBoxLoading ? 'Joining...' : 'Join Box'}
+          </Button>
+          <Button onClick={handleLeaveBox} disabled={!joinBoxRequested} variant="destructive">
+            Leave Box
+          </Button>
+          {localUserIsJudge && (
+            <Button onClick={() => setShowNewCaseModal(true)}>Start New Case</Button>
+          )}
+          <Button onClick={() => setShowDocketModal(true)}>View Docket</Button>
+          <Button onClick={() => setIsGeminiModalOpen(true)}>AI Assistant</Button>
+        </div>
+
+        {/* Modals and other components */}
+        <CourtGeminiModal
+          isOpen={isGeminiModalOpen}
+          onClose={() => setIsGeminiModalOpen(false)}
+          courtId={courtId}
+          isAuthorized={isJudge || isOfficer}
+        />
+        <CourtDocketModal
+          isOpen={showDocketModal}
+          onClose={() => setShowDocketModal(false)}
+          courtId={courtId}
+          isJudge={isJudge}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+          <CourtChat courtId={courtId} isLocked={!isJudge} />
+          <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
+            <h2 className="text-xl font-semibold mb-4">Court Controls & Info</h2>
+            <CourtAIController
+              caseId={courtId}
+              caseDetails={activeCase}
+              isJudge={isJudge}
+              evidence={evidence}
+            />
+
+            <div className="mt-6">
+              <h3 className="text-lg font-medium mb-2">Summaries</h3>
+              <Button onClick={handleSummarizeCourt} disabled={isSubmittingSummary}>
+                {isSubmittingSummary ? 'Summarizing...' : 'Summarize Court'}
+              </Button>
+              {summaries.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {summaries.map((s) => (
+                    <div key={s.id} className="bg-gray-700 p-3 rounded text-sm">
+                      <p className="font-semibold">Summary ({new Date(s.created_at).toLocaleString()}):</p>
+                      <p>{s.content}</p>
+                      {s.feedback && (
+                        <div className="mt-2 text-xs text-gray-400">
+                          <strong>AI Feedback:</strong> {s.feedback}
+                        </div>
+                      )}
+                      {isJudge && !s.feedback && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => setSummaryFeedbackState({ summaryId: s.id, feedback: s.content })}
+                          disabled={isSubmittingFeedback}
+                        >
+                          Generate Feedback
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {summaryFeedbackState && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 p-6 rounded-lg shadow-xl w-1/2">
+              <h2 className="text-xl font-semibold mb-4">Generate Feedback for Summary</h2>
+              <p className="mb-4">Are you sure you want to generate AI feedback for this summary?</p>
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setSummaryFeedbackState(null)} disabled={isSubmittingFeedback}>
+                  Cancel
+                </Button>
+                <Button onClick={() => handleGenerateSummaryFeedback(summaryFeedbackState.summaryId, summaryFeedbackState.feedback)} disabled={isSubmittingFeedback}>
+                  {isSubmittingFeedback ? 'Generating...' : 'Generate'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </RequireRole>
+  );
 }
