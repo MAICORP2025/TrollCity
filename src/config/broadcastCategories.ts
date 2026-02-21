@@ -66,6 +66,9 @@ export interface BroadcastCategoryConfig {
   isOneWayBroadcast: boolean; // No viewer-initiated actions
   requiresMinFollowers?: number;
   requiresCamera?: boolean;
+  
+  // UI visibility settings
+  showCoinBalanceInChat: boolean; // Show coin balance in live chat header
 }
 
 // Available religions for Spiritual category
@@ -109,6 +112,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: false, // Live chat category - no coin balance
   },
 
   // 2. Just Chatting - Same as General Chat but with Add/Deduct Box controls
@@ -136,6 +140,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: false, // Live chat category - no coin balance
   },
 
   // 3. Gaming - OBS streaming with RTMP
@@ -163,6 +168,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 
   // 4. Music - YouTube player as guest box
@@ -190,6 +196,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 
   // 5. IRL / Lifestyle - Rear camera only
@@ -217,6 +224,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 
   // 6. Debate & Discussion - Split screen, 2 boxes only
@@ -244,6 +252,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none', // Debate is not a battle
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: false, // Live chat category - no coin balance
   },
 
   // 7. Education - Classroom layout
@@ -271,6 +280,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: false, // Live chat category - no coin balance
   },
 
   // 8. Fitness & Sports - One-way broadcast
@@ -298,6 +308,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: true, // No viewer-initiated actions
+    showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 
   // 9. Business & Finance - Matching system with business terminology
@@ -325,6 +336,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: true,
     battleType: 'business',
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 
   // 10. Spiritual / Church - Religion matching
@@ -354,6 +366,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     battleType: 'spiritual',
     filterByReligion: true, // Match only same religion
     isOneWayBroadcast: false,
+    showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 
   // 11. Trollmers - Head-to-head battles (unchanged from current)
@@ -383,6 +396,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     isOneWayBroadcast: false,
     requiresMinFollowers: 100,
     requiresCamera: true,
+    showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 };
 
@@ -443,6 +457,12 @@ export function getMaxBoxCount(categoryId: string): number {
 export function allowFrontCamera(categoryId: string): boolean {
   const config = getCategoryConfig(categoryId);
   return config.allowFrontCamera;
+}
+
+// Helper to check if category shows coin balance in chat
+export function showCoinBalanceInChat(categoryId: string): boolean {
+  const config = getCategoryConfig(categoryId);
+  return config.showCoinBalanceInChat;
 }
 
 // Get all categories as array for UI

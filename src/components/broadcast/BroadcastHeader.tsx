@@ -4,6 +4,7 @@ import { Heart, Users, Coins, Swords } from 'lucide-react';
 import { Stream } from '../../types/broadcast';
 import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
+import { showCoinBalanceInChat } from '../../config/broadcastCategories';
 
 interface BroadcastHeaderProps {
     stream: Stream;
@@ -88,7 +89,8 @@ export default function BroadcastHeader({ stream, onStartBattle, categoryBattleT
 
     return (
         <div className="absolute top-16 left-4 right-4 z-50 flex items-center justify-end gap-3 pointer-events-none">
-            {/* Left: Coin Balance - REMOVED from left to avoid covering LIVE indicator, now on right */}
+            {/* Coin Balance - Only shown for stream categories (not live chat) */}
+            {showCoinBalanceInChat(stream.category || 'general') && (
             <div className="pointer-events-auto bg-black/40 backdrop-blur-md border border-yellow-500/30 rounded-full px-4 py-2 flex items-center gap-2 shadow-lg shadow-black/20">
                 <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/50">
                     <Coins size={16} className="text-yellow-400" />
@@ -100,6 +102,7 @@ export default function BroadcastHeader({ stream, onStartBattle, categoryBattleT
                     </span>
                 </div>
             </div>
+            )}
 
             {isHost && onStartBattle && (
                 <button
