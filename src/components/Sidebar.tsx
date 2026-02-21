@@ -351,6 +351,7 @@ export default function Sidebar() {
           <SidebarItem icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} collapsed={isSidebarCollapsed} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} />
           <SidebarItem icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} collapsed={isSidebarCollapsed} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} />
           <SidebarItem icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400 hover:text-green-300" />
+          <SidebarItem icon={Building2} label="Neighbors" to="/neighbors" active={isActive('/neighbors')} collapsed={isSidebarCollapsed} highlight={isUpdated('/neighbors')} onClick={() => markAsViewed('/neighbors')} className="text-blue-400 hover:text-blue-300" />
         </SidebarGroup>
 
         {/* Social */}
