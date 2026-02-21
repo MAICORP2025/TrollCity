@@ -26,6 +26,7 @@ import { APP_DATA_REFETCH_EVENT_NAME } from "./lib/appEvents";
 import { autoUnlockPayouts } from "./lib/supabase";
 import { initTelemetry } from "./lib/telemetry";
 import GlobalPresenceTracker from "./components/GlobalPresenceTracker";
+import { useIsMobile } from "./hooks/useIsMobile";
 
 // Layout
 import OfficerAlertBanner from "./components/OfficerAlertBanner";
@@ -346,6 +347,8 @@ function AppContent() {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalLoading] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const { isMobile } = useIsMobile();
+  const isMobileUI = isMobile || isStandalone;
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<ServiceWorker | null>(null);
   const [initialProfileLoaded, setInitialProfileLoaded] = useState(false);
@@ -355,6 +358,26 @@ function AppContent() {
 
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const eligibilityRefresh = useEligibilityStore((s) => s.refresh);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleOffline = () => {
+      toast.error('You are offline', { duration: 4000 })
+    }
+
+    const handleOnline = () => {
+      toast.success('Back online', { duration: 2500 })
+    }
+
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [])
 
   // Global app context for loading and error states
   const {
@@ -516,10 +539,7 @@ function AppContent() {
   useEffect(() => {
     if (hasNavigatedRef.current) return;
     if (!user || !isStandalone) return;
-    if (location.pathname === '/' || location.pathname === '/auth') {
-      hasNavigatedRef.current = true;
-      navigate('/mobile', { replace: true });
-    }
+    // Mobile UI is now activated automatically for PWA standalone.
   }, [user, isStandalone, location.pathname, navigate]);
 
   // Track route changes for session persistence
@@ -886,8 +906,8 @@ function AppContent() {
     setUpdateAvailable(false);
   };
 
-  return (
-      <>
+  const appShell = (
+    <>
       <SessionMonitor />
       <GlobalUserCounter />
       {updateAvailable && (
@@ -903,22 +923,22 @@ function AppContent() {
         </div>
       )}
       {/* Global Error Banner */}
-              <GlobalErrorBanner />
-              
-              <GlobalPayoutBanner />
-              <GlobalEventsBanner />
-              {/* Officer Alert Banner */}
-              <OfficerAlertBanner />
-              
-              {/* Global Gift Banner */}
+      <GlobalErrorBanner />
+      
+      <GlobalPayoutBanner />
+      <GlobalEventsBanner />
+      {/* Officer Alert Banner */}
+      <OfficerAlertBanner />
+      
+      {/* Global Gift Banner */}
       <GlobalGiftBanner />
 
       {/* Broadcast Announcement */}
       <BroadcastAnnouncement />
-              <GlobalPodBanner />
-              <DailyChurchNotification />
+      <GlobalPodBanner />
+      <DailyChurchNotification />
 
-              {/* Global Loading Overlay */}
+      {/* Global Loading Overlay */}
       <GlobalLoadingOverlay
         isVisible={globalLoading}
         message={loadingMessage}
@@ -940,8 +960,7 @@ function AppContent() {
         onRetry={retryLastAction}
       />
 
-
-      <AppLayout showSidebar={true} showHeader={true} showBottomNav={true}>
+      <AppLayout showSidebar={!isMobileUI} showHeader={!isMobileUI} showBottomNav={!isMobileUI}>
         <GlobalPresenceTracker />
         {user && <AdminOfficerQuickMenu />}
         {user && (
@@ -1019,10 +1038,10 @@ function AppContent() {
                   <Route path="/dev/battle" element={<BattlePreview />} />
                   <Route path="/dev/stress-test" element={<FrontendLimitsTest />} />
 
-                  <Route path="/mobile" element={<MobileShell><Outlet /></MobileShell>} />
+                  <Route path="/mobile" element={<Navigate to="/" replace />} />
                   <Route path="/live" element={<LandingHome />} />
                   <Route path="/messages" element={<Navigate to="/tcps" replace />} />
-                  <Route path="/tcps" element={<MobileShell><TCPS /></MobileShell>} />
+                  <Route path="/tcps" element={<TCPS />} />
           <Route path="/city-hall" element={<CityHall />} />
                   <Route path="/city-registry" element={<CityRegistry />} />
                   <Route path="/universe-event" element={<UniverseEventPage />} />
@@ -1758,7 +1777,10 @@ function AppContent() {
           },
         }}
       />
-  </>)
+    </>
+  );
+
+  return <>{isMobileUI ? <MobileShell>{appShell}</MobileShell> : appShell}</>;
 }
 
 function App() {

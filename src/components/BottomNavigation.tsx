@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Home, MessageSquare, Store, Video, User, Shield, Gavel, Star, Zap, DollarSign, Users, AlertTriangle, Ban, Settings, Heart, LogOut, FileText, ShoppingBag, Briefcase, Banknote, Gamepad2, Music, Swords, Camera, Mic } from 'lucide-react'
 import { useAuthStore } from '../lib/store'
@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useActiveBroadcasts } from '@/hooks/useActiveBroadcasts'
+import { BROADCAST_CATEGORIES, type BroadcastCategoryId } from '@/config/broadcastCategories'
 
 export default function BottomNavigation() {
   const { user, profile, logout } = useAuthStore()
@@ -31,14 +32,47 @@ export default function BottomNavigation() {
     setIsLiveMenuOpen(false)
   }, [location.pathname])
 
-  const liveCategories = [
-    { label: 'All Streams', icon: Video, path: '/live' },
-    { label: 'Just Chatting', icon: MessageSquare, path: '/live/just-chatting' },
-    { label: 'Gaming', icon: Gamepad2, path: '/live/gaming' },
-    { label: 'Music', icon: Music, path: '/live/music' },
-    { label: 'Battles', icon: Swords, path: '/live/battles' },
-    { label: 'IRL', icon: Camera, path: '/live/irl' }
-  ]
+  const liveCategories = useMemo(() => {
+    // The app currently routes live streams via /watch/:id and the /live page.
+    // These category routes may not exist yet, so keep navigation safe by
+    // pointing categories to the broadcast setup page for now.
+    const order: BroadcastCategoryId[] = [
+      'general',
+      'just_chatting',
+      'gaming',
+      'music',
+      'irl',
+      'debate',
+      'education',
+      'fitness',
+      'business',
+      'spiritual',
+      'trollmers',
+    ]
+
+    const iconMap: Record<string, any> = {
+      general: Video,
+      just_chatting: MessageSquare,
+      gaming: Gamepad2,
+      music: Music,
+      irl: Camera,
+      debate: Gavel,
+      education: FileText,
+      fitness: Zap,
+      business: Briefcase,
+      spiritual: Heart,
+      trollmers: Star,
+    }
+
+    return [
+      { label: 'All Streams', icon: Video, path: '/live' },
+      ...order.map((id) => ({
+        label: BROADCAST_CATEGORIES[id].name,
+        icon: iconMap[id] || Video,
+        path: `/broadcast/setup?category=${id}`,
+      })),
+    ]
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -122,20 +156,21 @@ export default function BottomNavigation() {
     switch (role as string) {
       case 'broadcaster':
         return [
-          { category: 'Streaming', label: 'Start Stream', icon: Video, path: '/go-live' },
-          { category: 'Streaming', label: 'Summary', icon: FileText, path: '/broadcast-summary' },
+          { category: 'Streaming', label: 'Start Stream', icon: Video, path: '/broadcast/setup' },
+          { category: 'Streaming', label: 'Summary', icon: FileText, path: '/broadcast/summary' },
           { category: 'Finance', label: 'My Earnings', icon: DollarSign, path: '/earnings' },
           { category: 'Community', label: 'My Guests', icon: Users, path: '/guests' }
         ]
       case 'admin':
         return [
           { category: 'Management', label: 'Court', icon: Gavel, path: '/troll-court' },
-          { category: 'Management', label: 'Ban User', icon: Ban, path: '/admin/bans' },
+          { category: 'Streaming', label: 'Go Live', icon: Video, path: '/broadcast/setup' },
+          { category: 'Management', label: 'Ban Management', icon: Ban, path: '/admin/ban-management' },
           { category: 'Content', label: 'Applications', icon: FileText, path: '/admin/applications' },
           { category: 'Content', label: 'Marketplace', icon: ShoppingBag, path: '/admin/marketplace' },
           { category: 'Content', label: 'Reports', icon: Shield, path: '/admin/officer-reports' },
           { category: 'Finance', label: 'Earnings', icon: DollarSign, path: '/admin/earnings' },
-          { category: 'System', label: 'System Tools', icon: Settings, path: '/admin/dashboard' }
+          { category: 'System', label: 'System Tools', icon: Settings, path: '/admin/system/health' }
         ]
       case 'officer':
         return [

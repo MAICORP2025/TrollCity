@@ -9,6 +9,8 @@ import IncomingCallPopup from '../components/IncomingCallPopup'
 import { supabase } from '../lib/supabase'
 import { usePresenceStore } from '../lib/presenceStore'
 
+const MOBILE_BREAKPOINT_PX = 768
+
 interface SidebarConversation {
   other_user_id: string
   other_username: string
@@ -23,6 +25,7 @@ interface SidebarConversation {
 export default function TCPS() {
   const { user } = useAuthStore()
   const { onlineUserIds } = usePresenceStore()
+  const safeOnlineUserIds = onlineUserIds ?? []
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -54,33 +57,21 @@ export default function TCPS() {
   useEffect(() => {
     const param = searchParams.get('user')
 
-    if (!param) return
+    if (!param || param === 'null' || param === 'undefined') return
 
-    // Here param is a UUID, not a username
-    supabase
-      .from('user_profiles')
-      .select('id, username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color')
-      .eq('id', param)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error || !data) {
-          console.error('Error loading user from URL', error);
-          return;
-        }
-        if (data) {
-          setActiveConversation(data.id)
-          setOtherUserInfo({
-            id: data.id,
-            username: data.username,
-            avatar_url: data.avatar_url,
-            created_at: data.created_at,
-            is_online: onlineUserIds.includes(data.id),
-            rgb_username_expires_at: data.rgb_username_expires_at,
-            glowing_username_color: data.glowing_username_color
-          })
-        }
-      })
-  }, [searchParams, onlineUserIds])
+    // Basic UUID v4/v5 shape guard to avoid hammering the DB with invalid IDs
+    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+    if (!looksLikeUuid) return
+
+    // Avoid double-fetching: URL param should only set selection.
+    // The activeConversation effect will hydrate full profile details.
+    setActiveConversation(param)
+    setOtherUserInfo({
+      id: param,
+      username: '',
+      avatar_url: null,
+    })
+  }, [searchParams])
 
   // Listen for incoming calls
   useEffect(() => {
@@ -153,37 +144,48 @@ export default function TCPS() {
   useEffect(() => {
     if (!activeConversation) return
 
+    // Already hydrated for this conversation
+    if (otherUserInfo?.id === activeConversation && otherUserInfo.username) return
+
     supabase
       .from('user_profiles')
       .select('id, username, avatar_url, created_at, rgb_username_expires_at, glowing_username_color')
       .eq('id', activeConversation)
       .maybeSingle()
       .then(({ data, error }) => {
-        if (error || !data) {
-          console.error('Error loading other user info', error);
-          return;
+        if (error) {
+          console.error('Error loading other user info', error)
+          return
         }
-        if (data) {
-          setOtherUserInfo({
-            id: data.id,
-            username: data.username,
-            avatar_url: data.avatar_url,
-            created_at: data.created_at,
-            is_online: onlineUserIds.includes(data.id),
-            rgb_username_expires_at: data.rgb_username_expires_at,
-            glowing_username_color: data.glowing_username_color
-          })
-        }
+        if (!data) return
+        setOtherUserInfo({
+          id: data.id,
+          username: data.username,
+          avatar_url: data.avatar_url,
+          created_at: data.created_at,
+          rgb_username_expires_at: data.rgb_username_expires_at,
+          glowing_username_color: data.glowing_username_color
+        })
       })
-  }, [activeConversation, onlineUserIds])
+  }, [activeConversation, otherUserInfo?.id, otherUserInfo?.username])
 
   const handleSelectConversation = (otherId: string) => {
     setActiveConversation(otherId)
+    setOtherUserInfo({
+      id: otherId,
+      username: '',
+      avatar_url: null,
+    })
     navigate(`/tcps?user=${otherId}`, { replace: true })
   }
 
   const handleNewMessage = (userId: string) => {
     setActiveConversation(userId)
+    setOtherUserInfo({
+      id: userId,
+      username: '',
+      avatar_url: null,
+    })
     navigate(`/tcps?user=${userId}`, { replace: true })
     setShowNewMessageModal(false)
   }
@@ -191,7 +193,8 @@ export default function TCPS() {
   const handleConversationsLoaded = useCallback((conversations: SidebarConversation[]) => {
     // Only auto-select first conversation if no user is specified in URL
     const userParam = searchParams.get('user')
-    if (!activeConversation && !userParam && conversations.length > 0) {
+    const isDesktop = typeof window !== 'undefined' ? window.innerWidth >= MOBILE_BREAKPOINT_PX : true
+    if (isDesktop && !activeConversation && !userParam && conversations.length > 0) {
       const first = conversations[0]
       setActiveConversation(first.other_user_id)
       navigate(`/tcps?user=${first.other_user_id}`, { replace: true })
@@ -201,7 +204,8 @@ export default function TCPS() {
   const { backgrounds } = trollCityTheme
   
   // Convert onlineUserIds array to Record<string, boolean> for InboxSidebar
-  const onlineUsersRecord = onlineUserIds.reduce((acc, id) => ({ ...acc, [id]: true }), {})
+  const onlineUsersRecord = safeOnlineUserIds.reduce((acc, id) => ({ ...acc, [id]: true }), {})
+  const isOtherOnline = otherUserInfo ? safeOnlineUserIds.includes(otherUserInfo.id) : false
 
   return (
     <div className={`w-full h-[100dvh] overflow-hidden ${backgrounds.primary} flex justify-center items-stretch px-3 py-4 md:py-8 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-8`}>
@@ -224,7 +228,7 @@ export default function TCPS() {
             <ChatWindow
               conversationId={null} // It will be derived from users or we can pass it if we have it
               otherUserInfo={otherUserInfo}
-              isOnline={otherUserInfo?.is_online}
+              isOnline={isOtherOnline}
               onBack={() => {
                 setActiveConversation(null)
                 navigate('/tcps')

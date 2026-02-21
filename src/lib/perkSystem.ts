@@ -4,6 +4,15 @@
 import { supabase } from './supabase';
 import { runStandardPurchaseFlow } from './purchases';
 
+type PerkCacheEntry = {
+  value?: boolean
+  expiresAtMs: number
+  inFlight?: Promise<boolean>
+}
+
+const PERK_ACTIVE_CACHE_TTL_MS = 30_000
+const perkActiveCache = new Map<string, PerkCacheEntry>()
+
 // Perk configuration - static data describing all available perks
 export const PERK_CONFIG = {
   'perk_disappear_chat': {
@@ -92,6 +101,18 @@ export type PerkKey = keyof typeof PERK_CONFIG;
  */
 export async function isPerkActive(userId: string, perkKey: PerkKey): Promise<boolean> {
   try {
+    const cacheKey = `${userId}:${perkKey}`
+    const now = Date.now()
+    const cached = perkActiveCache.get(cacheKey)
+    if (cached && cached.expiresAtMs > now && typeof cached.value === 'boolean') {
+      return cached.value
+    }
+
+    if (cached?.inFlight) {
+      return await cached.inFlight
+    }
+
+    const inFlight = (async () => {
     const { data: perk, error } = await supabase
       .from('user_perks')
       .select('expires_at')
@@ -103,10 +124,18 @@ export async function isPerkActive(userId: string, perkKey: PerkKey): Promise<bo
       .maybeSingle();
 
     if (error || !perk) {
-      return false;
+        const value = false
+        perkActiveCache.set(cacheKey, { value, expiresAtMs: Date.now() + PERK_ACTIVE_CACHE_TTL_MS })
+        return value
     }
 
-    return new Date(perk.expires_at) > new Date();
+      const value = new Date(perk.expires_at) > new Date()
+      perkActiveCache.set(cacheKey, { value, expiresAtMs: Date.now() + PERK_ACTIVE_CACHE_TTL_MS })
+      return value
+    })()
+
+    perkActiveCache.set(cacheKey, { expiresAtMs: now + PERK_ACTIVE_CACHE_TTL_MS, inFlight })
+    return await inFlight
   } catch (err) {
     console.error('Error checking perk status:', err);
     return false;

@@ -28,7 +28,7 @@ export default function AppLayout({
   const location = useLocation();
   const showLegacySidebar = useAuthStore((s) => s.showLegacySidebar)
   const user = useAuthStore((s) => s.user)
-  const { openChatBubble, isOpen } = useChatStore()
+  useChatStore()
   const isAuthPage = location.pathname.startsWith('/auth');
   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/broadcast/');
   const isKeyboardVisible = false;
@@ -40,6 +40,7 @@ export default function AppLayout({
     const cleanup = setupGlobalMessageNotifications(
       user.id,
       (senderId, senderUsername, senderAvatar, isOpsMessage) => {
+        const { openChatBubble, isOpen } = useChatStore.getState()
         // Don't auto-open if bubble already open
         if (isOpen) return
         
@@ -69,7 +70,7 @@ export default function AppLayout({
     )
     
     return cleanup
-  }, [user?.id, isOpen, openChatBubble])
+  }, [user?.id])
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -102,7 +103,7 @@ export default function AppLayout({
         {!isAuthPage && <UserCompliancePrompt />}
 
         {/* Main Content Area */}
-        <main className={`flex-1 w-full h-full relative overflow-x-hidden scrollbar-thin scrollbar-thumb-purple-900/50 scrollbar-track-transparent ${mainPaddingClass}`}>
+        <main className={`flex-1 w-full h-full relative overflow-x-hidden overflow-y-auto scrollbar-thin scrollbar-thumb-purple-900/50 scrollbar-track-transparent ${mainPaddingClass}`}>
           {children}
         </main>
 

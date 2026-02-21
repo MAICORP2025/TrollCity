@@ -353,11 +353,11 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
       try {
         // TODO: Replace with actual Agora token generation endpoint
         const agoraTokenResponse = await supabase.functions.invoke('agora-token', {
-          body: JSON.stringify({
-            channelName: roomId,
-            role: 1, // Publisher
-            uid: user.id, // Use user ID as UID
-          }),
+          body: {
+            channel: roomId,
+            uid: user.id,
+            role: 'publisher',
+          },
         });
 
         if (agoraTokenResponse.error) {

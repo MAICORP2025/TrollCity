@@ -451,6 +451,7 @@ function ProfileInner() {
   // Track if this is the initial load (not a re-render)
   const initialLoadRef = useRef(true);
   const prevProfileIdRef = useRef<string | null>(null);
+  const lastFetchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Auto-scroll to top on page load
@@ -467,6 +468,13 @@ function ProfileInner() {
         // Will resolve username to ID in the query
       } else if (currentUser?.id) {
         targetId = currentUser.id;
+      }
+
+      // Deduplicate: if we already loaded this exact target, skip doing it again.
+      // This prevents a second fetch when auth/profile state finishes hydrating.
+      const fetchKey = `${userId || ''}|${username || ''}|${currentUser?.id || ''}`
+      if (!initialLoadRef.current && lastFetchKeyRef.current === fetchKey) {
+        return
       }
       
       // Only show loading spinner on initial load or when viewing a different profile
@@ -553,12 +561,13 @@ function ProfileInner() {
         } else {
           // Reset inventory for other profiles
           setInventory({ perks: [], effects: [], insurance: [], callMinutes: null, homeListings: [], vehicleListings: [], vehicles: [], titlesAndDeeds: [] });
-          setEarnings([]);
-          setPurchases([]);
         }
-        
-        setLoading(false);
+
+        lastFetchKeyRef.current = fetchKey
       }
+      setEarnings([]);
+      setPurchases([]);
+      setLoading(false);
     };
 
     fetchProfile();

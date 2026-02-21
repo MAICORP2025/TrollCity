@@ -15,6 +15,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
     const channel = supabase
       .channel(`profile-changes-${user.id}`)
       .on(
@@ -25,13 +27,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           table: 'user_profiles',
           filter: `id=eq.${user.id}`,
         },
-        () => {
-          refreshProfile();
+        (payload) => {
+          try {
+            if (debounceTimer) clearTimeout(debounceTimer)
+            debounceTimer = setTimeout(() => {
+              try {
+                const next = (payload as any)?.new
+                if (!next || next.id !== user.id) {
+                  void refreshProfile()
+                  return
+                }
+
+                const current = useAuthStore.getState().profile
+                // Merge realtime payload into store without a refetch to avoid loops/churn
+                useAuthStore.getState().setProfile({ ...(current as any), ...(next as any) })
+              } catch {
+                void refreshProfile()
+              }
+            }, 250)
+          } catch {
+            void refreshProfile()
+          }
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
       supabase.removeChannel(channel);
     };
   }, [user, refreshProfile]);

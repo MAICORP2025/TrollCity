@@ -140,13 +140,17 @@ export default function CityRegistry() {
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       weekStart.setHours(0, 0, 0, 0);
       
-      const { data: limitData } = await supabase
+      const { data: limitData, error: limitError } = await supabase
         .from('appeal_weekly_limits')
         .select('appeals_filed, max_appeals, week_start_date')
         .eq('user_id', user.id)
         .gte('week_start_date', weekStart.toISOString().split('T')[0])
-        .single();
+        .maybeSingle();
       
+      if (limitError) {
+        console.error('Error fetching weekly appeal limit:', limitError);
+      }
+
       if (limitData) {
         setWeeklyLimit({
           appeals_filled: limitData.appeals_filed,

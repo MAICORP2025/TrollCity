@@ -227,15 +227,24 @@ function BroadcastPage() {
           const { data, error } =
             await supabase.functions.invoke('agora-token', {
               body: {
-                channelName: stream.id,
-                userId: user.id
+                channel: stream.id,
+                uid: user.id,
+                role: 'publisher'
               }
             })
 
           if (error) throw error
 
+          const appId = import.meta.env.VITE_AGORA_APP_ID
+          if (!appId) {
+            throw new Error('Missing VITE_AGORA_APP_ID')
+          }
+          if (!data?.token) {
+            throw new Error('Missing Agora token')
+          }
+
           await client.join(
-            import.meta.env.VITE_AGORA_APP_ID!,
+            appId,
             stream.id,
             data.token,
             user.id

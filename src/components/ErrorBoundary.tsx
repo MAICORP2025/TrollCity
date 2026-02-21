@@ -58,14 +58,16 @@ export default class ErrorBoundary extends Component<Props, State> {
 
     // Auto-reload on chunk load errors (once)
     if (errorMessage.includes('dynamically imported module') || errorMessage.includes('Importing a module script failed')) {
-      const storageKey = 'tc_chunk_reload_' + window.location.pathname;
-      const hasReloaded = sessionStorage.getItem(storageKey);
-      
-      if (!hasReloaded) {
-        sessionStorage.setItem(storageKey, 'true');
-        console.log('Chunk load error detected, reloading...');
-        window.location.reload();
-        return;
+      const env = (import.meta as any).env
+      if (typeof window !== 'undefined' && env?.PROD) {
+        const storageKey = 'tc_chunk_reload_once'
+        const hasReloaded = sessionStorage.getItem(storageKey)
+        if (!hasReloaded) {
+          sessionStorage.setItem(storageKey, 'true')
+          console.log('Chunk load error detected, reloading...')
+          window.location.reload()
+          return
+        }
       }
     }
     

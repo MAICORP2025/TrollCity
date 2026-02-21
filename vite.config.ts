@@ -27,6 +27,7 @@ try {
 
 // https://vite.dev/config/
 export default defineConfig(({ mode: _mode }) => ({
+  envDir: __dirname,
   define: {
     global: 'window',
     __APP_VERSION__: JSON.stringify(appVersion),
@@ -40,7 +41,8 @@ export default defineConfig(({ mode: _mode }) => ({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "robots.txt", "apple-touch-icon.png"],
       devOptions: {
-        enabled: false
+        // Keep PWA off by default in dev; opt-in by setting `VITE_PWA_DEV=1`
+        enabled: process.env.VITE_PWA_DEV === '1'
       },
       manifest: {
         name: "Troll City",

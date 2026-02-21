@@ -122,6 +122,34 @@ export default function InboxSidebar({
           unreadCounts[m.conversation_id] = (unreadCounts[m.conversation_id] || 0) + 1
         })
 
+        // 4. Fetch the last message for conversations (single query, avoid N+1)
+        const lastMessageByConversationId: Record<string, { body: string; created_at: string | null; sender_id: string }> = {}
+        try {
+          const { data: recentMessages, error: recentMessagesError } = await supabase
+            .from('conversation_messages')
+            .select('conversation_id, body, created_at, sender_id')
+            .in('conversation_id', convIds)
+            .is('is_deleted', false)
+            .order('created_at', { ascending: false })
+            .limit(1000)
+
+          if (recentMessagesError) throw recentMessagesError
+
+          ;(recentMessages || []).forEach((m: any) => {
+            if (!m?.conversation_id) return
+            // first occurrence wins (already ordered newest->oldest)
+            if (!lastMessageByConversationId[m.conversation_id]) {
+              lastMessageByConversationId[m.conversation_id] = {
+                body: m.body,
+                created_at: m.created_at ?? null,
+                sender_id: m.sender_id ?? ''
+              }
+            }
+          })
+        } catch (e) {
+          console.warn('Error fetching recent messages (batch):', e)
+        }
+
         // 2.5 Fetch blocked users to filter them out
         const { data: blockedData } = await supabase
           .from('user_relationships')
@@ -134,46 +162,37 @@ export default function InboxSidebar({
         // 2.6 Get hidden conversations from localStorage
         const hiddenConvIds = new Set<string>(JSON.parse(localStorage.getItem('hidden_conversations') || '[]'))
 
-        // 4. Fetch the last message for each conversation
-        const convsWithDetails = await Promise.all(convIds.map(async (cid) => {
-           const { data: msgs } = await supabase
-             .from('conversation_messages')
-             .select('body, created_at, sender_id')
-             .eq('conversation_id', cid)
-             .is('is_deleted', false)
-             .order('created_at', { ascending: false })
-             .limit(1)
-             .maybeSingle()
-           
-           const lastMsg = msgs || { body: 'No messages yet', created_at: null, sender_id: '' }
-           
-           // 4.1 If conversation is hidden, only show it if there are unread messages
-           const isHidden = hiddenConvIds.has(cid)
-           const unreadCount = unreadCounts[cid] || 0
-           if (isHidden && unreadCount === 0) return null
+        // 4. Build conversation previews (use batched last message map)
+        const convsWithDetails = convIds.map((cid) => {
+          const lastMsg = lastMessageByConversationId[cid] || { body: 'No messages yet', created_at: null, sender_id: '' }
 
-           // Find other member(s)
-           const others = otherMembers?.filter(om => om.conversation_id === cid)
-           if (!others || others.length === 0) return null
-           
-           // For now, handle as 1-on-1 but we could support groups
-           const other = others[0]
-           if (!other.user_profiles || blockedUserIds.has(other.user_id)) return null
-           
-           const profile = other.user_profiles as any
-           
-           return {
-             other_user_id: other.user_id,
-             other_username: profile.username,
-             other_avatar_url: profile.avatar_url,
-             rgb_username_expires_at: profile.rgb_username_expires_at,
-             glowing_username_color: profile.glowing_username_color,
-             other_created_at: profile.created_at,
-             last_message: lastMsg.body,
-             last_timestamp: lastMsg.created_at || '',
-             unread_count: unreadCount
-           }
-        }))
+          // 4.1 If conversation is hidden, only show it if there are unread messages
+          const isHidden = hiddenConvIds.has(cid)
+          const unreadCount = unreadCounts[cid] || 0
+          if (isHidden && unreadCount === 0) return null
+
+          // Find other member(s)
+          const others = otherMembers?.filter(om => om.conversation_id === cid)
+          if (!others || others.length === 0) return null
+
+          // For now, handle as 1-on-1 but we could support groups
+          const other = others[0]
+          if (!other.user_profiles || blockedUserIds.has(other.user_id)) return null
+
+          const profile = other.user_profiles as any
+
+          return {
+            other_user_id: other.user_id,
+            other_username: profile.username,
+            other_avatar_url: profile.avatar_url,
+            rgb_username_expires_at: profile.rgb_username_expires_at,
+            glowing_username_color: profile.glowing_username_color,
+            other_created_at: profile.created_at,
+            last_message: lastMsg.body,
+            last_timestamp: lastMsg.created_at || '',
+            unread_count: unreadCount
+          }
+        })
         
         processedConvs.push(...(convsWithDetails.filter(Boolean) as SidebarConversation[]))
       }

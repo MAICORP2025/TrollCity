@@ -20,9 +20,6 @@
     <meta name="format-detection" content="telephone=no" />
     <meta name="msapplication-tap-highlight" content="no" />
 
-    <!-- Preload Entry Module (avoids preload "not used" warnings) -->
-    <link rel="modulepreload" href="/src/main.tsx" />
-
     <!-- DNS Prefetch for Performance -->
     <link rel="dns-prefetch" href="//fonts.googleapis.com" />
     <link rel="dns-prefetch" href="//fonts.gstatic.com" />
@@ -41,14 +38,28 @@
     </script>
 
     <!-- OneSignal Web Push -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.init({
-          appId: "5eec8cd7-849b-4e7c-b143-d6e2bf50c39a",
-        });
-      });
+      (function () {
+        try {
+          var isProdDomain = window.location.hostname === 'maitrollcity.com' || window.location.hostname.endsWith('.maitrollcity.com')
+          var isHttps = window.location.protocol === 'https:'
+          if (!isProdDomain || !isHttps) return
+
+          var s = document.createElement('script')
+          s.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js'
+          s.defer = true
+          document.head.appendChild(s)
+
+          window.OneSignalDeferred = window.OneSignalDeferred || []
+          window.OneSignalDeferred.push(async function (OneSignal) {
+            await OneSignal.init({
+              appId: '5eec8cd7-849b-4e7c-b143-d6e2bf50c39a',
+            })
+          })
+        } catch {
+          // ignore
+        }
+      })();
     </script>
   </head>
   <body>

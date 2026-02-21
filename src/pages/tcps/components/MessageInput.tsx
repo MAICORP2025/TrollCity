@@ -27,8 +27,19 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   useEffect(() => {
-    if (!otherUserId) return
-    
+    if (!otherUserId) {
+      setIsOtherUserAdmin(false)
+      return
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(otherUserId)
+    if (!isUuid) {
+      setIsOtherUserAdmin(false)
+      return
+    }
+
+    let cancelled = false
+
     const checkOtherUser = async () => {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -36,18 +47,22 @@ export default function MessageInput({ conversationId, otherUserId, onMessageSen
         .eq('id', otherUserId)
         .maybeSingle()
 
-      if (error || !data) {
-        console.error('Error checking other user admin status', error);
-        setIsOtherUserAdmin(false);
-        return;
+      if (cancelled) return
+
+      if (error) {
+        console.error('Error checking other user admin status', error)
+        setIsOtherUserAdmin(false)
+        return
       }
-      
-      if (data) {
-        setIsOtherUserAdmin(data.role === 'admin' || data.is_admin === true)
-      }
+
+      setIsOtherUserAdmin(data?.role === 'admin' || data?.is_admin === true)
     }
     
     checkOtherUser()
+
+    return () => {
+      cancelled = true
+    }
   }, [otherUserId])
 
   useEffect(() => {

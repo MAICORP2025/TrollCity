@@ -20,55 +20,106 @@ export default function AdminMarketplace() {
     try {
       setLoading(true)
 
+      const unique = <T,>(arr: T[]): T[] => Array.from(new Set(arr)) as T[]
+      const chunk = <T,>(arr: T[], size: number) => {
+        const out: T[][] = []
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+        return out
+      }
+
+      const loadProfilesByIds = async (ids: string[]) => {
+        const map: Record<string, any> = {}
+        const cleaned = unique(ids.filter(Boolean))
+        for (const group of chunk(cleaned, 200)) {
+          const { data, error } = await supabase
+            .from('user_profiles')
+            .select('id, username, email, avatar_url')
+            .in('id', group)
+
+          if (error) throw error
+          for (const row of data || []) map[row.id] = row
+        }
+        return map
+      }
+
       // Load marketplace items
       const { data: itemsData, error: itemsError } = await supabase
         .from('marketplace_items')
-        .select(`
-          *,
-          user_profiles!seller_id (
-            username
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       if (itemsError) throw itemsError
-      setItems(itemsData || [])
+
+      const itemSellerIds: string[] = unique(
+        (itemsData || [])
+          .map((i: any) => i.seller_id)
+          .filter((v: any): v is string => typeof v === 'string' && v.length > 0)
+      )
+      const itemProfiles = itemSellerIds.length ? await loadProfilesByIds(itemSellerIds) : {}
+      setItems((itemsData || []).map((i: any) => ({ ...i, user_profiles: itemProfiles[i.seller_id] || null })))
 
       // Load pending moderation items
       const { data: pendingData, error: pendingError } = await supabase
         .from('marketplace_items')
-        .select(`
-          *,
-          user_profiles!seller_id (
-            username,
-            email
-          )
-        `)
+        .select('*')
         .in('moderation_status', ['pending_review', 'rejected'])
         .order('created_at', { ascending: false })
 
       if (pendingError) throw pendingError
-      setPendingItems(pendingData || [])
+
+      const pendingSellerIds: string[] = unique(
+        (pendingData || [])
+          .map((i: any) => i.seller_id)
+          .filter((v: any): v is string => typeof v === 'string' && v.length > 0)
+      )
+      const pendingProfiles = pendingSellerIds.length ? await loadProfilesByIds(pendingSellerIds) : {}
+      setPendingItems(
+        (pendingData || []).map((i: any) => ({ ...i, user_profiles: pendingProfiles[i.seller_id] || null }))
+      )
 
       // Load marketplace purchases
       const { data: purchasesData, error: purchasesError } = await supabase
         .from('marketplace_purchases')
-        .select(`
-          *,
-          buyer:user_profiles!buyer_id (
-            username
-          ),
-          seller:user_profiles!seller_id (
-            username
-          ),
-          item:marketplace_items (
-            title
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       if (purchasesError) throw purchasesError
-      setPurchases(purchasesData || [])
+
+      const buyerIds: string[] = unique(
+        (purchasesData || [])
+          .map((p: any) => p.buyer_id)
+          .filter((v: any): v is string => typeof v === 'string' && v.length > 0)
+      )
+      const sellerIds: string[] = unique(
+        (purchasesData || [])
+          .map((p: any) => p.seller_id)
+          .filter((v: any): v is string => typeof v === 'string' && v.length > 0)
+      )
+      const profileMap = (buyerIds.length || sellerIds.length)
+        ? await loadProfilesByIds([...buyerIds, ...sellerIds])
+        : {}
+
+      const itemIds: string[] = unique(
+        (purchasesData || [])
+          .map((p: any) => p.item_id)
+          .filter((v: any): v is string => typeof v === 'string' && v.length > 0)
+      )
+      let itemMap: Record<string, any> = {}
+      for (const group of chunk(itemIds, 200)) {
+        if (!group.length) continue
+        const { data, error } = await supabase.from('marketplace_items').select('id, title').in('id', group)
+        if (error) throw error
+        for (const row of data || []) itemMap[row.id] = row
+      }
+
+      setPurchases(
+        (purchasesData || []).map((p: any) => ({
+          ...p,
+          buyer: profileMap[p.buyer_id] || null,
+          seller: profileMap[p.seller_id] || null,
+          item: itemMap[p.item_id] || null,
+        }))
+      )
 
       // Load active marketplace disputes
       const { data: disputesData, error: disputesError } = await supabase
@@ -96,9 +147,14 @@ export default function AdminMarketplace() {
         setFraudHolds(fraudData || [])
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading marketplace data:', err)
-      toast.error('Failed to load marketplace data')
+      const message =
+        err?.message ||
+        err?.error_description ||
+        err?.details ||
+        'Failed to load marketplace data'
+      toast.error(message)
     } finally {
       setLoading(false)
     }

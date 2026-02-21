@@ -16,23 +16,21 @@ export const lazyWithRetry = <T extends ComponentType<any>>(
       const isChunkError = 
         error.message?.includes('Failed to fetch dynamically imported module') ||
         error.message?.includes('Importing a module script failed') ||
-        error.message?.includes('missing') ||
         error.name === 'ChunkLoadError';
 
       if (isChunkError) {
-        // Prevent infinite reload loops by checking session storage
-        // We scope it to the current time window to allow retries on subsequent visits
-        const storageKey = `retry-lazy-${window.location.pathname}`;
-        const lastRetry = sessionStorage.getItem(storageKey);
-        const now = Date.now();
-        
-        // If we haven't retried in the last 10 seconds, try reloading
-        if (!lastRetry || (now - parseInt(lastRetry)) > 10000) {
-            sessionStorage.setItem(storageKey, now.toString());
-            console.log('Reloading due to chunk load error...');
-            window.location.reload();
+        const env = (import.meta as any).env
+        if (typeof window !== 'undefined' && env.PROD) {
+          // Prevent reload storms: only reload once per tab/session for chunk mismatch.
+          const storageKey = 'lazy-chunk-reload-once'
+          const alreadyReloaded = sessionStorage.getItem(storageKey)
+          if (!alreadyReloaded) {
+            sessionStorage.setItem(storageKey, '1')
+            console.log('Reloading due to chunk load error...')
+            window.location.reload()
             // Return a promise that never resolves while reloading to suspend React
-            return new Promise(() => {}); 
+            return new Promise(() => {})
+          }
         }
       }
       

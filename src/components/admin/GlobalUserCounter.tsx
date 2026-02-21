@@ -22,6 +22,7 @@ export default function GlobalUserCounter() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
   const { onlineCount, onlineUserIds } = usePresenceStore(); // Read from store instead of channel
+  const safeOnlineUserIds = onlineUserIds ?? []
   const { openChatBubble } = useChatStore();
   const [inStreamCount, setInStreamCount] = useState(0);
   const [inPodCount, setInPodCount] = useState(0);
@@ -204,11 +205,11 @@ export default function GlobalUserCounter() {
 
         if (category === 'online') {
             // Just fetch all online profiles
-            if (onlineUserIds.length > 0) {
+            if (safeOnlineUserIds.length > 0) {
                 const { data: profiles } = await supabase
                     .from('user_profiles')
                     .select('id, username, avatar_url')
-                    .in('id', onlineUserIds);
+                    .in('id', safeOnlineUserIds);
                 
                 if (profiles) {
                     profiles.forEach(p => {
@@ -234,11 +235,11 @@ export default function GlobalUserCounter() {
             const busyUserIds = new Set([...sUsers, ...pUsers].map(u => u.user_id));
             
             // Get all online
-            if (onlineUserIds.length > 0) {
+            if (safeOnlineUserIds.length > 0) {
                 const { data: profiles } = await supabase
                     .from('user_profiles')
                     .select('id, username, avatar_url')
-                    .in('id', onlineUserIds);
+                    .in('id', safeOnlineUserIds);
                 
                 if (profiles) {
                     profiles.forEach(p => {

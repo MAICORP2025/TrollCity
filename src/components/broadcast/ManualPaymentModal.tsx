@@ -47,33 +47,107 @@ export default function ManualPaymentModal({ isOpen, onClose, pkg, providerId = 
   };
 
   const handleSubmit = async () => {
+    if (!user?.id) {
+      toast.error('Please sign in to continue')
+      return
+    }
+
     if (!payerHandle.trim()) {
       toast.error(`Please enter your ${provider.name} handle`);
       return;
     }
 
+    const rawCoins = (pkg as any)?.coins ?? (pkg as any)?.coin_amount ?? (pkg as any)?.coinAmount;
+    const coins = Number(String(rawCoins ?? '').replace(/,/g, '').trim());
+
+    const rawPrice = (pkg as any)?.price_usd ?? (pkg as any)?.amount_usd ?? (pkg as any)?.price;
+    const amountUsd = typeof rawPrice === 'number'
+      ? rawPrice
+      : Number(String(rawPrice ?? '').replace(/[^0-9.]/g, '').trim());
+
+    if (!coins || !Number.isFinite(coins)) {
+      toast.error('Invalid coin package: missing coin amount');
+      return;
+    }
+    if (!amountUsd || !Number.isFinite(amountUsd)) {
+      toast.error('Invalid coin package: missing USD amount');
+      return;
+    }
+
+    const coinsInt = Math.round(coins)
+    const amountUsdNum = Number(amountUsd)
+
+    const normalizedPkg = {
+      ...(pkg as any),
+      coins: coinsInt,
+      price_usd: amountUsdNum,
+      amount_usd: amountUsdNum,
+      price: amountUsdNum,
+    }
+
+    const minimalPkg = {
+      id: (pkg as any)?.id ?? null,
+      name: (pkg as any)?.name ?? null,
+      coins: coinsInt,
+      price_usd: amountUsdNum,
+    }
+
     setIsSubmitting(true);
 
     try {
+      console.log('[manual-coin-order] create payload', {
+        providerId,
+        coins: coinsInt,
+        amount_usd: amountUsdNum,
+        pkgCoins: (pkg as any)?.coins,
+        pkgPriceUsd: (pkg as any)?.price_usd,
+        pkgPrice: (pkg as any)?.price,
+      })
+
       const { data, error } = await supabase.functions.invoke('manual-coin-order', {
         body: {
           action: 'create',
-          package: pkg,
-          coins: pkg.coins,
-          amount_usd: typeof pkg.price === 'string' ? parseFloat(pkg.price.replace('$', '')) : pkg.price,
-          payer_cashtag: payerHandle, // Using generic field for handle
+          package: minimalPkg,
+          package_full: normalizedPkg,
+          coins: coinsInt,
+          amount_usd: amountUsdNum,
+          amountUsd: amountUsdNum,
+          amount: amountUsdNum,
+          usd: amountUsdNum,
+          coins_str: String(coinsInt),
+          amount_usd_str: String(amountUsdNum),
+          payer_cashtag: payerHandle,
+          payer_handle: payerHandle,
+          cashapp_tag: payerHandle,
+          cash_app_tag: payerHandle,
           purchase_type: 'manual_' + providerId,
           username: profile?.username || user?.email?.split('@')[0]
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        let details = ''
+        try {
+          const res = (error as any).context
+          if (res && typeof res.text === 'function') {
+            details = await res.text()
+          }
+        } catch {
+          // ignore
+        }
+
+        if (details) {
+          throw new Error(details)
+        }
+        throw error;
+      }
       
       setOrderData(data);
       setStep('instructions');
     } catch (err) {
       console.error('Error creating order:', err);
-      toast.error(err.message || 'Failed to create order');
+      const message = (err as any)?.message || 'Failed to create order'
+      toast.error(message)
     } finally {
       setIsSubmitting(false);
     }

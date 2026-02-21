@@ -10,7 +10,6 @@ import CropPhotoModal from '../components/CropPhotoModal'
 import { KeyRound } from 'lucide-react'
 import { setResetPin } from '@/services/passwordManager'
 import { trollCityTheme } from '../styles/trollCityTheme'
-import { bunnyStorage } from '../lib/bunny-storage'
 
 const ProfileSetup = () => {
   const navigate = useNavigate()
@@ -341,11 +340,19 @@ const ProfileSetup = () => {
       const ext = croppedFile.name.split('.').pop() || 'jpg'
       const name = `covers/${user.id}-${Date.now()}.${ext}`
 
-      // Upload to Bunny Storage
-      const { publicUrl: uploadedUrl, error: uploadErr } = await bunnyStorage.upload(name, croppedFile)
+      // Upload to Supabase storage
+      const { error: uploadErr } = await supabase.storage
+        .from('troll-city-assets')
+        .upload(name, croppedFile, { cacheControl: '3600', upsert: true })
 
-      if (uploadErr || !uploadedUrl) {
-        throw uploadErr || new Error('Failed to upload cover photo')
+      if (uploadErr) {
+        throw new Error(`Failed to upload cover photo: ${uploadErr.message}`)
+      }
+
+      const { data: publicData } = supabase.storage.from('troll-city-assets').getPublicUrl(name)
+      const uploadedUrl = publicData?.publicUrl
+      if (!uploadedUrl) {
+        throw new Error('Failed to resolve cover photo URL')
       }
 
       console.log('Uploaded URL:', uploadedUrl)

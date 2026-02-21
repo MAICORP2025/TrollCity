@@ -55,32 +55,24 @@ if (!rootElement) {
   throw new Error('Root element (#root) not found')
 }
 
-if (typeof window !== 'undefined' && !env.PROD) {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then((regs) => {
-      regs.forEach((r) => {
-        r.unregister().then((ok) => console.log('[SW] unregistered:', ok, r.scope)).catch(() => {});
-      });
-    }).catch(() => {});
-  }
-  if ('caches' in window) {
-    caches.keys().then((keys) => {
-      keys.forEach((k) => {
-        if (k.toLowerCase().includes('workbox') || k.toLowerCase().includes('vite') || k.toLowerCase().includes('pwa')) {
-          caches.delete(k).then((deleted) => console.log('[SW] deleted cache:', k, deleted)).catch(() => {});
-        }
-      });
-    }).catch(() => {});
-  }
-}
+if (typeof window !== 'undefined') {
+  const isLocalhost =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '0.0.0.0'
+  const isHttps = window.location.protocol === 'https:'
 
-if (typeof window !== 'undefined' && env.PROD) {
-  // PWA Service Worker Registration (only in production)
-  // We use vite-plugin-pwa's virtual module to handle registration and updates
-  // Skip SW registration during development to avoid Workbox CDN import issues
-  // @ts-expect-error - Virtual module
-  import('virtual:pwa-register').then(({ registerSW }) => {
-    const updateSW = registerSW({
+  // In prod, only register SW on HTTPS and not on localhost preview unless explicitly forced.
+  // In dev, only register if explicitly enabled.
+  const forceLocalhostSw = localStorage.getItem('force_sw') === '1'
+  const enableDevSw = env.DEV && localStorage.getItem('enable_sw_dev') === '1'
+  const enableProdSw = env.PROD && (isHttps && (!isLocalhost || forceLocalhostSw))
+
+  if (enableDevSw || enableProdSw) {
+    // We use vite-plugin-pwa's virtual module to handle registration and updates
+    // @ts-expect-error - Virtual module
+    import('virtual:pwa-register').then(({ registerSW }) => {
+      const updateSW = registerSW({
       onNeedRefresh() {
         console.log('[SW] update ready, dispatching in-app update event')
         if (typeof window !== 'undefined') {
@@ -90,7 +82,7 @@ if (typeof window !== 'undefined' && env.PROD) {
       onOfflineReady() {
         console.log('App ready to work offline')
       },
-    })
+      })
 
     const checkForUpdate = () => {
       if (typeof updateSW === 'function') {
@@ -247,13 +239,21 @@ if (typeof window !== 'undefined' && env.PROD) {
       })
     }
 
-    initOneSignalTokenSync()
-    supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        initOneSignalTokenSync()
-      }
+      initOneSignalTokenSync()
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          initOneSignalTokenSync()
+        }
+      })
     })
-  })
+  } else {
+    console.log('[SW] registration skipped', {
+      dev: !!env.DEV,
+      prod: !!env.PROD,
+      host: window.location.hostname,
+      protocol: window.location.protocol,
+    })
+  }
 }
 
 const queryClient = new QueryClient({

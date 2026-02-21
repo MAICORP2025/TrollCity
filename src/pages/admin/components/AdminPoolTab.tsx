@@ -108,6 +108,22 @@ export default function AdminPoolTab() {
   const [newProviderName, setNewProviderName] = useState('')
   const [newProviderCost, setNewProviderCost] = useState('')
 
+  useEffect(() => {
+    if (!buckets.length) return
+
+    const bucketNames = new Set(buckets.map((b) => b.bucket_name))
+    const first = buckets[0]?.bucket_name
+    if (!first) return
+
+    if (!bucketNames.has(moveSource)) {
+      setMoveSource(first)
+    }
+    if (!bucketNames.has(moveTarget)) {
+      const second = buckets.find((b) => b.bucket_name !== first)?.bucket_name
+      setMoveTarget(second || first)
+    }
+  }, [buckets])
+
   // Cashout State
   const [cashoutRequests, setCashoutRequests] = useState<CashoutRequest[]>([])
   const [cashoutLoading, setCashoutLoading] = useState(false)
@@ -316,13 +332,20 @@ export default function AdminPoolTab() {
   const handleMoveCoins = async () => {
     try {
       if (!moveAmount || !moveReason) return toast.error('Please fill all fields')
+      if (!moveSource || !moveTarget) return toast.error('Please select source and target buckets')
+      if (moveSource === moveTarget) return toast.error('Source and target buckets must be different')
+
+      const amount = Number.parseInt(String(moveAmount).replace(/,/g, ''), 10)
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return toast.error('Enter a valid amount')
+      }
       
       const { data, error } = await supabase.functions.invoke('admin-actions', {
         body: { 
           action: 'move_allocations',
           fromBucket: moveSource,
           toBucket: moveTarget,
-          amount: parseInt(moveAmount.replace(/,/g, '')),
+          amount,
           reason: moveReason
         }
       })

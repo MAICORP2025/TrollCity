@@ -362,12 +362,17 @@ export default function BroadcastChat({ streamId, hostId, isModerator, isHost, i
             })
         });
 
+        const contentType = response.headers.get('content-type') || ''
+        const rawText = await response.text()
+        const hasJsonBody = contentType.toLowerCase().includes('application/json') && rawText.trim().length > 0
+        const parsedBody = hasJsonBody ? JSON.parse(rawText) : undefined
+
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to send message');
+            const msg = (parsedBody as any)?.error || (parsedBody as any)?.message || rawText || response.statusText
+            throw new Error(`Failed to send message (${response.status}): ${msg}`)
         }
 
-        const signedEnvelope = await response.json();
+        const signedEnvelope = parsedBody ?? (rawText ? rawText : null)
         console.log('💬 [BroadcastChat] Message signed and sent:', signedEnvelope);
 
     } catch (err: any) {

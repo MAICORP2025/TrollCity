@@ -1240,45 +1240,49 @@ export function setupGlobalMessageNotifications(
       }
     )
     .subscribe()
-  
+
   // Subscribe to OPS messages (if user is officer)
+  let opsChannel: any | null = null
+  let opsEnabled = true
   isOfficer(userId).then((isOff) => {
     if (!isOff) return
-    
-    const opsChannel = supabase
+    if (!opsEnabled) return
+
+    opsChannel = supabase
       .channel(`global-ops:${userId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'officer_chat_messages'
+          table: 'officer_chat_messages',
         },
         async (payload) => {
           const newMsg = payload.new
           if (newMsg.sender_id === userId) return // Don't notify for own messages
-          
+
           // Fetch sender info
           const { data: sender } = await supabase
             .from('user_profiles')
             .select('username, avatar_url')
             .eq('id', newMsg.sender_id)
             .single()
-          
+
           if (sender) {
             onNewMessage(newMsg.sender_id, sender.username, sender.avatar_url, true)
           }
         }
       )
       .subscribe()
-    
-    return () => {
-      supabase.removeChannel(opsChannel)
-    }
   })
   
   // Cleanup function
   return () => {
+    opsEnabled = false
+    if (opsChannel) {
+      supabase.removeChannel(opsChannel)
+      opsChannel = null
+    }
     supabase.removeChannel(dmChannel)
   }
 }

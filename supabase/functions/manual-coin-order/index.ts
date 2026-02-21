@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders as cors } from "../_shared/cors.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -26,6 +26,7 @@ const normalizeHandle = (raw: string | undefined | null) => {
 };
 
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: cors });
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...cors, "Content-Type": "application/json" } });
@@ -67,16 +68,51 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "Please wait 60 seconds before making another request." }), { status: 429, headers: { ...cors, "Content-Type": "application/json" } });
       }
 
-      const pkg = body?.package;
-      const coins = Number(body?.coins ?? pkg?.coins);
-      const amountUsd = Number(body?.amount_usd ?? pkg?.price_usd);
+      const pkg = body?.package ?? body?.package_full;
+      const coins = Number(
+        body?.coins ??
+          body?.coin_amount ??
+          body?.coinAmount ??
+          body?.coins_str ??
+          pkg?.coins ??
+          pkg?.coin_amount ??
+          pkg?.coinAmount
+      );
+      const amountUsd = Number(
+        body?.amount_usd ??
+          body?.amountUsd ??
+          body?.amount ??
+          body?.usd ??
+          body?.amount_usd_str ??
+          pkg?.price_usd ??
+          pkg?.amount_usd ??
+          pkg?.price
+      );
       const packageId = body?.package_id ?? pkg?.id ?? null;
       const { tag: payerCashtag, error: tagError } = normalizeHandle(body?.cashapp_tag ?? body?.cash_app_tag ?? body?.payer_cashtag);
       if (tagError) {
         return new Response(JSON.stringify({ error: tagError }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
       }
       if (!coins || !amountUsd) {
-        return new Response(JSON.stringify({ error: "Missing coins or amount" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            error: "Missing coins or amount",
+            received: {
+              coins: body?.coins,
+              coins_str: body?.coins_str,
+              amount_usd: body?.amount_usd,
+              amountUsd: body?.amountUsd,
+              amount: body?.amount,
+              usd: body?.usd,
+              amount_usd_str: body?.amount_usd_str,
+              pkg_coins: pkg?.coins,
+              pkg_price_usd: pkg?.price_usd,
+              pkg_amount_usd: pkg?.amount_usd,
+              pkg_price: pkg?.price,
+            },
+          }),
+          { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
+        );
       }
 
       // Verify user profile exists (user_id in manual_coin_orders references user_profiles.id)
@@ -137,7 +173,7 @@ Deno.serve(async (req) => {
             .or('role.eq.admin,role.eq.secretary,is_admin.eq.true');
             
         if (adminUsers && adminUsers.length > 0) {
-            const notifications = adminUsers.map(admin => ({
+            const notifications = adminUsers.map((admin: any) => ({
                 user_id: admin.id,
                 type: 'admin_alert',
                 title: 'New Coin Order',

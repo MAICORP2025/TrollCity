@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { PreflightStore } from '@/lib/preflightStore';
@@ -52,11 +52,24 @@ function CategoryIcon({ categoryId }: { categoryId: string }) {
 }
 
 export default function SetupPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<BroadcastCategoryId>('general');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const fromQuery = params.get('category');
+      if (fromQuery && (fromQuery in BROADCAST_CATEGORIES)) {
+        setCategory(fromQuery as BroadcastCategoryId);
+      }
+    } catch {
+      // ignore
+    }
+  }, [location.search]);
   
   // Category-specific state
   const [selectedReligion, setSelectedReligion] = useState<string>('');

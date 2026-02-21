@@ -472,7 +472,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId }: Batt
                 // 4. Fetch Agora Token for the SHARED room
                 const { data: tokenData, error: tokenError } = await supabase.functions.invoke('agora-token', {
                     body: {
-                    room: `battle-${battleId}`,
+                    channel: `battle-${battleId}`,
                     identity: effectiveUserId,
                     role: (pData?.role === 'host' || pData?.role === 'stage') ? 'host' : 'guest'
                     }

@@ -1,132 +1,333 @@
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/lib/store';
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
-import MessageInput from './MessageInput';
-import { useParams } from 'react-router-dom';
-import { Message } from '@/types/db';
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { supabase, createConversation, getConversationMessages, markConversationRead, OFFICER_GROUP_CONVERSATION_ID } from '../../../lib/supabase'
+import { useAuthStore } from '../../../lib/store'
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
+import MessageInput from './MessageInput'
 
-const MAX_MESSAGES = 100;
+const MAX_MESSAGES = 100
 
-const ChatWindow = () => {
-  const { conversationId } = useParams<{ conversationId: string }>();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const profile = useAuthStore(state => state.profile);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+type ChatMessage = {
+  id: string
+  conversation_id: string
+  sender_id: string
+  content: string
+  created_at: string
+  read_at?: string | null
+  sender_username?: string
+  sender_avatar_url?: string | null
+  sender_rgb_expires_at?: string | null
+  sender_glowing_username_color?: string | null
+  sender_created_at?: string
+  isPending?: boolean
+}
+
+interface ChatWindowProps {
+  conversationId: string | null
+  otherUserInfo: {
+    id: string
+    username: string
+    avatar_url: string | null
+    created_at?: string
+    rgb_username_expires_at?: string | null
+    glowing_username_color?: string | null
+  } | null
+  isOnline?: boolean
+  onBack?: () => void
+}
+
+const ChatWindow = ({ otherUserInfo }: ChatWindowProps) => {
+  const { user, profile } = useAuthStore()
+  const [actualConversationId, setActualConversationId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const virtuosoRef = useRef<VirtuosoHandle>(null)
+
+  const otherUserId = otherUserInfo?.id ?? null
+
+  const mapConversationMessages = useCallback(async (conversationId: string) => {
+    const rows = await getConversationMessages(conversationId, { limit: MAX_MESSAGES })
+    if (!rows || rows.length === 0) return []
+
+    const senderIds = Array.from(new Set(rows.map((m) => m.sender_id)))
+    const { data: senders, error: sendersError } = await supabase
+      .from('user_profiles')
+      .select('id, username, avatar_url, rgb_username_expires_at, glowing_username_color, created_at')
+      .in('id', senderIds)
+
+    if (sendersError) {
+      console.error('Error fetching message senders:', sendersError)
+    }
+
+    const senderMap: Record<string, any> = {}
+    senders?.forEach((s) => {
+      senderMap[s.id] = s
+    })
+
+    return rows
+      .map((m) => ({
+        id: m.id,
+        conversation_id: m.conversation_id,
+        sender_id: m.sender_id,
+        content: m.body,
+        created_at: m.created_at,
+        read_at: (m as any).read_at ?? null,
+        sender_username: senderMap[m.sender_id]?.username,
+        sender_avatar_url: senderMap[m.sender_id]?.avatar_url,
+        sender_rgb_expires_at: senderMap[m.sender_id]?.rgb_username_expires_at,
+        sender_glowing_username_color: senderMap[m.sender_id]?.glowing_username_color,
+        sender_created_at: senderMap[m.sender_id]?.created_at,
+      }))
+      .reverse()
+  }, [])
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!user?.id || !otherUserId) {
+      setActualConversationId(null)
+      setMessages([])
+      return
+    }
 
-    const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select(`
-          id,
-          conversation_id,
-          sender_id,
-          content,
-          created_at,
-          read_at,
-          sender:profiles (
-            username,
-            avatar_url,
-            rgb_username_expires_at,
-            glowing_username_color
-          )
-        `)
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
-        .limit(MAX_MESSAGES);
+    if (otherUserId === OFFICER_GROUP_CONVERSATION_ID) {
+      setActualConversationId(OFFICER_GROUP_CONVERSATION_ID)
+      setMessages([])
+      return
+    }
 
-      if (error) {
-        console.error('Error fetching messages:', error);
-      } else if (data) {
-        const formattedMessages: Message[] = data.map(msg => ({
-          ...msg,
-          sender_username: msg.sender.username,
-          sender_avatar_url: msg.sender.avatar_url,
-          sender_rgb_expires_at: msg.sender.rgb_username_expires_at,
-          sender_glowing_username_color: msg.sender.glowing_username_color,
-        }));
-        setMessages(formattedMessages);
+    let mounted = true
+    const init = async () => {
+      try {
+        const { data: existingConvs, error: existingError } = await supabase
+          .from('conversation_members')
+          .select('conversation_id')
+          .eq('user_id', user.id)
+
+        if (existingError) throw existingError
+
+        const myConvIds = existingConvs?.map((c) => c.conversation_id) || []
+        let targetConvId: string | null = null
+
+        if (myConvIds.length > 0) {
+          const { data: shared, error: sharedError } = await supabase
+            .from('conversation_members')
+            .select('conversation_id')
+            .in('conversation_id', myConvIds)
+            .eq('user_id', otherUserId)
+            .limit(1)
+
+          if (sharedError) throw sharedError
+          const sharedFirst = Array.isArray(shared) ? shared[0] : null
+          if (sharedFirst) targetConvId = sharedFirst.conversation_id
+        }
+
+        if (!targetConvId) {
+          const newConv = await createConversation([otherUserId])
+          targetConvId = newConv.id
+        }
+
+        if (mounted) {
+          setActualConversationId(targetConvId)
+        }
+      } catch (e) {
+        console.error('Error initializing conversation:', e)
+        if (mounted) {
+          setActualConversationId(null)
+        }
       }
-    };
+    }
 
-    fetchMessages();
-
-  }, [conversationId]);
+    void init()
+    return () => {
+      mounted = false
+    }
+  }, [otherUserId, user?.id])
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!actualConversationId) return
 
-    const channel = supabase.channel(`chat:${conversationId}`);
+    let mounted = true
 
-    const handleNewMessage = (payload: any) => {
-      const newMessage = payload.new || payload.payload;
-      setMessages(prev => {
-        // Replace temp message with final one from DB
-        if (prev.some(m => m.id === newMessage.id)) {
-          return prev.map(m => m.id === newMessage.id ? newMessage : m);
-        }
-        // Add new message if not already present
-        const updated = [...prev, newMessage];
-        if (updated.length > MAX_MESSAGES) {
-          return updated.slice(updated.length - MAX_MESSAGES);
-        }
-        return updated;
-      });
-    };
+    const load = async () => {
+      try {
+        const mapped = await mapConversationMessages(actualConversationId)
+        if (mounted) setMessages(mapped)
+        await markConversationRead(actualConversationId)
+      } catch (e) {
+        console.error('Error loading messages:', e)
+      }
+    }
 
-    channel
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, handleNewMessage)
-      .on('broadcast', { event: 'new-message' }, handleNewMessage)
-      .subscribe();
+    void load()
 
     return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [conversationId]);
+      mounted = false
+    }
+  }, [actualConversationId, mapConversationMessages])
 
   useEffect(() => {
-    if (virtuosoRef.current) {
-      virtuosoRef.current.scrollToIndex({ index: messages.length - 1, behavior: 'smooth' });
-    }
-  }, [messages]);
+    if (!actualConversationId) return
 
-  const handleNewMessageOptimistic = (msg: Message) => {
-    setMessages(prev => {
-      // Prevent duplicates
-      if (prev.some(m => m.id === msg.id)) return prev;
-      const updated = [...prev, msg];
-      if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
-      return updated;
-    });
-    setTimeout(() => {
-      if (virtuosoRef.current) {
-        virtuosoRef.current.scrollToIndex({ index: 'last', behavior: 'smooth' });
+    const channel = supabase.channel(`tcps:${actualConversationId}`)
+
+    const handleNewMessage = async (payload: any) => {
+      const newMsgRaw = payload.new || payload.payload
+      if (!newMsgRaw) return
+
+      const senderId = newMsgRaw.sender_id
+
+      let senderInfo: any = null
+      if (senderId === profile?.id && profile) {
+        senderInfo = {
+          id: profile.id,
+          username: profile.username,
+          avatar_url: profile.avatar_url,
+          rgb_username_expires_at: profile.rgb_username_expires_at,
+          glowing_username_color: profile.glowing_username_color,
+          created_at: profile.created_at,
+        }
+      } else if (senderId === otherUserId && otherUserInfo) {
+        senderInfo = {
+          id: otherUserInfo.id,
+          username: otherUserInfo.username,
+          avatar_url: otherUserInfo.avatar_url,
+          rgb_username_expires_at: otherUserInfo.rgb_username_expires_at,
+          glowing_username_color: otherUserInfo.glowing_username_color,
+          created_at: otherUserInfo.created_at,
+        }
+      } else {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, rgb_username_expires_at, glowing_username_color, created_at')
+          .eq('id', senderId)
+          .maybeSingle()
+        senderInfo = data
       }
-    }, 50);
-  };
 
-  if (!profile) return <div>Loading...</div>;
+      const newMsg: ChatMessage = {
+        id: newMsgRaw.id,
+        conversation_id: newMsgRaw.conversation_id,
+        sender_id: newMsgRaw.sender_id,
+        content: newMsgRaw.body ?? newMsgRaw.content,
+        created_at: newMsgRaw.created_at,
+        read_at: newMsgRaw.read_at ?? null,
+        sender_username: senderInfo?.username,
+        sender_avatar_url: senderInfo?.avatar_url,
+        sender_rgb_expires_at: senderInfo?.rgb_username_expires_at,
+        sender_glowing_username_color: senderInfo?.glowing_username_color,
+        sender_created_at: senderInfo?.created_at,
+      }
+
+      setMessages((prev) => {
+        const withoutPending = prev.filter((m) => {
+          if (!m.isPending) return true
+          return !(m.sender_id === newMsg.sender_id && m.content === newMsg.content)
+        })
+
+        if (withoutPending.some((m) => m.id === newMsg.id)) return withoutPending
+
+        const updated = [...withoutPending, newMsg]
+        if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES)
+        return updated
+      })
+
+      if (newMsgRaw.sender_id !== profile?.id) {
+        try {
+          await markConversationRead(actualConversationId)
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'conversation_messages',
+          filter: `conversation_id=eq.${actualConversationId}`,
+        },
+        handleNewMessage
+      )
+      .on('broadcast', { event: 'new-message' }, handleNewMessage)
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [actualConversationId, otherUserId, otherUserInfo, profile])
+
+  useEffect(() => {
+    if (virtuosoRef.current && messages.length > 0) {
+      virtuosoRef.current.scrollToIndex({ index: messages.length - 1, behavior: 'smooth' })
+    }
+  }, [messages])
+
+  const handleNewMessageOptimistic = (msg: any) => {
+    if (!actualConversationId || !profile?.id) return
+
+    const pending: ChatMessage = {
+      id: msg.id || `temp-${Date.now()}`,
+      conversation_id: actualConversationId,
+      sender_id: profile.id,
+      content: msg.content || msg.body,
+      created_at: msg.created_at || new Date().toISOString(),
+      read_at: null,
+      sender_username: profile.username,
+      sender_avatar_url: profile.avatar_url,
+      sender_rgb_expires_at: profile.rgb_username_expires_at,
+      sender_glowing_username_color: profile.glowing_username_color,
+      sender_created_at: profile.created_at,
+      isPending: true,
+    }
+
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === pending.id)) return prev
+      const updated = [...prev, pending]
+      if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES)
+      return updated
+    })
+  }
+
+  if (!user?.id) return null
+
+  if (!otherUserId) {
+    return <div className="flex-1 flex items-center justify-center text-gray-500">Select a conversation</div>
+  }
+
+  if (!actualConversationId) {
+    return <div className="flex-1 flex items-center justify-center text-gray-500">Loading conversation...</div>
+  }
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-grow">
-        <Virtuoso
-          ref={virtuosoRef}
-          data={messages}
-          itemContent={(index, msg) => (
-            <div key={msg.id} className="p-4">
-              <strong>{msg.sender_username}: </strong>
-              <span>{msg.content}</span>
-            </div>
-          )}
-        />
+        {messages.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-gray-500">No messages yet</div>
+        ) : (
+          <Virtuoso
+            ref={virtuosoRef}
+            data={messages}
+            itemContent={(_index, msg) => (
+              <div key={msg.id} className="p-4">
+                <strong>{msg.sender_username || 'Unknown'}: </strong>
+                <span>{msg.content}</span>
+              </div>
+            )}
+          />
+        )}
       </div>
-      <MessageInput conversationId={conversationId!} onNewMessage={handleNewMessageOptimistic} />
+      <MessageInput
+        conversationId={actualConversationId}
+        otherUserId={otherUserId}
+        onMessageSent={() => {
+          if (actualConversationId) {
+            void markConversationRead(actualConversationId).catch(() => {})
+          }
+        }}
+        onNewMessage={handleNewMessageOptimistic}
+      />
     </div>
-  );
-};
+  )
+}
 
-export default ChatWindow;
+export default ChatWindow

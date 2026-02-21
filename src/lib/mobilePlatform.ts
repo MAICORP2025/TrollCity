@@ -27,7 +27,7 @@ export async function initMobilePlatform() {
     // Configure Status Bar
     await StatusBar.setStyle({ style: Style.Dark });
     await StatusBar.setBackgroundColor({ color: '#06030e' });
-    await StatusBar.setOverlaysWebView({ overlay: false });
+    await StatusBar.setOverlaysWebView({ overlay: true });
 
     // Configure Keyboard
     Keyboard.setAccessoryBarVisible({ isVisible: false });
