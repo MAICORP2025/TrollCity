@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../lib/store";
 import { hasRole, UserRole } from "../lib/supabase";
 import { Shield, Crown } from "lucide-react";
-import BottomNav from "./BottomNav";
+import BottomNavigation from "../components/BottomNavigation";
 
 export default function MobileShell({
   children,
@@ -90,7 +90,7 @@ export default function MobileShell({
       </div>
 
       {/* Bottom Nav hidden during immersive mode */}
-      {!isImmersive && <BottomNav />}
+      {!isImmersive && <BottomNavigation />}
     </div>
   );
 }
