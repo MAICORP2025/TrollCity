@@ -60,7 +60,8 @@ export default function DistrictNavigation() {
         { feature_name: 'Living & Housing', route_path: '/living', required_role: 'user' },
         { feature_name: 'Following', route_path: '/following', required_role: 'user' },
         { feature_name: 'Leaderboard', route_path: '/leaderboard', required_role: 'user' },
-        { feature_name: 'Troll City Wall', route_path: '/wall', required_role: 'user' }
+        { feature_name: 'Troll City Wall', route_path: '/wall', required_role: 'user' },
+        { feature_name: 'Neighbors', route_path: '/neighbors', required_role: 'user' }
       ],
       commerce_district: [
         { feature_name: 'Coin Store', route_path: '/store', required_role: 'user' },

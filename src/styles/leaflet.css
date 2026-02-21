@@ -1,0 +1,389 @@
+/* Leaflet CSS - Custom styling for TrollCity map */
+
+/* Required for Leaflet to work properly */
+@import 'leaflet/dist/leaflet.css';
+
+/* Leaflet Core */
+.leaflet-container {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0D0D0D;
+  outline: none;
+}
+
+.leaflet-container a {
+  color: #8b5cf6;
+}
+
+.leaflet-container a:hover {
+  color: #a78bfa;
+}
+
+/* Map tiles - Dark theme styling */
+.leaflet-tile {
+  filter: brightness(0.8) saturate(0.9) contrast(1.1);
+}
+
+.leaflet-tile-pane {
+  opacity: 1;
+}
+
+/* Control layers */
+.leaflet-control {
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-control a {
+  background: #1A1A1A !important;
+  color: #e5e5e5 !important;
+  border-bottom: 1px solid #2C2C2C !important;
+}
+
+.leaflet-control a:hover {
+  background: #2C2C2C !important;
+}
+
+.leaflet-control a:last-child {
+  border-bottom: none !important;
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  background: #1A1A1A !important;
+  color: #e5e5e5 !important;
+  border-bottom: 1px solid #2C2C2C !important;
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+  font-size: 18px !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #2C2C2C !important;
+  color: #8b5cf6 !important;
+}
+
+.leaflet-control-zoom-in {
+  border-top-left-radius: 8px !important;
+  border-top-right-radius: 8px !important;
+}
+
+.leaflet-control-zoom-out {
+  border-bottom-left-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+  border-bottom: none !important;
+}
+
+/* Attribution */
+.leaflet-control-attribution {
+  background: rgba(26, 26, 26, 0.9) !important;
+  color: #737373 !important;
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #8b5cf6 !important;
+}
+
+/* Scale control */
+.leaflet-control-scale-line {
+  background: rgba(26, 26, 26, 0.9) !important;
+  border-color: #2C2C2C !important;
+  color: #e5e5e5 !important;
+  font-size: 10px !important;
+}
+
+/* Markers */
+.leaflet-marker-icon {
+  background: transparent;
+  border: none;
+}
+
+.leaflet-marker-icon img {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  border: 3px solid #8b5cf6;
+  transition: transform 0.2s ease;
+}
+
+.leaflet-marker-icon img:hover {
+  transform: scale(1.1);
+}
+
+/* Custom marker icon styling */
+.leaflet-custom-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  border-radius: 50%;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+  border: 3px solid white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.leaflet-custom-marker:hover {
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6);
+}
+
+.leaflet-custom-marker img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* Popup styling */
+.leaflet-popup {
+  margin-bottom: 10px;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #1A1A1A !important;
+  color: #e5e5e5 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid #2C2C2C !important;
+  padding: 0 !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  min-width: 200px !important;
+}
+
+.leaflet-popup-tip {
+  background: #1A1A1A !important;
+  border: 1px solid #2C2C2C !important;
+  box-shadow: none !important;
+}
+
+.leaflet-popup-close-button {
+  color: #737373 !important;
+  font-size: 20px !important;
+  width: 24px !important;
+  height: 24px !important;
+  top: 8px !important;
+  right: 8px !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: #e5e5e5 !important;
+}
+
+/* Popup content styling */
+.leaflet-popup-content .popup-image {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 12px 12px 0 0;
+}
+
+.leaflet-popup-content .popup-content {
+  padding: 12px;
+}
+
+.leaflet-popup-content .popup-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.leaflet-popup-content .popup-price {
+  font-size: 16px;
+  font-weight: 700;
+  color: #8b5cf6;
+  margin-bottom: 8px;
+}
+
+.leaflet-popup-content .popup-seller {
+  font-size: 12px;
+  color: #737373;
+}
+
+/* User location marker */
+.leaflet-user-location {
+  width: 20px !important;
+  height: 20px !important;
+  background: #22c55e;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.5);
+}
+
+.leaflet-user-location-marker {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+/* Circle markers for cluster visualization */
+.leaflet-circle-marker {
+  background: rgba(139, 92, 246, 0.3);
+  border: 2px solid #8b5cf6;
+  border-radius: 50%;
+}
+
+/* Geolocation control */
+.leaflet-control-locate {
+  background: #1A1A1A !important;
+  color: #e5e5e5 !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-control-locate:hover {
+  background: #2C2C2C !important;
+}
+
+/* Fullscreen control */
+.leaflet-control-fullscreen {
+  background: #1A1A1A !important;
+  color: #e5e5e5 !important;
+}
+
+/* Minimap */
+.leaflet-minimap {
+  border: 2px solid #2C2C2C !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-minimap a {
+  background: #1A1A1A !important;
+}
+
+/* Drawing controls */
+.leaflet-draw-toolbar a {
+  background: #1A1A1A !important;
+  color: #e5e5e5 !important;
+  border-color: #2C2C2C !important;
+}
+
+.leaflet-draw-toolbar a:hover {
+  background: #2C2C2C !important;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .leaflet-control-zoom a {
+    width: 32px !important;
+    height: 32px !important;
+    line-height: 32px !important;
+  }
+  
+  .leaflet-popup-content {
+    min-width: 180px !important;
+  }
+  
+  .leaflet-popup-content .popup-image {
+    height: 100px;
+  }
+}
+
+/* Dark mode map overlay */
+.leaflet-overlay-pane {
+  opacity: 0.95;
+}
+
+/* Marker cluster styling */
+.marker-cluster {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 50%;
+}
+
+.marker-cluster div {
+  background: #8b5cf6;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marker-cluster-small {
+  width: 40px;
+  height: 40px;
+}
+
+.marker-cluster-small div {
+  width: 36px;
+  height: 36px;
+}
+
+.marker-cluster-medium {
+  width: 50px;
+  height: 50px;
+}
+
+.marker-cluster-medium div {
+  width: 44px;
+  height: 44px;
+}
+
+.marker-cluster-large {
+  width: 60px;
+  height: 60px;
+}
+
+.marker-cluster-large div {
+  width: 52px;
+  height: 52px;
+}
+
+/* Search control */
+.leaflet-control-search {
+  background: #1A1A1A !important;
+  border: 1px solid #2C2C2C !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-control-search input {
+  background: #0D0D0D !important;
+  color: #e5e5e5 !important;
+  border: 1px solid #2C2C2C !important;
+}
+
+.leaflet-control-search input::placeholder {
+  color: #737373 !important;
+}
+
+/* Measure control */
+.leaflet-control-measure {
+  background: #1A1A1A !important;
+  border: 1px solid #2C2C2C !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-control-measure a {
+  background: #1A1A1A !important;
+  color: #e5e5e5 !important;
+}

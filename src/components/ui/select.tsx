@@ -13,11 +13,13 @@ const SelectContext = createContext<SelectContextType | null>(null)
 export const Select = ({ 
   children, 
   value, 
-  onValueChange 
+  onValueChange,
+  required = false
 }: { 
   children: React.ReactNode
   value: string
   onValueChange: (value: string) => void 
+  required?: boolean
 }) => {
   const [open, setOpen] = useState(false)
   return (
@@ -29,16 +31,19 @@ export const Select = ({
 
 export const SelectTrigger = ({ 
   children, 
-  className = "" 
+  className = "",
+  id
 }: { 
   children: React.ReactNode
-  className?: string 
+  className?: string
+  id?: string
 }) => {
   const context = useContext(SelectContext)
   if (!context) throw new Error("SelectTrigger must be used within Select")
   
   return (
     <button
+      id={id}
       onClick={() => context.setOpen(!context.open)}
       className={`flex items-center justify-between w-full px-3 py-2 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >

@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, Video, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 
 const DatabaseBackup = lazy(() => import('./DatabaseBackup'))
@@ -23,6 +23,7 @@ const AdminJailManagement = lazy(() => import('./AdminJailManagement'))
 const SeasonalGoals = lazy(() => import('./SeasonalGoals'))
 const PayoutBatches = lazy(() => import('./PayoutBatches'))
 const LoadLab = lazy(() => import('../../components/admin/LoadLab'))
+const SellerManagement = lazy(() => import('./SellerManagement'))
 
 export interface AdminRoute {
   id: string
@@ -196,6 +197,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-purple-500/10',
     tileBorderColor: 'border-purple-500/30',
     category: 'support'
+  },
+  {
+    id: 'seller-management',
+    title: 'Seller Management',
+    path: '/admin/seller-management',
+    component: SellerManagement,
+    roles: [UserRole.ADMIN],
+    description: 'Manage seller tiers, reviews, and performance',
+    icon: <ShoppingCart className="w-5 h-5 text-orange-200" />,
+    tileColor: 'text-orange-200',
+    tileBgColor: 'bg-orange-500/10',
+    tileBorderColor: 'border-orange-500/30',
+    category: 'economy'
   },
   {
     id: 'court-dockets',

@@ -10,10 +10,11 @@
     "noUncheckedIndexedAccess": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "types": [],
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["vite/client"],
+
     "allowJs": true,
     "noEmit": true,
     "resolveJsonModule": true,
@@ -21,7 +22,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "allowImportingTsExtensions": true,
+    "moduleSuffixes": [".ts", ".tsx", ".js", ".jsx"]
   },
   "include": [
     "src",

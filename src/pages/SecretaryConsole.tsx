@@ -14,7 +14,8 @@ import {
   ShieldAlert,
   Home,
   Calendar,
-  CreditCard
+  CreditCard,
+  Scale
 } from 'lucide-react'
 import OfficerShiftCalendar from '../components/officer/OfficerShiftCalendar'
 import ExecutiveIntakeList from './admin/components/shared/ExecutiveIntakeList'
@@ -24,7 +25,7 @@ import CriticalAlertsList from './admin/components/shared/CriticalAlertsList'
 import ExecutiveReportsList from './admin/components/shared/ExecutiveReportsList'
 import ManualCoinOrdersList from './admin/components/shared/ManualCoinOrdersList'
 
-type TabId = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'troll_town' | 'shifts' | 'manual_payments'
+type TabId = 'intake' | 'cashouts' | 'giftcards' | 'alerts' | 'reports' | 'troll_town' | 'shifts' | 'manual_payments' | 'appeals'
 
 export default function SecretaryConsole() {
   const { user, profile } = useAuthStore()
@@ -166,6 +167,12 @@ export default function SecretaryConsole() {
             onClick={() => setActiveTab('giftcards')}
             icon={<Gift className="w-5 h-5" />}
             label="Gift Card Fulfillment"
+          />
+          <NavButton 
+            active={activeTab === 'appeals'} 
+            onClick={() => navigate('/admin/appeals')}
+            icon={<Scale className="w-5 h-5" />}
+            label="Transaction Appeals"
           />
           <NavButton 
             active={activeTab === 'alerts'} 

@@ -1,14 +1,24 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { 
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import {
   Search, MapPin, Filter, Grid, List, Car, Wrench, ShoppingBag, 
   MessageCircle, DollarSign, Clock, Star, CheckCircle, AlertTriangle,
   ChevronDown, X, Image as ImageIcon, Send, Phone, Mail, Globe,
-  Navigation, Heart, Eye, ChevronLeft, ChevronRight
+  Navigation, Heart, Eye, ChevronLeft, ChevronRight, Zap, Pin, Palette, Tv
 } from 'lucide-react'
+
+// Premium feature pricing
+const PREMIUM_FEATURES = {
+  featured: { cost: 50, label: 'Featured', icon: '⭐', description: 'Appear at top of search results' },
+  pinned: { cost: 100, label: 'Pin to Top', icon: '📌', description: 'Stay at the very top of listings' },
+  highlighted: { cost: 150, label: 'Highlight', icon: '✨', description: 'Stand out with special styling' },
+  auto_promo: { cost: 200, label: 'Auto Promo', icon: '📺', description: 'Promoted automatically in streams' }
+}
 
 // Category definitions
 const MARKETPLACE_CATEGORIES = [
@@ -46,6 +56,50 @@ const VEHICLE_MAKES = [
   'Porsche', 'Ram', 'Subaru', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo'
 ]
 
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371 // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  return R * c
+}
+
+// Convert km to miles
+function kmToMiles(km: number): number {
+  return km * 0.621371
+}
+
+// Recenter map control component
+function RecenterControl({ userLocation }: { userLocation: { lat: number, lon: number } }) {
+  const map = useMap()
+
+  useEffect(() => {
+    map.setView([userLocation.lat, userLocation.lon], 13)
+  }, [map, userLocation.lat, userLocation.lon])
+
+  return null
+}
+
+// Custom marker icon for user location
+const userLocationIcon = L.divIcon({
+  className: 'custom-user-marker',
+  html: `<div style="
+    width: 24px;
+    height: 24px;
+    background: #8b5cf6;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  "></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
+})
+
 // Types
 interface MarketplaceItem {
   id: string
@@ -63,6 +117,14 @@ interface MarketplaceItem {
   stock: number
   status: string
   created_at: string
+  latitude?: number
+  longitude?: number
+  // Premium features
+  is_featured?: boolean
+  is_pinned?: boolean
+  is_highlighted?: boolean
+  is_auto_promo?: boolean
+  premium_expires_at?: string
   seller?: {
     username: string
     avatar_url?: string
@@ -91,6 +153,14 @@ interface VehicleListing {
   images: string[]
   status: string
   created_at: string
+  latitude?: number
+  longitude?: number
+  // Premium features
+  is_featured?: boolean
+  is_pinned?: boolean
+  is_highlighted?: boolean
+  is_auto_promo?: boolean
+  premium_expires_at?: string
   seller?: {
     username: string
     avatar_url?: string
@@ -167,7 +237,10 @@ export default function Trollifieds() {
   // Map state
   const [showMap, setShowMap] = useState(false)
   const [userLocation, setUserLocation] = useState<{lat: number, lon: number} | null>(null)
-  const [mapRadius, setMapRadius] = useState(50) // km
+  const [mapRadius, setMapRadius] = useState(1.6) // km (default 1 mile = 1.6 km)
+  const [mapCenter, setMapCenter] = useState<[number, number]>([39.8283, -98.5795]) // Default center US
+  const [mapItems, setMapItems] = useState<MarketplaceItem[]>([])
+  const mapRef = useRef<L.Map | null>(null)
   
   // Messaging state
   const [messageModal, setMessageModal] = useState<{open: boolean, recipientId?: string, listingId?: string, listingType?: string}>({open: false})
@@ -177,6 +250,13 @@ export default function Trollifieds() {
   // Legal disclaimer
   const [showDisclaimer, setShowDisclaimer] = useState(false)
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false)
+
+  // Premium features state
+  const [premiumModal, setPremiumModal] = useState<{open: boolean, listingId?: string, listingType?: string}>({open: false})
+  const [purchasingPremium, setPurchasingPremium] = useState(false)
+
+  // Item detail modal state
+  const [itemDetail, setItemDetail] = useState<{open: boolean, item?: any}>({open: false})
 
   // Get user location
   useEffect(() => {
@@ -195,6 +275,41 @@ export default function Trollifieds() {
       )
     }
   }, [])
+
+  // Update map center when user location changes
+  useEffect(() => {
+    if (userLocation) {
+      setMapCenter([userLocation.lat, userLocation.lon])
+    }
+  }, [userLocation])
+
+  // Filter items within radius for map display
+  useEffect(() => {
+    if (!userLocation || marketplaceItems.length === 0) {
+      setMapItems([])
+      return
+    }
+
+    const itemsWithLocation = marketplaceItems.filter(item => {
+      if (!item.latitude || !item.longitude) return false
+      const distance = calculateDistance(
+        userLocation.lat,
+        userLocation.lon,
+        item.latitude,
+        item.longitude
+      )
+      return distance <= mapRadius
+    })
+
+    // Sort by distance
+    itemsWithLocation.sort((a, b) => {
+      const distA = a.latitude && a.longitude ? calculateDistance(userLocation.lat, userLocation.lon, a.latitude, a.longitude) : 0
+      const distB = b.latitude && b.longitude ? calculateDistance(userLocation.lat, userLocation.lon, b.latitude, b.longitude) : 0
+      return distA - distB
+    })
+
+    setMapItems(itemsWithLocation)
+  }, [userLocation, marketplaceItems, mapRadius])
 
   // Load data based on active tab
   const loadData = useCallback(async () => {
@@ -323,6 +438,22 @@ export default function Trollifieds() {
 
     // Sort
     items.sort((a, b) => {
+      // First priority: Pinned items
+      if (a.is_pinned && !b.is_pinned) return -1
+      if (!a.is_pinned && b.is_pinned) return 1
+      
+      // Second priority: Featured items
+      if (a.is_featured && !b.is_featured) return -1
+      if (!a.is_featured && b.is_featured) return 1
+      
+      // Third priority: Highlighted items
+      if (a.is_highlighted && !b.is_highlighted) return -1
+      if (!a.is_highlighted && b.is_highlighted) return 1
+      
+      // Fourth priority: Auto promo items
+      if (a.is_auto_promo && !b.is_auto_promo) return -1
+      if (!a.is_auto_promo && b.is_auto_promo) return 1
+      
       switch (sortBy) {
         case 'price_low':
           return (a.price_usd || 0) - (b.price_usd || 0)
@@ -379,6 +510,56 @@ export default function Trollifieds() {
       return
     }
     setMessageModal({ open: true, recipientId, listingId, listingType })
+  }
+
+  // Open premium modal
+  const openPremiumModal = (listingId: string, listingType: string) => {
+    if (!user) {
+      navigate('/auth')
+      return
+    }
+    setPremiumModal({ open: true, listingId, listingType })
+  }
+
+  // Purchase premium feature
+  const handlePurchasePremium = async (featureType: string) => {
+    if (!user || !premiumModal.listingId) {
+      toast.error('Please log in to purchase premium features')
+      return
+    }
+
+    const cost = PREMIUM_FEATURES[featureType as keyof typeof PREMIUM_FEATURES]?.cost
+    if (!cost) {
+      toast.error('Invalid premium feature')
+      return
+    }
+
+    setPurchasingPremium(true)
+    try {
+      const { error } = await supabase.rpc('purchase_listing_premium', {
+        p_listing_id: premiumModal.listingId,
+        p_listing_type: premiumModal.listingType || 'marketplace',
+        p_feature_type: featureType,
+        p_seller_id: user.id,
+        p_duration_days: 7
+      })
+
+      if (error) throw error
+
+      toast.success(`${PREMIUM_FEATURES[featureType as keyof typeof PREMIUM_FEATURES].label} purchased successfully!`)
+      setPremiumModal({ open: false })
+      loadData() // Refresh data
+    } catch (err: any) {
+      console.error('Error purchasing premium:', err)
+      toast.error(err.message || 'Failed to purchase premium feature')
+    } finally {
+      setPurchasingPremium(false)
+    }
+  }
+
+  // Open item detail
+  const openItemDetail = (item: any) => {
+    setItemDetail({ open: true, item })
   }
 
   // Get price display
@@ -617,7 +798,13 @@ export default function Trollifieds() {
             {filteredItems.map((item: any) => (
               <div 
                 key={item.id} 
-                className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] overflow-hidden hover:border-purple-500/50 transition-colors group"
+                className={`bg-[#1A1A1A] rounded-xl border overflow-hidden hover:border-purple-500/50 transition-colors group cursor-pointer ${
+                  item.is_highlighted ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 
+                  item.is_pinned ? 'border-red-500' : 
+                  item.is_featured ? 'border-yellow-600' : 
+                  'border-[#2C2C2C]'
+                }`}
+                onClick={() => openItemDetail(item)}
               >
                 {/* Image */}
                 <div className="aspect-video bg-[#0D0D0D] relative overflow-hidden">
@@ -625,7 +812,7 @@ export default function Trollifieds() {
                     <img
                       src={getImage(item)}
                       alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${item.is_highlighted ? 'ring-4 ring-yellow-400' : ''}`}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23222" width="100" height="100"/%3E%3Ctext fill="%23666" font-size="20" x="50" y="55" text-anchor="middle"%3ENo Image%3C/text%3E%3C/svg%3E'
                       }}
@@ -635,9 +822,27 @@ export default function Trollifieds() {
                       <ImageIcon className="w-12 h-12 text-gray-600" />
                     </div>
                   )}
+                  {/* Premium Badges */}
+                  <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                    {item.is_pinned && (
+                      <span className="bg-red-600 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
+                        <Pin className="w-3 h-3" /> Pinned
+                      </span>
+                    )}
+                    {item.is_featured && !item.is_pinned && (
+                      <span className="bg-yellow-600 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
+                        <Star className="w-3 h-3" /> Featured
+                      </span>
+                    )}
+                    {item.is_auto_promo && (
+                      <span className="bg-purple-600 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
+                        <Tv className="w-3 h-3" /> Auto Promo
+                      </span>
+                    )}
+                  </div>
                   {/* Condition Badge */}
                   {item.condition && (
-                    <span className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-xs capitalize">
+                    <span className="absolute top-2 right-2 bg-black/70 px-2 py-1 rounded text-xs capitalize">
                       {item.condition}
                     </span>
                   )}
@@ -692,18 +897,35 @@ export default function Trollifieds() {
                   {/* Actions */}
                   <div className="flex gap-2">
                     <button
-                      onClick={() => openMessageModal(
-                        item.seller_id || item.owner_id, 
-                        item.id, 
-                        activeTab
-                      )}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openMessageModal(
+                          item.seller_id || item.owner_id, 
+                          item.id, 
+                          activeTab
+                        )
+                      }}
                       className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1"
                     >
                       <MessageCircle className="w-4 h-4" />
                       Message
                     </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openPremiumModal(item.id, activeTab)
+                      }}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1 ${
+                        item.is_featured || item.is_pinned || item.is_highlighted || item.is_auto_promo
+                          ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                          : 'bg-[#0D0D0D] hover:bg-[#2C2C2C] text-gray-400'
+                      }`}
+                      title="Boost your listing"
+                    >
+                      <Zap className="w-4 h-4" />
+                    </button>
                     {activeTab !== 'services' && (
-                      <button className="px-3 py-2 bg-[#0D0D0D] hover:bg-[#2C2C2C] rounded-lg">
+                      <button className="px-3 py-2 bg-[#0D0D0D] hover:bg-[#2C2C2C] rounded-lg" onClick={(e) => e.stopPropagation()}>
                         <Heart className="w-4 h-4 text-gray-400" />
                       </button>
                     )}
@@ -714,31 +936,105 @@ export default function Trollifieds() {
           </div>
         )}
 
-        {/* Map View (Placeholder - would integrate with Leaflet) */}
+        {/* Map View with Leaflet */}
         {showMap && (
           <div className="mt-6 bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] p-4">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <MapPin className="w-5 h-5 text-purple-400" />
               Nearby Listings Map
             </h3>
-            <div className="aspect-video bg-[#0D0D0D] rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <MapPin className="w-12 h-12 text-gray-600 mx-auto mb-2" />
-                <p className="text-gray-400">Map view with Leaflet/OpenStreetMap</p>
-                <p className="text-gray-500 text-sm">Free, no account required</p>
+            
+            {/* Leaflet Map */}
+            <div className="aspect-video bg-[#0D0D0D] rounded-lg overflow-hidden">
+              <MapContainer
+                center={mapCenter}
+                zoom={13}
+                style={{ height: '100%', width: '100%' }}
+                ref={mapRef}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                
+                {/* User Location Marker */}
+                {userLocation && (
+                  <Marker position={[userLocation.lat, userLocation.lon]} icon={userLocationIcon}>
+                    <Popup>
+                      <div className="text-center">
+                        <p className="font-semibold text-purple-400">Your Location</p>
+                        <p className="text-xs text-gray-400">You are here</p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                )}
+                
+                {/* Listing Markers */}
+                {mapItems.map((item) => (
+                  item.latitude && item.longitude && (
+                    <Marker
+                      key={item.id}
+                      position={[item.latitude, item.longitude]}
+                    >
+                      <Popup>
+                        <div className="min-w-[180px]">
+                          {item.images && item.images.length > 0 ? (
+                            <img 
+                              src={item.images[0]} 
+                              alt={item.title}
+                              className="w-full h-24 object-cover rounded-t-lg -mx-3 -mt-3 mb-2"
+                            />
+                          ) : (
+                            <div className="w-full h-24 bg-gray-700 rounded-t-lg -mx-3 -mt-3 mb-2 flex items-center justify-center">
+                              <ShoppingBag className="w-8 h-8 text-gray-500" />
+                            </div>
+                          )}
+                          <p className="font-semibold text-white text-sm truncate">{item.title}</p>
+                          <p className="font-bold text-purple-400 text-lg">{item.price_coins} coins</p>
+                          {item.price_usd > 0 && (
+                            <p className="text-xs text-gray-400">${item.price_usd.toFixed(2)} USD</p>
+                          )}
+                          {item.seller && (
+                            <p className="text-xs text-gray-500 mt-1">by @{item.seller.username}</p>
+                          )}
+                          {item.latitude && item.longitude && userLocation && (
+                            <p className="text-xs text-green-400 mt-1">
+                              {kmToMiles(calculateDistance(userLocation.lat, userLocation.lon, item.latitude, item.longitude)).toFixed(2)} miles away
+                            </p>
+                          )}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )
+                ))}
+                
+                {/* Recenter button */}
+                {userLocation && (
+                  <RecenterControl userLocation={userLocation} />
+                )}
+              </MapContainer>
+            </div>
+            
+            {/* Map Info */}
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-400">Search Radius:</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="50"
+                  step="0.5"
+                  value={mapRadius}
+                  onChange={(e) => setMapRadius(Number(e.target.value))}
+                  className="flex-1"
+                />
+                <span className="text-sm text-purple-400 font-medium">{mapRadius.toFixed(1)} km ({kmToMiles(mapRadius).toFixed(1)} mi)</span>
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-4">
-              <label className="text-sm text-gray-400">Search Radius:</label>
-              <input
-                type="range"
-                min="10"
-                max="200"
-                value={mapRadius}
-                onChange={(e) => setMapRadius(Number(e.target.value))}
-                className="flex-1"
-              />
-              <span className="text-sm">{mapRadius} km</span>
+            
+            {/* Items count */}
+            <div className="mt-2 text-sm text-gray-500">
+              Showing {mapItems.length} listing{mapItems.length !== 1 ? 's' : ''} within {mapRadius.toFixed(1)} km
             </div>
           </div>
         )}
@@ -782,6 +1078,166 @@ export default function Trollifieds() {
                 )}
                 Send
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Premium Features Modal */}
+      {premiumModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <Zap className="w-5 h-5 text-yellow-400" />
+                Boost Your Listing
+              </h3>
+              <button
+                onClick={() => setPremiumModal({ open: false })}
+                className="p-1 hover:bg-[#2C2C2C] rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-gray-400 text-sm mb-4">
+              Make your listing stand out! Premium features last for 7 days.
+            </p>
+            <div className="space-y-3">
+              {Object.entries(PREMIUM_FEATURES).map(([key, feature]) => (
+                <button
+                  key={key}
+                  onClick={() => handlePurchasePremium(key)}
+                  disabled={purchasingPremium}
+                  className="w-full p-4 bg-[#0D0D0D] hover:bg-[#2C2C2C] rounded-lg border border-[#2C2C2C] hover:border-yellow-500/50 transition-colors text-left flex items-center gap-4"
+                >
+                  <span className="text-2xl">{feature.icon}</span>
+                  <div className="flex-1">
+                    <div className="font-bold text-white">{feature.label}</div>
+                    <div className="text-xs text-gray-400">{feature.description}</div>
+                  </div>
+                  <span className="text-yellow-400 font-bold text-lg">{feature.cost} coins</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Item Detail Modal */}
+      {itemDetail.open && itemDetail.item && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-[#1A1A1A] p-4 border-b border-[#2C2C2C] flex items-center justify-between">
+              <h3 className="text-lg font-bold">Listing Details</h3>
+              <button
+                onClick={() => setItemDetail({ open: false })}
+                className="p-1 hover:bg-[#2C2C2C] rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4">
+              {/* Image */}
+              <div className="aspect-video bg-[#0D0D0D] rounded-lg overflow-hidden mb-4">
+                {getImage(itemDetail.item) ? (
+                  <img
+                    src={getImage(itemDetail.item)}
+                    alt={itemDetail.item.title}
+                    className={`w-full h-full object-contain ${itemDetail.item.is_highlighted ? 'ring-4 ring-yellow-400' : ''}`}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <ImageIcon className="w-16 h-16 text-gray-600" />
+                  </div>
+                )}
+              </div>
+
+              {/* Premium Badges */}
+              {(itemDetail.item.is_pinned || itemDetail.item.is_featured || itemDetail.item.is_highlighted || itemDetail.item.is_auto_promo) && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {itemDetail.item.is_pinned && (
+                    <span className="bg-red-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                      <Pin className="w-4 h-4" /> Pinned to Top
+                    </span>
+                  )}
+                  {itemDetail.item.is_featured && (
+                    <span className="bg-yellow-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                      <Star className="w-4 h-4" /> Featured
+                    </span>
+                  )}
+                  {itemDetail.item.is_highlighted && (
+                    <span className="bg-yellow-500 text-black px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                      <Palette className="w-4 h-4" /> Highlighted
+                    </span>
+                  )}
+                  {itemDetail.item.is_auto_promo && (
+                    <span className="bg-purple-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                      <Tv className="w-4 h-4" /> Auto Promo
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <h2 className="text-2xl font-bold mb-2">{itemDetail.item.title}</h2>
+              
+              {/* Price */}
+              <div className="mb-4">
+                {getPriceDisplay(itemDetail.item)}
+              </div>
+
+              {/* Description */}
+              {itemDetail.item.description && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-1">Description</h4>
+                  <p className="text-gray-300">{itemDetail.item.description}</p>
+                </div>
+              )}
+
+              {/* Location - HIDE exact location, only show city/state */}
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-400 mb-1">Location</h4>
+                <p className="text-gray-300 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-gray-400" />
+                  {itemDetail.item.city}, {itemDetail.item.state}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Exact location is hidden for your safety
+                </p>
+              </div>
+
+              {/* Seller */}
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-400 mb-1">Seller</h4>
+                <p className="text-gray-300">@{itemDetail.item.seller?.username || 'Unknown'}</p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={() => {
+                    openMessageModal(
+                      itemDetail.item.seller_id || itemDetail.item.owner_id, 
+                      itemDetail.item.id, 
+                      activeTab
+                    )
+                    setItemDetail({ open: false })
+                  }}
+                  className="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  Message Seller
+                </button>
+                <button
+                  onClick={() => {
+                    openPremiumModal(itemDetail.item.id, activeTab)
+                  }}
+                  className="px-4 py-3 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-medium flex items-center gap-2"
+                >
+                  <Zap className="w-5 h-5" />
+                  Boost
+                </button>
+              </div>
             </div>
           </div>
         </div>

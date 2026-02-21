@@ -12,6 +12,7 @@ import {
   Banknote,
   FileText,
   Store,
+  ShoppingBag,
   Crown,
   Trophy,
   Package,
@@ -35,7 +36,8 @@ import {
   Video,
   Mic,
   Globe,
-  Lock
+  Lock,
+  Files
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
@@ -348,6 +350,7 @@ export default function Sidebar() {
 
           <SidebarItem icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} collapsed={isSidebarCollapsed} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} />
           <SidebarItem icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} collapsed={isSidebarCollapsed} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} />
+          <SidebarItem icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} collapsed={isSidebarCollapsed} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400 hover:text-green-300" />
         </SidebarGroup>
 
         {/* Social */}
@@ -499,6 +502,7 @@ export default function Sidebar() {
           <SidebarItem icon={FileText} label="Careers" to="/application" active={isActive('/application')} collapsed={isSidebarCollapsed} highlight={isUpdated('/application')} onClick={() => markAsViewed('/application')} />
           <SidebarItem icon={Video} label="Interview Room" to="/interview-room" active={isActive('/interview-room')} collapsed={isSidebarCollapsed} highlight={isUpdated('/interview-room')} onClick={() => markAsViewed('/interview-room')} />
           <SidebarItem icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} collapsed={isSidebarCollapsed} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} />
+          <SidebarItem icon={Scale} label="Appeals" to="/city-registry" active={isActive('/city-registry')} collapsed={isSidebarCollapsed} highlight={isUpdated('/city-registry')} onClick={() => markAsViewed('/city-registry')} />
         </SidebarGroup>
           </>
         )}

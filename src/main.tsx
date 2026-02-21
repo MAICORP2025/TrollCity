@@ -5,7 +5,7 @@ import App from './App'
 import './index.css'
 import './styles/broadcast-responsive.css'
 import './styles/mobile-theme.css'
-
+import './styles/leaflet.css'
 import { AuthProvider } from './contexts/AuthProvider'
 import { GlobalAppProvider } from './contexts/GlobalAppContext'
 import { supabase } from './lib/supabase'

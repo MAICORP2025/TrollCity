@@ -18,6 +18,12 @@ import PinnedProductOverlay from '../../components/broadcast/PinnedProductOverla
 import PinProductModal from '../../components/broadcast/PinProductModal'
 import { BroadcastGift } from '../../hooks/useBroadcastRealtime'
 import { useBroadcastPinnedProducts } from '../../hooks/useBroadcastPinnedProducts'
+import {
+  getCategoryConfig,
+  supportsBattles,
+  getMatchingTerminology,
+  BroadcastCategoryId
+} from '../../config/broadcastCategories'
 
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -364,6 +370,11 @@ function BroadcastPage() {
 
   if (!stream) return null
 
+  // Get category-specific configuration
+  const categoryConfig = getCategoryConfig(stream.category || 'general');
+  const categorySupportsBattles = supportsBattles(stream.category || 'general');
+  const categoryMatchingTerm = getMatchingTerminology(stream.category || 'general');
+
   if (stream.is_battle) {
     return (
       <BattleView
@@ -390,6 +401,8 @@ function BroadcastPage() {
           isHost={isHost}
           liveViewerCount={remoteUsers.length}
           handleLike={handleLike}
+          onStartBattle={isHost && categorySupportsBattles ? () => setIsBattleMode(true) : undefined}
+          categoryBattleTerm={categorySupportsBattles ? categoryMatchingTerm : undefined}
         />
 
         <div className="flex flex-1 overflow-hidden">

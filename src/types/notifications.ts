@@ -26,6 +26,12 @@ export type NotificationType =
   | 'troll_drop'
   | 'pod_live'
   | 'system'
+  // Seller system notifications
+  | 'seller_tier_upgraded'
+  | 'seller_tier_downgraded'
+  | 'new_review_received'
+  | 'appeal_submitted'
+  | 'appeal_decision'
 
 export interface Notification {
   id: string

@@ -1,5 +1,6 @@
 // src/App.tsx
 import React, { useEffect, Suspense, useState, useRef } from "react";
+import TrollProvider from "./troll/TrollProvider";
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
 
@@ -52,6 +53,7 @@ import ExitPage from "./pages/ExitPage";
 
 import TrollBank from "./pages/TrollBank";
 import CityHall from "./pages/CityHall";
+import CityRegistry from "./pages/CityRegistry";
 const SetupPage = lazyWithRetry(() => import("./pages/broadcast/SetupPage"));
 const BroadcastPage = lazyWithRetry(() => import("./pages/broadcast/BroadcastPage"));
 const StreamSummary = lazyWithRetry(() => import("./pages/broadcast/StreamSummary"));
@@ -120,6 +122,7 @@ const Changelog = lazyWithRetry(() => import("./pages/Changelog"));
 const AccessDenied = lazyWithRetry(() => import("./pages/AccessDenied"));
 const ReferralBonusPanel = lazyWithRetry(() => import("./pages/admin/ReferralBonusPanel"));
 const SecretaryConsole = lazyWithRetry(() => import("./pages/secretary/SecretaryConsole"));
+const AppealManagement = lazyWithRetry(() => import("./pages/admin/AppealManagement"));
 import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 
 const TaxOnboarding = lazyWithRetry(() => import("./pages/TaxOnboarding"));
@@ -209,6 +212,7 @@ const AdminTrollTownDeeds = lazyWithRetry(() => import("./pages/admin/AdminTroll
 const LeadOfficerDashboard = lazyWithRetry(() => import("./pages/lead-officer/LeadOfficerDashboard"));
 const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
 const UniverseEventPage = lazyWithRetry(() => import("./pages/UniverseEventPage"));
+const NeighborsPage = lazyWithRetry(() => import("./pages/Neighbors"));
 
 const ShopView = lazyWithRetry(() => import("./pages/ShopView"));
 const CourtRoom = lazyWithRetry(() => import("./pages/CourtRoom"));
@@ -346,6 +350,7 @@ function AppContent() {
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<ServiceWorker | null>(null);
   const [initialProfileLoaded, setInitialProfileLoaded] = useState(false);
   const userIdRef = useRef<string | null>(null);
+  const hasNavigatedRef = useRef(false);
 
 
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
@@ -445,12 +450,13 @@ function AppContent() {
 
   // Warrant Access Restriction
   useEffect(() => {
-    if (profile?.has_active_warrant) {
+    if (!hasNavigatedRef.current && profile?.has_active_warrant) {
        // Allow access to court pages, auth pages, and static assets
        const allowedPaths = ['/troll-court', '/court', '/auth', '/legal', '/support'];
        const isAllowed = allowedPaths.some(path => location.pathname.startsWith(path));
        
        if (!isAllowed) {
+         hasNavigatedRef.current = true;
          toast.error("Active Warrant Issued! You must appear in Troll Court.");
          navigate('/troll-court');
        }
@@ -508,8 +514,10 @@ function AppContent() {
   }, [updateAvailable, waitingServiceWorker, isStandalone]);
 
   useEffect(() => {
+    if (hasNavigatedRef.current) return;
     if (!user || !isStandalone) return;
     if (location.pathname === '/' || location.pathname === '/auth') {
+      hasNavigatedRef.current = true;
       navigate('/mobile', { replace: true });
     }
   }, [user, isStandalone, location.pathname, navigate]);
@@ -527,6 +535,7 @@ function AppContent() {
   // 🔹 Auto-routing after approval (only on home page, not on every route change)
   useEffect(() => {
     // Only auto-route from home page (/) - never redirect from other pages
+    if (hasNavigatedRef.current) return;
     if (location.pathname !== '/') {
       return;
     }
@@ -536,14 +545,9 @@ function AppContent() {
       return;
     }
 
-    // 🚗 Redirect to Driver Test if no license
-    const licenseStatus = (profile as any).drivers_license_status;
-    if (!licenseStatus || licenseStatus === 'none') {
-        // Only redirect if not already there (though the outer check covers /)
-        navigate('/tmv', { replace: true });
-        return;
-    }
+    hasNavigatedRef.current = true;
 
+    // Redirect to family if troll_family role
     if (profile?.role === 'troll_family') {
       navigate('/family', { replace: true });
     }
@@ -629,12 +633,18 @@ function AppContent() {
     if (!profile) return;
 
     if (profile.is_banned && location.pathname !== '/ban-fee') {
-      navigate('/ban-fee', { replace: true });
+      if (!hasNavigatedRef.current) {
+        hasNavigatedRef.current = true;
+        navigate('/ban-fee', { replace: true });
+      }
       return;
     }
 
     if (profile.is_kicked && location.pathname !== '/kick-fee') {
-      navigate('/kick-fee', { replace: true });
+      if (!hasNavigatedRef.current) {
+        hasNavigatedRef.current = true;
+        navigate('/kick-fee', { replace: true });
+      }
     }
   }, [profile, location.pathname, navigate]);
 
@@ -877,7 +887,7 @@ function AppContent() {
   };
 
   return (
-    <>
+      <>
       <SessionMonitor />
       <GlobalUserCounter />
       {updateAvailable && (
@@ -941,7 +951,7 @@ function AppContent() {
         )}
 
         <ErrorBoundary>
-          <Suspense fallback={<LoadingScreen />}>
+          <Suspense fallback={null}>
             <Routes>
                 {/* 🚪 Public Routes */}
                 <Route path="/" element={<LandingHome />} />
@@ -1014,6 +1024,7 @@ function AppContent() {
                   <Route path="/messages" element={<Navigate to="/tcps" replace />} />
                   <Route path="/tcps" element={<MobileShell><TCPS /></MobileShell>} />
           <Route path="/city-hall" element={<CityHall />} />
+                  <Route path="/city-registry" element={<CityRegistry />} />
                   <Route path="/universe-event" element={<UniverseEventPage />} />
                   <Route path="/events/universe" element={<Navigate to="/universe-event" replace />} />
                   <Route path="/call/:roomId/:type/:userId" element={<Call />} />
@@ -1041,10 +1052,11 @@ function AppContent() {
                   <Route path="/profile/id/:userId" element={<Profile />} />
                   <Route path="/profile/:username" element={<Profile />} />
                   <Route path="/trollstown" element={<TrollsTownPage />} />
-                  <Route path="/district/:districtName" element={<DistrictTour />} />
-                  <Route path="/living" element={<LivingPage />} />
-                  
-                  <Route path="/pods" element={<TrollPodsListing />} />
+                   <Route path="/district/:districtName" element={<DistrictTour />} />
+                   <Route path="/living" element={<LivingPage />} />
+                   <Route path="/neighbors" element={<NeighborsPage />} />
+                   
+                   <Route path="/pods" element={<TrollPodsListing />} />
                   <Route path="/pods/:roomId" element={<TrollPodRoom />} />
                   
                   <Route path="/church" element={<ChurchPage />} />
@@ -1696,6 +1708,14 @@ function AppContent() {
                       </RequireRole>
                     }
                   />
+                  <Route
+                    path="/admin/appeals"
+                    element={
+                      <RequireRole roles={[UserRole.ADMIN, UserRole.SECRETARY]}>
+                        <AppealManagement />
+                      </RequireRole>
+                    }
+                  />
                   <Route path="/rfc" element={<AdminRFC />} />
                   <Route
                     path="/changelog"
@@ -1749,7 +1769,7 @@ function App() {
     return cleanup;
   }, []);
 
-  return <AppContent />;
+  return <TrollProvider><AppContent /></TrollProvider>;
 }
 
 export default App;

@@ -290,3 +290,140 @@ export async function notifyAdmins(
     return { success: false, error: err?.message || 'Unknown error', count: 0 }
   }
 }
+
+// ==========================================
+// SELLER SYSTEM NOTIFICATIONS
+// ==========================================
+
+/**
+ * Create notification for seller tier upgrade
+ */
+export async function notifySellerTierUpgraded(
+  userId: string,
+  oldTier: string,
+  newTier: string
+) {
+  const tierEmojis: Record<string, string> = {
+    standard: '',
+    verified: '✓',
+    verified_pro: '⭐',
+    merchant: '🏪',
+    enterprise: '🏢'
+  };
+
+  return createNotification(
+    userId,
+    'seller_tier_upgraded',
+    `${tierEmojis[newTier] || '🎉'} Seller Tier Upgraded!`,
+    `Congratulations! You've been upgraded from ${oldTier} to ${newTier}. Your seller badge has been updated!`,
+    {
+      old_tier: oldTier,
+      new_tier: newTier,
+      action_url: '/profile?tab=marketplace'
+    }
+  );
+}
+
+/**
+ * Create notification for seller tier downgrade
+ */
+export async function notifySellerTierDowngraded(
+  userId: string,
+  oldTier: string,
+  newTier: string,
+  reason: string
+) {
+  return createNotification(
+    userId,
+    'seller_tier_downgraded',
+    '⚠️ Seller Tier Downgraded',
+    `Your seller tier has been downgraded from ${oldTier} to ${newTier}. Reason: ${reason}. Contact support if you believe this is an error.`,
+    {
+      old_tier: oldTier,
+      new_tier: newTier,
+      reason,
+      action_url: '/support'
+    }
+  );
+}
+
+/**
+ * Create notification for new review received
+ */
+export async function notifyNewReviewReceived(
+  sellerId: string,
+  rating: number,
+  buyerUsername: string,
+  orderId: string
+) {
+  const ratingStars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+  
+  return createNotification(
+    sellerId,
+    'new_review_received',
+    '📝 New Review Received!',
+    `${buyerUsername} left you a ${rating}-star review: ${ratingStars}`,
+    {
+      rating,
+      buyer_username: buyerUsername,
+      order_id: orderId,
+      action_url: '/marketplace/reviews'
+    }
+  );
+}
+
+/**
+ * Create notification for appeal submitted
+ */
+export async function notifyAppealSubmitted(
+  userId: string,
+  orderId: string,
+  appealId: string
+) {
+  return createNotification(
+    userId,
+    'appeal_submitted',
+    '📋 Appeal Submitted',
+    `Your appeal for order ${orderId} has been submitted and is pending review.`,
+    {
+      order_id: orderId,
+      appeal_id: appealId,
+      action_url: '/support/appeals'
+    }
+  );
+}
+
+/**
+ * Create notification for appeal decision
+ */
+export async function notifyAppealDecision(
+  userId: string,
+  orderId: string,
+  appealId: string,
+  decision: 'approved' | 'denied' | 'escalated'
+) {
+  const titles = {
+    approved: '✅ Appeal Approved!',
+    denied: '❌ Appeal Denied',
+    escalated: '📤 Appeal Escalated'
+  };
+
+  const messages = {
+    approved: `Great news! Your appeal for order ${orderId} has been approved.`,
+    denied: `Your appeal for order ${orderId} has been denied. You can submit a new appeal with additional evidence.`,
+    escalated: `Your appeal for order ${orderId} has been escalated to a senior reviewer.`
+  };
+
+  return createNotification(
+    userId,
+    'appeal_decision',
+    titles[decision],
+    messages[decision],
+    {
+      order_id: orderId,
+      appeal_id: appealId,
+      decision,
+      action_url: '/support/appeals'
+    }
+  );
+}

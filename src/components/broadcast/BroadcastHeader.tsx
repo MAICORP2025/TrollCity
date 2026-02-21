@@ -8,12 +8,13 @@ import { supabase } from '../../lib/supabase';
 interface BroadcastHeaderProps {
     stream: Stream;
     onStartBattle?: () => void;
+    categoryBattleTerm?: string;
     isHost: boolean;
     liveViewerCount?: number;
     handleLike: () => void;
 }
 
-export default function BroadcastHeader({ stream, onStartBattle, isHost, liveViewerCount, handleLike }: BroadcastHeaderProps) {
+export default function BroadcastHeader({ stream, onStartBattle, categoryBattleTerm, isHost, liveViewerCount, handleLike }: BroadcastHeaderProps) {
     const { profile, setProfile } = useAuthStore();
     const [likes, setLikes] = React.useState(0);
     const [isLiking, setIsLiking] = React.useState(false);
@@ -107,7 +108,7 @@ export default function BroadcastHeader({ stream, onStartBattle, isHost, liveVie
                 >
                     <Swords size={16} />
                     <span className="text-xs font-bold">
-                        {stream.stream_kind === 'trollmers' ? 'HEAD TO HEAD' : 'BATTLE'}
+                        {categoryBattleTerm ? categoryBattleTerm.toUpperCase() : (stream.stream_kind === 'trollmers' ? 'HEAD TO HEAD' : 'BATTLE')}
                     </span>
                 </button>
             )}

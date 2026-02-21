@@ -44,7 +44,7 @@ const GIFTS = [
 const MAX_POSTS = 100 // Memory cap for the wall feed
 
 export default function TrollCityWall() {
-  const { user, profile } = useAuthStore()
+  const { user, profile, isAdmin } = useAuthStore()
   const navigate = useNavigate()
   const [posts, setPosts] = useState<WallPost[]>([])
   const postBufferRef = useRef<WallPost[]>([])
@@ -407,30 +407,17 @@ export default function TrollCityWall() {
     }
 
     try {
-      const { data: userProfile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('role, is_admin, is_troll_officer, is_lead_officer')
-        .eq('id', user.id)
-        .maybeSingle()
+      // Authors can delete their own posts, and admins can delete any post
+      let query = supabase
+        .from('troll_wall_posts')
+        .delete()
+        .eq('id', postId)
 
-      if (profileError || !userProfile) {
-        console.error('Error fetching profile for delete:', profileError)
-        toast.error('Failed to verify delete permissions')
-        return
-      }
-
-      const isStaff = userProfile?.is_admin || 
-                     userProfile?.is_troll_officer || 
-                     userProfile?.is_lead_officer || 
-                     userProfile?.role === 'admin' ||
-                     userProfile?.role === 'troll_officer' ||
-                     userProfile?.role === 'lead_troll_officer'
-
-      console.log('Delete permissions - isStaff:', isStaff, 'userId:', user.id, 'postId:', postId)
-
-      let query = supabase.from('troll_wall_posts').delete().eq('id', postId)
-
-      if (!isStaff) {
+      if (isAdmin) {
+        // Admins can delete any post without user_id check
+        query = query
+      } else {
+        // Only the post author can delete their own posts
         query = query.eq('user_id', user.id)
       }
 
@@ -568,26 +555,13 @@ export default function TrollCityWall() {
               </p>
             )}
           </div>
-          {user && (post.user_id === user.id || profile?.is_admin || profile?.is_troll_officer || profile?.is_lead_officer || profile?.role === 'lead_troll_officer') && (
+          {user && (post.user_id === user.id || isAdmin) && (
             <div className="flex items-center gap-1">
-              {(profile?.is_admin || profile?.role === 'admin') && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePin(post);
-                  }}
-                  className={`p-2 hover:bg-yellow-500/20 rounded-lg transition-colors ${post.is_pinned ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'}`}
-                  title={post.is_pinned ? "Unpin post" : "Pin post"}
-                >
-                  <Pin className={`w-4 h-4 ${post.is_pinned ? 'fill-current' : ''}`} />
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => handleDelete(post.id)}
                 className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-red-400"
-                title="Delete post"
+                title={isAdmin && post.user_id !== user.id ? "Admin delete post" : "Delete post"}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
