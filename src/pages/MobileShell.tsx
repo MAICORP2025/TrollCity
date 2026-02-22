@@ -41,10 +41,11 @@ export default function MobileShell({
   );
 
   return (
-    <div className="mobile-shell">
-      {/* Header hidden during immersive mode */}
+    <div className="relative w-full h-[100dvh] bg-[#05010a] text-white overflow-hidden flex flex-col">
+
+      {/* HEADER */}
       {!isImmersive && (
-        <div className="mobile-header">
+        <header className="shrink-0 px-4 pt-safe pb-2 border-b border-white/10 bg-black/40 backdrop-blur-xl">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] uppercase tracking-[0.3em] text-white/40">
@@ -77,20 +78,26 @@ export default function MobileShell({
               </div>
             </div>
           </div>
-        </div>
+        </header>
       )}
 
-      {/* Main Content */}
-      <div
-        className={`mobile-content ${
-          isImmersive ? "immersive-content" : ""
+      {/* CONTENT */}
+      <main
+        className={`relative flex-1 ${
+          isImmersive
+            ? "w-full h-full overflow-hidden"
+            : "overflow-y-auto pb-[80px]"
         }`}
       >
         {children}
-      </div>
+      </main>
 
-      {/* Bottom Nav hidden during immersive mode */}
-      {!isImmersive && <BottomNavigation />}
+      {/* BOTTOM NAV */}
+      {!isImmersive && (
+        <div className="absolute bottom-0 left-0 right-0 z-40 pb-safe">
+          <BottomNavigation />
+        </div>
+      )}
     </div>
   );
 }
