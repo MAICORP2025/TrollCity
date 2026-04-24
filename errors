@@ -1,0 +1,182 @@
+
+================================================================================
+TROLLCITY APPLICATION COMPREHENSIVE AUDIT REPORT
+Audit Date: 2026-02-10
+Mode: Read-Only (No Changes Made)
+================================================================================
+
+## EXECUTIVE SUMMARY
+Total RPC calls found: 224+
+Tables with RLS enabled: 450+
+Migration files: 200+
+
+================================================================================
+SECTION 1: MISSING RPC FUNCTIONS (CRITICAL)
+================================================================================
+
+1. ❌ auto_start_court_session
+   - Called from: src/components/AuthorityPanel.tsx:55
+   - Expected signature: auto_start_court_session(authority_user_id UUID)
+   - Available: auto_start_court_with_docket (different function)
+   - Impact: Fallback court session start fails
+   - Recommendation: Create function or update code to use existing function
+
+2. ❌ restore_banned_account
+   - Called from: src/components/BanPage.tsx:65
+   - Impact: Ban restoration feature broken
+   - Recommendation: Create function
+
+================================================================================
+SECTION 2: SECURITY VULNERABILITIES (HIGH PRIORITY)
+================================================================================
+
+1. ❌ Functions Without SECURITY DEFINER
+   The following functions run with caller's permissions instead of elevated
+   permissions. This can be exploited if RLS is misconfigured:
+
+   - calculate_level (20240101_xp_system.sql:45)
+   - send_gift (20250202110000_paid_features.sql:75)
+   - join_paid_seat (20250202110000_paid_features.sql:136)
+   - is_moderator (20250202120000_moderation.sql:42)
+   - kick_user (20250202120000_moderation.sql:78)
+   - mute_user (20250202120000_moderation.sql:93)
+   - unmute_user (20250202120000_moderation.sql:107)
+   - assign_broadofficer (20250202120000_moderation.sql:119)
+   - remove_broadofficer (20250202120000_moderation.sql:129)
+   - create_battle_challenge (20250202130000_battles.sql:20)
+   - accept_battle (20250202130000_battles.sql:36)
+   - end_battle (20250202130000_battles.sql:82)
+   - spend_coins (20250202120001_unify_gift_rpc.sql:5)
+   - pay_bank_loan (20250211000000_pay_bank_loan.sql:2)
+
+   Impact: If RLS is bypassed or misconfigured, users can exploit these
+   Recommendation: Add SECURITY DEFINER to all functions modifying tables
+
+2. ❌ Publicly Accessible get_bank_reserves
+   - Called from: src/pages/TrollBank.tsx:23
+   - Function: get_bank_reserves
+   - Issue: Anyone can query bank reserves (information disclosure)
+   - Recommendation: Restrict to authenticated/admin only
+
+================================================================================
+SECTION 3: PREVIOUSLY FIXED ISSUES (VERIFIED)
+================================================================================
+
+✅ reset_troll_coins
+   - Status: FIXED
+   - Migration: 20270701000002_missing_rpc_functions.sql
+   - Code: src/pages/admin/AdminResetPanel.tsx:33
+
+✅ issue_warrant
+   - Status: FIXED
+   - Migration: 20270701000002_missing_rpc_functions.sql
+
+✅ send_guest_gift
+   - Status: FIXED
+   - Migration: 20270701000002_missing_rpc_functions.sql
+
+✅ create_atomic_battle_challenge
+   - Status: FIXED (wrapper created in migration)
+   - Code: src/components/broadcast/BattleControls.tsx:69 (now uses create_battle_challenge)
+
+✅ TCPS.tsx JSX
+   - Status: VERIFIED PROPERLY CLOSED
+   - No issues found
+
+================================================================================
+SECTION 4: RLS (ROW LEVEL SECURITY) AUDIT
+================================================================================
+
+✅ RLS Status:
+   - 450+ tables have RLS enabled
+   - Comprehensive policy coverage found
+   - Migration patterns show consistent RLS enforcement
+
+⚠️ Tables requiring verification (no explicit RLS check in search):
+   - Tables created after last full audit
+   - Verify all new tables have RLS enabled
+
+================================================================================
+SECTION 5: TYPEScript QUALITY ISSUES
+================================================================================
+
+⚠️ Pattern: try/catch with console.error but no re-throw
+   - Found in multiple files
+   - Error swallowed silently
+   - Recommendation: Propagate errors to UI for user feedback
+
+⚠️ Pattern: setTimeout/setInterval without cleanup
+   - Polling in BattleControls (3 second interval)
+   - Polling in ChatWindow (1 second interval)
+   - Recommendation: Use Supabase subscriptions instead
+
+⚠️ Pattern: Hardcoded values in UI
+   - Costs, fees, limits defined in code
+   - Recommendation: Fetch from get_system_settings RPC
+
+================================================================================
+SECTION 6: DATABASE SCHEMA OBSERVATIONS
+================================================================================
+
+1. Table Count: 450+ public tables
+2. Function Count: 200+ RPC functions
+3. Migration Count: 200+ migration files
+
+⚠️ Potential Issues:
+   - Table naming inconsistency (troll_ vs prefix vs none)
+   - Duplicate/redundant tables possible
+   - Consider schema cleanup for v2
+
+================================================================================
+SECTION 7: PERFORMANCE CONCERNS
+================================================================================
+
+1. Polling Locations:
+   - src/components/broadcast/BattleControls.tsx (3s)
+   - src/components/ChatWindow.tsx (1s)
+   - src/components/GlobalPresenceTracker.tsx
+
+2. Real-time Alternative Available:
+   - Supabase subscriptions for all polling cases
+   - Recommendation: Replace polling with subscriptions
+
+3. Index Coverage:
+   - Most frequently queried columns have indexes
+   - Verify with EXPLAIN ANALYZE for slow queries
+
+================================================================================
+SECTION 8: FRONTEND DEPENDENCIES
+================================================================================
+
+⚠️ Potential Version Issues:
+   - Multiple useEffect hooks with missing dependencies
+   - React Strict Mode may cause double-invocations
+   - Recommendation: Run full typecheck and lint
+
+================================================================================
+RECOMMENDATIONS (PRIORITY ORDER)
+================================================================================
+
+1. CRITICAL: Create missing functions
+   - auto_start_court_session
+   - restore_banned_account
+
+2. HIGH: Add SECURITY DEFINER to all table-modifying functions
+   - This prevents privilege escalation if RLS is bypassed
+
+3. HIGH: Restrict get_bank_reserves
+   - Remove public access to bank reserves
+
+4. MEDIUM: Replace polling with real-time subscriptions
+   - BattleControls, ChatWindow, PresenceTracker
+
+5. MEDIUM: Add proper error propagation
+   - Don't swallow errors in try/catch
+
+6. LOW: Consider schema cleanup
+   - Consolidate duplicate tables
+   - Standardize naming conventions
+
+================================================================================
+END OF AUDIT REPORT
+================================================================================

@@ -1,0 +1,923 @@
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/cors.ts";
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders(req.headers.get("origin")) });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Missing Supabase environment variables");
+    }
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseClient.auth.getUser();
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("user_profiles")
+      .select("role, is_admin, is_lead_officer")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return new Response(JSON.stringify({ error: "Profile not found" }), {
+        status: 403,
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+      });
+    }
+
+    const isAdmin = 
+      profile.role === "admin" || 
+      profile.role === "lead_troll_officer" || 
+      profile.is_lead_officer === true ||
+      profile.is_admin === true;
+
+    const isSecretary = profile.role === "secretary";
+
+    if (!isAdmin && !isSecretary) {
+      return new Response(JSON.stringify({ error: "Forbidden: Insufficient permissions" }), {
+        status: 403,
+        headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+      });
+    }
+
+    const { action, ...params } = await req.json();
+    let result;
+
+    switch (action) {
+      // --- Payout Requests ---
+      case "approve_payout": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { requestId } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const { data, error } = await supabaseAdmin
+          .from("payout_requests")
+          .update({
+            status: "approved",
+            reviewed_by: user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "approve_payout_request",
+          p_target_id: requestId,
+          p_details: { status: "approved" },
+        });
+
+        result = data;
+        break;
+      }
+
+      case "reject_payout": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { requestId, reason } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const { data, error } = await supabaseAdmin
+          .from("payout_requests")
+          .update({
+            status: "rejected",
+            rejected_reason: reason,
+            reviewed_by: user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "reject_payout_request",
+          p_target_id: requestId,
+          p_details: { status: "rejected", reason: reason },
+        });
+
+        result = data;
+        break;
+      }
+
+      case "update_payout_status": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { payoutId, newStatus, reason, paymentReference, notes } = params;
+        if (!payoutId || !newStatus) throw new Error("Missing required fields");
+
+        const updates: any = {
+            status: newStatus,
+            updated_at: new Date().toISOString()
+        };
+
+        if (newStatus === 'rejected') {
+            updates.rejection_reason = reason;
+            updates.processed_by = user.id;
+            updates.processed_at = new Date().toISOString();
+        } else if (newStatus === 'paid') {
+             updates.paid_at = new Date().toISOString();
+             updates.processed_by = user.id;
+        } else if (newStatus === 'approved') {
+             updates.approved_at = new Date().toISOString();
+             updates.processed_by = user.id;
+        }
+        
+        if (paymentReference) updates.payment_reference = paymentReference;
+        if (notes) updates.notes = notes;
+
+        const { data, error } = await supabaseAdmin
+          .from('payout_requests')
+          .update(updates)
+          .eq('id', payoutId)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        await supabaseAdmin.rpc("log_admin_action", {
+            p_action_type: "update_payout_status",
+            p_target_id: payoutId,
+            p_details: { status: newStatus, reason, paymentReference, notes }
+        });
+
+        result = { success: true, data };
+        break;
+      }
+
+      case "get_payout_requests": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { statusFilter } = params;
+
+        let query = supabaseAdmin
+            .from('payout_requests')
+            .select(`
+                *,
+                user_profiles!payout_requests_user_id_fkey (
+                    username,
+                    email
+                ),
+                processor:user_profiles!payout_requests_processed_by_fkey (
+                    username
+                )
+            `)
+            .order('created_at', { ascending: false });
+
+        if (statusFilter && statusFilter !== 'all') {
+            query = query.eq('status', statusFilter);
+        }
+
+        const { data: payouts, error } = await query;
+        if (error) throw error;
+
+        const formattedPayouts = payouts?.map((p: any) => ({
+            ...p,
+            username: p.user_profiles?.username || 'Unknown',
+            email: p.user_profiles?.email || 'Unknown',
+            processed_by_username: p.processor?.username || null
+        }));
+
+        result = { payouts: formattedPayouts };
+        break;
+      }
+
+      // --- Cashout Requests ---
+      case "approve_cashout": {
+        const { requestId } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const updates = {
+          status: 'approved',
+          approved_at: new Date().toISOString(),
+          approved_by: user.id
+        };
+
+        const { data, error } = await supabaseAdmin
+          .from('cashout_requests')
+          .update(updates)
+          .eq('id', requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "reject_cashout": {
+        const { requestId, reason } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const { data, error } = await supabaseAdmin.rpc('process_cashout_refund', {
+          p_request_id: requestId,
+          p_admin_id: user.id,
+          p_notes: reason || 'Request denied via Admin Panel'
+        });
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "update_cashout_status": {
+        const { requestId, status } = params;
+        if (!requestId || !status) throw new Error("Missing required fields");
+
+        const { data, error } = await supabaseAdmin
+          .from('cashout_requests')
+          .update({ status })
+          .eq('id', requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      // --- Executive Intake ---
+      case "assign_intake": {
+        const { requestId, assigneeId } = params;
+        if (!requestId) throw new Error("Missing requestId");
+        
+        const targetAssignee = assigneeId || user.id;
+
+        const { data, error } = await supabaseAdmin
+          .from('executive_intake')
+          .update({ assigned_secretary: targetAssignee })
+          .eq('id', requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "update_intake_status": {
+        const { requestId, status } = params;
+        if (!requestId || !status) throw new Error("Missing required fields");
+
+        const { data, error } = await supabaseAdmin
+          .from('executive_intake')
+          .update({ status })
+          .eq('id', requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "escalate_intake": {
+        const { requestId } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const { data, error } = await supabaseAdmin
+          .from('executive_intake')
+          .update({ status: 'escalated', escalated_to_admin: true })
+          .eq('id', requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "update_intake_notes": {
+        const { requestId, notes } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const { data, error } = await supabaseAdmin
+          .from('executive_intake')
+          .update({ notes })
+          .eq('id', requestId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      // --- Manual Orders ---
+      case "approve_manual_order": {
+        const { orderId, externalTxId } = params;
+        if (!orderId) throw new Error("Missing orderId");
+
+        const { data, error } = await supabaseAdmin.rpc('approve_manual_order', {
+          p_order_id: orderId,
+          p_admin_id: user.id,
+          p_external_tx_id: externalTxId || `MANUAL-${Date.now()}`
+        });
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "reject_manual_order": {
+        const { orderId, reason } = params;
+        if (!orderId) throw new Error("Missing orderId");
+
+        const { data, error } = await supabaseAdmin
+          .from('manual_coin_orders')
+          .update({ 
+            status: 'rejected',
+            rejection_reason: reason,
+            processed_by: user.id,
+            processed_at: new Date().toISOString()
+          })
+          .eq('id', orderId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "delete_manual_order": {
+        const { orderId } = params;
+        if (!orderId) throw new Error("Missing orderId");
+
+        const { data, error } = await supabaseAdmin
+          .from('manual_coin_orders')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', orderId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = data;
+        break;
+      }
+
+      case "get_manual_orders_dashboard": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+
+        const { data: orders, error: ordersError } = await supabaseAdmin
+          .from('manual_coin_orders')
+          .select('*')
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(200);
+
+        if (ordersError) throw ordersError;
+
+        if (!orders || orders.length === 0) {
+            result = { orders: [], profiles: {}, packages: {} };
+            break;
+        }
+
+        const userIds = Array.from(new Set(orders.map((r: any) => r.user_id).filter(Boolean)));
+        const profilesMap: Record<string, any> = {};
+        if (userIds.length > 0) {
+            const { data: userData, error: userError } = await supabaseAdmin
+                .from('user_profiles')
+                .select('id, username, email, rgb_username_expires_at, role')
+                .in('id', userIds);
+            
+            if (userError) throw userError;
+            userData?.forEach((u: any) => { profilesMap[u.id] = u; });
+        }
+
+        const pkgIds = Array.from(new Set(orders.map((r: any) => r.package_id).filter(Boolean)));
+        const packagesMap: Record<string, any> = {};
+        if (pkgIds.length > 0) {
+            const { data: pkgData, error: pkgError } = await supabaseAdmin
+                .from('coin_packages')
+                .select('id, name, coins, price_usd, amount_cents')
+                .in('id', pkgIds);
+
+            if (pkgError) throw pkgError;
+            pkgData?.forEach((p: any) => { packagesMap[p.id] = p; });
+        }
+
+        result = { orders, profiles: profilesMap, packages: packagesMap };
+        break;
+      }
+
+      case "get_user_ip": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        const { data, error } = await supabaseAdmin
+          .from('user_profiles')
+          .select('last_known_ip')
+          .eq('id', userId)
+          .single();
+
+        if (error) throw error;
+        result = { ip: data?.last_known_ip };
+        break;
+      }
+
+      // --- User Management ---
+      case "get_users": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+
+        const { page = 1, limit = 100, search } = params;
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+
+        const canViewEmails = profile.role === 'admin' || profile.is_admin === true;
+
+        const selectFields = canViewEmails
+          ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge'
+          : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge';
+
+        let query = supabaseAdmin
+          .from('user_profiles')
+          .select(selectFields, { count: 'exact' });
+
+        if (search) {
+            if (canViewEmails) {
+                query = query.or(`username.ilike.%${search}%,email.ilike.%${search}%,full_name.ilike.%${search}%`);
+            } else {
+                query = query.or(`username.ilike.%${search}%,full_name.ilike.%${search}%`);
+            }
+        }
+
+        query = query.order('created_at', { ascending: false }).range(from, to);
+
+        const { data, error, count } = await query;
+
+        if (error) throw error;
+        result = { data, count };
+        break;
+      }
+
+      case "update_user_profile": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId, updates, coinAdjustment, roleUpdate } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        if (roleUpdate) {
+            const { newRole, reason } = roleUpdate;
+            if (newRole) {
+                const { data: targetUserRes, error: targetError } = await supabaseAdmin.auth.admin.getUserById(userId);
+                if (targetError) throw targetError;
+                
+                const OWNER_EMAIL = 'trollcity2025@gmail.com';
+                const isTargetOwner = targetUserRes.user.email?.toLowerCase() === OWNER_EMAIL;
+                const isActorOwner = user.email?.toLowerCase() === OWNER_EMAIL;
+
+                if (isTargetOwner && !isActorOwner) {
+                     throw new Error("CRITICAL: You cannot change the role of the Owner account.");
+                }
+
+                const { error: roleError } = await supabaseAdmin.rpc('set_user_role', {
+                    target_user: userId,
+                    new_role: newRole,
+                    reason: reason || `Admin update by ${user.id}`,
+                    acting_admin_id: user.id
+                });
+                if (roleError) throw roleError;
+            }
+        }
+
+        if (updates && Object.keys(updates).length > 0) {
+          const { error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: updates,
+            p_admin_id: user.id,
+            p_reason: 'Admin Panel Update'
+          });
+          
+          if (error) throw error;
+        }
+
+        if (coinAdjustment) {
+            const { amount, reason } = coinAdjustment;
+            if (amount !== 0) {
+                if (amount > 0) {
+                   const { error: creditError } = await supabaseAdmin.rpc('troll_bank_credit_coins', {
+                     p_user_id: userId,
+                     p_coins: amount,
+                     p_bucket: 'paid',
+                     p_source: 'admin_grant',
+                     p_ref_id: null,
+                     p_metadata: { admin_id: user.id, reason: reason || 'Manual Adjustment' }
+                   });
+                   if (creditError) throw creditError;
+                } else {
+                   const { error: spendError } = await supabaseAdmin.rpc('troll_bank_spend_coins_secure', {
+                     p_user_id: userId,
+                     p_amount: Math.abs(amount),
+                     p_bucket: 'paid',
+                     p_source: 'admin_deduct',
+                     p_ref_id: null,
+                     p_metadata: { admin_id: user.id, reason: reason || 'Manual Adjustment' }
+                   });
+                   if (spendError) throw spendError;
+                }
+
+                await supabaseAdmin.from('coin_transactions').insert({
+                    user_id: userId,
+                    type: 'admin_adjustment',
+                    amount: amount,
+                    description: `Admin adjustment: ${reason || 'Manual update'}`,
+                    metadata: { admin_id: user.id }
+                });
+            }
+        }
+
+        result = { success: true };
+        break;
+      }
+
+      case "update_user_bypass": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId, bypass } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        const { data, error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: { bypass_broadcast_restriction: bypass },
+            p_admin_id: user.id,
+            p_reason: 'Admin Panel Bypass Update'
+        });
+
+        if (error) throw error;
+        
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "update_user_bypass",
+          p_target_id: userId,
+          p_details: { bypass }
+        });
+
+        result = { success: true, data };
+        break;
+      }
+
+      case "ban_user_action": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId, until, reason } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        let minutes = 525600;
+        if (until) {
+            const diff = new Date(until).getTime() - Date.now();
+            if (diff > 0) {
+                minutes = Math.floor(diff / 60000);
+            }
+        }
+
+        const { data: rpcResult, error } = await supabaseAdmin.rpc('ban_user', {
+            target: userId,
+            minutes: minutes,
+            reason: reason || 'Banned by admin',
+            acting_admin_id: user.id
+        });
+
+        if (error) throw error;
+        
+        if (rpcResult && rpcResult.status === 'error') {
+            throw new Error(rpcResult.message || rpcResult.error || 'Ban failed');
+        }
+
+        result = { success: true };
+        break;
+      }
+
+      case "unban_user_action": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        const { data: rpcResult, error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: { is_banned: false, banned_until: null },
+            p_admin_id: user.id,
+            p_reason: 'Unbanned by admin'
+        });
+
+        if (error) throw error;
+        
+        if (rpcResult && rpcResult.status === 'error') {
+            throw new Error(rpcResult.message || 'Unban failed');
+        }
+
+        result = { success: true };
+        break;
+      }
+
+      case "soft_delete_user": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId, reason } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        const { error } = await supabaseAdmin.rpc('admin_soft_delete_user', {
+            p_user_id: userId,
+            p_reason: reason || 'Admin deleted via dashboard'
+        });
+
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      case "set_user_level": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId, level } = params;
+        if (!userId || level === undefined) throw new Error("Missing params");
+        const numLevel = Number(level);
+        if (isNaN(numLevel) || numLevel < 1 || numLevel > 100) throw new Error("Invalid level");
+
+        const { error } = await supabaseAdmin.rpc('admin_update_any_profile_field', {
+            p_user_id: userId,
+            p_updates: { tier: numLevel.toString(), level: numLevel },
+            p_admin_id: user.id,
+            p_reason: 'Admin set level'
+        });
+        
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      case "notify_user": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { targetUserId, title, message } = params;
+        if (!targetUserId || !message) throw new Error("Missing required fields");
+
+        const { error } = await supabaseAdmin.rpc('notify_user_rpc', {
+            p_target_user_id: targetUserId,
+            p_type: 'system_alert',
+            p_title: title || 'System Notification',
+            p_message: message
+        });
+
+        if (error) {
+          console.error(`Failed to send notification to ${targetUserId}:`, error);
+          throw error;
+        }
+
+        result = { success: true };
+        break;
+      }
+
+      // --- MARKETING READ-ONLY USER MANAGEMENT ---
+      case "create_marketing_user": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { email, username, fullName } = params;
+        if (!email || !username) throw new Error("Missing email or username");
+
+        if (!email.includes('@')) throw new Error("Invalid email format");
+
+        const password = params.password || (() => {
+          const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%&*";
+          let pwd = "";
+          for (let i = 0; i < 16; i++) {
+            pwd += chars[Math.floor(Math.random() * chars.length)];
+          }
+          return pwd;
+        })();
+
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: email,
+          password: password,
+          email_confirm: true,
+          user_metadata: {
+            username: username,
+            full_name: fullName || username
+          }
+        });
+
+        if (createError) {
+          console.error("Auth creation error:", createError);
+          throw new Error("Failed to create auth user: " + createError.message);
+        }
+        if (!newUser?.user) throw new Error("Failed to create user - no user returned");
+
+        const newUserId = newUser.user.id;
+
+        // Verify auth user was actually created
+        const { data: authCheck, error: authCheckError } = await supabaseAdmin.auth.admin.getUserById(newUserId);
+        if (authCheckError || !authCheck?.user) {
+          console.error("Auth verification failed:", authCheckError);
+          throw new Error("Auth user creation verification failed");
+        }
+
+        const { error: profileError } = await supabaseAdmin.from("user_profiles").insert({
+          id: newUserId,
+          username: username,
+          email: email,
+          role: "marketing_readonly",
+          bio: "Marketing Agency Read-Only Account",
+          created_at: new Date().toISOString(),
+          is_broadcaster: true,
+          is_creator_onboarded: false,
+          troll_coins: 0,
+          total_earned_coins: 0,
+          total_spent_coins: 0,
+          tier: 'Bronze'
+        });
+
+        if (profileError) {
+          await supabaseAdmin.auth.admin.deleteUser(newUserId);
+          throw profileError;
+        }
+
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "create_marketing_user",
+          p_target_id: newUserId,
+          p_details: { email, username, created_by: user.id }
+        });
+
+        result = { success: true, userId: newUserId, email, password };
+        break;
+      }
+
+      case "delete_marketing_user": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+        const { userId } = params;
+        if (!userId) throw new Error("Missing userId");
+
+        const { data: targetProfile, error: fetchError } = await supabaseAdmin
+          .from("user_profiles")
+          .select("role, username")
+          .eq("id", userId)
+          .single();
+
+        if (fetchError) throw fetchError;
+        if (targetProfile.role !== "marketing_readonly") {
+          throw new Error("User is not a marketing_readonly account");
+        }
+
+        const { error: roleError } = await supabaseAdmin.rpc('set_user_role', {
+          target_user: userId,
+          new_role: 'user',
+          reason: `Removed by admin ${user.id}`,
+          acting_admin_id: user.id
+        });
+
+        if (roleError) throw roleError;
+
+        const { error: disableError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          ban_duration: "forever"
+        });
+
+        if (disableError) {
+          console.error("Warning: Failed to ban user:", disableError);
+        }
+
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "delete_marketing_user",
+          p_target_id: userId,
+          p_details: { username: targetProfile.username, deleted_by: user.id }
+        });
+
+        result = { success: true };
+        break;
+      }
+
+      case "get_marketing_users": {
+        if (!isAdmin) throw new Error("Unauthorized: Admin only");
+
+        const { data, error } = await supabaseAdmin
+          .from("user_profiles")
+          .select("id, username, email, created_at, last_active")
+          .eq("role", "marketing_readonly")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        result = { users: data || [] };
+        break;
+      }
+
+      // --- Applications ---
+      case "get_applications": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+
+        const { data: filled } = await supabaseAdmin.rpc('is_lead_officer_position_filled');
+
+        const { data: applications, error } = await supabaseAdmin
+          .from('applications')
+          .select(`
+            *,
+            user_profiles!user_id (
+              username,
+              email,
+              created_at,
+              rgb_username_expires_at
+            )
+          `)
+          .neq('status', 'deleted')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        result = { applications, positionFilled: filled };
+        break;
+      }
+
+      case "get_seller_appeals": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+
+        const { data, error } = await supabaseAdmin
+          .from('applications')
+          .select(`
+            *,
+            user_profiles!user_id (
+              username,
+              email
+            )
+          `)
+          .eq('type', 'seller')
+          .eq('appeal_requested', true)
+          .eq('appeal_status', 'pending')
+          .order('appeal_requested_at', { ascending: false });
+
+        if (error) throw error;
+        result = { appeals: data };
+        break;
+      }
+
+      // ============ Support Tickets ============
+      case "get_support_tickets": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { data, error } = await supabaseAdmin.from("support_tickets").select("*").order("created_at", { ascending: false });
+        if (error) throw error;
+        result = { tickets: data };
+        break;
+      }
+
+      case "resolve_support_ticket": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { ticketId, response } = params;
+        if (!ticketId || !response) throw new Error("Missing params");
+        const { error } = await supabaseAdmin.from("support_tickets").update({ status: "resolved", admin_response: response, admin_id: user.id, response_at: new Date().toISOString() }).eq("id", ticketId);
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      case "close_support_ticket": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { ticketId } = params;
+        if (!ticketId) throw new Error("Missing ticketId");
+        const { error } = await supabaseAdmin.from("support_tickets").update({ status: "closed", response_at: new Date().toISOString() }).eq("id", ticketId);
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      case "delete_support_ticket": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { ticketId } = params;
+        if (!ticketId) throw new Error("Missing ticketId");
+        const { error } = await supabaseAdmin.from("support_tickets").delete().eq("id", ticketId);
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      default:
+        throw new Error(`Unknown action: ${action}`);
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 400,
+      headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+    });
+  }
+});

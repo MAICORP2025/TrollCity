@@ -1,0 +1,298 @@
+TRAE FINAL PROMPT — P0/P1 FIXES + FULL VALIDATION + PASS/FAIL REPORT
+
+We are not shipping until the system is measurably scale-safe for 1,000+ concurrent users and cannot be trivially abused into an outage. You must implement the fixes below and then run the tests below, producing a PASS/FAIL diagnostic report with evidence.
+
+GOAL
+
+After these fixes, Troll City must:
+
+survive viewer spikes and “gift bombs” without DB locking/outage
+
+prevent LiveKit stage hijacking
+
+prevent chat self-DDoS and API bans
+
+have gifts settle reliably (scheduled batch)
+
+have leaderboards load instantly (no transaction scans)
+
+have HLS/Bunny viewer mode working under cdn.maitrollcity.com without external navigation
+
+provide measurable limits and first-failure points
+
+1️⃣ P0 SECURITY FIX — LIVEKIT TOKEN ENDPOINT (STOP STAGE HIJACK)
+Requirements
+
+The livekit-token edge function must ignore all client-provided permission flags (do NOT trust allowPublish, canPublish, roles, etc. coming from request body).
+
+Server must compute permissions strictly from trusted sources:
+
+Host/owner of the stream OR
+
+Currently occupying a valid guest seat (paid seat session) OR
+
+Staff role (explicit)
+
+Everyone else must receive subscribe-only token.
+
+Enforce stage cap server-side (6 max stage participants total) even if client is bypassed.
+
+Deliverables
+
+Paste the updated livekit-token function code
+
+Explain the server-side checks used (which tables/RPCs, what conditions)
+
+Confirm viewers cannot obtain publish tokens by spoofing request payload
+
+2️⃣ P0 PERFORMANCE FIX — CHAT SELF-DDOS (NO DB WRITE AMPLIFICATION, NO N+1)
+Requirements
+
+Chat must be refactored so it does NOT create explosive per-viewer/per-message DB/API traffic.
+
+Mandatory constraints
+
+A chat message must cause:
+
+0 DB writes (realtime-only) OR 1 DB write max (persist message once)
+
+No message rendering may trigger:
+
+per-message getUserProfile fetches
+
+per-message getVehicle RPC calls
+
+any viewer-side N+1 patterns
+
+Required approach (choose one)
+
+A) Denormalize chat payload: message event includes user_id, username, avatar_url, badges, vehicle_snapshot(optional) so clients render without extra RPCs
+OR
+B) Client cache map: preload user/profile/vehicle maps on join and update via realtime change events; message render reads from cache only
+
+System messages
+
+Join/leave should stay Presence-based, but rate-limit/batch system messages to avoid spam on reconnect storms.
+
+Deliverables
+
+Updated chat component/hook code
+
+Exact message payload shape
+
+Evidence that 50 messages does NOT cause hundreds/thousands of network requests across viewers
+
+3️⃣ P1 RELIABILITY FIX — SCHEDULE GIFT LEDGER BATCH (ECONOMY MUST SETTLE)
+Requirements
+
+process_gift_ledger_batch must run automatically every 10 seconds
+
+Use pg_cron OR scheduled Edge Function (choose one)
+
+Must be safe under retries:
+
+idempotent processing (no double credit/debit)
+
+prevent negative balances
+
+Add minimal observability:
+
+last_run_at
+
+rows_processed
+
+backlog_count
+
+Deliverables
+
+The schedule definition (SQL for pg_cron OR Edge schedule config)
+
+Where to view the last run + backlog metrics
+
+Proof it updates balances/stats under load
+
+4️⃣ P1 FIX — LEADERBOARD MUST BE O(1) (NO TRANSACTION SCANS)
+Requirements
+
+Any leaderboard page must read only from:
+
+broadcaster_stats (or equivalent pre-aggregated table/view)
+
+It must NOT fetch all transactions for a period, and must not send megabytes of JSON to the client.
+
+Add/confirm indexes for fast reads.
+
+Deliverables
+
+Updated leaderboard query code / RPC
+
+Confirm data source is pre-aggregated only
+
+Confirm payload sizes are small (KBs, not MBs)
+
+5️⃣ P1 FIX — HLS/BUNNY VIEWER MODE MUST WORK ON OUR DOMAIN
+Requirements
+
+Viewer mode uses HLS/LL-HLS URLs under:
+
+https://cdn.maitrollcity.com/.../*.m3u8
+
+No external navigation; broadcast page stays the same.
+
+Default viewers must NOT touch LiveKit.
+
+When user enters a guest seat (paid seat logic), the client switches:
+
+HLS viewer → LiveKit stage
+
+When guest leaves seat:
+
+LiveKit → back to HLS viewer
+
+Backend + DNS must be consistent:
+
+If backend is pushing to Mux, custom domain mapping must be configured OR stop using Mux and push segments behind Bunny.
+
+There must be at least one working .m3u8 that plays in browser.
+
+Deliverables
+
+The exact HLS URL format produced
+
+One working example .m3u8 URL
+
+Broadcast page plays it successfully
+
+6️⃣ P0 ADMIN BLOCKER — FIX SERVICE ROLE KEY MISMATCH
+Requirements
+
+.env must match:
+
+SUPABASE_URL = yjxpwfalenorzrqxwmtr.supabase.co
+
+SUPABASE_SERVICE_ROLE_KEY belonging to the SAME project
+
+Rotate key and update:
+
+local .env
+
+Vercel env vars
+
+edge secrets (if applicable)
+
+Deliverables
+
+Confirm which environments were updated
+
+Provide a minimal admin sanity check result proving correct project
+
+7️⃣ FINAL VALIDATION TESTS (RUN AFTER FIXES) + PASS/FAIL REPORT
+
+After implementing fixes, you MUST run these tests and output results in a report:
+
+A) LiveKit Security Tests (PASS/FAIL)
+
+Viewer spoof test: viewer requests publish token → must receive subscribe-only
+
+Guest seat test: seat occupant requests token → publish allowed
+
+Removed guest test: after removal, publish token denied
+
+Stage cap test: attempt 7th publisher → denied (server-side)
+
+B) Chat Load Tests (PASS/FAIL)
+
+50-message test with 20 viewers:
+
+Show DevTools network request counts before/after refactor
+
+Must NOT scale as viewers × messages × extra RPCs
+
+100 msgs/sec test for 10 seconds:
+
+Chat stays responsive
+
+No API bans / no runaway request storm
+
+Reconnect storm test:
+
+Presence events do not spam DB
+
+System join messages are rate-limited/batched
+
+C) Gift Ledger Tests (PASS/FAIL)
+
+500 gifts in 10 seconds:
+
+ledger inserts succeed
+
+balances/stats settle within 60 seconds
+
+Idempotency test:
+
+retry same gift request → charged once
+
+Scheduler test:
+
+confirm batch ran at least 3 times (timestamps)
+
+backlog decreases over time
+
+D) Leaderboard Tests (PASS/FAIL)
+
+Load leaderboard:
+
+must not fetch full transaction history
+
+payload size must be small
+
+render time fast
+
+Confirm query source = broadcaster_stats only
+
+E) HLS/Bunny Tests (PASS/FAIL)
+
+Viewer opens broadcast page:
+
+plays HLS via cdn.maitrollcity.com
+
+does NOT request LiveKit token
+
+Click guest seat:
+
+instant switch to LiveKit, publish works
+
+Leave seat:
+
+switches back to HLS
+
+404 resilience:
+
+player retries gracefully and shows “reconnecting” message, not blank crash
+
+F) Regression / Crash Matrix (PASS/FAIL)
+
+Provide a final table:
+
+Scenario	Expected	Actual	PASS/FAIL
+1k concurrent app opens	degrade not crash	?	?
+1k gifts in same second	queue/settle	?	?
+100 msgs/sec chat	stable	?	?
+Viewer spoof publish	denied	?	?
+HLS playback	works	?	?
+
+No blanks.
+
+8️⃣ OUTPUT FORMAT REQUIREMENT
+
+You must respond with:
+
+List of files changed
+
+Code snippets for the key fixes (token endpoint, chat payload, scheduler)
+
+Test results with PASS/FAIL and supporting evidence (logs, screenshots, metrics)
+
+Remaining known limits and “first failure point” after fixes
+
+No hype. No “should be fine.” Only measurable results.

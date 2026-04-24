@@ -1,0 +1,2 @@
+Place your gift sound files here (e.g. troll.mp3, rose.mp3...).
+If you want me to add small silent placeholders, tell me and I'll generate base64-encoded silent mp3s.
