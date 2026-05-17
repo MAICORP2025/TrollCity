@@ -1,0 +1,376 @@
+Rebuild and extend the Troll City Vehicle + TMV + Broadcast Enforcement system end-to-end. This system was deleted and must be rebuilt cleanly, server-authoritative, and scalable.
+
+1) KTAuto Dealership (Trolls Town Tab)
+New UI Tab
+
+Add a separate tab in Trolls Town named:
+
+🚗 KTAuto
+
+This is the only car dealership in the app.
+
+KTAuto Requirements
+
+Show a large catalog of cars with:
+
+High-quality car images
+
+Make / model / trim
+
+Class (economy, sedan, sport, luxury, SUV, truck, exotic, etc.)
+
+Base price in Troll Coins ONLY
+
+NO free cars
+
+NO real-money purchases
+
+ALL cars must be paid using Troll Coins
+
+Car prices must range from:
+
+Minimum: 2,000 Troll Coins
+
+Maximum: 300,000 Troll Coins
+
+Ownership Limits
+
+Users may own up to 25 cars per month
+
+Enforce server-side:
+
+Count purchases per rolling 30-day window
+
+Reject purchase if limit is reached
+
+On Purchase (Atomic)
+
+When a user buys a car from KTAuto:
+
+Deduct full car price (coins)
+
+Charge TMV title issue fee
+
+Create:
+
+user_vehicles
+
+vehicle_titles (title required for every car)
+
+vehicle_registrations
+
+Issue temp plates by default unless user selects hard plates
+
+Require insurance (policy created but unpaid until user pays)
+
+Log everything in vehicle_transactions
+
+2) Vehicle Variety & Catalog
+
+Create a very large catalog (dozens to hundreds of vehicles over time):
+
+Cheap beaters (2,000–10,000)
+
+Daily drivers (10,000–40,000)
+
+Performance cars (50,000–120,000)
+
+Luxury vehicles (100,000–200,000)
+
+Exotics / rare cars (200,000–300,000)
+
+Each car must include:
+
+Stats (jsonb)
+
+Insurance tier
+
+Upgrade compatibility
+
+Image URL
+
+3) Vehicle Upgrades (Paid in Coins)
+Upgrade System
+
+Add car upgrades purchasable with Troll Coins:
+
+Engine upgrades
+
+Handling upgrades
+
+Cosmetic upgrades
+
+Durability upgrades
+
+Special class upgrades (limited)
+
+Each upgrade:
+
+Costs Troll Coins
+
+Is logged as a transaction
+
+Is stored in user_vehicles.mods (jsonb)
+
+Cannot be refunded
+
+Increases resale value optionally (configurable)
+
+NO free upgrades.
+
+4) TMV (Transportation Management Vault) System
+Tables Required
+
+Implement or restore:
+
+vehicles_catalog
+
+user_vehicles
+
+vehicle_titles
+
+vehicle_registrations
+
+vehicle_insurance_policies
+
+vehicle_listings
+
+vehicle_transactions
+
+tmv_fee_schedule
+
+user_driver_licenses
+
+tmv_actions
+
+court_cases (or integrate with existing court system)
+
+5) TMV Fees (Coins Only)
+
+Fees must be configurable via tmv_fee_schedule.
+
+Required fees:
+
+title_issue
+
+title_transfer
+
+registration_new
+
+registration_renew_temp
+
+registration_renew_hard
+
+plate_temp_issue
+
+plate_hard_issue
+
+plate_replace
+
+plate_change_number = 20 Troll Coins
+
+late_fee
+
+citation_fee
+
+court_summons_fee
+
+impound_fee
+
+TMV fees are coin sinks (system-owned).
+
+6) Plates & Registration Rules
+Plate Types
+
+Temp Plates
+
+Short duration (e.g. 7 days)
+
+Cheap
+
+Hard Plates
+
+Longer duration (30–90 days)
+
+More expensive
+
+Expiration Enforcement
+
+Registration expires instantly when expires_at < now()
+
+No grace period unless explicitly configured
+
+Plate Number Change
+
+Users may change their plate number at any time
+
+Cost: 20 Troll Coins
+
+Generates a unique new plate
+
+Logged as TMV fee transaction
+
+7) Insurance (Mandatory Sink)
+
+Every car must have insurance to be legally used
+
+Default premium: 2,000 Troll Coins per period
+
+If insurance lapses:
+
+Car badge shows ❌ Uninsured
+
+Staff can enforce penalties
+
+Renewals handled by scheduled server job (idempotent)
+
+8) Driver License System
+
+Create user_driver_licenses:
+
+Status: valid or suspended
+
+Suspension reasons:
+
+Unpaid fines
+
+Expired plates
+
+Insurance lapse
+
+Court order
+
+License suspension is global, not per-car
+
+9) Broadcast Car Badge (PUBLIC VISIBILITY)
+Core Rule
+
+If a user is in a broadcast, ANYONE can click the 🚗 car badge on their profile tile.
+
+Car Badge Panel (Public)
+
+Shows:
+
+Vehicle make / model
+
+Plate number
+
+Plate type (temp / hard)
+
+Registration status (active / expired / suspended)
+
+Insurance status (active / lapsed)
+
+Driver license status (valid / suspended)
+
+Critical Rule
+
+If a user’s license is suspended, EVERYONE can see it in the broadcast by clicking the car badge.
+
+No hiding. No role restriction for viewing.
+
+10) Staff Moderation From Broadcast
+
+If viewer is staff/mod/admin, show action buttons:
+
+Warn
+
+Issue fine (coins deducted)
+
+Summon to court
+
+Impound vehicle
+
+Suspend license
+
+Unsuspend license
+
+Enforcement Rules
+
+Actions are server-side only
+
+Logged in tmv_actions
+
+Fines and fees deducted atomically
+
+Court summons create court cases
+
+11) Marketplace (Player-to-Player Sales)
+
+Users may list cars they own
+
+Sale requires valid title
+
+On sale:
+
+Apply platform fee (12%)
+
+Apply tax (3%)
+
+Transfer:
+
+Ownership
+
+Title
+
+Registration (or force renewal)
+
+Insurance resets or lapses (clean state)
+
+12) Required Server Functions (Edge / RPC)
+
+Implement atomically:
+
+purchase_from_ktauto(vehicle_catalog_id, plate_type)
+
+create_vehicle_listing(user_vehicle_id, price)
+
+buy_vehicle_listing(listing_id)
+
+pay_vehicle_insurance(user_vehicle_id)
+
+renew_vehicle_insurance() (scheduled)
+
+renew_registration(user_vehicle_id, plate_type)
+
+upgrade_to_hard_plate(user_vehicle_id)
+
+change_plate_number(user_vehicle_id) (20 coins)
+
+apply_vehicle_upgrade(user_vehicle_id, upgrade_id)
+
+get_broadcast_vehicle_status(target_user_id)
+
+staff_tmv_action(...)
+
+13) RLS & Security
+
+Users can only manage their own vehicles
+
+Everyone can view broadcast vehicle status (safe fields only)
+
+Staff-only mutation functions
+
+All coin movement server-side
+
+No trust in client values
+
+14) Final Rules Summary
+
+No free cars
+
+No real-money car purchases
+
+Coins only
+
+Huge variety of vehicles
+
+Ownership capped at 25 cars/month
+
+Titles required for every car
+
+Plates and licenses are enforceable and public in broadcasts
+
+TMV is a major recurring coin sink
+
+Social pressure + staff enforcement are intentional mechanics

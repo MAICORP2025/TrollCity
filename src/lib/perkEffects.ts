@@ -1,0 +1,335 @@
+// Perk Effect Implementations
+// Real-time logic for applying perk effects throughout the app
+
+import { supabase } from './supabase';
+import { isPerkActive } from './perkSystem';
+
+/**
+ * GHOST MODE (30m)
+ * Hide user from viewer lists and online status
+ */
+export async function shouldHideUserFromViewers(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_ghost_mode');
+}
+
+/**
+ * DISAPPEARING CHATS (30m)
+ * Auto-hide chat messages after 10 seconds
+ */
+export async function shouldAutoHideMessage(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_disappear_chat');
+}
+
+/**
+ * MESSAGE ADMIN (Officer Only)
+ * Unlock DM button to admin
+ */
+export async function canMessageAdmin(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_message_admin');
+}
+
+/**
+ * GLOWING USERNAME (1h)
+ * Add neon glow effect to username
+ */
+export async function getUsernameGlowClass(userId: string): Promise<string> {
+  if (await isPerkActive(userId, 'perk_rgb_username')) {
+    return 'rgb-username';
+  }
+
+  // Check for custom glowing username
+  const { data: customGlow } = await supabase
+    .from('user_perks')
+    .select('metadata')
+    .eq('user_id', userId)
+    .eq('perk_id', 'perk_global_highlight')
+    .eq('is_active', true)
+    .gt('expires_at', new Date().toISOString())
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (customGlow?.metadata?.glowColor) {
+    // Return a class that can be dynamically styled
+    return `custom-glowing-username-${customGlow.metadata.glowColor}`;
+  }
+
+  // Fallback: Check user_profiles for color preference
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('glowing_username_color')
+    .eq('id', userId)
+    .maybeSingle();
+  
+  if (profile?.glowing_username_color) {
+    return `custom-glowing-username-${profile.glowing_username_color}`;
+  }
+
+  const isActive = await isPerkActive(userId, 'perk_global_highlight');
+  return isActive ? 'glowing-username' : '';
+}
+
+/**
+ * Get CSS style object for glowing username
+ */
+export function getGlowingTextStyle(color: string) {
+  return {
+    animation: 'glow 2s ease-in-out infinite alternate',
+    color: color,
+    fontWeight: 'bold' as const,
+    textShadow: `0 0 5px ${color}, 0 0 10px ${color}, 0 0 15px ${color}, 0 0 20px ${color}`
+  };
+}
+
+/**
+ * SLOW-MOTION CHAT CONTROL (5hrs)
+ * Allow user to toggle slow mode in streams
+ */
+export async function canControlSlowMode(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_slowmo_chat');
+}
+
+/**
+ * TROLL ALARM ARRIVAL (100hrs)
+ * Play sound + flash when user joins
+ */
+export async function shouldPlayArrivalEffects(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_troll_alarm');
+}
+
+/**
+ * BAN SHIELD (2hrs)
+ * Prevent moderation actions on user
+ */
+export async function isProtectedFromModeration(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_ban_shield');
+}
+
+/**
+ * DOUBLE XP MODE (1h)
+ * Multiply XP rewards by 2
+ */
+export async function getXPMultiplier(userId: string): Promise<number> {
+  const isActive = await isPerkActive(userId, 'perk_double_xp');
+  return isActive ? 2 : 1;
+}
+
+/**
+ * GOLDEN FLEX BANNER (100h)
+ * Show golden crown banner on messages
+ */
+export async function shouldShowGoldenBanner(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_flex_banner');
+}
+
+/**
+ * TROLL SPELL (1h)
+ * Allow user to change another user's username style temporarily
+ */
+export async function canCastTrollSpell(userId: string): Promise<boolean> {
+  return await isPerkActive(userId, 'perk_troll_spell');
+}
+
+// Random styles for Troll Spell
+const TROLL_SPELL_STYLES = [
+  { name: 'zombie', emoji: '🧟', color: '#4ade80' },
+  { name: 'alien', emoji: '👽', color: '#22d3ee' },
+  { name: 'pirate', emoji: '🏴‍☠️', color: '#f97316' },
+  { name: 'robot', emoji: '🤖', color: '#94a3b8' },
+  { name: 'clown', emoji: '🤡', color: '#f43f5e' },
+  { name: 'ghost', emoji: '👻', color: '#e2e8f0' },
+];
+
+/**
+ * Apply Troll Spell to a target user
+ * This stores the spell effect in the user's perk metadata
+ */
+export async function applyTrollSpell(casterId: string, targetUserId: string, targetUsername: string): Promise<{ success: boolean; error?: string; style?: typeof TROLL_SPELL_STYLES[0] }> {
+  // Check if caster has the perk
+  const canCast = await canCastTrollSpell(casterId);
+  if (!canCast) {
+    return { success: false, error: 'You do not have the Troll Spell perk' };
+  }
+  
+  // Pick a random style
+  const randomStyle = TROLL_SPELL_STYLES[Math.floor(Math.random() * TROLL_SPELL_STYLES.length)];
+  
+  // Store the spell effect in user_perks metadata (using caster's perk as the source)
+  const { data: perkData, error: perkError } = await supabase
+    .from('user_perks')
+    .select('id, metadata')
+    .eq('user_id', casterId)
+    .eq('perk_id', 'perk_troll_spell')
+    .eq('is_active', true)
+    .gt('expires_at', new Date().toISOString())
+    .limit(1)
+    .maybeSingle();
+  
+  if (perkError || !perkData) {
+    return { success: false, error: 'Could not find active Troll Spell perk' };
+  }
+  
+  // Update metadata to store the target user transformation
+  const spellEffects = perkData.metadata?.spellEffects || {};
+  spellEffects[targetUserId] = {
+    style: randomStyle.name,
+    emoji: randomStyle.emoji,
+    color: randomStyle.color,
+    appliedAt: new Date().toISOString(),
+    targetUsername: targetUsername
+  };
+  
+  const { error: updateError } = await supabase
+    .from('user_perks')
+    .update({ metadata: { ...perkData.metadata, spellEffects } })
+    .eq('id', perkData.id);
+  
+  if (updateError) {
+    console.error('Failed to apply Troll Spell:', updateError);
+    return { success: false, error: 'Failed to apply spell effect' };
+  }
+  
+  return { success: true, style: randomStyle };
+}
+
+/**
+ * Get Troll Spell effect for a user (if any)
+ */
+export async function getTrollSpellEffect(userId: string): Promise<{ style: string; emoji: string; color: string; targetUsername: string } | null> {
+  // Query all active troll_spell perks that might have this user as a target
+  const { data: perks, error } = await supabase
+    .from('user_perks')
+    .select('metadata')
+    .eq('perk_id', 'perk_troll_spell')
+    .eq('is_active', true)
+    .gt('expires_at', new Date().toISOString());
+  
+  if (error || !perks) return null;
+  
+  for (const perk of perks) {
+    const spellEffects = perk.metadata?.spellEffects || {};
+    if (spellEffects[userId]) {
+      return spellEffects[userId];
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * UTILITY FUNCTIONS FOR PERK EFFECTS
+ */
+
+/**
+ * Apply disappearing chat effect to a message
+ */
+export function applyDisappearingChat(messageElement: HTMLElement, userId: string) {
+  shouldAutoHideMessage(userId).then(shouldHide => {
+    if (shouldHide) {
+      setTimeout(() => {
+        messageElement.style.opacity = '0.3';
+        messageElement.style.pointerEvents = 'none';
+        // Optionally remove completely after another delay
+        setTimeout(() => {
+          messageElement.style.display = 'none';
+        }, 2000);
+      }, 10000); // 10 seconds
+    }
+  });
+}
+
+/**
+ * Apply glowing username effect
+ */
+export function applyGlowingUsername(usernameElement: HTMLElement, userId: string) {
+  getUsernameGlowClass(userId).then(async (glowClass) => {
+    if (glowClass) {
+      if (glowClass.startsWith('custom-glowing-username-')) {
+        // Extract color from class name
+        const color = glowClass.replace('custom-glowing-username-', '');
+        // Apply custom glow effect with the chosen color
+        usernameElement.style.animation = 'glow 2s ease-in-out infinite alternate';
+        usernameElement.style.color = color;
+        usernameElement.style.fontWeight = 'bold';
+        usernameElement.style.textShadow = `0 0 5px ${color}, 0 0 10px ${color}, 0 0 15px ${color}, 0 0 20px ${color}`;
+      } else {
+        usernameElement.classList.add(glowClass);
+      }
+    }
+  });
+}
+
+/**
+ * Play arrival sound and flash effect
+ */
+export function playArrivalEffects(userId: string) {
+  shouldPlayArrivalEffects(userId).then(shouldPlay => {
+    if (shouldPlay) {
+      // Play sound
+      const audio = new Audio('/sounds/troll-alarm.mp3');
+      audio.volume = 0.5;
+      audio.play().catch(err => console.log('Audio play failed:', err));
+
+      // Flash effect
+      const flash = document.createElement('div');
+      flash.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        opacity: 0.8;
+        z-index: 9999;
+        pointer-events: none;
+        animation: flash 0.5s ease-out;
+      `;
+      document.body.appendChild(flash);
+      setTimeout(() => document.body.removeChild(flash), 500);
+    }
+  });
+}
+
+/**
+ * Check if moderation action should be blocked
+ */
+export async function shouldBlockModeration(targetUserId: string, _action: 'kick' | 'mute' | 'ban'): Promise<boolean> {
+  return await isProtectedFromModeration(targetUserId);
+}
+
+/**
+ * Calculate XP with multiplier
+ */
+export async function calculateXP(baseXP: number, userId: string): Promise<number> {
+  const multiplier = await getXPMultiplier(userId);
+  return Math.floor(baseXP * multiplier);
+}
+
+/**
+ * Get message styling for golden banner
+ */
+export async function getMessageBannerStyle(userId: string): Promise<string> {
+  const shouldShow = await shouldShowGoldenBanner(userId);
+  return shouldShow ? 'golden-banner' : '';
+}
+
+/**
+ * CSS for glowing username effect (to be added to global styles)
+ */
+export const GLOWING_USERNAME_CSS = `
+@keyframes glow {
+  from { text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #fff, 0 0 20px #FFC93C; }
+  to { text-shadow: 0 0 10px #FFC93C, 0 0 20px #FFC93C, 0 0 30px #FFC93C, 0 0 40px #FFD700; }
+}
+
+.glowing-username {
+  animation: glow 2s ease-in-out infinite alternate;
+  color: #FFD700;
+  font-weight: bold;
+}
+
+@keyframes flash {
+  0% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+`;

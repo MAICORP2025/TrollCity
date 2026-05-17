@@ -1,0 +1,11 @@
+#!/usr/bin/env node
+/**
+ * PRE-COMMIT HOOK
+ * Protects critical streaming infrastructure files from accidental modification.
+ *
+ * This hook is automatically installed by the project setup.
+ * DO NOT EDIT MANUALLY - If you need to whitelist additional files,
+ * edit scripts/pre-commit-protect.js instead.
+ */
+
+import '../scripts/pre-commit-protect.js';

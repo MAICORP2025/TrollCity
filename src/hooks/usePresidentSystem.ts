@@ -1,0 +1,667 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/lib/store';
+import { toast } from 'sonner';
+
+export type ElectionState = 'draft' | 'open' | 'closed' | 'finalized';
+
+export interface PresidentElection {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  title?: string;
+  description?: string;
+  status: ElectionState;
+  winner_candidate_id: string | null;
+  created_at: string;
+  voting_strategy: 'standard' | 'coins';
+  candidate_limit?: number;
+  candidates?: PresidentCandidate[];
+}
+
+export interface PresidentCandidate {
+  id: string;
+  election_id: string;
+  user_id: string;
+  slogan: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+  vote_count: number;
+  score: number; // New score field
+  created_at: string;
+  is_approved?: boolean; // Derived helper
+  username?: string; // Joined
+  avatar_url?: string; // Joined
+}
+
+export interface PresidentAppointment {
+  id: string;
+  president_user_id: string;
+  vice_president_user_id: string;
+  starts_at: string;
+  ends_at: string;
+  status: 'active' | 'removed' | 'expired';
+  appointee?: {
+    username: string;
+    avatar_url: string;
+  };
+}
+
+export interface TreasuryEntry {
+  id: string;
+  kind: 'deposit' | 'reserve' | 'release' | 'spend' | 'refund';
+  amount_cents: number;
+  currency: string;
+  created_by: string; // actor_id
+  created_at: string;
+}
+
+export const usePresidentSystem = () => {
+  const { user } = useAuthStore();
+  const [currentElection, setCurrentElection] = useState<PresidentElection | null>(null);
+  const [currentPresident, setCurrentPresident] = useState<{ user_id: string; username: string; avatar_url: string } | null>(null);
+  const [currentVP, setCurrentVP] = useState<PresidentAppointment | null>(null);
+  const [treasuryBalance, setTreasuryBalance] = useState<number>(0);
+  const [proposals, setProposals] = useState<any[]>([]); // Added missing state
+  const [allElections, setAllElections] = useState<PresidentElection[]>([]);
+  const [loading, setLoading] = useState(false);
+
+const fetchCurrentElection = useCallback(async () => {
+     try {
+       const { data, error } = await supabase
+         .from('president_elections')
+         .select(`
+           *,
+           candidates:president_candidates!president_candidates_election_id_fkey(
+             *,
+             user:user_profiles(username, avatar_url)
+           )
+         `)
+         .order('created_at', { ascending: false })
+         .limit(1)
+         .maybeSingle();
+
+       if (error) throw error;
+
+       if (data) {
+         console.log('[President] candidates loaded', data.candidates?.length ?? 0);
+
+         // Transform candidates to flatten user info
+         let candidates = data.candidates?.map((c: any) => ({
+           ...c,
+           username: c.user?.username,
+           avatar_url: c.user?.avatar_url,
+           is_approved: c.status === 'approved'
+         })) || [];
+
+// Fetch vote counts from president_votes for these candidates
+          if (candidates.length > 0) {
+            const candidateIds = candidates.map((c: any) => c.id);
+            console.log('[President] fetching vote counts for candidates:', candidateIds);
+
+            const { data: voteRows, error: voteError } = await supabase
+              .from('president_votes')
+              .select('candidate_id')
+              .in('candidate_id', candidateIds);
+
+            if (voteError) throw voteError;
+            console.log('[President] vote rows loaded', voteRows?.length ?? 0);
+
+            // Count votes per candidate in JS since Supabase JS doesn't support .group()
+            const voteCountMap: Record<string, number> = {};
+            voteRows?.forEach((v: any) => {
+              voteCountMap[v.candidate_id] = (voteCountMap[v.candidate_id] || 0) + 1;
+            });
+            console.log('[President] vote count map', voteCountMap);
+
+            candidates = candidates.map((c: any) => ({
+              ...c,
+              vote_count: voteCountMap[c.id] ?? c.vote_count ?? c.score ?? 0,
+            }));
+          }
+
+         setCurrentElection({ ...data, candidates });
+       }
+     } catch (err) {
+       console.error('Error fetching election:', err);
+     }
+   }, []);
+
+  const fetchCurrentPresident = useCallback(async () => {
+    try {
+      // Find user with 'president' badge or gold style
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, username, avatar_url')
+        .or('badge.eq.president,username_style.eq.gold')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      if (data) {
+        setCurrentPresident({
+           user_id: data.id,
+           username: data.username,
+           avatar_url: data.avatar_url
+        });
+      } else {
+        // Fallback: check last finalized election winner
+        const { data: election } = await supabase
+          .from('president_elections')
+          .select('winner_candidate_id')
+          .eq('status', 'finalized')
+          .order('end_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+         if (election?.winner_candidate_id) {
+             const { data: candidate } = await supabase
+               .from('president_candidates')
+               .select('user_id')
+               .eq('id', election.winner_candidate_id)
+               .maybeSingle();
+               
+             if (candidate) {
+                const { data: user } = await supabase
+                  .from('user_profiles')
+                  .select('id, username, avatar_url')
+                  .eq('id', candidate.user_id)
+                  .maybeSingle();
+                  
+                if (user) {
+                   setCurrentPresident({
+                     user_id: user.id,
+                     username: user.username,
+                     avatar_url: user.avatar_url
+                   });
+                }
+             }
+         }
+      }
+    } catch (err) {
+      console.error('Error fetching president:', err);
+    }
+  }, []);
+
+  const fetchVicePresident = useCallback(async () => {
+      try {
+          const { data, error } = await supabase
+            .from('president_appointments')
+            .select(`
+                *,
+                appointee:user_profiles!president_appointments_vice_president_user_id_fkey(username, avatar_url)
+            `)
+            .eq('status', 'active')
+            .maybeSingle();
+          
+          if (error) throw error;
+            
+          if (data) {
+              setCurrentVP(data as any);
+          } else {
+              setCurrentVP(null);
+          }
+      } catch (err) {
+          console.error('Error fetching VP:', err);
+      }
+  }, []);
+  
+  const fetchTreasuryBalance = useCallback(async () => {
+      try {
+          const { data } = await supabase
+            .from('president_treasury_balance')
+            .select('balance_cents')
+            .eq('currency', 'USD')
+            .maybeSingle(); // Changed from single() to maybeSingle()
+            
+          if (data) {
+              setTreasuryBalance(data.balance_cents / 100);
+          } else {
+             setTreasuryBalance(0);
+          }
+      } catch (err) {
+          console.error(err);
+      }
+  }, []);
+
+  const fetchProposals = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('president_proposals')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setProposals(data || []);
+    } catch (err) {
+      console.error('Error fetching proposals:', err);
+    }
+  }, []);
+
+  const createElection = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('create_president_election');
+      if (error) throw error;
+      toast.success('Election created successfully');
+      fetchCurrentElection();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const finalizeElection = async (electionId: string) => {
+    setLoading(true);
+    try {
+      // If election is still open, end it first (allows secretaries to finalize early)
+      const { data: election } = await supabase
+        .from('president_elections')
+        .select('status')
+        .eq('id', electionId)
+        .single();
+
+      if (election?.status === 'open') {
+        await supabase
+          .from('president_elections')
+          .update({ status: 'closed', ends_at: new Date(Date.now() - 1000).toISOString() })
+          .eq('id', electionId);
+      }
+
+      const { error } = await supabase.rpc('finalize_president_election', {
+        p_election_id: electionId
+      });
+      if (error) throw error;
+      toast.success('Election finalized!');
+      fetchCurrentElection();
+      fetchCurrentPresident();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const endElection = async (electionId: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('president_elections')
+        .update({ status: 'closed', ends_at: new Date().toISOString() })
+        .eq('id', electionId);
+
+      if (error) throw error;
+      toast.success('Election ended successfully');
+      fetchCurrentElection();
+      fetchAllElections();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteElection = async (electionId: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('president_elections')
+        .delete()
+        .eq('id', electionId);
+
+      if (error) throw error;
+      toast.success('Election deleted successfully');
+      fetchCurrentElection();
+      fetchAllElections();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAllElections = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('president_elections')
+        .select(`
+          *,
+          candidates:president_candidates(
+            *,
+            user:user_profiles(username, avatar_url)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+if (error) throw error;
+
+       if (data) {
+         console.log('[President] all elections loaded', data.length);
+         const formattedElections = data.map((election: any) => ({
+          ...election,
+          candidates: election.candidates?.map((c: any) => ({
+            ...c,
+            username: c.user?.username,
+            avatar_url: c.user?.avatar_url,
+            is_approved: c.status === 'approved'
+          })) || []
+        }));
+        setAllElections(formattedElections);
+      }
+    } catch (err) {
+      console.error('Error fetching all elections:', err);
+    }
+  }, []);
+
+   const signupCandidate = async (electionId: string, slogan: string, statement: string, bannerPath: string = 'default') => {
+     setLoading(true);
+     try {
+       const { data: { user } } = await supabase.auth.getUser();
+       
+       // Check if user is currently jailed (active sentence)
+       const { data: jailData } = await supabase
+         .from('jail')
+         .select('release_time')
+         .eq('user_id', user?.id)
+         .order('created_at', { ascending: false })
+         .limit(1)
+         .maybeSingle();
+       
+       if (jailData) {
+         const releaseTime = new Date(jailData.release_time);
+         if (releaseTime > new Date()) {
+           toast.error('You cannot run for president while incarcerated. Please serve your sentence first.');
+           setLoading(false);
+           return;
+         }
+       }
+       
+       // Check if user has background jail status (released within last 24 hours)
+       const { data: profileData, error: profileError } = await supabase
+         .from('user_profiles')
+         .select('is_background_jailed')
+         .eq('id', user?.id)
+         .single();
+         
+       if (profileError) {
+         console.error('Error fetching profile for background jail check:', profileError);
+         // Don't block signup on profile fetch error, but log it
+       } else if (profileData?.is_background_jailed) {
+         toast.error('You cannot run for president while your jail record is recent. Please wait 24 hours after release.');
+         setLoading(false);
+         return;
+       }
+       
+       const displayName = user?.user_metadata?.username || 'Unknown';
+
+       const { error } = await supabase.rpc('signup_president_candidate', {
+         p_election_id: electionId,
+         p_banner_path: bannerPath,
+         p_display_name: displayName,
+         p_slogan: slogan,
+         p_statement: statement
+       });
+       
+       if (error) throw error;
+
+       toast.success('Signed up as candidate!');
+       fetchCurrentElection();
+     } catch (err: any) {
+       toast.error(err.message);
+     } finally {
+       setLoading(false);
+     }
+   };
+
+  const approveCandidate = async (candidateId: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('approve_president_candidate', {
+        p_candidate_id: candidateId
+      });
+      if (error) throw error;
+      toast.success('Candidate approved');
+      fetchCurrentElection();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const rejectCandidate = async (candidateId: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('reject_president_candidate', {
+        p_candidate_id: candidateId
+      });
+      if (error) throw error;
+      toast.success('Candidate rejected');
+      fetchCurrentElection();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+const voteForCandidate = async (candidateId: string) => {
+     setLoading(true);
+     try {
+       if (!currentElection) return;
+
+       const { data, error } = await supabase.rpc('vote_for_president_candidate', {
+         p_election_id: currentElection.id,
+         p_candidate_id: candidateId
+       });
+
+       if (error) throw error;
+
+       // Check if already voted
+       if (data?.already_voted) {
+         toast.success('You already voted this week');
+         return;
+       }
+
+if (data?.success) {
+          console.log('[President] vote submitted for candidate', candidateId);
+          toast.success('Vote cast successfully!');
+          await fetchCurrentElection();
+          console.log('[President] refreshed vote counts');
+        } else {
+         toast.error(data?.message || 'Failed to cast vote');
+       }
+     } catch (err: any) {
+       // Handle duplicate key constraint error gracefully
+       if (err.message?.includes('duplicate') || err.message?.includes('already_voted')) {
+         toast.success('You already voted this week');
+       } else {
+         toast.error(err.message || 'Failed to cast vote');
+       }
+     } finally {
+       setLoading(false);
+     }
+   };
+
+const voteWithCoins = async (candidateId: string, amount: number) => {
+     setLoading(true);
+     try {
+       const { data, error } = await supabase.rpc('vote_candidate_with_coins', {
+         p_candidate_id: candidateId,
+         p_amount: amount
+       });
+       if (error) throw error;
+
+       // Check if already voted
+       if (data?.already_voted) {
+         toast.success('You already voted this week');
+         return;
+       }
+
+       toast.success(`Cast ${amount} coin votes!`);
+       await fetchCurrentElection();
+     } catch (err: any) {
+       if (err.message?.includes('duplicate') || err.message?.includes('already_voted')) {
+         toast.success('You already voted this week');
+       } else {
+         toast.error(err.message || 'Failed to vote');
+       }
+     } finally {
+       setLoading(false);
+     }
+   };
+
+  const createProposal = async (title: string, description: string, type: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('create_president_proposal', {
+        p_title: title,
+        p_description: description,
+        p_type: type
+      });
+      if (error) throw error;
+      toast.success('Proposal submitted successfully');
+      fetchProposals();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const postAnnouncement = async (message: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('post_president_announcement', {
+        p_message: message
+      });
+      if (error) throw error;
+      toast.success('Announcement posted');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const spendTreasury = async (amount: number, reason: string) => {
+    setLoading(true);
+    try {
+      // Amount in cents
+      const amountCents = Math.floor(amount * 100);
+      const { error } = await supabase.rpc('spend_president_treasury', {
+        p_amount_cents: amountCents,
+        p_reason: reason
+      });
+      if (error) throw error;
+      toast.success('Treasury funds spent');
+      fetchTreasuryBalance();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const flagUser = async (userId: string, reason: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('president_flag_user', {
+        p_target_user_id: userId,
+        p_reason: reason
+      });
+      if (error) throw error;
+      toast.success('User flagged for review');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const raisePayouts = async (amount: number) => {
+      setLoading(true);
+      try {
+          const { error } = await supabase.rpc('president_raise_payouts', {
+              p_amount_cents: amount * 100 // Convert to cents
+          });
+          if (error) throw error;
+          toast.success(`Payouts raised by $${amount}!`);
+          fetchTreasuryBalance();
+      } catch (err: any) {
+          toast.error(err.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const appointVP = async (userId: string) => {
+      setLoading(true);
+      try {
+          const { error } = await supabase.rpc('appoint_vice_president', {
+              p_appointee_id: userId
+          });
+          if (error) throw error;
+          toast.success('Vice President appointed!');
+          fetchVicePresident();
+      } catch (err: any) {
+          toast.error(err.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  useEffect(() => {
+    fetchCurrentElection();
+    fetchCurrentPresident();
+    fetchVicePresident();
+    fetchTreasuryBalance();
+    fetchProposals();
+  }, [fetchCurrentElection, fetchCurrentPresident, fetchVicePresident, fetchTreasuryBalance, fetchProposals]);
+
+  const isPresident = currentPresident?.user_id === user?.id;
+  const isVP = currentVP?.vice_president_user_id === user?.id;
+
+  return {
+    currentElection,
+    currentPresident,
+    currentVP,
+    isPresident,
+    isVP,
+    treasuryBalance,
+    proposals,
+    loading,
+    refresh: async () => {
+      try {
+        await Promise.all([
+          fetchCurrentElection(),
+          fetchCurrentPresident(),
+          fetchVicePresident(),
+          fetchTreasuryBalance(),
+          fetchProposals()
+        ]);
+      } catch (err) {
+        console.warn('Refresh error:', err);
+      }
+    },
+    createElection,
+    finalizeElection,
+    endElection,
+    deleteElection,
+    allElections,
+    fetchAllElections,
+    signupCandidate,
+    approveCandidate,
+    rejectCandidate,
+    voteForCandidate,
+    voteWithCoins,
+    createProposal,
+    postAnnouncement,
+    spendTreasury,
+    flagUser,
+    raisePayouts,
+    appointVP,
+    fetchProposals
+  };
+};

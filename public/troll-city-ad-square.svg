@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0c29"/>
+      <stop offset="100%" style="stop-color:#302b63"/>
+    </linearGradient>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="50%" style="stop-color:#ec4899"/>
+      <stop offset="100%" style="stop-color:#06b6d4"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="800" fill="url(#bg)"/>
+  
+  <!-- Sidebar (left side) -->
+  <rect x="0" y="0" width="180" height="800" fill="#0a0a1a" stroke="#fbbf24" stroke-opacity="0.15"/>
+  <rect x="0" y="0" width="180" height="50" fill="#1a1a2a" stroke="#fbbf24" stroke-opacity="0.1"/>
+  <text x="90" y="32" font-family="Arial Black" font-size="18" fill="white" text-anchor="middle" font-weight="900">TROLL</text>
+  <text x="90" y="48" font-family="Arial Black" font-size="14" fill="#fbbf24" text-anchor="middle" font-weight="900">CITY</text>
+  
+  <!-- Sidebar icons -->
+  <g fill="#fbbf24" font-family="Arial" font-size="9" text-anchor="middle">
+    <circle cx="45" cy="80" r="15" fill-opacity="0.2"/>
+    <text x="45" y="105" font-size="8">Home</text>
+    <circle cx="135" cy="80" r="15" fill="#22c55e" fill-opacity="0.2"/>
+    <text x="135" y="105" font-size="8" fill="#4ade80">Auction</text>
+    <circle cx="45" cy="140" r="15" fill="#8b5cf6" fill-opacity="0.2"/>
+    <text x="45" y="165" font-size="8" fill="#a78bfa">Town</text>
+    <circle cx="135" cy="140" r="15" fill="#ec4899" fill-opacity="0.2"/>
+    <text x="135" y="165" font-size="8" fill="#f472b6">Living</text>
+    <circle cx="45" cy="200" r="15" fill="#06b6d4" fill-opacity="0.2"/>
+    <text x="45" y="225" font-size="8" fill="#22d3ee">Inventory</text>
+    <circle cx="135" cy="200" r="15" fill="#f97316" fill-opacity="0.2"/>
+    <text x="135" y="225" font-size="8" fill="#fb923c">Leader</text>
+    <circle cx="45" cy="260" r="15" fill="#eab308" fill-opacity="0.2"/>
+    <text x="45" y="285" font-size="8">TCPS</text>
+    <circle cx="135" cy="260" r="15" fill="#ef4444" fill-opacity="0.2"/>
+    <text x="135" y="285" font-size="8" fill="#f87171">Talent</text>
+  </g>
+  
+  <!-- Main Content Area -->
+  <rect x="190" y="10" width="600" height="60" rx="30" fill="#1a1a2a" fill-opacity="0.6"/>
+  <rect x="195" y="14" width="250" height="52" rx="26" fill="url(#brandGrad)" filter="url(#glow)"/>
+  <text x="220" y="48" font-family="Arial Black" font-size="22" fill="white" font-weight="900">TROLL CITY</text>
+  
+  <!-- Featured Content -->
+  <g transform="translate(200, 90)">
+    <!-- Live Streaming -->
+    <rect width="185" height="140" rx="10" fill="#1e1e3a" stroke="#ec4899" stroke-opacity="0.3"/>
+    <text x="15" y="25" font-family="Arial Black" font-size="13" fill="#ec4899" font-weight="900">🔴 LIVE STREAM</text>
+    <circle cx="92" cy="75" r="30" fill="none" stroke="#ec4899" stroke-width="3"/>
+    <circle cx="92" cy="75" r="18" fill="#ec4899"/>
+    <text x="92" y="120" font-family="Arial" font-size="10" fill="#a1a1aa" text-anchor="middle">Watch live shows</text>
+    
+    <!-- Battle -->
+    <rect x="195" y="0" width="185" height="140" rx="10" fill="#1e1e3a" stroke="#f97316" stroke-opacity="0.3"/>
+    <text x="210" y="25" font-family="Arial Black" font-size="13" fill="#f97316" font-weight="900">⚔️ BATTLE</text>
+    <polygon points="277,45 307,75 277,105 247,75" fill="#f97316"/>
+    <polygon points="277,75 297,95 277,115 257,95" fill="#fbbf24"/>
+    <text x="277" y="120" font-family="Arial" font-size="10" fill="#a1a1aa" text-anchor="middle">Compete & win</text>
+    
+    <!-- Gifts -->
+    <rect x="390" y="0" width="185" height="140" rx="10" fill="#1e1e3a" stroke="#fbbf24" stroke-opacity="0.3"/>
+    <text x="405" y="25" font-family="Arial Black" font-size="13" fill="#fbbf24" font-weight="900">💰 GIFTS</text>
+    <circle cx="482" cy="75" r="30" fill="#fbbf24"/>
+    <text x="482" y="85" font-family="Arial Black" font-size="28" fill="#1e1e3a" text-anchor="middle">$</text>
+    <text x="482" y="120" font-family="Arial" font-size="10" fill="#a1a1aa" text-anchor="middle">Earn rewards</text>
+  </g>
+  
+  <!-- More Features Grid -->
+  <g transform="translate(200, 245)">
+    <!-- Leaderboard -->
+    <rect width="130" height="110" rx="8" fill="#1e1e3a" stroke="#eab308" stroke-opacity="0.3"/>
+    <text x="15" y="20" font-family="Arial Black" font-size="11" fill="#eab308" font-weight="900">🏆 Leaderboard</text>
+    <text x="15" y="45" font-family="Arial" font-size="10" fill="#ffffff">#1 TopHost</text>
+    <text x="15" y="62" font-family="Arial" font-size="10" fill="#ffffff">#2 StarStream</text>
+    <text x="15" y="79" font-family="Arial" font-size="10" fill="#ffffff">#3 GameKing</text>
+    <text x="15" y="96" font-family="Arial" font-size="10" fill="#ffffff">#4 MusicQueen</text>
+    
+    <!-- TCPS -->
+    <rect x="140" y="0" width="130" height="110" rx="8" fill="#1e1e3a" stroke="#8b5cf6" stroke-opacity="0.3"/>
+    <text x="155" y="20" font-family="Arial Black" font-size="11" fill="#8b5cf6" font-weight="900">💬 TCPS Chat</text>
+    <text x="155" y="45" font-family="Arial" font-size="10" fill="#ffffff">Private messages</text>
+    <text x="155" y="62" font-family="Arial" font-size="10" fill="#ffffff">Group chats</text>
+    <text x="155" y="79" font-family="Arial" font-size="10" fill="#ffffff">Voice calls</text>
+    <text x="155" y="96" font-family="Arial" font-size="10" fill="#a1a1aa">And more...</text>
+    
+    <!-- Auctions -->
+    <rect x="280" y="0" width="130" height="110" rx="8" fill="#1e1e3a" stroke="#22c55e" stroke-opacity="0.3"/>
+    <text x="295" y="20" font-family="Arial Black" font-size="11" fill="#22c55e" font-weight="900">⚖️ Auctions</text>
+    <text x="295" y="45" font-family="Arial" font-size="10" fill="#ffffff">Car auctions</text>
+    <text x="295" y="62" font-family="Arial" font-size="10" fill="#ffffff">Property</text>
+    <text x="295" y="79" font-family="Arial" font-size="10" fill="#ffffff">Rare items</text>
+    <text x="295" y="96" font-family="Arial" font-size="10" fill="#ffffff">Daily deals</text>
+    
+    <!-- Families -->
+    <rect x="420" y="0" width="130" height="110" rx="8" fill="#1e1e3a" stroke="#f59e0b" stroke-opacity="0.3"/>
+    <text x="435" y="20" font-family="Arial Black" font-size="11" fill="#f59e0b" font-weight="900">👨‍👩‍👧 Families</text>
+    <text x="435" y="45" font-family="Arial" font-size="10" fill="#ffffff">Build empire</text>
+    <text x="435" y="62" font-family="Arial" font-size="10" fill="#ffffff">Recruit members</text>
+    <text x="435" y="79" font-family="Arial" font-size="10" fill="#ffffff">Family battles</text>
+    <text x="435" y="96" font-family="Arial" font-size="10" fill="#ffffff">Team rewards</text>
+  </g>
+  
+  <!-- More Features Row 2 -->
+  <g transform="translate(200, 365)">
+    <!-- Mai Talent -->
+    <rect width="130" height="110" rx="8" fill="#1e1e3a" stroke="#ec4899" stroke-opacity="0.3"/>
+    <text x="15" y="20" font-family="Arial Black" font-size="11" fill="#ec4899" font-weight="900">🎤 Mai Talent</text>
+    <text x="15" y="45" font-family="Arial" font-size="10" fill="#ffffff">Show broadcasts</text>
+    <text x="15" y="62" font-family="Arial" font-size="10" fill="#ffffff">Fan following</text>
+    <text x="15" y="79" font-family="Arial" font-size="10" fill="#ffffff">Gift earnings</text>
+    <text x="15" y="96" font-family="Arial" font-size="10" fill="#ffffff">Climb the ranks</text>
+    
+    <!-- Troll Court -->
+    <rect x="140" y="0" width="130" height="110" rx="8" fill="#1e1e3a" stroke="#ef4444" stroke-opacity="0.3"/>
+    <text x="155" y="20" font-family="Arial Black" font-size="11" fill="#ef4444" font-weight="900">⚖️ Troll Court</text>
+    <text x="155" y="45" font-family="Arial" font-size="10" fill="#ffffff">File complaints</text>
+    <text x="155" y="62" font-family="Arial" font-size="10" fill="#ffffff">Court dockets</text>
+    <text x="155" y="79" font-family="Arial" font-size="10" fill="#ffffff">Attorneys</text>
+    <text x="155" y="96" font-family="Arial" font-size="10" fill="#ffffff">Justice served</text>
+    
+    <!-- Government -->
+    <rect x="280" y="0" width="130" height="110" rx="8" fill="#1e1e3a" stroke="#06b6d4" stroke-opacity="0.3"/>
+    <text x="295" y="20" font-family="Arial Black" font-size="11" fill="#06b6d4" font-weight="900">🏛️ Government</text>
+    <text x="295" y="45" font-family="Arial" font-size="10" fill="#ffffff">Officer HQ</text>
+    <text x="295" y="62" font-family="Arial" font-size="10" fill="#ffffff">TCNN News</text>
+    <text x="295" y="79" font-family="Arial" font-size="10" fill="#ffffff">President</text>
+    <text x="295" y="96" font-family="Arial" font-size="10" fill="#ffffff">Admin panel</text>
+    
+    <!-- Wheel -->
+    <rect x="420" y="0" width="130" height="110" rx="8" fill="#1e1e3a" stroke="#a855f7" stroke-opacity="0.3"/>
+    <text x="435" y="20" font-family="Arial Black" font-size="11" fill="#a855f7" font-weight="900">🎡 Troll Wheel</text>
+    <text x="435" y="45" font-family="Arial" font-size="10" fill="#ffffff">Spin to win</text>
+    <text x="435" y="62" font-family="Arial" font-size="10" fill="#ffffff">Daily spins</text>
+    <text x="435" y="79" font-family="Arial" font-size="10" fill="#ffffff">Huge prizes</text>
+    <text x="435" y="96" font-family="Arial" font-size="10" fill="#a1a1aa">Try your luck</text>
+  </g>
+  
+  <!-- CTA Button -->
+  <rect x="225" y="510" width="350" height="55" rx="27" fill="url(#brandGrad)" filter="url(#glow)"/>
+  <text x="400" y="543" font-family="Arial Black" font-size="22" fill="white" text-anchor="middle" font-weight="900">JOIN THE CHAOS</text>
+  
+  <!-- Bottom tagline -->
+  <text x="400" y="600" font-family="Arial" font-size="16" fill="#a1a1aa" text-anchor="middle">Watch • Chat • Battle • Win</text>
+  <text x="400" y="625" font-family="Arial" font-size="14" fill="#fbbf24" text-anchor="middle">Your City. Your Rules.</text>
+  
+  <!-- App badge mock -->
+  <rect x="320" y="660" width="160" height="50" rx="25" fill="#1a1a2a" stroke="#fbbf24" stroke-opacity="0.3"/>
+  <text x="400" y="680" font-family="Arial" font-size="10" fill="#a1a1aa" text-anchor="middle">Download on</text>
+  <text x="400" y="698" font-family="Arial Black" font-size="16" fill="white" text-anchor="middle" font-weight="900">App Store</text>
+  
+  <!-- Decorative -->
+  <circle cx="60" cy="700" r="3" fill="#fbbf24" opacity="0.5"/>
+  <circle cx="40" cy="750" r="2" fill="#ec4899" opacity="0.5"/>
+  <circle cx="740" cy="710" r="3" fill="#06b6d4" opacity="0.5"/>
+  <circle cx="760" cy="680" r="2" fill="#8b5cf6" opacity="0.5"/>
+</svg>

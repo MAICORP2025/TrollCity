@@ -1,0 +1,83 @@
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+
+interface GlobalAppContextType {
+  isLoading: boolean;
+  loadingMessage: string;
+  error: string | null;
+  clearError: () => void;
+  retryLastAction: () => void;
+  isReconnecting: boolean;
+  reconnectMessage: string;
+  setError: (message: string | null) => void;
+  setRetryAction: (action: (() => void) | null) => void;
+  setStreamEnded: (ended: boolean) => void;
+}
+
+const GlobalAppContext = createContext<GlobalAppContextType | undefined>(undefined);
+
+interface GlobalAppProviderProps {
+  children: ReactNode;
+}
+
+export const GlobalAppProvider: React.FC<GlobalAppProviderProps> = ({ children }) => {
+  const [isLoading, _setIsLoading] = useState(false);
+  const [loadingMessage, _setLoadingMessage] = useState('');
+  const [error, setErrorState] = useState<string | null>(null);
+  const [isReconnecting, _setIsReconnecting] = useState(false);
+  const [reconnectMessage, _setReconnectMessage] = useState('');
+  const [retryAction, setRetryActionState] = useState<(() => void) | null>(null);
+  const [_isStreamEnded, setIsStreamEndedState] = useState(false);
+
+  const setError = useCallback((message: string | null) => {
+    setErrorState(message);
+  }, []);
+
+  const setRetryAction = useCallback((action: (() => void) | null) => {
+    setRetryActionState(() => action);
+  }, []);
+
+  const setStreamEnded = useCallback((ended: boolean) => {
+    setIsStreamEndedState(ended);
+  }, []);
+
+  const clearError = useCallback(() => {
+    setErrorState(null);
+    setRetryActionState(null);
+    setIsStreamEndedState(false);
+  }, []);
+
+  const retryLastAction = useCallback(() => {
+    if (retryAction) {
+      retryAction();
+    }
+  }, [retryAction]);
+
+  const value: GlobalAppContextType = {
+    isLoading,
+    loadingMessage,
+    error,
+    clearError,
+    retryLastAction,
+    isReconnecting,
+    reconnectMessage,
+    setError,
+    setRetryAction,
+    setStreamEnded,
+  };
+
+  return (
+    <GlobalAppContext.Provider value={value}>
+      {children}
+    </GlobalAppContext.Provider>
+  );
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const useGlobalApp = () => {
+  const context = useContext(GlobalAppContext);
+  if (context === undefined) {
+    throw new Error('useGlobalApp must be used within a GlobalAppProvider');
+  }
+  return context;
+};
+

@@ -1,0 +1,22 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/social/:id",
+      "destination": "/api/social/:id"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  }
+}

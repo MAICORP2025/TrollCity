@@ -1,0 +1,46 @@
+{
+  "appId": "com.trollcity.app",
+  "appName": "trollcity",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "hostname": "maitrollcity.com",
+    "iosScheme": "https"
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": "",
+      "keystoreAlias": "",
+      "releaseType": "APK"
+    },
+    "backgroundColor": "#06030e",
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true,
+    "allowCleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#06030e",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#06030e"
+    },
+    "Keyboard": {
+      "resize": "native",
+      "style": "DARK",
+      "resizeOnFullScreen": true
+    },
+    "App": {
+      "launchUrl": ""
+    }
+  },
+  "cordova": {}
+}

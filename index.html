@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#05010a" />
+    
+    <!-- CRITICAL: Permissions Policy (iOS/iPadOS Safari requires this to expose navigator.mediaDevices) -->
+    <meta name="permissions-policy" content="camera=(self), microphone=(self)" />
+    <meta http-equiv="feature-policy" content="camera 'self'; microphone 'self'" />
+
+    <!-- PWA / Mobile Capable -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mai Troll City" />
+    
+    <!-- CRITICAL: Mobile Fullscreen Viewport with Safe Area Support -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+
+    <!-- Mobile Optimization -->
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="msapplication-tap-highlight" content="no" />
+
+    <!-- DNS Prefetch for Performance -->
+    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+
+
+    <title>Mai Troll City - The Ultimate Social Streaming & Battle Arena</title>
+    <meta name="description" content="Join Mai Troll City, the wildest social streaming platform where you can battle friends, earn coins, and rule the city. Live streams, interactive gifts, and endless chaos await!" />
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-3XKLTEJ3ZR"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-3XKLTEJ3ZR');
+    </script>
+     
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <h1>Welcome to Troll City</h1>
+      <p>Troll City is a revolutionary social streaming platform designed for interaction and fun.</p>
+      <p>Watch live streams, send gifts, participate in troll battles, and climb the leaderboard.</p>
+      <p>Join our community today and start your journey to becoming a Troll City legend.</p>
+    </noscript>
+    <script>
+      window.global = window;
+
+      /* ================================================================
+       * iOS / WKWebView navigator.mediaDevices polyfill
+       *
+       * Problem:
+       *   iOS Safari (and WKWebView used by Capacitor / in-app browsers)
+       *   sets navigator.mediaDevices = undefined even though the
+       *   underlying webkit shims are fully functional.  The meta-tag alone
+       *   is not enough: cached PWAs, WKWebView, and some in-app Safari
+       *   contexts still strip the property.
+       *
+       * What this does:
+       *   1. Detects when navigator.mediaDevices is undefined but
+       *      webkit* equivalents exist (or the property simply needs to be
+       *      re-defined on the prototype chain).
+       *   2. Re-creates the standard navigator.mediaDevices object with
+       *      getUserMedia / getDisplayMedia / enumerateDevices / ondevicechange
+       *      using the iOS webkit shims.
+       *   3. Injects playsInline into every <video> created via
+       *      document.createElement('video') so iOS inline playback works
+       *      the moment the element touches the DOM.
+       * ================================================================ */
+      (function () {
+        'use strict';
+
+        /* ── helpers ── */
+        function getUA() { return navigator.userAgent || ''; }
+        var isIOS = /iP(hone|od|ad)(?!.*Safari)|iPhone/.test(getUA());
+        var isWebKit = /WebKit/.test(getUA());
+        var hasProxy = typeof navigator.webkitGetUserMedia === 'function' ||
+                       typeof navigator.webkitGetDisplayMedia === 'function';
+
+        /* Rebuild mediaDevices from webkit shims when missing */
+        function rebuildMediaDevices() {
+          var MD = {};
+
+          /* getDisplayMedia */
+          if (typeof navigator.webkitGetDisplayMedia === 'function') {
+            MD.getDisplayMedia = function (constraints) {
+              // webkitGetDisplayMedia returns a MediaStream synchronously
+              // (no callback form on modern iOS)
+              return navigator.webkitGetDisplayMedia(constraints);
+            };
+          }
+
+          /* getUserMedia */
+          if (typeof navigator.webkitGetUserMedia === 'function') {
+            // Modern iOS: Promise-based, identical signature to the standard API
+            MD.getUserMedia = function (constraints) {
+              return navigator.webkitGetUserMedia(constraints);
+            };
+          }
+
+          /* enumerateDevices — uses MediaDevices.prototype if available */
+          if (typeof navigator.mediaDevices !== 'undefined' &&
+              typeof navigator.mediaDevices.enumerateDevices === 'function') {
+            MD.enumerateDevices = function () {
+              return navigator.mediaDevices.enumerateDevices();
+            };
+          }
+
+          /* devicechange noop listener */
+          var changeListeners = [];
+          Object.defineProperty(MD, 'ondevicechange', {
+            get: function () { return this._ondevicechange; },
+            set: function (fn) {
+              this._ondevicechange = fn;
+              // If the real mediaDevices fires this event, proxy it
+              if (typeof navigator.mediaDevices !== 'undefined' &&
+                  typeof navigator.mediaDevices.addEventListener === 'function') {
+                navigator.mediaDevices.addEventListener('devicechange', fn);
+              }
+            }
+          });
+
+          MD.addEventListener = function (type, listener) {
+            if (type === 'devicechange') changeListeners.push(listener);
+            if (typeof navigator.mediaDevices !== 'undefined' &&
+                typeof navigator.mediaDevices.addEventListener === 'function') {
+              navigator.mediaDevices.addEventListener(type, listener);
+            }
+          };
+
+          MD.removeEventListener = function (type, listener) {
+            var i = changeListeners.indexOf(listener);
+            if (i > -1) changeListeners.splice(i, 1);
+            if (typeof navigator.mediaDevices !== 'undefined' &&
+                typeof navigator.mediaDevices.removeEventListener === 'function') {
+              navigator.mediaDevices.removeEventListener(type, listener);
+            }
+          };
+
+          Object.defineProperty(navigator, 'mediaDevices', {
+            value: MD,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
+
+          console.info('[iOS Polyfill] navigator.mediaDevices rebuilt:', {
+            getUserMedia: typeof MD.getUserMedia === 'function',
+            getDisplayMedia: typeof MD.getDisplayMedia === 'function',
+            enumerateDevices: typeof MD.enumerateDevices === 'function',
+          });
+        }
+
+        /* Force playsInline on every <video> created via the DOM API */
+        function injectPlaysInline() {
+          var orig = document.createElement;
+          document.createElement = function (tag) {
+            var el = orig.call(document, tag);
+            if (el.tagName === 'VIDEO') {
+              /* Attribute-level guard – fires before React/JSX attaches */
+              el.setAttribute('playsinline', '');
+              el.setAttribute('webkit-playsinline', '');
+
+              /* Property-level guard for JS-assigned videos */
+              Object.defineProperty(el, 'playsInline', {
+                get: function () { return true; },
+                set: function (_v) { /* ignore nothingness */ },
+                configurable: true,
+              });
+
+              /* Block autoplay-without-muted snagging iOS video pipeline */
+              el.addEventListener('loadedmetadata', function onLoadMD() {
+                el.removeEventListener('loadedmetadata', onLoadMD);
+                if (!el.muted) {
+                  el.muted = true; /* caller must un-mute explicitly */
+                }
+              });
+            }
+            return el;
+          };
+        }
+
+        /* ── run ── */
+        if (isIOS || isWebKit) {
+          injectPlaysInline();
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            rebuildMediaDevices();
+          }
+        }
+      })();
+    </script>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,332 @@
+.battle-theme-layer {
+  background: #000;
+  isolation: isolate;
+}
+
+.battle-theme-base,
+.battle-theme-sides,
+.battle-theme-clash,
+.battle-theme-particles {
+  position: absolute;
+  inset: 0;
+}
+
+.battle-theme-base {
+  z-index: 0;
+  background: var(--bt-base, linear-gradient(150deg, #050505, #101010));
+}
+
+.battle-theme-sides {
+  z-index: 1;
+  display: flex;
+}
+
+.battle-theme-side {
+  width: 50%;
+  height: 100%;
+  opacity: 0.35;
+  transform: translateZ(0);
+}
+
+.battle-theme-side-left {
+  background: linear-gradient(90deg, var(--bt-left, rgba(255, 255, 255, 0.08)), transparent 72%);
+  animation: btSideLeft 16s linear infinite;
+}
+
+.battle-theme-side-right {
+  background: linear-gradient(270deg, var(--bt-right, rgba(255, 255, 255, 0.08)), transparent 72%);
+  animation: btSideRight 16s linear infinite;
+}
+
+.battle-theme-clash {
+  z-index: 2;
+  left: 39%;
+  width: 22%;
+  background:
+    radial-gradient(circle, var(--bt-clash, rgba(255,255,255,0.28)), rgba(255,255,255,0.03) 70%),
+    var(--bt-center-overlay, linear-gradient(180deg, transparent, rgba(255,255,255,0.15), transparent));
+  opacity: 0.45;
+  animation: btClash 8s ease-in-out infinite;
+  display: none;
+}
+
+.battle-theme-particles {
+  z-index: 3;
+  opacity: 0.24;
+  transform: translateZ(0);
+}
+
+.battle-theme-particles::before {
+  content: '';
+  position: absolute;
+  inset: -24% 0;
+  background:
+    radial-gradient(circle at 18% 24%, var(--bt-p1, rgba(255,255,255,0.8)) 0 1px, transparent 1px),
+    radial-gradient(circle at 82% 36%, var(--bt-p2, rgba(255,255,255,0.8)) 0 1px, transparent 1px),
+    radial-gradient(circle at 30% 70%, var(--bt-p3, rgba(255,255,255,0.75)) 0 1px, transparent 1px),
+    radial-gradient(circle at 68% 62%, var(--bt-p4, rgba(255,255,255,0.7)) 0 1px, transparent 1px);
+  background-size: 240px 240px, 300px 300px, 270px 270px, 220px 220px;
+  animation: btParticles 22s linear infinite;
+}
+
+.battle-theme-particles::after {
+  content: '';
+  position: absolute;
+  inset: var(--bt-after-inset, 0);
+  background: var(--bt-after, none);
+  opacity: var(--bt-after-opacity, 0);
+  animation: var(--bt-after-anim, none);
+}
+
+[class*="battle-theme-preview-"] {
+  position: relative;
+  overflow: hidden;
+  background: var(--bt-base, linear-gradient(150deg, #0a101c, #172132));
+}
+
+[class*="battle-theme-preview-"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, var(--bt-left, rgba(56,189,248,0.28)), transparent 72%),
+    linear-gradient(270deg, var(--bt-right, rgba(236,72,153,0.28)), transparent 72%);
+  opacity: 0.6;
+}
+
+[class*="battle-theme-preview-"]::after {
+  content: '';
+  position: absolute;
+  left: 39%;
+  width: 22%;
+  inset-block: 0;
+  background: radial-gradient(circle, var(--bt-clash, rgba(255,255,255,0.3)), rgba(255,255,255,0.02) 70%);
+  opacity: 0.6;
+}
+
+/* Money / Wealth */
+.battle-theme-preview-cash-flow,
+.battle-theme-cash-flow {
+  --bt-base: linear-gradient(150deg, #081410, #11241d 56%, #183026);
+  --bt-left: rgba(34, 197, 94, 0.35);
+  --bt-right: rgba(250, 204, 21, 0.34);
+  --bt-clash: rgba(250, 204, 21, 0.4);
+  --bt-center-overlay: repeating-linear-gradient(90deg, rgba(255,255,255,0.1) 0 2px, transparent 2px 10px);
+  --bt-p1: rgba(34, 197, 94, 0.95);
+  --bt-p2: rgba(250, 204, 21, 0.95);
+  --bt-p3: rgba(74, 222, 128, 0.9);
+  --bt-p4: rgba(253, 224, 71, 0.9);
+}
+
+.battle-theme-preview-vault-room,
+.battle-theme-vault-room {
+  --bt-base: linear-gradient(150deg, #111316, #232a31 56%, #2c343d);
+  --bt-left: rgba(168, 162, 158, 0.3);
+  --bt-right: rgba(234, 179, 8, 0.3);
+  --bt-clash: rgba(251, 191, 36, 0.42);
+  --bt-after-inset: -10% -35%;
+  --bt-after: linear-gradient(104deg, transparent 35%, rgba(255, 224, 138, 0.42) 50%, transparent 65%);
+  --bt-after-opacity: 0.6;
+  --bt-after-anim: btShimmer 13s linear infinite;
+}
+
+.battle-theme-preview-stock-market-war,
+.battle-theme-stock-market-war {
+  --bt-base: linear-gradient(155deg, #0b1018, #162232 52%, #1d2b3d);
+  --bt-left: rgba(239, 68, 68, 0.33);
+  --bt-right: rgba(34, 197, 94, 0.33);
+  --bt-clash: rgba(255, 255, 255, 0.32);
+  --bt-center-overlay: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.24), rgba(255,255,255,0));
+  --bt-after: linear-gradient(180deg, rgba(34,197,94,0.25), rgba(239,68,68,0.25));
+  --bt-after-opacity: 0.28;
+}
+
+/* Cars / Speed */
+.battle-theme-preview-midnight-street-race,
+.battle-theme-midnight-street-race {
+  --bt-base: linear-gradient(150deg, #090f1c, #141d31 56%, #1b2540);
+  --bt-left: rgba(34, 211, 238, 0.35);
+  --bt-right: rgba(168, 85, 247, 0.35);
+  --bt-after: repeating-linear-gradient(95deg, rgba(255,255,255,0.12) 0 2px, transparent 2px 20px);
+  --bt-after-opacity: 0.32;
+  --bt-after-anim: btSpeedSweep 8s linear infinite;
+}
+
+.battle-theme-preview-luxury-garage,
+.battle-theme-luxury-garage {
+  --bt-base: linear-gradient(150deg, #101318, #1c222b 56%, #2a313c);
+  --bt-left: rgba(148, 163, 184, 0.26);
+  --bt-right: rgba(203, 213, 225, 0.23);
+  --bt-clash: rgba(255, 255, 255, 0.26);
+  --bt-after-inset: -8% -30%;
+  --bt-after: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.28) 50%, transparent 68%);
+  --bt-after-opacity: 0.42;
+  --bt-after-anim: btShimmer 15s linear infinite;
+}
+
+.battle-theme-preview-turbo-boost-arena,
+.battle-theme-turbo-boost-arena {
+  --bt-base: linear-gradient(150deg, #07101d, #12223b 56%, #1c3252);
+  --bt-left: rgba(56, 189, 248, 0.35);
+  --bt-right: rgba(14, 165, 233, 0.33);
+  --bt-clash: rgba(125, 211, 252, 0.45);
+  --bt-center-overlay: repeating-linear-gradient(0deg, rgba(125,211,252,0.16) 0 2px, transparent 2px 8px);
+}
+
+/* Food */
+.battle-theme-preview-neon-kitchen,
+.battle-theme-neon-kitchen {
+  --bt-base: linear-gradient(150deg, #1c120b, #2d1d12 56%, #3e2817);
+  --bt-left: rgba(251, 146, 60, 0.34);
+  --bt-right: rgba(45, 212, 191, 0.29);
+  --bt-clash: rgba(255, 237, 213, 0.34);
+  --bt-after: radial-gradient(circle at 50% 100%, rgba(255,255,255,0.18), transparent 60%);
+  --bt-after-opacity: 0.45;
+}
+
+.battle-theme-preview-street-food-night,
+.battle-theme-street-food-night {
+  --bt-base: linear-gradient(150deg, #141118, #221a2d 56%, #31203f);
+  --bt-left: rgba(244, 114, 182, 0.3);
+  --bt-right: rgba(250, 204, 21, 0.28);
+  --bt-clash: rgba(255, 255, 255, 0.28);
+  --bt-after: radial-gradient(circle at 22% 26%, rgba(244,114,182,0.35), transparent 22%), radial-gradient(circle at 78% 34%, rgba(250,204,21,0.35), transparent 24%);
+  --bt-after-opacity: 0.34;
+}
+
+/* Music */
+.battle-theme-preview-bass-reactor,
+.battle-theme-bass-reactor {
+  --bt-base: linear-gradient(150deg, #0c1020, #171f36 56%, #222d4b);
+  --bt-left: rgba(99, 102, 241, 0.34);
+  --bt-right: rgba(34, 211, 238, 0.3);
+  --bt-clash: rgba(167, 139, 250, 0.4);
+  --bt-center-overlay: repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0 3px, transparent 3px 11px);
+}
+
+.battle-theme-preview-concert-stage,
+.battle-theme-concert-stage {
+  --bt-base: linear-gradient(150deg, #0d1017, #1a2030 56%, #252d40);
+  --bt-left: rgba(236, 72, 153, 0.3);
+  --bt-right: rgba(56, 189, 248, 0.28);
+  --bt-after: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.22), rgba(255,255,255,0));
+  --bt-after-opacity: 0.3;
+  --bt-after-anim: btBeam 16s linear infinite;
+}
+
+.battle-theme-preview-studio-mode,
+.battle-theme-studio-mode {
+  --bt-base: linear-gradient(150deg, #11141a, #1a2029 56%, #252c37);
+  --bt-left: rgba(148, 163, 184, 0.24);
+  --bt-right: rgba(125, 211, 252, 0.22);
+  --bt-clash: rgba(226, 232, 240, 0.24);
+}
+
+/* Drinks / Nightlife */
+.battle-theme-preview-neon-bar,
+.battle-theme-neon-bar {
+  --bt-base: linear-gradient(150deg, #10102a, #1f1640 56%, #2f1f5d);
+  --bt-left: rgba(34, 211, 238, 0.33);
+  --bt-right: rgba(244, 114, 182, 0.31);
+  --bt-clash: rgba(255, 255, 255, 0.3);
+  --bt-after-inset: -20% -20%;
+  --bt-after: linear-gradient(120deg, rgba(34,211,238,0.26), rgba(244,114,182,0.26), rgba(251,191,36,0.22));
+  --bt-after-opacity: 0.38;
+  --bt-after-anim: btLiquid 12s ease-in-out infinite alternate;
+}
+
+.battle-theme-preview-club-pulse,
+.battle-theme-club-pulse {
+  --bt-base: linear-gradient(150deg, #100d1d, #1d1631 56%, #2d2345);
+  --bt-left: rgba(167, 139, 250, 0.32);
+  --bt-right: rgba(236, 72, 153, 0.29);
+  --bt-clash: rgba(196, 181, 253, 0.35);
+}
+
+/* Troll City Core */
+.battle-theme-preview-troll-chaos,
+.battle-theme-troll-chaos {
+  --bt-base: linear-gradient(150deg, #0d1018, #161c2a 56%, #232c3c);
+  --bt-left: rgba(239, 68, 68, 0.3);
+  --bt-right: rgba(56, 189, 248, 0.3);
+  --bt-after: repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0 2px, transparent 2px 10px);
+  --bt-after-opacity: 0.24;
+  --bt-after-anim: btGlitch 5s steps(2, end) infinite;
+}
+
+.battle-theme-preview-courtroom-clash,
+.battle-theme-courtroom-clash {
+  --bt-base: linear-gradient(150deg, #1a110a, #2d1e13 56%, #3f2a1c);
+  --bt-left: rgba(120, 53, 15, 0.3);
+  --bt-right: rgba(180, 83, 9, 0.28);
+  --bt-clash: rgba(255, 248, 220, 0.42);
+  --bt-center-overlay: radial-gradient(circle, rgba(255,248,220,0.42), rgba(255,248,220,0.04) 72%);
+}
+
+.battle-theme-preview-jail-block,
+.battle-theme-jail-block {
+  --bt-base: linear-gradient(150deg, #0f1318, #1a212a 56%, #25303b);
+  --bt-left: rgba(71, 85, 105, 0.3);
+  --bt-right: rgba(100, 116, 139, 0.28);
+  --bt-after: repeating-linear-gradient(90deg, rgba(148,163,184,0.26) 0 2px, transparent 2px 22px);
+  --bt-after-opacity: 0.45;
+  --bt-after-anim: btBars 12s linear infinite;
+}
+
+@keyframes btSideLeft {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(2.2%); }
+}
+
+@keyframes btSideRight {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-2.2%); }
+}
+
+@keyframes btClash {
+  0%, 100% { transform: scale(0.98); opacity: 0.38; }
+  50% { transform: scale(1.04); opacity: 0.5; }
+}
+
+@keyframes btParticles {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(18%); }
+}
+
+@keyframes btShimmer {
+  0% { transform: translateX(-34%); }
+  100% { transform: translateX(34%); }
+}
+
+@keyframes btSpeedSweep {
+  0% { transform: translateX(-8%); }
+  100% { transform: translateX(8%); }
+}
+
+@keyframes btBeam {
+  0% { transform: translateY(-12%); }
+  100% { transform: translateY(12%); }
+}
+
+@keyframes btLiquid {
+  0% { transform: translateX(-4%) scale(1); }
+  100% { transform: translateX(4%) scale(1.03); }
+}
+
+@keyframes btGlitch {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(1px, -1px); }
+  50% { transform: translate(-1px, 1px); }
+  75% { transform: translate(1px, 1px); }
+}
+
+@keyframes btBars {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-theme-layer * {
+    animation: none !important;
+  }
+}

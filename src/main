@@ -1,0 +1,2 @@
+// Duplicate mount removed. Use src/main.tsx as the single app mount.
+export {}

@@ -1,0 +1,2449 @@
+{
+  "public.abuse_reports": [
+    "deny_all"
+  ],
+  "public.action_logs": [
+    "Admins can view action logs",
+    "Admins can view all action logs",
+    "Authenticated can insert logs",
+    "System can insert logs"
+  ],
+  "public.active_sessions": [
+    "Allow session management for authenticated users",
+    "Allow session reads for service role"
+  ],
+  "public.activity_log": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.activity_logs": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.admin_adjustments": [
+    "Admins can view all adjustments",
+    "Only admins can create adjustments",
+    "Users can view adjustments to their account",
+    "deny_all"
+  ],
+  "public.admin_allocation_buckets": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.admin_app_settings": [
+    "Admins can manage app settings",
+    "Admins manage admin settings",
+    "Public can read public settings",
+    "Public read admin settings"
+  ],
+  "public.admin_broadcasts": [
+    "Admins and Officers can manage admin_broadcasts",
+    "Admins can manage admin_broadcasts",
+    "Anyone can view broadcasts",
+    "Everyone can read admin_broadcasts",
+    "Only admins can create broadcasts",
+    "Public can view broadcasts",
+    "admins can delete admin_broadcasts",
+    "admins can read admin_broadcasts",
+    "admins can update admin_broadcasts",
+    "admins can write admin_broadcasts",
+    "deny_all"
+  ],
+  "public.admin_coin_pool": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.admin_coin_revenue": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.admin_flags": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.admin_for_week_queue": [
+    "Public view queue"
+  ],
+  "public.admin_gift_totals": [
+    "Admins can view all gift totals",
+    "Users can view their own gift totals"
+  ],
+  "public.admin_pool": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.admin_pool_buckets": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.admin_pool_ledger": [
+    "Admins can view admin pool ledger"
+  ],
+  "public.admin_pool_transactions": [
+    "Admins can view admin pool transactions"
+  ],
+  "public.admin_settings": [
+    "admin_can_manage_settings",
+    "public_read_broadcast_lockdown"
+  ],
+  "public.admin_tax_reviews": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.admin_top_buyers": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.ai_action_logs": [
+    "Admins can view all AI logs",
+    "Authenticated users can insert AI logs",
+    "Users can view their own AI logs",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.apartment_applications": [
+    "Landlords read applications",
+    "Users insert applications",
+    "Users read own applications"
+  ],
+  "public.app_settings": [
+    "deny_all"
+  ],
+  "public.app_updates": [
+    "deny_all"
+  ],
+  "public.applications": [
+    "Admins can view all applications",
+    "Users can create own applications",
+    "Users can view own applications",
+    "applications_insert_self",
+    "applications_select",
+    "applications_update_admin",
+    "auth_delete_own",
+    "auth_update_own"
+  ],
+  "public.audit_logs": [
+    "Admins can view audit_logs",
+    "System can insert audit_logs"
+  ],
+  "public.badge_catalog": [
+    "Badge catalog delete by service role",
+    "Badge catalog insert by service role",
+    "Badge catalog is publicly readable",
+    "Badge catalog update by service role",
+    "badge_catalog_public_read"
+  ],
+  "public.badge_definitions": [
+    "read_authenticated"
+  ],
+  "public.balance_ledger": [
+    "auth_insert_own"
+  ],
+  "public.bank_audit_log": [
+    "Admins can view audit logs",
+    "Secretary can view audit logs"
+  ],
+  "public.bank_feature_flags": [
+    "Allow read access for authenticated users",
+    "Allow write access for admins"
+  ],
+  "public.bank_tiers": [
+    "Everyone can view tiers"
+  ],
+  "public.battle_gifts": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.battle_history": [
+    "Users can view their battle history",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.battle_queue": [
+    "Anyone can delete own",
+    "Anyone can insert",
+    "Public read queue"
+  ],
+  "public.battle_rewards": [
+    "Users can view their battle rewards",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.battle_sessions": [
+    "deny_all"
+  ],
+  "public.battle_skips": [
+    "Read own skips"
+  ],
+  "public.blocked_users": [
+    "Users can view their own blocked users",
+    "deny_all"
+  ],
+  "public.broadcast_background_themes": [
+    "broadcast_theme_catalog_admin_write",
+    "broadcast_theme_catalog_read",
+    "themes_read_all"
+  ],
+  "public.broadcast_cycle_stats": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.broadcast_officers": [
+    "Broadcasters can add officers",
+    "Broadcasters can manage their officers",
+    "Broadcasters can remove officers",
+    "Broadcasters can view their own officers",
+    "Everyone can view officers"
+  ],
+  "public.broadcast_seat_bans": [
+    "Everyone can read seat bans",
+    "Officers and Admins can manage seat bans"
+  ],
+  "public.broadcast_seats": [
+    "Allow read access to broadcast seats",
+    "Allow service role full access to broadcast seats",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "broadcast_seats_paid_delete",
+    "broadcast_seats_paid_insert",
+    "broadcast_seats_paid_update"
+  ],
+  "public.broadcast_theme_events": [
+    "Public read access",
+    "Users can insert own events"
+  ],
+  "public.broadcast_tokens": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.broadcaster_applications": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.broadcaster_earnings": [
+    "Admin can view all earnings",
+    "Broadcasters can view their own earnings",
+    "Users can view own earnings"
+  ],
+  "public.broadcaster_metrics": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.call_history": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "call_history_admin_view_all",
+    "call_history_insert_own",
+    "call_history_select_own"
+  ],
+  "public.call_minutes": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.call_sessions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.call_sound_catalog": [
+    "call_sound_catalog_admin_write",
+    "call_sound_catalog_read"
+  ],
+  "public.call_transactions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.car_insurance_policies": [
+    "Users can insert own car insurance",
+    "Users can update own car insurance",
+    "Users can view own car insurance"
+  ],
+  "public.car_models": [
+    "Public read car_models"
+  ],
+  "public.car_upgrades": [
+    "Public read upgrades"
+  ],
+  "public.case_audit_logs": [
+    "Everyone can read logs"
+  ],
+  "public.case_evidence": [
+    "Participants can read evidence"
+  ],
+  "public.case_participants": [
+    "Participants can read their cases"
+  ],
+  "public.case_templates": [
+    "Everyone can read case templates"
+  ],
+  "public.cashout_requests": [
+    "Admins can update cashout requests",
+    "Admins can view all cashout requests",
+    "Insert own cashout request",
+    "Staff can update cashout status",
+    "Staff can view all cashouts",
+    "Users can create own cashout requests",
+    "Users can view own cashout requests",
+    "Users cannot update cashout after submission",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.cashout_tiers": [
+    "Anyone can view active tiers",
+    "deny_all"
+  ],
+  "public.church_passages": [
+    "Anyone can view church passages",
+    "Pastors/Admins can manage passages"
+  ],
+  "public.church_prayer_likes": [
+    "Anyone can view likes",
+    "Authenticated users can like",
+    "Authenticated users can unlike"
+  ],
+  "public.church_prayers": [
+    "Anyone can view prayers",
+    "Authenticated users can create prayers",
+    "Pastors/Admins can delete any prayer",
+    "Users can delete own prayers"
+  ],
+  "public.church_sermon_notes": [
+    "Pastors can manage own notes"
+  ],
+  "public.city_districts": [
+    "Admins can manage districts",
+    "Everyone can view active districts"
+  ],
+  "public.city_events": [
+    "City events admin write",
+    "City events read access"
+  ],
+  "public.clan_rewards": [
+    "deny_all"
+  ],
+  "public.clan_vault": [
+    "deny_all"
+  ],
+  "public.coin_audit_log": [
+    "Allow auth read",
+    "No public access",
+    "service_role_insert_coin_audit",
+    "user_insert_own_coin_audit"
+  ],
+  "public.coin_ledger": [
+    "Secretary can view all ledgers",
+    "Service role full access ledger",
+    "Users can view own ledger",
+    "Users can view their coin ledger",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.coin_orders": [
+    "Users read own orders"
+  ],
+  "public.coin_packages": [
+    "coin_packages_admin_only",
+    "coin_packages_admin_update",
+    "coin_packages_public_read"
+  ],
+  "public.coin_pool_contributions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.coin_purchases": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.coin_reward_pool": [
+    "Admins can view coin reward pool",
+    "deny_all"
+  ],
+  "public.coin_transactions": [
+    "Users can insert own transactions",
+    "Users can insert their own coin transactions",
+    "Users can update own transactions",
+    "Users can view own transactions",
+    "Users can view their own coin transactions",
+    "auth_delete_own",
+    "auth_update_own",
+    "coin_transactions_service_insert",
+    "coin_transactions_update_owner",
+    "coin_transactions_user_read"
+  ],
+  "public.coinback_log": [
+    "Users can read own coinback log",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.config": [
+    "Admins can update config",
+    "Admins can view all config",
+    "Anyone can view public config",
+    "deny_all"
+  ],
+  "public.content": [
+    "deny_all"
+  ],
+  "public.conversation_members": [
+    "Users can add members to their own conversations",
+    "delete_conversation_members",
+    "insert_conversation_members",
+    "members_insert_owner_or_self",
+    "view_conversation_members"
+  ],
+  "public.conversation_messages": [
+    "Users can send messages to their conversations",
+    "Users can view messages in their conversations",
+    "conversation_messages_insert_sender_is_member",
+    "conversation_messages_select_member"
+  ],
+  "public.conversations": [
+    "delete_conversations",
+    "insert_conversations",
+    "update_conversations",
+    "view_conversations"
+  ],
+  "public.court_ai_messages": [
+    "Users can insert own AI messages",
+    "Users can read own AI messages"
+  ],
+  "public.court_box_members": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "court_box_members_select"
+  ],
+  "public.court_docket": [
+    "Authority can manage docket entries",
+    "Authority can view all docket entries",
+    "Users can view their own docket entries"
+  ],
+  "public.court_dockets": [
+    "Public view dockets",
+    "Staff manage dockets"
+  ],
+  "public.court_rulings_archive": [
+    "Court rulings admin read",
+    "Court rulings admin write",
+    "Court rulings public read"
+  ],
+  "public.court_schedules": [
+    "deny_all"
+  ],
+  "public.court_sessions": [
+    "Only admins and lead officers can manage court sessions",
+    "View active public court sessions",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "court_sessions_delete_judge",
+    "court_sessions_insert_allowed",
+    "court_sessions_select_participants",
+    "court_sessions_update_judge"
+  ],
+  "public.court_summons": [
+    "View own summons or admin",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "court_summons_delete_accuser",
+    "court_summons_insert_accuser",
+    "court_summons_select_participants",
+    "court_summons_update_participants"
+  ],
+  "public.creator_migration_claims": [
+    "Admins can manage claims",
+    "Users can create claims",
+    "Users can update pending claims",
+    "Users can view own claims"
+  ],
+  "public.creator_panic_alerts": [
+    "Creators create alerts",
+    "Officers update alerts",
+    "Officers view alerts"
+  ],
+  "public.creators_over_600": [
+    "deny_all"
+  ],
+  "public.credit_events": [
+    "credit_events_select_owner",
+    "credit_events_service_role_all"
+  ],
+  "public.critical_alerts": [
+    "Staff can update alerts",
+    "Staff can view alerts",
+    "deny_all"
+  ],
+  "public.daily_giveaways": [
+    "Admins can view all giveaways",
+    "Users can view their own giveaways",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.daily_login_claims": [
+    "insert own daily claim",
+    "read own daily claims"
+  ],
+  "public.daily_login_posts": [
+    "daily_login_posts_insert_service",
+    "daily_login_posts_select_own",
+    "daily_login_posts_update_service"
+  ],
+  "public.daily_logins": [
+    "Users can read own daily logins"
+  ],
+  "public.daily_rewards": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.declined_transactions": [
+    "Admins can view declined transactions",
+    "Users can view own declined transactions"
+  ],
+  "public.deed_transfers": [
+    "Admins can view all deed transfers",
+    "buyers can request transfer to self"
+  ],
+  "public.deeds": [
+    "Admins can view all deeds",
+    "deeds insert own",
+    "deeds insert when owned",
+    "deeds select own",
+    "deeds update own"
+  ],
+  "public.district_announcements": [
+    "Admins and officers can manage announcements",
+    "Users can view announcements for accessible districts"
+  ],
+  "public.district_features": [
+    "Admins can manage district features",
+    "Users can view features for accessible districts"
+  ],
+  "public.earnings": [
+    "Users can view their own earnings",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.economy_abuse_flags": [
+    "Staff can read economy abuse flags",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.empire_applications": [
+    "Admins can manage all applications",
+    "Users can insert own applications",
+    "Users can update own applications",
+    "Users can view own applications",
+    "Users can view their own applications",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_update_own",
+    "empire_applications_insert_own",
+    "empire_applications_select_own",
+    "empire_applications_update_own",
+    "empire_apps_delete_self_pending",
+    "empire_apps_insert_self",
+    "empire_apps_select_self",
+    "empire_apps_update_self_pending"
+  ],
+  "public.empire_partner_rewards": [
+    "Users can view their own rewards",
+    "deny_all"
+  ],
+  "public.empire_partners": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.empire_referrals": [
+    "Users can view their own empire referrals",
+    "deny_all"
+  ],
+  "public.empire_rewards": [
+    "deny_all"
+  ],
+  "public.entrance_effect_catalog": [
+    "Public read entrance_effect_catalog"
+  ],
+  "public.entrance_effects": [
+    "Anyone can view active entrance effects"
+  ],
+  "public.error_logs": [
+    "Admins can update error logs",
+    "Admins can view all error logs",
+    "Users can insert own error logs",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.escalation_matrix": [
+    "Escalation matrix admin write",
+    "Escalation matrix read access"
+  ],
+  "public.escalation_reports": [
+    "Admins can view all escalations",
+    "Officers can view escalations to them",
+    "Users can view own escalations",
+    "deny_all"
+  ],
+  "public.event_participants": [
+    "Event participants read access",
+    "Event participants write access"
+  ],
+  "public.executive_intake": [
+    "Admin can view all intake",
+    "Secretaries and admin can update intake",
+    "Secretaries can view all intake",
+    "deny_all"
+  ],
+  "public.executive_reports": [
+    "Admin can view all executive reports",
+    "Secretaries can create executive reports",
+    "Secretaries can view executive reports",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.family_activity_log": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.family_badges_earned": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.family_invites": [
+    "Royal Troll can manage invites",
+    "Users can view family invites",
+    "deny_all"
+  ],
+  "public.family_lounge_messages": [
+    "Family members can send messages",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "lounge_messages_select"
+  ],
+  "public.family_seasons": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.family_shop_items": [
+    "Admins manage family shop items",
+    "Family shop items public readable"
+  ],
+  "public.family_shop_purchases": [
+    "Admins manage family purchases",
+    "Family leaders can purchase items",
+    "Family members can view purchases"
+  ],
+  "public.family_stats": [
+    "System can insert family stats"
+  ],
+  "public.family_tasks": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.family_tasks_new": [
+    "Family members can view family tasks",
+    "Royal Troll can manage family tasks",
+    "deny_all",
+    "tasks_select"
+  ],
+  "public.family_war_stats": [
+    "Allow auth read",
+    "No public access"
+  ],
+  "public.family_wars": [
+    "Users can view family wars",
+    "deny_all",
+    "family_wars_insert_auth",
+    "family_wars_select_all",
+    "family_wars_update_auth"
+  ],
+  "public.follows": [
+    "Users can view their own follows",
+    "deny_all",
+    "follows_delete_self",
+    "follows_insert_self"
+  ],
+  "public.gas_requests": [
+    "Users can create requests",
+    "Users can update requests sent to them",
+    "Users can view requests involving them"
+  ],
+  "public.ghost_presence_logs": [
+    "deny_all"
+  ],
+  "public.gift_bonus_tracker": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.gift_card_redemptions": [
+    "Admin/Secretary can delete redemptions",
+    "Admin/Secretary can update redemptions",
+    "Admin/Secretary can view all redemption requests",
+    "No one can delete redemptions",
+    "Users can create their own redemption requests",
+    "Users can view their own redemption requests",
+    "Users cannot update redemption requests"
+  ],
+  "public.gift_catalog": [
+    "deny_all"
+  ],
+  "public.gift_items": [
+    "deny_all"
+  ],
+  "public.gift_leaderboard_entries": [
+    "read_authenticated",
+    "service_role_delete",
+    "service_role_insert",
+    "service_role_update"
+  ],
+  "public.gift_leaderboards": [
+    "read_authenticated"
+  ],
+  "public.gift_transactions": [
+    "Users can send gifts",
+    "Users can view their gifts",
+    "deny_all",
+    "insert gift as self",
+    "read own gift transactions"
+  ],
+  "public.giftcard_fulfillments": [
+    "Staff can create fulfillments",
+    "Staff can update fulfillments",
+    "Staff can view fulfillments",
+    "Users can view their own fulfillment status",
+    "deny_all"
+  ],
+  "public.gifts": [
+    "Anyone can view active gifts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "gifts_select"
+  ],
+  "public.gifts_owned": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.group_chats": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.hire_fire_actions": [
+    "deny_all"
+  ],
+  "public.hire_limits": [
+    "deny_all"
+  ],
+  "public.home_feature_cycles": [
+    "deny_all"
+  ],
+  "public.home_feature_spend": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.honorary_family_members": [
+    "Everyone can view honorary family members"
+  ],
+  "public.houses": [
+    "Public read houses"
+  ],
+  "public.hr_employees": [
+    "HR employees managed by HR",
+    "HR employees viewable by HR",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.hr_events": [
+    "Admins can manage all hr events",
+    "Admins can view all hr events",
+    "deny_all"
+  ],
+  "public.hr_notes": [
+    "Admins can manage all hr notes",
+    "Admins can view all hr notes",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.identity_reward_logs": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.incidents": [
+    "deny_all"
+  ],
+  "public.insurance": [
+    "Anyone can view active insurance",
+    "deny_all"
+  ],
+  "public.insurance_logs": [
+    "Admins can view insurance logs",
+    "Users can insert their own insurance logs"
+  ],
+  "public.insurance_options": [
+    "Anyone can view active insurance options"
+  ],
+  "public.insurance_packages": [
+    "Anyone can view active packages",
+    "deny_all"
+  ],
+  "public.insurance_plans": [
+    "deny_all"
+  ],
+  "public.insurance_policies": [
+    "insurance read own"
+  ],
+  "public.interview_sessions": [
+    "Admins can create interview sessions",
+    "Admins can update interview sessions",
+    "Admins can view all interview sessions",
+    "Interview sessions managed by HR",
+    "Interview sessions viewable by participants or HR",
+    "Users can view own interview sessions",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.inventory_items": [
+    "deny_all",
+    "inventory_items_delete_policy",
+    "inventory_items_insert_policy",
+    "inventory_items_select_policy",
+    "inventory_items_update_policy"
+  ],
+  "public.invoices": [
+    "Landlords read invoices",
+    "Users read own invoices"
+  ],
+  "public.ip_bans": [
+    "Admins and Officers can insert ip_bans",
+    "Admins and Officers can view ip_bans",
+    "Officers and admins can create IP bans",
+    "Officers and admins can update IP bans",
+    "Officers and admins can view IP bans",
+    "deny_all"
+  ],
+  "public.job_applications": [
+    "Job applications created by owner",
+    "Job applications managed by HR",
+    "Job applications viewable by owner or HR",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.kick_logs": [
+    "Admins and officers can view all kick logs",
+    "Officers and admins can view all kick logs",
+    "Users can view their own kick logs",
+    "deny_all"
+  ],
+  "public.leases": [
+    "Landlords read leases",
+    "Public read leases",
+    "Users read own leases"
+  ],
+  "public.live_sessions": [
+    "Users manage own live sessions"
+  ],
+  "public.loan_applications": [
+    "Secretary can view all applications",
+    "Users can view own applications"
+  ],
+  "public.lucky_coin_events": [
+    "Admins can view all lucky events",
+    "Users can view their own lucky events",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_update_own"
+  ],
+  "public.mai_appeals": [
+    "Users can create one appeal",
+    "Users can view their appeals",
+    "deny_all"
+  ],
+  "public.mai_incidents": [
+    "Staff can view mai incidents",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.mai_overrides": [
+    "Staff can read overrides",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.mai_timeline_events": [
+    "Staff can read MAI timeline",
+    "deny_all"
+  ],
+  "public.mai_user_memory": [
+    "Users can read own MAI memory",
+    "Users can update own MAI memory",
+    "Users can upsert own MAI memory",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.manual_coin_orders": [
+    "Admins can view all orders",
+    "Users can insert own orders",
+    "Users can view own orders",
+    "manual_coin_orders_insert_own",
+    "manual_coin_orders_read_own"
+  ],
+  "public.matchmaking_queue": [
+    "Users manage own queue entry"
+  ],
+  "public.message_receipts": [
+    "receipts_select_own",
+    "receipts_select_sender",
+    "receipts_update_own"
+  ],
+  "public.message_requests": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "message_requests_insert_own",
+    "message_requests_select_own",
+    "message_requests_update_own"
+  ],
+  "public.millionaire_hall_of_fame": [
+    "read_authenticated"
+  ],
+  "public.moderation_actions": [
+    "deny_all",
+    "staff can read moderation_actions"
+  ],
+  "public.moderation_actions_log": [
+    "Staff view logs",
+    "Staff view moderation logs"
+  ],
+  "public.moderation_events": [
+    "deny_all"
+  ],
+  "public.moderation_fee_settings": [
+    "Authenticated can read moderation fee settings",
+    "Officers can update moderation fee settings",
+    "deny_all"
+  ],
+  "public.moderation_notes": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.moderation_reports": [
+    "Users can create reports",
+    "Users can view their own reports",
+    "deny_all"
+  ],
+  "public.notifications": [
+    "System can insert notifications",
+    "Users can insert notifications for themselves",
+    "Users can insert their own notifications",
+    "Users can read own notifications",
+    "Users can read their own notifications",
+    "Users can update own notifications",
+    "Users can update their own notifications",
+    "Users can view their own notifications",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all",
+    "notifications insert admin",
+    "notifications_select_own",
+    "notifications_service_insert",
+    "read own notifications",
+    "users read own notifications"
+  ],
+  "public.observer_ratings": [
+    "deny_all"
+  ],
+  "public.officer_actions": [
+    "Officers can view own actions"
+  ],
+  "public.officer_activity": [
+    "deny_all"
+  ],
+  "public.officer_applications": [
+    "Enable insert for authenticated users only",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.officer_assignments": [
+    "Users can view officer assignments"
+  ],
+  "public.officer_availability": [
+    "deny_all"
+  ],
+  "public.officer_badges": [
+    "Admins manage badges",
+    "Public view badges",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.officer_chat": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "officer_chat_insert",
+    "officer_chat_read"
+  ],
+  "public.officer_chat_messages": [
+    "Officer chat insert",
+    "Officer chat select",
+    "Officers chat",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "officer_chat_insert"
+  ],
+  "public.officer_earnings": [
+    "Officers can view own earnings"
+  ],
+  "public.officer_hours": [
+    "deny_all"
+  ],
+  "public.officer_live_assignments": [
+    "deny_all"
+  ],
+  "public.officer_logs": [
+    "deny_all"
+  ],
+  "public.officer_mission_logs": [
+    "deny_all"
+  ],
+  "public.officer_orientation_results": [
+    "Admins and lead officers can view all orientation results",
+    "Users can insert own orientation results",
+    "Users can update own orientation results",
+    "Users can view own orientation results",
+    "auth_delete_own"
+  ],
+  "public.officer_orientations": [
+    "Admins can view all orientations",
+    "Users can update own orientation",
+    "Users can view own orientation"
+  ],
+  "public.officer_patrols": [
+    "Admins manage patrols",
+    "Officers view patrols"
+  ],
+  "public.officer_payouts": [
+    "Admins can view all officer payouts",
+    "Officers can insert own payouts",
+    "Officers can view own payouts"
+  ],
+  "public.officer_payroll_logs": [
+    "Officers read own logs"
+  ],
+  "public.officer_performance": [
+    "Officer performance read access"
+  ],
+  "public.officer_quiz_attempts": [
+    "Admins can view all quiz attempts",
+    "Users can insert own quiz attempts",
+    "Users can view own quiz attempts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.officer_quiz_questions": [
+    "Admins can manage quiz questions",
+    "Public can view active quiz questions",
+    "deny_all"
+  ],
+  "public.officer_quiz_results": [
+    "deny_all"
+  ],
+  "public.officer_shift_logs": [
+    "Officer shift logs view",
+    "Officers and admins can view shift logs",
+    "Officers can insert own shift logs",
+    "Officers can update own shift logs",
+    "Officers can view own shift logs",
+    "deny_all"
+  ],
+  "public.officer_shift_slots": [
+    "Admins can manage all shift slots",
+    "Officers and secretaries can view all shift slots",
+    "Officers can delete own shift slots",
+    "Officers can insert own shift slots",
+    "Officers can update own shift slots",
+    "Officers can view own shift slots",
+    "deny_all",
+    "officer_shift_slots_insert_admin"
+  ],
+  "public.officer_stream_logs": [
+    "Officers can insert own logs",
+    "Officers can update own logs",
+    "Officers can view own logs"
+  ],
+  "public.officer_strikes": [
+    "deny_all"
+  ],
+  "public.officer_time_off_requests": [
+    "Admins and Lead Officers can update time off requests",
+    "Admins and Lead Officers can view all time off requests",
+    "Officers can create time off requests",
+    "Officers can view their own time off requests",
+    "admin can manage all time off requests",
+    "officer can cancel own pending request",
+    "officer can create own time off requests",
+    "officer can read own time off requests"
+  ],
+  "public.officer_training_sessions": [
+    "Admins can view all training sessions",
+    "Users can insert their own training sessions",
+    "Users can view their own training sessions",
+    "deny_all"
+  ],
+  "public.officer_vote_cycles": [
+    "Users can view officer vote cycles"
+  ],
+  "public.officer_votes": [
+    "Users can insert own officer vote",
+    "Users can view officer votes"
+  ],
+  "public.officer_weekly_reports": [
+    "deny_all"
+  ],
+  "public.officer_work_sessions": [
+    "Admins and Leads can view all work sessions",
+    "Officers can view own work sessions",
+    "deny_all"
+  ],
+  "public.onboarding_events": [
+    "Admins can view all onboarding events",
+    "Users can insert their own onboarding events",
+    "Users can view their own onboarding events",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.onboarding_progress": [
+    "Admins can update all onboarding progress",
+    "Admins can view all onboarding progress",
+    "Users can update their own onboarding progress",
+    "Users can view their own onboarding progress",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.owc_transactions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.payment_fees": [
+    "Admins can read payment_fees",
+    "Service role inserts payment_fees",
+    "deny_all"
+  ],
+  "public.payment_holds": [
+    "Lead/Admin can update payment holds",
+    "Secretary+ can insert payment holds",
+    "Staff can view all payment holds",
+    "Users can view their own payment holds"
+  ],
+  "public.payment_logs": [
+    "admins_can_update_payments",
+    "admins_can_view_all_payments",
+    "users_can_view_own_payments"
+  ],
+  "public.payment_methods": [
+    "Users can insert their own payment methods",
+    "Users can update their own payment methods",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.payment_transactions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.payout_audit_log": [
+    "Allow admins and lead officers to read payout audit logs",
+    "Allow service role full access to payout audit logs"
+  ],
+  "public.payout_requests": [
+    "Admins can update payout requests",
+    "Admins can view all payout requests",
+    "Creators insert payout",
+    "Creators read own payouts",
+    "Officers see all payouts",
+    "Officers update payouts",
+    "User can insert their payout request",
+    "User can view their own payout requests",
+    "Users can create payout requests",
+    "Users can insert own payout requests",
+    "Users can insert their own payout requests",
+    "Users can view own payout requests",
+    "Users can view their own payout requests",
+    "admin select all payouts",
+    "admin update all payouts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "payout_requests_insert_own",
+    "payout_requests_select_own",
+    "payout_requests_service",
+    "payouts_insert_self",
+    "payouts_select",
+    "users insert own payouts",
+    "users select own payouts",
+    "users update own payouts"
+  ],
+  "public.payout_reviews": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.payout_runs": [
+    "Admins view payout runs",
+    "Secretaries view payout runs"
+  ],
+  "public.payout_settings": [
+    "Admins can insert payout settings",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.perk_catalog": [
+    "Public read perk_catalog"
+  ],
+  "public.perks": [
+    "Anyone can view active perks"
+  ],
+  "public.pitch_contests": [
+    "Admins can manage contests",
+    "admins can insert pitch contests",
+    "admins can read pitch contests",
+    "admins can update pitch contests",
+    "create pitch contests",
+    "pitch_contests_admin_insert",
+    "pitch_contests_admin_select",
+    "pitch_contests_admin_update",
+    "pitch_contests_select_authenticated",
+    "pitch_contests_update_authenticated",
+    "read open pitch contests",
+    "update own pitch contests"
+  ],
+  "public.pitch_votes": [
+    "Public view votes",
+    "Users can vote"
+  ],
+  "public.pitches": [
+    "Admins can manage pitches",
+    "Public view pitches",
+    "Users can submit pitches",
+    "Users can update own pitches"
+  ],
+  "public.platform_fees": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all",
+    "platform_fees_select_on_auth"
+  ],
+  "public.platform_wallet": [
+    "deny_all"
+  ],
+  "public.pod_bans": [
+    "Hosts can ban users",
+    "Hosts can unban users",
+    "Hosts can view bans"
+  ],
+  "public.pod_episodes": [
+    "Anyone can view episodes"
+  ],
+  "public.pool_donations": [
+    "Public read donations",
+    "Users can insert own donations"
+  ],
+  "public.post_gifts": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.posts": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.profiles": [
+    "Users can read own profile",
+    "Users can update own profile",
+    "Users can view own recruiter relationship",
+    "deny_all",
+    "profiles insert own",
+    "profiles select own",
+    "profiles update own"
+  ],
+  "public.promo_code_uses": [
+    "Users can view own promo code uses",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_update_own"
+  ],
+  "public.promo_codes": [
+    "Public can view active promo codes",
+    "deny_all"
+  ],
+  "public.property_insurance_policies": [
+    "Users can insert own property insurance",
+    "Users can update own property insurance",
+    "Users can view own property insurance"
+  ],
+  "public.property_loans": [
+    "Users read own loans"
+  ],
+  "public.property_types": [
+    "Public read property types"
+  ],
+  "public.property_upgrades": [
+    "Admins can view all upgrades",
+    "Owners read upgrades",
+    "Users can delete their own upgrades",
+    "Users can insert their own upgrades",
+    "Users can update their own upgrades",
+    "Users can view their own upgrades"
+  ],
+  "public.provider_costs": [
+    "Admins only",
+    "deny_all"
+  ],
+  "public.punishment_transactions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.punishments": [
+    "Users can view their own punishments",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.recent_matches": [
+    "Public read access for recent_matches"
+  ],
+  "public.referral_claims": [
+    "Users can insert their own referral claims",
+    "Users can view their own referral claims"
+  ],
+  "public.referral_monthly_bonus": [
+    "Admins can manage bonus claims",
+    "Admins can view referral bonuses",
+    "Users can view own bonus claims",
+    "Users can view own referral bonuses",
+    "deny_all"
+  ],
+  "public.referrals": [
+    "Users can insert referrals for themselves",
+    "Users can update their own referral status",
+    "Users can view their own referrals",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.rent_payment_log": [
+    "Users read own rent logs"
+  ],
+  "public.report_cases": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.reputation_events": [
+    "Reputation events read access"
+  ],
+  "public.revenue_ledger": [
+    "Admins can read revenue_ledger",
+    "Service role inserts revenue_ledger",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.revenue_settings": [
+    "Admin can read revenue settings",
+    "Admins can manage revenue settings"
+  ],
+  "public.revenue_splits": [
+    "Admins can manage splits",
+    "Public view splits"
+  ],
+  "public.risk_events": [
+    "Users can view their own risk events"
+  ],
+  "public.role_change_log": [
+    "Admins view logs",
+    "deny_all"
+  ],
+  "public.role_privileges": [
+    "deny_all"
+  ],
+  "public.roles": [
+    "deny_all"
+  ],
+  "public.rooms": [
+    "Public read access for rooms"
+  ],
+  "public.royal_family_history": [
+    "Admins can view all history",
+    "Users can view their own history"
+  ],
+  "public.royal_family_perks": [
+    "Admins can view all perks",
+    "Users can view their own perks"
+  ],
+  "public.royal_family_titles": [
+    "Everyone can view royal family titles"
+  ],
+  "public.scheduled_announcements": [
+    "Only admins can create scheduled announcements",
+    "Only admins can update scheduled announcements",
+    "Only admins can view scheduled announcements",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.secretary_assignments": [
+    "Admin can manage secretaries",
+    "Secretary can view own assignment",
+    "secretary_assignments_insert_own"
+  ],
+  "public.security_events": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.seller_reliability": [
+    "Seller reliability read access"
+  ],
+  "public.shadow_bans": [
+    "deny_all"
+  ],
+  "public.shifts": [
+    "Users can view their own shifts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.shop_items": [
+    "deny_all"
+  ],
+  "public.shop_partners": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.shop_transactions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.shops": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.sidebar_updates": [
+    "Admins can manage updates",
+    "Everyone can view active updates"
+  ],
+  "public.special_gift_earnings": [
+    "deny_all"
+  ],
+  "public.square_events": [
+    "Admin can view square events"
+  ],
+  "public.staff_applications": [
+    "Admins can manage all staff applications",
+    "Admins can view all staff applications",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.staff_profiles": [
+    "Admins can manage all staff profiles",
+    "Admins can view all staff profiles",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.store_items": [
+    "deny_all"
+  ],
+  "public.stores": [
+    "Admins can view all stores",
+    "Store owners can update own stores",
+    "Store owners can view own stores"
+  ],
+  "public.stream_discovery_prefs": [
+    "Stream discovery prefs access"
+  ],
+  "public.stream_entrances": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.stream_entries": [
+    "Broadcasters can view entries for their streams",
+    "Users can insert their own entries",
+    "Users can update their own entries",
+    "Users can view their own entries",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.stream_events": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.stream_gifts": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all",
+    "users insert own gifts",
+    "view stream gifts"
+  ],
+  "public.stream_join_requests": [
+    "Host can update join requests",
+    "User or host can read join requests",
+    "Users can request to join a stream",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.stream_likes": [
+    "Users can like streams",
+    "Users can unlike streams",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.stream_messages": [
+    "Users can send stream messages",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all",
+    "users insert own messages",
+    "view stream messages"
+  ],
+  "public.stream_momentum": [
+    "Admins can manage all momentum",
+    "Stream owners can manage momentum",
+    "deny_all",
+    "stream_momentum_insert",
+    "stream_momentum_read",
+    "stream_momentum_update"
+  ],
+  "public.stream_mute_counts": [
+    "deny_all",
+    "stream_mute_counts_insert",
+    "stream_mute_counts_select",
+    "stream_mute_counts_update"
+  ],
+  "public.stream_participants": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all",
+    "view stream participants"
+  ],
+  "public.stream_passwords": [
+    "stream_passwords_owner_delete",
+    "stream_passwords_owner_insert",
+    "stream_passwords_owner_select",
+    "stream_passwords_owner_update"
+  ],
+  "public.stream_presets": [
+    "Users can delete their own presets",
+    "Users can insert their own presets",
+    "Users can update their own presets",
+    "Users can view their own presets",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.stream_ranking": [
+    "Stream ranking admin write",
+    "Stream ranking read access"
+  ],
+  "public.stream_reactions": [
+    "Users can react in streams",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.stream_reports": [
+    "Admins and Mods can update reports",
+    "Admins and Mods can view reports",
+    "Admins can update reports",
+    "Admins can view all reports",
+    "Anyone can insert reports",
+    "Anyone can view reports on public streams",
+    "Users can create reports",
+    "deny_all",
+    "stream_reports_insert_self",
+    "stream_reports_select"
+  ],
+  "public.stream_sessions": [
+    "deny_all"
+  ],
+  "public.stream_snack_purchases": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.stream_viewers": [
+    "Public read stream viewers",
+    "Users insert self as viewer"
+  ],
+  "public.stream_vods": [
+    "deny_all"
+  ],
+  "public.stripe_customers": [
+    "Users read own stripe customer"
+  ],
+  "public.system_alerts": [
+    "Users can view their own alerts"
+  ],
+  "public.system_backup_requests": [
+    "Admins can manage backup requests"
+  ],
+  "public.system_errors": [
+    "Admins can view errors",
+    "Public can insert errors"
+  ],
+  "public.system_settings": [
+    "service_role_only"
+  ],
+  "public.task_completions": [
+    "Royal Troll can verify completions",
+    "Users can create their task completions",
+    "Users can view task completions",
+    "auth_delete_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.task_history": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.task_templates": [
+    "deny_all"
+  ],
+  "public.tax_report_status": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.telemetry_events": [
+    "Admins can view telemetry"
+  ],
+  "public.ticket_messages": [
+    "Admins can add ticket messages",
+    "Admins can view all ticket messages",
+    "Users can add ticket messages",
+    "Users can view ticket messages"
+  ],
+  "public.town_player_state": [
+    "delete own town_player_state",
+    "insert own town_player_state",
+    "read own town_player_state",
+    "update own town_player_state"
+  ],
+  "public.training_scenarios": [
+    "Authenticated users can view training scenarios",
+    "deny_all"
+  ],
+  "public.transactions": [
+    "Users view own transactions",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_ai_avatars": [
+    "deny_all"
+  ],
+  "public.troll_battle_gifts": [
+    "Users can send battle gifts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_battle_weekly_stats": [
+    "Public read stats"
+  ],
+  "public.troll_battles": [
+    "Broadcasters can create battles",
+    "Public read battles",
+    "System update battles",
+    "deny_all"
+  ],
+  "public.troll_court_cases": [
+    "Judges can update cases",
+    "Users can view public cases",
+    "deny_all"
+  ],
+  "public.troll_dna_events": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_dna_profiles": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "dna_update_self"
+  ],
+  "public.troll_dna_traits": [
+    "deny_all",
+    "dna_traits_select_all"
+  ],
+  "public.troll_drops": [
+    "Allow streamer to manage troll drops",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.troll_drops_log": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_event_claims": [
+    "Users can insert their own claims",
+    "Users can view their own claims"
+  ],
+  "public.troll_events": [
+    "Anyone can view active troll events"
+  ],
+  "public.troll_families": [
+    "Anyone can view troll_families",
+    "Auth users can create troll_families",
+    "Leaders can update troll_families"
+  ],
+  "public.troll_family_members": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "troll_family_members_select"
+  ],
+  "public.troll_family_memberships": [
+    "Family leaders can update roles",
+    "Memberships are public readable",
+    "Users can join a family",
+    "Users can leave their family"
+  ],
+  "public.troll_family_messages": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_family_wars": [
+    "deny_all"
+  ],
+  "public.troll_gift_items": [
+    "deny_all"
+  ],
+  "public.troll_mart_clothing": [
+    "public_can_view_clothing"
+  ],
+  "public.troll_officer_applications": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_officers": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_post_comments": [
+    "Anyone can view comments",
+    "Users can delete their own comments",
+    "Users can insert their own comments",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.troll_post_gifts": [
+    "Public read post gifts",
+    "Users can send gifts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_post_views": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_posts": [
+    "Admins and officers can delete any post",
+    "Public read access",
+    "Users can create posts",
+    "Users can delete own posts",
+    "Users can delete their own posts",
+    "Users can insert their own posts",
+    "Users can update own posts",
+    "Users can update their own posts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_stream_messages": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_streams": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.troll_wall_gifts": [
+    "Anyone can view wall gifts",
+    "Authenticated users can send gifts",
+    "Users can view all wall gifts"
+  ],
+  "public.troll_wall_likes": [
+    "Authenticated users can like posts",
+    "Users can unlike posts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.troll_wall_reactions": [
+    "Anyone can view wall reactions",
+    "Authenticated users can react to posts",
+    "Users can remove their own reactions"
+  ],
+  "public.trollcity_orders": [
+    "deny_all"
+  ],
+  "public.trollcity_products": [
+    "deny_all"
+  ],
+  "public.trollcity_shops": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.trollmond_gifts": [
+    "Public read trollmond_gifts"
+  ],
+  "public.trollmond_ledger": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.trollmond_store_items": [
+    "Public read trollmond_store_items"
+  ],
+  "public.trollmonds_pools": [
+    "deny_all"
+  ],
+  "public.trolls_night_applications": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.trollstown_properties": [
+    "Allow users to insert their own properties",
+    "Allow users to update their own properties",
+    "Allow users to view their own properties",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.trollstown_property_upgrades": [
+    "Allow users to insert their own property upgrades",
+    "Allow users to update their own property upgrades",
+    "Allow users to view their own property upgrades",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.trollstown_upgrade_config": [
+    "deny_all"
+  ],
+  "public.trolltract_contracts": [
+    "Admins can view contracts",
+    "Only backend can insert contracts",
+    "Users view their own contracts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.trolltract_weekly_rewards": [
+    "deny_all"
+  ],
+  "public.tromody_battles": [
+    "Admins can view all battles",
+    "Users can view battles they participated in"
+  ],
+  "public.tromody_gifts": [
+    "deny_all",
+    "insert own gift"
+  ],
+  "public.tromody_matches": [
+    "Users can update matches they are in",
+    "Users can view matches they are in",
+    "deny_all"
+  ],
+  "public.tromody_queue": [
+    "Users can insert their own queue entry",
+    "Users can update their own queue entry",
+    "Users can view their own queue entry",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.tromody_sessions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "creator update session",
+    "deny_public_all",
+    "insert own session",
+    "officer admin update"
+  ],
+  "public.trophies": [
+    "Users can view their own trophies",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.typing_statuses": [
+    "Users can view their own typing status",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_active_entrance_effect": [
+    "Users manage own active effect"
+  ],
+  "public.user_active_items": [
+    "Public can view active items",
+    "Users can delete their own active items",
+    "Users can insert their own active items",
+    "Users can manage their own active items",
+    "Users can view their own active items",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "users_can_manage_own_active_items"
+  ],
+  "public.user_agreements": [
+    "Admins can view all agreements",
+    "Users can view own agreements",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_avatar_customization": [
+    "users_can_manage_own_avatar"
+  ],
+  "public.user_badges": [
+    "User badges delete by service role",
+    "User badges insert by service role",
+    "User badges publicly readable",
+    "User badges update by service role",
+    "user_badges_public_read"
+  ],
+  "public.user_badges_earned": [
+    "user_own_all"
+  ],
+  "public.user_balances": [
+    "Users can view own balances",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_bans": [
+    "Admins can create bans",
+    "Admins can update bans",
+    "Admins can view all bans",
+    "Users can view own bans",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_broadcast_theme_purchases": [
+    "broadcast_theme_purchases_insert",
+    "broadcast_theme_purchases_read",
+    "theme_purchases_insert_own",
+    "theme_purchases_read_own"
+  ],
+  "public.user_broadcast_theme_state": [
+    "broadcast_theme_state_insert",
+    "broadcast_theme_state_read",
+    "broadcast_theme_state_update",
+    "theme_state_read_own",
+    "theme_state_update_own",
+    "theme_state_upsert_own"
+  ],
+  "public.user_call_sounds": [
+    "user_call_sounds_read",
+    "user_call_sounds_write"
+  ],
+  "public.user_car_upgrades": [
+    "Users view own car upgrades"
+  ],
+  "public.user_cars": [
+    "Admins can view all user cars",
+    "Users can delete own cars",
+    "Users can insert own cars",
+    "Users can update own cars",
+    "Users can view own cars"
+  ],
+  "public.user_credit": [
+    "user_credit_policy",
+    "user_credit_select_owner",
+    "user_credit_service_role_all"
+  ],
+  "public.user_devices": [
+    "Users can view their own devices",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_district_progress": [
+    "Users can update their own progress",
+    "Users can view their own progress"
+  ],
+  "public.user_entrance_effects": [
+    "Users can update their own entrance effects",
+    "Users can view their own entrance effects",
+    "entrance_insert"
+  ],
+  "public.user_entrances": [
+    "Users can view their own entrances",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_follows": [
+    "Public read access",
+    "Users can follow others",
+    "Users can unfollow",
+    "Users can unfollow others",
+    "deny_all",
+    "follows_insert_self",
+    "follows_select"
+  ],
+  "public.user_garage": [
+    "garage read own"
+  ],
+  "public.user_insurance": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_insurances": [
+    "Users can insert their own insurances",
+    "Users can update their own insurances",
+    "Users can view their own insurances"
+  ],
+  "public.user_ip_tracking": [
+    "Allow select for service role",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all"
+  ],
+  "public.user_level_perks": [
+    "User level perks insert by service role",
+    "User level perks publicly readable"
+  ],
+  "public.user_levels": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "ul_update_self"
+  ],
+  "public.user_notifications": [
+    "Enable insert for authenticated users only",
+    "notifications read own"
+  ],
+  "public.user_payment_methods": [
+    "Allow user to delete own methods",
+    "Allow user to insert own methods",
+    "Allow user to view own methods",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_payout_settings": [
+    "Users can update own payout settings",
+    "Users can upsert own payout settings",
+    "Users can view own payout settings",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.user_perks": [
+    "Users can insert their own perks",
+    "Users can update their own perks",
+    "Users can view their own perks"
+  ],
+  "public.user_purchases": [
+    "users_can_update_own_purchases",
+    "users_can_view_own_purchases"
+  ],
+  "public.user_reputation": [
+    "Reputation read access"
+  ],
+  "public.user_risk_profile": [
+    "Admin can view all risk profiles",
+    "Users can view own risk profile",
+    "Users can view their own risk profile"
+  ],
+  "public.user_roles": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "user_roles_select_own"
+  ],
+  "public.user_sidebar_views": [
+    "Users can manage own views"
+  ],
+  "public.user_stats": [
+    "Users can view own stats"
+  ],
+  "public.user_streamer_entitlements": [
+    "streamer_entitlements_read_own",
+    "streamer_entitlements_update_own",
+    "streamer_entitlements_upsert_own"
+  ],
+  "public.user_tax_info": [
+    "Admins can update tax info",
+    "Admins can view all tax info",
+    "Users can insert own tax info",
+    "Users can update own tax info",
+    "Users can view own tax info",
+    "select_own_tax_info",
+    "update_own_tax_info",
+    "upsert_own_tax_info"
+  ],
+  "public.user_troll_mart_purchases": [
+    "users_can_manage_own_troll_mart"
+  ],
+  "public.user_vehicles": [
+    "user_vehicles_read_own",
+    "user_vehicles_update_own"
+  ],
+  "public.user_vouchers": [
+    "Service role can manage vouchers",
+    "Users can claim own vouchers",
+    "Users can view own vouchers"
+  ],
+  "public.user_wallets": [
+    "Users can view own row",
+    "admin_delete_user_wallets",
+    "admin_insert_user_wallets",
+    "admin_select_user_wallets",
+    "admin_update_user_wallets",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.users": [
+    "deny_all"
+  ],
+  "public.vehicle_bids": [
+    "Public read access for vehicle_bids"
+  ],
+  "public.vehicle_listings": [
+    "Admins can view all vehicle listings",
+    "Anyone can view active listings",
+    "Sellers can update their listings",
+    "Users can create listings"
+  ],
+  "public.vehicle_upgrades": [
+    "Admins can view all vehicle upgrades",
+    "Users can insert own upgrades",
+    "Users can view own upgrades"
+  ],
+  "public.vehicles_catalog": [
+    "Public read vehicles catalog",
+    "catalog_read_all",
+    "vehicles_catalog_select_active",
+    "vehicles_catalog_select_all"
+  ],
+  "public.vendor_invoices": [
+    "Admins can read vendor_invoices",
+    "Admins write vendor_invoices",
+    "deny_all"
+  ],
+  "public.verification_requests": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.verification_transactions": [
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own"
+  ],
+  "public.videos": [
+    "deny_all"
+  ],
+  "public.visa_redemptions": [
+    "Staff can manage redemptions",
+    "User can view own redemptions",
+    "visa redemption insert own",
+    "visa redemption read own"
+  ],
+  "public.wall_comments": [
+    "wall_comments_insert",
+    "wall_comments_read"
+  ],
+  "public.wall_gifts": [
+    "wall_gifts_insert",
+    "wall_gifts_read"
+  ],
+  "public.wall_likes": [
+    "wall_likes_delete",
+    "wall_likes_insert",
+    "wall_likes_read"
+  ],
+  "public.wall_posts": [
+    "Authenticated users can create wall posts",
+    "Users can delete their own wall posts",
+    "Users can update their own wall posts",
+    "auth_delete_own",
+    "auth_insert_own",
+    "auth_select_own",
+    "auth_update_own",
+    "deny_public_all",
+    "wall_posts_insert",
+    "wall_posts_read"
+  ],
+  "public.wallets": [
+    "Users read own wallet"
+  ],
+  "public.war_results": [
+    "deny_all",
+    "war results readable"
+  ],
+  "public.wars": [
+    "deny_all",
+    "wars readable"
+  ],
+  "public.web_push_subscriptions": [
+    "Users can delete own web push subscriptions",
+    "Users can upsert own web push subscriptions",
+    "Users can view own web push subscriptions"
+  ],
+  "public.weekly_officer_reports": [
+    "Admins can view all reports",
+    "Lead officers can insert their own reports",
+    "Lead officers can view their own reports",
+    "deny_all"
+  ],
+  "public.weekly_reports": [
+    "Users can view their own weekly reports",
+    "deny_all"
+  ],
+  "public.xp_ledger": [
+    "Users can view own ledger"
+  ],
+  "public.xp_transactions": [
+    "Users can view own XP transactions",
+    "XP transactions insert by service role"
+  ]
+}

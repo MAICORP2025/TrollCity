@@ -1,0 +1,8 @@
+-- Trollopoly Game System - No Database Changes Required
+-- 
+-- This game uses the existing infrastructure:
+-- - Client-side Zustand store for game state
+-- - Supabase realtime channels for multiplayer sync
+-- - Existing coinTransactions for real coin balance
+--
+-- No SQL migration needed - the game works out of the box!

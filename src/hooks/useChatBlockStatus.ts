@@ -1,0 +1,155 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
+
+interface ChatBlockStatus {
+  blocked: boolean;
+  expiresAt: string | null;
+}
+
+export function useChatBlockStatus(userId?: string | null, streamId?: string | null) {
+  const [status, setStatus] = useState<ChatBlockStatus>({ blocked: false, expiresAt: null });
+  const expiryTimerRef = useRef<number | null>(null);
+  const profileMutedUntilRef = useRef<string | null>(null);
+
+  const clearExpiryTimer = useCallback(() => {
+    if (expiryTimerRef.current) {
+      window.clearTimeout(expiryTimerRef.current);
+      expiryTimerRef.current = null;
+    }
+  }, []);
+
+  const applyResolvedStatus = useCallback((blocked: boolean, expiresAt: string | null) => {
+    setStatus({ blocked, expiresAt });
+  }, []);
+
+  const refresh = useCallback(async () => {
+    clearExpiryTimer();
+
+    if (!userId) {
+      applyResolvedStatus(false, null);
+      return;
+    }
+
+    let highestBlocked = false;
+    let highestExpiresAt: string | null = null;
+
+    // 1 ── stream-specific / global block from chat_blocks
+    let query = supabase
+      .from('chat_blocks')
+      .select('expires_at')
+      .eq('user_id', userId)
+      .gt('expires_at', new Date().toISOString())
+      .order('expires_at', { ascending: false })
+      .limit(1);
+
+    if (streamId) {
+      query = query.or(`stream_id.eq.${streamId},stream_id.is.null`);
+    }
+
+    const { data } = await query.maybeSingle();
+    if (data?.expires_at) {
+      highestBlocked = true;
+      highestExpiresAt = data.expires_at;
+    }
+
+    // 2 ── global moderator block via user_profiles.muted_until
+    const mutedUntil = profileMutedUntilRef.current;
+
+    if (mutedUntil) {
+      const mutedExpiry = new Date(mutedUntil).getTime();
+      const now = Date.now();
+
+      if (mutedExpiry > now) {
+        if (!highestBlocked || mutedExpiry > new Date(highestExpiresAt!).getTime()) {
+          highestBlocked = true;
+          highestExpiresAt = mutedUntil;
+        }
+      }
+    }
+
+    applyResolvedStatus(highestBlocked, highestExpiresAt);
+
+    if (highestExpiresAt) {
+      const delay = Math.max(0, new Date(highestExpiresAt).getTime() - Date.now()) + 250;
+      expiryTimerRef.current = window.setTimeout(() => {
+        applyResolvedStatus(false, null);
+      }, delay);
+    }
+  }, [clearExpiryTimer, streamId, userId, applyResolvedStatus]);
+
+  // Seed muted_until from the local auth store on mount / userId change.
+  // setupProfileRealtime() in store.ts keeps the auth-store profile fresh;
+  // this snapshot feeds the muted_until leg of the resolved block check.
+  useEffect(() => {
+    if (!userId) {
+      profileMutedUntilRef.current = null;
+      return;
+    }
+
+    const profile = useAuthStore.getState().profile;
+    profileMutedUntilRef.current = profile?.muted_until ?? null;
+    void refresh();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  // Poll the auth store for muted_until changes on the same cadence as
+  // setupProfileRealtime refreshes (≈30 s) while the hook is mounted.
+  // This avoids a hard realtime-setup dependency (no new Supabase channel required)
+  // while still providing sub-30 s reaction time for global moderator blocks.
+  useEffect(() => {
+    if (!userId) return;
+
+    const intervalId = window.setInterval(() => {
+      const profile = useAuthStore.getState().profile;
+      const currentMutedUntil = profile?.muted_until ?? null;
+
+      if (currentMutedUntil !== profileMutedUntilRef.current) {
+        profileMutedUntilRef.current = currentMutedUntil;
+        void refresh();
+      }
+    }, 15_000); // 15 s poll – fast enough, cheap enough
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [userId, refresh]);
+
+  useEffect(() => {
+    void refresh();
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`chat-block-status:${userId}:${streamId || 'global'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'chat_blocks',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          void refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearExpiryTimer();
+      supabase.removeChannel(channel);
+    };
+  }, [clearExpiryTimer, refresh, streamId, userId]);
+
+  const remainingMinutes = status.expiresAt
+    ? Math.max(1, Math.ceil((new Date(status.expiresAt).getTime() - Date.now()) / 60000))
+    : null;
+
+  return {
+    userChatDisabled: status.blocked,
+    chatDisabledUntil: status.expiresAt,
+    chatDisabledRemainingMinutes: remainingMinutes,
+    refreshChatBlockStatus: refresh,
+  };
+}
