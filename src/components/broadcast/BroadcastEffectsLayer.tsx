@@ -10,7 +10,6 @@ import { BroadcastAudioSettings } from '../../types/liveStreaming';
 interface BroadcastEffectsLayerProps {
   streamId: string;
   recentGifts?: BroadcastGift[];
-  onGiftAnimationComplete?: (giftId: string) => void;
 }
 
 interface ActiveEffect {
@@ -31,7 +30,7 @@ const DEFAULT_AUDIO_SETTINGS: BroadcastAudioSettings = {
   muted_users: [],
 };
 
-export default function BroadcastEffectsLayer({ streamId, recentGifts = [], onGiftAnimationComplete }: BroadcastEffectsLayerProps) {
+export default function BroadcastEffectsLayer({ streamId, recentGifts = [] }: BroadcastEffectsLayerProps) {
   const [activeEffects, setActiveEffects] = useState<ActiveEffect[]>([]);
   const [showEnhancedJoin, setShowEnhancedJoin] = useState(false);
   const [_userLevels, setUserLevels] = useState<Map<string, number>>(new Map());

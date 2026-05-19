@@ -109,64 +109,56 @@ export default function AdditionalTasksGrid({
       .map(mapRouteToTask)
   }
 
-  const executiveOfficeGroup = {
-      title: 'Executive Office',
-      color: 'text-amber-400',
-      bgColor: 'bg-amber-500/20',
-      borderColor: 'border-amber-500/30',
-      tasks: [
-        {
-          icon: <Shield className="w-5 h-5" />,
-          label: 'Exec Secretaries',
-          description: 'Manage assignments',
-          action: () => navigate('/admin/executive-secretaries'),
-          color: 'text-purple-400',
-          bgColor: 'bg-purple-500/20'
-        },
-        {
-          icon: <Home className="w-5 h-5" />,
-          label: 'Troll Town Deeds',
-          description: 'View deed transfers',
-          action: () => navigate('/admin/troll-town-deeds'),
-          color: 'text-emerald-400',
-          bgColor: 'bg-emerald-500/20'
-        },
-        {
-          icon: <Clock className="w-5 h-5" />,
-          label: 'Intake Inbox',
-          description: 'Executive intake',
-          action: () => navigate('/admin/executive-intake'),
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-500/20',
-        count: counts.intake
-      },
-      {
-        icon: <Bell className="w-5 h-5" />,
-        label: 'Critical Alerts',
-        description: 'System alerts',
-        action: () => navigate('/admin/critical-alerts'),
-        color: 'text-red-400',
-        bgColor: 'bg-red-500/20',
-        count: counts.alerts
-      },
-      {
-        icon: <Activity className="w-5 h-5" />,
-        label: 'Exec Reports',
-        description: 'Review reports',
-        action: () => navigate('/admin/executive-reports'),
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/20'
-      },
-      {
-        icon: <UserCheck className="w-5 h-5" />,
-        label: 'Officer Mgmt',
-        description: 'Roles & Status',
-        action: () => navigate('/admin/officer-management'),
-        color: 'text-indigo-400',
-        bgColor: 'bg-indigo-500/20'
-      }
-    ]
-  }
+   const executiveOfficeGroup = {
+       title: 'Executive Office',
+       color: 'text-amber-400',
+       bgColor: 'bg-amber-500/20',
+       borderColor: 'border-amber-500/30',
+       tasks: [
+         {
+           icon: <Shield className="w-5 h-5" />,
+           label: 'Exec Secretaries',
+           description: 'Manage assignments',
+           action: () => navigate('/admin/executive-secretaries'),
+           color: 'text-purple-400',
+           bgColor: 'bg-purple-500/20'
+         },
+         {
+           icon: <Clock className="w-5 h-5" />,
+           label: 'Intake Inbox',
+           description: 'Executive intake',
+           action: () => navigate('/admin/executive-intake'),
+         color: 'text-blue-400',
+         bgColor: 'bg-blue-500/20',
+         count: counts.intake
+       },
+       {
+         icon: <Bell className="w-5 h-5" />,
+         label: 'Critical Alerts',
+         description: 'System alerts',
+         action: () => navigate('/admin/critical-alerts'),
+         color: 'text-red-400',
+         bgColor: 'bg-red-500/20',
+         count: counts.alerts
+       },
+       {
+         icon: <Activity className="w-5 h-5" />,
+         label: 'Exec Reports',
+         description: 'Review reports',
+         action: () => navigate('/admin/executive-reports'),
+         color: 'text-yellow-400',
+         bgColor: 'bg-yellow-500/20'
+       },
+       {
+         icon: <UserCheck className="w-5 h-5" />,
+         label: 'Officer Mgmt',
+         description: 'Roles & Status',
+         action: () => navigate('/admin/officer-management'),
+         color: 'text-indigo-400',
+         bgColor: 'bg-indigo-500/20'
+       }
+     ]
+   }
 
   const taskGroups = [
     executiveOfficeGroup,
@@ -185,47 +177,31 @@ export default function AdditionalTasksGrid({
           color: 'text-blue-400',
           bgColor: 'bg-blue-500/20'
         },
-        {
-          icon: <Mic className="w-5 h-5" />,
-          label: 'Interview Room',
-          description: 'Conduct interviews',
-          action: pickTab('interview'),
-          color: 'text-indigo-400',
-          bgColor: 'bg-indigo-500/20'
-        },
-        {
-          icon: <Ban className="w-5 h-5" />,
-          label: 'Ban Management',
-          description: 'Manage banned users',
-          action: pickTab('ban_management'),
-          color: 'text-red-400',
-          bgColor: 'bg-red-500/20'
-        },
-        {
-          icon: <Shuffle className="w-5 h-5" />,
-          label: 'Creator Switch',
-          description: 'Review migration claims',
-          action: () => navigate('/admin/creator-approvals'),
-          color: 'text-green-400',
-          bgColor: 'bg-green-500/20'
-        },
-        {
-          icon: <Flag className="w-5 h-5" />,
-          label: 'Reports Queue',
-          description: 'Handle user reports',
-          action: pickTab('reports_queue'),
-          color: 'text-yellow-400',
-          bgColor: 'bg-yellow-500/20',
-          count: counts.reports
-        },
-        {
-          icon: <UserCheck className="w-5 h-5" />,
-          label: 'Role Management',
-          description: 'Assign user roles',
-          action: pickTab('role_management'),
-          color: 'text-green-400',
-          bgColor: 'bg-green-500/20'
-        },
+         {
+           icon: <Shuffle className="w-5 h-5" />,
+           label: 'Creator Switch',
+           description: 'Review migration claims',
+           action: () => navigate('/admin/creator-approvals'),
+           color: 'text-green-400',
+           bgColor: 'bg-green-500/20'
+         },
+         {
+           icon: <Flag className="w-5 h-5" />,
+           label: 'Reports Queue',
+           description: 'Handle user reports',
+           action: pickTab('reports_queue'),
+           color: 'text-yellow-400',
+           bgColor: 'bg-yellow-500/20',
+           count: counts.reports
+         },
+         {
+           icon: <UserCheck className="w-5 h-5" />,
+           label: 'Role Management',
+           description: 'Assign user roles',
+           action: pickTab('role_management'),
+           color: 'text-green-400',
+           bgColor: 'bg-green-500/20'
+         },
         ...systemManagementRoutes
           .filter((r) => ['users', 'moderation'].includes(r.category || ''))
           .map(mapRouteToTask)
@@ -343,14 +319,6 @@ export default function AdditionalTasksGrid({
           action: pickTab('payment_logs'),
           color: 'text-blue-400',
           bgColor: 'bg-blue-500/20'
-        },
-        {
-          icon: <ShoppingCart className="w-5 h-5" />,
-          label: 'Manual Cash Orders',
-          description: 'Admin/Secretary Cash App queue',
-          action: () => navigate('/admin/manual-orders'),
-          color: 'text-emerald-400',
-          bgColor: 'bg-emerald-500/20'
         },
         ...systemManagementRoutes
           .filter((r) => r.category === 'economy')

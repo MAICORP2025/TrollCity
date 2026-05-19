@@ -84,7 +84,6 @@ type TabId =
   | 'cache_clear'
   | 'system_config'
   | 'user_search'
-  | 'ban_management'
   | 'reports_queue'
   | 'role_management'
   | 'stream_monitor'
@@ -97,8 +96,6 @@ type TabId =
   | 'grant_coins'
   | 'tax_reviews'
   | 'payment_logs'
-  | 'store_pricing'
-  | 'admin_pool'
   | 'create_schedule'
   | 'officer_shifts'
   | 'shift_requests_approval'
@@ -124,7 +121,6 @@ type TabId =
   | 'agreements'
   | 'reports'
   | 'send_notifications'
-  | 'interview'
   | 'applications'
 
 interface TransactionRow {
@@ -1088,47 +1084,44 @@ export default function AdminDashboard() {
   const handleOpenTrollmersTournament = () => navigate('/admin/trollmers-tournament')
   const handleOpenManualOrders = () => navigate('/admin/manual-orders')
 
-  const redirectRoutes = useMemo(
-    () =>
-      ({
-        hr: '/admin/hr',
-        all_hr: '/admin/hr',
-        database_backup: '/admin/system/backup',
-        cache_clear: '/admin/system/cache',
-        system_config: '/admin/system/config',
-        user_search: '/admin/user-search',
-        users: '/admin/user-search',
-        ban_management: '/admin/ban-management',
-        reports_queue: '/admin/reports-queue',
-        role_management: '/admin/role-management',
-        stream_monitor: '/admin/stream-monitor',
-        voting: '/admin/voting',
-        media_library: '/admin/media-library',
-        chat_moderation: '/admin/chat-moderation',
-        announcements: '/admin/announcements',
-        reports: '/admin/reports-queue',
-        finance_dashboard: '/admin/finance',
-        economy_dashboard: '/admin/economy',
-        grant_coins: '/admin/grant-coins',
-        tax_reviews: '/admin/tax-reviews',
-        payment_logs: '/admin/payment-logs',
-        store_pricing: '/admin/store-pricing',
-        admin_pool: '/admin/pool',
-        create_schedule: '/admin/create-schedule',
-        officer_shifts: '/admin/officer-shifts',
-        shift_requests_approval: '/admin/officer-shifts',
-        empire_applications: '/admin/empire-applications',
-        applications: '/admin/applications',
-        referral_bonuses: '/admin/referral-bonuses',
-        control_panel: '/admin/control-panel',
-        test_diagnostics: '/admin/test-diagnostics',
-        reset_maintenance: '/admin/reset-maintenance',
-        export_data: '/admin/export-data',
-        support_tickets: '/admin/support-tickets',
-        send_notifications: '/admin/send-notifications',
-      }) as Partial<Record<TabId, string>>,
-    []
-  )
+   const redirectRoutes = useMemo(
+     () =>
+       ({
+         hr: '/admin/hr',
+         all_hr: '/admin/hr',
+         database_backup: '/admin/system/backup',
+         cache_clear: '/admin/system/cache',
+         system_config: '/admin/system/config',
+         user_search: '/admin/user-search',
+         users: '/admin/user-search',
+         reports_queue: '/admin/reports-queue',
+         role_management: '/admin/role-management',
+         stream_monitor: '/admin/stream-monitor',
+         voting: '/admin/voting',
+         media_library: '/admin/media-library',
+         chat_moderation: '/admin/chat-moderation',
+         announcements: '/admin/announcements',
+         reports: '/admin/reports-queue',
+         finance_dashboard: '/admin/finance',
+         economy_dashboard: '/admin/economy',
+         grant_coins: '/admin/grant-coins',
+         tax_reviews: '/admin/tax-reviews',
+         payment_logs: '/admin/payment-logs',
+         create_schedule: '/admin/create-schedule',
+         officer_shifts: '/admin/officer-shifts',
+         shift_requests_approval: '/admin/officer-shifts',
+         empire_applications: '/admin/empire-applications',
+         applications: '/admin/applications',
+         referral_bonuses: '/admin/referral-bonuses',
+         control_panel: '/admin/control-panel',
+         test_diagnostics: '/admin/test-diagnostics',
+         reset_maintenance: '/admin/reset-maintenance',
+         export_data: '/admin/export-data',
+         support_tickets: '/admin/support-tickets',
+         send_notifications: '/admin/send-notifications',
+       }) as Partial<Record<TabId, string>>,
+     []
+   )
 
   useEffect(() => {
     const target = redirectRoutes[activeTab]

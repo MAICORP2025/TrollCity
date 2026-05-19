@@ -28,7 +28,6 @@ import BroadcasterStatsModal from '@/components/broadcast/BroadcasterStatsModal'
 import CoinStoreModal from '@/components/broadcast/CoinStoreModal'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
 import GamePicker from '@/components/broadcast/GamePicker'
-import GiftAnimationOverlay from '@/components/broadcast/GiftAnimationOverlay'
 import GiftBoxModal, { GiftTarget } from '@/components/broadcast/GiftBoxModal'
 import PinProductModal from '@/components/broadcast/PinProductModal'
 
@@ -502,8 +501,6 @@ export function BroadcastPage() {
       licensePlate: string | null;
       isSeatUser: boolean;
     } | null>(null)
-    // const playGiftAnimation = useAnimationStore((state) => state.playGiftAnimation)
-
   // Broadcast Abilities
   const {
     abilities: userAbilities,
@@ -784,17 +781,7 @@ export function BroadcastPage() {
       //   (giftData.gift_name || '').toLowerCase().includes('trophy') ? 'trophy' :
       //   (giftData.gift_name || '').toLowerCase().includes('coffee') ? 'coffee' :
       //   (giftData.gift_name || '').toLowerCase().includes('pizza') ? 'pizza' : 'heart';
-
-      // playGiftAnimation({
-      //   type: broadcastGiftType,
-      //   senderName: giftData.sender_name || 'Someone',
-      //   senderAvatar: undefined,
-      //   receiverName: giftData.receiver_name || 'Broadcast',
-      //   amount: giftData.quantity || 1,
-      // });
-    } catch (err) {
-      console.error('[BroadcastPage] playGiftAnimation failed:', err);
-    }
+ 
 
      // Update broadcaster profile optimistically
     if (receiverId === streamRef.current?.user_id && resolvedGiftAmount > 0) {
@@ -3881,21 +3868,7 @@ const handleLike = useCallback(async () => {
              )}
            </AnimatePresence>
 
-           {/* Gift Animation Overlay */}
-           <GiftAnimationOverlay
-             gifts={recentGifts}
-             participantNames={Object.fromEntries(
-               [
-                 ...Object.entries(userProfiles).map(([id, profile]) => [id, profile.username || 'User'] as const),
-                 ...Object.entries(giftNameMap),
-               ]
-             )}
-             onAnimationComplete={(giftId) => {
-               setRecentGifts(prev => prev.filter(g => g.id !== giftId));
-             }}
-           />
-
-           {/* Glass Crack Full Page Effect */}
+            {/* Glass Crack Full Page Effect */}
            <GlassCrackEffect />
 
            {/* TCPS Private Message Bubble */}

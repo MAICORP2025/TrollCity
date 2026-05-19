@@ -449,7 +449,7 @@ const LoadingScreen = () => (
     );
   };
 
-import AdminPoolTab from './pages/admin/components/AdminPoolTab'
+
 
 import { useSidebarStore } from './stores/useSidebarStore';
 
@@ -1725,14 +1725,7 @@ function AppContent() {
                         />
                       )
                     })}
-                    <Route
-                      path="/admin/pool"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <AdminPoolTab />
-                        </RequireRole>
-                      }
-                    />
+
                     <Route
                       path="/admin/trollmers-tournament"
                       element={

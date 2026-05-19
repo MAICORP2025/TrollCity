@@ -1,14 +1,15 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image, TrendingUp, PieChart } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 
 const AdminAdvertisements = lazy(() => import('./AdminAdvertisements'))
-const XAdsStudio = lazy(() => import('./XAdsStudio'))
 
 const DatabaseBackup = lazy(() => import('./DatabaseBackup'))
 const CityControlCenter = lazy(() => import('./CityControlCenter'))
 const CacheClear = lazy(() => import('./CacheClear'))
 const SystemConfig = lazy(() => import('./SystemConfig'))
+const CoinPackPurchasesLedger = lazy(() => import('./CoinPackPurchasesLedger'))
+const StartupExpenseTracker = lazy(() => import('./StartupExpenseTracker'))
 
 const UserFormsTab = lazy(() => import('./components/UserFormsTab'))
 const AdminErrors = lazy(() => import('./AdminErrors'))
@@ -18,9 +19,7 @@ const OfficerPayrollReports = lazy(() => import('./OfficerPayrollReports'))
 const ZipGovernanceDashboard = lazy(() => import('./ZipGovernanceDashboard'))
 const AdminSupportTicketsPage = lazy(() => import('./AdminSupportTicketsPage'))
 const CourtDocketsManager = lazy(() => import('./CourtDocketsManager'))
-const StorePriceEditor = lazy(() => import('./components/StorePriceEditor'))
 const TournamentManager = lazy(() => import('./components/TournamentManager'))
-const AdminManualOrders = lazy(() => import('./AdminManualOrders'))
 const WeeklyReportsView = lazy(() => import('./WeeklyReportsView'))
 const AdminJailManagement = lazy(() => import('./AdminJailManagement'))
 const SeasonalGoals = lazy(() => import('./SeasonalGoals'))
@@ -110,6 +109,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     category: 'economy'
   },
   {
+    id: 'coin-purchases-ledger',
+    title: 'Coin Purchases Ledger',
+    path: '/admin/coinpurchase-ledger',
+    component: CoinPackPurchasesLedger,
+    roles: [UserRole.ADMIN],
+    description: 'View and manage coin pack purchases',
+    icon: <TrendingUp className="w-5 h-5 text-green-200" />,
+    tileColor: 'text-green-200',
+    tileBgColor: 'bg-green-500/10',
+    tileBorderColor: 'border-green-500/30',
+    category: 'economy'
+  },
+  {
     id: 'zip-governance',
     title: 'Zip Governance',
     path: '/admin/zip-governance',
@@ -135,19 +147,7 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBorderColor: 'border-purple-500/30',
     category: 'economy'
   },
-  {
-    id: 'x-ads-studio',
-    title: 'X Ads Studio',
-    path: '/admin/x-ads',
-    component: XAdsStudio,
-    roles: [UserRole.ADMIN, UserRole.SECRETARY],
-    description: 'Generate and share promotional assets for X and Instagram',
-    icon: <Share2 className="w-5 h-5 text-blue-200" />,
-    tileColor: 'text-blue-200',
-    tileBgColor: 'bg-blue-500/10',
-    tileBorderColor: 'border-blue-500/30',
-    category: 'economy'
-  },
+
   {
     id: 'cache-clear',
     title: 'Cache Clear',
@@ -292,19 +292,7 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBorderColor: 'border-red-500/30',
     category: 'moderation'
   },
-  {
-    id: 'store-pricing',
-    title: 'Store Pricing',
-    path: '/admin/store/pricing',
-    component: StorePriceEditor,
-    roles: [UserRole.ADMIN],
-    description: 'Edit store item prices and details',
-    icon: <DollarSign className="w-5 h-5 text-green-200" />,
-    tileColor: 'text-green-200',
-    tileBgColor: 'bg-green-500/10',
-    tileBorderColor: 'border-green-500/30',
-    category: 'economy'
-  },
+
   {
     id: 'tournaments',
     title: 'Tournaments',
@@ -318,19 +306,7 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBorderColor: 'border-yellow-500/30',
     category: 'events'
   },
-  {
-    id: 'manual-orders',
-    title: 'Manual Orders',
-    path: '/admin/manual-orders',
-    component: AdminManualOrders,
-    roles: [UserRole.ADMIN, UserRole.SECRETARY],
-    description: 'Review manual coin orders',
-    icon: <DollarSign className="w-5 h-5 text-green-200" />,
-    tileColor: 'text-green-200',
-    tileBgColor: 'bg-green-500/10',
-    tileBorderColor: 'border-green-500/30',
-    category: 'economy'
-  },
+
   {
     id: 'weekly-reports',
     title: 'Weekly Reports',
@@ -344,12 +320,11 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBorderColor: 'border-blue-500/30',
     category: 'moderation'
   },
-  /*
   {
     id: 'jail-test-simulator',
     title: 'Jail Test Simulator',
     path: '/admin/jail-test',
-    component: JailTestSimulator,
+    component: AdminJailManagement,
     roles: [UserRole.ADMIN],
     description: 'Test jail system functionality',
     icon: <Lock className="w-5 h-5 text-red-200" />,
@@ -357,6 +332,18 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-red-500/10',
     tileBorderColor: 'border-red-500/30',
     category: 'moderation'
+  },
+  {
+    id: 'startup-expense-tracker',
+    title: 'Startup Expense Tracker',
+    path: '/admin/startup-expense-tracker',
+    component: StartupExpenseTracker,
+    roles: [UserRole.ADMIN],
+    description: 'Track and manage startup expenses',
+    icon: <PieChart className="w-5 h-5 text-blue-200" />,
+    tileColor: 'text-blue-200',
+    tileBgColor: 'bg-blue-500/10',
+    tileBorderColor: 'border-blue-500/30',
+    category: 'economy'
   }
-  */
 ]

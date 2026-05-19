@@ -1,7 +1,7 @@
 // Animation Components - import for internal use and re-export
 import JoinEffect, { JoinEffectsContainer } from './JoinEffect';
 import ReactionFloat, { ReactionsFloatContainer } from './ReactionFloat';
-import GiftAnimation, { GiftAnimationsContainer } from './GiftAnimation';
+
 import CoinExplosion, { CoinExplosionsContainer } from './CoinExplosion';
 import DiamondRain, { DiamondRainsContainer } from './DiamondRain';
 import AnimatedButton from './AnimatedButton';
@@ -12,7 +12,7 @@ import { useAnimationStore } from '../../lib/animationManager';
 export { AnimatedButton, AnimatedCard };
 export { JoinEffect, JoinEffectsContainer };
 export { ReactionFloat, ReactionsFloatContainer };
-export { GiftAnimation, GiftAnimationsContainer };
+
 export { CoinExplosion, CoinExplosionsContainer };
 export { DiamondRain, DiamondRainsContainer };
 
@@ -31,9 +31,7 @@ export {
 } from '../../lib/animationManager';
 
 // Re-export helper for playing animations
-export const playGiftAnimation = (gift: Omit<import('../../lib/animationManager').GiftAnimationData, 'id' | 'timestamp'>) => {
-  useAnimationStore.getState().playGiftAnimation(gift);
-};
+
 
 export const playJoinEffect = (effect: Omit<import('../../lib/animationManager').JoinEffectData, 'id' | 'timestamp'>) => {
   useAnimationStore.getState().playJoinEffect(effect);
@@ -57,7 +55,7 @@ export function AnimationsContainer() {
     <>
       <JoinEffectsContainer />
       <ReactionsFloatContainer />
-      <GiftAnimationsContainer />
+
       <CoinExplosionsContainer />
       <DiamondRainsContainer />
     </>

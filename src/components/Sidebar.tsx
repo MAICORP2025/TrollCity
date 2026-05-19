@@ -535,9 +535,15 @@ profile?.role === 'superadmin' ||
             {(canSeeOfficer || canSeeSecretary || isAdmin) && (
               <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Streams" to="/government/streams" active={location.pathname.startsWith('/government/streams')} highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')} className="text-red-400" tone="red" />
             )}
-            {(canSeeSecretary || isAdmin) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} className="text-cyan-200" tone="cyan" />
-            )}
+             {(canSeeSecretary || isAdmin) && (
+               <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} className="text-cyan-200" tone="cyan" />
+             )}
+             {isAdmin && (
+               <>
+                 <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Coin Purchase Ledger" to="/admin/coinpurchase-ledger" active={location.pathname.startsWith('/admin/coinpurchase-ledger')} highlight={isUpdated('/admin/coinpurchase-ledger')} onClick={() => markAsViewed('/admin/coinpurchase-ledger')} className="text-cyan-300" tone="cyan" />
+                 <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Startup Expense Tracker" to="/admin/startup-expense-tracker" active={location.pathname.startsWith('/admin/startup-expense-tracker')} highlight={isUpdated('/admin/startup-expense-tracker')} onClick={() => markAsViewed('/admin/startup-expense-tracker')} className="text-cyan-300" tone="cyan" />
+               </>
+             )}
 
             <SectionTitle title="Support" collapsed={isSidebarCollapsed} />
             <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} tone="blue" />
