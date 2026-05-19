@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { Stream } from '../../types/broadcast'
-import BroadcastPage from './BroadcastPage'
+import { BroadcastPage } from './BroadcastPage'
 import ViewerPage from './ViewerPage'
 import StreamEndedPage from './StreamEndedPage'
 
@@ -17,15 +17,6 @@ type BroadcasterMeta = {
   username: string
   avatar_url: string | null
   thumbnail_url?: string | null
-}
-
-type SeatSessionRow = {
-  id?: string
-  stream_id?: string
-  user_id?: string | null
-  guest_id?: string | null
-  seat_index?: number | null
-  status?: string | null
 }
 
 type ProfileAccessSnapshot = {
@@ -39,8 +30,6 @@ type ProfileAccessSnapshot = {
   isPresident: boolean
   isCeo: boolean
 }
-
-const ACTIVE_SEAT_STATUSES = ['active', 'joined', 'approved'] as const
 
 function normalizeRole(value: unknown): string {
   return String(value || 'user').toLowerCase().trim()
@@ -258,7 +247,6 @@ function BroadcastRouter() {
   const [enteredPassword, setEnteredPassword] = useState('')
   const [validatingPassword, setValidatingPassword] = useState(false)
   const [hasAccess, setHasAccess] = useState(false)
-  const [isSeatUser, setIsSeatUser] = useState(false)
 
   const lastRouteLogRef = useRef<string | null>(null)
   const lastAccessStateRef = useRef<string | null>(null)
@@ -267,7 +255,7 @@ function BroadcastRouter() {
     return Boolean(stream?.user_id && userId && userId === stream.user_id)
   }, [stream?.user_id, userId])
 
-  const shouldUseRtcPage = isHost || isSeatUser
+  const shouldUseRtcPage = isHost
 
   const routingDecision = useMemo(
     () => ({
@@ -275,13 +263,12 @@ function BroadcastRouter() {
       userId,
       streamOwnerId: stream?.user_id || null,
       isHost,
-      isSeatUser,
       hasAccess,
       route: shouldUseRtcPage
         ? 'BroadcastPage (LiveKit RTC)'
         : 'ViewerPage (LiveKit Viewer)',
     }),
-    [streamId, userId, stream?.user_id, isHost, isSeatUser, hasAccess, shouldUseRtcPage],
+    [streamId, userId, stream?.user_id, isHost, hasAccess, shouldUseRtcPage],
   )
 
   const handleValidatePassword = useCallback(async () => {
@@ -533,104 +520,6 @@ function BroadcastRouter() {
     profileAccess.isSecretary,
     profileAccess.isPresident,
   ])
-
-  const refreshSeatStatus = useCallback(async () => {
-    if (!streamId || !userId || isHost) {
-      setIsSeatUser((current) => (current ? false : current))
-      return
-    }
-
-    try {
-      const { data, error: seatError } = await supabase
-        .from('stream_seat_sessions')
-        .select('id, stream_id, user_id, guest_id, seat_index, status')
-        .eq('stream_id', streamId)
-        .in('status', [...ACTIVE_SEAT_STATUSES])
-        .or(`user_id.eq.${userId},guest_id.eq.${userId}`)
-        .limit(1)
-        .maybeSingle()
-
-      if (seatError) {
-        console.warn('[BroadcastRouter] Seat status check failed:', seatError)
-        setIsSeatUser((current) => (current ? false : current))
-        return
-      }
-
-      const active = Boolean(data?.id)
-
-      console.log('[BroadcastRouter] Seat status check:', {
-        streamId,
-        userId,
-        isSeatUser: active,
-        seatSession: data,
-      })
-
-      setIsSeatUser((current) => (current === active ? current : active))
-    } catch (err) {
-      console.warn('[BroadcastRouter] Seat status check threw:', err)
-      setIsSeatUser((current) => (current ? false : current))
-    }
-  }, [streamId, userId, isHost])
-
-  useEffect(() => {
-    void refreshSeatStatus()
-  }, [refreshSeatStatus])
-
-  useEffect(() => {
-    if (!streamId || !userId || isHost) return
-
-    const channelName = `router-seat-session:${streamId}:${userId}`
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'stream_seat_sessions',
-          filter: `stream_id=eq.${streamId}`,
-        },
-        (payload) => {
-          const next = payload.new as SeatSessionRow | null
-          const old = payload.old as SeatSessionRow | null
-          const row = next || old
-
-          const rowUserId = row?.user_id || row?.guest_id
-          if (rowUserId !== userId) return
-
-          const status = String(next?.status || '').toLowerCase()
-          const active = Boolean(next?.id && ACTIVE_SEAT_STATUSES.includes(status as any))
-
-          console.log('[BroadcastRouter] Realtime seat session update:', {
-            streamId,
-            userId,
-            eventType: payload.eventType,
-            status,
-            active,
-            row,
-          })
-
-          setIsSeatUser((current) => (current === active ? current : active))
-
-          if (!active) {
-            void refreshSeatStatus()
-          }
-        },
-      )
-      .subscribe((status) => {
-        console.log('[BroadcastRouter] Seat session realtime status:', {
-          streamId,
-          userId,
-          channelName,
-          status,
-        })
-      })
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [streamId, userId, isHost, refreshSeatStatus])
 
   useEffect(() => {
     if (!stream || !hasAccess) return

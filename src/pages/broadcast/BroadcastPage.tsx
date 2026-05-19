@@ -31,8 +31,7 @@ import GamePicker from '@/components/broadcast/GamePicker'
 import GiftAnimationOverlay from '@/components/broadcast/GiftAnimationOverlay'
 import GiftBoxModal, { GiftTarget } from '@/components/broadcast/GiftBoxModal'
 import PinProductModal from '@/components/broadcast/PinProductModal'
-import { SeatRequestModal } from '@/components/broadcast/SeatRequestModal'
-import { SeatRequestQueue } from '@/components/broadcast/SeatRequestQueue'
+
 import ShareModal from '@/components/broadcast/ShareModal'
 import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
 import TickerControlPanel from '@/components/broadcast/TickerControlPanel'
@@ -48,19 +47,14 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import TrollopolyCityBoard from '@/components/games/TrollopolyCityBoard'
 import { GlassCrackEffect } from '@/components/GlassCrackEffect'
 import { getCategoryConfig } from '@/config/broadcastCategories'
-import { TrollSeatsControl } from '@/features/broadcast/entrance-effects/TrollSeatsControl'
-import { TrollSeatsOverlay } from '@/features/broadcast/entrance-effects/TrollSeatsOverlay'
-import { useTrollSeats } from '@/features/broadcast/entrance-effects/useTrollSeats'
 import { useBattleState } from '@/hooks/useBattleState'
-import { useBoxCount } from '@/hooks/useBoxCount'
 import { useBroadcastAbilities } from '@/hooks/useBroadcastAbilities'
 import { useBroadcastPinnedProducts } from '@/hooks/useBroadcastPinnedProducts'
 import { BroadcastGift } from '@/hooks/useBroadcastRealtime'
 import { useBroadcastTicker } from '@/hooks/useBroadcastTicker'
 import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueController'
-import { useSeatLiveKit } from '@/hooks/useSeatLiveKit'
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
-import { useStreamSeats } from '@/hooks/useStreamSeats'
+
 import { useTrollopoly } from '@/hooks/useTrollopoly'
 import { useTrollToe } from '@/hooks/useTrollToe'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
@@ -75,6 +69,7 @@ import { useTickerStore } from '@/stores/tickerStore'
 import { AnimatePresence } from 'framer-motion'
 import { LogOut, Dice5, Shield, Zap } from 'lucide-react'
 import { toast } from 'sonner'
+import { div } from 'three/src/nodes/math/OperatorNode.js'
 
 // Debug counters for broadcast stability verification
 const DEBUG_COUNTERS = {
@@ -96,7 +91,6 @@ const DEBUG_COUNTERS = {
   supabaseChannelCreatedMap: new Map<string, number>(),
   supabaseChannelCleanupMap: new Map<string, number>(),
   useGiftSystemInitCount: 0,
-  useStreamSeatsSubscriptionCount: 0,
   trackSubscribedCount: 0,
   trackUnsubscribedCount: 0,
 };
@@ -119,7 +113,13 @@ if (typeof window !== 'undefined') {
  * Any changes require explicit confirmation during commit.
  * ============================================================================ */
 
-function BroadcastPage() {
+/**
+ * BroadcastPage
+ *
+ * Broadcaster publishes via LiveKit RTC.
+ * Participants join through LiveKit as audience members.
+ */
+export function BroadcastPage() {
   const params = useParams()
   const streamId = params.id || params.streamId
 
@@ -217,13 +217,8 @@ function BroadcastPage() {
     const videoTrack = videoTrackRef.current
     return audioTrack || videoTrack ? [audioTrack, videoTrack] : null
   }, [localTracksVersion])
-  // Tracks from useSeatLiveKit, if user is in a seat
-  const [seatAudioTrack, setSeatAudioTrack] = useState<LocalAudioTrack | null>(null)
-  const [seatVideoTrack, setSeatVideoTrack] = useState<LocalVideoTrack | null>(null)
-  const combinedLocalTracks = useMemo(() => {
-    if (isHost) return localTracks;
-    return seatAudioTrack || seatVideoTrack ? [seatAudioTrack, seatVideoTrack] : null;
-  }, [isHost, localTracks, seatAudioTrack, seatVideoTrack])
+  // Host users publish through this local track state.
+  const combinedLocalTracks = localTracks
   const setLocalTracks = useCallback((
     next:
       | [LocalAudioTrack | null, LocalVideoTrack | null]
@@ -374,7 +369,7 @@ function BroadcastPage() {
 
     // If direct publication fails, attempt to recreate the LiveKit track from the native MediaStreamTrack
     try {
-      const mediaTrack = track.getMediaStreamTrack()
+      const mediaTrack = track.mediaStreamTrack()
       if (!mediaTrack) {
         console.warn('[BroadcastPage] No native media track available for clone publish', { kind })
         return undefined
@@ -433,7 +428,7 @@ function BroadcastPage() {
   }, []) // Empty deps - only run once
   const [isScreenSharing, setIsScreenSharing] = useState(initialScreenMode)
   const [cameraOverlayEnabled, setCameraOverlayEnabled] = useState(initialCameraOverlay)
-  const [cameraOverlayTrack, setCameraOverlayTrack] = useState<LocalVideoTrack | null>(null)
+  const [cameraOverlayTrackState, setCameraOverlayTrackState] = useState<LocalVideoTrack | null>(null)
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
   const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
   // Helper to safely get array from RemoteParticipants Map
@@ -543,7 +538,7 @@ function BroadcastPage() {
 
           const preflightVideoTrack = PreflightStore.getLivekitTracks()?.[1];
           if (preflightVideoTrack) {
-            const mediaTrack = preflightVideoTrack.getMediaStreamTrack?.();
+            const mediaTrack = preflightVideoTrack.mediaStreamTrack?.();
             const isLiveTrack = mediaTrack && mediaTrack.readyState === 'live';
 
             console.log('[BroadcastPage] Preflight camera overlay candidate:', {
@@ -555,7 +550,7 @@ function BroadcastPage() {
 
             if (isLiveTrack) {
               console.log('[BroadcastPage] Reusing live preflight camera track for overlay');
-              setCameraOverlayTrack(preflightVideoTrack);
+              setCameraOverlayTrackState(preflightVideoTrack);
               return;
             }
 
@@ -577,7 +572,7 @@ function BroadcastPage() {
           overlayTrack = new LocalVideoTrack(overlayStream.getVideoTracks()[0], {
             name: 'camera-overlay'
           });
-          setCameraOverlayTrack(overlayTrack);
+          setCameraOverlayTrackState(overlayTrack);
           console.log('[BroadcastPage] Camera overlay track created successfully');
         } catch (err) {
           console.error('[BroadcastPage] Failed to acquire camera overlay:', err);
@@ -592,7 +587,7 @@ function BroadcastPage() {
         overlayTrack.stop();
         overlayTrack = null;
       }
-      setCameraOverlayTrack(null);
+      setCameraOverlayTrackState(null);
     };
 
     if (cameraOverlayEnabled && isScreenSharing) {
@@ -1201,22 +1196,6 @@ useEffect(() => {
     isHost,
   })
 
-    const {
-      trollSeats,
-      profilesByUserId: trollSeatProfilesByUserId,
-      goldenRingByUserId: trollSeatGoldenRingByUserId,
-      message: trollSeatsMessage,
-      addTrollSeat,
-      deductTrollSeat,
-      approveTrollSeatCohost,
-      processBroadcastEndRefunds,
-    } = useTrollSeats({
-      streamId,
-      broadcasterId: stream?.user_id || user?.id,
-      currentUserId: user?.id,
-      enabled: !!streamId && !!stream,
-    })
-
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const streamRef = useRef(stream)
   const broadcasterProfileRef = useRef(broadcasterProfile)
@@ -1234,43 +1213,7 @@ useEffect(() => {
     profileRef.current = profile
   }, [profile])
 
-  const {
-    boxCount,
-    setBoxCount: updateBoxCount,
-    incrementBoxCount,
-    decrementBoxCount,
-  } = useBoxCount({
-    streamId: streamId || '',
-    initialBoxCount: stream?.box_count || 1,
-    isHost,
-  });
-
-   const {
-     seats,
-     mySession: userSeat,
-     joinSeat,
-     leaveSeat,
-     handleParticipantDisconnected: handleSeatParticipantDisconnected,
-     // Seat request receiving/approval flow
-     pendingSeatRequests,
-     loadingSeatRequests,
-     approveSeatRequest,
-     denySeatRequest,
-     refreshSeatRequests,
-     capacity,
-     isInQueue,
-     canJoinInteractively,
-     joinQueue,
-     leaveQueue,
-     // For useSeatLiveKit integration
-     myRequest,
-     mySession,
-   } = useStreamSeats(streamId, user?.id, broadcasterProfile, stream);
-   const [isSeatRequestModalOpen, setIsSeatRequestModalOpen] = useState(false);
-
-  // LiveKit connection for seat users
-  const { status: seatLiveKitStatus, audioTrack: liveKitSeatAudioTrack, videoTrack: liveKitSeatVideoTrack, disconnect: disconnectSeatLiveKit } =
-    useSeatLiveKit({ seatRequest: myRequest, mySession: mySession });
+const canPublish = isHost
 
   const updateStreamPatch = useCallback((patch: Partial<Stream>) => {
     setStream((prev) => prev ? { ...prev, ...patch } : prev);
@@ -1285,7 +1228,7 @@ useEffect(() => {
 
   const trollopolyPlayerMedia = useMemo(() => {
     const media: Record<string, { videoTrack?: any; audioTrack?: any; isLocal?: boolean }> = {};
-    const localIdentity = user?.id || mySession?.guest_id || anonymousViewerIdRef.current;
+    const localIdentity = user?.id || anonymousViewerIdRef.current;
 
     if (localIdentity && combinedLocalTracks) {
       media[localIdentity] = {
@@ -1319,26 +1262,13 @@ useEffect(() => {
 
     getRemoteParticipantsArray().forEach((participant) => {
       assignParticipantMedia(participant.identity, participant);
-
-      if (seats) {
-        Object.values(seats).forEach((seat: any) => {
-          const ids = [seat?.user_id, seat?.guest_id].filter(Boolean);
-          ids.forEach((id) => {
-            const idText = String(id);
-            const identityText = String(participant.identity);
-            if (identityText === idText || identityText.substring(0, 8) === idText.replace(/-/g, '').substring(0, 8)) {
-              assignParticipantMedia(idText, participant);
-            }
-          });
-        });
-      }
     });
 
     return media;
-  }, [user?.id, mySession?.guest_id, combinedLocalTracks, localTracks, isHost, stream?.user_id, seats, remoteParticipants]);
+  }, [user?.id, combinedLocalTracks, localTracks, isHost, stream?.user_id, remoteParticipants]);
 
-  // Battle State - placed after userSeat is defined
-  const { 
+// Battle State
+   const { 
     battleState: rawBattleState,
     pickSide,
     supporters,
@@ -1347,9 +1277,9 @@ useEffect(() => {
     remainingTime,
     shouldShowSidePicker,
     sendBattleGift,
-  } = useBattleState({ // userSeat is now mySession
+  } = useBattleState({
     streamId: streamId || '',
-    localUserId: user?.id || userSeat?.guest_id || anonymousViewerIdRef.current || '',
+    localUserId: user?.id || anonymousViewerIdRef.current || '',
     isHost,
     hostId: stream?.user_id,
   })
@@ -1367,61 +1297,17 @@ useEffect(() => {
     suddenDeath: rawBattleState.suddenDeath,
   }), [rawBattleState])
 
-  const canPublish = isHost || !!mySession
 
-  const trollSeatTracksByUserId = useMemo(() => {
-    const map: Record<string, any> = {}
-
-    for (const seat of trollSeats) {
-      if (!seat.user_id || seat.status !== 'occupied') continue
-
-      /**
-       * Match existing LiveKit identity pattern.
-       * Keep this flexible so it works with your current approved cohost identity.
-       */
-      const possibleIdentities = [
-        seat.user_id,
-        `user-${seat.user_id}`,
-        `cohost-${seat.user_id}`,
-        `viewer-${seat.user_id}`,
-      ]
-
-      const participantEntry = Array.from(remoteParticipants?.values?.() || []).find((participant: any) => {
-        return possibleIdentities.includes(participant.identity)
-      })
-
-      if (!participantEntry) continue
-
-      const videoPublication = Array.from(participantEntry.videoTrackPublications?.values?.() || []).find(
-        (publication: any) => publication?.track
-      )
-
-      const audioPublication = Array.from(participantEntry.audioTrackPublications?.values?.() || []).find(
-        (publication: any) => publication?.track
-      )
-
-      map[seat.user_id] = {
-        participantIdentity: participantEntry.identity,
-        videoTrack: videoPublication?.track,
-        audioTrack: audioPublication?.track,
-        isMicMuted: !audioPublication?.track || audioPublication?.isMuted,
-        isCameraOff: !videoPublication?.track || videoPublication?.isMuted,
-      }
-    }
-
-    return map
-  }, [trollSeats, remoteParticipants])
-
-  const cleanupLocalMedia = () => {
+   const cleanupLocalMedia = () => {
     const room = roomRef.current
 
-    if (cameraOverlayTrack) {
+    if (cameraOverlayTrackState) {
       try {
-        cameraOverlayTrack.stop()
+        cameraOverlayTrackState.stop()
       } catch (e) {
         console.warn('[BroadcastPage] Error stopping camera overlay track:', e)
       }
-      setCameraOverlayTrack(null)
+      setCameraOverlayTrackState(null)
     }
 
     if (combinedLocalTracks) { // Use combined tracks for cleanup
@@ -1480,67 +1366,40 @@ useEffect(() => {
       clearTracks()
     } else {
       console.log('[BroadcastPage] ⏭️ Skipping clearTracks during live transition')
-    }
-  }
+   }
+  };
 
-  // Update localTracks based on useSeatLiveKit output
-  useEffect(() => {
-    if (seatLiveKitStatus === 'live' && liveKitSeatAudioTrack && liveKitSeatVideoTrack) {
-      setSeatAudioTrack(liveKitSeatAudioTrack);
-      setSeatVideoTrack(liveKitSeatVideoTrack);
-    } else if (seatLiveKitStatus === 'cleanup' || seatLiveKitStatus === 'failed' || seatLiveKitStatus === 'idle') {
-      setSeatAudioTrack(null);
-      setSeatVideoTrack(null);
-    }
-  }, [seatLiveKitStatus, liveKitSeatAudioTrack, liveKitSeatVideoTrack]);
+   // Handle leaving seat with instant track cleanup
+   const handleLeaveSeat = useCallback(async () => {
+     const room = roomRef.current
+     
+     // Instantly stop publishing tracks before clearing seat
+     if (room && room.localParticipant) {
+       try {
+         // Unpublish all tracks instantly - this removes them from other participants immediately
+         for (const pub of room.localParticipant.videoTrackPublications.values()) {
+           if (pub.track) {
+             room.localParticipant.unpublishTrack(pub.track).catch(console.warn)
+           }
+         }
+         for (const pub of room.localParticipant.audioTrackPublications.values()) {
+           if (pub.track) {
+             room.localParticipant.unpublishTrack(pub.track).catch(console.warn)
+           }
+         }
+         console.log('[BroadcastPage] Unpublished all tracks for leaving seat')
+       } catch (e) {
+         console.warn('Error unpublishing tracks on leave:', e)
+       }
+     }
+     
+     // Stop local and published media immediately
+     cleanupLocalMedia()
 
-  const justJoinedSeatRef = useRef(false);
+     console.log('[BroadcastPage] Left seat with instant track cleanup')
+   }, [localTracks, user?.id]) 
 
-  useEffect(() => {
-    if (mySession && justJoinedSeatRef.current) {
-      justJoinedSeatRef.current = false
-      hasJoinedRef.current = false
-    }
-  }, [userSeat])
-
-  // Handle leaving seat with instant track cleanup
-  const handleLeaveSeat = useCallback(async () => {
-    const room = roomRef.current
-    
-    // Instantly stop publishing tracks before clearing seat
-    if (room && room.localParticipant) {
-      try {
-        // Unpublish all tracks instantly - this removes them from other participants immediately
-        for (const pub of room.localParticipant.videoTrackPublications.values()) {
-          if (pub.track) {
-            room.localParticipant.unpublishTrack(pub.track).catch(console.warn)
-          }
-        }
-        for (const pub of room.localParticipant.audioTrackPublications.values()) {
-          if (pub.track) {
-            room.localParticipant.unpublishTrack(pub.track).catch(console.warn)
-          }
-        }
-        console.log('[BroadcastPage] Unpublished all tracks for leaving seat')
-      } catch (e) {
-        console.warn('Error unpublishing tracks on leave:', e)
-      }
-    }
-    
-    // Stop local and published media immediately
-    cleanupLocalMedia()
-
-    // Call the seat leave function
-    await leaveSeat();
-
-    // Also disconnect useSeatLiveKit
-    if (disconnectSeatLiveKit) {
-      disconnectSeatLiveKit();
-    }
-    console.log('[BroadcastPage] Left seat with instant track cleanup')
-  }, [leaveSeat, localTracks])
-
-  // Handle leaving the broadcast (for host ending stream or viewer leaving)
+   // Handle leaving the broadcast (for host ending stream or viewer leaving)
   const handleLeave = useCallback(async () => {
     const confirmed = confirm(isHost ? 'End this broadcast?' : 'Leave this broadcast?')
     if (!confirmed) return
@@ -1580,26 +1439,6 @@ useEffect(() => {
     // Navigate away
     navigate('/')
   }, [isHost, localTracks, navigate])
-  // userSeat is now mySession
-  const handleJoinSeat = useCallback(async (index: number) => {
-    const price = getSeatPrice(index);
-    const success = await joinSeat(index, price);
-    if (success) {
-      setIsSeatRequestModalOpen(true);
-      justJoinedSeatRef.current = true;
-      return true;
-    }
-    return false;
-  }, [joinSeat])
-
-  const getSeatPrice = useCallback((seatIndex: number): number => {
-    if (stream?.seat_prices && stream.seat_prices.length > seatIndex) {
-      return stream.seat_prices[seatIndex]
-    }
-    return stream?.seat_price || 0
-  }, [stream?.seat_prices, stream?.seat_price])
-
-  const handleJoinSeatCallback = useCallback((index: number) => handleJoinSeat(index), [handleJoinSeat])
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
   const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
   const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
@@ -2296,11 +2135,8 @@ useEffect(() => {
       // Update broadcaster profile if the receiver is the broadcaster
       if (receiverId === broadcasterId && broadcasterId) {
         setBroadcasterProfile((prev: any) => {
-          if (!prev) {
-            pendingBroadcasterGiftsRef.current += amount;
-            return prev;
-          }
-          return { ...prev, troll_coins: Number(prev.troll_coins || 0) + amount };
+          if (!prev) return prev;
+          return { ...prev, troll_coins: Number(prev.troll_coins ?? 0) + amount };
         });
       }
 
@@ -2339,14 +2175,14 @@ useEffect(() => {
   }, [])
 
   const handleLiveKitParticipantDisconnected = useCallback((participant: RemoteParticipant) => {
-    console.log('[BroadcastPage] Participant disconnected:', participant.identity)
+    const identity = participant.identity
+    console.log('[BroadcastPage] Participant disconnected:', identity)
     setRemoteParticipants(prev => {
       const next = new Map(prev)
-      next.delete(participant.identity)
+      next.delete(identity)
       return next
     })
-    handleSeatParticipantDisconnected(participant.identity)
-  }, [handleSeatParticipantDisconnected])
+  }, [])
 
   const handleLiveKitTrackSubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
     console.log('[BroadcastPage] Track subscribed:', track.kind, 'from', participant.identity)
@@ -2405,7 +2241,7 @@ useEffect(() => {
   useEffect(() => {
     // Allow anonymous viewers to watch without authentication.
     // Only publishers still require a real user or guest seat identity.
-    const hasUserIdentity = !isHost || !!user?.id || !!mySession;
+    const hasUserIdentity = !isHost || !!user?.id;
     
     if (!stream || !stream.id || !hasUserIdentity) {
       return;
@@ -2446,11 +2282,11 @@ useEffect(() => {
       return
     }
 
-    const shouldPublish = isHost || !!mySession;
+     const shouldPublish = isHost
     
     // Determine the user identity for LiveKit
-    // Use user.id for logged-in users, or guest_id from userSeat for guests
-    const userIdentity = user?.id || userSeat?.guest_id || anonymousViewerIdRef.current;
+    // Use user.id for logged-in users, or anonymous viewer for guests
+    const userIdentity = user?.id || anonymousViewerIdRef.current;
     const connectionRole = shouldPublish ? 'publisher' : 'audience';
     const connectionKey = `${stream.id}:${userIdentity}:${connectionRole}`;
 
@@ -2491,7 +2327,7 @@ useEffect(() => {
             body: {
               room: stream.id,
               identity: viewerIdentity, // Use viewerIdentity for audience
-              name: profile?.username || user?.email || userSeat?.user_profile?.username || 'Guest Viewer',
+              name: profile?.username || user?.email || 'Guest Viewer',
               role: 'audience',
               isHost: false
             }
@@ -2500,6 +2336,11 @@ useEffect(() => {
           if (error) {
             console.error('[BroadcastPage] ❌ LiveKit token fetch error:', error);
             throw error
+          }
+
+          if (!data?.token) {
+            console.error('[BroadcastPage] ❌ LiveKit token response missing token:', data);
+            throw new Error('LiveKit token response missing token')
           }
 
           console.log('[BroadcastPage] ✅ LiveKit token received:', {
@@ -2550,7 +2391,7 @@ useEffect(() => {
       try {
         const hostIdentity = userIdentity
         // OPTIMIZED: Fetch token without waiting for UI
-        console.log('[BroadcastPage] 📡 Fetching LiveKit token for HOST from Supabase Edge Function...', {
+        console.log('[BroadcastPage] 📡 Fetching LiveKit token for publisher from Supabase Edge Function...', {
           streamId: stream.id,
           hostIdentity,
           room: stream.livekit_room_name || stream.id,
@@ -2561,9 +2402,9 @@ useEffect(() => {
           body: {
             room: stream.id,
             identity: hostIdentity, // Use hostIdentity for publisher
-            name: profile?.username || user?.email || userSeat?.user_profile?.username || 'Host',
+            name: profile?.username || user?.email || 'Guest',
             role: 'publisher',
-            isHost: true
+            isHost
           }
         })
 
@@ -2572,7 +2413,12 @@ useEffect(() => {
           throw error
         }
 
-        console.log('[BroadcastPage] ✅ LiveKit token received for host:', {
+        if (!data?.token) {
+          console.error('[BroadcastPage] ❌ LiveKit token response missing token:', data);
+          throw new Error('LiveKit token response missing token')
+        }
+
+        console.log('[BroadcastPage] ✅ LiveKit token received for publisher:', {
           hasToken: !!data?.token,
           tokenLength: data?.token?.length || 0,
           room: data?.room,
@@ -2786,8 +2632,7 @@ useEffect(() => {
          stream?.id,
          stream?.status,
          stream?.is_live,
-         user?.id, // user.id is used for hostIdentity
-         mySession?.guest_id, // mySession?.guest_id is used for guest identity
+user?.id, // user.id is used for identity
          isHost,
          attachLiveKitHandlers,
          detachLiveKitHandlers,
@@ -3022,7 +2867,6 @@ useEffect(() => {
       // Only update broadcaster profile if broadcaster is involved - no refreshProfile calls
       // to avoid unnecessary state updates that could cause page refresh appearance
       const isBroadcasterInvolved = receiverId === stream?.user_id || senderId === stream?.user_id;
-      
       if (isBroadcasterInvolved && stream?.user_id) {
         console.log('[BroadcastPage] 🔄 Broadcaster involved - updating profile');
         const { data: updatedProfile } = await supabase
@@ -3041,19 +2885,8 @@ useEffect(() => {
     return () => window.removeEventListener('broadcast-balance-update', handleBalanceUpdate);
   }, [user?.id, stream?.user_id, supabase]);
 
-  // Listen for seat balance refresh events
-  useEffect(() => {
-    const handleSeatRefresh = () => {
-      console.log('[BroadcastPage] 🔄 Received seat balance refresh request');
-      // This will trigger the useStreamSeats hook to refresh seat data
-      // The hook already polls every 10 seconds, but this provides instant refresh
-    };
-    
-    window.addEventListener('refresh-seat-balances', handleSeatRefresh);
-    return () => window.removeEventListener('refresh-seat-balances', handleSeatRefresh);
-  }, []);
+   // Broadcaster profile updates are now handled in the combined host channel above
 
-  // Broadcaster profile updates are now handled in the combined host channel above
 
 
    const onGift = useCallback((userId: string) => {
@@ -3367,14 +3200,6 @@ const handleLike = useCallback(async () => {
     }
     
     setStream((prev: any) => prev ? { ...prev, status: 'ended', is_live: false } : null);
-        // Process TrollSeat refunds before navigation
-        try {
-          await processBroadcastEndRefunds()
-        } catch (error) {
-          console.error('[BroadcastPage] TrollSeat refund check failed:', error)
-        }
-    
-        setStream((prev: any) => prev ? { ...prev, status: 'ended', is_live: false } : null);
     
     // For staff, don't show summary page - go to government streams instead
     if (isStaff) {
@@ -3471,7 +3296,7 @@ const handleLike = useCallback(async () => {
     }
 
     // Enable swipe only for mobile viewers (not host, not on seat)
-    const shouldEnableSwipe = !isHost && !userSeat && isMobileWidth;
+    const shouldEnableSwipe = !isHost && isMobileWidth;
     
     if (!shouldEnableSwipe) {
       setCanSwipe(false);
@@ -3502,7 +3327,7 @@ const handleLike = useCallback(async () => {
     return () => {
       window.clearInterval(swipeTimer);
     };
-  }, [stream?.id, stream?.category, isHost, userSeat, isMobileWidth]);
+  }, [stream?.id, stream?.category, isHost, isMobileWidth]);
 
   const navigateToAdjacentStream = useCallback(async (direction: 'up' | 'down') => {
     if (!stream?.id || swipeNavigateLockRef.current) return;
@@ -3602,28 +3427,18 @@ const handleLike = useCallback(async () => {
   }, [isHost, navigateToAdjacentStream]);
 
   const memoizedViewerId = useMemo(() => 
-    user?.id || userSeat?.guest_id || anonymousViewerIdRef.current || undefined,
-    [user?.id, userSeat?.guest_id, anonymousViewerIdRef.current]
+    user?.id || anonymousViewerIdRef.current || undefined,
+    [user?.id, anonymousViewerIdRef.current]
   );
 
   const activeUserIds = useMemo(() => {
-    if (!stream || !seats) return [];
     const ids: string[] = [];
 
-    Object.values(seats).forEach((seat: any) => {
-      if (seat?.user_id && seat.user_id !== stream.user_id) {
-        ids.push(seat.user_id); // Use user_id for registered users
-      }
-      if (seat?.guest_id && seat.guest_id !== stream.user_id) {
-        ids.push(seat.guest_id); // Use guest_id for guest users
-      }
-    });
-
     return ids;
-  }, [seats, stream?.user_id]);
+  }, [stream?.user_id]);
 
   const userProfiles = useMemo(() => {
-    if (!stream || !seats) return {};
+    if (!stream) return {};
     const profiles: Record<string, { username: string; avatar_url?: string }> = {};
     
     if (broadcasterProfile) {
@@ -3633,26 +3448,8 @@ const handleLike = useCallback(async () => {
       };
     }
     
-    // Handle both user_id and guest_id profiles
-    Object.values(seats).forEach((seat: any) => {
-      // For registered users with profiles
-      if (seat?.user_id && seat.user_profile) {
-        profiles[seat.user_id] = {
-          username: seat.user_profile.username || 'User',
-          avatar_url: seat.user_profile.avatar_url,
-        };
-      }
-      // For guest users - use guest_id directly (guests have username in the seat data)
-      if (seat?.guest_id && seat.user_profile) {
-        profiles[seat.guest_id] = {
-          username: seat.user_profile.username || 'Guest',
-          avatar_url: seat.user_profile.avatar_url,
-        };
-      }
-    });
-    
     return profiles;
-  }, [seats, broadcasterProfile, stream?.user_id]);
+  }, [broadcasterProfile, stream?.user_id]);
 
   // INSTANT JOIN: Show minimal loading state inline instead of blocking entire page
   // This allows users to see the page immediately while data loads in background
@@ -3661,10 +3458,10 @@ const handleLike = useCallback(async () => {
   // INSTANT JOIN: Show broadcast content immediately
 
   // Only treat as mobile viewer after mount and when actually on mobile width
-  const isMobileViewer = hasMounted && isMobileWidth && !isHost && !userSeat;
+  const isMobileViewer = hasMounted && isMobileWidth && !isHost;
 
   // Check if game is active that should hide add/remove box buttons
-  const isTrollopolyInProgress = Boolean(trollopoly.match && trollopoly.match.phase !== 'finished' && trollopoly.match.status !== 'finished'); // userSeat is now mySession
+  const isTrollopolyInProgress = Boolean(trollopoly.match && trollopoly.match.phase !== 'finished' && trollopoly.match.status !== 'finished');
   const isGameActive = Boolean(
     isTrollopolyInProgress ||
     (activeGame === 'troll_toe' && trollToe.match && trollToe.match.phase !== 'ended') ||
@@ -3674,7 +3471,7 @@ const handleLike = useCallback(async () => {
     viewers: viewerCount > 0 ? viewerCount : Number(stream?.current_viewers ?? stream?.viewer_count ?? remoteParticipants.size ?? 0),
     likes: Number((stream as any)?.total_likes ?? (stream as any)?.like_count ?? 0),
     coinsEarned: Number((stream as any)?.total_gifts_coins ?? (stream as any)?.coin_earnings ?? 0),
-    onStage: Object.values(seats).filter((seat: any) => seat?.status === 'active' && (seat?.user_id || seat?.guest_id)).length,
+    onStage: 0,
   }), [
     viewerCount,
     stream?.current_viewers,
@@ -3684,7 +3481,6 @@ const handleLike = useCallback(async () => {
     (stream as any)?.total_gifts_coins,
     (stream as any)?.coin_earnings,
     remoteParticipants.size,
-    seats,
   ])
   const liveViewerCount = viewerCount > 0 ? viewerCount : remoteParticipants.size
   const visibleViewerCount = Math.max(viewerCount, activeViewerProfiles.length)
@@ -3706,8 +3502,6 @@ const handleLike = useCallback(async () => {
     () => (!isHost && trollToe.match?.fogEnabled && trollToe.match?.phase === 'live' ? trollToe.useFog : undefined),
     [isHost, trollToe.match?.fogEnabled, trollToe.match?.phase, trollToe.useFog]
   )
-  const canShowBoxAdd = isHost && categoryConfig.allowAddBox && boxCount < 6 && !isGameActive
-  const canShowBoxRemove = isHost && categoryConfig.allowDeductBox && boxCount > 1 && !isGameActive
   const shouldShowRandomBattleArena =
     stream?.battle_mode === 'random_queue' &&
     !!stream?.battle_id &&
@@ -3770,21 +3564,17 @@ const handleLike = useCallback(async () => {
     );
   }
 
-  function handleMute(userId: string, arg1: string) {
-    throw new Error('Function not implemented.')
-  }
+   function handleMute(userId: string, reason?: string) {
+   }
 
-  function handleGeneralKick() {
-    throw new Error('Function not implemented.')
-  }
+   function handleGeneralKick() {
+   }
 
-  function handleArrest(userId: string, arg1: string) {
-    throw new Error('Function not implemented.')
-  }
+   function handleArrest(userId: string, reason?: string) {
+   }
 
-  function handleBlock(userId: string, arg1: string) {
-    throw new Error('Function not implemented.')
-  }
+   function handleBlock(userId: string, reason?: string) {
+   }
 
   return (
     <GiftSystemProvider streamId={streamId} defaultReceiverId={stream?.user_id}>
@@ -3805,7 +3595,7 @@ const handleLike = useCallback(async () => {
             isHost={isHost}
             liveViewerCount={liveViewerCount}
             handleLike={handleLike}
-            boxCount={boxCount}
+            boxCount={(stream as any).box_count || 1}
                   onAddBox={undefined}
                   onRemoveBox={undefined}
             onClose={handleLeave}
@@ -3819,42 +3609,24 @@ const handleLike = useCallback(async () => {
             style={!isHost ? { touchAction: 'pan-y' } : undefined}
           >
             {/* Always show BroadcastGrid - battle mode is integrated into the grid */}
-            <>
-              {!isHost && (
-                <div className="mx-3 mt-3">
-                  <CapacityStatus
-                    capacity={capacity}
-                    isInQueue={isInQueue}
-                    onJoinQueue={joinQueue}
-                    onLeaveQueue={leaveQueue}
-                  />
-                </div>
-              )}
-               <BroadcastGrid
-                 stream={stream}
-                 seats={seats}
-                 showTicker={tickerSettings.is_enabled && !isMobileViewer}
-                 isMobileViewer={isMobileViewer} // userSeat is now mySession
-                 onJoinSeat={undefined} // Removed old click-to-join logic
-                 isHost={isHost}
-                 isOfficer={isOfficer}
-                 localTracks={localTracks}
-                 cameraOverlayTrack={cameraOverlayTrack}
-                 room={roomRef.current}
-                 remoteUsers={broadcastGridRemoteUsers}
-                 localUserId={user?.id || mySession?.guest_id || ''}
-                 onGift={onGift}
-                 onGiftAll={onGiftAll}
-                 toggleCamera={toggleCamera}
-                 toggleMicrophone={toggleMicrophone}
-                 flipCamera={flipCamera}
-                 isCameraOn={cameraEnabled}
-                 isMicOn={micEnabled}
-                 cameraFacingMode={cameraFacingMode}
-                 onGetUserPositions={handleGetUserPositions}
-                 broadcasterProfile={broadcasterProfile}
-                 streamStatus={stream.status}
-                 boxCount={boxCount}
+<>
+<BroadcastGrid
+                stream={stream}
+                showTicker={tickerSettings.is_enabled && !isMobileViewer}
+                isMobileViewer={isMobileViewer}
+                isHost={isHost}
+                isOfficer={isOfficer}
+                localTracks={localTracks}
+                cameraOverlayTrack={cameraOverlayTrackState}
+                room={roomRef.current}
+                remoteUsers={broadcastGridRemoteUsers}
+                localUserId={user?.id || ''}
+                onGift={onGift}
+                onGiftAll={onGiftAll}
+              toggleCamera={toggleCamera}
+              toggleMicrophone={toggleMicrophone}
+              streamStatus={stream.status}
+              boxCount={(stream as any).box_count || 1}
                  broadcastMode={stream.broadcast_mode as 'normal' | 'game' | 'battle' | undefined}
                  battleState={battleState}
                  isBattleActive={stream.is_battle}
@@ -3884,18 +3656,7 @@ const handleLike = useCallback(async () => {
                  onOpenHostStats={handleOpenHostStats}
                  onOpenModActions={handleOpenModActions}
                  onCloseModActions={handleCloseModActions}
-               />
-               <TrollSeatsOverlay
-                 streamId={streamId}
-                 broadcasterId={stream?.user_id || user?.id}
-                 currentUserId={user?.id}
-                 isBroadcaster={true}
-                 trollSeats={trollSeats}
-                 profilesByUserId={trollSeatProfilesByUserId}
-                 tracksByUserId={trollSeatTracksByUserId}
-                 goldenRingByUserId={trollSeatGoldenRingByUserId}
-                 onOpenUserStats={handleOpenUserStats}
-               />
+                />
             </>
             
             {/* Troll Toe game lives on the broadcast grid tiles - no separate overlay needed */}
@@ -3907,7 +3668,7 @@ const handleLike = useCallback(async () => {
             <BroadcastControls
               stream={stream}
               isHost={isHost}
-              isOnStage={!!userSeat}
+              isOnStage={false}
               liveViewerCount={liveViewerCount}
               chatOpen={isChatOpen}
               toggleChat={handleToggleChat}
@@ -3924,7 +3685,7 @@ const handleLike = useCallback(async () => {
               onPinProduct={handlePinProduct}
               isMicOn={micEnabled}
               isCamOn={cameraEnabled}
-              boxCount={boxCount}
+              boxCount={(stream as any).box_count || 1}
               setBoxCount={undefined}
               onRefreshStream={refreshStream}
               isBattleActive={stream.is_battle}
@@ -3938,16 +3699,6 @@ const handleLike = useCallback(async () => {
               selectedBattleTheme={selectedBattleTheme}
               onBattleThemeChange={setSelectedBattleTheme}
             />
-            {isHost && (
-              <TrollSeatsControl
-                trollSeats={trollSeats}
-                message={trollSeatsMessage}
-                onAddTrollSeat={addTrollSeat}
-                onDeductTrollSeat={deductTrollSeat}
-                onApproveCohost={approveTrollSeatCohost}
-                allowSeatPrice={true}
-              />
-            )}
           </>
         }
         
@@ -4207,40 +3958,29 @@ const handleLike = useCallback(async () => {
                      />
                    </DraggableWrapper>
                  )}
-               </AnimatePresence>
-             </>
-           )}
-          {/* Seat Request Queue (Host only) */}
-          {isHost && pendingSeatRequests.length > 0 && (
-            <div className="absolute top-20 left-3 z-[60]">
-              <SeatRequestQueue
-                requests={pendingSeatRequests}
-                onApprove={approveSeatRequest}
-                onDeny={denySeatRequest}
-              />
-            </div>
-          )}
+</AnimatePresence>
+              </>
+            )}
           </>
         }
-        chat={
-          <BroadcastChat
-            streamId={streamId!}
-            hostId={stream.user_id}
-            isHost={isHost}
-            isViewer={!userSeat && !isHost}
-            isGuest={!user}
-            isBattleActive={stream.is_battle}
-            isChatOpen={isChatOpen}
-            seats={seats}
-            broadcasterProfile={broadcasterProfile}
-            onMessageSent={() => setHasReceivedChatMessage(true)}
-          />
-        }
 
-        
-         modals={
-           <>
-             <CoinStoreModal
+        chat={
+            <BroadcastChat
+              streamId={streamId!}
+              hostId={stream.user_id}
+              isHost={isHost}
+              isViewer={true}
+              isGuest={!user}
+              isBattleActive={stream.is_battle}
+              isChatOpen={isChatOpen}
+              broadcasterProfile={broadcasterProfile}
+              onMessageSent={() => setHasReceivedChatMessage(true)}
+            />
+          }
+
+          modals={
+            <>
+              <CoinStoreModal
                isOpen={isCoinStoreOpen}
                onClose={() => setIsCoinStoreOpen(false)}
              />
@@ -4309,25 +4049,7 @@ const handleLike = useCallback(async () => {
                />
              )}
 
-             {/* Seat Request Modal (Viewers only) */}
-             <SeatRequestModal
-               isOpen={isSeatRequestModalOpen}
-               isApproved={myRequest?.status === 'approved'}
-               isDenied={myRequest?.status === 'denied'}
-               denyReason={myRequest?.deny_reason}
-               seatIndex={myRequest?.seat_index}
-               isConnecting={seatLiveKitStatus.state === 'connecting' || seatLiveKitStatus.state === 'publishing'}
-               onAccept={() => {
-                 // useSeatLiveKit handles the connection logic automatically when status becomes 'approved'
-                 setIsSeatRequestModalOpen(false);
-               }}
-               onDeny={() => {
-                 setIsSeatRequestModalOpen(false);
-               }}
-               onClose={() => setIsSeatRequestModalOpen(false)}
-             />
-
-             {/* Broadcaster Stats Modal */}
+{/* Broadcaster Stats Modal */}
              {showHostStats && isHost && (
                <BroadcasterStatsModal
                  stream={stream}
@@ -4410,20 +4132,14 @@ const handleLike = useCallback(async () => {
              <div>Stream ID: {stream.id?.substring(0, 8)}...</div>
              <div>Status: {stream.status} | Live: {String(stream.is_live)}</div>
              <div>LiveKit Room: {stream.livekit_room_name?.substring(0, 12)}...</div>
-             <div style={{ color: stream.egress_id ? '#0f0' : '#ff0' }}>
-               Egress ID: {stream.egress_id ? (stream.egress_id.substring(0, 12) + '...') : 'NULL ⚠️'}
-             </div>
-             <div style={{ marginTop: 8, fontSize: 10, color: '#888' }}>
-               Check server console for LiveKit/egress logs
-             </div>
            </div>
          )}
       </ErrorBoundary>
     </GiftSystemProvider>
-   )
- }
+  )
+}
 
-export default BroadcastPage
-function isStaffProfile(profile: UserProfile) {
+function isStaffProfile(profile: UserProfile | null) {
+  if (!profile) return false
   return isStaffUser(profile)
 }

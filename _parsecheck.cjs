@@ -1,0 +1,10 @@
+const fs = require('fs');
+const ts = require('typescript');
+const f = 'src/pages/admin/CoinPackPurchasesLedger.tsx';
+const source = fs.readFileSync(f, 'utf8');
+const sf = ts.createSourceFile(f, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let errors = [];
+ts.bindSourceFile(sf, ts.getCompilerOptions(), (diag) => { errors.push(diag); });
+console.log('Parse errors (Syntax-level):', errors.length);
+errors.forEach(d => console.log('  line', d.start.line, ts.flattenDiagnosticMessageText(d.messageText, '\n')));
+console.log('done');

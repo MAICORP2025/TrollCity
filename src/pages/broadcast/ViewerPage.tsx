@@ -15,7 +15,6 @@ import BroadcastControls from '../../components/broadcast/BroadcastControls'
 import BroadcastGrid from '../../components/broadcast/BroadcastGrid'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import UserActionModal from '../../components/broadcast/UserActionModal'
-import ViewerSeatBar from '../../components/broadcast/ViewerSeatBar'
 import GiftBoxModal from '../../components/broadcast/GiftBoxModal'
 
 import { GiftSystemProvider } from '../../lib/hooks/useGiftSystem'
@@ -24,8 +23,6 @@ import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useBoxCount } from '../../hooks/useBoxCount'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import useLiveKitRoom from '../../hooks/useLiveKitRoom'
-import { useTrollSeats } from '../../features/broadcast/entrance-effects/useTrollSeats'
-import { TrollSeatsOverlay } from '../../features/broadcast/entrance-effects/TrollSeatsOverlay'
 
 
 function getDisplayName(profile: any, fallback = 'Troll City') {
@@ -131,18 +128,6 @@ function ViewerPage() {
     leaveSeat,
   } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
 
-  const {
-    trollSeats,
-    profilesByUserId: trollSeatProfilesByUserId,
-    goldenRingByUserId: trollSeatGoldenRingByUserId,
-    requestOrPayForTrollSeat,
-  } = useTrollSeats({
-    streamId,
-    broadcasterId: (stream as any)?.broadcaster_id || (stream as any)?.user_id,
-    currentUserId: user?.id,
-    enabled: !!streamId && !!stream,
-  })
-
   const isUserOnStage = Boolean(
     userSeat?.status === 'active' && (userSeat?.user_id || userSeat?.guest_id),
   )
@@ -204,46 +189,7 @@ function ViewerPage() {
 
   const viewerLocalTracks = useMemo(() => [null, null] as [null, null], [])
 
-  const trollSeatTracksByUserId = useMemo(() => {
-    const map: Record<string, any> = {}
-
-    for (const seat of (trollSeats || [])) {
-      if (!seat.user_id || seat.status !== 'occupied') continue
-
-      const possibleIdentities = [
-        seat.user_id,
-        `user-${seat.user_id}`,
-        `cohost-${seat.user_id}`,
-        `viewer-${seat.user_id}`,
-      ]
-
-      const participantEntry = (remoteUsers || []).find((participant: any) => {
-        return possibleIdentities.includes(participant.identity)
-      })
-
-      if (!participantEntry) continue
-
-      const videoPublication = Array.from(participantEntry.videoTrackPublications?.values?.() || []).find(
-        (publication: any) => publication?.track
-      )
-
-      const audioPublication = Array.from(participantEntry.audioTrackPublications?.values?.() || []).find(
-        (publication: any) => publication?.track
-      )
-
-      map[seat.user_id] = {
-        participantIdentity: participantEntry.identity,
-        videoTrack: videoPublication?.track,
-        audioTrack: audioPublication?.track,
-        isMicMuted: !audioPublication?.track || audioPublication?.isMuted,
-        isCameraOff: !videoPublication?.track || videoPublication?.isMuted,
-      }
-    }
-
-    return map
-  }, [trollSeats, remoteUsers])
-
-  const isOfficer = !!(profile?.role === 'admin' || profile?.is_admin || profile?.role === 'officer' || (profile as any)?.is_troll_officer || (profile as any)?.is_lead_officer);
+   const isOfficer = !!(profile?.role === 'admin' || profile?.is_admin || profile?.role === 'officer' || (profile as any)?.is_troll_officer || (profile as any)?.is_lead_officer);
 
   const activeUserIds = useMemo(() => {
     if (!stream || !seats) return [];
@@ -635,165 +581,17 @@ function ViewerPage() {
           requestId: seatJoinTransition?.requestId ?? '',
         })
       }
-    )
+     )
     if (!tokenResponse.ok) throw new Error('Failed to get LiveKit publisher token')
     const { token, url } = await tokenResponse.json()
     return { token, url }
-  }, [streamId, seatJoinTransition, userSeat])
+  }, [streamId])
 
-  const disconnectAudienceAndStartPublisher = useCallback(async () => {
-    if (isSeatTransitioningRef.current) return
-    if (!user?.id) return
-    if (!seatJoinTransition) return
+   // Note: disconnectAudienceAndStartPublisher removed - seat queue system no longer supported
 
-    const requestId = seatJoinTransition.requestId
-    const sessionId = seatJoinTransition.sessionId
-    const seatIndex = seatJoinTransition.seatIndex
-
-    console.log('[SeatJoinTransition] approved seat detected:', { requestId, seatIndex })
-    isSeatTransitioningRef.current = true
-
-    try {
-      // ── 1. Disconnect audience room ─────────────────────────────────────
-      console.log('[SeatJoinTransition] disconnecting audience room')
-      await leaveLiveKitRoom()
-      hasJoinedAudienceRef.current = false
-      joiningAudienceRef.current = false
-      currentRoomKeyRef.current = null
-
-      // ── 2. Connect as publisher with real user.id identity ───────────────
-      console.log('[SeatJoinTransition] connecting as publisher, identity:', user.id)
-      const { token, url } = await fetchPublisherToken(user.id)
-
-      const publisherRoom = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-        videoCaptureDefaults: {
-          resolution: { width: 720, height: 1280 },
-          facingMode: 'user',
-        },
-        audioCaptureDefaults: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      })
-
-      publisherRoom.on(RoomEvent.Connected, () => {
-        console.log('[SeatJoinTransition] connected as publisher')
-      })
-      
-      // Add remote participant listeners to the publisher room so the seat user can still see the host
-      publisherRoom.on(RoomEvent.ParticipantConnected, (p) => {
-        setRemoteUsers(prev => [...prev.filter(old => old.identity !== p.identity), p]);
-      });
-      publisherRoom.on(RoomEvent.ParticipantDisconnected, (p) => {
-        setRemoteUsers(prev => prev.filter(old => old.identity !== p.identity));
-      });
-      publisherRoom.on(RoomEvent.TrackSubscribed, () => {
-        setRemoteUsers(prev => [...prev]);
-      });
-      publisherRoom.on(RoomEvent.TrackUnsubscribed, () => {
-        setRemoteUsers(prev => [...prev]);
-      });
-
-      publisherRoom.on(RoomEvent.Disconnected, () => {
-        console.log('[SeatJoinTransition] publisher room disconnected')
-        isSeatTransitioningRef.current = false
-      })
-
-      await publisherRoom.connect(url!, token)
-
-      // ── 3. Request camera/mic permission ─────────────────────────────────
-      console.log('[SeatJoinTransition] camera/mic requested')
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Camera/microphone access is not available in this browser or context. On iOS, open the page directly in Safari.')
-      }
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
-      })
-      const audioTrack = new LocalAudioTrack(mediaStream.getAudioTracks()[0])
-      const videoTrack = new LocalVideoTrack(mediaStream.getVideoTracks()[0])
-
-      // ── 4. Publish camera and audio tracks ────────────────────────────────
-      console.log('[SeatJoinTransition] tracks published')
-      await publisherRoom.localParticipant.publishTrack(videoTrack)
-      await publisherRoom.localParticipant.publishTrack(audioTrack)
-
-      // ── 5. mark_seat_request_joined ───────────────────────────────────────
-      console.log('[SeatJoinTransition] calling mark_seat_request_joined')
-      const { error: joinError } = await supabase.rpc('mark_seat_request_joined', {
-        p_request_id: requestId,
-        p_session_id: sessionId ?? '',
-      })
-      if (joinError) {
-        console.error('[SeatJoinTransition] mark_seat_request_joined error:', joinError)
-        await publisherRoom.disconnect()
-        await Promise.allSettled([
-          audioTrack?.stop?.() ?? Promise.resolve(),
-          videoTrack?.stop?.() ?? Promise.resolve(),
-        ]).catch(() => {})
-        throw joinError
-      }
-      console.log('[SeatJoinTransition] mark joined success')
-      isSeatTransitioningRef.current = false
-
-    } catch (err: any) {
-      console.error('[SeatJoinTransition] failed:', err)
-      isSeatTransitioningRef.current = false
-
-      // ── 7. Refund failed seat request ─────────────────────────────────────
-      try {
-        await supabase.rpc('refund_failed_seat_request', {
-          p_request_id: seatJoinTransition.requestId,
-          p_session_id: seatJoinTransition.sessionId ?? '',
-          p_refund_reason: 'publisher_join_failed',
-        })
-        toast.success('Refunded due to publisher join failure')
-      } catch (refundErr: any) {
-        console.error('[SeatJoinTransition] refund failed:', refundErr)
-      }
-
-      toast.error('Could not connect publisher. Seat funds have been refunded.')
-
-      // ── 8. Reconnect audience if still watching ───────────────────────────
-      if (isActive && user?.id) {
-        console.log('[SeatJoinTransition] reconnecting audience after failure')
-        viewerIdentityRef.current = `viewer-${streamId}-${user.id}`
-        try {
-          await joinAsAudience(viewerIdentityRef.current)
-          hasJoinedAudienceRef.current = true
-        } catch {
-          // best-effort; error already shown via toast
-        }
-      }
-    }
-  }, [
-    seatJoinTransition,
-    user?.id,
-    isActive,
-    streamId,
-    roomId,
-    supabase,
-    toast,
-    leaveLiveKitRoom,
-    joinAsAudience,
-    fetchPublisherToken,
-  ])
-
-  // Kick off handoff when useStreamSeats publishes an approved transition
-  useEffect(() => {
-    if (seatJoinTransition?.status === 'approved') {
-      disconnectAudienceAndStartPublisher()
-    }
-  }, [seatJoinTransition?.status, disconnectAudienceAndStartPublisher])
-
-  // ── Audience join (runs only when no active seat transition is in progress) ───
-  useEffect(() => {
+   // ── Audience join ───
+   useEffect(() => {
     if (!streamId || !roomId || !isActive) return
-    // Skip audience join while transitioning to publisher (publisher flow handles it)
-    if (seatJoinTransition) return
 
     if (user?.id) {
       const kickKey = getKickStorageKey(streamId, user.id)
@@ -856,7 +654,6 @@ function ViewerPage() {
     streamId,
     roomId,
     isActive,
-    seatJoinTransition,
     joinAsAudience,
     user?.id,
     navigate,
@@ -939,19 +736,6 @@ function ViewerPage() {
                 toggleCamera={() => {}}
                 toggleMicrophone={() => {}}
                 streamStatus={(stream as any).status}
-              />
-
-              <TrollSeatsOverlay
-                streamId={streamId}
-                broadcasterId={(stream as any)?.broadcaster_id || (stream as any)?.user_id}
-                currentUserId={user?.id}
-                isBroadcaster={false}
-                trollSeats={trollSeats}
-                profilesByUserId={trollSeatProfilesByUserId}
-                tracksByUserId={trollSeatTracksByUserId}
-                goldenRingByUserId={trollSeatGoldenRingByUserId}
-                onOpenUserStats={handleOpenUserAction}
-                onRequestSeat={requestOrPayForTrollSeat}
               />
 
               {isActive && (!remoteUsers || remoteUsers.length === 0) && !viewerError && (
