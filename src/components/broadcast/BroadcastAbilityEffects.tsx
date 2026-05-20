@@ -7,7 +7,7 @@ interface BroadcastAbilityEffectsProps {
   activeEffects: BroadcastActiveEffect[];
 }
 
-export default function BroadcastAbilityEffects({ activeEffects }: BroadcastAbilityEffectsProps) {
+export default function BroadcastAbilityEffects({ activeEffects = [] }: BroadcastAbilityEffectsProps) {
   const now = Date.now();
 
   return (

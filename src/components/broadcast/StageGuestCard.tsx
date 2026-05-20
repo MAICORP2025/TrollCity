@@ -1,7 +1,7 @@
 import React from 'react';
 import { Mic, MicOff, Video, VideoOff, MoreVertical, Circle } from 'lucide-react';
-import { cn } from '../lib/utils';
-import type { StagePass } from '../types/broadcast';
+import { cn } from '../../lib/utils';
+import type { StagePass } from '../../types/broadcast';
 
 interface StageGuestCardProps {
   pass: StagePass;

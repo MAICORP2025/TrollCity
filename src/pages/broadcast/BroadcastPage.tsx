@@ -10,43 +10,32 @@ import { isStaffUser } from '../../lib/userUtils'
 
 import { supabase, UserProfile } from '../../lib/supabase'
 
+import { useAuthStore } from '../../lib/store'
+import { useStreamStore } from '../../lib/streamStore'
+import { cn } from '../../lib/utils'
+
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 import { Stream, StagePass } from '../../types/broadcast'
-import StreamLayout from '../../components/broadcast/StreamLayout'
 import BroadcastChat from '../../components/broadcast/BroadcastChat'
 import BroadcastControls from '../../components/broadcast/BroadcastControls'
-import BattleView from '../../components/broadcast/BattleView'
-import BroadcastHeader from '../../components/broadcast/BroadcastHeader'
-import { CapacityStatus } from '../../components/CapacityStatus'
-import { useAuthStore } from '../../lib/store'
-import { useStreamStore } from '../../lib/streamStore'
-import AbilityBox from '@/components/broadcast/AbilityBox'
-import BroadcastAbilityEffects from '@/components/broadcast/BroadcastAbilityEffects'
-import BroadcasterStatsModal from '@/components/broadcast/BroadcasterStatsModal'
-import CoinStoreModal from '@/components/broadcast/CoinStoreModal'
+import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
+import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
+import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
-import GamePicker from '@/components/broadcast/GamePicker'
-import GiftBoxModal, { GiftTarget } from '@/components/broadcast/GiftBoxModal'
-import PinProductModal from '@/components/broadcast/PinProductModal'
-import OpenStagePassModal from '@/components/broadcast/OpenStagePassModal'
-import StagePassControl from '@/components/broadcast/StagePassControl'
+
+import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
+
+// Reusable label classes from broadcastTheme
+const guestLabel = 'rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]'
+const sectionLabel = 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm font-bold text-white/70 backdrop-blur'
+
+
+import BroadcastStageLayout from '../../components/broadcast/BroadcastStageLayout'
 import StagePassRequestsPanel from '@/components/broadcast/StagePassRequestsPanel'
-import BroadcastStageLayout from '@/components/broadcast/BroadcastStageLayout'
 
 import ShareModal from '@/components/broadcast/ShareModal'
-import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
-import TickerControlPanel from '@/components/broadcast/TickerControlPanel'
-import TrollopolyController from '@/components/broadcast/TrollopolyController'
-import TrollopolyLobby from '@/components/broadcast/TrollopolyLobby'
-import TrollopolyViewerUI from '@/components/broadcast/TrollopolyViewerUI'
-import TrollToeController from '@/components/broadcast/TrollToeController'
-import TrollToeViewerUI from '@/components/broadcast/TrollToeViewerUI'
-import TrollUsGameController from '@/components/broadcast/TrollUsGameController'
-import UserActionModal from '@/components/broadcast/UserActionModal'
-import UserStatsModal from '@/components/broadcast/UserStatsModal'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import TrollopolyCityBoard from '@/components/games/TrollopolyCityBoard'
 import { GlassCrackEffect } from '@/components/GlassCrackEffect'
 import { getCategoryConfig } from '@/config/broadcastCategories'
 import { useBattleState } from '@/hooks/useBattleState'
@@ -58,20 +47,27 @@ import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueCont
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStagePasses } from '@/hooks/useStagePasses'
 
-import { useTrollopoly } from '@/hooks/useTrollopoly'
-import { useTrollToe } from '@/hooks/useTrollToe'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
-import { useBroadcastEffects } from '@/contexts/BroadcastEffectsContext'
-import { GameAction } from '@/lib/game/InternetGameTypes'
-import { TrollopolyGameState, VehicleType, TROLLOPOLY_PROPERTIES } from '@/lib/game/types/TrollopolyTypes'
 import { GiftItem } from '@/lib/giftConstants'
 import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
 import { useTickerStore } from '@/stores/tickerStore'
 import { AnimatePresence } from 'framer-motion'
-import { LogOut, Dice5, Shield, Zap } from 'lucide-react'
+import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, ShieldCheck, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
+import AbilityBox from '@/components/broadcast/AbilityBox'
+import BattleView from '@/components/broadcast/BattleView'
+import BroadcastAbilityEffects from '@/components/broadcast/BroadcastAbilityEffects'
+import BroadcasterStatsModal from '@/components/broadcast/BroadcasterStatsModal'
+import CoinStoreModal from '@/components/broadcast/CoinStoreModal'
+import GiftBoxModal from '@/components/broadcast/GiftBoxModal'
+import OpenStagePassModal from '@/components/broadcast/OpenStagePassModal'
+import PinProductModal from '@/components/broadcast/PinProductModal'
+import TickerControlPanel from '@/components/broadcast/TickerControlPanel'
+import UserActionModal from '@/components/broadcast/UserActionModal'
+import UserStatsModal from '@/components/broadcast/UserStatsModal'
 
 // Debug counters for broadcast stability verification
 const DEBUG_COUNTERS = {
@@ -150,8 +146,7 @@ export function BroadcastPage() {
   // Determine if user is admin for video quality (1080p admin, 720p regular)
   const isStreamAdmin = !!(profile && (
     profile.role === 'admin' || profile.is_admin ||
-    profile.role === 'superadmin' || profile.is_superadmin ||
-    profile.role === 'owner'
+    profile.is_superadmin || profile.role === 'owner'
   ))
   
    const isOfficer = isStaffProfile(profile)
@@ -287,9 +282,7 @@ export function BroadcastPage() {
     await room.connect(livekitUrl, token)
   }
 
-  // Broadcast Effects Engine
-  const { triggerGiftEffect, boostCityHeat } = useBroadcastEffects()
-
+ 
   useEffect(() => {
     localTracksRef.current = localTracks
   }, [localTracks])
@@ -462,6 +455,7 @@ export function BroadcastPage() {
   const [hasReceivedChatMessage, setHasReceivedChatMessage] = useState(false)
   const streamStartTimeRef = useRef<Date | null>(null)
   const autoEndCheckedRef = useRef(false)
+  const tcpsMessageBubbleRef = useRef<{ message: string; type: string } | null>(null)
   
   const hasJoinedRef = useRef(false)
   const roomRef = useRef<Room | null>(null)
@@ -578,9 +572,7 @@ export function BroadcastPage() {
             audio: false,
           });
 
-          overlayTrack = new LocalVideoTrack(overlayStream.getVideoTracks()[0], {
-            name: 'camera-overlay'
-          });
+          overlayTrack = new LocalVideoTrack(overlayStream.getVideoTracks()[0]);
           setCameraOverlayTrackState(overlayTrack);
           console.log('[BroadcastPage] Camera overlay track created successfully');
         } catch (err) {
@@ -944,234 +936,12 @@ useEffect(() => {
     enabled: !!streamId && !!user,
   })
   const [isTickerPanelOpen, setIsTickerPanelOpen] = useState(false)
+  const handleCloseTickerPanel = useCallback(() => setIsTickerPanelOpen(false), [])
   const tickerSettings = useTickerStore((s) => s.settings)
 
-  // Troll Toe (Live Tic-Tac-Toe) game
-  const trollToe = useTrollToe({
-    streamId: streamId || '',
-    isHost,
-    enabled: !!streamId && !!(user || anonymousViewerIdRef.current),
-  })
+   // Quick Coin Store
+   const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false)
 
-  // Trollopoly game
-  const trollopoly = useTrollopoly({
-    streamId: streamId || '',
-    isHost,
-    enabled: !!streamId && !!(user || anonymousViewerIdRef.current),
-  })
-
-  // Game picker state
-  const [gamePickerOpen, setGamePickerOpen] = useState(false)
-  const [trollUsGameOpen, setTrollUsGameOpen] = useState(false)
-  const [activeGame, setActiveGame] = useState<'troll_toe' | 'troll_us' | 'trollopoly' | null>(null)
-  const [isTrollopolyDiceRolling, setIsTrollopolyDiceRolling] = useState(false)
-  const [isTrollopolyControllerOpen, setIsTrollopolyControllerOpen] = useState(false)
-  const [isTrollopolyViewerPanelDismissed, setIsTrollopolyViewerPanelDismissed] = useState(false)
-  
-  // Quick Coin Store
-  const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false)
-
-  useEffect(() => {
-    if (trollopoly.match && activeGame !== 'trollopoly') {
-      setActiveGame('trollopoly');
-    }
-    if (!trollopoly.match && activeGame === 'trollopoly') {
-      setActiveGame(null);
-      setIsTrollopolyControllerOpen(false);
-    }
-  }, [trollopoly.match?.id, activeGame]);
-
-  useEffect(() => {
-    setIsTrollopolyViewerPanelDismissed(false);
-  }, [trollopoly.match?.id, trollopoly.match?.status]);
-
-  // getTrackForUser - maps userId to LiveKit video/audio tracks for Troll Toe board
-  const getTrackForUser = useCallback((userId: string) => {
-    const isLocal = userId === user?.id;
-    if (isLocal) {
-      return {
-        videoTrack: localTracks?.[1] || undefined,
-        audioTrack: localTracks?.[0] || undefined,
-        isLocal: true,
-        hasVideo: !!localTracks?.[1],
-        hasAudio: !!localTracks?.[0],
-      };
-    }
-    // Find remote participant by identity
-    const participant = getRemoteParticipantsArray().find(
-      (p) => p.identity === userId || p.identity.substring(0, 8) === userId.replace(/-/g, '').substring(0, 8)
-    );
-    if (!participant) {
-      return { videoTrack: undefined, audioTrack: undefined, isLocal: false, hasVideo: false, hasAudio: false };
-    }
-    const videoPubs = Array.from((participant.videoTrackPublications as any)?.values() || []);
-    const audioPubs = Array.from((participant.audioTrackPublications as any)?.values() || []);
-    const videoPub = videoPubs.find((p: any) => p.track && p.isSubscribed) || videoPubs.find((p: any) => p.track);
-    const audioPub = audioPubs.find((p: any) => p.track && p.isSubscribed) || audioPubs.find((p: any) => p.track);
-    return {
-      videoTrack: videoPub?.track,
-      audioTrack: audioPub?.track,
-      isLocal: false,
-      hasVideo: !!videoPub?.track,
-      hasAudio: !!audioPub?.track,
-    };
-  }, [user?.id, localTracks, remoteParticipants])
-
-  // Get video tracks for all participants for trollopoly
-  const getVideoTracksForParticipants = useCallback(() => {
-    const tracks: { [userId: string]: any } = {};
-
-    // Add local user track
-    if (user?.id && localTracks?.[1]) {
-      tracks[user.id] = localTracks[1];
-    }
-
-    // Add remote participant tracks
-    getRemoteParticipantsArray().forEach(participant => {
-      const videoPubs = Array.from((participant.videoTrackPublications as any)?.values() || []);
-      const videoPub = videoPubs.find((p: any) => p.track && p.isSubscribed) || videoPubs.find((p: any) => p.track);
-      if (videoPub?.track) {
-        tracks[participant.identity] = videoPub.track;
-      }
-    });
-
-    return tracks;
-  }, [user?.id, localTracks, remoteParticipants]);
-
-  const trollopolyCityState = useMemo<TrollopolyGameState | null>(() => {
-    const match = trollopoly.match;
-    if (!match) return null;
-
-    const die1 = match.lastDiceRoll ? Math.min(6, Math.max(1, match.lastDiceRoll - 1)) : 1;
-    const die2 = match.lastDiceRoll ? Math.max(1, match.lastDiceRoll - die1) : 1;
-    const ownedPropertiesByPlayer = new Map<string, number[]>();
-
-    match.properties.forEach((property) => {
-      if (!property.ownerId) return;
-      const owned = ownedPropertiesByPlayer.get(property.ownerId) || [];
-      owned.push(property.id);
-      ownedPropertiesByPlayer.set(property.ownerId, owned);
-    });
-
-    const vehicleTypes: VehicleType[] = ['sports_car', 'limousine', 'taxi', 'police_car', 'hover_car'];
-    const currentPlayer = match.players[match.currentTurnIndex];
-    const currentLanding = currentPlayer ? match.properties.find((property) => property.id === currentPlayer.position) : null;
-
-    return {
-      matchId: match.id,
-      gameType: 'trollopoly',
-      status: match.status === 'finished' ? 'finished' : 'active',
-      phase: match.status === 'finished'
-        ? 'finished'
-        : currentLanding && currentLanding.price > 0 && !currentLanding.ownerId
-          ? 'property_action'
-          : 'waiting_for_roll',
-      players: match.players.map((player, index) => ({
-        id: player.id,
-        username: player.username,
-        score: player.balance,
-        isHost: player.id === stream?.user_id || index === 0,
-        isConnected: player.isConnected,
-        position: player.position % TROLLOPOLY_PROPERTIES.length,
-        coins: player.balance,
-        properties: ownedPropertiesByPlayer.get(player.id) || [],
-        isInJail: false,
-        jailTurns: 0,
-        hasGetOutOfJailFree: false,
-        isBankrupt: player.isBankrupt,
-        vehicleType: vehicleTypes[index % vehicleTypes.length],
-        vehicleColor: ['#ff4444', '#4444ff', '#44ff44', '#ffff44'][index % 4],
-        cameraEnabled: true,
-        microphoneEnabled: true,
-        doublesCount: 0,
-      })),
-      properties: TROLLOPOLY_PROPERTIES.map((property) => {
-        const legacyProperty = match.properties.find((item) => item.id === property.id);
-        return {
-          ...property,
-          name: legacyProperty?.name ?? property.name,
-          price: legacyProperty?.price ?? property.price,
-          baseRent: legacyProperty?.rent ?? property.baseRent,
-          ownerId: legacyProperty?.ownerId || undefined,
-          houseCount: legacyProperty?.buildingLevel ?? 0,
-          hasHotel: false,
-          isMortgaged: false,
-        };
-      }),
-      currentPlayerIndex: match.currentTurnIndex,
-      timerRemaining: 0,
-      winnerId: match.winnerId || undefined,
-      dice: {
-        die1,
-        die2,
-        isRolling: isTrollopolyDiceRolling,
-        animationProgress: 0,
-      },
-      cards: {
-        chance: [],
-        community: [],
-        chanceIndex: 0,
-        communityIndex: 0,
-      },
-      spectators: [],
-      spectatorCount: Math.max(0, remoteParticipants.size - match.players.length),
-      streamId: streamId || '',
-      chatChannelId: streamId || match.id,
-      gameLog: [],
-      freeParkingCoins: 0,
-      gameBalance: match.gameBalance || 0,
-      turnCount: 0,
-      startTime: new Date(match.createdAt).getTime(),
-    };
-  }, [trollopoly.match, stream?.user_id, streamId, remoteParticipants.size, isTrollopolyDiceRolling]);
-
-  const handleTrollopolyCityAction = useCallback(async (action: GameAction) => {
-    if (action.type === 'roll_dice') {
-      if (isTrollopolyDiceRolling) return;
-
-      setIsTrollopolyDiceRolling(true);
-      const rollPromise = trollopoly.rollDice().catch((err) => {
-        console.error('[BroadcastPage] Trollopoly roll failed:', err);
-        toast.error('Dice roll failed');
-        return 0;
-      });
-
-      try {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      } finally {
-        setIsTrollopolyDiceRolling(false);
-      }
-      void rollPromise;
-      return;
-    }
-
-    if (action.type === 'buy_property') {
-      const currentPlayer = trollopoly.match?.players[trollopoly.match.currentTurnIndex];
-      if (currentPlayer) {
-        trollopoly.buyProperty(currentPlayer.position);
-      }
-      return;
-    }
-
-    if (action.type === 'end_turn') {
-      trollopoly.endTurn();
-    }
-  }, [isTrollopolyDiceRolling, trollopoly]);
-
-  // Set broadcast mode to disable TrollEngine while this route is active.
-  useEffect(() => {
-    PreflightStore.setInBroadcast(true);
-    if (import.meta.env.DEV) console.log('[BroadcastPage] Broadcast mode enabled - TrollEngine disabled');
-    
-    return () => {
-      window.setTimeout(() => {
-        if (!/^\/(broadcast|watch|live)(\/|$)/.test(window.location.pathname)) {
-          PreflightStore.setInBroadcast(false);
-          if (import.meta.env.DEV) console.log('[BroadcastPage] Broadcast mode disabled - TrollEngine enabled');
-        }
-      }, 0);
-    };
-  }, []);
 
   const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
     streamId: streamId || '',
@@ -1206,47 +976,6 @@ useEffect(() => {
     isBroadcaster: isHost,
     onStreamUpdate: updateStreamPatch,
   });
-
-  const trollopolyPlayerMedia = useMemo(() => {
-    const media: Record<string, { videoTrack?: any; audioTrack?: any; isLocal?: boolean }> = {};
-    const localIdentity = user?.id || anonymousViewerIdRef.current;
-
-    if (localIdentity && combinedLocalTracks) {
-      media[localIdentity] = {
-        audioTrack: combinedLocalTracks[0] || undefined,
-        videoTrack: combinedLocalTracks[1] || undefined,
-        isLocal: true,
-      };
-    }
-
-    if (isHost && stream?.user_id && localTracks) {
-      media[stream.user_id] = {
-        audioTrack: localTracks[0] || undefined,
-        videoTrack: localTracks[1] || undefined, // Use original localTracks for host
-        isLocal: true, // Host is always local
-      };
-    }
-
-    const assignParticipantMedia = (userId: string | undefined, participant: RemoteParticipant) => {
-      if (!userId) return;
-      const videoPubs = Array.from((participant.videoTrackPublications as any)?.values() || []);
-      const audioPubs = Array.from((participant.audioTrackPublications as any)?.values() || []);
-      const videoPub = videoPubs.find((p: any) => p.track && p.isSubscribed) || videoPubs.find((p: any) => p.track);
-      const audioPub = audioPubs.find((p: any) => p.track && p.isSubscribed) || audioPubs.find((p: any) => p.track);
-
-      media[userId] = {
-        videoTrack: videoPub?.track,
-        audioTrack: audioPub?.track,
-        isLocal: false,
-      };
-    };
-
-    getRemoteParticipantsArray().forEach((participant) => {
-      assignParticipantMedia(participant.identity, participant);
-    });
-
-    return media;
-  }, [user?.id, combinedLocalTracks, localTracks, isHost, stream?.user_id, remoteParticipants]);
 
 // Battle State
    const { 
@@ -1423,8 +1152,23 @@ useEffect(() => {
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
   const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
   const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
+  const handleClosePinProductModal = useCallback(() => setIsPinProductModalOpen(false), [])
   const handleOpenStagePassModal = useCallback(() => setIsStagePassModalOpen(true), [])
   const handleCloseStagePassModal = useCallback(() => setIsStagePassModalOpen(false), [])
+
+  const handleOpenStagePassConfirm = useCallback(async (count: number, priceCoins: number) => {
+    try {
+      await (stagePassesHook as any).openStagePasses(count, priceCoins);
+      await (stagePassesHook as any).loadStagePasses?.();
+      setIsStagePassModalOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to open Stage Passes');
+    }
+  }, [stagePassesHook])
+  const handleOpenCoinStore = useCallback(() => setIsCoinStoreOpen(true), [])
+  const handleCloseCoinStore = useCallback(() => setIsCoinStoreOpen(false), [])
+  const handleOpenAbilityBox = useCallback(() => setIsAbilityBoxOpen(true), [])
+  const handleCloseAbilityBox = useCallback(() => setIsAbilityBoxOpen(false), [])
 
   const fetchHostStreamFallback = async () => {
     if (!user?.id) return null
@@ -2878,6 +2622,7 @@ user?.id, // user.id is used for identity
      setGiftRecipientId(userId)
      setIsGiftModalOpen(true)
    }, [])
+   const handleCloseGiftModal = useCallback(() => setIsGiftModalOpen(false), [])
 
    const onGiftAll = useCallback((ids: string[]) => {
      toast.info(`Gift sent to ${ids.length} users`)
@@ -2892,6 +2637,7 @@ user?.id, // user.id is used for identity
    const handleCloseUserAction = useCallback(() => {
      setUserActionTarget(null)
    }, [])
+   const handleCloseShareModal = useCallback(() => setIsShareModalOpen(false), [])
 
    const handleOpenUserStats = useCallback((statsInfo: {
      userId: string;
@@ -3445,14 +3191,7 @@ const handleLike = useCallback(async () => {
   // Only treat as mobile viewer after mount and when actually on mobile width
   const isMobileViewer = hasMounted && isMobileWidth && !isHost;
 
-  // Check if game is active that should hide add/remove box buttons
-  const isTrollopolyInProgress = Boolean(trollopoly.match && trollopoly.match.phase !== 'finished' && trollopoly.match.status !== 'finished');
-  const isGameActive = Boolean(
-    isTrollopolyInProgress ||
-    (activeGame === 'troll_toe' && trollToe.match && trollToe.match.phase !== 'ended') ||
-    activeGame === 'troll_us'
-  );
-  const streamLayoutStats = useMemo(() => ({
+   const streamLayoutStats = useMemo(() => ({
     viewers: viewerCount > 0 ? viewerCount : Number(stream?.current_viewers ?? stream?.viewer_count ?? remoteParticipants.size ?? 0),
     likes: Number((stream as any)?.total_likes ?? (stream as any)?.like_count ?? 0),
     coinsEarned: Number((stream as any)?.total_gifts_coins ?? (stream as any)?.coin_earnings ?? 0),
@@ -3476,17 +3215,8 @@ const handleLike = useCallback(async () => {
   })), [activeViewerProfiles])
   const broadcastGridRemoteUsers = remoteUsers
   const handleToggleBattleMode = useCallback(() => setIsBattleMode((active) => !active), [])
-  const handleToggleGamePicker = useCallback(() => setGamePickerOpen((open) => !open), [])
-  const handleGameSelect = useCallback((game: 'troll_toe' | 'troll_us') => {
-    console.log('[BroadcastPage] Game selected:', game)
-    setActiveGame(game)
-  }, [])
-  const handleSwipeUp = useCallback(() => navigateToAdjacentStream('up'), [navigateToAdjacentStream])
-  const handleSwipeDown = useCallback(() => navigateToAdjacentStream('down'), [navigateToAdjacentStream])
-  const handleTrollToeFog = useMemo(
-    () => (!isHost && trollToe.match?.fogEnabled && trollToe.match?.phase === 'live' ? trollToe.useFog : undefined),
-    [isHost, trollToe.match?.fogEnabled, trollToe.match?.phase, trollToe.useFog]
-  )
+   const handleSwipeUp = useCallback(() => navigateToAdjacentStream('up'), [navigateToAdjacentStream])
+
   const shouldShowRandomBattleArena =
     stream?.battle_mode === 'random_queue' &&
     !!stream?.battle_id &&
@@ -3495,8 +3225,8 @@ const handleLike = useCallback(async () => {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-dvh bg-black text-white">
-        <p className="text-red-500">{error}</p>
+      <div className={cn('flex flex-col items-center justify-center h-dvh', theme.pageBg + ' text-white')}>
+        <p className="text-red-300">{error}</p>
         <Link to="/">Go Home</Link>
       </div>
     )
@@ -3506,11 +3236,11 @@ const handleLike = useCallback(async () => {
   // Use skeleton/placeholder instead of blocking with spinner
   if (!stream) {
     return (
-      <div className="flex items-center justify-center h-dvh bg-black">
-        <div className="text-white text-center">
+      <div className={cn('flex items-center justify-center h-dvh', theme.pageBg + ' text-white')}>
+        <div className="text-center">
           <div className="animate-pulse">
-            <div className="h-4 bg-gray-700 rounded w-48 mb-4"></div>
-            <div className="h-3 bg-gray-600 rounded w-32"></div>
+            <div className="h-4 bg-white/10 rounded w-48 mb-4"></div>
+            <div className="h-3 bg-white/[0.06] rounded w-32"></div>
           </div>
         </div>
       </div>
@@ -3561,562 +3291,665 @@ const handleLike = useCallback(async () => {
    function handleBlock(userId: string, reason?: string) {
    }
 
-  return (
-    <GiftSystemProvider streamId={streamId} defaultReceiverId={stream?.user_id}>
-      <ErrorBoundary>
-        {/* Fullscreen screenshare overlay - disabled, using BroadcastGrid instead */}
-        {/* Screen share now displays through BroadcastGrid with object-fit: cover */}
-        <StreamLayout
-        isChatOpen={isChatOpen}
-        onToggleChat={handleToggleChat}
-        onLike={handleLike}
-        hideHeader={true}
-        forceViewMode={isMobileViewer ? 'vertical' : 'fullscreen'}
-        stats={streamLayoutStats}
-        
-          header={
-          <BroadcastHeader
-            stream={stream}
-            isHost={isHost}
-            liveViewerCount={liveViewerCount}
-            handleLike={handleLike}
-            boxCount={(stream as any).box_count || 1}
-                  onAddBox={undefined}
-                  onRemoveBox={undefined}
-            onClose={handleLeave}
-            isMobile={isMobileViewer}
-          />
-        }
-        
-        video={
-          <div
-            className="flex flex-col h-full"
-            style={!isHost ? { touchAction: 'pan-y' } : undefined}
-          >
-            {/* Host Stage Card + Stage Guest Grid */}
-            <BroadcastStageLayout
-              hostName={broadcasterProfile?.username || 'Broadcaster'}
-              hostAvatarUrl={broadcasterProfile?.avatar_url || null}
-              hostIsMicOn={micEnabled}
-              hostIsCamOn={cameraEnabled}
-              hostIsScreenSharing={isScreenSharing}
-              hostHasVideo={!!(localTracks && localTracks[1])}
-              livePasses={stagePassesHook.stagePasses.filter(
-                (p: StagePass) => p.status === 'approved' || p.status === 'live'
-              )}
-              guestMicCam={{}} // mic/cam state filled as LiveKit track data arrives
-              coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
-              isHost={isHost}
-              hasOpenPass={stagePassesHook.stagePasses.some((p: StagePass) => p.status === 'open')}
-              currentUserPassStatus={stagePassesHook.currentUserStagePass?.status || null}
-              onRequestPass={async () => {
-                const openPass = stagePassesHook.stagePasses.find((p: StagePass) => p.status === 'open');
-                if (openPass) {
-                  const result = await stagePassesHook.requestStagePass(openPass.id);
-                  if (!result.success) {
-                    toast.error(result.error || 'Failed to request Stage Pass');
-                  }
-                }
-              }}
-              onOpenPassModal={handleOpenStagePassModal}
-              onRemoveStageGuest={(passId: string) => {
-                void stagePassesHook.removeStageGuest(passId);
-                void stagePassesHook.refetch();
-              }}
-              onApproveStagePass={stagePassesHook.approveStagePass}
-              onDenyStagePass={stagePassesHook.denyStagePass}
-             className=""
-            />
+  function startDrag(event: React.MouseEvent<HTMLDivElement>): void {
+    // Start a horizontal resize for the desktop chat panel
+    try {
+      event.preventDefault();
+      const divider = event.currentTarget as HTMLDivElement;
+      const panel = divider.parentElement as HTMLElement | null;
+      if (!panel) return;
 
-            {/* Drag to reorder helper chip — host only (no-seats launch: omitted) */}
-          </div>
-        }
+      const startX = event.clientX;
+      const startWidth = panel.getBoundingClientRect().width;
 
-        controls={
-          <>
-            <BroadcastControls
-              stream={stream}
-              isHost={isHost}
-              isOnStage={false}
-              liveViewerCount={liveViewerCount}
-              chatOpen={isChatOpen}
-              toggleChat={handleToggleChat}
-              onGiftHost={handleGiftHost}
-              onShare={handleOpenShareModal}
-              onLeave={handleLeaveSeat}
-              onBoxCountUpdate={undefined}
-              onStreamEnd={handleStreamEnd}
-              handleLike={handleLike}
-              toggleBattleMode={handleToggleBattleMode}
-              localTracks={localTracks}
-              toggleCamera={toggleCamera}
-              toggleMicrophone={toggleMicrophone}
-              onPinProduct={handlePinProduct}
-              isMicOn={micEnabled}
-              isCamOn={cameraEnabled}
-              boxCount={(stream as any).box_count || 1}
-              setBoxCount={undefined}
-              onRefreshStream={refreshStream}
-              isBattleActive={stream.is_battle}
-              onStartBattle={isHost ? handleStartBattle : undefined}
-              isLive={stream.status === 'live'}
-              onTrollToeController={isHost && stream.status === 'live' ? handleToggleGamePicker : undefined}
-              trollToeActive={gamePickerOpen || trollToe.isControllerOpen}
-              onGameSelect={handleGameSelect}
-              activeGame={activeGame}
-              activeViewers={activeViewerProfiles}
-              selectedBattleTheme={selectedBattleTheme}
-              onBattleThemeChange={setSelectedBattleTheme}
-              onOpenStagePass={isHost ? handleOpenStagePassModal : undefined}
-            />
-          </>
-        }
-        
-        overlays={
-          <>
-            <AnimatePresence>
-              {isHost && trollToe.isControllerOpen && (
-                <div className="absolute top-16 right-3 z-[70] pointer-events-auto">
-                  <TrollToeController
-                    streamId={streamId!}
-                    match={trollToe.match}
-                    onResetBoard={trollToe.resetGame}
-                    onOpenSideSelection={trollToe.openSideSelection}
-                    onCloseSideSelection={trollToe.closeSideSelection}
-                    onToggleFog={trollToe.toggleFog}
-                    onSetFogCost={trollToe.setFogCost}
-                    onSetRewardAmount={trollToe.setRewardAmount}
-                    onAssignPlayers={trollToe.assignQueuedPlayers}
-                    onClose={() => { trollToe.setControllerOpen(false); setActiveGame(null); }}
-                  />
-                </div>
-              )}
-            </AnimatePresence>
+      const minWidth = 200;
+      const maxWidth = 720;
 
-            {/* Troll Us Game Controller (host only) */}
-            <AnimatePresence>
-              {isHost && trollUsGameOpen && (
-                <div className="absolute top-16 right-3 z-[70] pointer-events-auto">
-                  <TrollUsGameController
-                    streamId={streamId!}
-                    onClose={() => { setTrollUsGameOpen(false); setActiveGame(null); }}
-                  />
-                </div>
-              )}
-            </AnimatePresence>
-            {/* Game Picker Dropdown */}
-            <AnimatePresence>
-              {false && (
-                <div className="absolute top-16 right-3 z-[65] pointer-events-auto">
-                  <GamePicker
-                    activeGame={activeGame}
-                    category={stream?.category}
-                    onSelectGame={(game) => {
-                      setActiveGame(game)
-                      setGamePickerOpen(false)
-                      if (game === 'troll_toe') {
-                        trollToe.setControllerOpen(true)
-                      }
-                      if (game === 'trollopoly') {
-                        trollopoly.createGame()
-                        setIsTrollopolyControllerOpen(true)
-                      }
-                    }}
-                    onClose={() => setGamePickerOpen(false)}
-                  />
-                </div>
-              )}
-            </AnimatePresence>
+      function onMouseMove(e: MouseEvent) {
+        const dx = startX - e.clientX; // dragging left increases width
+        let newWidth = startWidth + dx;
+        if (newWidth < minWidth) newWidth = minWidth;
+        if (newWidth > maxWidth) newWidth = maxWidth;
+        panel.style.width = `${Math.round(newWidth)}px`;
+      }
 
-           {/* Troll Toe Viewer UI */}
-           <AnimatePresence>
-             {!isHost && trollToe.match && trollToe.match.phase !== 'waiting' && (
-               <TrollToeViewerUI
-                 match={trollToe.match}
-                 viewerStatus={trollToe.viewerStatus}
-                 viewerTeam={trollToe.viewerTeam}
-                 currentUserId={user?.id || anonymousViewerIdRef.current}
-                 trollCoins={profile?.troll_coins || 0}
-                 onJoinSide={trollToe.joinSide}
-                 onUseFog={trollToe.useFog}
-                 canUseFog={trollToe.canUseFog(user?.id || anonymousViewerIdRef.current)}
-               />
-             )}
-           </AnimatePresence>
+      function onMouseUp() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
 
-           {/* Trollopoly Lobby Overlay */}
-           <AnimatePresence>
-             {trollopoly.match && (trollopoly.match.phase === 'lobby' || trollopoly.match.phase === 'piece_selection') && (
-               <TrollopolyLobby
-                 match={trollopoly.match}
-                 isHost={isHost}
-                 currentUserId={user?.id}
-                 availablePieces={trollopoly.availablePieces}
-                 onJoin={trollopoly.joinGame}
-                 onLeave={trollopoly.leaveGame}
-                 onSelectPiece={trollopoly.selectPiece}
-                 onStartGame={trollopoly.startGame}
-                 onClose={() => { trollopoly.resetGame(); setActiveGame(null); }}
-               />
-             )}
-           </AnimatePresence>
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    } catch (err) {
+      // ignore
+    }
+  }
 
-           {/* Trollopoly Board (Game View) */}
-           <AnimatePresence>
-             {trollopoly.match && trollopoly.match.phase === 'playing' && trollopolyCityState && (
-               <div className="fixed inset-0 z-40 bg-black overflow-hidden">
-                 <TrollopolyCityBoard
-                   gameState={trollopolyCityState}
-                   playerId={user?.id || ''}
-                   onAction={handleTrollopolyCityAction}
-                   isHost={isHost}
-                   isSpectator={!trollopoly.match.players.some((player) => player.id === user?.id)}
-                   streamId={streamId || trollopoly.match.streamId}
-                   playerMedia={trollopolyPlayerMedia}
-                 />
-                 {!isHost && trollopoly.match.players.some((player) => player.id === user?.id) && (
-                   <button
-                     type="button"
-                     onClick={() => trollopoly.leaveGame()}
-                     className="absolute right-3 top-3 z-[80] flex items-center gap-2 rounded-full border border-red-400/40 bg-red-950/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-red-100 shadow-2xl backdrop-blur hover:bg-red-900"
-                     title="Leave Trollopoly"
-                   >
-                     <LogOut size={14} />
-                     Leave Game
-                   </button>
-                 )}
-               </div>
-             )}
-           </AnimatePresence>
+    return (
+      <GiftSystemProvider streamId={streamId} defaultReceiverId={stream?.user_id}>
+          <ErrorBoundary>
 
-           {/* Trollopoly Controller (Host Only) */}
-           <AnimatePresence>
-             {isHost && trollopoly.match && trollopoly.match.status !== 'finished' && !isTrollopolyControllerOpen && (
-               <DraggableWrapper
-                 initialPos={{
-                   x: Math.max(20, Math.floor(window.innerWidth / 2) - 92),
-                   y: Math.max(20, window.innerHeight - 88),
-                 }}
-                 bounds={{
-                   left: 8,
-                   right: Math.max(8, window.innerWidth - 220),
-                   top: 8,
-                   bottom: Math.max(8, window.innerHeight - 56),
-                 }}
-               >
-                 <button
-                   onClick={() => setIsTrollopolyControllerOpen(true)}
-                   className="flex cursor-move items-center gap-2 rounded-full border border-amber-400/40 bg-slate-950/95 px-5 py-3 text-sm font-black uppercase tracking-wide text-white shadow-2xl shadow-amber-500/20 backdrop-blur hover:bg-slate-900"
-                   title="Drag to move. Click to open game controls."
-                 >
-                   <Dice5 size={18} className="text-amber-300" />
-                   Game Controls
-                 </button>
-               </DraggableWrapper>
-             )}
+          {/* ── Outer layout: header + 3-column grid + bottom bar + footer ── */}
+          <div className={cn(theme.pageShell, 'flex flex-col')}>
 
-             {isHost && trollopoly.match && trollopoly.match.status !== 'finished' && isTrollopolyControllerOpen && (
-               <DraggableWrapper
-                 initialPos={{
-                   x: Math.max(20, window.innerWidth - 320),
-                   y: 112,
-                 }}
-                 bounds={{
-                   left: 8,
-                   right: Math.max(8, window.innerWidth - 300),
-                   top: 8,
-                   bottom: Math.max(8, window.innerHeight - 440),
-                 }}
-               >
-                 <TrollopolyController
-                   match={trollopoly.match}
-                   onStartGame={trollopoly.startGame}
-                   onEndGame={trollopoly.endGame}
-                   onResetGame={trollopoly.resetGame}
-                   onClose={() => setIsTrollopolyControllerOpen(false)}
-                 />
-               </DraggableWrapper>
-             )}
-           </AnimatePresence>
+            {/* Background layers — identical to Sidebar ShellBackdrop */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.13),transparent_44%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-300/65 to-transparent" />
 
-           {/* Trollopoly Viewer UI */}
-           <AnimatePresence>
-             {!isHost && !isTrollopolyViewerPanelDismissed && trollopoly.match && (trollopoly.match.phase === 'playing' || trollopoly.match.status === 'finished') && (
-               <TrollopolyViewerUI
-                 match={trollopoly.match}
-                 currentUserId={user?.id}
-                 userBalance={profile?.troll_coins}
-                 onClose={() => setIsTrollopolyViewerPanelDismissed(true)}
-               />
-             )}
-           </AnimatePresence>
-
-            {/* Glass Crack Full Page Effect */}
-           <GlassCrackEffect />
-
-           {/* TCPS Private Message Bubble */}
-           {stream && <TCPSMessageBubble broadcasterId={stream.user_id} />}
-
-           {/* Broadcast Ability Effects Overlay */}
-           <BroadcastAbilityEffects activeEffects={abilityActiveEffects} />
-
-           {/* Ability Box Floating Button */}
-           {userAbilities.length > 0 && (
-             <div className="absolute bottom-20 right-3 z-[50] pointer-events-auto">
-               <button
-                 onClick={() => setIsAbilityBoxOpen(true)}
-                 className="relative bg-purple-600/90 hover:bg-purple-500 text-white p-3 rounded-full shadow-lg shadow-purple-500/30 transition-all hover:scale-110"
-                 title="Open Ability Box - Use abilities during broadcast"
-               >
-                 <Shield className="w-5 h-5" />
-                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                   {userAbilities.reduce((sum, a) => sum + a.quantity, 0)}
-                 </span>
-               </button>
-             </div>
-           )}
-
-            {/* Ticker Control Button + Panel (host only) - hide during active game */}
-            {isHost && !isGameActive && (
-              <>
-                <DraggableWrapper
-                  initialPos={{ x: 20, y: window.innerHeight - 180 }}
-                >
-                  <button
-                    onClick={() => setIsTickerPanelOpen(!isTickerPanelOpen)}
-                    className="relative bg-cyan-600/90 hover:bg-cyan-500 text-white p-3 rounded-full shadow-lg shadow-cyan-500/30 transition-all hover:scale-110"
-                    title="Open Ticker Control - Send scrolling announcements"
-                  >
-                    <Zap className="w-5 h-5" />
-                    {tickerSettings.is_enabled && (
-                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse" />
-                    )}
-                  </button>
-                </DraggableWrapper>
-
-                <AnimatePresence>
-                  {isTickerPanelOpen && (
-                      <DraggableWrapper
-                      initialPos={{ x: 12, y: Math.min(window.innerHeight - 420, window.innerHeight * 0.3) }}
-                    >
-                      <TickerControlPanel
-                        onSendMessage={(content, category, isPriority, tags) => {
-                          if (isPriority) {
-                            tickerSendPriority(content, category, tags);
-                          } else {
-                            tickerSendMessage(content, category, false, tags);
-                          }
-                        }}
-                        onBroadcastSettings={tickerBroadcastSettings}
-                        onDeleteMessage={tickerDeleteMessage}
-                        onClose={() => setIsTickerPanelOpen(false)}
-                        disableClose={activeGame === 'trollopoly'}
-                      />
-                    </DraggableWrapper>
-                  )}
- </AnimatePresence>
-               </>
-             )}
-
-            {/* Stage Pass Requests Panel — host only */}
-            {isHost && (
-              <StagePassRequestsPanel
-                requests={stagePassesHook.requests}
-                onApprove={(id: string) => { void stagePassesHook.approveStagePass(id); }}
-                onDeny={(id: string) => { void stagePassesHook.denyStagePass(id); }}
-                className="absolute top-3 left-3 z-[65] w-[280px]"
+            {/* TOP HEADER */}
+            {!isMobileViewer && (
+              <BroadcastNeonHeader
+                stream={stream}
+                broadcasterProfile={broadcasterProfile ? {
+                  username: broadcasterProfile.username,
+                  avatar_url: broadcasterProfile.avatar_url,
+                  display_name: broadcasterProfile.display_name,
+                } : null}
+                isHost={isHost}
+                liveViewerCount={liveViewerCount}
+                handleLike={handleLike}
+                onGift={handleGiftHost}
+                onShare={handleOpenShareModal}
+                onEndStream={handleStreamEnd}
+                coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+                onOpenCoinStore={handleOpenCoinStore}
+                isLive={stream.status === 'live'}
+                streamStartedAt={stream.started_at}
               />
             )}
-          </>
-        }
 
-        chat={
-            <BroadcastChat
-              streamId={streamId!}
-              hostId={stream.user_id}
-              isHost={isHost}
-              isViewer={true}
-              isGuest={!user}
-              isBattleActive={stream.is_battle}
-              isChatOpen={isChatOpen}
-              broadcasterProfile={broadcasterProfile}
-              onMessageSent={() => setHasReceivedChatMessage(true)}
+            {/* ── MAIN CONTENT GRID (3-column) ── */}
+            <main
+              className="grid flex-1 min-h-0 gap-4 px-5 py-4"
+              style={{ gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(380px, 0.85fr) 360px' }}
+            >
+              {/* ── LEFT: Host Video Card ── */}
+              <section className={cn('relative min-h-0 overflow-hidden', theme.hostVideoPanel)}>
+
+                {/* Camera starting fallback — shows when no video track is available */}
+                {(() => {
+                  const hostCamTrack = isHost
+                    ? (localTracks?.[1] ?? null)
+                    : (() => {
+                        const broadcasterUserId = stream?.user_id;
+                        if (!broadcasterUserId || !remoteParticipants) return null;
+                        let vt: LocalVideoTrack | RemoteVideoTrack | undefined;
+                        remoteParticipants.forEach((rp: RemoteParticipant) => {
+                          if (rp.identity === broadcasterUserId) {
+                            const pub = (rp as any).videoTrackPublications
+                              ? Array.from((rp as any).videoTrackPublications.values())
+                              : [];
+                            const found = pub.find((p: any) => p.track && typeof (p.track as any).attach === 'function');
+                            if (found) vt = found.track;
+                          }
+                        });
+                        return vt ?? null;
+                      })();
+
+                  if (hostCamTrack) return null;
+
+                  return (
+                    <div className="absolute inset-0 flex h-full w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(45,212,191,0.15),transparent_38%)]">
+                      {broadcasterProfile?.avatar_url ? (
+                        <img
+                          src={broadcasterProfile.avatar_url}
+                          alt={broadcasterProfile.username || 'Broadcaster'}
+                          className="h-28 w-28 rounded-full border-2 border-cyan-400/70 object-cover shadow-[0_0_28px_rgba(45,212,191,0.35)]"
+                        />
+                      ) : (
+                        <Crown className="h-14 w-14 text-cyan-200/60" />
+                      )}
+                      <p className="mt-4 text-base font-black text-white">{broadcasterProfile?.username || 'Broadcaster'}</p>
+                      <p className="mt-1 text-sm text-cyan-200/60">Camera starting…</p>
+                    </div>
+                  );
+                })()}
+
+                {/* Host video element — mounted via TrackAttach, covers card when track available */}
+                <TrackAttach track={isHost ? (localTracks?.[1] ?? null) : (() => {
+                  const broadcasterUserId = stream?.user_id;
+                  if (!broadcasterUserId || !remoteParticipants) return null;
+                  let vt: any = null;
+                  remoteParticipants.forEach((rp: RemoteParticipant) => {
+                    if (rp.identity === broadcasterUserId) {
+                      const pubs = (rp as any).videoTrackPublications;
+                      if (pubs) {
+                        pubs.forEach((pub: any) => {
+                          if (pub.track && typeof pub.track?.attach === 'function') vt = pub.track;
+                        });
+                      }
+                    }
+                  });
+                  return vt;
+                })()} />
+
+                {/* Gradient overlay — sits above video/fallback */}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
+
+                {/* Host badge — top-left */}
+                <div className="absolute left-5 top-5 z-10 flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/18 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(45,212,191,0.25)] backdrop-blur-xl">
+                  <Crown className="h-4 w-4" />
+                  Host
+                </div>
+
+                {/* Mic / Camera media pills — top-right */}
+                <div className="absolute right-5 top-5 z-10 flex items-center gap-2">
+                  <span className={cn(
+                    theme.badge,
+                    micEnabled ? theme.emeraldPill : theme.redPill,
+                  )} title={`mic ${micEnabled ? 'on' : 'off'}`}>
+                    {micEnabled ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
+                  </span>
+                  <span className={cn(
+                    theme.badge,
+                    cameraEnabled ? theme.emeraldPill : theme.redPill,
+                  )} title={`camera ${cameraEnabled ? 'on' : 'off'}`}>
+                    {cameraEnabled ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
+                  </span>
+                </div>
+
+                 {/* Host identity — lower left */}
+                 <div className="absolute bottom-28 left-6 z-20 flex items-center gap-2">
+                  <img
+                    src={broadcasterProfile?.avatar_url || ''}
+                    alt=""
+                    className="h-8 w-8 rounded-md border border-cyan-300/60 object-cover shadow-[0_0_18px_rgba(45,212,191,0.28)]"
+                  />
+                  <span className="text-base font-black text-white">{broadcasterProfile?.display_name || broadcasterProfile?.username || 'Broadcaster'}</span>
+                  {broadcasterProfile?.is_verified && <BadgeCheck className="h-5 w-5 text-purple-400" />}
+                </div>
+
+                 {/* Pinned product overlay */}
+                 {(() => {
+                   const pinned = pinnedProducts.find((p: any) => p.stream_id === stream.id);
+                   if (!pinned) return null;
+                   const imgSrc = (pinned as any).image_url || (pinned as any).imageUrl || (pinned as any)?.product?.image_url || null;
+                   const title = (pinned as any).title || (pinned as any).name || (pinned as any)?.product?.name || 'Product';
+                   const priceVal = (pinned as any).price_coins || (pinned as any).coin_price || (pinned as any).price || (pinned as any)?.product?.price || 0;
+                   return (
+                  <div className="absolute bottom-6 left-6 z-20 w-[min(310px,calc(100%-32px))] rounded-2xl border border-purple-400/30 bg-[#120b1f]/90 p-4 shadow-[0_0_30px_rgba(168,85,247,0.35)] backdrop-blur-xl">
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="rounded-lg bg-purple-500/40 px-2.5 py-1 text-[11px] font-black uppercase text-purple-100">
+                        Pinned Product
+                      </span>
+                      {isHost && (
+                        <button
+                          onClick={() => pinProduct(pinned.id)}
+                          className="rounded-md p-1 text-white/50 hover:text-white transition-colors"
+                          aria-label="Remove pinned product"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-16 w-16 shrink-0 rounded-xl bg-white/8 overflow-hidden">
+                        {imgSrc ? (
+                          <img src={imgSrc} alt={title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full grid place-items-center text-violet-300">
+                            <Ticket className="h-7 w-7" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-black text-white truncate">{title}</p>
+                        <p className="mt-2 flex items-center gap-2 text-sm font-black text-white">
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-violet-500/25 text-violet-200 text-xs">◆</span>
+                          {Number(priceVal).toLocaleString()}
+                        </p>
+                        <button className="mt-2 w-full rounded-xl border border-violet-300/30 bg-gradient-to-r from-violet-700 to-purple-600 px-3 py-1.5 text-xs font-black text-white shadow-[0_0_16px_rgba(168,85,247,0.35)]">
+                          View Product
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+                })()}
+              </section>
+
+                {/* Open Stage Pass (quick action for host, bottom-right of host card) */}
+                {isHost && (
+                  <div className="absolute bottom-5 right-5 z-10">
+                    <button
+                      onClick={handleOpenStagePassModal}
+                      className={cn('flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-black transition-colors', theme.hostCardPrimary)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Stage Pass
+                    </button>
+                  </div>
+                )}
+
+              {/* ── MIDDLE: Stage Guest Grid ── */}
+              <section className={cn('flex min-h-0 flex-col overflow-hidden', theme.guestsPanel)}>
+                {/* Chip row */}
+                <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
+                  <span className={sectionLabel}>
+                    <svg className="h-4 w-4 text-white/45" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M9 19l3 3 3-3M19 9l3 3-3 3M15 5l3 3-3 3M15 19l-3 3-3-3"/>
+                    </svg>
+                    Stage Guests
+                  </span>
+                  {(() => {
+                    const livePassesCount = stagePassesHook.stagePasses.filter(
+                      (p: StagePass) => p.status === 'approved' || p.status === 'live',
+                    ).length;
+                    return (
+                      <span className={theme.stageCountLabel}>
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        On Stage {livePassesCount}/6
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                {/* Guest / empty-slot grid */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start">
+                  {(() => {
+                    const livePasses = stagePassesHook.stagePasses.filter(
+                      (p: StagePass) => p.status === 'approved' || p.status === 'live',
+                    );
+                    const emptySlots = Math.max(1, 6 - livePasses.length);
+
+                    return livePasses.map((pass: StagePass) => {
+                      const username = (pass as any).user_profile?.username || (pass as any).profile?.username || (pass as any).username || 'Stage Guest';
+                      const avatar = (pass as any).user_profile?.avatar_url || (pass as any).profile?.avatar_url || (pass as any).avatar_url || null;
+
+                      return (
+                        <div key={pass.id} className={cn('relative min-h-[210px] rounded-2xl border border-purple-400/40 bg-gradient-to-b from-[#160d2b] to-[#070711] p-4 shadow-[0_0_24px_rgba(168,85,247,0.25)] overflow-hidden', theme.panel)}>
+                          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.18),transparent_45%)]" />
+
+                          <div className="relative z-10 flex items-start justify-between gap-2">
+                            <span className={guestLabel}>
+                              Stage Guest
+                            </span>
+                            {isHost && (
+                              <button
+                                onClick={async () => {
+                                  await stagePassesHook.removeStageGuest(pass.id);
+                                  await stagePassesHook.refetch();
+                                }}
+                                className="relative z-20 grid h-8 w-8 place-items-center rounded-lg bg-white/8 hover:bg-red-500/15 text-white/70 hover:text-red-300 transition-colors"
+                                aria-label="Remove from stage"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+
+                          <p className="relative z-10 mt-1.5 flex items-center gap-1.5 text-[10px] font-black text-emerald-400">
+                            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                            On Stage
+                          </p>
+
+                          <div className="relative z-10 mt-4 flex flex-col items-center">
+                            {avatar ? (
+                              <img src={avatar} alt={username} className="h-20 w-20 rounded-full border-2 border-purple-400 object-cover shadow-[0_0_22px_rgba(168,85,247,0.45)]" />
+                            ) : (
+                              <div className="h-20 w-20 rounded-full border-2 border-purple-400/50 bg-black/50 grid place-items-center text-cyan-200">
+                                <svg className="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                                </svg>
+                              </div>
+                            )}
+                            <p className="mt-3 text-sm font-black text-cyan-100 truncate max-w-full">{username}</p>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+
+                  {/* Empty slots — only show at least one so the section is never empty */}
+                  {Array.from({ length: Math.max(1, 6 - stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'approved' || p.status === 'live').length) }).map((_, i) => (
+                    <button
+                      key={`empty-${i}`}
+                      onClick={isHost ? handleOpenStagePassModal : (async () => {
+                        const openPass = stagePassesHook.stagePasses.find((p: StagePass) => p.status === 'open');
+                        if (openPass) {
+                          const result = await stagePassesHook.requestStagePass(openPass.id);
+                          if (!result.success) toast.error(result.error || 'Failed to request');
+                        }
+                      })}
+                      disabled={!isHost && !stagePassesHook.stagePasses.some((p: StagePass) => p.status === 'open')}
+                      className="min-h-[210px] rounded-2xl border border-dashed border-white/15 bg-black/20 p-4 text-center hover:border-purple-400/60 hover:bg-purple-500/10 transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <div className="mx-auto mt-10 grid h-16 w-16 place-items-center rounded-full border border-white/15 bg-white/5">
+                        <Plus className="h-8 w-8 text-white/80" />
+                      </div>
+                      <p className="mt-5 text-base font-bold text-slate-300">
+                        {isHost ? 'Open Stage Pass' : (stagePassesHook.stagePasses.some((p: StagePass) => p.status === 'open') ? 'Request Stage Pass' : 'Stage Pass')}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {isHost ? 'to fill this slot' : 'ask to join stage'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── RIGHT: Chat Panel ── */}
+              <aside className={theme.chatPanel}>
+                {/* Chat tabs */}
+                <div className="grid grid-cols-4 border-b border-white/10">
+                  {['Chat', 'Gifts', 'Top Fans', 'Settings'].map((tab, tIdx) => (
+                    <button
+                      key={tab}
+                      className={`relative h-16 text-sm font-black transition-colors ${
+                        tIdx === 0 ? 'text-white' : 'text-white/60 hover:text-white/80'
+                      } data-[active=true]:text-cyan-300`}
+                      data-active={tIdx === 0}
+                    >
+                      {tab}
+                      {tIdx === 0 && (
+                        <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <BroadcastChat
+                    streamId={streamId || ''}
+                    hostId={stream?.user_id || ''}
+                    isViewer
+                    onMessageSent={handleLike}
+                  />
+                </div>
+              </aside>
+            </main>
+
+            {/* ── BOTTOM CONTROL BAR ── */}
+            <BroadcastBottomBar
+              openPassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
+              isMicOn={micEnabled}
+              isCamOn={cameraEnabled}
+              isLive={stream.status === 'live'}
+              isGiftTrayOpen={isGiftModalOpen}
+              isOfficerModalOpen={!!(stagePassesHook as any)?.showOfficer}
+              onToggleMic={toggleMicrophone}
+              onToggleCam={toggleCamera}
+              onGift={handleGiftHost}
+              onShare={handleOpenShareModal}
+              onOpenMoreMenu={() => setIsStagePassModalOpen(true)}
+              onEndStream={handleStreamEnd}
+              onOpenStagePass={handleOpenStagePassModal}
+              onManageStagePass={() => setIsStagePassModalOpen(true)}
+              onOpenCoinStore={handleOpenCoinStore}
             />
-          }
 
-          modals={
-            <>
-              <CoinStoreModal
-               isOpen={isCoinStoreOpen}
-               onClose={() => setIsCoinStoreOpen(false)}
-             />
-             <GiftBoxModal
-               isOpen={isGiftModalOpen}
-               onClose={() => {
-                 setIsGiftModalOpen(false);
-                 setGiftRecipientId(null);
-               }}
-               recipientId={giftRecipientId || ''}
-               streamId={streamId || ''}
-               broadcasterId={stream.user_id}
-               activeUserIds={activeUserIds}
-               userProfiles={userProfiles}
-                onGiftSent={async (giftData: GiftItem, target: GiftTarget) => {
-                 // This callback is for UI effects only.
-                 // DB insertion and coin deduction are handled server-side by send_gift_in_stream RPC.
-                 console.log('[BroadcastPage] 🎁 Gift effect trigger:', { giftData, target });
+            {/* ── FOOTER STATUS STRIP ── */}
+            <div className={theme.footerStrip}>
+              <span className="flex items-center gap-2 text-slate-400">
+                <Sparkles className="h-4 w-4 text-purple-400" />
+                Your stream is protected
+              </span>
+              <span className="text-white/15">•</span>
+              <span>Troll City Guidelines</span>
+              <span className="text-white/15">•</span>
+              <span className="text-emerald-400 font-bold">Secure Stream</span>
+              <span className="text-white/15">•</span>
+              <span className="text-emerald-400">Excellent Connection</span>
+            </div>
 
-                 // Trigger broadcast effects based on gift
-                 const giftId = giftData.id?.toLowerCase() || giftData.name?.toLowerCase() || '';
-                 const totalAmount = Number(giftData.coin_cost || 0);
-                 if (giftId.includes('glass') || giftId.includes('breaker')) {
-                   triggerGiftEffect('glass_breaker');
-                 } else if (giftId.includes('flame') || giftId.includes('fire')) {
-                   triggerGiftEffect('troll_flame');
-                 } else if (giftId.includes('surge') || giftId.includes('city')) {
-                   triggerGiftEffect('city_surge');
-                 } else if (giftId.includes('glitch')) {
-                   triggerGiftEffect('glitch_king');
-                 } else {
-                   // Default: boost heat bar for any gift
-                   boostCityHeat(Math.ceil(totalAmount / 100));
-                 }
-               }}
-             />
+            {/* View mode toggle — desktop */}
+            {!isMobileViewer && (
+              <div className="absolute top-3 right-3 z-50">
+                <button
+                  onClick={() => setIsChatOpen(!isChatOpen)}
+                  className="rounded-lg bg-black/40 backdrop-blur border border-white/10 flex items-center gap-1.5 px-2.5 py-1.5 text-white/70 hover:text-white transition-all"
+                  title="Toggle Chat"
+                  aria-label="Toggle chat"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  <span className="hidden sm:inline text-[10px] font-bold">Chat</span>
+                </button>
+              </div>
+            )}
 
-             {/* Open Stage Pass Modal */}
-             <OpenStagePassModal
-               isOpen={isStagePassModalOpen}
-               onClose={handleCloseStagePassModal}
-               onConfirm={async (count: number, priceCoins: number) => {
-                 await stagePassesHook.openStagePasses(count, priceCoins);
-                 handleCloseStagePassModal();
-               }}
-               loading={stagePassesHook.loading}
-             />
-             
-             <PinProductModal
-               isOpen={isPinProductModalOpen}
-               onClose={() => setIsPinProductModalOpen(false)}
-               onProductPinned={async (productId) => {
-                 const result = await pinProduct(productId);
-                 if (!result.success) {
-                   toast.error('Failed to pin product');
-                 }
-               }}
-             />
+            {/* View mode toggle — mobile */}
+            {isMobileViewer && (
+              <div className="absolute bottom-3 left-3 z-50">
+                <button
+                  onClick={() => {
+                    isMobileViewer(!isMobileViewer);
+                  }}
+                  className="rounded-lg bg-black/40 backdrop-blur border border-white/10 flex items-center gap-1.5 px-2.5 py-1.5 text-white/70 hover:text-white transition-all"
+                  title={isMobileViewer ? 'Fullscreen View' : 'Vertical View'}
+                  aria-label={isMobileViewer ? 'Fullscreen view' : 'Vertical view'}
+                >
+                  <Maximize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline text-[10px] font-bold">{isMobileViewer ? 'Fullscreen' : 'Vertical'}</span>
+                </button>
+              </div>
+            )}
+          </div>
 
-             {/* User Action Modal (for gifts, mod actions, etc.) */}
-             {userActionTarget && (
-               <UserActionModal
-                 onClose={handleCloseUserAction}
-                 userId={userActionTarget.userId}
-                 streamId={streamId || ''}
-                 username={userActionTarget.username}
-                 role={userActionTarget.role}
-                 createdAt={userActionTarget.createdAt}
-                 isHost={isHost}
-                 isModerator={isModerator || isCurrentUserBroadofficer}
-                 isOfficer={isOfficer}
-                 onGift={() => onGift(userActionTarget.userId)}
-                 onMute={() => handleMute(userActionTarget.userId, userActionTarget.username || '')}
-                 onKick={() => handleGeneralKick()}
-                 onArrest={() => handleArrest(userActionTarget.userId, userActionTarget.username || '')}
-                 onBlock={() => handleBlock(userActionTarget.userId, userActionTarget.username || '')}
-               />
-             )}
+            {/* OVERLAYS — absolutely positioned, renders above all grid content */}
+            <div className="absolute inset-0 pointer-events-none">
+              {isGiftModalOpen && (
+                <GiftBoxModal
+                  isOpen={isGiftModalOpen}
+                  onClose={handleCloseGiftModal}
+                  streamId={streamId}
+                  recipientId={giftRecipientId}
+                  onSetRecipientId={setGiftRecipientId}
+                  recentGifts={recentGifts}
+                  giftNameMap={giftNameMap}
+                  onGiftUserPositions={handleGetUserPositions}
+                />
+              )}
+              {isShareModalOpen && (
+                <ShareModal
+                  isOpen={isShareModalOpen}
+                  onClose={handleCloseShareModal}
+                  stream={stream}
+                  broadcasterProfile={broadcasterProfile}
+                />
+              )}
+              {isStagePassModalOpen && (
+                <OpenStagePassModal
+                  isOpen={isStagePassModalOpen}
+                  onClose={handleCloseStagePassModal}
+                  onConfirm={handleOpenStagePassConfirm}
+                />
+              )}
+              {isPinProductModalOpen && (
+                <PinProductModal
+                  isOpen={isPinProductModalOpen}
+                  onClose={handleClosePinProductModal}
+                  streamId={streamId}
+                  onProductPinned={async (productId) => {
+                    const result = await pinProduct(productId);
+                    if (!result.success) {
+                      toast.error('Failed to pin product');
+                    }
+                  }}
+                />
+              )}
 
-{/* Broadcaster Stats Modal */}
-             {showHostStats && isHost && (
-               <BroadcasterStatsModal
-                 stream={stream}
-                 onClose={handleCloseHostStats}
-                 broadcasterProfile={broadcasterProfile}
-                 isCameraOn={cameraEnabled}
-                 isMicOn={micEnabled}
-                 onToggleCamera={toggleCamera}
-                 onToggleMic={toggleMicrophone}
-                 onFlipCamera={flipCamera}
-                 cameraFacingMode={cameraFacingMode}
-               />
-             )}
+              {/* User Action Modal (for gifts, mod actions, etc.) */}
+              {userActionTarget && (
+                <UserActionModal
+                  onClose={handleCloseUserAction}
+                  userId={userActionTarget.userId}
+                  streamId={streamId || ''}
+                  username={userActionTarget.username}
+                  role={userActionTarget.role}
+                  createdAt={userActionTarget.createdAt}
+                  isHost={isHost}
+                  isModerator={isModerator || isCurrentUserBroadofficer}
+                  isOfficer={isOfficer}
+                  onGift={() => onGift(userActionTarget.userId)}
+                  onMute={() => handleMute(userActionTarget.userId, userActionTarget.username || '')}
+                  onKick={() => handleGeneralKick()}
+                  onArrest={() => handleArrest(userActionTarget.userId, userActionTarget.username || '')}
+                  onBlock={() => handleBlock(userActionTarget.userId, userActionTarget.username || '')}
+                />
+              )}
 
-             {/* User Stats Modal */}
-             {showUserStats && (
-               <UserStatsModal
-                 isOpen={true}
-                 onClose={handleCloseUserStats}
-                 userId={showUserStats.userId}
-                 username={showUserStats.username}
-                trollCoins={showUserStats.trollCoins}
-                trollmonds={showUserStats.trollmonds}
-                licensePlate={showUserStats.licensePlate}
-                 streamId={streamId || ''}
-                 isSeatUser={showUserStats.isSeatUser}
-               />
-             )}
+              {/* Broadcaster Stats Modal */}
+              {showHostStats && isHost && (
+                <BroadcasterStatsModal
+                  stream={stream}
+                  onClose={handleCloseHostStats}
+                  broadcasterProfile={broadcasterProfile}
+                  isCameraOn={cameraEnabled}
+                  isMicOn={micEnabled}
+                  onToggleCamera={toggleCamera}
+                  onToggleMic={toggleMicrophone}
+                  onFlipCamera={flipCamera}
+                  cameraFacingMode={cameraFacingMode}
+                />
+              )}
 
-             {/* Ability Box Modal */}
-             <AbilityBox
-               isOpen={isAbilityBoxOpen}
-               onClose={() => setIsAbilityBoxOpen(false)}
-               abilities={userAbilities}
-               activeEffects={abilityActiveEffects}
-               onActivate={async (abilityId, targetUserId, targetUsername) => {
-                 const success = await activateAbility(abilityId, targetUserId, targetUsername);
-                 if (success) setIsAbilityBoxOpen(false);
-                 return success;
-               }}
-               getCooldownRemaining={getCooldownRemaining}
-               isEffectActive={isEffectActive}
-               getEffectRemaining={getEffectRemaining}
-               isInBroadcast={true}
-               loading={abilityLoading}
-             />
-           </>
-         }
-      />
+              {/* User Stats Modal */}
+              {showUserStats && (
+                <UserStatsModal
+                  isOpen={true}
+                  onClose={handleCloseUserStats}
+                  userId={showUserStats.userId}
+                  username={showUserStats.username}
+                  trollCoins={showUserStats.trollCoins}
+                  trollmonds={showUserStats.trollmonds}
+                  licensePlate={showUserStats.licensePlate}
+                  isSeatUser={showUserStats.isSeatUser}
+                />
+              )}
 
-         <ShareModal
-           isOpen={isShareModalOpen}
-           onClose={() => setIsShareModalOpen(false)}
-           streamTitle={stream?.title}
-           streamUrl={`${window.location.origin}/watch/${stream?.id}`}
-           broadcasterName={broadcasterProfile?.username}
-         />
-         
-         {/* 🔧 DEBUG PANEL - Only show in development or when ?debug=1 */}
-         {import.meta.env.DEV && new URLSearchParams(window.location.search).has('debug') && stream && (
-           <div style={{
-             position: 'fixed',
-             bottom: 20,
-             right: 20,
-             background: 'rgba(0,0,0,0.9)',
-             color: '#0f0',
-             fontFamily: 'monospace',
-             fontSize: 11,
-             padding: 12,
-             borderRadius: 8,
-             zIndex: 999999,
-             maxWidth: 400,
-             maxHeight: 300,
-             overflow: 'auto',
-             border: '1px solid #0f0'
-           }}>
-             <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#0ff' }}>
-               🛠️ BROADCAST DEBUG PANEL
-             </div>
-             <div>Stream ID: {stream.id?.substring(0, 8)}...</div>
-             <div>Status: {stream.status} | Live: {String(stream.is_live)}</div>
-             <div>LiveKit Room: {stream.livekit_room_name?.substring(0, 12)}...</div>
-           </div>
-         )}
-      </ErrorBoundary>
+              {/* Coin Store Modal */}
+              {isCoinStoreOpen && (
+                <CoinStoreModal
+                  isOpen={isCoinStoreOpen}
+                  onClose={handleCloseCoinStore}
+                  streamId={streamId}
+                />
+              )}
+
+              {/* Ability Box Modal */}
+              {isAbilityBoxOpen && (
+                <AbilityBox
+                  isOpen={isAbilityBoxOpen}
+                  onClose={handleCloseAbilityBox}
+                  abilities={userAbilities}
+                  activeEffects={abilityActiveEffects}
+                  loading={abilityLoading}
+                  useAbility={activateAbility}
+                  isEffectActive={isEffectActive}
+                  getCooldownRemaining={getCooldownRemaining}
+                  getEffectRemaining={getEffectRemaining}
+                />
+              )}
+
+              {/* Broadcast Ability Effects */}
+              <BroadcastAbilityEffects
+                streamId={streamId}
+              />
+
+              {/* TCPS Message Bubble */}
+              {tcpsMessageBubbleRef.current && (
+                <TCPSMessageBubble
+                  message={tcpsMessageBubbleRef.current.message}
+                  type={tcpsMessageBubbleRef.current.type}
+                  onClose={() => {
+                    tcpsMessageBubbleRef.current = null;
+                  }}
+                />
+              )}
+
+              {/* Ticker Control Panel */}
+              {isTickerPanelOpen && (
+                <TickerControlPanel
+                  isOpen={isTickerPanelOpen}
+                  onClose={handleCloseTickerPanel}
+                  streamId={streamId}
+                  broadcastSettings={tickerBroadcastSettings}
+                  onSendMessage={tickerSendMessage}
+                  onSendPriority={tickerSendPriority}
+                  onClearPriority={tickerClearPriority}
+                  onDeleteMessage={tickerDeleteMessage}
+                />
+              )}
+            </div>
+
+        </ErrorBoundary>
     </GiftSystemProvider>
-  )
+)
+
 }
 
 function isStaffProfile(profile: UserProfile | null) {
   if (!profile) return false
   return isStaffUser(profile)
+}
+
+/**
+ * TrackAttach
+ *
+ * Inline LiveKit video renderer for the host camera card.
+ * Attaches the video element to a permanent div via `track.attach()` in a useEffect.
+ * Mirrors spin-off from BroadcastGrid.tsx LiveKitVideoPlayer for minimal standalone use.
+ */
+function TrackAttach({ track }: { track: LocalVideoTrack | RemoteVideoTrack | null }) {
+  const divRef = React.useRef<HTMLDivElement>(null);
+  const videoElRef = React.useRef<HTMLVideoElement | null>(null);
+
+  React.useEffect(() => {
+    const div = divRef.current;
+    if (!div) return;
+
+    // If track is absent, detach and clear
+    if (!track) {
+      if (videoElRef.current) {
+        try { track?.detach(videoElRef.current); } catch { /* ignore */ }
+        videoElRef.current = null;
+      }
+      div.innerHTML = '';
+      return;
+    }
+
+    let cancelled = false;
+    const doAttach = () => {
+      if (cancelled) return;
+      try {
+        const el = (track as any).attach();
+        if (!el || !(el instanceof HTMLVideoElement)) return;
+        el.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;display:block;';
+        el.autoplay = true;
+        el.muted = true;
+        if (videoElRef.current && videoElRef.current !== el) {
+          try { track.detach(videoElRef.current); } catch { /* ignore */ }
+        }
+        videoElRef.current = el;
+        div.innerHTML = '';
+        div.appendChild(el);
+      } catch (err) {
+        console.warn('[TrackAttach] attach failed, retrying in 100ms', err);
+        setTimeout(doAttach, 100);
+      }
+    };
+
+    doAttach();
+
+    return () => {
+      cancelled = true;
+      if (videoElRef.current && track) {
+        try { track.detach(videoElRef.current); } catch { /* ignore */ }
+        videoElRef.current = null;
+      }
+    };
+  }, [track]);
+
+  if (!track) return null;
+
+  return (
+    <div
+      ref={divRef}
+      className="absolute inset-0 h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+    />
+  );
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Mic, MicOff, Video, VideoOff, Crown, Circle } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '../../lib/utils';
 
 interface HostStageCardProps {
   name: string;

@@ -124,6 +124,7 @@ export const PLATFORM_OPTIONS = [
 export type Platform = typeof PLATFORM_OPTIONS[number]['value'];
 
 export interface UserProfile {
+  is_superadmin: boolean
   id: string
   username: string
   avatar_url: string
@@ -143,6 +144,7 @@ export interface UserProfile {
   xp_multiplier?: number
   coin_multiplier?: number
   troll_coins: number
+  hype_coins: number
   paid_coins?: number
   reserved_troll_coins?: number
   has_paid?: boolean

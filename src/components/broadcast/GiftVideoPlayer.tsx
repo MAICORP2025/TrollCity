@@ -1,6 +1,6 @@
 /**
  * Gift Video Player
- * Plays MP4 video files for each gift with matching sound
+ * Plays WebM video files for each gift
  * Falls back to a styled placeholder if video file doesn't exist yet
  */
 
@@ -105,7 +105,7 @@ export function GiftVideoPlayer({ giftName, giftIcon, giftValue, duration, onCom
         <div className="gv-fallback">
           <div className="gv-fallback-icon">{giftIcon}</div>
           <div className="gv-fallback-label">
-            No video file: <code>/public/gift-videos/{giftName.toLowerCase().replace(/_/g, '-')}.mp4</code>
+            No video file: <code>/public/gift-videos/{giftName.toLowerCase().replace(/_/g, '-')}.webm</code>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Minus, Plus, Coins } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '../../lib/utils';
 
 interface OpenStagePassModalProps {
   isOpen: boolean;

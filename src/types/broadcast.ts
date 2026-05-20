@@ -2,6 +2,8 @@ export type StreamStatus = 'pending' | 'starting' | 'live' | 'ended' | 'failed';
 export type LayoutMode = 'grid' | 'battle' | 'spotlight';
 
 export interface Stream {
+  agora_channel: any;
+  room_name: any;
   id: string;
   user_id: string;
   broadcaster_id?: string;

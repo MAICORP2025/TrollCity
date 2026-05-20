@@ -5,18 +5,20 @@ import {
   Coins,
   Gem,
   Shield,
-  Sparkles,
   Wallet,
   Trophy,
   Star,
+  Zap,
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
 import { useXPStore } from '@/stores/useXPStore'
 import { useCoins } from '@/lib/hooks/useCoins'
+import { useHypeCoins } from '@/lib/hooks/useHypeCoins'
 import { getRoleDisplayName, supabase } from '@/lib/supabase'
 import { getGlowingTextStyle } from '@/lib/perkEffects'
 import CashoutDepositModal from '../modals/CashoutDepositModal'
+import ConvertHypeCoinsModal from '../modals/ConvertHypeCoinsModal'
 
 type OrganizationBadge = {
   name: string
@@ -70,7 +72,10 @@ export default function UserProfileWidget() {
     loading: coinsLoading,
   } = useCoins()
 
+  const { hypeCoins } = useHypeCoins()
+
   const [showDepositModal, setShowDepositModal] = useState(false)
+  const [showConvertModal, setShowConvertModal] = useState(false)
   const [organization, setOrganization] = useState<OrganizationBadge | null>(null)
   const prevXPData = useRef({ level: 0, xpTotal: 0, progress: 0 })
 
@@ -243,28 +248,67 @@ export default function UserProfileWidget() {
             </div>
           </div>
 
-          <div className="mt-3 grid gap-1.5">
-            <WalletRow
-              icon={<Coins size={12} />}
-              label="Coins"
-              value={coinsLoading ? '...' : formatNumber(troll_coins ?? 0)}
-              tone="gold"
-            />
+          <div className="mt-3 space-y-1.5">
+            {/* Combined COINS panel (Troll + Hype) */}
+            <button
+              type="button"
+              onClick={() => setShowConvertModal(true)}
+              className="group w-full rounded-xl border border-yellow-400/25 bg-gradient-to-r from-yellow-500/10 to-purple-500/10 p-3 text-left transition hover:border-yellow-400/40 hover:from-yellow-500/15 hover:to-purple-500/15"
+              title="Click to convert Hype Coins to Troll Coins"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-yellow-200">🪙 COINS</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Coins size={12} className="text-yellow-300" />
+                  <div>
+                    <span className="text-[9px] font-bold text-yellow-200">Troll</span>
+                    <div className="font-mono text-[11px] font-black text-yellow-300">
+                      {coinsLoading ? '...' : formatNumber(troll_coins ?? 0)}
+                    </div>
+                  </div>
+                </div>
+                <div className="w-px h-8 bg-slate-600" />
+                <div className="flex items-center gap-2">
+                  <Zap size={12} className="text-purple-300" />
+                  <div>
+                    <span className="text-[9px] font-bold text-purple-200">Hype</span>
+                    <div className="font-mono text-[11px] font-black text-purple-300">
+                      {hypeCoins ?? 0}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </button>
 
-            <WalletRow
-              icon={<Gem size={12} />}
-              label="Trollmonds"
-              value={coinsLoading ? '...' : formatNumber(displayTrollmonds)}
-              tone="purple"
-            />
+            {/* Combined Trollmonds + Crowns panel */}
+            <div className="flex gap-1.5">
+              <div className="flex-1 rounded-xl border border-purple-400/25 bg-purple-500/10 p-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Gem size={10} className="text-purple-300" />
+                  <div>
+                    <span className="text-[9px] font-bold text-purple-200">Trollmonds</span>
+                    <div className="font-mono text-[10px] font-black text-purple-300">
+                      {coinsLoading ? '...' : formatNumber(displayTrollmonds)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex-1 rounded-xl border border-slate-400/25 bg-slate-500/10 p-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Crown size={10} className="text-slate-200" />
+                  <div>
+                    <span className="text-[9px] font-bold text-slate-200">Crowns</span>
+                    <div className="font-mono text-[10px] font-black text-slate-300">
+                      {coinsLoading ? '...' : formatNumber(crowns ?? 0)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <WalletRow
-              icon={<Crown size={12} />}
-              label="Crowns"
-              value={coinsLoading ? '...' : formatNumber(crowns ?? 0)}
-              tone="silver"
-            />
-
+            {/* Cashout Coins */}
             <button
               type="button"
               onClick={() => setShowDepositModal(true)}
@@ -286,20 +330,21 @@ export default function UserProfileWidget() {
               </span>
             </button>
           </div>
-
-          <div className="mt-3 flex items-center justify-center gap-1 rounded-xl border border-cyan-300/10 bg-cyan-400/5 px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-cyan-200">
-            <Sparkles size={10} />
-            Mai Troll City Citizen ID
-          </div>
         </div>
       </div>
 
       {typeof document !== 'undefined' &&
         createPortal(
-          <CashoutDepositModal
-            isOpen={showDepositModal}
-            onClose={() => setShowDepositModal(false)}
-          />,
+          <>
+            <CashoutDepositModal
+              isOpen={showDepositModal}
+              onClose={() => setShowDepositModal(false)}
+            />
+            <ConvertHypeCoinsModal
+              isOpen={showConvertModal}
+              onClose={() => setShowConvertModal(false)}
+            />
+          </>,
           document.body
         )}
     </>

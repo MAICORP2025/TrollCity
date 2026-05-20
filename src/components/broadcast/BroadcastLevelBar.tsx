@@ -9,7 +9,7 @@ interface BroadcastLevelBarProps {
   className?: string;
 }
 
-const MAX_BAR_COINS = 500;
+const MAX_BAR_COINS = 500000000;
 const COINS_PER_SECOND = 10;
 
 export default function BroadcastLevelBar({ broadcasterId, streamId, className }: BroadcastLevelBarProps) {
@@ -102,15 +102,7 @@ export default function BroadcastLevelBar({ broadcasterId, streamId, className }
   const level = Math.floor(totalSessionGiftCoins / 1000) + 1;
 
   return (
-    <div className={cn("flex flex-col gap-0.5 w-32", className)}>
-      <div className="flex items-center justify-between text-[10px] font-bold text-white px-1 shadow-black/50 drop-shadow-md">
-        <div className="flex items-center gap-1 text-yellow-400">
-          <Trophy size={10} />
-          <span>Lvl {level}</span>
-        </div>
-        <span className="text-white/80">{Math.floor(barCoins)} / {MAX_BAR_COINS}</span>
-      </div>
-
+    <div className={cn("w-full", className)}>
       <div className="h-1.5 bg-black/60 rounded-full overflow-hidden border border-white/10 backdrop-blur-sm relative">
         <div
           className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(250,204,21,0.5)]"

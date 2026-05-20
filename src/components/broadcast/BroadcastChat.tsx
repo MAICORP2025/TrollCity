@@ -1199,7 +1199,7 @@ export default function BroadcastChat({
           </div>
         )}
         
-         <div className="p-4 border-b border-white/10 font-bold bg-transparent flex items-center justify-between gap-2">
+          <div className="p-4 border-b border-white/10 font-bold bg-black/20 backdrop-blur flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
                 <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>
                 Live Chat
@@ -1394,12 +1394,12 @@ export default function BroadcastChat({
                     // Check if this is a gift message
                     const isGift = msg.type === 'gift' || msg.content?.startsWith('GIFT_EVENT:');
                     
-                    if (isSystem) {
-                        return (
-                            <div 
-                                key={msg.id}
-                                className="flex items-center gap-2 text-zinc-400 text-xs italic bg-transparent p-1.5 rounded-lg border border-white/5 animate-in slide-in-from-bottom-2 fade-in duration-300"
-                            >
+                     if (isSystem) {
+                         return (
+                             <div 
+                                 key={msg.id}
+                                 className="flex items-center gap-2 text-zinc-400 text-xs italic bg-black/10 backdrop-blur p-1.5 rounded-lg border border-white/5 animate-in slide-in-from-bottom-2 fade-in duration-300"
+                             >
                                 <Sparkles size={12} className="text-yellow-500 flex-shrink-0" />
                                 <button
                                     type="button"
@@ -1417,10 +1417,10 @@ export default function BroadcastChat({
                     // Check if this is a challenge message
                     if (msg.type === 'challenge') {
                         return (
-                            <div 
-                                key={msg.id}
-                                className="flex items-center gap-2 bg-purple-900/40 border border-purple-500/30 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
-                            >
+                                 <div 
+                                 key={msg.id}
+                                 className="flex items-center gap-2 bg-purple-900/10 border border-purple-500/20 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
+                             >
                                 <Swords size={14} className="text-purple-400 flex-shrink-0" />
                                 <div className="flex-1">
                                     <div className="flex items-center gap-1">
@@ -1550,11 +1550,11 @@ export default function BroadcastChat({
                         );
                     }
 
-                    return (
-                        <div 
-                            key={msg.id}
-                            className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300 ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''}`}
-                        >
+                     return (
+                         <div 
+                             key={msg.id}
+                             className={`flex items-center gap-2 bg-black/20 backdrop-blur p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300 ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''}`}
+                         >
                             {/* Golden Flex Banner indicator */}
                             {showGoldenBanner && msg.user_id === user?.id && (
                                 <span className="text-yellow-400 text-xs">👑</span>

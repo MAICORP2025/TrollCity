@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, X, Clock, User } from 'lucide-react';
-import { cn } from '../lib/utils';
-import type { StagePass } from '../types/broadcast';
+import { cn } from '../../lib/utils';
+import type { StagePass } from '../../types/broadcast';
 
 interface StagePassRequestsPanelProps {
   requests: StagePass[];

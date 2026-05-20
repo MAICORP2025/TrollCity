@@ -4,7 +4,35 @@ export const USER_OFFLINE_NOTIFICATIONS = {
     body: 'Cashout requests are reviewed for Friday payouts. Check your coin progress.',
     type: 'payday',
   },
+  hype_coin_reward: {
+  title: '⚡ Hype Coin Earned',
+  body: 'You earned a Hype Coin from watching a live broadcast.',
+  type: 'hype_coin_reward',
+},
 
+hype_coin_convert: {
+  title: '⚡ Hype Coins Converted',
+  body: 'Your Hype Coins were converted into Troll Coins.',
+  type: 'hype_coin_convert',
+},
+
+stage_pass_requested: {
+  title: '🎟️ Stage Pass Requested',
+  body: 'Your Stage Pass request was sent to the broadcaster.',
+  type: 'stage_pass_requested',
+},
+
+stage_pass_approved: {
+  title: '🎟️ Stage Pass Approved',
+  body: 'Your Stage Pass was approved. You can join the live stage.',
+  type: 'stage_pass_approved',
+},
+
+stage_pass_denied: {
+  title: '🎟️ Stage Pass Update',
+  body: 'Your Stage Pass request was not approved for this broadcast.',
+  type: 'stage_pass_denied',
+},
   battle_day: {
     title: '⚔️ Friday Battle Day',
     body: 'Battle Day is live. Join battles, send gifts, and earn bonus rewards.',

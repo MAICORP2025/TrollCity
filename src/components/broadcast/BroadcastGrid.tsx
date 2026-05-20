@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect, useCallback, memo, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import { LocalVideoTrack, LocalAudioTrack, RemoteParticipant, RemoteVideoTrack, RemoteAudioTrack } from 'livekit-client';
-import { Stream } from '../../types/broadcast';
+import { StagePass, Stream } from '../../types/broadcast';
 import { User, Users, Coins, Plus, Minus, MicOff, VideoOff, Gift, Gem, Crown, Swords, Shield, Palette, X, Circle, Cloud } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import BroadcastHouseIcon from './BroadcastHouseIcon';
@@ -12,10 +12,13 @@ import ThemeEffectLayer from '../themes/ThemeEffectLayer';
 import { useAuthStore } from '../../lib/store';
 import { useStreamRealtime } from '../../hooks/useStreamRealtime';
 import { useParticipantAttributes } from '../../hooks/useParticipantAttributes';
+import { useStagePasses } from '../../hooks/useStagePasses';
 import { getAllPersistentGifts, type PersistentGift } from '../../lib/persistentGiftStore';
 import type { TrollToeMatch } from '../../types/trollToe';
 import BroadcastTicker from './BroadcastTicker';
 import SeatHeatBar from './SeatHeatBar';
+import BroadcastStageLayout from './BroadcastStageLayout';
+import { SeatSession } from '@/hooks/useStreamSeats';
 
  // Battle Timer Display Component - Shows 3 minute countdown for standalone battles
 
@@ -104,15 +107,23 @@ interface BroadcastGridProps {
    // Mobile viewer mode (disables interactions)
    isMobileViewer?: boolean;
 
-   // Modal state callbacks (for lifting modal state to parent)
-   onOpenUserAction?: (info: { userId: string; username?: string; role?: string; createdAt?: string }) => void;
-   onOpenUserStats?: (info: { userId: string; username: string; trollCoins: number; trollmonds: number; licensePlate: string | null; isSeatUser: boolean }) => void;
-   onCloseUserStats?: () => void;
-   onOpenHostStats?: () => void;
-   onCloseHostStats?: () => void;
-   onOpenModActions?: (target: { id: string; username: string; avatar_url?: string | null; role?: string | null; troll_role?: string | null; is_troll_officer?: boolean; is_lead_officer?: boolean; is_admin?: boolean }) => void;
-   onCloseModActions?: () => void;
- }
+    // Modal state callbacks (for lifting modal state to parent)
+    onOpenUserAction?: (info: { userId: string; username?: string; role?: string; createdAt?: string }) => void;
+    onOpenUserStats?: (info: { userId: string; username: string; trollCoins: number; trollmonds: number; licensePlate: string | null; isSeatUser: boolean }) => void;
+    onCloseUserStats?: () => void;
+    onOpenHostStats?: () => void;
+    onCloseHostStats?: () => void;
+    onOpenModActions?: (target: { id: string; username: string; avatar_url?: string | null; role?: string | null; troll_role?: string | null; is_troll_officer?: boolean; is_lead_officer?: boolean; is_admin?: boolean }) => void;
+    onCloseModActions?: () => void;
+    // ─── Stage Pass / BroadcastStageLayout (host goes live) ───────────────────
+    /** Stream ID needed to load stage passes via useStagePasses. */
+    streamId?: string;
+    /** Callback to open the stage-pass modal (broadcaster only). */
+    onOpenPassModal?: () => void;
+    onApproveStagePass?: (id: string) => void;
+    onDenyStagePass?: (id: string) => void;
+    onRemoveStageGuest?: (id: string) => void;
+  }
 
 function LiveKitVideoPlayer({
   videoTrack,
@@ -1089,6 +1100,137 @@ const { profile } = useAuthStore();
           </div>
         </div>
       )}
+
+        {/* Stage Pass layout — replaces box-grid when broadcaster goes live */}
+        {(() => {
+          const {
+            stagePasses: spStagePasses,
+            requestStagePass: spRequestPass,
+            approveStagePass: spApprovePass,
+            denyStagePass: spDenyPass,
+            removeStageGuest: spRemoveGuest,
+            refetch: spRefetch,
+          } = useStagePasses(streamStatus === 'live' ? stream : undefined);
+
+          if (streamStatus !== 'live') return null;
+
+          const livePasses = spStagePasses.filter(
+            (p: StagePass) => p.status === 'approved' || p.status === 'live',
+          );
+
+          // Who the broadcaster is
+          const isLocalHost = stream.user_id === localUserId;
+          const broadcasterUserId = isLocalHost ? localUserId : stream.user_id;
+
+          const broadcasterTrackInfo = isLocalHost
+            ? {
+                isMicOn: !!(localTracks?.[0] && (localTracks[0] as any).enabled !== false),
+                isCamOn: !!(localTracks?.[1] && ((localTracks[1] as any).enabled === true || (localTracks[1] as any).enabled === undefined)),
+                isScreenShare: (() => {
+                  const mt = localTracks?.[1]?.mediaStreamTrack;
+                  const vName = (localTracks?.[1] as any)?.name || '';
+                  const vLabel = mt?.label?.toLowerCase() || '';
+                  const settings = mt?.getSettings?.() || {};
+                  return (
+                    vName === 'screen-share' ||
+                    vLabel.includes('screen') ||
+                    vLabel.includes('display') ||
+                    vLabel.includes('window') ||
+                    !!(settings as any).displaySurface
+                  );
+                })(),
+                hasVideo: !!(localTracks?.[0] && localTracks?.[1]),
+              }
+            : getParticipantAndTracks(broadcasterUserId);
+
+          const broadcasterProfileForLayout = broadcasterProfile
+            ? {
+                username: broadcasterProfile.username || stream.user_id || 'Broadcaster',
+                avatar_url: broadcasterProfile.avatar_url || null,
+              }
+            : undefined;
+
+          const currentUserPassStatus =
+            useStagePasses(stream!)?.currentUserStagePass?.status || null;
+          const _hookFresh = useStagePasses(stream!); // silences unused-streamId lint
+          const hasOpenPass = spStagePasses.some(
+            (p: StagePass) => p.status === 'open',
+          );
+
+          return (
+            <BroadcastStageLayout
+              hostName={broadcasterProfileForLayout?.username || 'Broadcaster'}
+              hostAvatarUrl={broadcasterProfileForLayout?.avatar_url}
+              hostIsMicOn={broadcasterTrackInfo.isMicOn}
+              hostIsCamOn={broadcasterTrackInfo.isCamOn}
+              hostIsScreenSharing={broadcasterTrackInfo.isScreenShare}
+              hostHasVideo={!!broadcasterTrackInfo.hasVideo}
+              hostVideoNode={
+                (() => {
+                  const videoTrack = isLocalHost
+                    ? localTracks?.[1]
+                    : getParticipantAndTracks(broadcasterUserId).videoTrack;
+                  if (!videoTrack) return undefined;
+                  return (
+                    <LiveKitVideoPlayer
+                      videoTrack={videoTrack}
+                      isLocal={isLocalHost}
+                      isScreenShare={broadcasterTrackInfo.isScreenShare}
+                      themeUrl={stream.broadcast_theme_slug}
+                      isRgbEnabled={!!stream.has_rgb_effect}
+                      broadcasterProfile={broadcasterProfile}
+                    />
+                  );
+                })()
+              }
+              livePasses={livePasses}
+              guestMicCam={{}}
+              coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+              isHost={isHost}
+              hasOpenPass={isHost ? Boolean(livePasses.length < 6) : hasOpenPass}
+              currentUserPassStatus={
+                isHost ? undefined : (currentUserPassStatus as string | null)
+              }
+              onRequestPass={
+                isHost
+                  ? undefined
+                  : () => {
+                      const openPass = spStagePasses.find(
+                        (p: StagePass) => p.status === 'open',
+                      );
+                      if (openPass) {
+                        void spRequestPass(openPass.id);
+                      }
+                    }
+              }
+              onOpenPassModal={isHost ? onOpenPassModal : undefined}
+              onApproveStagePass={
+                isHost
+                  ? (id: string) => {
+                      void spApprovePass(id);
+                      void spRefetch?.();
+                    }
+                  : undefined
+              }
+              onDenyStagePass={
+                isHost
+                  ? (id: string) => {
+                      void spDenyPass(id);
+                      void spRefetch?.();
+                    }
+                  : undefined
+              }
+              onRemoveStageGuest={
+                isHost
+                  ? (id: string) => {
+                      void spRemoveGuest(id);
+                      void spRefetch?.();
+                    }
+                  : undefined
+              }
+            />
+          );
+        })()}
 
         {boxes.map((seatIndex) => {
           if (import.meta.env.DEV) {
