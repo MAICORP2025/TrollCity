@@ -179,3 +179,62 @@ export interface ModerationLog {
   metadata?: Record<string, any>;
   created_at: string;
 }
+
+// ─── Stage Pass System ───────────────────────────────────────────────────────
+export type StagePassStatus =
+  | 'open'
+  | 'requested'
+  | 'approved'
+  | 'live'
+  | 'denied'
+  | 'removed'
+  | 'expired';
+
+export interface StagePass {
+  id: string;
+  stream_id: string;
+  broadcaster_id: string;
+  user_id: string | null;
+  status: StagePassStatus;
+  stage_index: number;
+  price_coins: number;
+  paid_amount: number;
+  requested_at: string | null;
+  approved_at: string | null;
+  went_live_at: string | null;
+  denied_at: string | null;
+  removed_at: string | null;
+  expired_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined profile data (when user_id is not null)
+  user_profile?: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  };
+}
+
+export interface StagePassGuest {
+  id: string;
+  stream_id: string;
+  user_id: string;
+  status: StagePassStatus;
+  stage_index: number;
+  price_coins: number;
+  paid_amount: number;
+  requested_at: string | null;
+  approved_at: string | null;
+  went_live_at: string | null;
+  denied_at: string | null;
+  removed_at: string | null;
+  expired_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined profile data
+  user_profile: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  };
+}

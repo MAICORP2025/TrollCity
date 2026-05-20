@@ -105,19 +105,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     const roomName = String(body.room || body.roomName || body.channel || '');
-    const participantType = String(body.participantType || 'broadcaster'); // 'broadcaster' or 'seat'
-    const isPublisher = body.role === 'publisher' || body.role === 'host' || body.isHost === true || participantType === 'seat';
+    const userId = String(body.userId || body.identity || body.participantIdentity || '');
+    // Stage Pass check — approve/live Stage Pass holders get publisher access
+    let isPublisher = body.role === 'publisher' || body.role === 'host' || body.isHost === true;
 
-    // For seat tokens, construct participant name with seat identifier
-    let participantName = String(body.identity || body.participantIdentity || body.userId || body.user_name || 'participant');
-    
-    if (participantType === 'seat') {
-      const userId = String(body.userId || '');
-      const seatIndex = String(body.seatIndex || '0');
-      const requestId = String(body.requestId || '');
-      // Create unique identifier for this seat user
-      participantName = `seat-${userId}-${seatIndex}-${requestId}`.substring(0, 255);
+    // If not auto-approved as publisher, verify Stage Pass in database
+    if (!isPublisher && userId && roomName) {
+      try {
+        // Use Supabase client to check stream_stage_passes
+        const { createClient } = await import('npm:@supabase/supabase-js@2');
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+        if (supabaseUrl && supabaseServiceKey) {
+          const db = createClient(supabaseUrl, supabaseServiceKey);
+          const { data: stagePass } = await db
+            .from('stream_stage_passes')
+            .select('status')
+            .eq('stream_id', roomName)
+            .eq('user_id', userId)
+            .in('status', ['approved', 'live'])
+            .maybeSingle();
+
+          if (stagePass) {
+            isPublisher = true;
+            console.log('[livekit-token] Stage Pass verified —', stagePass.status, '— publisher token granted');
+          }
+        }
+      } catch (dbErr) {
+        console.warn('[livekit-token] Stage Pass DB check failed (treated as audience):', dbErr);
+      }
     }
+
+    let participantName = String(
+      body.identity || body.participantIdentity || body.userId || body.user_name || body.participantName || 'participant'
+    );
 
     // Guard: Check for missing room
     if (!roomName) {
@@ -135,17 +157,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Guard: Check for missing environment variables
     if (!apiKey || !apiSecret) {
       console.error('[livekit-token] LiveKit credentials NOT configured env vars:', { apiKey: !!apiKey, apiSecret: !!apiSecret });
-      return withCors({ 
+      return withCors({
         success: false,
         error: 'LiveKit credentials not configured on server',
         stage: 'livekit-token',
         hint: 'Set LIVEKIT_API_KEY and LIVEKIT_API_SECRET in Supabase secrets'
       }, 500, req);
     }
-    
-    console.log('[livekit-token] API Key present:', !!apiKey);
 
-    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'isPublisher:', isPublisher, 'type:', participantType);
+    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'isPublisher:', isPublisher);
 
     const token = await createLiveKitToken({
       apiKey,
@@ -155,7 +175,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       isPublisher
     });
 
-    console.log('[livekit-token] Token generated successfully for', participantType);
+    console.log('[livekit-token] Token generated successfully for', participantName, 'publisher:', isPublisher);
 
     // Get LiveKit URL for client to connect to
     const liveKitUrl = Deno.env.get('LIVEKIT_URL') || 'wss://troll-city-llc-4ixv208d.livekit.cloud';
@@ -168,7 +188,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       participantIdentity: participantName,
       participantName,
       isPublisher,
-      participantType
+      participantType: isPublisher ? 'publisher' : 'audience'
     }, 200, req);
 
   } catch (error) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stream } from '../../types/broadcast';
 import { supabase } from '../../lib/supabase';
-import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp, Share2, Package, Swords, Star, GripVertical, X, MoreHorizontal, Sliders, Shield, Gamepad2 } from 'lucide-react';
+import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp, Share2, Package, Swords, Star, GripVertical, X, MoreHorizontal, Sliders, Shield, Gamepad2, PlusCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { getCategoryConfig } from '../../config/broadcastCategories';
@@ -64,6 +64,7 @@ interface BroadcastControlsProps {
   }>;
   selectedBattleTheme?: string;
   onBattleThemeChange?: (themeId: string) => void;
+  onOpenStagePass?: () => void;
 }
 
 function BroadcastControls({
@@ -98,10 +99,11 @@ function BroadcastControls({
   onTrollToeController,
   trollToeActive = false,
   onGameSelect,
-  activeGame = null,
-  activeViewers = [],
-  selectedBattleTheme = 'default',
+  activeGame,
+  activeViewers,
+  selectedBattleTheme,
   onBattleThemeChange,
+  onOpenStagePass,
 }: BroadcastControlsProps) {
   const navigate = useNavigate();
   const renderCountRef = useRef(0);
@@ -774,6 +776,18 @@ function BroadcastControls({
           />
         )}
 
+        {/* Open Stage Pass (host) */}
+        {isHost && onOpenStagePass && (
+          <OrbBtn
+            active={false}
+            onClick={onOpenStagePass}
+            icon={PlusCircle}
+            label="Stage Pass"
+            glow="violet"
+            size="sm"
+          />
+        )}
+
         {/* More menu toggle */}
         {(canManageStream || isHost || isOfficerOrAdmin) && (
           <OrbBtn
@@ -966,11 +980,13 @@ function OrbBtn({ active, onClick, icon: Icon, label, glow, size, disabled, tool
             ? "bg-red-500/20 border-red-500/40 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]"
             : glow === "pink"
               ? "bg-pink-500/20 border-pink-500/40 text-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.3)]"
-              : glow === "yellow"
-                ? "bg-yellow-500/20 border-yellow-500/40 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.3)] animate-pulse"
-                : active
-                  ? "bg-white/15 border-white/25 text-white shadow-lg"
-                  : "bg-white/10 border-white/20 text-white hover:bg-white/20",
+              : glow === "violet"
+                ? "bg-violet-500/20 border-violet-500/40 text-violet-400 shadow-[0_0_15px_rgba(139,92,246,0.35)]"
+                : glow === "yellow"
+                  ? "bg-yellow-500/20 border-yellow-500/40 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.3)] animate-pulse"
+                  : active
+                    ? "bg-white/15 border-white/25 text-white shadow-lg"
+                    : "bg-white/10 border-white/20 text-white hover:bg-white/20",
           disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-90"
         )}
       >

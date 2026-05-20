@@ -12,9 +12,8 @@ import { supabase, UserProfile } from '../../lib/supabase'
 
 import { useIsMobile } from '../../hooks/useIsMobile'
 
-import { Stream } from '../../types/broadcast'
+import { Stream, StagePass } from '../../types/broadcast'
 import StreamLayout from '../../components/broadcast/StreamLayout'
-import BroadcastGrid from '../../components/broadcast/BroadcastGrid'
 import BroadcastChat from '../../components/broadcast/BroadcastChat'
 import BroadcastControls from '../../components/broadcast/BroadcastControls'
 import BattleView from '../../components/broadcast/BattleView'
@@ -30,6 +29,10 @@ import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
 import GamePicker from '@/components/broadcast/GamePicker'
 import GiftBoxModal, { GiftTarget } from '@/components/broadcast/GiftBoxModal'
 import PinProductModal from '@/components/broadcast/PinProductModal'
+import OpenStagePassModal from '@/components/broadcast/OpenStagePassModal'
+import StagePassControl from '@/components/broadcast/StagePassControl'
+import StagePassRequestsPanel from '@/components/broadcast/StagePassRequestsPanel'
+import BroadcastStageLayout from '@/components/broadcast/BroadcastStageLayout'
 
 import ShareModal from '@/components/broadcast/ShareModal'
 import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
@@ -53,6 +56,7 @@ import { BroadcastGift } from '@/hooks/useBroadcastRealtime'
 import { useBroadcastTicker } from '@/hooks/useBroadcastTicker'
 import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueController'
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
+import { useStagePasses } from '@/hooks/useStagePasses'
 
 import { useTrollopoly } from '@/hooks/useTrollopoly'
 import { useTrollToe } from '@/hooks/useTrollToe'
@@ -68,7 +72,6 @@ import { useTickerStore } from '@/stores/tickerStore'
 import { AnimatePresence } from 'framer-motion'
 import { LogOut, Dice5, Shield, Zap } from 'lucide-react'
 import { toast } from 'sonner'
-import { div } from 'three/src/nodes/math/OperatorNode.js'
 
 // Debug counters for broadcast stability verification
 const DEBUG_COUNTERS = {
@@ -478,12 +481,21 @@ export function BroadcastPage() {
   
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+   const [isStagePassModalOpen, setIsStagePassModalOpen] = useState(false)
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
    const [giftNameMap, setGiftNameMap] = useState<Record<string, string>>({})
    const [giftUserPositions, setGiftUserPositions] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({})
     const getGiftUserPositionsRef = useRef<() => Record<string, { top: number; left: number; width: number; height: number }>>(() => ({}))
     const giftNameMapRef = useRef<Record<string, string>>({})
+
+  // Stage Pass System
+  const stagePassesHook = useStagePasses(streamId);
+
+  // Determine if current user can publish based on Stage Pass status
+  const canPublish = isHost
+    || stagePassesHook.currentUserStagePass?.status === 'live'
+    || stagePassesHook.currentUserStagePass?.status === 'approved';
 
     // Modal state lifted from BroadcastGrid
     const [userActionTarget, setUserActionTarget] = useState<{
@@ -766,25 +778,9 @@ export function BroadcastPage() {
         });
     }
 
-    // Start animation via centralized store; all participants should see this.
-    try {
-      // Temporarily comment out to debug hook error
-      // const broadcastGiftType: GiftType = (giftData.gift_name || '').toLowerCase().includes('rose') ? 'rose' :
-      //   (giftData.gift_name || '').toLowerCase().includes('heart') ? 'heart' :
-      //   (giftData.gift_name || '').toLowerCase().includes('diamond') ? 'diamond' :
-      //   (giftData.gift_name || '').toLowerCase().includes('crown') ? 'crown' :
-      //   (giftData.gift_name || '').toLowerCase().includes('car') ? 'car' :
-      //   (giftData.gift_name || '').toLowerCase().includes('house') ? 'house' :
-      //   (giftData.gift_name || '').toLowerCase().includes('rocket') ? 'rocket' :
-      //   (giftData.gift_name || '').toLowerCase().includes('dragon') ? 'dragon' :
-      //   (giftData.gift_name || '').toLowerCase().includes('star') ? 'star' :
-      //   (giftData.gift_name || '').toLowerCase().includes('trophy') ? 'trophy' :
-      //   (giftData.gift_name || '').toLowerCase().includes('coffee') ? 'coffee' :
-      //   (giftData.gift_name || '').toLowerCase().includes('pizza') ? 'pizza' : 'heart';
- 
-
+     // Start animation via centralized store; all participants should see this.
      // Update broadcaster profile optimistically
-    if (receiverId === streamRef.current?.user_id && resolvedGiftAmount > 0) {
+     if (receiverId === streamRef.current?.user_id && resolvedGiftAmount > 0) {
       const giftAmount = Math.floor(resolvedGiftAmount);
       
       setBroadcasterProfile((prev: any) => {
@@ -1200,8 +1196,6 @@ useEffect(() => {
     profileRef.current = profile
   }, [profile])
 
-const canPublish = isHost
-
   const updateStreamPatch = useCallback((patch: Partial<Stream>) => {
     setStream((prev) => prev ? { ...prev, ...patch } : prev);
   }, []);
@@ -1429,6 +1423,8 @@ const canPublish = isHost
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
   const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
   const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
+  const handleOpenStagePassModal = useCallback(() => setIsStagePassModalOpen(true), [])
+  const handleCloseStagePassModal = useCallback(() => setIsStagePassModalOpen(false), [])
 
   const fetchHostStreamFallback = async () => {
     if (!user?.id) return null
@@ -2270,6 +2266,8 @@ const canPublish = isHost
     }
 
      const shouldPublish = isHost
+     || stagePassesHook.currentUserStagePass?.status === 'live'
+     || stagePassesHook.currentUserStagePass?.status === 'approved'
     
     // Determine the user identity for LiveKit
     // Use user.id for logged-in users, or anonymous viewer for guests
@@ -3595,58 +3593,42 @@ const handleLike = useCallback(async () => {
             className="flex flex-col h-full"
             style={!isHost ? { touchAction: 'pan-y' } : undefined}
           >
-            {/* Always show BroadcastGrid - battle mode is integrated into the grid */}
-<>
-<BroadcastGrid
-                stream={stream}
-                showTicker={tickerSettings.is_enabled && !isMobileViewer}
-                isMobileViewer={isMobileViewer}
-                isHost={isHost}
-                isOfficer={isOfficer}
-                localTracks={localTracks}
-                cameraOverlayTrack={cameraOverlayTrackState}
-                room={roomRef.current}
-                remoteUsers={broadcastGridRemoteUsers}
-                localUserId={user?.id || ''}
-                onGift={onGift}
-                onGiftAll={onGiftAll}
-              toggleCamera={toggleCamera}
-              toggleMicrophone={toggleMicrophone}
-              streamStatus={stream.status}
-              boxCount={(stream as any).box_count || 1}
-                 broadcastMode={stream.broadcast_mode as 'normal' | 'game' | 'battle' | undefined}
-                 battleState={battleState}
-                 isBattleActive={stream.is_battle}
-                 battleStartedAt={stream.is_battle ? battleStartTime : null}
-                 supporters={supporters}
-                 onPickSide={pickSide}
-                 joinWindowOpen={joinWindowOpen}
-                 userTeam={userTeam}
-                 remainingTime={remainingTime}
-                 shouldShowSidePicker={shouldShowSidePicker}
-                 onBattleGift={sendBattleGift}
-                 enableStreamSwipe={isMobileViewer}
-                 canSwipe={canSwipe}
-                 onSwipeUp={handleSwipeUp}
-                 onSwipeDown={handleSwipeDown}
-                 onAddBox={undefined} // Hide manual seat addition
-                 onRemoveBox={undefined} // Hide manual seat removal
-                 onToggleRgb={isHost ? toggleStreamRgb : undefined}
-                 hasRgbEffect={stream.has_rgb_effect}
-                 canEditBoxes={false}
-                 trollToeMatch={trollToe.match}
-                 onTrollToeFog={handleTrollToeFog}
-                 battleFormat={stream.broadcast_format as '1v1' | '2v2' | '3v3' | '4v4' | '5v5' | undefined}
-                 isUniversalBattle={(stream as any).battle_mode === 'universal'}
-                 onOpenUserAction={handleOpenUserAction}
-                 onOpenUserStats={handleOpenUserStats}
-                 onOpenHostStats={handleOpenHostStats}
-                 onOpenModActions={handleOpenModActions}
-                 onCloseModActions={handleCloseModActions}
-                />
-            </>
-            
-            {/* Troll Toe game lives on the broadcast grid tiles - no separate overlay needed */}
+            {/* Host Stage Card + Stage Guest Grid */}
+            <BroadcastStageLayout
+              hostName={broadcasterProfile?.username || 'Broadcaster'}
+              hostAvatarUrl={broadcasterProfile?.avatar_url || null}
+              hostIsMicOn={micEnabled}
+              hostIsCamOn={cameraEnabled}
+              hostIsScreenSharing={isScreenSharing}
+              hostHasVideo={!!(localTracks && localTracks[1])}
+              livePasses={stagePassesHook.stagePasses.filter(
+                (p: StagePass) => p.status === 'approved' || p.status === 'live'
+              )}
+              guestMicCam={{}} // mic/cam state filled as LiveKit track data arrives
+              coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+              isHost={isHost}
+              hasOpenPass={stagePassesHook.stagePasses.some((p: StagePass) => p.status === 'open')}
+              currentUserPassStatus={stagePassesHook.currentUserStagePass?.status || null}
+              onRequestPass={async () => {
+                const openPass = stagePassesHook.stagePasses.find((p: StagePass) => p.status === 'open');
+                if (openPass) {
+                  const result = await stagePassesHook.requestStagePass(openPass.id);
+                  if (!result.success) {
+                    toast.error(result.error || 'Failed to request Stage Pass');
+                  }
+                }
+              }}
+              onOpenPassModal={handleOpenStagePassModal}
+              onRemoveStageGuest={(passId: string) => {
+                void stagePassesHook.removeStageGuest(passId);
+                void stagePassesHook.refetch();
+              }}
+              onApproveStagePass={stagePassesHook.approveStagePass}
+              onDenyStagePass={stagePassesHook.denyStagePass}
+             className=""
+            />
+
+            {/* Drag to reorder helper chip — host only (no-seats launch: omitted) */}
           </div>
         }
 
@@ -3685,6 +3667,7 @@ const handleLike = useCallback(async () => {
               activeViewers={activeViewerProfiles}
               selectedBattleTheme={selectedBattleTheme}
               onBattleThemeChange={setSelectedBattleTheme}
+              onOpenStagePass={isHost ? handleOpenStagePassModal : undefined}
             />
           </>
         }
@@ -3893,46 +3876,56 @@ const handleLike = useCallback(async () => {
              </div>
            )}
 
-           {/* Ticker Control Button + Panel (host only) - hide during active game */}
-           {isHost && !isGameActive && (
-             <>
-               <DraggableWrapper
-                 initialPos={{ x: 20, y: window.innerHeight - 180 }}
-               >
-                 <button
-                   onClick={() => setIsTickerPanelOpen(!isTickerPanelOpen)}
-                   className="relative bg-cyan-600/90 hover:bg-cyan-500 text-white p-3 rounded-full shadow-lg shadow-cyan-500/30 transition-all hover:scale-110"
-                   title="Open Ticker Control - Send scrolling announcements"
-                 >
-                   <Zap className="w-5 h-5" />
-                   {tickerSettings.is_enabled && (
-                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse" />
-                   )}
-                 </button>
-               </DraggableWrapper>
+            {/* Ticker Control Button + Panel (host only) - hide during active game */}
+            {isHost && !isGameActive && (
+              <>
+                <DraggableWrapper
+                  initialPos={{ x: 20, y: window.innerHeight - 180 }}
+                >
+                  <button
+                    onClick={() => setIsTickerPanelOpen(!isTickerPanelOpen)}
+                    className="relative bg-cyan-600/90 hover:bg-cyan-500 text-white p-3 rounded-full shadow-lg shadow-cyan-500/30 transition-all hover:scale-110"
+                    title="Open Ticker Control - Send scrolling announcements"
+                  >
+                    <Zap className="w-5 h-5" />
+                    {tickerSettings.is_enabled && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse" />
+                    )}
+                  </button>
+                </DraggableWrapper>
 
-               <AnimatePresence>
-                 {isTickerPanelOpen && (
-                     <DraggableWrapper
-                     initialPos={{ x: 12, y: Math.min(window.innerHeight - 420, window.innerHeight * 0.3) }}
-                   >
-                     <TickerControlPanel
-                       onSendMessage={(content, category, isPriority, tags) => {
-                         if (isPriority) {
-                           tickerSendPriority(content, category, tags);
-                         } else {
-                           tickerSendMessage(content, category, false, tags);
-                         }
-                       }}
-                       onBroadcastSettings={tickerBroadcastSettings}
-                       onDeleteMessage={tickerDeleteMessage}
-                       onClose={() => setIsTickerPanelOpen(false)}
-                       disableClose={activeGame === 'trollopoly'}
-                     />
-                   </DraggableWrapper>
-                 )}
-</AnimatePresence>
-              </>
+                <AnimatePresence>
+                  {isTickerPanelOpen && (
+                      <DraggableWrapper
+                      initialPos={{ x: 12, y: Math.min(window.innerHeight - 420, window.innerHeight * 0.3) }}
+                    >
+                      <TickerControlPanel
+                        onSendMessage={(content, category, isPriority, tags) => {
+                          if (isPriority) {
+                            tickerSendPriority(content, category, tags);
+                          } else {
+                            tickerSendMessage(content, category, false, tags);
+                          }
+                        }}
+                        onBroadcastSettings={tickerBroadcastSettings}
+                        onDeleteMessage={tickerDeleteMessage}
+                        onClose={() => setIsTickerPanelOpen(false)}
+                        disableClose={activeGame === 'trollopoly'}
+                      />
+                    </DraggableWrapper>
+                  )}
+ </AnimatePresence>
+               </>
+             )}
+
+            {/* Stage Pass Requests Panel — host only */}
+            {isHost && (
+              <StagePassRequestsPanel
+                requests={stagePassesHook.requests}
+                onApprove={(id: string) => { void stagePassesHook.approveStagePass(id); }}
+                onDeny={(id: string) => { void stagePassesHook.denyStagePass(id); }}
+                className="absolute top-3 left-3 z-[65] w-[280px]"
+              />
             )}
           </>
         }
@@ -3989,6 +3982,17 @@ const handleLike = useCallback(async () => {
                    boostCityHeat(Math.ceil(totalAmount / 100));
                  }
                }}
+             />
+
+             {/* Open Stage Pass Modal */}
+             <OpenStagePassModal
+               isOpen={isStagePassModalOpen}
+               onClose={handleCloseStagePassModal}
+               onConfirm={async (count: number, priceCoins: number) => {
+                 await stagePassesHook.openStagePasses(count, priceCoins);
+                 handleCloseStagePassModal();
+               }}
+               loading={stagePassesHook.loading}
              />
              
              <PinProductModal
