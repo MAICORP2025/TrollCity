@@ -512,7 +512,7 @@ BEGIN
     RETURN 'Order not found';
   END IF;
   
-  IF v_order.status NOT IN ('paid', 'processing') THEN
+  IF v_order.status NOT IN ('paid', 'processing', 'shipped') THEN
     RETURN 'Order cannot be fulfilled in current status';
   END IF;
   
@@ -536,18 +536,29 @@ BEGIN
     tracking_status = 'label_created',
     updated_at = now()
   RETURNING id INTO v_shipment_id;
-  
-  -- Update order
-  UPDATE marketplace_purchases
-  SET status = 'shipped',
-      fulfillment_status = 'fulfilled',
-      tracking_number = p_tracking_number,
-      shipping_carrier = p_carrier,
-      tracking_url = v_tracking_url,
-      shipped_at = now(),
-      shipped_date = p_shipped_date,
-      updated_at = now()
-  WHERE id = p_order_id;
+
+  -- Only update order status if not already shipped (avoid overwriting shipped_at)
+  IF v_order.status NOT IN ('shipped', 'delivered', 'completed') THEN
+    UPDATE marketplace_purchases
+    SET status = 'shipped',
+        fulfillment_status = 'fulfilled',
+        tracking_number = p_tracking_number,
+        shipping_carrier = p_carrier,
+        tracking_url = v_tracking_url,
+        shipped_at = now(),
+        shipped_date = p_shipped_date,
+        updated_at = now()
+    WHERE id = p_order_id;
+  ELSE
+    -- Just update tracking info for already-shipped orders
+    UPDATE marketplace_purchases
+    SET tracking_number = p_tracking_number,
+        shipping_carrier = p_carrier,
+        tracking_url = v_tracking_url,
+        shipped_date = p_shipped_date,
+        updated_at = now()
+    WHERE id = p_order_id;
+  END IF;
   
   RETURN 'Order fulfilled successfully';
 END;

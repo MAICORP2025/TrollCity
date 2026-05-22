@@ -27,18 +27,19 @@ import { WallPost } from '@/types/trollWall'
 import UserNameWithAge from '@/components/UserNameWithAge'
 import NeonGlowUsername from '@/components/NeonGlowUsername'
 import CreatePostComposer from './CreatePostComposer'
-import { parseTextWithLinks } from '@/lib/utils'
+import { parseTextWithLinks, cn } from '@/lib/utils'
 
 const UserProfilePopup = lazy(() => import('@/components/UserProfilePopup'))
 const MentionTextarea = lazy(() => import('@/components/MentionTextarea'))
 
 interface TrollWallFeedProps {
   onRequireAuth: (intent?: string) => boolean
+  feedClassName?: string
 }
 
 const PAGE_SIZE = 10
 
-export default function TrollWallFeed({ onRequireAuth }: TrollWallFeedProps) {
+export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWallFeedProps) {
   const { user, isAdmin } = useAuthStore()
   const isMountedRef = useRef(true)
   const latestRequestId = useRef(0)
@@ -749,7 +750,7 @@ export default function TrollWallFeed({ onRequireAuth }: TrollWallFeedProps) {
       </div>
 
       <div className="mt-2 flex-shrink-0 border-t border-white/10 pt-2">
-        <div className="rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-2 shadow-[0_0_30px_rgba(34,211,238,0.08)]">
+        <div className={cn("rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-2 shadow-[0_0_30px_rgba(34,211,238,0.08)]", feedClassName)}>
           <CreatePostComposer
             onPostCreated={handlePostCreated}
             onRequireAuth={onRequireAuth}

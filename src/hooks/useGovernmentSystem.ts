@@ -146,7 +146,7 @@ export const ROLE_TABS = {
 export const TAB_PERMISSIONS: Record<string, string[]> = {
   'Laws': ['officer', 'lead', 'secretary', 'president', 'admin', 'citizen'],
   'Voting': ['officer', 'lead', 'secretary', 'president', 'admin', 'citizen'],
-  'Enforcement': ['officer', 'lead', 'secretary', 'president', 'admin'],
+  'Jail': ['officer', 'lead', 'secretary', 'president', 'admin'],
   'Roles & Power': ['secretary', 'president', 'admin'],
   'History': ['officer', 'lead', 'secretary', 'president', 'admin', 'citizen'],
   'Elections': ['officer', 'lead', 'secretary', 'president', 'admin', 'citizen'],
@@ -186,7 +186,7 @@ export const useGovernmentSystem = () => {
     const tabs = [
       { id: 'laws', name: 'Laws', icon: '📜' },
       { id: 'voting', name: 'Voting', icon: '🗳️' },
-      { id: 'enforcement', name: 'Enforcement', icon: '👮' },
+      { id: 'jail', name: 'Jail', icon: '🔒' },
       { id: 'roles', name: 'Roles & Power', icon: '🏛️' },
       { id: 'history', name: 'History', icon: '📜' },
       { id: 'elections', name: 'Elections', icon: '🗳️' },

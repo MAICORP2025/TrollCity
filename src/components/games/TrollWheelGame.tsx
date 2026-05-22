@@ -109,7 +109,7 @@ interface TrollWheelProps {
 
 interface WheelReward {
   id: number;
-  type: 'trollmonds' | 'bankrupt' | 'trolled' | 'free_perk' | 'free_insurance' | 'free_entrance' | 'ghost_mode' | 'featured_broadcaster' | 'broadcast_ability';
+  type: 'trollmonds' | 'bankrupt' | 'trolled' | 'free_perk' | 'free_jail' | 'free_entrance' | 'ghost_mode' | 'featured_broadcaster' | 'broadcast_ability';
   coins: number;
   label: string;
   description: string;
@@ -146,7 +146,7 @@ const WHEEL_REWARDS: WheelReward[] = [
 const SPECIAL_REWARDS: WheelReward[] = [
   { id: 16, type: 'ghost_mode', coins: 0, label: 'GHOST MODE', description: 'Hide from broadcast for 24 hours!', rarity: 'special', color: '#6b7280', glowColor: '#9ca3af', icon: '👻' },
   { id: 17, type: 'free_perk', coins: 0, label: 'FREE PERK', description: 'Get a free perk from Coin Store!', rarity: 'special', color: '#14b8a6', glowColor: '#2dd4bf', icon: '✨' },
-  { id: 18, type: 'free_insurance', coins: 0, label: 'FREE INSURANCE', description: 'Get free insurance for 7 days!', rarity: 'special', color: '#0ea5e9', glowColor: '#38bdf8', icon: '🛡️' },
+   { id: 18, type: 'free_jail', coins: 0, label: 'JAIL FREE', description: 'Get out of jail free card!', rarity: 'special', color: '#10b981', glowColor: '#34d399', icon: '🚪' },
   { id: 19, type: 'free_entrance', coins: 0, label: 'FREE ENTRANCE', description: 'Get a free entrance effect!', rarity: 'special', color: '#a855f7', glowColor: '#c084fc', icon: '🎆' },
 ];
 
@@ -865,50 +865,11 @@ export default function TrollWheelGame({
         playWinSound();
         message = '✨ FREE PERK! Visit Coin Store!';
         await addToInventory('free_perk', 'Free Perk', 'Get any perk for free');
-      } else if (result.type === 'free_insurance') {
-        playWinSound();
-        message = '🛡️ FREE INSURANCE! 7 days!';
-        await addToInventory('free_insurance', 'Free Insurance', 'Free insurance for 7 days');
-      } else if (result.type === 'free_entrance') {
-        playWinSound();
-        message = '🎆 FREE ENTRANCE! Free entrance effect!';
-        await addToInventory('free_entrance', 'Free Entrance Effect', 'Get any entrance effect for free');
-      } else if (result.type === 'broadcast_ability' && result.abilityId) {
-        const abilityDef = getAbilityById(result.abilityId);
-        if (abilityDef) {
-          playWinSound();
-          message = `${abilityDef.icon} RARE ABILITY: ${abilityDef.name}!`;
-          // Add to user's ability inventory
-          try {
-            await supabase.rpc('add_ability_to_inventory', {
-              p_user_id: profile.id,
-              p_ability_id: result.abilityId,
-            });
-          } catch (e) {
-            // Fallback: direct insert/upsert
-            try {
-              const { data: existing } = await supabase
-                .from('user_abilities')
-                .select('id, quantity')
-                .eq('user_id', profile.id)
-                .eq('ability_id', result.abilityId)
-                .single();
-              if (existing) {
-                await supabase
-                  .from('user_abilities')
-                  .update({ quantity: existing.quantity + 1 })
-                  .eq('id', existing.id);
-              } else {
-                await supabase
-                  .from('user_abilities')
-                  .insert({ user_id: profile.id, ability_id: result.abilityId, quantity: 1 });
-              }
-            } catch (e2) {
-              console.warn('Failed to add ability:', e2);
-            }
-          }
-        }
-      }
+       } else if (result.type === 'free_jail') {
+         playWinSound();
+         message = '🚪 JAIL FREE! Get out of jail free card!';
+         await addToInventory('free_jail', 'Jail Free Card', 'Get out of jail free card');
+       }
       
       // Show toast based on result type
       if (result.type === 'bankrupt' || result.type === 'trolled') {
@@ -953,27 +914,60 @@ export default function TrollWheelGame({
     }
   };
   
-  const activateItem = async (itemId: string) => {
-    try {
-      const { data, error } = await supabase
-        .rpc('activate_wheel_inventory_item', { p_item_id: itemId });
-      
-      if (error) throw error;
-      
-      if (data) {
-        toast.success('Item activated!');
-        loadInventory();
-        
-        // Refresh the global auth profile instead of reloading the page
-        useAuthStore.getState().refreshProfile();
-      } else {
-        toast.error('Failed to activate item');
-      }
-    } catch (err) {
-      console.error('[TrollWheel] Failed to activate item:', err);
-      toast.error('Failed to activate item');
-    }
-  };
+   const activateItem = async (itemId: string) => {
+     try {
+       const { data, error } = await supabase
+         .rpc('activate_wheel_inventory_item', { p_item_id: itemId });
+       
+       if (error) throw error;
+       
+       if (data) {
+         toast.success('Item activated!');
+         loadInventory();
+         
+         // Handle special activation for jail free card
+         const { data: itemData } = await supabase
+           .from('wheel_inventory')
+           .select('item_type')
+           .eq('id', itemId)
+           .single();
+           
+         if (itemData?.item_type === 'free_jail') {
+           // Release user from jail
+           await supabase
+             .from('user_profiles')
+             .update({ is_jailed: false })
+             .eq('id', profile?.id);
+             
+           // Clear jail record
+           await supabase
+             .from('jail')
+             .update({ 
+               status: 'released',
+               release_time: new Date().toISOString()
+             })
+             .eq('user_id', profile?.id)
+             .order('created_at', { ascending: false })
+             .limit(1);
+             
+           toast.success('You have been released from jail!');
+           
+           // Navigate to home if currently on jail page
+           if (window.location.pathname === '/jail') {
+             navigate('/', { replace: true });
+           }
+         }
+         
+         // Refresh the global auth profile instead of reloading the page
+         useAuthStore.getState().refreshProfile();
+       } else {
+         toast.error('Failed to activate item');
+       }
+     } catch (err) {
+       console.error('[TrollWheel] Failed to activate item:', err);
+       toast.error('Failed to activate item');
+     }
+   };
   
   const collectWheelBalance = async () => {
     if (wheelBalance <= 0) return;
@@ -1116,36 +1110,36 @@ export default function TrollWheelGame({
                 <p className="text-gray-400 text-center py-4">No items yet. Spin the wheel to win!</p>
               ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {inventory.map((item) => (
-                    <div 
-                      key={item.id}
-                      className="flex items-center justify-between bg-gray-900/50 rounded-xl p-3 border border-gray-700"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="text-2xl">
-                          {item.item_type === 'ghost_mode' && '👻'}
-                          {item.item_type === 'featured_broadcaster' && '⭐'}
-                          {item.item_type === 'free_perk' && '✨'}
-                          {item.item_type === 'free_insurance' && '🛡️'}
-                          {item.item_type === 'free_entrance' && '🎆'}
-                        </div>
-                        <div>
-                          <p className="font-bold text-white">{item.item_name}</p>
-                          <p className="text-xs text-gray-400">{item.item_description}</p>
-                        </div>
-                      </div>
-                      {item.is_active ? (
-                        <span className="text-green-400 text-sm font-bold">ACTIVE</span>
-                      ) : (
-                        <button
-                          onClick={() => activateItem(item.id)}
-                          className="bg-purple-500 text-white px-3 py-1 rounded-lg text-sm font-bold hover:bg-purple-600"
-                        >
-                          ACTIVATE
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                   {inventory.map((item) => (
+                     <div 
+                       key={item.id}
+                       className="flex items-center justify-between bg-gray-900/50 rounded-xl p-3 border border-gray-700"
+                     >
+                       <div className="flex items-center gap-3">
+                         <div className="text-2xl">
+                           {item.item_type === 'ghost_mode' && '👻'}
+                           {item.item_type === 'featured_broadcaster' && '⭐'}
+                           {item.item_type === 'free_perk' && '✨'}
+                           {item.item_type === 'free_jail' && '🚪'}
+                           {item.item_type === 'free_entrance' && '🎆'}
+                         </div>
+                         <div>
+                           <p className="font-bold text-white">{item.item_name}</p>
+                           <p className="text-xs text-gray-400">{item.item_description}</p>
+                         </div>
+                       </div>
+                       {item.is_active ? (
+                         <span className="text-green-400 text-sm font-bold">ACTIVE</span>
+                       ) : (
+                         <button
+                           onClick={() => activateItem(item.id)}
+                           className="bg-purple-500 text-white px-3 py-1 rounded-lg text-sm font-bold hover:bg-purple-600"
+                         >
+                           ACTIVATE
+                         </button>
+                       )}
+                     </div>
+                   ))}
                 </div>
               )}
             </motion.div>

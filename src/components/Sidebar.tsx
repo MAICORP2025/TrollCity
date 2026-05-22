@@ -325,7 +325,7 @@ profile?.role === 'superadmin' ||
   if (canSeeSecretary || isAdmin) specialAccessPaths.push('/secretary')
   if (isAdmin) specialAccessPaths.push('/admin/applications')
   if (profile?.role === 'president' || profile?.troll_role === 'president') specialAccessPaths.push('/government')
-   const systemPaths = ['/apply', '/interview-room', '/wallet']
+    const systemPaths = ['/apply', '/wallet']
   const isAnyUpdated = (paths: string[]) => paths.some(path => isUpdated(path))
 
   const jailedLocked = isJailed && !(profile?.role === 'admin' || profile?.is_admin)
@@ -406,26 +406,25 @@ profile?.role === 'superadmin' ||
       )}
 
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto px-2 py-3 custom-scrollbar">
-        {jailedLocked ? (
-          <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
-            {!isSidebarCollapsed && (
-              <div className="col-span-2 space-y-4 rounded-2xl border border-red-500/25 bg-red-950/20 px-3 py-6 text-center">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-red-500/25 bg-red-500/10">
-                  <Lock className="text-red-400" size={32} />
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-red-400">Access Restricted</p>
-                  <p className="mt-1 text-[10px] text-gray-400">City services suspended while incarcerated.</p>
-                </div>
-              </div>
-            )}
-            <GridItem collapsed={isSidebarCollapsed} icon={Lock} label="Jail" to="/jail" active={isActive('/jail')} className="text-red-400" tone="red" />
-            {isBackgroundJailed && (
-              <GridItem collapsed={isSidebarCollapsed} icon={AlertTriangle} label="Appeal" to="/jail/appeal?active=false" active={isActive('/jail/appeal')} className="text-orange-300" tone="orange" />
-            )}
-            <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} tone="blue" />
-          </div>
-        ) : (
+    {jailedLocked ? (
+  <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
+    {!isSidebarCollapsed && (
+      <div className="col-span-2 space-y-4 rounded-2xl border border-red-500/25 bg-red-950/20 px-3 py-6 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-red-500/25 bg-red-500/10">
+          <Lock className="text-red-400" size={32} />
+        </div>
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-red-400">Access Restricted</p>
+          <p className="mt-1 text-[10px] text-gray-400">City services suspended while incarcerated.</p>
+        </div>
+      </div>
+    )}
+    {isBackgroundJailed && (
+      <GridItem collapsed={isSidebarCollapsed} icon={AlertTriangle} label="Appeal" to="/jail/appeal?active=false" active={isActive('/jail/appeal')} className="text-orange-300" tone="orange" />
+    )}
+    <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} tone="blue" />
+  </div>
+) : (
           <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
             <div className={isSidebarCollapsed ? 'col-span-1 mb-2' : 'col-span-2 mb-2'}>
               {canBroadcast() ? (
@@ -495,12 +494,9 @@ profile?.role === 'superadmin' ||
                <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Dockets" to="/admin/court-dockets" active={location.pathname.startsWith('/admin/court-dockets')} highlight={isUpdated('/admin/court-dockets')} onClick={() => markAsViewed('/admin/court-dockets')} className="text-pink-300" tone="pink" />
              )}
 
-             <SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Crown} label={hasFamily ? 'My Family' : 'Families'} to={hasFamily ? '/family/home' : '/family/browse'} active={location.pathname.startsWith('/family')} highlight={isUpdated('/family/home')} onClick={() => markAsViewed('/family/home')} className="text-pink-300" tone="pink" glow={hasFamily ? 'pink' : undefined} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Insurance" to="/insurance" active={isActive('/insurance')} highlight={isUpdated('/insurance')} onClick={() => markAsViewed('/insurance')} className="text-cyan-300" tone="cyan" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Video} label="Interview" to="/interview-room" active={isActive('/interview-room')} highlight={isUpdated('/interview-room')} onClick={() => markAsViewed('/interview-room')} tone="blue" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} tone="purple" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Lock} label="Jail" to="/jail" active={isActive('/jail')} highlight={isUpdated('/jail')} onClick={() => markAsViewed('/jail')} className="text-red-400" tone="red" />
+              <SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
+             <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Insurance" to="/insurance" active={isActive('/insurance')} highlight={isUpdated('/insurance')} onClick={() => markAsViewed('/insurance')} className="text-cyan-300" tone="cyan" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} tone="purple" />
             <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} highlight={isUpdated('/leaderboard')} onClick={() => markAsViewed('/leaderboard')} tone="purple" />
             <GridItem collapsed={isSidebarCollapsed} icon={Warehouse} label="Living" to="/living" active={isActive('/living')} highlight={isUpdated('/living')} onClick={() => markAsViewed('/living')} tone="cyan" />
             {canAccessMaiClass && (

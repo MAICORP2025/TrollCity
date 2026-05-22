@@ -21,8 +21,11 @@ const NOTIFICATION_CATEGORIES = {
     'someone_you_follow_went_live', 'your_stream_started', 'your_stream_ended',
     'stream_disconnected', 'invited_to_cohost', 'cohost_invite_accepted',
     'cohost_invite_declined', 'removed_from_cohost', 'broadofficer_assigned',
-    'broadofficer_removed', 'chat_disabled', 'kicked_from_live', 'banned_from_live',
-    'live_received_report', 'live_ended_by_staff'
+    'broadofficer_removed', 'chat_disabled', 'kicked_from_live', 'restricted_from_live',
+    'live_received_report', 'live_ended_by_staff',
+    'stage_pass_opened', 'stage_pass_requested', 'stage_pass_approved',
+    'stage_pass_denied', 'stage_pass_removed', 'stage_pass_live_started',
+    'stage_pass_live_ended'
   ],
   CHAT_SOCIAL: [
     'new_private_message', 'message_request_received', 'someone_replied',
@@ -35,14 +38,19 @@ const NOTIFICATION_CATEGORIES = {
     'coin_purchase_failed', 'bonus_coins_added', 'daily_reward_available',
     'daily_reward_claimed', 'cashout_submitted', 'cashout_approved',
     'cashout_rejected', 'cashout_paid', 'cashout_hold_placed',
-    'cashout_hold_removed', 'wallet_adjustment', 'refund_issued'
+    'cashout_hold_removed', 'wallet_adjustment', 'refund_issued',
+    'hype_coin_earned', 'hype_coin_daily_cap_reached', 'hype_coin_weekly_cap_reached',
+    'hype_coins_converted', 'hype_coin_adjustment'
   ],
   COURT_JAIL: [
     'court_case_opened', 'added_to_case', 'court_hearing_scheduled',
     'hearing_starting_soon', 'judge_assigned', 'attorney_assigned',
     'evidence_submitted', 'verdict_issued', 'sentence_issued', 'fine_assigned',
     'fine_paid', 'license_suspension_started', 'license_suspension_ended',
-    'appeal_submitted', 'appeal_decision'
+    'appeal_submitted', 'appeal_decision',
+    'jail_insurance_purchased', 'jail_insurance_expiring_soon',
+    'jail_insurance_expired', 'get_out_of_jail_coin_won',
+    'get_out_of_jail_coin_used', 'get_out_of_jail_coin_denied'
   ],
   AUCTIONS_MARKETPLACE: [
     'auction_starting_soon', 'seller_you_follow_auction', 'you_placed_bid',

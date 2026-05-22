@@ -7,6 +7,7 @@ export interface ActivityEvent {
   message: string
   priority: 'high' | 'medium' | 'low' | 'breaking'
   created_at: string
+  duration_minutes?: number
   metadata?: {
     category?: string
     url?: string
@@ -26,6 +27,7 @@ const useGlobalActivity = () => {
       message: row?.title || row?.description || 'City update',
       priority: numericPriority >= 3 ? 'breaking' : numericPriority === 2 ? 'high' : 'medium',
       created_at: row?.created_at || new Date().toISOString(),
+      duration_minutes: row?.duration_minutes,
       metadata: row?.metadata || {},
     }
   }, [])
@@ -51,7 +53,7 @@ const useGlobalActivity = () => {
       const since = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
       const { data, error } = await supabase
         .from('global_events')
-        .select('id,type,title,icon,priority,metadata,created_at')
+        .select('id,type,title,icon,priority,metadata,created_at,duration_minutes')
         .gte('created_at', since)
         .order('created_at', { ascending: false })
         .limit(20)
@@ -70,6 +72,14 @@ const useGlobalActivity = () => {
     const channel = supabase
       .channel('global-events-ticker')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'global_events' }, (payload: any) => {
+        const event = normalizeEvent(payload.new)
+        setEvents((prevEvents) => {
+          const filtered = prevEvents.filter((existing) => existing.id !== event.id)
+          const next = [event, ...filtered].slice(0, 50)
+          return dedupeEvents(next)
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_events' }, (payload: any) => {
         const event = normalizeEvent(payload.new)
         setEvents((prevEvents) => {
           const filtered = prevEvents.filter((existing) => existing.id !== event.id)

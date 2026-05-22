@@ -27,7 +27,6 @@ import WeeklyReportsList from '../../components/WeeklyReportsList'
 import OfficerStreamGrid from '../../components/officer/OfficerStreamGrid'
 import OfficerShiftCalendar from '../../components/officer/OfficerShiftCalendar'
 import TimeOffRequestsList from './TimeOffRequestsList'
-import { InterviewSchedulerModal } from '../../components/admin/InterviewSchedulerModal'
 
 type Applicant = {
   id: string
@@ -91,9 +90,6 @@ export default function LeadOfficerDashboard() {
 
   const [showReportForm, setShowReportForm] = useState(false)
   const [submittingReport, setSubmittingReport] = useState(false)
-
-  const [showInterviewModal, setShowInterviewModal] = useState(false)
-  const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null)
 
   const leadOfficerCount = useMemo(
     () => officers.filter((officer) => officer.is_lead_officer).length,
@@ -311,7 +307,7 @@ export default function LeadOfficerDashboard() {
       const { data, error } = await supabase
         .from('job_applications')
         .select('id, user_id, position_id, status, created_at, user_profiles!user_id(username, email)')
-        .in('status', ['submitted', 'under_review', 'interview_scheduled', 'rejected'])
+        .in('status', ['submitted', 'under_review', 'rejected'])
         .order('created_at', { ascending: false })
         .limit(20)
 
@@ -341,7 +337,7 @@ export default function LeadOfficerDashboard() {
     }
 
     init()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   useEffect(() => {
@@ -547,23 +543,17 @@ export default function LeadOfficerDashboard() {
 
       switch (actionType) {
         case 'hire_officer': {
-          const applicant = applicants.find((a) => a.id === userId)
-
-          if (applicant) {
-            setSelectedApplicant(applicant)
-            setShowInterviewModal(true)
-            setLoading(false)
-            return
-          }
-
-          const { data, error: hireError } = await supabase.rpc('approve_officer_application', {
+          const { data: hireError, error: hireRpcError } = await supabase.rpc('approve_officer_application', {
             p_user_id: userId,
           })
 
-          if (hireError) {
-            error = hireError
-          } else if (!data?.success) {
-            error = { message: data?.error || 'Failed to approve officer application' }
+          error = hireRpcError || hireError
+
+            if (hireRpcError) {
+             toast.error(hireRpcError.message || 'Failed to hire officer')
+             return
+            } else if (hireError && !hireError?.success) {
+              error = { message: hireError?.error || 'Failed to approve officer application' }
           } else {
             const { error: activateError } = await supabase
               .from('user_profiles')
@@ -738,27 +728,12 @@ export default function LeadOfficerDashboard() {
             </div>
 
             <Panel title="Lead Officer Application Queue" icon={FileText}>
-              <PendingApplicationsList
-                onApprove={async (appId, userId) => {
-                  const app =
-                    applicants.find((a) => a.id === userId) || {
-                      id: userId,
-                      applicationId: appId,
-                      username: 'Unknown',
-                      email: '',
-                      created_at: new Date().toISOString(),
-                    }
-
-                  await approveApplication(appId)
-                  setSelectedApplicant(app)
-                  setShowInterviewModal(true)
-                }}
-                onReject={rejectApplication}
-                onSchedule={(applicant) => {
-                  setSelectedApplicant(applicant)
-                  setShowInterviewModal(true)
-                }}
-              />
+               <PendingApplicationsList
+                 onApprove={async (appId, userId) => {
+                   await approveApplication(appId)
+                 }}
+                 onReject={rejectApplication}
+               />
             </Panel>
 
             <Panel title="Time Off Requests" icon={Clock}>
@@ -932,27 +907,13 @@ export default function LeadOfficerDashboard() {
             )}
 
             <WeeklyReportsList reports={weeklyReports} />
-          </Panel>
-        )}
-
-        {selectedApplicant && (
-          <InterviewSchedulerModal
-            isOpen={showInterviewModal}
-            onClose={() => {
-              setShowInterviewModal(false)
-              setSelectedApplicant(null)
-            }}
-            applicantId={selectedApplicant.id}
-            applicantName={selectedApplicant.username}
-            onScheduled={async () => {
-              await loadApplicants()
-            }}
-          />
-        )}
-      </main>
-    </div>
+            </Panel>
+          )}
+        </main>
+        </div>
   )
 }
+ 
 }
 
 function TabButton({
@@ -1188,39 +1149,23 @@ function PendingApplicationsList({
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSchedule({
-                      id: app.user_id,
-                      applicationId: app.id,
-                      username: userProfile?.username || 'Unknown',
-                      email: userProfile?.email || '',
-                      created_at: app.created_at,
-                    })
-                  }
-                  className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-2 text-xs font-black text-fuchsia-200 hover:bg-fuchsia-500/20"
-                >
-                  Schedule Interview
-                </button>
+               <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onApprove(app.id, app.user_id)}
+                    className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-200 hover:bg-emerald-500/20"
+                  >
+                    Approve
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => onApprove(app.id, app.user_id)}
-                  className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-200 hover:bg-emerald-500/20"
-                >
-                  Approve
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onReject(app.id)}
-                  className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20"
-                >
-                  Reject
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => onReject(app.id)}
+                    className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20"
+                  >
+                    Reject
+                  </button>
+                </div>
             </div>
           </div>
         )

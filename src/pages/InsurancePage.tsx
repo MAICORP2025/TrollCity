@@ -30,16 +30,16 @@ type InsurancePlan = {
 }
 
 type InsuranceType = {
-  id: 'homeowners' | 'car' | 'broadcast' | 'kick' | 'ban'
-  name: string
-  shortName: string
-  icon: React.ElementType
-  description: string
-  protection: string[]
-  accent: string
-  glow: string
-  plans: InsurancePlan[]
-}
+   id: 'homeowners' | 'car' | 'broadcast' | 'kick' | 'jail'
+   name: string
+   shortName: string
+   icon: React.ElementType
+   description: string
+   protection: string[]
+   accent: string
+   glow: string
+   plans: InsurancePlan[]
+ }
 
 const INSURANCE_TYPES: InsuranceType[] = [
   {
@@ -98,20 +98,20 @@ const INSURANCE_TYPES: InsuranceType[] = [
       { id: 'kick_month', name: 'Monthly Guard', cost: 1500, duration: 720, label: '30 days', highlight: 'Popular' }
     ]
   },
-  {
-    id: 'ban',
-    name: 'Ban Insurance',
-    shortName: 'Ban',
-    icon: Shield,
-    description: 'Adds ban protection during broadcasts where eligible.',
-    protection: ['Ban protection', 'Creator safety', 'Broadcast defense'],
-    accent: 'from-rose-300 to-fuchsia-500',
-    glow: 'shadow-rose-500/20',
-    plans: [
-      { id: 'ban_week', name: 'Weekly Defense', cost: 1000, duration: 168, label: '7 days' },
-      { id: 'ban_month', name: 'Monthly Defense', cost: 3000, duration: 720, label: '30 days', highlight: 'Maximum defense' }
-    ]
-  }
+   {
+     id: 'jail',
+     name: 'Jail Insurance',
+     shortName: 'Jail',
+     icon: Shield,
+     description: 'Adds jail protection during broadcasts where eligible.',
+     protection: ['Jail protection', 'Creator safety', 'Broadcast defense'],
+     accent: 'from-rose-300 to-fuchsia-500',
+     glow: 'shadow-rose-500/20',
+      plans: [
+        { id: 'jail_week', name: 'Weekly Defense', cost: 5000, duration: 168, label: '7 days' },
+        { id: 'jail_month', name: 'Premium Defense', cost: 15000, duration: 168, label: '7 days', highlight: 'Maximum defense' }
+      ]
+   }
 ]
 
 function formatCoins(value: number | null | undefined) {
@@ -149,10 +149,10 @@ export default function InsurancePage() {
     [selectedType]
   )
 
-  const activeCount = useMemo(
-    () => ['homeowners', 'car', 'broadcast', 'kick', 'ban'].filter((key) => activeInsurance[key]).length,
-    [activeInsurance]
-  )
+const activeCount = useMemo(
+     () => ['homeowners', 'car', 'broadcast', 'kick', 'jail'].filter((key) => activeInsurance[key]).length,
+     [activeInsurance]
+   )
 
   const checkActiveInsurance = useCallback(async () => {
     if (!user?.id) return
@@ -175,19 +175,19 @@ export default function InsurancePage() {
       }
 
       if (isValidFutureDate(profile?.broadcast_insurance_expiry)) {
-        active.broadcast = {
-          expiry: profile?.broadcast_insurance_expiry,
-          protection_type: 'full'
-        }
-        active.kick = {
-          expiry: profile?.broadcast_insurance_expiry,
-          protection_type: 'full'
-        }
-        active.ban = {
-          expiry: profile?.broadcast_insurance_expiry,
-          protection_type: 'full'
-        }
-      }
+         active.broadcast = {
+           expiry: profile?.broadcast_insurance_expiry,
+           protection_type: 'full'
+         }
+         active.kick = {
+           expiry: profile?.broadcast_insurance_expiry,
+           protection_type: 'full'
+         }
+         active.jail = {
+           expiry: profile?.broadcast_insurance_expiry,
+           protection_type: 'full'
+         }
+       }
 
       const { data: liveProtections, error } = await supabase
         .from('user_insurances')
@@ -198,23 +198,23 @@ export default function InsurancePage() {
 
       if (error) throw error
 
-      liveProtections?.forEach((policy: any) => {
-        if (!isValidFutureDate(policy.expires_at)) return
+        liveProtections?.forEach((policy: any) => {
+          if (!isValidFutureDate(policy.expires_at)) return
 
-        if (policy.protection_type === 'full') {
-          active.broadcast = { expiry: policy.expires_at, protection_type: 'full' }
-          active.kick = { expiry: policy.expires_at, protection_type: 'full' }
-          active.ban = { expiry: policy.expires_at, protection_type: 'full' }
-        }
+          if (policy.protection_type === 'full') {
+            active.broadcast = { expiry: policy.expires_at, protection_type: 'full' }
+            active.kick = { expiry: policy.expires_at, protection_type: 'full' }
+            active.jail = { expiry: policy.expires_at, protection_type: 'full' }
+          }
 
-        if (policy.protection_type === 'kick') {
-          active.kick = { expiry: policy.expires_at, protection_type: 'kick' }
-        }
+          if (policy.protection_type === 'kick') {
+            active.kick = { expiry: policy.expires_at, protection_type: 'kick' }
+          }
 
-        if (policy.protection_type === 'ban') {
-          active.ban = { expiry: policy.expires_at, protection_type: 'ban' }
-        }
-      })
+          if (policy.protection_type === 'jail') {
+            active.jail = { expiry: policy.expires_at, protection_type: 'jail' }
+          }
+        })
 
       setActiveInsurance(active)
     } catch (error) {

@@ -33,26 +33,25 @@ import { toast } from 'sonner';
 const LIVE_DOT_CLASS = 'h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse';
 
 export interface BroadcastNeonHeaderProps {
-  stream: Stream;
-  broadcasterProfile: {
-    username?: string;
-    avatar_url?: string | null;
-    display_name?: string;
-  } | null;
-  isHost: boolean;
-  liveViewerCount: number;
-  handleLike: () => void;
-  onGift: () => void;
-  onShare?: () => void;
-  onEndStream?: () => void;
-  onClose?: () => void;
-  coinBalance?: number;
-  onAddCoins?: () => void;
-  isLive: boolean;
-  streamStartedAt?: string | null;
-  /** Called when the plus-coin button is clicked */
-  onOpenCoinStore?: () => void;
-}
+   stream: Stream;
+   broadcasterProfile: {
+     username?: string;
+     avatar_url?: string | null;
+     display_name?: string;
+   } | null;
+   isHost: boolean;
+   liveViewerCount: number;
+   onGift: () => void;
+   onShare?: () => void;
+   onEndStream?: () => void;
+   onClose?: () => void;
+   coinBalance?: number;
+   onOpenCoinStore?: () => void;
+   isLive: boolean;
+   streamStartedAt?: string | null;
+   /** Called when the plus-coin button is clicked */
+   handleLike: () => void;
+ }
 
 function formatTimer(ms: number): string {
   const totalSec = Math.floor(ms / 1000);

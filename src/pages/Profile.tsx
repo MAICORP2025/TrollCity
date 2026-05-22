@@ -33,14 +33,13 @@ import { toast } from 'sonner';
 
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { useXPStore } from '../stores/useXPStore';
 import CreditScoreBadge from '../components/CreditScoreBadge';
-import BadgesGrid from '../components/badges/BadgesGrid';
 import UserBadge from '../components/UserBadge';
 import BackgroundCheckView from '../components/broadcast/BackgroundCheckView';
 import { useCreditScore } from '../lib/hooks/useCreditScore';
 import { ENTRANCE_EFFECTS_MAP } from '../lib/entranceEffects';
 import { getLevelName } from '../lib/xp';
+import { useXPStore } from '@/stores/useXPStore';
 import { PERK_CONFIG } from '@/lib/perkSystem';
 import { canMessageAdmin, getGlowingTextStyle } from '@/lib/perkEffects';
 import { getProfileDisplayName } from '@/lib/profileDisplay';
@@ -155,7 +154,7 @@ function ProfileBackdrop() {
   );
 }
 
-function ProfileInner() {
+function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number }) {
   const { username, userId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -739,18 +738,10 @@ function ProfileInner() {
   const usernameStyle = isGold && profile?.username_style === 'gold' ? { color: '#FFD700', textShadow: '0 0 12px #FFD700' } : glowingStyle;
   const avatarUrl = profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`;
   const cleanBio = (profile.bio || '').replace(/(https?:\/\/[^\s]+)/g, '').trim();
-  const levelName = getLevelName(profile.level || 1);
-
-  const renderBadges = () => (
-    <div className={`${innerPanel} p-5`}>
-      <SectionHeader icon={Shield} title="Badge Vault" subtitle="City identity, achievements, and profile authority" />
-      <BadgesGrid userId={profile.id} showViewAllLink={false} />
-    </div>
-  );
+  const levelName = getLevelName(xpStoreLevelProp || 1);
 
   const renderSocial = () => (
     <div className="space-y-6">
-      {renderBadges()}
       <div className={`${innerPanel} overflow-hidden p-1`}>
         <div className="border-b border-white/10 px-5 py-4">
           <h3 className="text-lg font-black text-white">City Wall</h3>
@@ -1114,7 +1105,7 @@ function ProfileInner() {
                   </h1>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
                     <span className={isGold || hasRgbUsername ? 'font-black text-cyan-300' : ''} style={isGold && profile?.username_style === 'gold' ? { color: '#FFD700', textShadow: '0 0 10px #FFD700' } : undefined}>@{profile.username}</span>
-                    <span>Level {profile.level || 1} • {levelName}</span>
+                    <span>Level {xpStoreLevelProp || 1} • {levelName}</span>
                     {profile.license_plate && <Pill className="border-blue-400/30 text-blue-200">Plate: {profile.license_plate}</Pill>}
                   </div>
                 </div>
@@ -1328,5 +1319,6 @@ export default function Profile() {
       </div>
     );
   }
-  return <ProfileInner />;
+  const { level: xpStoreLevel } = useXPStore();
+  return <ProfileInner xpStoreLevel={xpStoreLevel} />;
 }

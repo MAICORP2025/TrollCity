@@ -209,17 +209,63 @@ export async function notifyJailReleaseCompleted(userId: string) {
 // BROADCAST / LIVE NOTIFICATIONS
 // ==========================================
 
+export function fillNotificationTemplate(
+  template: string,
+  metadata: NotificationMetadata = {}
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+    const value = metadata[key]
+    return value === undefined || value === null || value === '' ? 'Someone' : String(value)
+  })
+}
+
+export function buildNotificationContent(
+  type: NotificationType,
+  metadata: NotificationMetadata = {}
+): { title: string; message: string } {
+  if (type === 'someone_you_follow_went_live') {
+    return {
+      title: `${metadata.broadcaster_username ?? 'Someone'} went live`,
+      message: `Tap to join ${metadata.broadcaster_username ?? 'their'} broadcast.`,
+    }
+  }
+
+  return {
+    title: metadata.title ?? 'Troll City Notification',
+    message: metadata.message ?? '',
+  }
+}
+
 export async function notifySomeoneYouFollowWentLive(
   followerId: string,
   broadcasterUsername: string,
-  streamId: string
+  streamId: string,
+  broadcasterId?: string,
+  broadcasterAvatarUrl?: string,
+  streamTitle?: string
 ) {
+  const content = buildNotificationContent('someone_you_follow_went_live', {
+    broadcaster_id: broadcasterId,
+    broadcaster_username: broadcasterUsername,
+    broadcaster_avatar_url: broadcasterAvatarUrl,
+    stream_id: streamId,
+    stream_title: streamTitle,
+    action_url: `/watch/${streamId}`,
+  })
+
   return createNotification(
     followerId,
     'someone_you_follow_went_live',
-    '🔴 Live Now!',
-    `@${broadcasterUsername} is now live. Tap to watch!`,
-    { broadcaster_username: broadcasterUsername, stream_id: streamId, action_url: `/watch/${streamId}` }
+    content.title,
+    content.message,
+    {
+      broadcaster_id: broadcasterId,
+      broadcaster_username: broadcasterUsername,
+      broadcaster_avatar_url: broadcasterAvatarUrl,
+      stream_id: streamId,
+      stream_title: streamTitle,
+      action_url: `/watch/${streamId}`,
+    }
   )
 }
 
@@ -339,15 +385,17 @@ export async function notifyKickedFromLive(userId: string, hostUsername: string,
   )
 }
 
-export async function notifyBannedFromLive(userId: string, hostUsername: string, streamId: string, duration: string) {
+export async function notifyRestrictedFromLive(userId: string, hostUsername: string, streamId: string, duration: string) {
   return createNotification(
     userId,
-    'banned_from_live',
-    '🚫 Banned from Stream',
-    `You were banned from @${hostUsername}'s stream for ${duration}.`,
+    'restricted_from_live',
+    '⚠️ Restricted from live',
+    `You are restricted from @${hostUsername}'s stream for ${duration}.`,
     { host_username: hostUsername, stream_id: streamId, duration, action_url: '/profile' }
   )
 }
+
+export const notifyBannedFromLive = notifyRestrictedFromLive
 
 export async function notifyLiveReceivedReport(userId: string, streamId: string, reportCount: number) {
   return createNotification(

@@ -230,7 +230,7 @@ export function useLiveKitRoom({
   }, []);
 
   // Join LiveKit as publisher
-  const joinAsPublisher = useCallback(async (userId: string) => {
+  const joinAsPublisher = useCallback(async (userId: string, tokenOverride?: string | null) => {
     // Guard: prevent multiple simultaneous connection attempts
     if (joinedRef.current) {
       console.warn('[useLiveKitRoom] Join prevented: already joined');

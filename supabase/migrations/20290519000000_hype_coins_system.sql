@@ -1,6 +1,7 @@
 -- Hype Coins System Migration
 -- Adds watch-time earning currency system for viewers
 -- Created: May 19, 2026
+-- Fixed: May 20, 2026 - Added proper daily cap handling with partial awards and row-level locking
 
 -- ============================================================================
 -- 1. ADD HYPE_COINS COLUMN TO USER_PROFILES
@@ -94,6 +95,9 @@ DECLARE
   v_current_user_hype integer;
   v_earning_window_start timestamptz;
   v_error_msg text;
+  v_attempted_amount integer := 1;
+  v_awarded_amount integer;
+  v_remaining_allowance integer;
 BEGIN
   -- 1. Check authentication
   v_user_id := auth.uid();
@@ -157,7 +161,15 @@ BEGIN
     RETURN;
   END IF;
 
-  -- 5. Check daily cap (25 Hype Coins per day)
+  -- 5. Lock user's profile to prevent concurrent awards for the same user
+  -- This prevents race conditions where multiple concurrent calls could exceed the daily cap
+  SELECT user_profiles.hype_coins
+  INTO v_current_user_hype
+  FROM public.user_profiles
+  WHERE id = v_user_id
+  FOR UPDATE;
+
+  -- 6. Check daily cap (25 Hype Coins per day)
   SELECT COALESCE(SUM(amount), 0)::integer
   INTO v_daily_earned
   FROM public.hype_coin_ledger
@@ -165,11 +177,14 @@ BEGIN
     AND action = 'hype_watch_earned'
     AND created_at >= NOW()::date;
 
-  IF v_daily_earned >= 25 THEN
+  -- Calculate remaining daily allowance
+  v_remaining_allowance := 25 - v_daily_earned;
+  
+  IF v_remaining_allowance <= 0 THEN
     RETURN QUERY SELECT
       false,
       0::bigint,
-      0,
+      0, -- earned_amount
       v_daily_earned,
       25,
       0,
@@ -178,7 +193,7 @@ BEGIN
     RETURN;
   END IF;
 
-  -- 6. Check weekly cap (175 Hype Coins per week)
+  -- 7. Check weekly cap (175 Hype Coins per week)
   SELECT COALESCE(SUM(amount), 0)::integer
   INTO v_weekly_earned
   FROM public.hype_coin_ledger
@@ -199,7 +214,7 @@ BEGIN
     RETURN;
   END IF;
 
-  -- 7. Check for duplicate rewards in same 5-minute window
+  -- 8. Check for duplicate rewards in same 5-minute window
   v_earning_window_start := to_timestamp(EXTRACT(EPOCH FROM NOW())::integer / 300 * 300);
 
   SELECT created_at
@@ -224,33 +239,56 @@ BEGIN
     RETURN;
   END IF;
 
-  -- 8. Credit 1 Hype Coin
-  UPDATE public.user_profiles
-  SET hype_coins = hype_coins + 1
-  WHERE id = v_user_id;
+  -- 9. Calculate actual awarded amount (respect daily cap)
+  v_awarded_amount := LEAST(v_attempted_amount, v_remaining_allowance);
 
-  -- 9. Insert ledger entry
-  INSERT INTO public.hype_coin_ledger (user_id, stream_id, broadcaster_id, amount, action, metadata)
-  VALUES (v_user_id, p_stream_id, v_stream.user_id, 1, 'hype_watch_earned', jsonb_build_object(
-    'stream_title', v_stream.id,
-    'earned_at', NOW()
-  ));
+  -- 10. Credit awarded Hype Coins
+  IF v_awarded_amount > 0 THEN
+    UPDATE public.user_profiles
+    SET hype_coins = hype_coins + v_awarded_amount
+    WHERE id = v_user_id;
+  END IF;
 
-  -- 10. Fetch updated balance
-  SELECT hype_coins INTO v_current_user_hype
+  -- 11. Insert ledger entry with actual awarded amount
+  IF v_awarded_amount > 0 THEN
+    INSERT INTO public.hype_coin_ledger (user_id, stream_id, broadcaster_id, amount, action, metadata)
+    VALUES (v_user_id, p_stream_id, v_stream.user_id, v_awarded_amount, 'hype_watch_earned', jsonb_build_object(
+      'stream_title', v_stream.id,
+      'earned_at', NOW(),
+      'attempted_amount', v_attempted_amount,
+      'awarded_amount', v_awarded_amount,
+      'earned_today_before', v_daily_earned,
+      'daily_cap', 25
+    ));
+  END IF;
+
+  -- 12. Fetch updated balance
+  SELECT user_profiles.hype_coins INTO v_current_user_hype
   FROM public.user_profiles
   WHERE id = v_user_id;
 
-  -- 11. Return success
-  RETURN QUERY SELECT
-    true,
-    v_current_user_hype::bigint,
-    1,
-    v_daily_earned + 1,
-    25,
-    v_weekly_earned + 1,
-    175,
-    'Hype Coin earned'::text;
+  -- 13. Return success
+  IF v_awarded_amount > 0 THEN
+    RETURN QUERY SELECT
+      true,
+      v_current_user_hype::bigint,
+      v_awarded_amount,
+      v_daily_earned + v_awarded_amount,
+      25,
+      v_weekly_earned + v_awarded_amount,
+      175,
+      'Hype Coin earned'::text;
+  ELSE
+    RETURN QUERY SELECT
+      false,
+      0::bigint,
+      0,
+      v_daily_earned,
+      25,
+      0,
+      175,
+      'Daily earning cap reached'::text;
+  END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -296,7 +334,7 @@ BEGIN
   END IF;
 
   -- 3. Check user has enough hype coins
-  SELECT hype_coins, troll_coins
+  SELECT user_profiles.hype_coins, user_profiles.troll_coins
   INTO v_current_hype, v_current_troll
   FROM public.user_profiles
   WHERE id = v_user_id;
@@ -329,7 +367,7 @@ BEGIN
   VALUES (v_user_id, p_amount::bigint, 'gifted', 'hype_conversion', NOW());
 
   -- 6. Fetch updated balances
-  SELECT hype_coins, troll_coins
+  SELECT user_profiles.hype_coins, user_profiles.troll_coins
   INTO v_current_hype, v_current_troll
   FROM public.user_profiles
   WHERE id = v_user_id;
@@ -358,5 +396,7 @@ GRANT EXECUTE ON FUNCTION public.convert_hype_coins_to_troll_coins(integer) TO a
 COMMENT ON TABLE public.hype_coin_ledger IS 'Ledger of all Hype Coin transactions. Users earn 1 Hype Coin per 5 verified minutes watched in live broadcasts.';
 COMMENT ON COLUMN public.hype_coin_ledger.action IS 'Type of transaction: hype_watch_earned, hype_converted_to_troll';
 COMMENT ON COLUMN public.user_profiles.hype_coins IS 'User balance of Hype Coins earned from watching live broadcasts';
-COMMENT ON FUNCTION public.earn_hype_coin_watch_reward(uuid) IS 'RPC to award 1 Hype Coin after 5 verified minutes watching a live broadcast. Enforces daily (25) and weekly (175) caps.';
+COMMENT ON FUNCTION public.earn_hype_coin_watch_reward(uuid) IS 'RPC to award Hype Coins after 5 verified minutes watching a live broadcast. Enforces daily (25) and weekly (175) caps with row-level locking to prevent race conditions. Supports partial awards when daily cap would be exceeded.';
 COMMENT ON FUNCTION public.convert_hype_coins_to_troll_coins(integer) IS 'RPC to convert Hype Coins to Troll Coins at 1:1 rate. Updated balances are returned.';
+
+(End of file - total 408 lines)

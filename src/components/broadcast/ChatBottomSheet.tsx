@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Send, Smile } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatMessage } from "../../types/broadcast";
@@ -13,26 +13,90 @@ interface ChatBottomSheetProps {
   overlay?: boolean; // broadcast floating mode
 }
 
+type AnyChatMessage = ChatMessage & {
+  username?: string | null;
+  user_name?: string | null;
+  display_name?: string | null;
+  message?: string | null;
+  content?: string | null;
+  avatar_url?: string | null;
+  user_avatar?: string | null;
+  level?: number | null;
+  user?: {
+    username?: string | null;
+    display_name?: string | null;
+    avatar_url?: string | null;
+    level?: number | null;
+  } | null;
+  user_profiles?: {
+    username?: string | null;
+    display_name?: string | null;
+    avatar_url?: string | null;
+    level?: number | null;
+  } | null;
+};
+
+function resolveChatUsername(msg: ChatMessage, fallback = "Unknown") {
+  const chatMsg = msg as AnyChatMessage;
+
+  return (
+    chatMsg.user_profiles?.username ||
+    chatMsg.user_profiles?.display_name ||
+    chatMsg.user?.username ||
+    chatMsg.user?.display_name ||
+    chatMsg.username ||
+    chatMsg.user_name ||
+    chatMsg.display_name ||
+    fallback
+  );
+}
+
+function resolveChatAvatar(msg: ChatMessage) {
+  const chatMsg = msg as AnyChatMessage;
+
+  return (
+    chatMsg.user_profiles?.avatar_url ||
+    chatMsg.user?.avatar_url ||
+    chatMsg.avatar_url ||
+    chatMsg.user_avatar ||
+    ""
+  );
+}
+
+function resolveChatLevel(msg: ChatMessage) {
+  const chatMsg = msg as AnyChatMessage;
+
+  return (
+    chatMsg.user_profiles?.level ??
+    chatMsg.user?.level ??
+    chatMsg.level ??
+    0
+  );
+}
+
+function resolveChatText(msg: ChatMessage) {
+  const chatMsg = msg as AnyChatMessage;
+
+  return chatMsg.content || chatMsg.message || "";
+}
+
 export default function ChatBottomSheet({
   messages,
   onSendMessage,
   className,
-  _compact = false,
+  compact = false,
   overlay = false,
 }: ChatBottomSheetProps) {
   const [inputValue, setInputValue] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  // Scroll only if user near bottom
   const scrollToBottom = (smooth = true) => {
     const container = containerRef.current;
     if (!container) return;
 
     const distanceFromBottom =
-      container.scrollHeight -
-      container.scrollTop -
-      container.clientHeight;
+      container.scrollHeight - container.scrollTop - container.clientHeight;
 
     if (distanceFromBottom < 120) {
       endRef.current?.scrollIntoView({
@@ -48,9 +112,10 @@ export default function ChatBottomSheet({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!inputValue.trim()) return;
+    const cleanText = inputValue.trim();
+    if (!cleanText) return;
 
-    onSendMessage(inputValue.trim());
+    onSendMessage(cleanText);
     setInputValue("");
 
     setTimeout(() => scrollToBottom(false), 50);
@@ -64,40 +129,32 @@ export default function ChatBottomSheet({
         className
       )}
     >
-      {/* Messages */}
       <div
         ref={containerRef}
         className={cn(
           "flex-1 overflow-y-auto px-4 space-y-2",
-          overlay
-            ? "max-h-[40vh] pb-2"
-            : "h-full",
+          overlay ? "max-h-[40vh] pb-2" : "h-full",
+          compact && "px-2 space-y-1"
         )}
       >
         {messages.map((msg) => {
           if (msg.type === "system") {
-            return (
-              <SystemMessage key={msg.id} msg={msg} />
-            );
+            return <SystemMessage key={msg.id} msg={msg} />;
           }
 
-          return <UserMessage key={msg.id} msg={msg} />;
+          return <UserMessage key={msg.id} msg={msg} compact={compact} />;
         })}
 
         <div ref={endRef} />
       </div>
 
-      {/* Input */}
       <div
         className={cn(
           "p-3 border-t border-white/10",
-          overlay
-            ? "bg-black/40 backdrop-blur-md"
-            : "bg-zinc-900/60"
+          overlay ? "bg-black/40 backdrop-blur-md" : "bg-zinc-900/60"
         )}
         style={{
-          paddingBottom:
-            "calc(env(safe-area-inset-bottom) + 12px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)",
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 items-center">
@@ -111,7 +168,8 @@ export default function ChatBottomSheet({
 
             <button
               type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+              aria-label="Open emoji picker"
             >
               <Smile size={18} />
             </button>
@@ -121,6 +179,7 @@ export default function ChatBottomSheet({
             type="submit"
             disabled={!inputValue.trim()}
             className="w-10 h-10 rounded-full bg-pink-600 flex items-center justify-center text-white shadow-lg disabled:opacity-50 active:scale-95 transition"
+            aria-label="Send message"
           >
             <Send size={18} />
           </button>
@@ -131,13 +190,13 @@ export default function ChatBottomSheet({
 }
 
 function SystemMessage({ msg }: { msg: ChatMessage }) {
+  const username = resolveChatUsername(msg, "Guest");
+
   return (
     <div className="flex justify-center my-1 animate-fade-in-up">
       <div className="bg-black/30 backdrop-blur-sm rounded-full px-3 py-1 border border-white/5">
         <span className="text-[10px] text-white/70 italic">
-          <span className="font-bold text-pink-400/80">
-            {msg.user?.username || "Guest"}
-          </span>{" "}
+          <span className="font-bold text-pink-400/80">{username}</span>{" "}
           joined the broadcast
         </span>
       </div>
@@ -170,7 +229,7 @@ function ChatDiamondAvatar({
         clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
         border: `2px solid ${tier.border_color}`,
         overflow: "hidden",
-        position: "relative" as const,
+        position: "relative",
         zIndex: 2,
         ...glowStyle,
       }}
@@ -201,6 +260,7 @@ function ChatDiamondAvatar({
             showLevel={false}
           />
         </div>
+
         {diamondContent}
       </div>
     );
@@ -209,10 +269,17 @@ function ChatDiamondAvatar({
   return diamondContent;
 }
 
-function UserMessage({ msg }: { msg: ChatMessage }) {
-  const level = (msg.user as any)?.level ?? 0;
-  const avatarUrl = msg.user?.avatar_url || msg.user_profiles?.avatar_url || "";
-  const username = msg.user?.username || "User";
+function UserMessage({
+  msg,
+  compact = false,
+}: {
+  msg: ChatMessage;
+  compact?: boolean;
+}) {
+  const level = resolveChatLevel(msg);
+  const avatarUrl = resolveChatAvatar(msg);
+  const username = resolveChatUsername(msg, "Unknown");
+  const chatText = resolveChatText(msg);
 
   return (
     <div className="flex items-start gap-2 animate-fade-in-up">
@@ -226,13 +293,18 @@ function UserMessage({ msg }: { msg: ChatMessage }) {
         </div>
       )}
 
-      <div className="bg-black/30 backdrop-blur-sm rounded-2xl rounded-tl-sm px-3 py-1.5 max-w-[85%] border border-white/5">
+      <div
+        className={cn(
+          "bg-black/30 backdrop-blur-sm rounded-2xl rounded-tl-sm px-3 py-1.5 max-w-[85%] border border-white/5",
+          compact && "px-2 py-1 max-w-[92%]"
+        )}
+      >
         <span className="text-[11px] font-bold text-pink-400 block mb-0.5">
           {username}
         </span>
 
         <p className="text-sm text-white leading-snug break-words">
-          {msg.content}
+          {chatText}
         </p>
       </div>
     </div>

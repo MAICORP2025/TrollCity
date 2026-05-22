@@ -91,6 +91,12 @@ const GiftBoxModalComponent = function GiftBoxModal({
   
   // Gift target selection state
   const [giftTarget, setGiftTarget] = useState<GiftTarget>({ type: 'specific', userId: recipientId });
+
+  useEffect(() => {
+    if (isOpen) {
+      setGiftTarget({ type: 'specific', userId: recipientId });
+    }
+  }, [isOpen, recipientId]);
   
   const { sendGift, isSending } = useGiftSystem(
     recipientId,
@@ -201,7 +207,8 @@ const GiftBoxModalComponent = function GiftBoxModal({
           slug,
           animationKey: g.animation_key || g.animationKey || g.gift_slug || slug,
           animationType,
-          animationUrl: g.animation_url || g.animationUrl || null,
+          animationUrl: g.animation_url || g.animationUrl || g.video_url || g.videoUrl || null,
+          videoUrl: g.video_url || g.videoUrl || g.animation_url || g.animationUrl || null,
           animationDurationMs: g.animation_duration_ms || g.animationDurationMs || undefined,
           soundUrl: g.sound_url || g.soundUrl || null,
           isFullscreen: g.is_fullscreen ?? g.isFullscreen ?? undefined,

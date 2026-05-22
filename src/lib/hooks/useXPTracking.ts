@@ -11,7 +11,6 @@ import {
   awardWatchStreamXP,
   award7DayStreakXP
 } from '../xp'
-import { evaluateBadgesForUser } from '../../services/badgeEvaluationService'
 
 interface UseXPTrackingOptions {
   enableAutoTracking?: boolean
@@ -42,14 +41,11 @@ export function useXPTracking(options: UseXPTrackingOptions = {}) {
         const lastLoginKey = `last_login_xp_${user.id}`
         const lastLogin = localStorage.getItem(lastLoginKey)
         
-        if (lastLogin !== today) {
-          await awardDailyLoginXP(user.id)
-          localStorage.setItem(lastLoginKey, today)
-          dailyLoginAwarded.current = true
-          
-          // Check for streak badge
-          await evaluateBadgesForUser(user.id)
-        }
+if (lastLogin !== today) {
+           await awardDailyLoginXP(user.id)
+           localStorage.setItem(lastLoginKey, today)
+           dailyLoginAwarded.current = true
+         }
       } catch (err) {
         console.error('Error awarding daily login XP:', err)
       }
@@ -72,14 +68,13 @@ export function useXPTracking(options: UseXPTrackingOptions = {}) {
       return
     }
     
-    lastChatTime.current = now
+lastChatTime.current = now
     
-    try {
-      await awardChatMessageXP(user.id, roomId)
-      await evaluateBadgesForUser(user.id)
-    } catch (err) {
-      console.error('Error awarding chat message XP:', err)
-    }
+     try {
+       await awardChatMessageXP(user.id, roomId)
+     } catch (err) {
+       console.error('Error awarding chat message XP:', err)
+     }
   }, [user])
 
   /**
@@ -107,14 +102,13 @@ export function useXPTracking(options: UseXPTrackingOptions = {}) {
     const now = Date.now()
     const totalMinutes = Math.floor((now - tracking.startTime) / 60000)
     
-    if (totalMinutes > 0) {
-      try {
-        await awardWatchStreamXP(user.id, totalMinutes, streamId)
-        await evaluateBadgesForUser(user.id)
-      } catch (err) {
-        console.error('Error awarding watch stream XP:', err)
-      }
-    }
+if (totalMinutes > 0) {
+       try {
+         await awardWatchStreamXP(user.id, totalMinutes, streamId)
+       } catch (err) {
+         console.error('Error awarding watch stream XP:', err)
+       }
+     }
     
     watchTimeTracking.current.delete(streamId)
   }, [user])
@@ -148,25 +142,11 @@ export function useXPTracking(options: UseXPTrackingOptions = {}) {
   const track7DayStreak = useCallback(async (streakCount: number) => {
     if (!user) return
     
-    try {
-      await award7DayStreakXP(user.id, streakCount)
-      await evaluateBadgesForUser(user.id)
-    } catch (err) {
-      console.error('Error awarding 7-day streak XP:', err)
-    }
-  }, [user])
-
-  /**
-   * Manual XP evaluation trigger
-   */
-  const evaluateBadges = useCallback(async () => {
-    if (!user) return
-    
-    try {
-      await evaluateBadgesForUser(user.id)
-    } catch (err) {
-      console.error('Error evaluating badges:', err)
-    }
+try {
+       await award7DayStreakXP(user.id, streakCount)
+     } catch (err) {
+       console.error('Error awarding 7-day streak XP:', err)
+     }
   }, [user])
 
   return {
@@ -174,7 +154,6 @@ export function useXPTracking(options: UseXPTrackingOptions = {}) {
     startWatchTracking,
     stopWatchTracking,
     updateWatchTime,
-    track7DayStreak,
-    evaluateBadges
+    track7DayStreak
   }
 }

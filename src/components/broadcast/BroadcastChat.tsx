@@ -15,7 +15,7 @@ import { shouldAutoHideMessage, canControlSlowMode, shouldShowGoldenBanner } fro
 import { useChatBlockStatus } from '../../hooks/useChatBlockStatus';
 import { useStreamRealtime } from '../../hooks/useStreamRealtime';
 
-interface Message {
+export interface Message {
   id: string;
   txn_id?: string;
   user_id: string;
@@ -80,6 +80,7 @@ interface BroadcastChatProps {
     onChallengeBroadcaster?: () => void;
     hasPendingChallenge?: boolean;
     // Challenge management props
+    onFloatingMessage?: (message: Message) => void;
     pendingChallenges?: ChallengeNotification[];
     onAcceptChallenge?: (challengeId: string, challengerId: string) => void;
     onDenyChallenge?: (challengeId: string) => void;
@@ -103,6 +104,7 @@ export default function BroadcastChat({
   onChallengeBroadcaster, 
   hasPendingChallenge = false,
   pendingChallenges = [],
+  onFloatingMessage,
   onAcceptChallenge,
   onDenyChallenge,
   isBattleActive = false,
@@ -122,6 +124,7 @@ export default function BroadcastChat({
 
   const buildUserProfile = (source: any) => ({
     username:
+      source?.sender_name ||
       source?.user_name ||
       source?.username ||
       source?.user_profiles?.username ||
@@ -187,7 +190,14 @@ export default function BroadcastChat({
         type: normalizedType,
         gift_type: payload.gift_slug || payload.gift_name?.toLowerCase().replace(/\s+/g, '-'),
         gift_amount: payload.quantity || payload.amount || 1,
-        sender_name: payload.sender_name || payload.user_name,
+        sender_name:
+          payload.sender_name ||
+          payload.user_name ||
+          payload.username ||
+          payload.user_profiles?.username ||
+          payload.display_name ||
+          payload.user_profiles?.display_name ||
+          'Troll Citizen',
         receiver_id: payload.receiver_id,
         receiver_name: payload.receiver_name,
         challenge_id: payload.challenge_id,
@@ -244,6 +254,14 @@ export default function BroadcastChat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [isChatFocused, setIsChatFocused] = useState(true);
   const userIdRef = useRef<string | undefined>(user?.id);
+
+  const pushMessageToFloatingOverlay = (message: Message) => {
+    if (!message?.content) return;
+    if (message.type === 'gift') return;
+
+    onFloatingMessage?.(message);
+  };
+
   const isChatOpenRef = useRef(isChatOpen);
   const isChatFocusedRef = useRef(isChatFocused);
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
@@ -770,6 +788,8 @@ export default function BroadcastChat({
                     return;
                 }
 
+                pushMessageToFloatingOverlay(msg);
+
                 // Add message to UI when chat is open
                 setMessages(prev => {
                     // Triple-check for duplicates by txn_id, id, and content+user+timestamp
@@ -808,6 +828,8 @@ export default function BroadcastChat({
                 if (!msg) return;
 
                 if (import.meta.env.DEV) console.debug('[BroadcastChat] Received message event:', msg.type, msg.content, 'from user:', msg.user_id);
+
+                pushMessageToFloatingOverlay(msg);
 
                 if (!isChatOpenRef.current) {
                     setUnreadCount(prev => prev + 1);
@@ -855,11 +877,11 @@ export default function BroadcastChat({
               type: 'gift',
               gift_type: giftData.gift_slug || giftData.gift_name?.toLowerCase().replace(/\s+/g, '-'),
               gift_amount: giftData.quantity || 1,
-              sender_name: giftData.sender_name || giftData.user_name || 'Someone',
+              sender_name: giftData.sender_name || giftData.user_name || 'Troll Citizen',
               receiver_id: giftData.receiver_id,
               receiver_name: giftData.receiver_name || 'user',
               user_profiles: {
-                username: giftData.sender_name || giftData.user_name || 'Someone',
+                username: giftData.sender_name || giftData.user_name || 'Troll Citizen',
                 avatar_url: null
               }
             };
@@ -1047,6 +1069,8 @@ export default function BroadcastChat({
         if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
         return updated;
     });
+
+    pushMessageToFloatingOverlay(msg);
 
     // 4. Track txn_id to prevent duplicates
     receivedTxnIdsRef.current.add(txnId);
@@ -1261,7 +1285,7 @@ export default function BroadcastChat({
             if (userId && userId !== hostId) {
               seatUsers.push({
                 id: userId,
-                username: seat?.user_profile?.username || 'User',
+                username: seat?.user_profile?.username || 'Troll Citizen',
                 avatar_url: seat?.user_profile?.avatar_url || null,
                 isBroadcaster: false
               });
@@ -1346,7 +1370,7 @@ export default function BroadcastChat({
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-1">
                                         <span className="font-bold text-purple-300 text-xs truncate">
-                                            {notification.challenger_username || 'Unknown'}
+                                            {notification.challenger_username || 'Troll Citizen'}
                                         </span>
                                         {notification.challenger_crowns !== undefined && (
                                             <span className="text-amber-400 text-[10px] flex items-center gap-0.5">
@@ -1403,11 +1427,11 @@ export default function BroadcastChat({
                                 <Sparkles size={12} className="text-yellow-500 flex-shrink-0" />
                                 <button
                                     type="button"
-                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'Troll Citizen', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
                                     className="font-bold text-zinc-300 hover:text-yellow-300 transition-colors flex items-center gap-1 truncate"
                                     title="Send gift"
                                 >
-                                    {msg.user_profiles?.username || 'User'}
+                                    {msg.user_profiles?.username || 'Troll Citizen'}
                                 </button>
                                 <span className="truncate">{msg.content}</span>
                             </div>
@@ -1425,7 +1449,7 @@ export default function BroadcastChat({
                                 <div className="flex-1">
                                     <div className="flex items-center gap-1">
                                         <span className="font-bold text-purple-400 text-xs">
-                                            {msg.user_profiles?.username || msg.challenger_username || 'Someone'}
+                                            {msg.user_profiles?.username || msg.challenger_username || 'Troll Citizen'}
                                         </span>
                                         <span className="text-zinc-400 text-xs">sent a challenge!</span>
                                     </div>
@@ -1480,9 +1504,9 @@ export default function BroadcastChat({
                         let parsedCurrencyUsed: string | undefined;
                         let parsedCoinsBack = 0;
                         // Use sender_name from message data, user_profiles, or enriched data
-                        const senderName = msg.sender_name || msg.user_profiles?.username || 'Someone';
+                        const senderName = msg.sender_name || msg.user_profiles?.username || 'Troll Citizen';
                         // Use receiver_name from message data
-                        const receiverName = msg.receiver_name || 'user';
+                        const receiverName = msg.receiver_name || 'Troll Citizen';
                         
                         // If not already parsed, try to parse from content
                         if (!msg.gift_type && msg.content) {
@@ -1523,7 +1547,7 @@ export default function BroadcastChat({
                                 <span className="text-xs">
                                     <button
                                         type="button"
-                                        onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+                                        onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'Troll Citizen', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
                                         className="font-bold text-yellow-400 hover:text-yellow-300 transition-colors"
                                         title="Send gift"
                                     >
@@ -1569,11 +1593,11 @@ export default function BroadcastChat({
                             <div className="flex-1 min-w-0 flex items-center gap-1">
                                 <button
                                     type="button"
-                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'Troll Citizen', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
                                     className={`font-bold text-xs truncate hover:text-yellow-300 transition-colors ${showGoldenBanner && msg.user_id === user?.id ? 'text-yellow-400' : 'text-yellow-400'}`}
                                     title="Send gift"
                                 >
-                                    {msg.user_profiles?.username || 'User'}:
+                                    {msg.user_profiles?.username || 'Troll Citizen'}:
                                 </button>
                                 <span className="text-white text-xs truncate">{msg.content}</span>
                             </div>
@@ -1660,5 +1684,3 @@ export default function BroadcastChat({
     </div>
   );
 }
-
-

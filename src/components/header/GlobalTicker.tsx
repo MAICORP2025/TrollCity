@@ -22,6 +22,14 @@ const GlobalTicker = () => {
   const isAdmin = profile?.role === 'admin' || profile?.is_admin
   const canEditTicker = isAdmin || isNewsCaster || isChiefNewsCaster
 
+  const [currentEventIndex, setCurrentEventIndex] = useState(0)
+
+  const handleTickerClick = (event: ActivityEvent) => {
+    if (event.metadata?.url) {
+      navigate(event.metadata.url)
+    }
+  }
+
   useEffect(() => {
     if (events.length > 0 && (events[0].priority === 'high' || events[0].priority === 'breaking')) {
       setIsHeartbeating(true)
@@ -29,12 +37,6 @@ const GlobalTicker = () => {
       return () => clearTimeout(timer)
     }
   }, [events])
-
-  const handleTickerClick = (event: ActivityEvent) => {
-    if (event.metadata?.url) {
-      navigate(event.metadata.url)
-    }
-  }
 
   const handleSubmitTicker = async () => {
     if (!tickerMessage.trim()) {
@@ -45,7 +47,7 @@ const GlobalTicker = () => {
     setIsSubmitting(true)
     try {
       const cleanMessage = tickerMessage.trim()
-      const { error, data } = await supabase.from('global_events').insert({
+      const { error } = await supabase.from('global_events').insert({
         type: tickerType === 'breaking' ? 'tcnn_breaking' : 'tcnn_live',
         title: tickerType === 'breaking' ? `BREAKING: ${cleanMessage}` : cleanMessage,
         icon: tickerType === 'breaking' ? 'alert' : 'newspaper',
@@ -139,6 +141,15 @@ const GlobalTicker = () => {
 
   const hasBreakingNews = events.some(e => e.type === 'tcnn_breaking')
   const visibleEvents = events.slice(0, 20)
+  const currentEvent = visibleEvents[currentEventIndex] || null
+
+  useEffect(() => {
+    if (visibleEvents.length <= 1) return
+    const interval = setInterval(() => {
+      setCurrentEventIndex((prev) => (prev + 1) % visibleEvents.length)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [visibleEvents.length])
 
   return (
     <>
@@ -148,22 +159,21 @@ const GlobalTicker = () => {
         title={canEditTicker ? 'Double-click to push new ticker message' : undefined}
       >
         <div className="ticker">
-          {visibleEvents.map((event) => (
+          {currentEvent ? (
             <div
-              key={`${event.id}-${event.type}`}
-              className={`ticker-item ${getEventStyles(event)} ${event.metadata?.url ? 'cursor-pointer hover:underline' : ''}`}
-              onClick={() => handleTickerClick(event)}
-              role={event.metadata?.url ? 'button' : undefined}
-              tabIndex={event.metadata?.url ? 0 : undefined}
+              key={`${currentEvent.id}-${currentEvent.type}`}
+              className={`ticker-item ${getEventStyles(currentEvent)} ${currentEvent.metadata?.url ? 'cursor-pointer hover:underline' : ''} animate-slide-right-to-left`}
+              onClick={() => currentEvent.metadata?.url && handleTickerClick(currentEvent)}
+              role={currentEvent.metadata?.url ? 'button' : undefined}
+              tabIndex={currentEvent.metadata?.url ? 0 : undefined}
             >
-              <span className="ticker-icon">{getEventIcon(event)}</span>
-              <span className="ticker-message">{event.message}</span>
-              {event.type === 'tcnn_breaking' && <span className="breaking-badge">BREAKING</span>}
-              {event.type === 'tcnn_live' && <span className="live-badge">LIVE</span>}
+              <span className="ticker-icon">{getEventIcon(currentEvent)}</span>
+              <span className="ticker-message">{currentEvent.message}</span>
+              {currentEvent.type === 'tcnn_breaking' && <span className="breaking-badge">BREAKING</span>}
+              {currentEvent.type === 'tcnn_live' && <span className="live-badge">LIVE</span>}
             </div>
-          ))}
-          {visibleEvents.length === 0 && (
-            <div className="ticker-item event-system">
+          ) : (
+            <div className="ticker-item event-system animate-slide-right-to-left">
               <span className="ticker-icon">LIVE</span>
               <span className="ticker-message">Waiting for live city events...</span>
             </div>

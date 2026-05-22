@@ -19,6 +19,7 @@ import type { RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from
 import { Track } from 'livekit-client'
 
 import type { Stream } from '../../types/broadcast'
+import type { BroadcastGift } from '../../hooks/useBroadcastRealtime'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
@@ -27,8 +28,12 @@ import BroadcastChat from '../../components/broadcast/BroadcastChat'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import GiftBoxModal from '../../components/broadcast/GiftBoxModal'
+import GiftVideoOverlay from '../../components/broadcast/GiftVideoOverlay'
 import UserActionModal from '../../components/broadcast/UserActionModal'
+import UserStatsOrb from '../../components/broadcast/UserStatsOrb'
 import HypeCoinPopup from '../../components/HypeCoinPopup'
+import { getGiftVisualConfig } from '../../lib/giftVisuals'
+
 
 import { GiftSystemProvider } from '../../lib/hooks/useGiftSystem'
 import { useBoxCount } from '../../hooks/useBoxCount'
@@ -37,6 +42,10 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
+import { useStagePasses } from '../../hooks/useStagePasses'
+import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
+import { FloatingChatOverlay } from '../../components/broadcast/FloatingChatOverlay'
+import { Message } from '../../hooks/useStreamChat'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -217,11 +226,13 @@ function RemoteVideoSurface({
   mirror = false,
   className,
   fallback,
+  onTap,
 }: {
   participant: any
   mirror?: boolean
   className?: string
   fallback: React.ReactNode
+  onTap?: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -270,7 +281,10 @@ function RemoteVideoSurface({
   }, [audioTrack])
 
   return (
-    <div className={cn('relative h-full w-full overflow-hidden bg-black', className)}>
+    <div
+      onClick={() => onTap && onTap()}
+      className={cn('relative h-full w-full overflow-hidden bg-black', onTap && 'cursor-pointer', className)}
+    >
       {videoTrack ? (
         <>
           <video
@@ -308,8 +322,17 @@ function ViewerPage() {
   const [streamLoaded, setStreamLoaded] = useState(false)
   const [viewerCount, setViewerCount] = useState(0)
   const [isChatOpen, setIsChatOpen] = useState(true)
+  const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans'>('chat')
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
+  const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
+  const [floatingChatMessages, setFloatingChatMessages] = useState<Message[]>([])
+  const [streamMods, setStreamMods] = useState<string[]>([])
+  const processedGiftIdsRef = useRef<Set<string>>(new Set())
+  // Global per-page dedupe of gift animations.  The same stream_gifts row can
+  // arrive via postgres_changes and via the broadcast channel; both resolve to
+  // the same animationId (row UUID) so this Set catches the second arrival.
+  const seenGiftAnimationIdsRef = useRef<Set<string>>(new Set())
   const [userActionTarget, setUserActionTarget] = useState<{
     userId: string
     username?: string
@@ -318,6 +341,339 @@ function ViewerPage() {
   } | null>(null)
   const [viewerError, setViewerError] = useState<string | null>(null)
   const [showHypeCoinPopup, setShowHypeCoinPopup] = useState(false)
+  const { topGifters, isLoading: isTopFansLoading } = useStreamTopGifters({ streamId: streamId || null, limit: 10 })
+
+  const resolveGiftAmount = useCallback((giftData: any): number => {
+    const metadata = giftData?.metadata || {}
+    const quantity = Math.max(1, Number(giftData?.quantity ?? metadata.quantity ?? 1) || 1)
+
+    const directAmountCandidates = [
+      giftData?.coins_spent,
+      giftData?.coins_amount,
+      giftData?.total_amount,
+      giftData?.total_coins,
+      metadata.coins_spent,
+      metadata.coins_amount,
+      metadata.total_amount,
+      metadata.total_coins,
+      giftData?.amount,
+      metadata.amount,
+    ]
+
+    for (const candidate of directAmountCandidates) {
+      const value = Number(candidate)
+      if (Number.isFinite(value) && value > 0) return value
+    }
+
+    const unitAmountCandidates = [
+      giftData?.coin_value,
+      giftData?.gift_value,
+      giftData?.gift_price,
+      giftData?.price,
+      metadata.coin_value,
+      metadata.gift_value,
+      metadata.gift_price,
+      metadata.price,
+    ]
+
+    for (const candidate of unitAmountCandidates) {
+      const value = Number(candidate)
+      if (Number.isFinite(value) && value > 0) return value * quantity
+    }
+
+    return quantity
+  }, [])
+
+  const resolveGiftName = useCallback((giftData: any): string => {
+    const metadata = giftData?.metadata || {}
+    return (
+      giftData?.gift_name ||
+      giftData?.name ||
+      giftData?.title ||
+      metadata.gift_name ||
+      metadata.name ||
+      metadata.title ||
+      'Gift'
+    )
+  }, [])
+
+  const enrichGiftForOverlay = useCallback(async (incomingGift: any) => {
+    const giftItemId =
+      incomingGift?.gift_id ||
+      incomingGift?.gift_item_id ||
+      incomingGift?.giftId ||
+      incomingGift?.giftItemId ||
+      null
+
+    if (!giftItemId) {
+      return incomingGift
+    }
+
+    const { data: giftItem, error } = await supabase
+      .from('gift_items')
+      .select('id,name,slug,gift_slug,icon,icon_url,animation_url,animation_type,coin_cost')
+      .eq('id', giftItemId)
+      .maybeSingle()
+
+    if (error || !giftItem) {
+      console.warn('[ViewerPage] Could not enrich gift overlay payload', {
+        giftItemId,
+        error,
+        incomingGift,
+      })
+      return incomingGift
+    }
+
+    const enrichedGift = {
+      ...incomingGift,
+      gift_name:
+        incomingGift.gift_name && incomingGift.gift_name !== 'Gift'
+          ? incomingGift.gift_name
+          : giftItem.name,
+      slug:
+        giftItem.slug ||
+        giftItem.gift_slug ||
+        incomingGift.slug ||
+        incomingGift.gift_slug ||
+        null,
+      gift_slug:
+        giftItem.gift_slug ||
+        giftItem.slug ||
+        incomingGift.gift_slug ||
+        incomingGift.slug ||
+        null,
+      gift_icon: incomingGift.gift_icon || giftItem.icon || null,
+      icon: incomingGift.icon || giftItem.icon || null,
+      icon_url: giftItem.icon_url || incomingGift.icon_url || null,
+      animation_url: giftItem.animation_url || incomingGift.animation_url || null,
+      animation_type: giftItem.animation_type || incomingGift.animation_type || 'video',
+      coin_cost:
+        giftItem.coin_cost || incomingGift.coin_cost || incomingGift.amount || null,
+    }
+
+    if (import.meta.env.DEV) {
+      console.info('[ViewerPage] Enriched gift overlay payload', {
+        gift_id: giftItemId,
+        gift_name: enrichedGift.gift_name,
+        slug: enrichedGift.slug,
+        gift_slug: enrichedGift.gift_slug,
+        animation_url: enrichedGift.animation_url,
+      })
+    }
+
+    return enrichedGift
+  }, [])
+
+  const handleRemoveGiftOverlay = useCallback((giftId: string) => {
+    setRecentGifts((current) => current.filter((gift) => gift.id !== giftId))
+  }, [])
+
+  const resolveFloatingChatProfile = useCallback(async (message: Message) => {
+    const existingProfile = (message as any).user_profiles;
+
+    const existingUsername =
+      existingProfile?.username ||
+      (message as any).username ||
+      (message as any).user_name ||
+      (message as any).display_name ||
+      '';
+
+    const badNames = new Set(['', 'unknown', 'unknown:', 'guest', 'user']);
+
+    const hasGoodUsername =
+      typeof existingUsername === 'string' &&
+      existingUsername.trim() &&
+      !badNames.has(existingUsername.trim().toLowerCase());
+
+    if (hasGoodUsername && existingProfile?.username) {
+      return message;
+    }
+
+    if (!message.user_id) {
+      return message;
+    }
+
+    const { data: profileRow, error } = await supabase
+      .from('user_profiles')
+      .select(`
+        id,
+        username,
+        display_name,
+        email,
+        avatar_url,
+        role,
+        troll_role,
+        created_at,
+        rgb_username_expires_at,
+        glowing_username_color
+      `)
+      .eq('id', message.user_id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[FloatingChat] Failed to hydrate user profile:', error);
+    }
+
+    const username =
+      profileRow?.username ||
+      profileRow?.display_name ||
+      profileRow?.email?.split('@')?.[0] ||
+      existingUsername ||
+      'Troll Citizen';
+
+    return {
+      ...message,
+      username,
+      user_name: username,
+      user_avatar:
+        profileRow?.avatar_url ||
+        (message as any).user_avatar ||
+        existingProfile?.avatar_url ||
+        '',
+      user_role:
+        profileRow?.role ||
+        (message as any).user_role ||
+        existingProfile?.role ||
+        null,
+      user_troll_role:
+        profileRow?.troll_role ||
+        (message as any).user_troll_role ||
+        existingProfile?.troll_role ||
+        null,
+      user_created_at:
+        profileRow?.created_at ||
+        (message as any).user_created_at ||
+        existingProfile?.created_at ||
+        null,
+      user_rgb_expires_at:
+        profileRow?.rgb_username_expires_at ||
+        (message as any).user_rgb_expires_at ||
+        existingProfile?.rgb_username_expires_at ||
+        null,
+      user_glowing_username_color:
+        profileRow?.glowing_username_color ||
+        (message as any).user_glowing_username_color ||
+        existingProfile?.glowing_username_color ||
+        null,
+      user_profiles: {
+        ...(existingProfile || {}),
+        username,
+        display_name: profileRow?.display_name || existingProfile?.display_name || null,
+        email: profileRow?.email || existingProfile?.email || null,
+        avatar_url: profileRow?.avatar_url || existingProfile?.avatar_url || '',
+        role: profileRow?.role || existingProfile?.role || null,
+        troll_role: profileRow?.troll_role || existingProfile?.troll_role || null,
+        created_at: profileRow?.created_at || existingProfile?.created_at || null,
+        rgb_username_expires_at:
+          profileRow?.rgb_username_expires_at ||
+          existingProfile?.rgb_username_expires_at ||
+          null,
+        glowing_username_color:
+          profileRow?.glowing_username_color ||
+          existingProfile?.glowing_username_color ||
+          null,
+      },
+    } as Message;
+  }, []);
+
+  const pushFloatingChatMessage = useCallback(async (message: Message) => {
+    if (!message?.id || !message?.content) return;
+
+    const hydratedMessage = await resolveFloatingChatProfile(message);
+
+    setFloatingChatMessages(prev => {
+      if (prev.some(existing => existing.id === hydratedMessage.id)) return prev;
+      return [...prev, hydratedMessage].slice(-6);
+    });
+
+    window.setTimeout(() => {
+      setFloatingChatMessages(prev =>
+        prev.filter(existing => existing.id !== hydratedMessage.id)
+      );
+    }, 9000);
+  }, [resolveFloatingChatProfile]);
+
+  const processGiftEvent = useCallback(async (giftData: any) => {
+    if (!giftData) return
+
+    // Normalise to a stable animationId that is the same whether the event
+    // came from postgres_changes (event.new.id = row UUID) or from the
+    // broadcast channel (payload.id = same row UUID via transaction_id).
+    const animationId = String(giftData.id || giftData.stream_gift_id || giftData.gift_transaction_id || '')
+    if (!animationId) return
+
+    if (seenGiftAnimationIdsRef.current.has(animationId)) {
+      if (import.meta.env.DEV) console.log('[ViewerPage] Duplicate animation skipped', { animationId })
+      return
+    }
+    seenGiftAnimationIdsRef.current.add(animationId)
+
+    // Existing quick-dedupe (12 s window) for old-format giftIds too
+    const giftId = animationId
+    if (processedGiftIdsRef.current.has(giftId)) {
+      if (import.meta.env.DEV) console.log('[ViewerPage] Duplicate gift event skipped', giftId)
+      return
+    }
+    processedGiftIdsRef.current.add(giftId)
+    window.setTimeout(() => processedGiftIdsRef.current.delete(giftId), 12_000)
+
+    const enrichedGiftData = await enrichGiftForOverlay(giftData)
+    const incomingStreamId = enrichedGiftData.streamId || enrichedGiftData.stream_id || enrichedGiftData.metadata?.streamId || enrichedGiftData.metadata?.stream_id
+    const receiverId = enrichedGiftData.receiver_id || enrichedGiftData.recipient_id || enrichedGiftData.receiverId || enrichedGiftData.recipientId || enrichedGiftData.metadata?.receiver_id || enrichedGiftData.metadata?.recipient_id
+
+    if (incomingStreamId && incomingStreamId !== streamId) {
+      if (import.meta.env.DEV) console.log('[ViewerPage] ⚠️ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId })
+      return
+    }
+
+    const resolvedGiftAmount = resolveGiftAmount(enrichedGiftData)
+    const resolvedGiftName = resolveGiftName(enrichedGiftData)
+
+    const newGift = {
+      id: giftId,
+      gift_id: enrichedGiftData.gift_id,
+      gift_name: resolvedGiftName,
+      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || '🎁',
+      gift_slug: enrichedGiftData.gift_slug || enrichedGiftData.metadata?.gift_slug,
+      animation_key: enrichedGiftData.animation_key || enrichedGiftData.metadata?.animation_key,
+      animation_type: enrichedGiftData.animation_type || enrichedGiftData.metadata?.animation_type,
+      animation_url:
+        enrichedGiftData.animation_url ||
+        enrichedGiftData.video_url ||
+        enrichedGiftData.metadata?.animation_url ||
+        enrichedGiftData.metadata?.video_url ||
+        undefined,
+      video_url:
+        enrichedGiftData.video_url ||
+        enrichedGiftData.animation_url ||
+        enrichedGiftData.metadata?.video_url ||
+        enrichedGiftData.metadata?.animation_url ||
+        undefined,
+      animation_duration_ms: enrichedGiftData.animation_duration_ms || enrichedGiftData.metadata?.animation_duration_ms,
+      sound_url: enrichedGiftData.sound_url || enrichedGiftData.metadata?.sound_url,
+      is_fullscreen: enrichedGiftData.is_fullscreen ?? enrichedGiftData.metadata?.is_fullscreen,
+      rarity: enrichedGiftData.rarity || enrichedGiftData.metadata?.rarity,
+      tray_visual_url: enrichedGiftData.tray_visual_url || enrichedGiftData.metadata?.tray_visual_url,
+      tray_gradient: enrichedGiftData.tray_gradient || enrichedGiftData.metadata?.tray_gradient,
+      amount: resolvedGiftAmount || enrichedGiftData.quantity || 1,
+      quantity: enrichedGiftData.quantity || 1,
+      sender_id: enrichedGiftData.sender_id,
+      sender_name: enrichedGiftData.sender_name || enrichedGiftData.metadata?.sender_name || 'Someone',
+      receiver_id: receiverId,
+      receiver_name: enrichedGiftData.receiver_name || enrichedGiftData.metadata?.receiver_name,
+      created_at: enrichedGiftData.timestamp || enrichedGiftData.created_at || new Date().toISOString(),
+    } as BroadcastGift
+
+    setRecentGifts((prev) => {
+      if (prev.some((gift) => gift.id === giftId)) return prev
+      return [...prev, newGift].slice(-20)
+    })
+
+    const giftDurationMs = newGift.animation_duration_ms ?? getGiftVisualConfig(newGift).durationMs
+    window.setTimeout(() => {
+      setRecentGifts((prev) => prev.filter((gift) => gift.id !== giftId))
+    }, giftDurationMs + 150)
+  }, [enrichGiftForOverlay, resolveGiftAmount, resolveGiftName, streamId])
 
   const hasJoinedAudienceRef = useRef(false)
   const joiningAudienceRef = useRef(false)
@@ -327,6 +683,9 @@ function ViewerPage() {
   )
   const watchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastEarnTimeRef = useRef<number>(0)
+  const clickTimesRef = useRef<number[]>([])
+  const blockedUntilRef = useRef<number | null>(null)
+  const manualStageLeaveRef = useRef(false)
 
   const defaultSeatCount = Array.isArray((stream as any)?.seat_prices)
     ? (stream as any).seat_prices.length
@@ -338,14 +697,22 @@ function ViewerPage() {
     isHost: false,
   })
 
+  const stagePassesHook = useStagePasses(streamId || undefined)
+  const currentUserStagePass = stagePassesHook.currentUserStagePass
+
   const effectiveBoxCount = useMemo(() => {
     const seatCountFromPrices = Array.isArray((stream as any)?.seat_prices)
       ? (stream as any).seat_prices.length
       : 0
     const rawBoxCount = (stream as any)?.box_count ?? hookBoxCount ?? seatCountFromPrices ?? 1
     const computedBoxCount = Number(rawBoxCount) || seatCountFromPrices || 1
-    return Math.max(1, Math.min(computedBoxCount, 6))
-  }, [stream, hookBoxCount])
+    const stagePassMaxIndex = stagePassesHook.stagePasses.reduce(
+      (max, pass) => Math.max(max, pass.stage_index || 0),
+      0,
+    )
+    const inferredSeatCount = stagePassMaxIndex > 0 ? stagePassMaxIndex + 1 : 0
+    return Math.max(1, Math.min(Math.max(computedBoxCount, inferredSeatCount), 6))
+  }, [stream, hookBoxCount, stagePassesHook.stagePasses])
 
   const {
     seats,
@@ -359,6 +726,50 @@ function ViewerPage() {
     userSeat?.status === 'active' && (userSeat?.user_id || userSeat?.guest_id),
   )
 
+  useEffect(() => {
+    if (!streamId || !user?.id) return;
+    if (!currentUserStagePass) return;
+    if (isUserOnStage) return;
+    if (manualStageLeaveRef.current) return;
+    if (!['approved', 'live'].includes(currentUserStagePass.status)) return;
+    if (currentUserStagePass.stage_index == null) return;
+
+    console.debug('[ViewerPage] auto-joining approved stage pass', {
+      streamId,
+      userId: user.id,
+      stagePass: currentUserStagePass,
+      existingSeat: userSeat,
+    });
+
+    void joinSeat(currentUserStagePass.stage_index, 0);
+  }, [streamId, user?.id, currentUserStagePass, isUserOnStage, joinSeat, userSeat]);
+
+  useEffect(() => {
+    if (isUserOnStage) {
+      manualStageLeaveRef.current = false;
+    }
+  }, [isUserOnStage]);
+
+  useEffect(() => {
+    if (!currentUserStagePass || !['approved', 'live'].includes(currentUserStagePass.status)) {
+      manualStageLeaveRef.current = false;
+    }
+  }, [currentUserStagePass?.status]);
+
+  // Fetch stream mods for the floating overlay badges
+  useEffect(() => {
+    const fetchMods = async () => {
+      const targetHostId = (stream as any)?.user_id;
+      if (!targetHostId) return;
+      const { data } = await supabase
+        .from('stream_moderators')
+        .select('user_id')
+        .eq('broadcaster_id', targetHostId);
+      if (data) setStreamMods(data.map((d: any) => d.user_id));
+    };
+    if ((stream as any)?.user_id) fetchMods();
+  }, [(stream as any)?.user_id]);
+
   const isActive = isStreamActive(stream)
   const hostId = (stream as any)?.user_id || ''
   const hostName = getDisplayName(broadcasterProfile, 'Broadcaster')
@@ -367,11 +778,14 @@ function ViewerPage() {
     return String((stream as any)?.livekit_room_name || `stream-${streamId}` || '')
   }, [stream, streamId])
 
-  useEffect(() => {
-    viewerIdentityRef.current = `viewer-${streamId}-${
-      user?.id || Math.random().toString(36).slice(2, 9)
-    }`
-  }, [streamId, user?.id])
+   useEffect(() => {
+     if (!streamId || !user?.id) return;
+     if (isUserOnStage) {
+       viewerIdentityRef.current = String(user.id);
+     } else {
+       viewerIdentityRef.current = `viewer-${streamId}-${user.id}`;
+     }
+   }, [streamId, user?.id, isUserOnStage])
 
   const audienceName = useMemo(() => {
     return user
@@ -387,21 +801,21 @@ function ViewerPage() {
 
   const noopCallback = useCallback(() => {}, [])
 
-  const {
-    remoteUsers,
-    joinAsAudience,
-    leaveRoom: leaveLiveKitRoom,
-  } = useLiveKitRoom({
-    roomId,
-    roomType: 'broadcast',
-    role: 'viewer',
-    publish: false,
-    audioOnly: false,
-    userName: audienceName,
-    onUserJoined: noopCallback,
-    onUserLeft: noopCallback,
-    onError: handleLiveKitError,
-  })
+const {
+  remoteUsers,
+  joinAsAudience,
+  leaveRoom: leaveLiveKitRoom,
+} = useLiveKitRoom({
+  roomId,
+  roomType: 'broadcast',
+  role: isUserOnStage ? 'publisher' : 'viewer',
+  publish: isUserOnStage,
+  audioOnly: false,
+  userName: audienceName,
+  onUserJoined: noopCallback,
+  onUserLeft: noopCallback,
+  onError: handleLiveKitError,
+})
 
   const remoteParticipants = useMemo(() => {
     return Array.isArray(remoteUsers) ? remoteUsers : []
@@ -528,6 +942,7 @@ function ViewerPage() {
   }, [streamId, navigate])
 
   const handleLeaveSeat = useCallback(async () => {
+    manualStageLeaveRef.current = true
     await leaveSeat()
     navigate(location.pathname, { replace: true })
   }, [leaveSeat, navigate, location.pathname])
@@ -540,11 +955,36 @@ function ViewerPage() {
       return
     }
 
+    const now = Date.now()
+
+    if (blockedUntilRef.current && now < blockedUntilRef.current) {
+      const secondsLeft = Math.ceil((blockedUntilRef.current - now) / 1000)
+      toast.error(`You're temporarily blocked from liking (${secondsLeft}s)`)
+      return
+    }
+
+    // record this tap and check rate
+    const times = clickTimesRef.current
+    times.push(now)
+    const cutoff = now - 1000
+    while (times.length && times[0] < cutoff) times.shift()
+
+    const tapsPerSec = times.length
+    if (tapsPerSec >= 20) {
+      // suspected auto-clicking: block for 1 minute
+      blockedUntilRef.current = now + 60 * 1000
+      clickTimesRef.current = []
+      toast.error('Rate limited for 1 minute due to suspected auto-clicking')
+      return
+    }
+
+    const likeIncrement = 2 // allow 2 likes per tap
+
     setStream((prev: any) =>
       prev
         ? {
             ...prev,
-            total_likes: Number(prev.total_likes || 0) + 1,
+            total_likes: Number(prev.total_likes || 0) + likeIncrement,
           }
         : prev,
     )
@@ -552,7 +992,7 @@ function ViewerPage() {
     try {
       await supabase
         .from('streams')
-        .update({ total_likes: Number((stream as any)?.total_likes || 0) + 1 })
+        .update({ total_likes: Number((stream as any)?.total_likes || 0) + likeIncrement })
         .eq('id', streamId)
     } catch (err) {
       console.warn('[ViewerPage] like update failed:', err)
@@ -731,10 +1171,21 @@ function ViewerPage() {
     return () => window.clearInterval(interval)
   }, [streamId, refreshStream])
 
-  useStreamRealtime(
-    streamId || '',
-    {
-      onGift: () => {},
+  // Canonical gift-animation source: stream_gifts postgres_changes received
+  // via useStreamRealtime. event.new.id is the stream_gifts row UUID — the
+  // same value that useGiftSystem uses as broadcast payload.id — so both
+  // postgres and broadcast paths resolve to the same animationId and the
+  // seenGiftAnimationIdsRef Set catches the second arrival without double-
+  // playing the <video>.
+useStreamRealtime(
+     streamId || '',
+     {
+       onGift: (event) => {
+         const rawGift = event?.new ?? event
+         if (rawGift) {
+           void processGiftEvent(rawGift)
+         }
+       },
       onViewerCount: (count: number) => setViewerCount(count),
       onParticipant: (event: any) => {
         if (event.eventType !== 'UPDATE' || !event.new || !user?.id) return
@@ -818,62 +1269,75 @@ function ViewerPage() {
     }
   }, [seatJoinTransition, user?.id])
 
-  useEffect(() => {
-    if (!streamId || !roomId || !isActive) return
+   useEffect(() => {
+     if (!streamId || !roomId || !isActive) return
 
-    if (user?.id) {
-      const kickKey = getKickStorageKey(streamId, user.id)
-      const kickRaw = localStorage.getItem(kickKey)
-      const kickData = parseKickData(kickRaw)
+     if (user?.id) {
+       const kickKey = getKickStorageKey(streamId, user.id)
+       const kickRaw = localStorage.getItem(kickKey)
+       const kickData = parseKickData(kickRaw)
 
-      if (isKickBanActive(kickData)) {
-        const timeSinceKick = Date.now() - kickData.timestamp
-        const remainingMs = Math.max(KICK_BAN_DURATION_MS - timeSinceKick, 0)
-        const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+       if (isKickBanActive(kickData)) {
+         const timeSinceKick = Date.now() - kickData.timestamp
+         const remainingMs = Math.max(KICK_BAN_DURATION_MS - timeSinceKick, 0)
+         const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
 
-        toast.error(
-          `You were kicked from this broadcast and cannot rejoin for ${hoursRemaining} hour${
-            hoursRemaining === 1 ? '' : 's'
-          }.`,
-        )
+         toast.error(
+           `You were kicked from this broadcast and cannot rejoin for ${hoursRemaining} hour${
+             hoursRemaining === 1 ? '' : 's'
+           }.`,
+         )
 
-        leaveLiveKitRoom().catch(() => {})
-        hasJoinedAudienceRef.current = false
-        joiningAudienceRef.current = false
-        currentRoomKeyRef.current = null
-        navigate('/', { replace: true })
-        return
-      }
+         leaveLiveKitRoom().catch(() => {})
+         hasJoinedAudienceRef.current = false
+         joiningAudienceRef.current = false
+         currentRoomKeyRef.current = null
+         navigate('/', { replace: true })
+         return
+       }
 
-      if (kickRaw && !isKickBanActive(kickData)) {
-        localStorage.removeItem(kickKey)
-      }
-    }
+       if (kickRaw && !isKickBanActive(kickData)) {
+         localStorage.removeItem(kickKey)
+       }
+     }
 
-    const audienceRoomKey = `${streamId}:${roomId}`
-    if (hasJoinedAudienceRef.current && currentRoomKeyRef.current === audienceRoomKey) return
-    if (joiningAudienceRef.current) return
+     // When user is on stage, we don't join as audience
+     // The LiveKit connection should be handled by the hook with publisher role
+     if (isUserOnStage) {
+       // If we were previously joined as audience, we should leave
+       if (hasJoinedAudienceRef.current) {
+         leaveLiveKitRoom().catch(() => {})
+         hasJoinedAudienceRef.current = false
+         joiningAudienceRef.current = false
+         currentRoomKeyRef.current = null
+       }
+       return
+     }
 
-    joiningAudienceRef.current = true
-    currentRoomKeyRef.current = audienceRoomKey
+     const audienceRoomKey = `${streamId}:${roomId}`
+     if (hasJoinedAudienceRef.current && currentRoomKeyRef.current === audienceRoomKey) return
+     if (joiningAudienceRef.current) return
 
-    const identity = viewerIdentityRef.current
+     joiningAudienceRef.current = true
+     currentRoomKeyRef.current = audienceRoomKey
 
-    joinAsAudience(identity)
-      .then(() => {
-        hasJoinedAudienceRef.current = true
-        setViewerError(null)
-        console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId, identity })
-      })
-      .catch((err: any) => {
-        const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
-        console.warn('[ViewerPage] joinAsAudience failed:', err, { errorDetail })
-        setViewerError(errorDetail)
-      })
-      .finally(() => {
-        joiningAudienceRef.current = false
-      })
-  }, [streamId, roomId, isActive, joinAsAudience, user?.id, navigate, leaveLiveKitRoom])
+     const identity = viewerIdentityRef.current
+
+     joinAsAudience(identity)
+       .then(() => {
+         hasJoinedAudienceRef.current = true
+         setViewerError(null)
+         console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId, identity })
+       })
+       .catch((err: any) => {
+         const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
+         console.warn('[ViewerPage] joinAsAudience failed:', err, { errorDetail })
+         setViewerError(errorDetail)
+       })
+       .finally(() => {
+         joiningAudienceRef.current = false
+       })
+   }, [streamId, roomId, isActive, isUserOnStage, joinAsAudience, leaveLiveKitRoom, user?.id, navigate])
 
   const stageSlots = useMemo(() => {
     const liveSeats = activeSeats.slice(0, Math.max(0, effectiveBoxCount - 1))
@@ -915,6 +1379,8 @@ function ViewerPage() {
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:42px_42px] opacity-25" />
 
+          <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
+
           {!isMobileViewer && (
             <BroadcastNeonHeader
               stream={stream}
@@ -954,9 +1420,10 @@ function ViewerPage() {
             <section className={cn('relative min-h-[520px] overflow-hidden', theme.hostVideoPanel)}>
 
                 <RemoteVideoSurface
-                participant={hostParticipant}
-                mirror={false}
-                className="absolute inset-0"
+                  participant={hostParticipant}
+                  mirror={false}
+                  className="absolute inset-0"
+                  onTap={handleLike}
                 fallback={
                   <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
                     <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
@@ -976,6 +1443,13 @@ function ViewerPage() {
                     </div>
                   </div>
                 }
+              />
+
+              {/* Floating Chat Overlay (Stage/Video anchor) */}
+              <FloatingChatOverlay
+                messages={floatingChatMessages}
+                streamMods={streamMods}
+                hostId={hostId}
               />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/25" />
@@ -1023,13 +1497,6 @@ function ViewerPage() {
 
               <div className="absolute bottom-6 left-6 z-20 flex flex-wrap items-center gap-2">
                 <button
-                  onClick={handleLike}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.pinkButton)}
-                >
-                  <Heart className="h-4 w-4" />
-                  {Number((stream as any)?.total_likes || 0).toLocaleString()}
-                </button>
-                <button
                   onClick={() => onGift(hostId)}
                   className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.purpleButton)}
                 >
@@ -1076,6 +1543,7 @@ function ViewerPage() {
                       <RemoteVideoSurface
                         participant={stageParticipant}
                         className="absolute inset-0"
+                        onTap={handleLike}
                         fallback={
                           <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-[#160d2b] to-[#070711] p-4">
                             {avatar ? (
@@ -1115,6 +1583,15 @@ function ViewerPage() {
                         <Gift className="h-4 w-4" />
                       </button>
 
+                      <p className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[15]">
+                        <UserStatsOrb
+                          userId={seatUserId}
+                          username={username}
+                          streamId={streamId}
+                          isSeatUser={isUserOnStage}
+                        />
+                      </p>
+
                       <p className="absolute bottom-3 left-3 right-3 z-10 truncate text-sm font-black text-cyan-100 drop-shadow">
                         {username}
                       </p>
@@ -1122,68 +1599,182 @@ function ViewerPage() {
                   )
                 })}
 
-                {Array.from({ length: stageSlots.emptyCount }).map((_, index) => (
-                  <button
-                    key={`empty-${index}`}
-                    onClick={() => {
-                      if (!user?.id) {
-                        toast.error('Login to request a stage spot')
-                        return
-                      }
-                      if ((stream as any)?.are_seats_locked) {
-                        toast.error('Stage is locked right now')
-                        return
-                      }
-                      void joinSeat(index + 1 as any)
-                    }}
-                    disabled={(stream as any)?.are_seats_locked || isUserOnStage}
-                    className={cn('min-h-[210px] rounded-2xl border border-dashed border-white/15 bg-black/20 p-4 text-center transition-all disabled:cursor-not-allowed disabled:opacity-40', theme.emptySlot)}
-                  >
-                    <div className="mx-auto mt-10 grid h-16 w-16 place-items-center rounded-full border border-white/15 bg-white/5">
-                      <Plus className="h-8 w-8" />
-                    </div>
-                    <p className="mt-5 text-base font-bold text-slate-300">
-                      {isUserOnStage ? 'You are on stage' : 'Request Stage Spot'}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {isUserOnStage ? 'Leave first to switch spots' : 'ask to join the broadcast'}
-                    </p>
-                  </button>
-                ))}
+                {Array.from({ length: stageSlots.emptyCount }).map((_, index) => {
+                  const slotIndex = stageSlots.liveSeats.length + index + 1
+                  const openPass = stagePassesHook.stagePasses.find(
+                    (p) => p.status === 'open' && p.stage_index === slotIndex,
+                  ) || stagePassesHook.stagePasses.find((p) => p.status === 'open')
+                  const canJoinAfterApproval = currentUserStagePass?.status === 'approved' || currentUserStagePass?.status === 'live'
+                  const isPendingRequest = currentUserStagePass?.status === 'requested'
+                  const isDisabled = (stream as any)?.are_seats_locked || isUserOnStage || isPendingRequest
+
+                  return (
+                    <button
+                      key={`empty-${index}`}
+                      onClick={async () => {
+                        if (!user?.id) {
+                          toast.error('Login to request a stage spot')
+                          return
+                        }
+                        if ((stream as any)?.are_seats_locked) {
+                          toast.error('Stage is locked right now')
+                          return
+                        }
+                        if (isUserOnStage) return
+
+                        if (canJoinAfterApproval && currentUserStagePass?.stage_index) {
+                          manualStageLeaveRef.current = false
+                          await joinSeat(currentUserStagePass.stage_index, 0)
+                          return
+                        }
+
+                        if (isPendingRequest) {
+                          toast('Stage pass request pending')
+                          return
+                        }
+
+                        if (!openPass) {
+                          console.debug('[ViewerPage] no open stage pass found', { streamId, userId: user?.id, availablePasses: stagePassesHook.stagePasses })
+                          toast.error('Seats Are Temp Disabled Until 5-25-2025')
+                          return
+                        }
+
+                        console.debug('[ViewerPage] requesting stage pass', { streamId, userId: user?.id, stagePassId: openPass.id, stageIndex: openPass.stage_index })
+                        const result = await stagePassesHook.requestStagePass(openPass.id)
+                        if (!result.success) {
+                          toast.error(result.error || 'Failed to request stage pass')
+                        } else {
+                          toast.success('Stage pass request sent')
+                        }
+                      }}
+                      disabled={isDisabled}
+                      className={cn('min-h-[210px] rounded-2xl border border-dashed border-white/15 bg-black/20 p-4 text-center transition-all disabled:cursor-not-allowed disabled:opacity-40', theme.emptySlot)}
+                    >
+                      <div className="mx-auto mt-10 grid h-16 w-16 place-items-center rounded-full border border-white/15 bg-white/5">
+                        <Plus className="h-8 w-8" />
+                      </div>
+                      <p className="mt-5 text-base font-bold text-slate-300">
+                        {isUserOnStage
+                          ? 'You are on stage'
+                          : canJoinAfterApproval
+                            ? 'Join Stage Spot'
+                            : isPendingRequest
+                              ? 'Request Pending'
+                              : 'Seats Are Temp Disabled Until 5-25-2026'}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {isUserOnStage
+                          ? 'Leave first to switch spots'
+                          : canJoinAfterApproval
+                            ? 'Approved — join now'
+                            : isPendingRequest
+                              ? 'Your request is waiting for approval'
+                              : 'ask to join the broadcast'}
+                      </p>
+                    </button>
+                  )
+                })}
               </div>
             </section>
 
             {(!isMobileViewer || isChatOpen) && (
               <aside className={theme.chatPanel}>
                 <div className="grid grid-cols-3 border-b border-white/10">
-                  {['Chat', 'Gifts', 'Top Fans'].map((tab, tabIndex) => (
-                    <button
-                      key={tab}
-                      className={cn(
-                        'relative h-16 text-sm font-black transition-colors',
-                        tabIndex === 0 ? 'text-white' : 'text-white/60 hover:text-white/80',
-                      )}
-                    >
-                      {tab}
-                      {tabIndex === 0 && (
-                        <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
-                      )}
-                    </button>
-                  ))}
+                  {['Chat', 'Gifts', 'Top Fans'].map((tab, tabIndex) => {
+                    const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'gifts' | 'top-fans'
+                    const active = chatTab === tabKey
+                    return (
+                      <button
+                        key={tab}
+                        onClick={() => setChatTab(tabKey)}
+                        className={cn(
+                          'relative h-16 text-sm font-black transition-colors',
+                          active ? 'text-white' : 'text-white/60 hover:text-white/80',
+                        )}
+                        type="button"
+                        data-active={active}
+                      >
+                        {tab}
+                        {active && (
+                          <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <BroadcastChat
-                    streamId={streamId}
-                    hostId={hostId}
-                    isHost={false}
-                    isViewer={true}
-                    isGuest={!user}
-                    isBattleActive={(stream as any).is_battle}
-                    isChatOpen={isChatOpen}
-                    seats={seats}
-                    broadcasterProfile={broadcasterProfile}
-                    onMessageSent={() => {}}
-                  />
+                  {chatTab === 'chat' ? (
+                    <BroadcastChat
+                      streamId={streamId}
+                      hostId={hostId}
+                      isHost={false}
+                      isViewer={true}
+                      isGuest={!user}
+                      isBattleActive={(stream as any).is_battle}
+                      isChatOpen={isChatOpen}
+                      seats={seats}
+                      broadcasterProfile={broadcasterProfile}
+                      onFloatingMessage={pushFloatingChatMessage}
+                      onMessageSent={() => {}}
+                    />
+                  ) : chatTab === 'gifts' ? (
+                    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>
+                      {recentGifts.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
+                          No gifts have been received yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {recentGifts.slice(0, 12).map((gift) => (
+                            <div key={gift.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-bold text-white truncate">
+                                    {gift.sender_username || 'Anonymous'}
+                                  </div>
+                                  <div className="text-xs text-slate-400 truncate">
+                                    Sent {gift.quantity || 1} {gift.gift_name || 'gift'}
+                                  </div>
+                                </div>
+                                <div className="text-xs font-semibold text-cyan-300">
+                                  {gift.coins_amount?.toLocaleString() || gift.amount?.toLocaleString() || '0'} coins
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Top Fans</div>
+                      {isTopFansLoading ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">Loading top fans...</div>
+                      ) : topGifters.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">No fan activity yet.</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {topGifters.map((fan) => (
+                            <div key={fan.sender_id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold">
+                                    {fan.sender_username?.charAt(0)?.toUpperCase() || '?'}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-bold text-white">{fan.sender_username || 'Troll Citizen'}</div>
+                                    <div className="truncate text-xs text-slate-400">Last gift: {new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+                                  </div>
+                                </div>
+                                <div className="text-xs font-semibold text-cyan-300">{fan.total_gift_coins.toLocaleString()} coins</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </aside>
             )}

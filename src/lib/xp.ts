@@ -1,6 +1,5 @@
 import { supabase } from './supabase'
 import { xpService } from '../services/xpService'
-import { evaluateBadgesForUser } from '../services/badgeEvaluationService'
 
 // Level Thresholds (Legacy - Source of Truth is now Database RPC 'calculate_level')
 export const LEVEL_THRESHOLDS = [
@@ -140,11 +139,11 @@ export async function awardPaidCoinXP(userId: string, coinAmount: number, metada
     metadata
   )
   
-  if (result.success) {
-    evaluateBadgesForUser(userId).catch(console.error)
-  }
-  
-  return result
+if (result.success) {
+     // Badge evaluation removed
+   }
+   
+   return result
 }
 
 /**
@@ -152,22 +151,18 @@ export async function awardPaidCoinXP(userId: string, coinAmount: number, metada
  * +1.1 XP per coin
  */
 export async function awardLiveGiftXP(userId: string, coinAmount: number, metadata: any = {}) {
-  const xpAmount = Math.floor(coinAmount * ECONOMY_XP.LIVE_GIFT_BONUS)
-  const sourceId = `live_gift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  
-  const result = await xpService.grantXP(
-    userId,
-    xpAmount,
-    'live_gift_send',
-    sourceId,
-    metadata
-  )
-
-  if (result.success) {
-    evaluateBadgesForUser(userId, { giftAmount: coinAmount }).catch(console.error)
-  }
-
-  return result
+   const xpAmount = Math.floor(coinAmount * ECONOMY_XP.LIVE_GIFT_BONUS)
+   const sourceId = `live_gift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+   
+   const result = await xpService.grantXP(
+     userId,
+     xpAmount,
+     'live_gift_send',
+     sourceId,
+     metadata
+   )
+   
+   return result
 }
 
 /**
@@ -175,22 +170,18 @@ export async function awardLiveGiftXP(userId: string, coinAmount: number, metada
  * +5 XP per $1
  */
 export async function awardStorePurchaseXP(userId: string, dollarAmount: number, metadata: any = {}) {
-  const xpAmount = Math.floor(dollarAmount * ECONOMY_XP.STORE_PURCHASE)
-  const sourceId = `store_purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  
-  const result = await xpService.grantXP(
-    userId,
-    xpAmount,
-    'store_purchase',
-    sourceId,
-    metadata
-  )
+   const xpAmount = Math.floor(dollarAmount * ECONOMY_XP.STORE_PURCHASE)
+   const sourceId = `store_purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+   
+   const result = await xpService.grantXP(
+     userId,
+     xpAmount,
+     'store_purchase',
+     sourceId,
+     metadata
+   )
 
-  if (result.success) {
-    evaluateBadgesForUser(userId).catch(console.error)
-  }
-
-  return result
+   return result
 }
 
 // ===========================
@@ -271,21 +262,17 @@ export async function award7DayStreakXP(userId: string, streakCount: number) {
  * +200 XP for streams 10+ minutes
  */
 export async function awardGoLiveXP(userId: string, streamId: string) {
-  const sourceId = `go_live_${streamId}`
-  
-  const result = await xpService.grantXP(
-    userId,
-    STREAMING_XP.GO_LIVE_BASE,
-    'go_live',
-    sourceId,
-    { stream_id: streamId }
-  )
+   const sourceId = `go_live_${streamId}`
+   
+   const result = await xpService.grantXP(
+     userId,
+     STREAMING_XP.GO_LIVE_BASE,
+     'go_live',
+     sourceId,
+     { stream_id: streamId }
+   )
 
-  if (result.success) {
-    evaluateBadgesForUser(userId).catch(console.error)
-  }
-
-  return result
+   return result
 }
 
 /**
@@ -293,22 +280,18 @@ export async function awardGoLiveXP(userId: string, streamId: string) {
  * +1 XP per viewer per minute
  */
 export async function awardViewerMinuteXP(userId: string, viewerMinutes: number, streamId: string) {
-  const xpAmount = Math.floor(viewerMinutes * STREAMING_XP.VIEWER_MINUTE)
-  const sourceId = `viewer_minute_${streamId}_${Date.now()}`
-  
-  const result = await xpService.grantXP(
-    userId,
-    xpAmount,
-    'viewer_minute',
-    sourceId,
-    { stream_id: streamId, viewer_minutes: viewerMinutes }
-  )
+   const xpAmount = Math.floor(viewerMinutes * STREAMING_XP.VIEWER_MINUTE)
+   const sourceId = `viewer_minute_${streamId}_${Date.now()}`
+   
+   const result = await xpService.grantXP(
+     userId,
+     xpAmount,
+     'viewer_minute',
+     sourceId,
+     { stream_id: streamId, viewer_minutes: viewerMinutes }
+   )
 
-  if (result.success) {
-    evaluateBadgesForUser(userId).catch(console.error)
-  }
-
-  return result
+   return result
 }
 
 /**
@@ -316,22 +299,18 @@ export async function awardViewerMinuteXP(userId: string, viewerMinutes: number,
  * Base amount + bonus %
  */
 export async function awardGiftReceivedXP(userId: string, coinAmount: number, streamId: string, metadata: any = {}) {
-  const xpAmount = Math.floor(coinAmount * XP_RATES.STREAMER)
-  const sourceId = `gift_received_${streamId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  
-  const result = await xpService.grantXP(
-    userId,
-    xpAmount,
-    'gift_received',
-    sourceId,
-    { stream_id: streamId, coin_amount: coinAmount, ...metadata }
-  )
+   const xpAmount = Math.floor(coinAmount * XP_RATES.STREAMER)
+   const sourceId = `gift_received_${streamId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+   
+   const result = await xpService.grantXP(
+     userId,
+     xpAmount,
+     'gift_received',
+     sourceId,
+     { stream_id: streamId, coin_amount: coinAmount, ...metadata }
+   )
 
-  if (result.success) {
-    evaluateBadgesForUser(userId, { giftAmount: coinAmount }).catch(console.error)
-  }
-
-  return result
+   return result
 }
 
 // ===========================

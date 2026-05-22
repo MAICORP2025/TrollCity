@@ -40,6 +40,16 @@ export interface GiftItem {
   subcategory?: string
   slug?: string
   currency?: 'troll_coins'
+  animationKey?: string
+  animationType?: string
+  animationUrl?: string | null
+  animationDurationMs?: number
+  soundUrl?: string | null
+  isFullscreen?: boolean
+  rarity?: string
+  trayVisualUrl?: string | null
+  trayGradient?: string | null
+  videoUrl?: string | null
 }
 
 export interface GiftSendOptions {
@@ -116,17 +126,32 @@ export function GiftSystemProvider({
 
       setIsSending(true)
       try {
-        const { data: result, error: rpcError } = await supabase.rpc('send_gift_in_stream', {
+        const giftMetadata = {
+        source: battleId ? 'battle_gift' : 'stream_gift',
+        battle_id: battleId,
+        gift_name: gift.name,
+        gift_slug: gift.slug,
+        gift_icon: gift.icon,
+        animation_key: gift.animationKey || gift.slug || gift.name,
+        animation_type: gift.animationType,
+        animation_url: gift.animationUrl || gift.animation_url || gift.videoUrl || gift.video_url || null,
+        video_url: gift.videoUrl || gift.video_url || gift.animationUrl || gift.animation_url || null,
+        animation_duration_ms: gift.animationDurationMs || gift.animation_duration_ms,
+        sound_url: gift.soundUrl || gift.sound_url || null,
+        is_fullscreen: gift.isFullscreen ?? gift.is_fullscreen,
+        rarity: gift.rarity,
+        tray_visual_url: gift.trayVisualUrl || gift.tray_visual_url || null,
+        tray_gradient: gift.trayGradient || gift.tray_gradient || null,
+        ...options.metadata,
+      }
+
+      const { data: result, error: rpcError } = await supabase.rpc('send_gift_in_stream', {
           p_sender_id: user.id,
           p_receiver_id: targetReceiverId,
           p_stream_id: streamId,
           p_gift_id: gift.id,
           p_quantity: quantity,
-          p_metadata: {
-            source: battleId ? 'battle_gift' : 'stream_gift',
-            battle_id: battleId,
-            ...options.metadata,
-          },
+          p_metadata: giftMetadata,
         })
 
         if (rpcError) {

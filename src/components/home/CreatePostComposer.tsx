@@ -12,9 +12,10 @@ const EMOJI_OPTIONS = [':)', ':D', '<3', ':-)', ';)', ':P']
 interface CreatePostComposerProps {
   onPostCreated: (post: WallPost) => void
   onRequireAuth: (intent?: string) => boolean
+  className?: string
 }
 
-export default function CreatePostComposer({ onPostCreated, onRequireAuth }: CreatePostComposerProps) {
+export default function CreatePostComposer({ onPostCreated, onRequireAuth, className }: CreatePostComposerProps) {
   const { user, profile } = useAuthStore()
   const [content, setContent] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
@@ -160,7 +161,7 @@ export default function CreatePostComposer({ onPostCreated, onRequireAuth }: Cre
   }
 
   return (
-    <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-2`}
+    <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-2} ${className ?? ''}`}
       onClick={() => handleRequireAuth('create a post')}
     >
       {mediaFile && (

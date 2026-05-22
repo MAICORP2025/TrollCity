@@ -118,10 +118,10 @@ const EmbedPage = lazyWithRetry(() => import("./pages/broadcast/EmbedPage"));
 const StreamSummary = lazyWithRetry(() => import("./pages/broadcast/StreamSummary"));
 const ThemePreviewPage = lazyWithRetry(() => import("./pages/dev/ThemePreviewPage"));
 const HomepageBackgroundShowcase = lazyWithRetry(() => import("./pages/dev/HomepageBackgroundShowcase"));
+const Stats = lazyWithRetry(() => import("./pages/Stats"));
 const LivingPage = lazyWithRetry(() => import("./pages/LivingPage"));
 const ChurchPage = lazyWithRetry(() => import("./pages/ChurchPage"));
 const PastorDashboard = lazyWithRetry(() => import("./pages/church/PastorDashboard"));
-const BadgePopup = lazyWithRetry(() => import("./components/BadgePopup"));
 
 // Live Streaming System
 const LiveCommandCenter = lazyWithRetry(() => import("./pages/live/LiveCommandCenter"));
@@ -183,6 +183,13 @@ const FamilyWarsHub = lazyWithRetry(() => import("./pages/FamilyWarsHub.jsx"));
 const FamilyLeaderboard = lazyWithRetry(() => import("./pages/FamilyLeaderboard.jsx"));
 const FamilyShop = lazyWithRetry(() => import("./pages/FamilyShop.jsx"));
 const FamilyBrowse = lazyWithRetry(() => import("./pages/FamilyBrowse"));
+const TrollFamilyCity = lazyWithRetry(() => import("./pages/TrollFamilyCity"));
+const FamilyProfilePage = lazyWithRetry(() => import("./pages/FamilyProfilePage"));
+const FamilyChatPage = lazyWithRetry(() => import("./pages/FamilyChatPage"));
+const FamilyWarsPage = lazyWithRetry(() => import("./pages/FamilyWarsPage"));
+const Career = lazyWithRetry(() => import("./pages/Career"));
+const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
+const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
 const Support = lazyWithRetry(() => import("./pages/Support"));
 const JailPage = lazyWithRetry(() => import("./pages/JailPage"));
 const Safety = lazyWithRetry(() => import("./pages/Safety"));
@@ -203,18 +210,28 @@ import { systemManagementRoutes } from "./pages/admin/adminRoutes";
 
 const TaxOnboarding = lazyWithRetry(() => import("./pages/TaxOnboarding"));
 const MyEarnings = lazyWithRetry(() => import("./pages/MyEarnings"));
-const EarningsPage = lazyWithRetry(() => import("./pages/EarningsPage"));
+const EarningsDashboard = lazyWithRetry(() => import("./pages/EarningsDashboard"));
 const VerificationPage = lazyWithRetry(() => import("./pages/VerificationPage"));
 const VerificationComplete = lazyWithRetry(() => import("./pages/VerificationComplete"));
 const PayoutStatus = lazyWithRetry(() => import("./pages/PayoutStatus"));
 const PayoutSetupPage = lazyWithRetry(() => import("./pages/PayoutSetupPage"));
 const AdminLaunchTrial = lazyWithRetry(() => import("./pages/admin/LaunchTrial"));
+const PayoutRequest = lazyWithRetry(() => import("./pages/PayoutRequest"));
+const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
+const EmpirePartnerDashboard = lazyWithRetry(() => import("./pages/EmpirePartnerDashboard"));
+const CashoutPage = lazyWithRetry(() => import("./pages/CashoutPage"));
+const CashoutRequestPage = lazyWithRetry(() => import("./pages/CashoutRequestPage"));
+const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
+const TransactionHistory = lazyWithRetry(() => import("./pages/TransactionHistory"));
+const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
+const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
 
 
+const CreatorOnboarding = lazyWithRetry(() => import("./pages/CreatorOnboarding"));
+const CreatorSwitchProgram = lazyWithRetry(() => import("./pages/CreatorSwitchProgram"));
 const JoinPage = lazyWithRetry(() => import("./pages/Join"));
 const KickFeePage = lazyWithRetry(() => import("./pages/broadcast/KickFeePage"));
 const KickFee = lazyWithRetry(() => import("./pages/KickFee"));
-const BanFee = lazyWithRetry(() => import("./pages/BanFee"));
 const TrollCourtSession = lazyWithRetry(() => import("./pages/TrollCourtSession"));
 const CourtViewerPage = lazyWithRetry(() => import("./pages/CourtViewerPage"));
 
@@ -223,56 +240,8 @@ const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
 const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
 const Trollifieds = lazyWithRetry(() => import("./pages/Trollifieds"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
-const InterviewRoom = lazyWithRetry(() => import("./pages/InterviewRoom"));
-const OfficerPayrollDashboard = lazyWithRetry(() => import("./pages/officer/OfficerPayrollDashboard"));
-const OfficerDashboard = lazyWithRetry(() => import("./pages/officer/OfficerDashboard"));
-const OfficerOWCDashboard = lazyWithRetry(() => import("./pages/OfficerOWCDashboard"));
-const OfficerVote = lazyWithRetry(() => import("./pages/OfficerVote"));
-const GovernmentPage = lazyWithRetry(() => import("./pages/Government"));
-const GovernmentStreams = lazyWithRetry(() => import("./pages/government/GovernmentStreams"));
-const ReportDetailsPage = lazyWithRetry(() => import("./pages/ReportDetailsPage"));
-const TrollFamilyCity = lazyWithRetry(() => import("./pages/TrollFamilyCity"));
-const FamilyProfilePage = lazyWithRetry(() => import("./pages/FamilyProfilePage"));
-const FamilyWarsPage = lazyWithRetry(() => import("./pages/FamilyWarsPage"));
-const FamilyChatPage = lazyWithRetry(() => import("./pages/TrollFamilyChat"));
-const TransactionHistory = lazyWithRetry(() => import("./pages/TransactionHistory"));
-const CashoutPage = lazyWithRetry(() => import("./pages/CashoutPage"));
-const CashoutRequestPage = lazyWithRetry(() => import("./pages/CashoutRequestPage"));
-const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
-const FamilyApplication = lazyWithRetry(() => import("./pages/FamilyApplication"));
-const OfficerApplication = lazyWithRetry(() => import("./pages/OfficerApplication"));
-const TrollerApplication = lazyWithRetry(() => import("./pages/TrollerApplication"));
-const Career = lazyWithRetry(() => import("./pages/Career"));
-const LeadOfficerApplication = lazyWithRetry(() => import("./pages/LeadOfficerApplication"));
-const PastorApplication = lazyWithRetry(() => import("./pages/PastorApplication"));
-
-
-const AttorneyApplication = lazyWithRetry(() => import("./pages/AttorneyApplication"));
-const ProsecutorApplication = lazyWithRetry(() => import("./pages/ProsecutorApplication"));
-const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
-const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
-const InmatesPage = lazyWithRetry(() => import("./pages/InmatesPage"));
-const JailAppealPage = lazyWithRetry(() => import("./pages/JailAppealPage"));
-const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
-const MobileAdminDashboard = lazyWithRetry(() => import("./pages/admin/MobileAdminDashboard"));
-const PaymentsDashboard = lazyWithRetry(() => import("./pages/admin/PaymentsDashboard"));
-const AdminCashoutDetailPage = lazyWithRetry(() => import("./pages/admin/CashoutDetailPage"));
-const EconomyDashboard = lazyWithRetry(() => import("./pages/admin/EconomyDashboard"));
-const TaxUpload = lazyWithRetry(() => import("./pages/TaxUpload"));
-const TaxReviewPanel = lazyWithRetry(() => import("./pages/admin/TaxReviewPanel"));
-const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
-const CoinsComplete = lazyWithRetry(() => import("./pages/CoinsComplete"));
-
-const Profile = lazyWithRetry(() => import("./pages/Profile"));
-const ProfileSetup = lazyWithRetry(() => import("./pages/ProfileSetup"));
-const BadgesPage = lazyWithRetry(() => import("./pages/BadgesPage"));
-const Stats = lazyWithRetry(() => import("./pages/Stats"));
-const EmpirePartnerDashboard = lazyWithRetry(() => import("./pages/EmpirePartnerDashboard"));
-
-const EarningsDashboard = lazyWithRetry(() => import("./pages/EarningsDashboard"));
-const CreatorOnboarding = lazyWithRetry(() => import("./pages/CreatorOnboarding"));
-const CreatorSwitchProgram = lazyWithRetry(() => import("./pages/CreatorSwitchProgram"));
 const PolicyCenter = lazyWithRetry(() => import("./pages/PolicyCenter"));
+const UniverseEventPage = lazyWithRetry(() => import("./pages/UniverseEventPage"));
 const TermsOfServiceLegal = lazyWithRetry(() => import("./pages/legal/TermsOfService"));
 const PrivacyPolicyLegal = lazyWithRetry(() => import("./pages/legal/PrivacyPolicy"));
 const RefundPolicyLegal = lazyWithRetry(() => import("./pages/legal/RefundPolicy"));
@@ -281,51 +250,18 @@ const SafetyGuidelinesLegal = lazyWithRetry(() => import("./pages/legal/SafetyGu
 const CreatorEarnings = lazyWithRetry(() => import("./pages/legal/CreatorEarnings"));
 const GamblingDisclosure = lazyWithRetry(() => import("./pages/legal/GamblingDisclosure"));
 const PartnerProgram = lazyWithRetry(() => import("./pages/legal/PartnerProgram"));
-const Wallet = lazyWithRetry(() => import("./pages/Wallet"));
-const PayoutRequest = lazyWithRetry(() => import("./pages/PayoutRequest"));
-const AdminPayoutDashboard = lazyWithRetry(() => import("./pages/admin/components/AdminPayoutDashboard"));
-const AdminLiveOfficersTracker = lazyWithRetry(() => import("./pages/admin/AdminLiveOfficersTracker"));
-const AdminVerifiedUsers = lazyWithRetry(() => import("./pages/admin/AdminVerifiedUsers"));
-const AdminVerificationReview = lazyWithRetry(() => import("./pages/admin/AdminVerificationReview"));
-const AdminPoliciesDocs = lazyWithRetry(() => import("./pages/admin/AdminPoliciesDocs"));
-const ExecutiveSecretaries = lazyWithRetry(() => import("./pages/admin/ExecutiveSecretaries"));
-const ExecutiveIntake = lazyWithRetry(() => import("./pages/admin/ExecutiveIntake"));
-const ExecutiveReports = lazyWithRetry(() => import("./pages/admin/ExecutiveReports"));
-const AdminManualOrders = lazyWithRetry(() => import("./pages/admin/AdminManualOrders"));
-const CashoutManager = lazyWithRetry(() => import("./pages/admin/CashoutManager"));
-const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersTournament"));
-const CriticalAlertsManager = lazyWithRetry(() => import("./pages/admin/CriticalAlertsManager"));
-const OfficerManager = lazyWithRetry(() => import("./pages/admin/OfficerManager"));
-const AdminTrollTownDeeds = lazyWithRetry(() => import("./pages/admin/AdminTrollTownDeeds"));
+const OfficerPayrollDashboard = lazyWithRetry(() => import("./pages/officer/OfficerPayrollDashboard"));
+const OfficerDashboard = lazyWithRetry(() => import("./pages/officer/OfficerDashboard"));
+const OfficerOWCDashboard = lazyWithRetry(() => import("./pages/OfficerOWCDashboard"));
+const OfficerVote = lazyWithRetry(() => import("./pages/OfficerVote"));
 const LeadOfficerDashboard = lazyWithRetry(() => import("./pages/lead-officer/LeadOfficerDashboard"));
-const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
-const UniverseEventPage = lazyWithRetry(() => import("./pages/UniverseEventPage"));
-const NeighborsPage = lazyWithRetry(() => import("./pages/Neighbors"));
-const MapPage = lazyWithRetry(() => import("./pages/MapPage"));
-const NeighborhoodMapHub = lazyWithRetry(() => import("./pages/NeighborhoodMapHub"));
-const NeighborhoodOnboarding = lazyWithRetry(() => import("./pages/NeighborhoodOnboarding"));
-const DriverTest = lazyWithRetry(() => import("./pages/DriverTest"));
-const InsurancePage = lazyWithRetry(() => import("./pages/InsurancePage"));
-
-// TCNN - Troll City News Network
-const TCNNMainPage = lazyWithRetry(() => import("./pages/tcnn/TCNNMainPage"));
-const ArticleReader = lazyWithRetry(() => import("./pages/tcnn/ArticleReader"));
-const TCNNInternalDashboard = lazyWithRetry(() => import("./pages/tcnn/TCNNInternalDashboard"));
-const TCNNSetupPage = lazyWithRetry(() => import("./pages/tcnn/TCNNSetupPage"));
-const TCNNBroadcasterPage = lazyWithRetry(() => import("./pages/tcnn/TCNNBroadcasterPage"));
-const TCNNViewerPage = lazyWithRetry(() => import("./pages/tcnn/TCNNViewerPage"));
-
-const ShopView = lazyWithRetry(() => import("./pages/ShopView"));
-const CourtRoom = lazyWithRetry(() => import("./pages/CourtRoom"));
-const InterviewRoomPage = lazyWithRetry(() => import("./pages/InterviewRoomPage"));
-const TeamMeetingRoom = lazyWithRetry(() => import("./pages/TeamMeetingRoom"));
-const AdminInterviewDashboard = lazyWithRetry(() => import("./pages/AdminInterviewDashboard"));
+const ReportDetailsPage = lazyWithRetry(() => import("./pages/ReportDetailsPage"));
 const PasswordReset = lazyWithRetry(() => import("./pages/PasswordReset"));
 const CreditScorePage = lazyWithRetry(() => import("./pages/CreditScorePage"));
 
 
 // Admin pages
-const BanManagement = lazyWithRetry(() => import("./pages/admin/BanManagement"));
+const AdminJailManagement = lazyWithRetry(() => import("./pages/admin/AdminJailManagement"));
 const RoleManagement = lazyWithRetry(() => import("./pages/admin/RoleManagement"));
 const MediaLibrary = lazyWithRetry(() => import("./pages/admin/MediaLibrary"));
 const ChatModeration = lazyWithRetry(() => import("./pages/admin/ChatModeration"));
@@ -353,6 +289,20 @@ const BucketsDashboard = lazyWithRetry(() => import("./pages/admin/BucketsDashbo
 const GrantCoins = lazyWithRetry(() => import("./pages/admin/GrantCoins"));
 const OfficerOperations = lazyWithRetry(() => import("./pages/admin/OfficerOperations"));
 const CreatorSwitchApprovals = lazyWithRetry(() => import("./pages/admin/components/CreatorSwitchApprovals"));
+const MobileAdminDashboard = lazyWithRetry(() => import("./pages/admin/MobileAdminDashboard"));
+const PaymentsDashboard = lazyWithRetry(() => import("./pages/admin/PaymentsDashboard"));
+const EconomyDashboard = lazyWithRetry(() => import("./pages/admin/EconomyDashboard"));
+const TaxReviewPanel = lazyWithRetry(() => import("./pages/admin/TaxReviewPanel"));
+const TaxUpload = lazyWithRetry(() => import("./pages/TaxUpload"));
+const AdminPayoutDashboard = lazyWithRetry(() => import("./pages/admin/components/AdminPayoutDashboard"));
+const AdminLiveOfficersTracker = lazyWithRetry(() => import("./pages/admin/AdminLiveOfficersTracker"));
+const AdminVerifiedUsers = lazyWithRetry(() => import("./pages/admin/AdminVerifiedUsers"));
+const AdminVerificationReview = lazyWithRetry(() => import("./pages/admin/AdminVerificationReview"));
+const AdminPoliciesDocs = lazyWithRetry(() => import("./pages/admin/AdminPoliciesDocs"));
+const ExecutiveSecretaries = lazyWithRetry(() => import("./pages/admin/ExecutiveSecretaries"));
+const ExecutiveReports = lazyWithRetry(() => import("./pages/admin/ExecutiveReports"));
+const AdminTrollTownDeeds = lazyWithRetry(() => import("./pages/admin/AdminTrollTownDeeds"));
+const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersTournament"));
 
 const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
@@ -452,6 +402,32 @@ const LoadingScreen = () => (
 
 
 import { useSidebarStore } from './stores/useSidebarStore';
+import TCNNMainPage from "./pages/tcnn/TCNNMainPage.js";
+import ArticleReader from "./pages/tcnn/ArticleReader.js";
+import TCNNInternalDashboard from "./pages/tcnn/TCNNInternalDashboard.js";
+import TCNNSetupPage from "./pages/tcnn/TCNNSetupPage.js";
+import TCNNViewerPage from "./pages/tcnn/TCNNViewerPage.js";
+import TCNNBroadcasterPage from "./pages/tcnn/TCNNBroadcasterPage.js";
+import ShopView from "./pages/ShopView.js";
+import InmatesPage from "./pages/InmatesPage.js";
+import JailAppealPage from "./pages/JailAppealPage.js";
+import ProfileSetup from "./pages/ProfileSetup.js";
+import Profile from "./pages/Profile.js";
+import NeighborsPage from "./pages/Neighbors.js";
+import MapPage from "./pages/MapPage.js";
+import NeighborhoodMapHub from "./pages/NeighborhoodMapHub.js";
+import InsurancePage from "./pages/InsurancePage.js";
+import NeighborhoodOnboarding from "./pages/NeighborhoodOnboarding.js";
+import DriverTest from "./pages/DriverTest.js";
+import AdminManualOrders from "./pages/admin/AdminManualOrders.js";
+import OfficerManager from "./pages/admin/OfficerManager.js";
+import ExecutiveIntake from "./pages/admin/ExecutiveIntake.js";
+import AdminCashoutDetailPage from "./pages/admin/CashoutDetailPage.js";
+import CashoutManager from "./pages/admin/CashoutManager.js";
+import CourtRoom from "./pages/CourtRoom.js";
+import TeamMeetingRoom from "./pages/TeamMeetingRoom.js";
+import CoinsComplete from "./pages/CoinsComplete.js";
+import { Wallet } from "lucide-react";
 
 function AppContent() {
   // Lightweight render counter (dev only)
@@ -852,10 +828,10 @@ function AppContent() {
   useEffect(() => {
     if (!profile) return;
 
-    if (profile.is_banned && location.pathname !== '/ban-fee') {
+    if (profile.is_banned && location.pathname !== '/jail' && location.pathname !== '/jail/appeal') {
       if (!hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
-        navigate('/ban-fee', { replace: true });
+        navigate('/jail', { replace: true });
       }
       return;
     }
@@ -1201,11 +1177,6 @@ function AppContent() {
         <GlobalPresenceTracker />
         {user && <AdminOfficerQuickMenu />}
         <RTCAdminMonitor />
-        {user && (
-          <Suspense fallback={null}>
-            <BadgePopup />
-          </Suspense>
-        )}
 
         <ErrorBoundary>
           <Suspense fallback={null}>
@@ -1239,7 +1210,7 @@ function AppContent() {
                 <Route path="/verification/complete" element={<VerificationComplete />} />
                 <Route path="/founding-officer-trial" element={<FoundingOfficerTrial />} />
 
-                <Route path="/account/earnings" element={<EarningsDashboard />} />
+                  <Route path="/account/earnings" element={<EarningsDashboard />} />
                 <Route path="/payout-status" element={<PayoutStatus />} />
                  
                 {/* 📜 Legal & Policy Pages (Public) */}
@@ -1260,9 +1231,6 @@ function AppContent() {
                 <Route path="/embed/:id" element={<EmbedPage />} />
                 <Route path="/dev/theme-preview" element={<ThemePreviewPage />} />
                 <Route path="/dev/homepage-preview" element={<HomepageBackgroundShowcase />} />
-
-                <Route path="/badges" element={<BadgesPage />} />
-                <Route path="/badges/:userId" element={<BadgesPage />} />
 
                 {/* Safety Page (standalone) */}
                 <Route path="/safety" element={<Safety />} />
@@ -1381,16 +1349,14 @@ function AppContent() {
 
                    {/* 🎥 Streaming */}
 
-                  <Route path="/join" element={<JoinPage />} />
-                  <Route path="/kick-fee" element={<KickFee />} />
-                  <Route path="/ban-fee" element={<BanFee />} />
-                  <Route path="/troll-court/session" element={<TrollCourtSession />} />
-                  <Route path="/live/:streamId" element={<BroadcastRouter />} />
-                  <Route path="/interview/:roomId" element={<InterviewRoom />} />
-                  <Route path="/stream/:id" element={<BroadcastRouter />} />
-                  <Route path="/stream/:streamId" element={<BroadcastRouter />} />
-                  <Route path="/stream/:id/summary" element={<Navigate to="/live" replace />} />
-                  <Route path="/stream-ended" element={<Navigate to="/live" replace />} />
+                   <Route path="/join" element={<JoinPage />} />
+                   <Route path="/kick-fee" element={<KickFee />} />
+                   <Route path="/troll-court/session" element={<TrollCourtSession />} />
+                   <Route path="/live/:streamId" element={<BroadcastRouter />} />
+                   <Route path="/stream/:id" element={<BroadcastRouter />} />
+                   <Route path="/stream/:streamId" element={<BroadcastRouter />} />
+                   <Route path="/stream/:id/summary" element={<Navigate to="/live" replace />} />
+                   <Route path="/stream-ended" element={<Navigate to="/live" replace />} />
 
                   {/* ⚖️ Court */}
                   <Route path="/troll-court" element={<TrollCourt />} />
@@ -1432,7 +1398,7 @@ function AppContent() {
                   <Route path="/payouts/setup" element={<PayoutSetupPage />} />
                   <Route path="/payouts/request" element={<PayoutRequest />} />
                   <Route path="/payment/callback" element={<PaymentCallback />} />
-                  <Route path="/earnings" element={<EarningsPage />} />
+                   <Route path="/earnings" element={<EarningsDashboard />} />
                   <Route path="/my-earnings" element={<MyEarnings />} />
                   <Route path="/empire-partner" element={<EmpirePartnerDashboard />} />
                    <Route path="/cashout" element={<CashoutPage />} />
@@ -1465,12 +1431,9 @@ function AppContent() {
                    {/* 📝 Applications - All handled by Career component */}
                     <Route path="/apply" element={<Career />} />
                     <Route path="/apply/*" element={<Career />} />
-                  <Route path="/attorney" element={<AttorneyDashboard />} />
-                  <Route path="/prosecutor" element={<ProsecutorDashboard />} />
-                   <Route path="/career" element={<Career />} />
-
-                   <Route path="/interview-room" element={<InterviewRoomPage />} />
-                  <Route path="/admin/interview-test" element={<AdminInterviewDashboard />} />
+                   <Route path="/attorney" element={<AttorneyDashboard />} />
+                   <Route path="/prosecutor" element={<ProsecutorDashboard />} />
+                    <Route path="/career" element={<Career />} />
 
                   {/* 👮 Officer */}
                   <Route
@@ -1521,38 +1484,7 @@ function AppContent() {
                       </RequireRole>
                     }
                   />
-                  <Route
-                    path="/officer/owc"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <OfficerOWCDashboard />
-                      </RequireRole>
-                    }
-                  />
-
-                  <Route
-                    path="/officer/payroll"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <OfficerPayrollDashboard />
-                      </RequireRole>
-                    }
-                  />
-                  <Route path="/officer/vote" element={<OfficerVote />} />
-                  <Route
-                    path="/government/streams"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.LEAD_TROLL_OFFICER, UserRole.ADMIN, UserRole.SECRETARY]}>
-                        <GovernmentStreams />
-                      </RequireRole>
-                    }
-                  />
-                  <Route
-                    path="/government"
-                    element={<GovernmentPage />}
-                  />
-
-                  {/* 👑 Admin */}
+                   {/* 👑 Admin */}
                   <Route
                     path="/admin"
                     element={
@@ -1562,20 +1494,10 @@ function AppContent() {
                     }
                   />
                   <Route
-                    path="/admin/interviews"
-                    element={
-                      <RequireRole roles={[UserRole.ADMIN, UserRole.LEAD_TROLL_OFFICER]}>
-                        <AdminInterviewDashboard />
-                      </RequireRole>
-                    }
-                  />
-                  <Route
                     path="/admin/creator-approvals"
                     element={
                       <RequireRole roles={[UserRole.ADMIN, UserRole.SECRETARY, UserRole.LEAD_TROLL_OFFICER]}>
-                        <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-5">
-                          <CreatorSwitchApprovals />
-                        </div>
+                        <CreatorSwitchApprovals />
                       </RequireRole>
                     }
                   />
@@ -1735,13 +1657,13 @@ function AppContent() {
                       }
                     />
                     <Route
-                      path="/admin/ban-management"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <BanManagement />
-                        </RequireRole>
-                      }
-                    />
+                      path="/admin/jail-management"
+                        element={
+                          <RequireRole roles={[UserRole.ADMIN]}>
+                            <AdminJailManagement />
+                          </RequireRole>
+                        }
+                      />
 
                     <Route
                       path="/admin/user-forms"

@@ -206,10 +206,12 @@ export default function FinanceEconomyCenter({
       {/* Financial Overview */}
       <section className="bg-[#141414] border border-[#2C2C2C] rounded-xl overflow-hidden">
 
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => toggleSection('financial-overview')}
-          className="w-full flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('financial-overview') } }}
+          className="w-full flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-green-500/20 border border-green-500/30 rounded-lg flex items-center justify-center">
@@ -251,7 +253,7 @@ export default function FinanceEconomyCenter({
               <ChevronDown className="w-4 h-4 text-gray-400" />
             )}
           </div>
-        </button>
+        </div>
 
         {expandedSection === 'financial-overview' && (
           <div className="px-4 pb-4">
@@ -271,10 +273,12 @@ export default function FinanceEconomyCenter({
       {/* Coin Economy */}
       <section className="bg-[#141414] border border-[#2C2C2C] rounded-xl overflow-hidden">
 
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => toggleSection('coin-economy')}
-          className="w-full flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('coin-economy') } }}
+          className="w-full flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-yellow-500/20 border border-yellow-500/30 rounded-lg flex items-center justify-center">
@@ -317,7 +321,7 @@ export default function FinanceEconomyCenter({
               <ChevronDown className="w-4 h-4 text-gray-400" />
             )}
           </div>
-        </button>
+        </div>
 
         {expandedSection === 'coin-economy' && (
           <div className="px-4 pb-4">

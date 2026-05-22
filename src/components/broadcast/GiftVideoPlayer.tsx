@@ -53,19 +53,13 @@ export function GiftVideoPlayer({ giftName, giftIcon, giftValue, duration, onCom
     };
   }, [entry]);
 
-  // Play video
-  useEffect(() => {
+// Play video
+   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const onErr = () => setVideoExists(false);
     video.addEventListener('error', onErr);
-
-    video.playbackRate = 1;
-    // Slow down long videos, speed up short ones to fit duration
-    if (video.duration && video.duration > 0) {
-      video.playbackRate = video.duration / duration;
-    }
 
     video.play().catch(() => {
       setVideoExists(false);
@@ -74,7 +68,7 @@ export function GiftVideoPlayer({ giftName, giftIcon, giftValue, duration, onCom
     return () => {
       video.removeEventListener('error', onErr);
     };
-  }, [duration, entry]);
+  }, [entry]);
 
   // Phase transitions
   useEffect(() => {
@@ -94,7 +88,7 @@ export function GiftVideoPlayer({ giftName, giftIcon, giftValue, duration, onCom
           ref={videoRef}
           className="gv-video"
           src={entry.video}
-          muted
+          muted={false}
           loop={false}
           playsInline
           preload="auto"

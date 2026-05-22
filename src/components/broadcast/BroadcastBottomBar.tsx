@@ -15,6 +15,7 @@ import {
   Loader2,
   Gift,
   Sparkles,
+  Skull,
 } from 'lucide-react';
 import { LocalVideoTrack, LocalAudioTrack } from 'livekit-client';
 import { cn } from '../../lib/utils';
@@ -22,7 +23,7 @@ import { toast } from 'sonner';
 import GiftTray from './GiftTray';
 import { GiftItem } from '../../lib/hooks/useGiftSystem';
 import BroadcastOfficerModal from './BroadcastOfficerModal';
-import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
+import { trollCityBroadcastTheme, bottomBarShell, bottomBarAmbient, hostActionButtonCenter } from '../../styles/broadcastTheme'
 
 /**
  * Generic "icon grid" button used in host action bottom bar.
@@ -82,8 +83,9 @@ export function StagePassSummaryCard({
   openPassCount: number;
   onManage: () => void;
 }) {
+  const theme = trollCityBroadcastTheme
   return (
-    <div className={cn('flex h-[86px] items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-5 shadow-[0_0_18px_rgba(168,85,247,0.15)] backdrop-blur-2xl', trollCityBroadcastTheme.panel)}>
+    <div className={cn('flex h-[86px] items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-5 shadow-[0_0_18px_rgba(168,85,247,0.15)] backdrop-blur-2xl', theme.panel)}>
       <div className="flex items-center gap-4">
         <div className="grid h-12 w-12 place-items-center rounded-xl bg-purple-500/20 text-purple-300">
           <Ticket className="h-7 w-7" />
@@ -133,6 +135,8 @@ export interface BroadcastBottomBarProps {
   onOpenStagePass: () => void;
   onManageStagePass: () => void;
   onOpenCoinStore?: () => void;
+  onTroll?: () => void;
+  isHost?: boolean;
 }
 
 export default function BroadcastBottomBar({
@@ -151,11 +155,14 @@ export default function BroadcastBottomBar({
   onOpenStagePass,
   onManageStagePass,
   onOpenCoinStore,
+  onTroll,
+  isHost = false,
 }: BroadcastBottomBarProps) {
+  const theme = trollCityBroadcastTheme
   return (
-    <div className={cn(trollCityBroadcastTheme.bottomBarShell, 'relative')}>
+    <div className={cn(bottomBarShell, 'relative')}>
       {/* Ambient glow strip */}
-      <div className={trollCityBroadcastTheme.bottomBarAmbient} />
+      <div className={bottomBarAmbient} />
 
       <div className="grid gap-4" style={{ gridTemplateColumns: '290px 1fr 360px' }}>
         {/* Left: Stage Pass summary */}
@@ -165,7 +172,7 @@ export default function BroadcastBottomBar({
         />
 
         {/* Center: host action buttons */}
-        <div className={trollCityBroadcastTheme.hostActionButtonCenter}>
+        <div className={hostActionButtonCenter}>
           <HostActionButton
             active={isMicOn}
             onClick={onToggleMic}
@@ -190,6 +197,16 @@ export default function BroadcastBottomBar({
             icon={MoreHorizontal}
             label="More"
           />
+          {!isHost && (
+            <HostActionButton
+              active={false}
+              onClick={onTroll}
+              icon={Skull}
+              label="Troll"
+              variant="danger"
+              disabled={!onTroll}
+            />
+          )}
           {/* End Stream — red variant */}
           <button
             onClick={onEndStream}
@@ -200,8 +217,8 @@ export default function BroadcastBottomBar({
           </button>
         </div>
 
-        {/* Right: large Stage Pass open button */}
-        <OpenStagePassCard onClick={onOpenStagePass} />
+        {/* Right: large Stage Pass open button (hidden for broadcaster to avoid duplicate controls) */}
+        {!isHost && <OpenStagePassCard onClick={onOpenStagePass} />}
       </div>
     </div>
   );
@@ -222,7 +239,7 @@ export function BroadcastFooterStrip({
   onLicenseClick?: () => void;
 }) {
   return (
-    <footer className={theme.footerStrip}>
+    <footer className={trollCityBroadcastTheme.footerStrip}>
       <span className="flex items-center gap-2 text-slate-400">
         <Sparkles className="h-4 w-4 text-purple-400" />
         Stream protected

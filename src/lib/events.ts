@@ -11,7 +11,8 @@ export type TrollEventType =
   | 'economy_gain'
   | 'pod_started'
   | 'pod_listened'
-  | 'tcps_message_sent';
+  | 'tcps_message_sent'
+  | 'badge_progress';
 
 export type TrollEvent = {
   type: TrollEventType;
@@ -71,4 +72,18 @@ export function subscribeEvents(listener: EventListener) {
   return () => {
     listeners.delete(listener);
   };
+}
+
+// Badge progress tracking - maps activity types to badge slugs and progress values
+export type BadgeActivityType = 'gift_sent' | 'gift_received' | 'stream_started' | 'chat_message' | 'viewer_minutes';
+
+export function trackBadgeProgress(
+  userId: string,
+  activityType: BadgeActivityType,
+  amount: number = 1
+) {
+  emitEvent('badge_progress', userId, {
+    activityType,
+    amount,
+  });
 }

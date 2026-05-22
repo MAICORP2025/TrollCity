@@ -1,495 +1,514 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { useAuthStore } from '../../lib/store';
-import { toast } from 'sonner';
-import { Room, RoomEvent } from 'livekit-client';
-import { 
-  ArrowLeft, Gavel, Play, Pause, Video, VideoOff, Mic, MicOff,
-  Clock, Users, Layers, Trophy, SkipForward,
-  Maximize2, Minimize2
-} from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import AgoraRTC, {
+  type IAgoraRTCClient,
+  type ICameraVideoTrack,
+  type IMicrophoneAudioTrack,
+} from 'agora-rtc-sdk-ng'
+import {
+  ArrowLeft,
+  Bell,
+  CheckCircle,
+  Clock,
+  Coins,
+  Flag,
+  Gavel,
+  Loader2,
+  Maximize2,
+  Mic,
+  MicOff,
+  Pause,
+  Play,
+  Shield,
+  Users,
+  Video,
+  VideoOff,
+  Volume2,
+  VolumeX,
+} from 'lucide-react'
+import { toast } from 'sonner'
+
+import { supabase } from '../../lib/supabase'
+import { useAuthStore } from '../../lib/store'
 
 interface AuctionLot {
-  id: string;
-  title: string;
-  description: string;
-  starting_bid: number;
-  min_increment: number;
-  current_highest_bid: number;
-  current_highest_bidder_id: string;
-  status: 'upcoming' | 'live' | 'sold' | 'unsold';
-  countdown_end_at: string;
-  order_index: number;
+  id: string
+  title: string
+  description?: string | null
+  image_url?: string | null
+  starting_bid: number
+  bid_increment: number
+  current_highest_bid?: number | null
+  current_highest_bidder_id?: string | null
+  status: 'draft' | 'upcoming' | 'queued' | 'live' | 'paused' | 'sold' | 'unsold' | 'removed'
+  countdown_end_at?: string | null
+  queue_position?: number | null
+  reserve_price?: number | null
+  buy_now_price?: number | null
+  condition?: string | null
+  quantity?: number | null
 }
 
-interface AuctionBid {
-  id: string;
-  bidder_id: string;
-  bid_amount: number;
-  created_at: string;
+interface AuctionShow {
+  id: string
+  title: string
+  description?: string | null
+  status: 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled'
+  livekit_room_name?: string | null
+  auctioneer_id: string
+}
+
+const GLOBAL_AGORA_JOIN_LOCKS = new Set<string>()
+
+function formatCoins(value?: number | null) {
+  return Number(value || 0).toLocaleString()
+}
+
+function getAgoraChannelName(show: AuctionShow) {
+  return show.livekit_room_name || `auction-${show.id}`
+}
+
+function makeAgoraUid(userId: string, role: 'viewer' | 'auctioneer') {
+  let hash = role === 'auctioneer' ? 900000000 : 100000000
+  for (let i = 0; i < userId.length; i += 1) {
+    hash = (hash * 31 + userId.charCodeAt(i)) % 2147483647
+  }
+  return Math.max(1, Math.abs(hash))
 }
 
 export default function AuctioneerDashboard() {
-  const { showId } = useParams<{ showId: string }>();
-  const navigate = useNavigate();
-  const { user, profile } = useAuthStore();
-  
-  const [show, setShow] = useState<any>(null);
-  const [lots, setLots] = useState<AuctionLot[]>([]);
-  const [bids, setBids] = useState<AuctionBid[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [isVideoOn, setIsVideoOn] = useState(true);
-  const [isAudioOn, setIsAudioOn] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  
-  const roomRef = useRef<Room | null>(null);
-  const videoRef = useRef<HTMLDivElement>(null);
+  const { showId } = useParams<{ showId: string }>()
+  const navigate = useNavigate()
+  const { user, profile } = useAuthStore()
+
+  const [show, setShow] = useState<AuctionShow | null>(null)
+  const [lots, setLots] = useState<AuctionLot[]>([])
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [auctioneerMicOn, setAuctioneerMicOn] = useState(true)
+  const [auctioneerCamOn, setAuctioneerCamOn] = useState(true)
+  const [auctioneerConnecting, setAuctioneerConnecting] = useState(false)
+  const [agoraConnected, setAgoraConnected] = useState(false)
+
+  const localVideoRef = useRef<HTMLDivElement | null>(null)
+  const agoraClientRef = useRef<IAgoraRTCClient | null>(null)
+  const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null)
+  const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null)
+  const agoraJoinedRef = useRef(false)
+  const agoraConnectingRef = useRef(false)
+  const activeAgoraKeyRef = useRef<string | null>(null)
+
+  const isAuctioneer = useMemo(() => {
+    if (!user?.id || !show) return false
+    return show.auctioneer_id === user.id
+  }, [show, user?.id])
+
+  const getAgoraToken = useCallback(async (channelName: string, uid: number, role: 'publisher' | 'audience') => {
+    const { data, error } = await supabase.functions.invoke('agora-token', {
+      body: { channelName, channel: channelName, uid, role, isPublisher: role === 'publisher' },
+    })
+    if (error) throw error
+    if (!data?.token) throw new Error('No Agora token returned')
+    return data.token as string
+  }, [])
+
+  const cleanupAgora = useCallback(async () => {
+    try {
+      if (localAudioTrackRef.current) {
+        localAudioTrackRef.current.stop()
+        localAudioTrackRef.current.close()
+        localAudioTrackRef.current = null
+      }
+      if (localVideoTrackRef.current) {
+        localVideoTrackRef.current.stop()
+        localVideoTrackRef.current.close()
+        localVideoTrackRef.current = null
+      }
+      if (agoraClientRef.current && agoraJoinedRef.current) {
+        await agoraClientRef.current.leave()
+      }
+    } catch (error) {
+      console.warn('Agora cleanup warning:', error)
+    } finally {
+      if (activeAgoraKeyRef.current) GLOBAL_AGORA_JOIN_LOCKS.delete(activeAgoraKeyRef.current)
+      agoraClientRef.current = null
+      agoraJoinedRef.current = false
+      agoraConnectingRef.current = false
+      activeAgoraKeyRef.current = null
+      setAgoraConnected(false)
+    }
+  }, [])
+
+  const connectAuctioneerAgora = useCallback(async () => {
+    if (!show || !showId || !user?.id || !isAuctioneer) return
+    const appId = import.meta.env.VITE_AGORA_APP_ID
+    if (!appId) {
+      toast.error('Agora App ID is not configured')
+      return
+    }
+
+    const channelName = getAgoraChannelName(show)
+    const uid = makeAgoraUid(user.id, 'auctioneer')
+    const agoraKey = `${channelName}:${uid}:auctioneer`
+
+    if (activeAgoraKeyRef.current === agoraKey || agoraConnectingRef.current || agoraJoinedRef.current || agoraClientRef.current) return
+    if (GLOBAL_AGORA_JOIN_LOCKS.has(agoraKey)) return
+
+    GLOBAL_AGORA_JOIN_LOCKS.add(agoraKey)
+    activeAgoraKeyRef.current = agoraKey
+    agoraConnectingRef.current = true
+    setAuctioneerConnecting(true)
+
+    try {
+      const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' })
+      agoraClientRef.current = client
+      await client.setClientRole('host')
+
+      const token = await getAgoraToken(channelName, uid, 'publisher')
+      await client.join(appId, channelName, token, uid)
+
+      const [micTrack, camTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+        { AEC: true, ANS: true, AGC: true },
+        { encoderConfig: '720p_2', facingMode: 'user' }
+      )
+
+      localAudioTrackRef.current = micTrack
+      localVideoTrackRef.current = camTrack
+
+      if (localVideoRef.current) camTrack.play(localVideoRef.current)
+
+      await client.publish([micTrack, camTrack])
+
+      agoraJoinedRef.current = true
+      setAgoraConnected(true)
+      setAuctioneerMicOn(true)
+      setAuctioneerCamOn(true)
+      toast.success('Agora camera connected')
+    } catch (error: any) {
+      console.error('Auctioneer Agora connection failed:', error)
+      toast.error(error?.message || 'Failed to connect camera')
+      GLOBAL_AGORA_JOIN_LOCKS.delete(agoraKey)
+      activeAgoraKeyRef.current = null
+      await cleanupAgora()
+    } finally {
+      setAuctioneerConnecting(false)
+      agoraConnectingRef.current = false
+    }
+  }, [show, showId, user?.id, isAuctioneer, getAgoraToken, cleanupAgora])
 
   const fetchData = useCallback(async () => {
-    if (!showId) return;
-
+    if (!showId) return
+    setLoading(true)
     try {
-      const [showRes, lotsRes, bidsRes] = await Promise.all([
-        supabase.from('auction_shows').select('*').eq('id', showId).single(),
-        supabase.from('auction_lots').select('*').eq('auction_show_id', showId).order('order_index'),
-        supabase.from('auction_bids').select('*').eq('auction_show_id', showId).order('created_at', { ascending: false }).limit(50)
-      ]);
-
-      if (showRes.data) setShow(showRes.data);
-      if (lotsRes.data) setLots(lotsRes.data);
-      if (bidsRes.data) setBids(bidsRes.data);
+      const [showRes, lotsRes] = await Promise.all([
+        supabase.from('auction_shows').select('*').eq('id', showId).maybeSingle(),
+        supabase.from('auction_lots').select('*').eq('auction_show_id', showId).order('queue_position'),
+      ])
+      if (showRes.data) setShow(showRes.data)
+      if (lotsRes.data) setLots(lotsRes.data)
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching data:', error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [showId]);
+  }, [showId])
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 3000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    fetchData()
+    const interval = setInterval(fetchData, 3000)
+    return () => clearInterval(interval)
+  }, [fetchData])
 
   useEffect(() => {
-    if (show?.status === 'live' && show?.livekit_room_name && user) {
-      connectToLiveKit();
+    if (show && user?.id && isAuctioneer && show.status === 'live') {
+      void connectAuctioneerAgora()
     }
     return () => {
-      if (roomRef.current) {
-        roomRef.current.disconnect();
-      }
-    };
-  }, [show?.status, show?.livekit_room_name, user]);
-
-  const connectToLiveKit = async () => {
-    if (!show?.livekit_room_name || !user) return;
-
-    try {
-      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('livekit-token', {
-        body: {
-          room: show.livekit_room_name,
-          identity: profile?.username || 'Auctioneer',
-          role: 'publisher'
-        }
-      });
-
-      if (tokenError) throw tokenError;
-
-      if (!tokenData?.token) {
-        console.error('No token returned:', tokenData);
-        return;
-      }
-
-      const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
-      if (!livekitUrl) {
-        console.warn('LiveKit URL not configured');
-        return;
-      }
-
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-      });
-
-      room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-
-      await room.connect(livekitUrl, tokenData.token);
-      roomRef.current = room;
-
-      // Record presence
-      await supabase
-        .from('auction_presence')
-        .upsert({
-          auction_show_id: showId,
-          user_id: user.id,
-          presence_role: 'auctioneer',
-          is_active: true,
-          joined_at: new Date().toISOString()
-        });
-
-      // Show local video immediately
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('Camera/microphone access is not available in this browser or context.');
-        }
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const videoTrack = stream.getVideoTracks()[0];
-        
-        if (videoTrack && videoRef.current) {
-          const videoEl = document.createElement('video');
-          videoEl.srcObject = new MediaStream([videoTrack]);
-          videoEl.autoplay = true;
-          videoEl.playsInline = true;
-          videoEl.muted = true;
-          videoEl.className = 'w-full h-full object-cover rounded-lg';
-          videoRef.current.innerHTML = '';
-          videoRef.current.appendChild(videoEl);
-        }
-        
-        const { createLocalVideoTrack, createLocalAudioTrack } = await import('livekit-client');
-        
-        if (videoTrack) {
-          const localVideoTrack = await createLocalVideoTrack({ deviceId: videoTrack.getSettings().deviceId });
-          await room.localParticipant.publishTrack(localVideoTrack);
-        }
-        // Publish audio track
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('Camera/microphone access is not available in this browser or context.');
-        }
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const audioTrack = audioStream.getAudioTracks()[0];
-        if (audioTrack) {
-          const localAudioTrack = await createLocalAudioTrack({ deviceId: audioTrack.getSettings().deviceId });
-          await room.localParticipant.publishTrack(localAudioTrack);
-        }
-      } catch (err) {
-        console.log('Camera/mic access failed:', err);
-      }
-
-    } catch (error) {
-      console.error('Error connecting to LiveKit:', error);
+      void cleanupAgora()
     }
-  };
+  }, [show, user?.id, isAuctioneer, connectAuctioneerAgora, cleanupAgora])
 
-  const handleTrackSubscribed = (publication: any, _participant: any, stream: any) => {
-    if (videoRef.current && publication.kind === 'video') {
-      const videoEl = document.createElement('video');
-      videoEl.srcObject = new MediaStream([stream.getTracks()[0]]);
-      videoEl.autoplay = true;
-      videoEl.playsInline = true;
-      videoEl.className = 'w-full h-full object-cover rounded-lg';
-      videoRef.current.appendChild(videoEl);
-    }
-  };
+  const toggleAuctioneerMic = useCallback(async () => {
+    const track = localAudioTrackRef.current
+    if (!track) return
+    await track.setEnabled(!auctioneerMicOn)
+    setAuctioneerMicOn((prev) => !prev)
+  }, [auctioneerMicOn])
+
+  const toggleAuctioneerCam = useCallback(async () => {
+    const track = localVideoTrackRef.current
+    if (!track) return
+    await track.setEnabled(!auctioneerCamOn)
+    setAuctioneerCamOn((prev) => !prev)
+  }, [auctioneerCamOn])
 
   const startShow = async () => {
-    setActionLoading(true);
+    setActionLoading(true)
     try {
-      const { data, error } = await supabase.rpc('start_auction_show', { p_show_id: showId });
-      if (error) throw error;
-      const result = data as any;
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Show is now live!');
-      fetchData();
+      const { error } = await supabase.from('auction_shows').update({ status: 'live', live_started_at: new Date().toISOString() }).eq('id', showId)
+      if (error) throw error
+      toast.success('Show is now live!')
+      fetchData()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to start show');
+      toast.error(error.message || 'Failed to start show')
     } finally {
-      setActionLoading(false);
+      setActionLoading(false)
     }
-  };
+  }
 
   const endShow = async () => {
-    if (!confirm('End this auction show?')) return;
-    setActionLoading(true);
+    if (!confirm('End this auction show?')) return
+    setActionLoading(true)
     try {
-      const { data, error } = await supabase.rpc('end_auction_show', { p_show_id: showId });
-      if (error) throw error;
-      const result = data as any;
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Show ended');
-      fetchData();
+      const { error } = await supabase.from('auction_shows').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', showId)
+      if (error) throw error
+      toast.success('Show ended')
+      fetchData()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to end show');
+      toast.error(error.message || 'Failed to end show')
     } finally {
-      setActionLoading(false);
+      setActionLoading(false)
     }
-  };
+  }
 
   const activateLot = async (lotId: string) => {
-    setActionLoading(true);
+    setActionLoading(true)
     try {
-      const { data, error } = await supabase.rpc('activate_auction_lot', {
-        p_show_id: showId,
-        p_lot_id: lotId,
-        p_countdown_seconds: 30
-      });
-      if (error) throw error;
-      const result = data as any;
-      if (!result.success) {
-        toast.error(result.error);
-        return;
+      const currentLiveLot = lots.find((l) => l.status === 'live')
+      if (currentLiveLot) {
+        await supabase.from('auction_lots').update({ status: 'pass' }).eq('id', currentLiveLot.id)
       }
-      toast.success('Lot is now live!');
-      fetchData();
+      const { error } = await supabase.from('auction_lots').update({ status: 'live' }).eq('id', lotId)
+      if (error) throw error
+      toast.success('Lot is now live!')
+      fetchData()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to activate lot');
+      toast.error(error.message || 'Failed to activate lot')
     } finally {
-      setActionLoading(false);
+      setActionLoading(false)
     }
-  };
+  }
 
   const markSold = async (lotId: string) => {
-    setActionLoading(true);
+    setActionLoading(true)
     try {
-      const { data, error } = await supabase.rpc('mark_lot_sold', {
-        p_show_id: showId,
-        p_lot_id: lotId
-      });
-      if (error) throw error;
-      const result = data as any;
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Lot marked as sold!');
-      fetchData();
+      const { error } = await supabase.from('auction_lots').update({ status: 'sold' }).eq('id', lotId)
+      if (error) throw error
+      toast.success('Lot marked as sold!')
+      fetchData()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to mark sold');
+      toast.error(error.message || 'Failed to mark sold')
     } finally {
-      setActionLoading(false);
+      setActionLoading(false)
     }
-  };
+  }
 
   const markUnsold = async (lotId: string) => {
-    setActionLoading(true);
+    setActionLoading(true)
     try {
-      const { data, error } = await supabase.rpc('mark_lot_unsold', {
-        p_show_id: showId,
-        p_lot_id: lotId
-      });
-      if (error) throw error;
-      const result = data as any;
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Lot marked as unsold');
-      fetchData();
+      const { error } = await supabase.from('auction_lots').update({ status: 'unsold' }).eq('id', lotId)
+      if (error) throw error
+      toast.success('Lot marked as unsold')
+      fetchData()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to mark unsold');
+      toast.error(error.message || 'Failed to mark unsold')
     } finally {
-      setActionLoading(false);
+      setActionLoading(false)
     }
-  };
+  }
 
-  const currentLot = lots.find(l => l.status === 'live');
-  const upcomingLots = lots.filter(l => l.status === 'upcoming');
-  const soldLots = lots.filter(l => l.status === 'sold');
+  const currentLot = lots.find((l) => l.status === 'live')
+  const upcomingLots = lots.filter((l) => l.status === 'queued' || l.status === 'upcoming').sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0))
+  const soldLots = lots.filter((l) => l.status === 'sold')
+  const isLive = show?.status === 'live'
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-[#02030a] text-white">
+        <div className="text-center">
+          <Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-cyan-300" />
+          <p className="text-slate-400">Loading auction dashboard...</p>
+        </div>
       </div>
-    );
+    )
   }
 
-  const isLive = show?.status === 'live';
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white">
-      {/* Header */}
-      <div className={`p-4 border-b ${isLive ? 'bg-red-900/20 border-red-500/30' : 'bg-gray-900/50 border-gray-800'}`}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+    <div className="relative min-h-screen overflow-hidden bg-[#02030a] text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.18),transparent_30%),linear-gradient(135deg,rgba(2,6,23,0.98),rgba(8,13,30,0.98))]" />
+
+      <div className={`relative z-10 border-b ${isLive ? 'border-red-500/30 bg-red-500/10' : 'border-cyan-400/20 bg-black/45'} backdrop-blur-xl`}>
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/auctions/studio')} className="p-2 hover:bg-gray-800 rounded-lg">
-              <ArrowLeft className="w-5 h-5" />
+            <button onClick={() => navigate('/auctions/studio')} className="rounded-xl border border-cyan-400/20 bg-white/5 p-2 transition hover:bg-cyan-400/10">
+              <ArrowLeft className="h-5 w-5 text-cyan-300" />
             </button>
             <div>
               <div className="flex items-center gap-2">
-                {isLive && <span className="px-2 py-0.5 bg-red-500 text-xs font-bold rounded animate-pulse">LIVE</span>}
-                <h1 className="text-xl font-bold">{show?.title}</h1>
+                {isLive && <span className="rounded-md bg-red-500 px-2 py-1 text-xs font-black tracking-wide animate-pulse">LIVE</span>}
+                <h1 className="text-lg font-black sm:text-xl">{show?.title}</h1>
               </div>
-              <p className="text-gray-400 text-sm">{isLive ? 'Broadcasting live' : 'Ready to start'}</p>
+              <p className="text-sm text-slate-400">{isLive ? 'Broadcasting via Agora' : 'Ready to start'}</p>
             </div>
           </div>
-          
+
           <div className="flex gap-2">
             {!isLive ? (
-              <button onClick={startShow} disabled={actionLoading || lots.length === 0} className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 rounded-lg">
-                <Play className="w-4 h-4" /> Start Show
+              <button onClick={startShow} disabled={actionLoading || lots.length === 0} className="rounded-xl border border-green-300/30 bg-green-500/20 px-4 py-2 font-bold text-green-100 hover:bg-green-500/30 disabled:opacity-50">
+                <Play className="mr-2 inline h-4 w-4" /> Start Show
               </button>
             ) : (
-              <button onClick={endShow} disabled={actionLoading} className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 rounded-lg">
-                <Pause className="w-4 h-4" /> End Show
+              <button onClick={endShow} disabled={actionLoading} className="rounded-xl border border-red-300/30 bg-red-500/20 px-4 py-2 font-bold text-red-100 hover:bg-red-500/30 disabled:opacity-50">
+                <Pause className="mr-2 inline h-4 w-4" /> End Show
               </button>
             )}
-            <button onClick={() => navigate(`/auctions/${showId}`)} className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg">
-              <Users className="w-4 h-4" /> View as Viewer
+            <button onClick={() => navigate(`/auctions/${showId}`)} className="rounded-xl border border-purple-400/20 bg-white/5 px-4 py-2 font-bold text-purple-200 hover:bg-purple-400/10">
+              <Users className="mr-2 inline h-4 w-4" /> View as Viewer
             </button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Video Area */}
-        <div className="lg:col-span-3 space-y-4">
-          {/* Live Video */}
-          <div className="relative aspect-video bg-gray-900 rounded-xl overflow-hidden border border-green-500/30">
-            <div ref={videoRef} className="absolute inset-0">
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-center">
-                  <Video className="w-16 h-16 text-green-500 mx-auto mb-4 animate-pulse" />
-                  <p className="text-green-400 text-lg font-bold">Live Broadcast</p>
-                  <p className="text-gray-500 text-sm">Screen share or camera feed</p>
-                </div>
+      <main className="relative z-10 mx-auto grid max-w-7xl grid-cols-1 gap-4 p-4 lg:grid-cols-3">
+        <section className="space-y-4 lg:col-span-2">
+          <div className="relative aspect-video overflow-hidden rounded-3xl border border-cyan-400/25 bg-black shadow-[0_0_45px_rgba(34,211,238,0.16)]">
+            <div ref={localVideoRef} className="absolute inset-0 h-full w-full bg-black" />
+            {!agoraConnected && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-cyan-950/25 to-purple-950/25">
+                <Gavel className="h-16 w-16 animate-pulse text-cyan-300" />
+                <p className="mt-4 text-xl font-black text-cyan-100">Agora Control Room</p>
+                <p className="mt-1 text-sm text-slate-400">Click Connect Camera to broadcast via Agora.</p>
               </div>
-            </div>
-            
-            {isLive && (
-              <>
-                <div className="absolute top-4 left-4 flex items-center gap-2">
-                  <div className="px-3 py-1.5 bg-red-500 text-white text-sm font-bold rounded-lg flex items-center gap-2">
-                    <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                    LIVE
-                  </div>
-                </div>
-                <div className="absolute bottom-4 right-4 flex gap-2">
-                  <button onClick={() => setIsVideoOn(!isVideoOn)} className="p-2 bg-black/70 rounded-lg hover:bg-black/50">
-                    {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                  </button>
-                  <button onClick={() => setIsAudioOn(!isAudioOn)} className="p-2 bg-black/70 rounded-lg hover:bg-black/50">
-                    {isAudioOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-                  </button>
-                  <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-2 bg-black/70 rounded-lg hover:bg-black/50">
-                    {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-                  </button>
-                </div>
-              </>
             )}
+
+            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={connectAuctioneerAgora}
+                disabled={auctioneerConnecting || agoraConnected || !isLive}
+                className="rounded-xl border border-cyan-300/30 bg-cyan-500/20 px-4 py-3 font-bold text-cyan-100 hover:bg-cyan-500/30 disabled:opacity-50"
+              >
+                {auctioneerConnecting ? 'Connecting...' : agoraConnected ? 'Agora Connected' : 'Connect Camera'}
+              </button>
+
+              <button onClick={toggleAuctioneerMic} disabled={!agoraConnected} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 disabled:opacity-50">
+                {auctioneerMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />} Mic
+              </button>
+
+              <button onClick={toggleAuctioneerCam} disabled={!agoraConnected} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 disabled:opacity-50">
+                {auctioneerCamOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />} Camera
+              </button>
+            </div>
+
+            <div className="absolute left-4 top-4 flex items-center gap-2">
+              <span className="flex items-center gap-2 rounded-xl bg-red-500 px-3 py-1.5 text-sm font-black text-white">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> LIVE
+              </span>
+              <span className="flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-black/70 px-3 py-1.5 text-sm text-cyan-100">
+                <Users className="h-4 w-4" /> {upcomingLots.length + (currentLot ? 1 : 0)} lots
+              </span>
+            </div>
           </div>
 
-          {/* Current Lot */}
           {currentLot ? (
-            <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/20 border border-green-500/30 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-green-400 font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  Currently Live - Lot #{lots.indexOf(currentLot) + 1}
-                </span>
+            <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">Currently Live - Lot #{lots.findIndex((l) => l.id === currentLot.id) + 1}</p>
+                  <h2 className="mt-1 text-2xl font-black">{currentLot.title}</h2>
+                  {currentLot.description && <p className="mt-2 line-clamp-3 text-sm text-slate-300">{currentLot.description}</p>}
+                </div>
                 <div className="flex gap-2">
-                  <button onClick={() => markSold(currentLot.id)} disabled={actionLoading} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm">
-                    Mark Sold
-                  </button>
-                  <button onClick={() => markUnsold(currentLot.id)} disabled={actionLoading} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
-                    Mark Unsold
-                  </button>
+                  <button onClick={() => markSold(currentLot.id)} disabled={actionLoading} className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-sm font-bold text-emerald-100">Sold</button>
+                  <button onClick={() => markUnsold(currentLot.id)} disabled={actionLoading} className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-sm font-bold">Unsold</button>
                 </div>
               </div>
-              
-              <h2 className="text-2xl font-bold mb-2">{currentLot.title}</h2>
-              {currentLot.description && <p className="text-gray-400 mb-4">{currentLot.description}</p>}
-              
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="bg-black/30 rounded-lg p-3">
-                  <p className="text-gray-500 text-xs">Starting Bid</p>
-                  <p className="text-lg font-bold">{currentLot.starting_bid.toLocaleString()} TC</p>
-                </div>
-                <div className="bg-black/30 rounded-lg p-3">
-                  <p className="text-gray-500 text-xs">Min Increment</p>
-                  <p className="text-lg font-bold">{currentLot.min_increment.toLocaleString()} TC</p>
-                </div>
-                <div className="bg-black/30 rounded-lg p-3">
-                  <p className="text-gray-500 text-xs">Current Bid</p>
-                  <p className="text-lg font-bold text-green-400">{(currentLot.current_highest_bid || currentLot.starting_bid).toLocaleString()} TC</p>
-                </div>
+
+              <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Stat label="Starting Bid" value={`${formatCoins(currentLot.starting_bid)} TC`} />
+                <Stat label="Increment" value={`${formatCoins(currentLot.bid_increment)} TC`} />
+                <Stat label="Current Bid" value={`${formatCoins(currentLot.current_highest_bid || currentLot.starting_bid)} TC`} />
+                <Stat label="Reserve" value={currentLot.reserve_price ? `${formatCoins(currentLot.reserve_price)} TC` : 'None'} />
               </div>
 
               {currentLot.countdown_end_at && (
-                <p className="text-gray-400 text-sm"><Clock className="w-4 h-4 inline" /> Next lot in: {new Date(currentLot.countdown_end_at).toLocaleTimeString()}</p>
+                <p className="text-sm text-slate-400"><Clock className="mr-1 inline h-4 w-4" /> Ends: {new Date(currentLot.countdown_end_at).toLocaleTimeString()}</p>
               )}
             </div>
           ) : (
-            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-8 text-center">
-              <Gavel className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">{isLive ? 'No lot currently active' : 'Start the show and activate a lot to begin'}</p>
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-10 text-center">
+              <Gavel className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+              <p className="text-slate-400">{isLive ? 'No lot currently active' : 'Go live and activate a lot to begin'}</p>
             </div>
           )}
 
-          {/* Upcoming */}
           {upcomingLots.length > 0 && (
-            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Layers className="w-5 h-5" /> Queue ({upcomingLots.length})</h3>
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+              <h3 className="mb-3 text-lg font-black">Queue ({upcomingLots.length})</h3>
               <div className="space-y-2">
                 {upcomingLots.map((lot, idx) => (
-                  <div key={lot.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
+                  <div key={lot.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-3">
                     <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 bg-gray-700 rounded flex items-center justify-center text-gray-400 text-sm">{idx + 1}</span>
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-400/10 text-sm font-black text-cyan-200">{idx + 1}</span>
                       <div>
-                        <p className="font-medium">{lot.title}</p>
-                        <p className="text-gray-500 text-sm">Starting: {lot.starting_bid.toLocaleString()} TC</p>
+                        <p className="font-bold">{lot.title}</p>
+                        <p className="text-sm text-slate-500">Starting: {formatCoins(lot.starting_bid)} TC</p>
                       </div>
                     </div>
                     {isLive && (
-                      <button onClick={() => activateLot(lot.id)} disabled={actionLoading} className="flex items-center gap-1 px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-sm">
-                        <SkipForward className="w-4 h-4" /> Go Live
-                      </button>
+                      <button onClick={() => activateLot(lot.id)} disabled={actionLoading} className="rounded-xl border border-green-300/20 bg-green-400/10 px-3 py-1 text-sm font-bold text-green-100">Go Live</button>
                     )}
                   </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Sidebar */}
-        <div className="space-y-4">
-          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
-            <h3 className="font-bold mb-3">Statistics</h3>
+        <aside className="space-y-4">
+          <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 backdrop-blur-xl">
+            <h3 className="mb-3 text-lg font-black">Statistics</h3>
             <div className="space-y-2">
-              <div className="flex justify-between"><span className="text-gray-400">Total Lots</span><span>{lots.length}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Sold</span><span className="text-green-400">{soldLots.length}</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Bids</span><span>{bids.length}</span></div>
-            </div>
-          </div>
-
-          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
-            <h3 className="font-bold mb-3">Recent Bids</h3>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {bids.slice(0, 10).map((bid) => (
-                <div key={bid.id} className="flex justify-between text-sm p-2 bg-black/30 rounded">
-                  <span className="text-gray-400">#{bid.id.slice(-4)}</span>
-                  <span className="text-yellow-400 font-medium">{bid.bid_amount.toLocaleString()} TC</span>
-                </div>
-              ))}
-              {bids.length === 0 && <p className="text-gray-500 text-sm">No bids yet</p>}
+              <Info label="Total Lots" value={lots.length} />
+              <Info label="Sold" value={soldLots.length} />
+              <Info label="Status" value={isLive ? 'Live' : 'Offline'} />
             </div>
           </div>
 
           {soldLots.length > 0 && (
-            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
-              <h3 className="font-bold mb-3 flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-400" /> Winners</h3>
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+              <h3 className="mb-3 text-lg font-black">Sold Items</h3>
               <div className="space-y-2">
-                {soldLots.map((lot) => (
-                  <div key={lot.id} className="p-2 bg-black/30 rounded">
-                    <p className="text-sm font-medium truncate">{lot.title}</p>
-                    <p className="text-green-400 text-sm">{lot.current_highest_bid?.toLocaleString()} TC</p>
+                {soldLots.slice(0, 5).map((lot) => (
+                  <div key={lot.id} className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-3">
+                    <p className="font-bold">{lot.title}</p>
+                    <p className="text-sm text-emerald-200">{formatCoins(lot.current_highest_bid || lot.starting_bid)} TC</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </aside>
+      </main>
     </div>
-  );
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/35 p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="font-black text-white">{value}</p>
+    </div>
+  )
+}
+
+function Info({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="font-bold text-white">{value}</p>
+    </div>
+  )
 }

@@ -16,7 +16,8 @@ ADD CONSTRAINT user_advertisements_status_check
 CHECK (status IN ('pending', 'approved', 'denied', 'expired', 'queued', 'active'));
 
 -- Function to manage ad queue rotation
-CREATE OR REPLACE FUNCTION public.rotate_ad_queue()
+-- p_force: if true, rotate even if current ad hasn't reached 7 days
+CREATE OR REPLACE FUNCTION public.rotate_ad_queue(p_force BOOLEAN DEFAULT false)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -26,54 +27,43 @@ DECLARE
     v_current_active UUID;
     v_current_slot_start TIMESTAMP WITH TIME ZONE;
     v_rotation_count INT := 0;
+    v_should_rotate BOOLEAN := false;
 BEGIN
-    -- Check for expired active ads
+    -- Check for active ads
     SELECT id, slot_start_time INTO v_current_active, v_current_slot_start
     FROM public.user_advertisements
     WHERE status = 'active'
     ORDER BY slot_start_time ASC
     LIMIT 1;
 
-    -- Rotate if current ad has been active for 7 days
-    IF v_current_active IS NOT NULL AND 
-       v_current_slot_start < (NOW() - INTERVAL '7 days') THEN
-        
-        -- Mark current ad as expired/queued
-        UPDATE public.user_advertisements
-        SET status = 'queued', is_active_slot = false
-        WHERE id = v_current_active;
+    -- Determine if we should rotate
+    IF p_force THEN
+        v_should_rotate := TRUE;
+    ELSIF v_current_active IS NULL THEN
+        v_should_rotate := TRUE;
+    ELSIF v_current_slot_start < (NOW() - INTERVAL '7 days') THEN
+        v_should_rotate := TRUE;
+    END IF;
 
-        v_rotation_count := v_rotation_count + 1;
+    IF v_should_rotate THEN
+        -- Mark current active ad as queued (if any)
+        IF v_current_active IS NOT NULL THEN
+            UPDATE public.user_advertisements
+            SET status = 'queued', is_active_slot = false
+            WHERE id = v_current_active;
+
+            v_rotation_count := v_rotation_count + 1;
+        END IF;
 
         -- Get next ad in queue
         SELECT id INTO v_next_ad
         FROM public.user_advertisements
         WHERE status = 'queued'
-        ORDER BY queue_position ASC, approved_at ASC
+        ORDER BY queue_position ASC NULLS LAST, approved_at ASC
         LIMIT 1;
 
         IF v_next_ad IS NOT NULL THEN
             -- Activate next ad
-            UPDATE public.user_advertisements
-            SET 
-                status = 'active', 
-                is_active_slot = true,
-                slot_start_time = NOW()
-            WHERE id = v_next_ad;
-
-            v_rotation_count := v_rotation_count + 1;
-        END IF;
-    END IF;
-
-    -- If no active ad at all, activate first in queue
-    IF v_current_active IS NULL THEN
-        SELECT id INTO v_next_ad
-        FROM public.user_advertisements
-        WHERE status = 'queued'
-        ORDER BY queue_position ASC, approved_at ASC
-        LIMIT 1;
-
-        IF v_next_ad IS NOT NULL THEN
             UPDATE public.user_advertisements
             SET 
                 status = 'active', 
@@ -94,28 +84,61 @@ BEGIN
 END;
 $$;
 
--- Function to add approved ad to queue
+-- Function to add approved ad to queue and activate immediately
+-- When approving, move current active ad to queued first, then activate the new one
 CREATE OR REPLACE FUNCTION public.add_ad_to_queue(p_ad_id UUID)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    v_max_position INTEGER;
+    v_position INTEGER;
+    v_current_active UUID;
 BEGIN
-    SELECT COALESCE(MAX(queue_position), 0) + 1 INTO v_max_position
-    FROM public.user_advertisements
-    WHERE status = 'queued';
-
+    -- Move current active ad to queued (if any)
     UPDATE public.user_advertisements
     SET 
         status = 'queued',
-        queue_position = v_max_position
+        is_active_slot = false
+    WHERE status = 'active';
+
+    -- Get max queue position for the new ad
+    SELECT COALESCE(MAX(queue_position), 0) + 1 INTO v_position
+    FROM public.user_advertisements
+    WHERE status IN ('queued', 'active');
+
+    -- Activate the new ad
+    UPDATE public.user_advertisements
+    SET 
+        status = 'active',
+        queue_position = v_position,
+        is_active_slot = true,
+        slot_start_time = NOW()
     WHERE id = p_ad_id;
 
-    RETURN jsonb_build_object('success', true, 'queue_position', v_max_position);
+    RETURN jsonb_build_object('success', true, 'queue_position', v_position);
 END;
 $$;
+
+-- Function to increment user ad impressions
+CREATE OR REPLACE FUNCTION public.increment_user_ad_impressions(ad_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.user_advertisements
+    SET impressions_count = impressions_count + 1
+    WHERE id = ad_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to increment user ad clicks
+CREATE OR REPLACE FUNCTION public.increment_user_ad_clicks(ad_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.user_advertisements
+    SET clicks_count = clicks_count + 1
+    WHERE id = ad_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.rotate_ad_queue() TO service_role;
 GRANT EXECUTE ON FUNCTION public.add_ad_to_queue(UUID) TO authenticated;

@@ -287,7 +287,7 @@ BEGIN
     RETURN 'Order not found';
   END IF;
 
-  IF v_order.status NOT IN ('paid', 'processing') THEN
+  IF v_order.status NOT IN ('paid', 'processing', 'shipped') THEN
     RETURN 'Order cannot be fulfilled in current status';
   END IF;
 
@@ -310,27 +310,39 @@ BEGIN
     updated_at = now()
   RETURNING id INTO v_shipment_id;
 
-  UPDATE public.marketplace_purchases
-  SET status = 'shipped',
-      fulfillment_status = 'fulfilled',
-      tracking_number = p_tracking_number,
-      shipping_carrier = p_carrier,
-      tracking_url = v_tracking_url,
-      shipped_at = now(),
-      shipped_date = p_shipped_date,
-      updated_at = now()
-  WHERE id = p_order_id;
+  -- Only update order status if not already shipped (avoid overwriting shipped_at)
+  IF v_order.status NOT IN ('shipped', 'delivered', 'completed') THEN
+    UPDATE public.marketplace_purchases
+    SET status = 'shipped',
+        fulfillment_status = 'fulfilled',
+        tracking_number = p_tracking_number,
+        shipping_carrier = p_carrier,
+        tracking_url = v_tracking_url,
+        shipped_at = now(),
+        shipped_date = p_shipped_date,
+        updated_at = now()
+    WHERE id = p_order_id;
 
-  INSERT INTO public.notifications (user_id, type, title, message, metadata, is_read, created_at)
-  VALUES (
-    v_order.buyer_id,
-    'marketplace_order_shipped',
-    'Order Shipped',
-    'Your marketplace order has been shipped.',
-    jsonb_build_object('order_id', p_order_id, 'tracking_number', p_tracking_number, 'carrier', p_carrier, 'route', '/my-orders'),
-    false,
-    now()
-  );
+    INSERT INTO public.notifications (user_id, type, title, message, metadata, is_read, created_at)
+    VALUES (
+      v_order.buyer_id,
+      'marketplace_order_shipped',
+      'Order Shipped',
+      'Your marketplace order has been shipped.',
+      jsonb_build_object('order_id', p_order_id, 'tracking_number', p_tracking_number, 'carrier', p_carrier, 'route', '/my-orders'),
+      false,
+      now()
+    );
+  ELSE
+    -- Just update tracking info for already-shipped orders
+    UPDATE public.marketplace_purchases
+    SET tracking_number = p_tracking_number,
+        shipping_carrier = p_carrier,
+        tracking_url = v_tracking_url,
+        shipped_date = p_shipped_date,
+        updated_at = now()
+    WHERE id = p_order_id;
+  END IF;
 
   RETURN 'Order fulfilled successfully';
 END;

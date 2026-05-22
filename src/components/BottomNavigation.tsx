@@ -455,12 +455,12 @@ const isActive = false;
     { category: 'City Center', label: 'Troll Court', icon: Scale, path: '/troll-court' },
     { category: 'City Center', label: 'Troll President', icon: Crown, path: '/president' },
     // Public Services
-    { category: 'Public Services', label: 'Jail', icon: Lock, path: '/jail' },
-    { category: 'Public Services', label: 'Troll Church', icon: BookOpen, path: '/church' },
-    { category: 'Public Services', label: 'Support', icon: LifeBuoy, path: '/support' },
-    { category: 'Public Services', label: 'Safety', icon: Shield, path: '/safety' },
-    { category: 'Public Services', label: 'Trollified', icon: ShoppingBag, path: '/trollifieds' },
-    { category: 'Public Services', label: 'Neighbors', icon: Building2, path: '/neighbors' },
+     { category: 'Public Services', label: 'Troll Church', icon: BookOpen, path: '/church' },
+     { category: 'Public Services', label: 'Inmates', icon: Users, path: '/inmates' },
+     { category: 'Public Services', label: 'Support', icon: LifeBuoy, path: '/support' },
+     { category: 'Public Services', label: 'Safety', icon: Shield, path: '/safety' },
+     { category: 'Public Services', label: 'Trollified', icon: ShoppingBag, path: '/trollifieds' },
+     { category: 'Public Services', label: 'Neighbors', icon: Building2, path: '/neighbors' },
     // Social & Profile
     { category: 'Social', label: 'Profile', icon: User, path: `/${profile?.username || user?.id}` },
     { category: 'Social', label: 'Postal Service', icon: MessageSquare, path: '/tcps', badge: totalUnreadCount, onClick: handleMessagesClick },
@@ -475,45 +475,80 @@ const isActive = false;
     { category: 'City Registry', label: 'Appeals', icon: Scale, path: '/city-registry' },
   ]
 
-  // Government Sector pages - shown to officers, lead, secretary, admin
-  const governmentPages = []
-  if (isOfficer || isSecretary || isAdmin) {
-    governmentPages.push({ category: 'Government', label: 'Streams', icon: Radio, path: '/government/streams' })
-  }
-  if (isOfficer || isSecretary || isAdmin) {
-    governmentPages.push({ category: 'Government', label: 'City Government', icon: Landmark, path: '/government' })
-  }
-  if (canSeeCourt) {
-    governmentPages.push({ category: 'Government', label: 'Court Dockets', icon: Gavel, path: '/admin/court-dockets' })
-  }
-  if (isOfficer) {
-    governmentPages.push(
-      { category: 'Government', label: 'Officer Dashboard', icon: LayoutDashboard, path: '/officer/dashboard' },
-      { category: 'Government', label: 'Officer Lounge', icon: Users, path: '/officer/lounge' },
-      { category: 'Government', label: 'Moderation', icon: Eye, path: '/officer/moderation' },
-      { category: 'Government', label: 'Scheduling', icon: Calendar, path: '/officer/scheduling' },
-      { category: 'Government', label: 'OWC Dashboard', icon: LayoutDashboard, path: '/officer/owc' },
-      { category: 'Government', label: 'Officer Payroll', icon: DollarSign, path: '/officer/payroll' },
-    )
-  }
-  if (isLead) {
-    governmentPages.push(
-      { category: 'Government', label: 'Lead HQ', icon: Star, path: '/lead-officer' },
-      { category: 'Government', label: 'Interviews', icon: Video, path: '/admin/interviews' },
-      { category: 'Government', label: 'Weekly Reports', icon: BarChart3, path: '/admin/reports/weekly' },
-      { category: 'Government', label: 'Creator Approvals', icon: ClipboardList, path: '/admin/creator-approvals' },
-    )
-  }
-  if (isSecretary || isAdmin) {
-    governmentPages.push(
-      { category: 'Government', label: 'Secretary Console', icon: LayoutDashboard, path: '/secretary' },
-      { category: 'Government', label: 'Appeals', icon: ScrollText, path: '/admin/appeals' },
-      { category: 'Government', label: 'Manual Orders', icon: FileText, path: '/admin/manual-orders' },
-    )
-  }
-  if ((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin) {
-    governmentPages.push({ category: 'Government', label: 'TCNN Dashboard', icon: Newspaper, path: '/tcnn/dashboard' })
-  }
+    // Government Sector pages - shown to officers, lead, secretary, admin
+    const governmentPages = []
+    if (isOfficer || isSecretary || isAdmin) {
+      governmentPages.push({ category: 'Government', label: 'Streams', icon: Radio, path: '/government/streams' })
+    }
+    if (isOfficer || isSecretary || isAdmin) {
+      governmentPages.push({ category: 'Government', label: 'City Government', icon: Landmark, path: '/government' })
+    }
+    if (canSeeCourt) {
+      governmentPages.push({ category: 'Government', label: 'Court Dockets', icon: Gavel, path: '/admin/court-dockets' })
+    }
+    if (isOfficer) {
+      governmentPages.push(
+        { category: 'Government', label: 'Officer Dashboard', icon: LayoutDashboard, path: '/officer/dashboard' },
+        { category: 'Government', label: 'Officer Lounge', icon: Users, path: '/officer/lounge' },
+        { category: 'Government', label: 'Moderation', icon: Eye, path: '/officer/moderation' },
+        { category: 'Government', label: 'Scheduling', icon: Calendar, path: '/officer/scheduling' },
+        { category: 'Government', label: 'OWC Dashboard', icon: LayoutDashboard, path: '/officer/owc' },
+        { category: 'Government', label: 'Officer Payroll', icon: DollarSign, path: '/officer/payroll' },
+      )
+    }
+    if (isLead) {
+      governmentPages.push(
+        { category: 'Government', label: 'Lead HQ', icon: Star, path: '/lead-officer' },
+        { category: 'Government', label: 'Weekly Reports', icon: BarChart3, path: '/admin/reports/weekly' },
+        { category: 'Government', label: 'Creator Approvals', icon: ClipboardList, path: '/admin/creator-approvals' },
+      )
+    }
+    if (isSecretary || isAdmin) {
+      governmentPages.push(
+        { category: 'Government', label: 'Secretary Console', icon: LayoutDashboard, path: '/secretary' },
+        { category: 'Government', label: 'Appeals', icon: ScrollText, path: '/admin/appeals' },
+        { category: 'Government', label: 'Manual Orders', icon: FileText, path: '/admin/manual-orders' },
+      )
+    }
+    if ((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin) {
+      governmentPages.push({ category: 'Government', label: 'TCNN Dashboard', icon: Newspaper, path: '/tcnn/dashboard' })
+    }
+   if (isOfficer || isSecretary || isAdmin) {
+     governmentPages.push({ category: 'Government', label: 'City Government', icon: Landmark, path: '/government' })
+   }
+   if (canSeeCourt) {
+     governmentPages.push({ category: 'Government', label: 'Court Dockets', icon: Gavel, path: '/admin/court-dockets' })
+   }
+   if (isOfficer) {
+     governmentPages.push(
+       { category: 'Government', label: 'Officer Dashboard', icon: LayoutDashboard, path: '/officer/dashboard' },
+       { category: 'Government', label: 'Officer Lounge', icon: Users, path: '/officer/lounge' },
+       { category: 'Government', label: 'Moderation', icon: Eye, path: '/officer/moderation' },
+       { category: 'Government', label: 'Scheduling', icon: Calendar, path: '/officer/scheduling' },
+       { category: 'Government', label: 'OWC Dashboard', icon: LayoutDashboard, path: '/officer/owc' },
+       { category: 'Government', label: 'Officer Payroll', icon: DollarSign, path: '/officer/payroll' },
+     )
+   }
+   if (isLead) {
+     governmentPages.push(
+       { category: 'Government', label: 'Lead HQ', icon: Star, path: '/lead-officer' },
+       { category: 'Government', label: 'Weekly Reports', icon: BarChart3, path: '/admin/reports/weekly' },
+       { category: 'Government', label: 'Creator Approvals', icon: ClipboardList, path: '/admin/creator-approvals' },
+     )
+   }
+   if (isSecretary || isAdmin) {
+     governmentPages.push(
+       { category: 'Government', label: 'Secretary Console', icon: LayoutDashboard, path: '/secretary' },
+       { category: 'Government', label: 'Appeals', icon: ScrollText, path: '/admin/appeals' },
+       { category: 'Government', label: 'Manual Orders', icon: FileText, path: '/admin/manual-orders' },
+     )
+   }
+   if ((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin) {
+     governmentPages.push({ category: 'Government', label: 'TCNN Dashboard', icon: Newspaper, path: '/tcnn/dashboard' })
+   }
+   if ((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin) {
+      governmentPages.push({ category: 'Government', label: 'TCNN Dashboard', icon: Newspaper, path: '/tcnn/dashboard' })
+    }
 
   // Admin pages
   const adminPages = []
@@ -527,7 +562,7 @@ const isActive = false;
       { category: 'Admin - City', label: 'Role Management', icon: Shield, path: '/admin/role-management' },
       { category: 'Admin - City', label: 'Verified Users', icon: Eye, path: '/admin/verified-users' },
       // Moderation
-      { category: 'Admin - Moderation', label: 'Ban Management', icon: AlertTriangle, path: '/admin/ban-management' },
+      { category: 'Admin - Moderation', label: 'Jail Management', icon: AlertTriangle, path: '/admin/jail-management' },
       { category: 'Admin - Moderation', label: 'Chat Moderation', icon: MessageSquare, path: '/admin/chat-moderation' },
       { category: 'Admin - Moderation', label: 'Reports Queue', icon: FileText, path: '/admin/reports-queue' },
       { category: 'Admin - Moderation', label: 'Stream Monitor', icon: MonitorDot, path: '/admin/stream-monitor' },

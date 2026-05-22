@@ -22466,7 +22466,7 @@ CREATE TABLE IF NOT EXISTS "public"."insurance_logs" (
     "event_type" "text" NOT NULL,
     "blocked_at" timestamp with time zone DEFAULT "now"(),
     "created_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "insurance_logs_protection_type_check" CHECK (("protection_type" = ANY (ARRAY['bankrupt'::"text", 'kick'::"text", 'full'::"text"])))
+     CONSTRAINT "insurance_logs_protection_type_check" CHECK (("protection_type" = ANY (ARRAY['bankrupt'::"text", 'kick'::"text", 'full'::"text", 'jail'::"text"])))
 );
 
 
@@ -22496,7 +22496,7 @@ CREATE TABLE IF NOT EXISTS "public"."insurance_options" (
     "is_active" boolean DEFAULT true,
     "created_at" timestamp with time zone DEFAULT "now"(),
     CONSTRAINT "insurance_options_cost_check" CHECK (("cost" >= 0)),
-    CONSTRAINT "insurance_options_protection_type_check" CHECK (("protection_type" = ANY (ARRAY['bankrupt'::"text", 'kick'::"text", 'full'::"text"])))
+     CONSTRAINT "insurance_options_protection_type_check" CHECK (("protection_type" = ANY (ARRAY['bankrupt'::"text", 'kick'::"text", 'full'::"text", 'jail'::"text"])))
 );
 
 

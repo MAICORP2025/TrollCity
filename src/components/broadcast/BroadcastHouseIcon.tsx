@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import { motion, useTransform, useCycle } from 'framer-motion'
+import HouseRaidAnimation from './HouseRaidAnimation'
 
 interface BroadcastHouseIconProps {
   broadcasterId: string
@@ -147,10 +148,10 @@ export default function BroadcastHouseIcon({
            damage_level: 'minor'
          })
  
-       await supabase.rpc('update_house_condition', { 
-         house_id: targetHouse.id, 
-         condition_change: -10 
-       })
+        await supabase.rpc('update_house_condition', { 
+          house_id: targetHouse.id, 
+          condition_change: -10 
+        })
  
          await fetchHouseData()
        }
@@ -167,6 +168,9 @@ export default function BroadcastHouseIcon({
       setRaiding(false)
     }
   }
+
+  // Calculate cash value: 100 Troll Coins = $1, so 1 coin = $0.01
+  const houseValue = house ? Math.round((house.condition || 100) / 100) : 0
 
   if (!house || loading) return null
 
@@ -204,26 +208,29 @@ export default function BroadcastHouseIcon({
           </div>
         )}
 
-         {/* Hover Tooltip */}
-         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/90 rounded-lg p-2 whitespace-nowrap z-50">
-           <p className="text-white text-xs font-bold">
-             {isRaided ? '⚠️ House Raided!' : '🏠 House'}
-           </p>
-           <p className="text-gray-400 text-xs">
-             Condition: {house.condition}%
-           </p>
-           <p className="text-gray-400 text-xs">
-             Level: {house.upgrade_level}
-           </p>
-           {broadcasterProfile?.troll_coins !== undefined && (
-             <p className="text-yellow-400 text-xs">
-               💰 {broadcasterProfile.troll_coins.toLocaleString()} TC
-             </p>
-           )}
-           {hasInsurance && (
-             <p className="text-green-400 text-xs">✅ Insured</p>
-           )}
-         </div>
+{/* Hover Tooltip */}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/90 rounded-lg p-2 whitespace-nowrap z-50">
+            <p className="text-white text-xs font-bold">
+              {isRaided ? '⚠️ House Raided!' : '🏠 House'}
+            </p>
+            <p className="text-gray-400 text-xs">
+              Condition: {house.condition}%
+            </p>
+            <p className="text-cyan-400 text-xs">
+              Cash Value: ${houseValue.toFixed(2)}
+            </p>
+            <p className="text-gray-400 text-xs">
+              Level: {house.upgrade_level}
+            </p>
+            {broadcasterProfile?.troll_coins !== undefined && (
+              <p className="text-yellow-400 text-xs">
+                💰 {broadcasterProfile.troll_coins.toLocaleString()} TC
+              </p>
+            )}
+            {hasInsurance && (
+              <p className="text-green-400 text-xs">✅ Insured</p>
+            )}
+          </div>
       </div>
 
       {/* Raid Confirmation Dialog */}
@@ -400,7 +407,7 @@ export function HouseRaidButton({ broadcasterId, onRaided }: HouseRaidButtonProp
 
         await supabase.rpc('update_house_condition', { 
           house_id: house.id, 
-          condition_change: -15 
+          condition_change: -10 
         })
       }
 
@@ -435,18 +442,34 @@ interface RepairHouseButtonProps {
 export function RepairHouseButton({ houseId, onRepaired }: RepairHouseButtonProps) {
   const { user, profile } = useAuthStore()
   const [repairing, setRepairing] = useState(false)
+  const [house, setHouse] = useState<{ condition: number } | null>(null)
+
+  // Fetch house condition to compute dynamic repair cost: 100 TC per 5% restored
+  useEffect(() => {
+    if (!houseId) return
+    supabase
+      .from('houses')
+      .select('condition')
+      .eq('id', houseId)
+      .maybeSingle()
+      .then(({ data }) => setHouse(data))
+  }, [houseId])
+
+  const conditionDeficit = house ? (100 - (house.condition || 0)) : 0
+  const repairUnits = Math.ceil(conditionDeficit / 5)
+  const repairCost = repairUnits > 0 ? repairUnits * 100 : 100
 
   const handleRepair = async () => {
     if (!user?.id || !houseId) return
 
-    if ((profile?.troll_coins || 0) < 200) {
-      toast.error('Need 200 Troll Coins to repair')
+    if ((profile?.troll_coins || 0) < repairCost) {
+      toast.error(`Need ${repairCost} Troll Coins to repair`)
       return
     }
 
     setRepairing(true)
     try {
-      await supabase.rpc('deduct_coins', { amount: 200 })
+      await supabase.rpc('deduct_coins', { amount: repairCost })
 
       await supabase
         .from('house_raids')
@@ -454,10 +477,10 @@ export function RepairHouseButton({ houseId, onRepaired }: RepairHouseButtonProp
         .eq('house_id', houseId)
         .is('repaired_at', null)
 
-      await supabase
-        .from('houses')
-        .update({ condition: 100 })
-        .eq('id', houseId)
+      await supabase.rpc('update_house_condition', {
+        house_id: houseId,
+        condition_change: 100
+      })
 
       toast.success('House repaired! ✅')
       onRepaired?.()
@@ -476,7 +499,7 @@ export function RepairHouseButton({ houseId, onRepaired }: RepairHouseButtonProp
       className="bg-green-600 hover:bg-green-700"
     >
       <Wrench className="w-4 h-4 mr-1" />
-      {repairing ? 'Repairing...' : 'Repair (200 TC)'}
+      {repairing ? 'Repairing...' : `Repair (${repairCost} TC)`}
     </Button>
   )
 }

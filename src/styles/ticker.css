@@ -1,64 +1,65 @@
-
 .ticker-wrap {
   position: relative;
   width: 100%;
-  height: 40px;
+  height: 64px;
   background-color: transparent;
   padding: 0;
   overflow: hidden;
 }
 
+/* When the admin action row is shown inside the ticker bar */
+.ticker-wrap.has-action-row {
+  height: 120px;
+}
+
+.ticker-bar {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+}
+
 .ticker {
   display: flex;
-  width: 200%;
+  width: 100%;
   height: 100%;
-  animation: ticker 30s linear infinite;
+  align-items: center;
+}
+
+.ticker-action-row {
+  justify-content: center;
 }
 
 .ticker-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 50%;
-  height: 100%;
-  color: #FFD700;
-  font-size: 1rem;
-  white-space: nowrap;
-  padding: 0 8px;
-  box-sizing: border-box;
-}
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   width: 100%;
+   height: 100%;
+   color: #FFD700;
+   font-size: 1rem;
+   white-space: nowrap;
+   padding: 0 8px;
+   box-sizing: border-box;
+ }
 
 /* Mobile responsive adjustments */
 @media (max-width: 768px) {
-  .ticker {
-    animation: ticker 45s linear infinite; /* Slower on mobile for better readability */
-  }
-  
   .ticker-item {
     font-size: 0.875rem;
     padding: 0 4px;
   }
-  
+
   .ticker-wrap {
-    height: 36px;
+    height: 56px;
   }
-}
 
-@keyframes ticker {
-  0% {
-    transform: translateX(0);
+  .ticker-wrap.has-action-row {
+    height: 100px;
   }
-  100% {
-    transform: translateX(-50%);
-  }
-}
 
-@keyframes ticker {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
+  .ticker-message {
+    max-width: calc(100% - 20px);
   }
 }
 
@@ -66,7 +67,7 @@
   display: inline;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: calc(100% - 24px); /* Account for icon and spacing */
+  max-width: calc(100% - 24px);
 }
 
 .ticker-icon {
@@ -74,26 +75,6 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-}
-
-/* Mobile responsive adjustments */
-@media (max-width: 768px) {
-  .ticker {
-    animation: ticker 45s linear infinite; /* Slower on mobile for better readability */
-  }
-  
-  .ticker-item {
-    font-size: 0.875rem;
-    padding: 0 4px;
-  }
-  
-  .ticker-wrap {
-    height: 36px;
-  }
-  
-  .ticker-message {
-    max-width: calc(100% - 20px);
-  }
 }
 
 .breaking-badge {
@@ -192,4 +173,46 @@
 
 .ticker-item.cursor-pointer:hover .ticker-message {
   text-decoration: underline;
+}
+
+/* ─── Inline ticker action row (replaces the old fixed/fried buttons) ─── */
+.ticker-action-row {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.ticker-action-dropdown {
+  display: inline-flex;
+  flex-direction: column;
+  background: rgba(8, 16, 30, 0.96);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+  min-width: 220px;
+  max-width: 360px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(6, 182, 212, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+@media (max-width: 768px) {
+  .ticker-action-dropdown button {
+    font-size: 9px;
+  }
+}
+
+@keyframes slide-right-to-left {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-slide-right-to-left {
+  display: inline-block;
+  animation: slide-right-to-left 15s linear infinite;
 }

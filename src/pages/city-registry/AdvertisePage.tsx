@@ -206,7 +206,7 @@ export default function AdvertisePage() {
 
   const rotateQueue = async () => {
     try {
-      const { data, error } = await supabase.rpc('rotate_ad_queue')
+      const { data, error } = await supabase.rpc('rotate_ad_queue', { p_force: true })
       if (error) throw error
 
       toast.success(`Queue rotated: ${data?.rotations_performed || 0} changes`)

@@ -41,6 +41,7 @@ export interface BroadcastMessage {
 }
 
 export interface BroadcastGift {
+  [x: string]: any;
   id: string;
   gift_id: string;
   gift_name: string;
@@ -49,6 +50,7 @@ export interface BroadcastGift {
   animation_key?: string;
   animation_type?: string;
   animation_url?: string;
+  video_url?: string;
   animation_duration_ms?: number;
   sound_url?: string;
   is_fullscreen?: boolean;
@@ -228,7 +230,7 @@ export function useBroadcastRealtime({
            
            const giftData = envelope.d;
            
-           const newGift: BroadcastGift = {
+           const newGift = {
              id: giftData.id,
              gift_id: giftData.gift_id,
              gift_name: giftData.gift_name,
@@ -242,7 +244,7 @@ export function useBroadcastRealtime({
              receiver_id: giftData.receiver_id,
              receiver_name: giftData.receiver_name,
              created_at: giftData.timestamp || new Date().toISOString(),
-           };
+           } as BroadcastGift
 
           setState(prev => ({
             ...prev,

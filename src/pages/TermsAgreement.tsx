@@ -122,7 +122,7 @@ export default function TermsAgreement() {
        }
 
        // Edge Function returns the updated profile directly
-       let updatedProfile = result?.profile
+       const updatedProfile = result?.profile
 
        if (updatedProfile && setProfile) {
          // Ensure agreement flags are explicitly true (source-of-truth safety)

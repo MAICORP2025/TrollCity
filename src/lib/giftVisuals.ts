@@ -26,37 +26,16 @@ export interface GiftVisualConfig {
   description?: string;
   trayLabel?: string;
   animationUrl?: string | null;
+  resolvedUrl?: string | null;
+  resolvedSource?: 'animation_url' | 'icon_url' | 'local_fallback' | 'missing' | null;
+  resolvedType?: 'video' | 'image' | 'fallback';
+  resolvedVideoUrl?: string | null;
+  resolvedImageUrl?: string | null;
+  slug?: string | null;
   soundUrl?: string | null;
   trayVisualUrl?: string | null;
   trayGradient?: string | null;
 }
-
-const getAnimationKeyFromName = (name: string, slug?: string) => {
-  if (!name && !slug) return 'gift_boost';
-  const normalized = `${name || ''} ${slug || ''}`.toLowerCase();
-  if (normalized.includes('alien')) return 'alien_invasion';
-  if (normalized.includes('yacht')) return 'yacht';
-  if (normalized.includes('phoenix')) return 'phoenix';
-  if (normalized.includes('private jet') || normalized.includes('jet')) return 'private_jet';
-  if (normalized.includes('dragon')) return 'dragon';
-  if (normalized.includes('black hole') || normalized.includes('blackhole')) return 'black_hole';
-  if (normalized.includes('gold bar') || normalized.includes('gold_bar') || normalized.includes('goldbar')) return 'gold_bar';
-  if (normalized.includes('planet')) return 'planet';
-  if (normalized.includes('rocket')) return 'rocket';
-  if (normalized.includes('rolex') || normalized.includes('watch')) return 'rolex';
-  if (normalized.includes('cash stack') || normalized.includes('money stack') || normalized.includes('cash')) return 'cash_stack';
-  if (normalized.includes('time machine') || normalized.includes('time portal') || normalized.includes('time')) return 'time_machine';
-  if (normalized.includes('sports car') || normalized.includes('sportscar') || normalized.includes('car')) return 'sports_car';
-  if (normalized.includes('galaxy')) return 'galaxy';
-  if (normalized.includes('diamond')) return 'diamond';
-  if (normalized.includes('unicorn')) return 'unicorn';
-  if (normalized.includes('ring')) return 'ring';
-  if (normalized.includes('mansion')) return 'mansion';
-  if (normalized.includes('404') || normalized.includes('error')) return 'error_404';
-  if (normalized.includes('lag switch') || normalized.includes('lag_switch')) return 'lag_switch';
-  if (normalized.includes('trophy')) return 'trophy';
-  return normalized.replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '') || 'gift_boost';
-};
 
 const PRESET_GIFT_CONFIG: Array<{
   matcher: (name: string, slug?: string) => boolean;
@@ -397,10 +376,104 @@ const getDefaultGlowClass = (rarity: GiftRarity): string => {
   }
 };
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
+const KNOWN_GIFT_STORAGE_BUCKETS = ['gift-videos', 'gift-animations', 'gifts', 'public']
+
+const normalizeSlug = (value?: string | null): string | null => {
+  if (!value) return null
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/--+/g, '-')
+    .replace(/(^-|-$)/g, '') || null
+}
+
+const toStorageFileName = (value?: string | null): string | null => {
+  if (!value) return null
+  return String(value)
+    .replace(/^gift_/, '')
+    .replace(/_/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .toLowerCase() || null
+}
+
+const buildSupabaseStorageUrl = (bucket: string, filePath: string): string | null => {
+  if (!bucket || !filePath || !SUPABASE_URL) return null
+  const sanitizedBucket = bucket.replace(/\/+$/g, '')
+  const sanitizedPath = String(filePath).replace(/^\/+/, '')
+  return `${SUPABASE_URL.replace(/\/+$/g, '')}/storage/v1/object/public/${sanitizedBucket}/${sanitizedPath}`
+}
+
+const isFullUrl = (value?: string | null): value is string => {
+  return typeof value === 'string' && /^(https?:)?\/\//i.test(value)
+}
+
+const getAssetTypeFromField = (field: string, value?: string | null): 'video' | 'image' | 'unknown' => {
+  if (!value) return 'unknown'
+  if (field === 'icon_url') return 'image'
+  if (field === 'animation_url') return 'video'
+  return 'unknown'
+}
+
+const getAssetTypeFromUrl = (url?: string | null): 'video' | 'image' | null => {
+  if (!url) return null
+  const lower = url.toLowerCase()
+  if (lower.match(/\.(webm|mp4|mov|m4v|ogv|ogg)(\?.*)?$/)) return 'video'
+  if (lower.match(/\.(png|jpe?g|gif|webp|svg)(\?.*)?$/)) return 'image'
+  return null
+}
+
+const resolveSupabaseStorageUrl = (value?: string | null): { url: string; type: 'video' | 'image' } | null => {
+  if (!value || !SUPABASE_URL) return null
+  const normalized = String(value).trim().replace(/^\/+/, '')
+  const firstSegment = normalized.split('/')[0]
+
+  if (KNOWN_GIFT_STORAGE_BUCKETS.includes(firstSegment) && normalized.split('/').length > 1) {
+    const bucket = firstSegment
+    const path = normalized.slice(bucket.length + 1)
+    const assetType = getAssetTypeFromUrl(path) || (path.includes('gif') ? 'image' : 'video')
+    return {
+      url: buildSupabaseStorageUrl(bucket, path) as string,
+      type: assetType,
+    }
+  }
+
+  const extensionType = getAssetTypeFromUrl(normalized)
+  if (extensionType) {
+    const bucket = KNOWN_GIFT_STORAGE_BUCKETS[0]
+    const path = normalized
+    return {
+      url: buildSupabaseStorageUrl(bucket, path) as string,
+      type: extensionType,
+    }
+  }
+
+  return null
+}
+
+const getLocalFallbackSlugs = (slug: string): string[] => {
+  const normalizedSlug = normalizeSlug(slug) || 'gift_boost'
+  const strippedSlug = normalizedSlug.replace(/^gift[-_]/i, '')
+  return Array.from(new Set([normalizedSlug, strippedSlug].filter(Boolean)))
+}
+
+const buildLocalGiftCandidates = (slug: string, type: 'video' | 'image'): string[] => {
+  const slugs = getLocalFallbackSlugs(slug)
+  if (type === 'image') {
+    return slugs.map((candidate) => `/gift-images/${candidate}.png`)
+  }
+  return slugs.flatMap((candidate) => [`/gift-videos/${candidate}.webm`, `/gift-animations/${candidate}.webm`])
+}
+
+const debugGiftResolutionMap = new Map<string, Record<string, any>>()
+
 export function getGiftVisualConfig(gift: {
   id?: string;
   name?: string;
   slug?: string;
+  gift_slug?: string;
   icon?: string;
   coinCost?: number;
   value?: number;
@@ -411,6 +484,14 @@ export function getGiftVisualConfig(gift: {
   animationType?: string;
   animation_url?: string;
   animationUrl?: string;
+  video_url?: string;
+  videoUrl?: string;
+  media_url?: string;
+  mediaUrl?: string;
+  image_url?: string;
+  imageUrl?: string;
+  icon_url?: string;
+  iconUrl?: string;
   animation_duration_ms?: number;
   animationDurationMs?: number;
   sound_url?: string;
@@ -425,7 +506,9 @@ export function getGiftVisualConfig(gift: {
   trayGradient?: string;
 }): GiftVisualConfig {
   const name = (gift.name || '').trim();
-  const slug = gift.slug || gift.animationKey || gift.animation_key || '';
+  const slug = normalizeSlug(
+    gift.slug || gift.gift_slug || gift.animationKey || gift.animation_key || gift.name || ''
+  ) || 'gift_boost';
   const value = gift.coinCost ?? gift.value ?? gift.amount ?? 0;
   const animationKey = gift.animationKey || gift.animation_key || getAnimationKeyFromName(name, slug);
   const preset = PRESET_GIFT_CONFIG.find((entry) => entry.matcher(name.toLowerCase(), slug.toLowerCase()));
@@ -434,6 +517,108 @@ export function getGiftVisualConfig(gift: {
   const animationType = (gift.animationType as GiftAnimationType) || (gift.animation_type as GiftAnimationType) || preset?.config.animationType || getDefaultAnimationType(value);
   const isFullscreen = gift.isFullscreen ?? gift.is_fullscreen ?? preset?.config.isFullscreen ?? value >= 5000;
   const durationMs = gift.animationDurationMs ?? gift.animation_duration_ms ?? preset?.config.durationMs ?? (value >= 5000 ? 5800 : value >= 1000 ? 4200 : value >= 200 ? 3400 : 2800);
+
+  let resolvedUrl: string | null = null;
+  let resolvedType: 'video' | 'image' | 'fallback' = 'fallback';
+  let resolvedVideoUrl: string | null = null;
+  let resolvedImageUrl: string | null = null;
+  let resolvedSource: 'animation_url' | 'icon_url' | 'local_fallback' | 'missing' | null = null;
+
+  const debugEntry: Record<string, any> = {
+    id: gift.id,
+    name,
+    slug,
+    gift_slug: gift.gift_slug || null,
+    animation_url: gift.animation_url || null,
+    resolvedUrl: null,
+    resolvedSource: null,
+    resolvedType: 'fallback',
+  };
+
+  // 1) animation_url (primary)
+  const animUrl = gift.animation_url || gift.animationUrl || null;
+  if (animUrl) {
+    if (isFullUrl(animUrl)) {
+      resolvedUrl = animUrl;
+      resolvedType = (getAssetTypeFromUrl(animUrl) as any) || 'video';
+      resolvedSource = 'animation_url';
+    } else {
+      const r = resolveSupabaseStorageUrl(animUrl);
+      if (r) {
+        resolvedUrl = r.url;
+        resolvedType = r.type;
+        resolvedSource = 'animation_url';
+      }
+    }
+  }
+
+  // 2) icon_url (fallback image)
+  if (!resolvedUrl && (gift.icon_url || (gift as any).iconUrl)) {
+    const iconVal = (gift.icon_url || (gift as any).iconUrl) as string;
+    if (isFullUrl(iconVal)) {
+      resolvedUrl = iconVal;
+      resolvedType = 'image';
+      resolvedSource = 'icon_url';
+    } else {
+      const r = resolveSupabaseStorageUrl(iconVal);
+      if (r) {
+        resolvedUrl = r.url;
+        resolvedType = r.type === 'video' ? 'image' : r.type;
+        resolvedSource = 'icon_url';
+      }
+    }
+  }
+
+  // 3) local video fallbacks
+  if (!resolvedUrl) {
+    const vids = buildLocalGiftCandidates(slug, 'video');
+    if (vids && vids.length > 0) {
+      resolvedUrl = vids[0];
+      resolvedType = 'video';
+      resolvedSource = 'local_fallback';
+    }
+  }
+
+  // 4) local image fallback
+  if (!resolvedUrl) {
+    const imgs = buildLocalGiftCandidates(slug, 'image');
+    if (imgs && imgs.length > 0) {
+      resolvedUrl = imgs[0];
+      resolvedType = 'image';
+      resolvedSource = 'local_fallback';
+    }
+  }
+
+  // 5) missing -> keep fallback
+  if (!resolvedUrl) {
+    resolvedType = 'fallback';
+    resolvedSource = 'missing';
+  }
+
+  if (resolvedType === 'video') {
+    resolvedVideoUrl = resolvedUrl
+    resolvedImageUrl = `/gift-images/${slug}.png`
+  } else if (resolvedType === 'image') {
+    resolvedImageUrl = resolvedUrl
+  }
+
+  debugEntry.resolvedUrl = resolvedUrl
+  debugEntry.resolvedSource = resolvedSource
+  debugEntry.resolvedType = resolvedType
+  debugGiftResolutionMap.set(gift.id || `${name}-${slug}`, debugEntry)
+
+  if (import.meta.env.DEV) {
+    // Only show the requested fields in dev console for clarity
+    const tableRows = Array.from(debugGiftResolutionMap.values()).map((v) => ({
+      name: v.name,
+      slug: v.slug,
+      gift_slug: v.gift_slug,
+      animation_url: v.animation_url,
+      resolvedUrl: v.resolvedUrl,
+      resolvedSource: v.resolvedSource,
+    }))
+    console.table(tableRows)
+  }
 
   return {
     animationKey,
@@ -445,9 +630,19 @@ export function getGiftVisualConfig(gift: {
     durationMs,
     description: gift.description || preset?.config.description || undefined,
     trayLabel: name || 'Gift',
-    animationUrl: gift.animationUrl || gift.animation_url || `/gift-animations/${animationKey}.webm`,
+    animationUrl: resolvedUrl,
+    resolvedUrl,
+    resolvedSource: resolvedSource || null,
+    resolvedType,
+    resolvedVideoUrl,
+    resolvedImageUrl,
+    slug,
     soundUrl: gift.soundUrl || gift.sound_url || null,
     trayVisualUrl: gift.tray_visual_url || gift.trayVisualUrl || undefined,
     trayGradient: gift.tray_gradient || gift.trayGradient || preset?.config.trayGradient || undefined,
   };
 }
+function getAnimationKeyFromName(name: string, slug: string): string {
+  return slug;
+}
+

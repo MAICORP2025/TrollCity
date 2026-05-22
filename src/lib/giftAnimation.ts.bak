@@ -1,0 +1,136 @@
+/**
+ * Shared gift animation pipeline.
+ *
+ * Canonical source: stream_gifts postgres_changes (useStreamRealtime.onGift).
+ * The broadcast gift_sent channel is a secondary/parallel path for viewers whose
+ * realtime subscription has not yet delivered the DB event.
+ *
+ * Both paths are normalised to the same animationId so the dedupe layer in each
+ * page can catch the second arrival.
+ */
+
+export interface NormalizedGift {
+  animationId: string
+  streamGiftId: string
+  source: 'postgres' | 'broadcast' | 'rpc'
+  streamId: string
+  senderId: string
+  receiverId: string
+  giftItemId: string
+  giftName: string
+  slug: string
+  amount: number
+  animationUrl?: string | null
+  createdAt: string
+}
+
+/**
+ * Normalise any raw gift event into a canonical shape.
+ *
+ * Priority for animationId:
+ *  1. rawGift.id          – present in both pg event.new and broadcast payload.id (txn_id)
+ *  2. rawGift.stream_gift_id
+ *  3. rawGift.gift_transaction_id
+ *  4. Composite fallback
+ */
+export function normalizeGiftEvent(
+  rawGift: Record<string, unknown>,
+  source: NormalizedGift['source'],
+): NormalizedGift | null {
+  if (!rawGift) return null
+
+  // stream_gifts row id is the single truth – pg new.id becomes this
+  const streamGiftId =
+    (rawGift.id as string | undefined) ??
+    (rawGift.stream_gift_id as string | undefined) ??
+    (rawGift.gift_transaction_id as string | undefined) ??
+    ''
+
+  // Sender: broad field-name coverage across pg + broadcast payloads
+  const senderId =
+    (rawGift.sender_id as string | undefined) ??
+    (rawGift.from_user_id as string | undefined) ??
+    (rawGift.senderId as string | undefined) ??
+    (rawGift.s as string | undefined) ??
+    ''
+
+  // Receiver: broad field-name coverage
+  const receiverId =
+    (rawGift.receiver_id as string | undefined) ??
+    (rawGift.recipient_id as string | undefined) ??
+    (rawGift.receiverId as string | undefined) ??
+    (rawGift.recipientId as string | undefined) ??
+    ''
+
+  if (!streamGiftId || !senderId || !receiverId) return null
+
+  // If id is missing we can't form a stable animationId
+  if (!(rawGift.id as string | undefined)) return null
+
+  const streamId =
+    (rawGift.stream_id as string | undefined) ??
+    (rawGift.streamId as string | undefined) ??
+    ''
+
+  const eventNewGiftId =
+    (rawGift.gift_id as string | undefined) ??
+    (rawGift.gift_item_id as string | undefined) ??
+    (rawGift.giftId as string | undefined) ??
+    (rawGift.giftItemId as string | undefined) ??
+    (rawGift.gift_type as string | undefined) ??
+    ''
+
+  const giftName =
+    (rawGift.gift_name as string | undefined) ??
+    (rawGift.name as string | undefined) ??
+    (rawGift.title as string | undefined) ??
+    (rawGift.message as string | undefined) ??
+    'Gift'
+
+  const amount =
+    (rawGift.amount as number | undefined) ??
+    (rawGift.coins_spent as number | undefined) ??
+    (rawGift.coins_amount as number | undefined) ??
+    (rawGift.total_amount as number | undefined) ??
+    (rawGift.total_coins as number | undefined) ??
+    (rawGift.coin_value as number | undefined) ??
+    (rawGift.gift_value as number | undefined) ??
+    0
+
+  // Stable animationId: prefer rawGift.id (present in both event.new and broadcast)
+  const animationId = String(rawGift.id as string)
+
+  const slug =
+    (rawGift.gift_slug as string | undefined) ??
+    (rawGift.gift_slug as string | undefined) ??
+    (rawGift.gift_slug as string | undefined) ??
+    (rawGift.slug as string | undefined) ??
+    ''
+
+  const animationUrl =
+    (rawGift.animation_url as string | undefined) ??
+    (rawGift.video_url as string | undefined) ??
+    (rawGift.animationUrl as string | undefined) ??
+    (rawGift.videoUrl as string | undefined) ??
+    null
+
+  const createdAt =
+    (rawGift.timestamp as string | undefined) ??
+    (rawGift.created_at as string | undefined) ??
+    new Date().toISOString()
+
+  return {
+    animationId,
+    streamGiftId,
+    source,
+    streamId,
+    senderId,
+    receiverId,
+    giftItemId: eventNewGiftId,
+    giftName,
+    slug,
+    amount: Number(amount) || 0,
+    animationUrl: animationUrl || null,
+    createdAt,
+  }
+}

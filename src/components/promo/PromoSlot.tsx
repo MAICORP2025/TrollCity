@@ -42,7 +42,7 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
         .from('user_advertisements')
         .select('*')
         .eq('status', 'active')
-        .or('placement.is.null,placement.eq.' + placement)
+        .or(`placement.is.null,placement.eq.${placement},placement.eq.any`)
         .order('slot_start_time', { ascending: true });
 
       // Combine ads with official ads taking priority
@@ -54,7 +54,8 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
           cta_text: 'Learn More',
           priority: 0,
           is_active: true,
-          label: 'Sponsored'
+          label: 'Sponsored',
+          isUserAd: true
         }))
       ];
 
@@ -68,21 +69,26 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
   }, [placement]);
 
   // Track impression when ad is displayed
-  const trackImpression = useCallback(async (adId: string) => {
+  const trackImpression = useCallback(async (adId: string, isUserAd: boolean = false) => {
     try {
-      await supabase.rpc('increment_ad_impressions', { ad_id: adId });
+      if (isUserAd) {
+        await supabase.rpc('increment_user_ad_impressions', { ad_id: adId });
+      } else {
+        await supabase.rpc('increment_ad_impressions', { ad_id: adId });
+      }
     } catch (e) {
-      // Fallback: get current count and increment
+      // Fallback: direct update
       try {
+        const table = isUserAd ? 'user_advertisements' : 'city_ads';
         const { data } = await supabase
-          .from('city_ads')
+          .from(table)
           .select('impressions_count')
           .eq('id', adId)
           .single();
         
         if (data) {
           await supabase
-            .from('city_ads')
+            .from(table)
             .update({ impressions_count: (data.impressions_count || 0) + 1 })
             .eq('id', adId);
         }
@@ -100,7 +106,7 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
       const nextIndex = (prev + 1) % ads.length;
       // Track impression for new ad
       if (ads[nextIndex]) {
-        trackImpression(ads[nextIndex].id);
+        trackImpression(ads[nextIndex].id, !!ads[nextIndex].isUserAd);
       }
       return nextIndex;
     });
@@ -139,7 +145,7 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
   // Track impression for current ad when it changes
   useEffect(() => {
     if (ads.length > 0 && ads[currentIndex]) {
-      trackImpression(ads[currentIndex].id);
+      trackImpression(ads[currentIndex].id, !!ads[currentIndex].isUserAd);
     }
   }, [currentIndex, ads, trackImpression]);
 
@@ -210,7 +216,7 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
                   key={index}
                   onClick={() => {
                     setCurrentIndex(index);
-                    trackImpression(ads[index].id);
+                    trackImpression(ads[index].id, !!ads[index].isUserAd);
                   }}
                   className={`w-1.5 h-1.5 rounded-full transition-all ${
                     index === currentIndex

@@ -36,6 +36,7 @@ export interface CityAd {
   created_by?: string;
   created_at: string;
   updated_at: string;
+  isUserAd?: boolean;
 }
 
 export interface CityAdFormData {

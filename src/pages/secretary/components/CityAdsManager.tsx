@@ -6,17 +6,46 @@ import { toast } from 'sonner';
 
 interface CityAdsManagerProps {}
 
+interface UserAdvertisement {
+  id: string;
+  user_id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  image_url: string;
+  link_url: string;
+  status: string;
+  cost_paid: number;
+  submitted_at: string;
+  approved_at: string;
+  expires_at: string;
+  queue_position: number | null;
+  is_active_slot: boolean;
+  slot_start_time: string;
+  clicks_count: number;
+  impressions_count: number;
+  user_profiles: { username: string };
+  placement: string;
+}
+
 export default function CityAdsManager() {
   const [ads, setAds] = useState<CityAd[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userAds, setUserAds] = useState<UserAdvertisement[]>([]);
+  const [userAdsLoading, setUserAdsLoading] = useState(false);
   const [editingAd, setEditingAd] = useState<CityAd | null>(null);
   const [formData, setFormData] = useState<Partial<CityAd>>({});
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [placementFilter, setPlacementFilter] = useState<AdPlacement | ''>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [userAdTab, setUserAdTab] = useState<'all' | 'pending' | 'queued' | 'active'>('all');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [adToRemove, setAdToRemove] = useState<UserAdvertisement | null>(null);
+  const [removing, setRemoving] = useState(false);
 
-  // Fetch all ads with filters
+  // Fetch city ads with filters
   const fetchAds = useCallback(async () => {
     try {
       setLoading(true);
@@ -46,10 +75,67 @@ export default function CityAdsManager() {
     }
   }, [placementFilter, statusFilter]);
 
+  // Fetch all user-submitted advertisements
+  const fetchUserAds = useCallback(async () => {
+    try {
+      setUserAdsLoading(true);
+      const { data, error } = await supabase
+        .from('user_advertisements')
+        .select(`
+          *,
+          user_profiles!user_advertisements_user_id_fkey (username)
+        `)
+        .order('submitted_at', { ascending: false });
+
+      if (error) throw error;
+      setUserAds((data || []) as UserAdvertisement[]);
+    } catch (e) {
+      console.error('Failed to fetch user ads:', e);
+      toast.error('Failed to load user advertisements');
+    } finally {
+      setUserAdsLoading(false);
+    }
+  }, []);
+
+  // Remove (deny) a user-submitted ad — works for approved/queued/active/pending
+  const removeUserAd = async (ad: UserAdvertisement) => {
+    const reason = deleteReason || prompt('Enter reason for removing this ad:');
+    if (!reason) return;
+
+    setRemoving(true);
+    try {
+      const { data, error } = await supabase.rpc('deny_advertisement', {
+        p_ad_id: ad.id,
+        p_reason: reason,
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success('Ad removed successfully');
+        setShowDeleteDialog(false);
+        setAdToRemove(null);
+        setDeleteReason('');
+        await fetchUserAds();
+      } else {
+        toast.error(data?.message || 'Failed to remove ad');
+      }
+    } catch (err) {
+      console.error('Remove ad error:', err);
+      toast.error('Failed to remove ad');
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   // Initialize form data
   useEffect(() => {
     fetchAds();
   }, [fetchAds]);
+
+  useEffect(() => {
+    fetchUserAds();
+  }, [fetchUserAds]);
 
   // Reset form
   const resetForm = () => {
@@ -221,7 +307,7 @@ export default function CityAdsManager() {
   // Handle delete ad
   const handleDeleteAd = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this ad?')) return;
-    
+
     try {
       // Delete image from storage if exists
       const adToDelete = ads.find(a => a.id === id);
@@ -250,7 +336,7 @@ export default function CityAdsManager() {
     try {
       const { error } = await supabase
         .from('city_ads')
-        .update({ 
+        .update({
           is_active: !ad.is_active,
           updated_at: new Date().toISOString()
         })
@@ -282,7 +368,7 @@ export default function CityAdsManager() {
         <h2 className="text-2xl font-bold text-white">
           Promo Ads Manager
         </h2>
-        <button 
+        <button
           onClick={() => {
             resetForm();
           }}
@@ -358,9 +444,9 @@ export default function CityAdsManager() {
                 )}
                 {previewUrl && (
                   <div className="mt-2">
-                    <img 
-                      src={previewUrl} 
-                      alt="Preview" 
+                    <img
+                      src={previewUrl}
+                      alt="Preview"
                       className="max-w-xs rounded border border-slate-700"
                     />
                   </div>
@@ -531,7 +617,7 @@ export default function CityAdsManager() {
           </div>
 
           <div className="flex justify-end pt-4">
-            <button 
+            <button
               type="submit"
               disabled={uploading}
               className={`px-6 py-2 rounded-lg font-medium transition-colors 
@@ -541,7 +627,7 @@ export default function CityAdsManager() {
               {editingAd ? 'Update Ad' : 'Create Ad'}
             </button>
             {!editingAd && (
-              <button 
+              <button
                 type="button"
                 onClick={resetForm}
                 className="ml-4 px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/10"
@@ -603,16 +689,16 @@ export default function CityAdsManager() {
         ) : (
           <div className="space-y-4">
             {ads.map(ad => (
-              <div 
-                key={ad.id} 
+              <div
+                key={ad.id}
                 className="bg-slate-900/50 rounded-xl p-4 border border-slate-800 flex flex-col md:flex-row items-start justify-between"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start gap-4">
                     {ad.image_url && (
-                      <img 
-                        src={ad.image_url} 
-                        alt={ad.title} 
+                      <img
+                        src={ad.image_url}
+                        alt={ad.title}
                         className="w-24 h-24 object-cover rounded-lg border border-slate-700"
                       />
                     )}
@@ -634,11 +720,11 @@ export default function CityAdsManager() {
                       )}
                       <div className="mt-2 flex items-center gap-4 text-sm text-slate-400">
                         <span>
-                          {ad.is_active ? 
+                          {ad.is_active ?
                             <span className="flex items-center gap-1">
                               <div className="h-2 w-2 rounded-full bg-green-500"></div>
                               Active
-                            </span> : 
+                            </span> :
                             <span className="flex items-center gap-1">
                               <div className="h-2 w-2 rounded-full bg-red-500"></div>
                               Inactive
@@ -690,7 +776,151 @@ export default function CityAdsManager() {
             ))}
           </div>
         )}
+       </div>
+
+      {/* ── User-Submitted Ads ────────────────────────────────────────────── */}
+      <div>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+          <h3 className="text-xl font-bold text-white">User-Submitted Ads</h3>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4">
+          {(['pending', 'queued', 'active', 'all'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setUserAdTab(tab)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                userAdTab === tab
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)} ({userAds.filter(a => tab === 'all' || a.status === tab).length})
+            </button>
+          ))}
+        </div>
+
+        {userAdsLoading ? (
+          <div className="text-center py-8 text-slate-400">Loading user advertisements...</div>
+        ) : userAds.length === 0 ? (
+          <div className="bg-slate-900/50 rounded-xl p-8 text-center border border-slate-800">
+            <p className="text-slate-400">No user-submitted advertisements</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {userAds
+              .filter(ad => userAdTab === 'all' || ad.status === userAdTab)
+              .map(ad => (
+                <div key={ad.id} className="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
+                  <div className="flex gap-4">
+                    {ad.image_url && (
+                      <img
+                        src={ad.image_url}
+                        alt={ad.title}
+                        className="w-32 h-20 object-cover rounded-lg"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-semibold text-white">{ad.title}</h3>
+                          {ad.subtitle && <p className="text-slate-400 text-sm">{ad.subtitle}</p>}
+                          <p className="text-slate-500 text-xs mt-1">
+                            Submitted by @{ad.user_profiles?.username}&nbsp;&bull;&nbsp;
+                            {new Date(ad.submitted_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            ad.status === 'pending'
+                              ? 'bg-yellow-600/20 text-yellow-400'
+                              : ad.status === 'queued'
+                              ? 'bg-blue-600/20 text-blue-400'
+                              : ad.status === 'active'
+                              ? 'bg-green-600/20 text-green-400'
+                              : ad.status === 'denied'
+                              ? 'bg-red-600/20 text-red-400'
+                              : ad.status === 'expired'
+                              ? 'bg-slate-600/20 text-slate-400'
+                              : 'bg-slate-600/20 text-slate-400'
+                          }`}
+                        >
+                          {ad.status.toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+                        <span>&#128065; {ad.impressions_count ?? 0} impressions</span>
+                        <span>&#128073; {ad.clicks_count ?? 0} clicks</span>
+                        {ad.queue_position != null && <span>&#128203; Queue #{ad.queue_position}</span>}
+                      </div>
+
+                      {ad.status !== 'pending' && ad.status !== 'denied' && ad.status !== 'expired' && (
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={() => {
+                              setAdToRemove(ad);
+                              setShowDeleteDialog(true);
+                            }}
+                            className="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-500 text-white rounded transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
+
+      {/* ── Remove Confirmation Dialog ──────────────────────────────────────── */}
+      {showDeleteDialog && adToRemove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full mx-4 space-y-4">
+            <h3 className="text-lg font-bold text-white">Remove User Ad</h3>
+            <p className="text-slate-300 text-sm">
+              Removing <strong className="text-white">{adToRemove.title}</strong> ({adToRemove.status}). This will deny the ad and remove it from the queue.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Reason for removal</label>
+              <textarea
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:border-purple-500 focus:ring-purple-500 text-sm"
+                placeholder="Enter a reason..."
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteDialog(false);
+                  setAdToRemove(null);
+                  setDeleteReason('');
+                }}
+                className="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => adToRemove && removeUserAd(adToRemove)}
+                disabled={removing || !deleteReason.trim()}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors text-white ${
+                  removing || !deleteReason.trim()
+                    ? 'bg-red-600/40 cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-500'
+                }`}
+              >
+                {removing ? 'Removing...' : 'Remove Ad'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

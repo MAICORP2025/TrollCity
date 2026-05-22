@@ -17,7 +17,7 @@ import { cn } from '../../lib/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 import { Stream, StagePass } from '../../types/broadcast'
-import BroadcastChat from '../../components/broadcast/BroadcastChat'
+import BroadcastChat, { Message } from '../../components/broadcast/BroadcastChat'
 import BroadcastControls from '../../components/broadcast/BroadcastControls'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
@@ -46,15 +46,16 @@ import { useBroadcastTicker } from '@/hooks/useBroadcastTicker'
 import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueController'
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStagePasses } from '@/hooks/useStagePasses'
-
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
 import { GiftItem } from '@/lib/giftConstants'
+import { getGiftVisualConfig } from '@/lib/giftVisuals'
+
 import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
 import { useTickerStore } from '@/stores/tickerStore'
 import { AnimatePresence } from 'framer-motion'
-import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, ShieldCheck, Sparkles } from 'lucide-react'
+import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, ShieldCheck, Sparkles, Skull } from 'lucide-react'
 import { toast } from 'sonner'
 import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
 import AbilityBox from '@/components/broadcast/AbilityBox'
@@ -63,9 +64,11 @@ import BroadcastAbilityEffects from '@/components/broadcast/BroadcastAbilityEffe
 import BroadcasterStatsModal from '@/components/broadcast/BroadcasterStatsModal'
 import CoinStoreModal from '@/components/broadcast/CoinStoreModal'
 import GiftBoxModal from '@/components/broadcast/GiftBoxModal'
+import GiftVideoOverlay from '@/components/broadcast/GiftVideoOverlay'
 import OpenStagePassModal from '@/components/broadcast/OpenStagePassModal'
 import PinProductModal from '@/components/broadcast/PinProductModal'
 import TickerControlPanel from '@/components/broadcast/TickerControlPanel'
+import { FloatingChatOverlay } from '@/components/broadcast/FloatingChatOverlay'
 import UserActionModal from '@/components/broadcast/UserActionModal'
 import UserStatsModal from '@/components/broadcast/UserStatsModal'
 
@@ -185,6 +188,12 @@ export function BroadcastPage() {
 
   const isHost = stream?.user_id === user?.id
   const isBroadcaster = isHost;
+
+  // Stage Pass System
+  const stagePassesHook = useStagePasses(streamId)
+  const { stagePasses, requests, approveStagePass, denyStagePass } = stagePassesHook
+
+  console.debug('[BroadcastPage StagePass Requests]', { streamId, requests, stagePasses })
 
   const roomName = useMemo(() => {
     if (stream?.agora_channel) return stream.agora_channel;
@@ -353,7 +362,7 @@ export function BroadcastPage() {
         console.warn(
           `[BroadcastPage] Failed to publish ${kind} track`,
           err,
-          { trackId: candidate.getTrackId?.(), kind }
+           { trackId: candidate.trackId, kind }
         )
         return undefined
       }
@@ -364,7 +373,7 @@ export function BroadcastPage() {
 
     // If direct publication fails, attempt to recreate the LiveKit track from the native MediaStreamTrack
     try {
-      const mediaTrack = track.mediaStreamTrack()
+             const mediaTrack = track.mediaStreamTrack ? track.mediaStreamTrack() : undefined;
       if (!mediaTrack) {
         console.warn('[BroadcastPage] No native media track available for clone publish', { kind })
         return undefined
@@ -452,6 +461,134 @@ export function BroadcastPage() {
   const [selectedBattleTheme, setSelectedBattleTheme] = useState<string>(DEFAULT_BATTLE_THEME_ID);
   
   // Auto-end stream if no viewers and no messages for 10 minutes
+  const [floatingChatMessages, setFloatingChatMessages] = useState<Message[]>([]);
+  const [streamMods, setStreamMods] = useState<string[]>([]);
+
+  const resolveFloatingChatProfile = useCallback(async (message: Message) => {
+    const existingProfile = (message as any).user_profiles;
+
+    const existingUsername =
+      existingProfile?.username ||
+      (message as any).username ||
+      (message as any).user_name ||
+      (message as any).display_name ||
+      '';
+
+    const badNames = new Set(['', 'unknown', 'unknown:', 'guest', 'user']);
+
+    const hasGoodUsername =
+      typeof existingUsername === 'string' &&
+      existingUsername.trim() &&
+      !badNames.has(existingUsername.trim().toLowerCase());
+
+    if (hasGoodUsername && existingProfile?.username) {
+      return message;
+    }
+
+    if (!message.user_id) {
+      return message;
+    }
+
+    const { data: profileRow, error } = await supabase
+      .from('user_profiles')
+      .select(`
+        id,
+        username,
+        display_name,
+        email,
+        avatar_url,
+        role,
+        troll_role,
+        created_at,
+        rgb_username_expires_at,
+        glowing_username_color
+      `)
+      .eq('id', message.user_id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[FloatingChat] Failed to hydrate user profile:', error);
+    }
+
+    const username =
+      profileRow?.username ||
+      profileRow?.display_name ||
+      profileRow?.email?.split('@')?.[0] ||
+      existingUsername ||
+      'Troll Citizen';
+
+    return {
+      ...message,
+      username,
+      user_name: username,
+      user_avatar:
+        profileRow?.avatar_url ||
+        (message as any).user_avatar ||
+        existingProfile?.avatar_url ||
+        '',
+      user_role:
+        profileRow?.role ||
+        (message as any).user_role ||
+        existingProfile?.role ||
+        null,
+      user_troll_role:
+        profileRow?.troll_role ||
+        (message as any).user_troll_role ||
+        existingProfile?.troll_role ||
+        null,
+      user_created_at:
+        profileRow?.created_at ||
+        (message as any).user_created_at ||
+        existingProfile?.created_at ||
+        null,
+      user_rgb_expires_at:
+        profileRow?.rgb_username_expires_at ||
+        (message as any).user_rgb_expires_at ||
+        existingProfile?.rgb_username_expires_at ||
+        null,
+      user_glowing_username_color:
+        profileRow?.glowing_username_color ||
+        (message as any).user_glowing_username_color ||
+        existingProfile?.glowing_username_color ||
+        null,
+      user_profiles: {
+        ...(existingProfile || {}),
+        username,
+        display_name: profileRow?.display_name || existingProfile?.display_name || null,
+        email: profileRow?.email || existingProfile?.email || null,
+        avatar_url: profileRow?.avatar_url || existingProfile?.avatar_url || '',
+        role: profileRow?.role || existingProfile?.role || null,
+        troll_role: profileRow?.troll_role || existingProfile?.troll_role || null,
+        created_at: profileRow?.created_at || existingProfile?.created_at || null,
+        rgb_username_expires_at:
+          profileRow?.rgb_username_expires_at ||
+          existingProfile?.rgb_username_expires_at ||
+          null,
+        glowing_username_color:
+          profileRow?.glowing_username_color ||
+          existingProfile?.glowing_username_color ||
+          null,
+      },
+    } as Message;
+  }, []);
+
+  const pushFloatingChatMessage = useCallback(async (message: Message) => {
+    if (!message?.id || !message?.content) return;
+
+    const hydratedMessage = await resolveFloatingChatProfile(message);
+
+    setFloatingChatMessages(prev => {
+      if (prev.some(existing => existing.id === hydratedMessage.id)) return prev;
+      return [...prev, hydratedMessage].slice(-6);
+    });
+
+    window.setTimeout(() => {
+      setFloatingChatMessages(prev =>
+        prev.filter(existing => existing.id !== hydratedMessage.id)
+      );
+    }, 9000);
+  }, [resolveFloatingChatProfile]);
+
   const [hasReceivedChatMessage, setHasReceivedChatMessage] = useState(false)
   const streamStartTimeRef = useRef<Date | null>(null)
   const autoEndCheckedRef = useRef(false)
@@ -476,15 +613,137 @@ export function BroadcastPage() {
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
    const [isStagePassModalOpen, setIsStagePassModalOpen] = useState(false)
+   const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans' | 'settings'>('chat')
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
    const [giftNameMap, setGiftNameMap] = useState<Record<string, string>>({})
    const [giftUserPositions, setGiftUserPositions] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({})
     const getGiftUserPositionsRef = useRef<() => Record<string, { top: number; left: number; width: number; height: number }>>(() => ({}))
     const giftNameMapRef = useRef<Record<string, string>>({})
+   const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{
+     sender_id: string;
+     sender_username: string;
+     sender_avatar_url: string | null;
+     total_gift_coins: number;
+     last_gift_at: string | null;
+   }>>([])
+   const [isAllTimeTopGiftersLoading, setIsAllTimeTopGiftersLoading] = useState(false)
 
-  // Stage Pass System
-  const stagePassesHook = useStagePasses(streamId);
+   useEffect(() => {
+     const broadcasterId = stream?.user_id;
+     if (!broadcasterId) {
+       setAllTimeTopGifters([]);
+       return;
+     }
+
+     let cancelled = false;
+
+     const loadAllTimeTopGifters = async () => {
+       setIsAllTimeTopGiftersLoading(true);
+
+       try {
+         const { data: giftRows, error: giftError } = await supabase
+           .from('stream_gifts')
+           .select('*')
+           .eq('receiver_id', broadcasterId)
+           .limit(5000);
+
+         if (giftError) {
+           console.warn('[BroadcastPage] Failed to load all-time top gifters:', giftError);
+           if (!cancelled) setAllTimeTopGifters([]);
+           return;
+         }
+
+         const totals = new Map<string, { total: number; lastGiftAt: string | null }>();
+
+         (giftRows || []).forEach((row: any) => {
+           const senderId = String(row.sender_id || row.user_id || row.senderId || '');
+           if (!senderId || senderId === broadcasterId) return;
+
+           const amount = Number(
+             row.coins_amount ??
+             row.coins_spent ??
+             row.total_coins ??
+             row.total_amount ??
+             row.amount ??
+             row.coin_value ??
+             0
+           );
+
+           if (!Number.isFinite(amount) || amount <= 0) return;
+
+           const current = totals.get(senderId) || { total: 0, lastGiftAt: null };
+           const rowCreatedAt = row.created_at || row.timestamp || null;
+
+           totals.set(senderId, {
+             total: current.total + amount,
+             lastGiftAt:
+               rowCreatedAt && (!current.lastGiftAt || new Date(rowCreatedAt).getTime() > new Date(current.lastGiftAt).getTime())
+                 ? rowCreatedAt
+                 : current.lastGiftAt,
+           });
+         });
+
+         const senderIds = Array.from(totals.keys());
+
+         if (senderIds.length === 0) {
+           if (!cancelled) setAllTimeTopGifters([]);
+           return;
+         }
+
+         const { data: profileRows, error: profileError } = await supabase
+           .from('user_profiles')
+           .select('id, username, display_name, email, avatar_url')
+           .in('id', senderIds);
+
+         if (profileError) {
+           console.warn('[BroadcastPage] Failed to load top gifter profiles:', profileError);
+         }
+
+         const profileMap = new Map<string, any>();
+         (profileRows || []).forEach((row: any) => {
+           if (row?.id) profileMap.set(row.id, row);
+         });
+
+         const ranked = senderIds
+           .map((senderId) => {
+             const profileRow = profileMap.get(senderId);
+             const total = totals.get(senderId)!;
+
+             return {
+               sender_id: senderId,
+               sender_username:
+                 profileRow?.username ||
+                 profileRow?.display_name ||
+                 profileRow?.email?.split('@')?.[0] ||
+                 'Troll Citizen',
+               sender_avatar_url: profileRow?.avatar_url || null,
+               total_gift_coins: Math.floor(total.total),
+               last_gift_at: total.lastGiftAt,
+             };
+           })
+           .sort((a, b) => b.total_gift_coins - a.total_gift_coins)
+           .slice(0, 10);
+
+         if (!cancelled) setAllTimeTopGifters(ranked);
+       } catch (err) {
+         console.warn('[BroadcastPage] Unexpected error loading all-time top gifters:', err);
+         if (!cancelled) setAllTimeTopGifters([]);
+       } finally {
+         if (!cancelled) setIsAllTimeTopGiftersLoading(false);
+       }
+     };
+
+     void loadAllTimeTopGifters();
+
+     return () => {
+       cancelled = true;
+     };
+   }, [stream?.user_id])
+
+  const handleRemoveGiftOverlay = useCallback((giftId: string) => {
+    setRecentGifts((current) => current.filter((gift) => gift.id !== giftId))
+  }, [])
 
   // Determine if current user can publish based on Stage Pass status
   const canPublish = isHost
@@ -527,7 +786,12 @@ export function BroadcastPage() {
     giftNameMapRef.current = giftNameMap;
   }, [giftNameMap]);
 
-  const processedGiftIdsRef = useRef<Set<string>>(new Set())
+const processedGiftIdsRef = useRef<Set<string>>(new Set())
+   // Per-page dedupe of gift animations used by processGiftEvent.
+   // Normalised animationId is always the stream_gifts row UUID, so whether the
+   // source is postgres_changes or the broadcast channel, the second arrival is
+   // caught here and skipped.
+   const seenGiftAnimationIdsRef = useRef<Set<string>>(new Set())
 
   // Acquire camera overlay stream when enabled for gaming mode
   useEffect(() => {
@@ -663,55 +927,140 @@ export function BroadcastPage() {
     );
   }, []);
 
-  const processGiftEvent = useCallback((giftData: any) => {
-    if (!giftData) {
-      if (import.meta.env.DEV) console.log('[BroadcastPage] ⚠️ processGiftEvent: giftData is null/undefined');
-      return;
+  const enrichGiftForOverlay = useCallback(async (incomingGift: any) => {
+    const giftItemId =
+      incomingGift?.gift_id ||
+      incomingGift?.gift_item_id ||
+      incomingGift?.giftId ||
+      incomingGift?.giftItemId ||
+      null;
+
+    if (!giftItemId) {
+      return incomingGift;
     }
 
-    const giftId = giftData.id || `gift-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    if (processedGiftIdsRef.current.has(giftId)) {
-      if (import.meta.env.DEV) console.log('[BroadcastPage] Duplicate gift event skipped', giftId);
-      return;
-    }
-    processedGiftIdsRef.current.add(giftId);
-    window.setTimeout(() => processedGiftIdsRef.current.delete(giftId), 12_000);
+    const { data: giftItem, error } = await supabase
+      .from('gift_items')
+      .select('id,name,slug,gift_slug,icon,icon_url,animation_url,animation_type,coin_cost')
+      .eq('id', giftItemId)
+      .maybeSingle();
 
-    const incomingStreamId = giftData.streamId || giftData.stream_id || giftData.metadata?.streamId || giftData.metadata?.stream_id;
-    const receiverId = giftData.receiver_id || giftData.recipient_id || giftData.receiverId || giftData.recipientId || giftData.metadata?.receiver_id || giftData.metadata?.recipient_id;
-    console.log('[BroadcastPage] ✅ Processing gift', { giftId, incomingStreamId, currentStreamId: streamId, receiverId });
-    
-    if (incomingStreamId && incomingStreamId !== streamId) {
-      console.log('[BroadcastPage] ⚠️ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId });
-      return;
+    if (error || !giftItem) {
+      console.warn('[BroadcastPage] Could not enrich gift overlay payload', {
+        giftItemId,
+        error,
+        incomingGift,
+      });
+      return incomingGift;
     }
 
-    const resolvedGiftAmount = resolveGiftAmount(giftData);
-    const resolvedGiftName = resolveGiftName(giftData);
-
-    const newGift: BroadcastGift = {
-      id: giftId,
-      gift_id: giftData.gift_id,
-      gift_name: resolvedGiftName,
-      gift_icon: giftData.gift_icon || giftData.metadata?.gift_icon || '🎁',
-      gift_slug: giftData.gift_slug || giftData.metadata?.gift_slug,
-      animation_key: giftData.animation_key || giftData.metadata?.animation_key,
-      animation_type: giftData.animation_type || giftData.metadata?.animation_type,
-      animation_url: giftData.animation_url || giftData.metadata?.animation_url,
-      animation_duration_ms: giftData.animation_duration_ms || giftData.metadata?.animation_duration_ms,
-      sound_url: giftData.sound_url || giftData.metadata?.sound_url,
-      is_fullscreen: giftData.is_fullscreen ?? giftData.metadata?.is_fullscreen,
-      rarity: giftData.rarity || giftData.metadata?.rarity,
-      tray_visual_url: giftData.tray_visual_url || giftData.metadata?.tray_visual_url,
-      tray_gradient: giftData.tray_gradient || giftData.metadata?.tray_gradient,
-      amount: resolvedGiftAmount || giftData.quantity || 1,
-      quantity: giftData.quantity || 1,
-      sender_id: giftData.sender_id,
-      sender_name: giftData.sender_name || 'Someone',
-      receiver_id: receiverId,
-      receiver_name: giftData.receiver_name || giftData.metadata?.receiver_name,
-      created_at: giftData.timestamp || giftData.created_at || new Date().toISOString(),
+    const enrichedGift = {
+      ...incomingGift,
+      gift_name:
+        incomingGift.gift_name && incomingGift.gift_name !== 'Gift'
+          ? incomingGift.gift_name
+          : giftItem.name,
+      slug:
+        giftItem.slug ||
+        giftItem.gift_slug ||
+        incomingGift.slug ||
+        incomingGift.gift_slug ||
+        null,
+      gift_slug:
+        giftItem.gift_slug ||
+        giftItem.slug ||
+        incomingGift.gift_slug ||
+        incomingGift.slug ||
+        null,
+      gift_icon: incomingGift.gift_icon || giftItem.icon || null,
+      icon: incomingGift.icon || giftItem.icon || null,
+      icon_url: giftItem.icon_url || incomingGift.icon_url || null,
+      animation_url: giftItem.animation_url || incomingGift.animation_url || null,
+      animation_type: giftItem.animation_type || incomingGift.animation_type || 'video',
+      coin_cost:
+        giftItem.coin_cost || incomingGift.coin_cost || incomingGift.amount || null,
     };
+
+    if (import.meta.env.DEV) {
+      console.info('[BroadcastPage] Enriched gift overlay payload', {
+        gift_id: giftItemId,
+        gift_name: enrichedGift.gift_name,
+        slug: enrichedGift.slug,
+        gift_slug: enrichedGift.gift_slug,
+        animation_url: enrichedGift.animation_url,
+      });
+    }
+
+    return enrichedGift;
+  }, []);
+
+   const processGiftEvent = useCallback(async (giftData: any) => {
+     if (!giftData) {
+       if (import.meta.env.DEV) console.log('[BroadcastPage] ⚠️ processGiftEvent: giftData is null/undefined');
+       return;
+     }
+
+     // ── Stable animation-id ─────────────────────────────────────────────────
+     const animationId = String(giftData.id || giftData.stream_gift_id || giftData.gift_transaction_id || '');
+     if (!animationId) return // noise: skip entirely
+     const giftId = animationId;
+
+     if (seenGiftAnimationIdsRef.current.has(animationId)) {
+       if (import.meta.env.DEV) console.log('[BroadcastPage] Duplicate animation skipped', animationId);
+       return;
+     }
+     seenGiftAnimationIdsRef.current.add(animationId);
+
+     // ── Enrich / validate ───────────────────────────────────────────────────
+     const enrichedGiftData = await enrichGiftForOverlay(giftData);
+
+     const incomingStreamId = enrichedGiftData.streamId || enrichedGiftData.stream_id || enrichedGiftData.metadata?.streamId || enrichedGiftData.metadata?.stream_id;
+     const receiverId = enrichedGiftData.receiver_id || enrichedGiftData.recipient_id || enrichedGiftData.receiverId || enrichedGiftData.recipientId || enrichedGiftData.metadata?.receiver_id || enrichedGiftData.metadata?.recipient_id;
+     console.log('[BroadcastPage] ✅ Processing gift', { animationId, incomingStreamId, currentStreamId: streamId, receiverId });
+
+     if (incomingStreamId && incomingStreamId !== streamId) {
+       console.log('[BroadcastPage] ⚠️ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId });
+       return;
+     }
+
+     const resolvedGiftAmount = resolveGiftAmount(enrichedGiftData);
+     const resolvedGiftName = resolveGiftName(enrichedGiftData);
+
+     // ── Build state entry ──────────────────────────────────────────────────
+     const newGift = {
+      id: giftId,
+      gift_id: enrichedGiftData.gift_id,
+      gift_name: resolvedGiftName,
+      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || '🎁',
+      gift_slug: enrichedGiftData.gift_slug || enrichedGiftData.metadata?.gift_slug,
+      animation_key: enrichedGiftData.animation_key || enrichedGiftData.metadata?.animation_key,
+      animation_type: enrichedGiftData.animation_type || enrichedGiftData.metadata?.animation_type,
+      animation_url:
+        enrichedGiftData.animation_url ||
+        enrichedGiftData.video_url ||
+        enrichedGiftData.metadata?.animation_url ||
+        enrichedGiftData.metadata?.video_url ||
+        undefined,
+      video_url:
+        enrichedGiftData.video_url ||
+        enrichedGiftData.animation_url ||
+        enrichedGiftData.metadata?.video_url ||
+        enrichedGiftData.metadata?.animation_url ||
+        undefined,
+      animation_duration_ms: enrichedGiftData.animation_duration_ms || enrichedGiftData.metadata?.animation_duration_ms,
+      sound_url: enrichedGiftData.sound_url || enrichedGiftData.metadata?.sound_url,
+      is_fullscreen: enrichedGiftData.is_fullscreen ?? enrichedGiftData.metadata?.is_fullscreen,
+      rarity: enrichedGiftData.rarity || enrichedGiftData.metadata?.rarity,
+      tray_visual_url: enrichedGiftData.tray_visual_url || enrichedGiftData.metadata?.tray_visual_url,
+      tray_gradient: enrichedGiftData.tray_gradient || enrichedGiftData.metadata?.tray_gradient,
+      amount: resolvedGiftAmount || enrichedGiftData.quantity || 1,
+      quantity: enrichedGiftData.quantity || 1,
+      sender_id: enrichedGiftData.sender_id,
+      sender_name: enrichedGiftData.sender_name || enrichedGiftData.metadata?.sender_name || 'Someone',
+      receiver_id: receiverId,
+      receiver_name: enrichedGiftData.receiver_name || enrichedGiftData.metadata?.receiver_name,
+      created_at: enrichedGiftData.timestamp || enrichedGiftData.created_at || new Date().toISOString(),
+    } as BroadcastGift;
 
     // Show gift banner for ALL gifts to broadcaster
     setRecentGifts((prev) => {
@@ -724,10 +1073,11 @@ export function BroadcastPage() {
       return updated;
     });
 
-    // Auto-remove gift from recentGifts after 2 seconds to ensure banner disappears
+    // Auto-remove gift from recentGifts after the gift's animation duration so overlays play fully
+    const giftDurationMs = newGift.animation_duration_ms ?? getGiftVisualConfig(newGift).durationMs;
     setTimeout(() => {
       setRecentGifts(prev => prev.filter(g => g.id !== giftId));
-    }, 2000);
+    }, giftDurationMs + 150);
 
     const missingIds = [giftData.sender_id, receiverId].filter(
       (id): id is string => !!id && !giftNameMapRef.current[id]
@@ -764,58 +1114,65 @@ export function BroadcastPage() {
                 : gift
             )
           );
-        })
-        .catch((err) => {
+        },
+        (err) => {
           console.warn('[BroadcastPage] Failed to resolve gift usernames:', err);
-        });
-    }
-
-     // Start animation via centralized store; all participants should see this.
-     // Update broadcaster profile optimistically
-     if (receiverId === streamRef.current?.user_id && resolvedGiftAmount > 0) {
-      const giftAmount = Math.floor(resolvedGiftAmount);
-      
-      setBroadcasterProfile((prev: any) => {
-        if (!prev) {
-          pendingBroadcasterGiftsRef.current += giftAmount;
-          return prev;
         }
-        return { ...prev, troll_coins: Number(prev.troll_coins || 0) + giftAmount };
-      });
-
-      // Also update the stream's total_gifts_coins
-      setStream((prev) => prev ? {
-        ...prev,
-        total_gifts_coins: (prev.total_gifts_coins || 0) + giftAmount,
-      } : prev);
+      );
     }
 
-    const levelGiftAmount = resolvedGiftAmount;
+// Start animation via centralized store; all participants should see this.
+      // Update broadcaster profile optimistically
+      if (receiverId === streamRef.current?.user_id && resolvedGiftAmount > 0) {
+       const giftAmount = Math.floor(resolvedGiftAmount);
+       
+       setBroadcasterProfile((prev: any) => {
+         if (!prev) {
+           pendingBroadcasterGiftsRef.current += giftAmount;
+           return prev;
+         }
+         return { ...prev, troll_coins: Number(prev.troll_coins || 0) + giftAmount };
+       });
 
-    if (levelGiftAmount > 0 && receiverId === streamRef.current?.user_id) {
-      window.dispatchEvent(new CustomEvent('broadcast-gift-level', {
+       // Also update the stream's total_gifts_coins
+       setStream((prev) => prev ? {
+         ...prev,
+         total_gifts_coins: (prev.total_gifts_coins || 0) + giftAmount,
+       } : prev);
+     }
+
+     const levelGiftAmount = resolvedGiftAmount;
+
+     if (levelGiftAmount > 0 && receiverId === streamRef.current?.user_id) {
+       window.dispatchEvent(new CustomEvent('broadcast-gift-level', {
+         detail: {
+           giftId,
+           broadcasterId: streamRef.current?.user_id,
+           receiverId,
+           streamId,
+           amount: levelGiftAmount,
+           timestamp: Date.now(),
+         }
+       }));
+     }
+
+// Dispatch balance update event for UserStatsModal and auth store
+      // Use consistent snake_case field names
+      window.dispatchEvent(new CustomEvent('broadcast-balance-update', {
         detail: {
-          giftId,
-          broadcasterId: streamRef.current?.user_id,
-          receiverId,
-          streamId,
-          amount: levelGiftAmount,
+          // Provide both snake_case and camelCase for consumers
+          sender_id: giftData.sender_id,
+          senderId: giftData.sender_id,
+          receiver_id: receiverId,
+          receiverId: receiverId,
+          amount: resolvedGiftAmount,
+          coins: resolvedGiftAmount,
+          gift_id: giftId,
+          giftId: giftId,
           timestamp: Date.now(),
         }
       }));
-    }
-
-    // Dispatch balance update event for UserStatsModal and auth store
-    // Use consistent snake_case field names
-    window.dispatchEvent(new CustomEvent('broadcast-balance-update', {
-      detail: {
-        senderId: giftData.sender_id,
-        receiverId: receiverId,
-        amount: resolvedGiftAmount,
-        timestamp: Date.now(),
-      }
-    }));
-  }, [streamId, resolveGiftAmount, resolveGiftName, supabase]);
+   }, [streamId, resolveGiftAmount, resolveGiftName, supabase]);
 
   const stopLocalTracks = useCallback(() => {
     if (localTracks) {
@@ -1158,13 +1515,17 @@ useEffect(() => {
 
   const handleOpenStagePassConfirm = useCallback(async (count: number, priceCoins: number) => {
     try {
-      await (stagePassesHook as any).openStagePasses(count, priceCoins);
-      await (stagePassesHook as any).loadStagePasses?.();
+      if (!streamId || !user?.id) {
+        toast.error('Not connected to a live stream');
+        return;
+      }
+      await stagePassesHook.openStagePasses(Math.min(count, 5), Math.max(0, priceCoins));
+      await stagePassesHook.loadStagePasses();
       setIsStagePassModalOpen(false);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to open Stage Passes');
     }
-  }, [stagePassesHook])
+  }, [stagePassesHook, streamId, user?.id])
   const handleOpenCoinStore = useCallback(() => setIsCoinStoreOpen(true), [])
   const handleCloseCoinStore = useCallback(() => setIsCoinStoreOpen(false), [])
   const handleOpenAbilityBox = useCallback(() => setIsAbilityBoxOpen(true), [])
@@ -1591,43 +1952,37 @@ useEffect(() => {
     }
   }, [navigate, streamId]);
 
-  useStreamRealtime(streamId, {
-    onStream: (event) => {
-      // During live battle, only update critical properties to prevent remounts
-      if (stream?.is_battle && stream?.battle_status === 'active') {
-        const nextStream = event.new;
-        // Only update battle-related properties during active battle
-        if (nextStream.battle_status !== stream.battle_status ||
-            nextStream.battle_end_time !== stream.battle_end_time) {
-          setStream((prev: any) => prev ? { ...prev, 
-            battle_status: nextStream.battle_status,
-            battle_end_time: nextStream.battle_end_time
-          } : prev);
-        }
-        return;
-      }
-      // Normal stream updates for non-battle state
-      handleStreamRealtimeUpdate(event.new);
-    },
-    onGift: (event) => {
-      processGiftEvent(event.new);
-    },
-  }, stream?.battle_id);
+useStreamRealtime(streamId, {
+     onStream: (event) => {
+       // During live battle, only update critical properties to prevent remounts
+       if (stream?.is_battle && stream?.battle_status === 'active') {
+         const nextStream = event.new;
+         // Only update battle-related properties during active battle
+         if (nextStream.battle_status !== stream.battle_status ||
+             nextStream.battle_end_time !== stream.battle_end_time) {
+           setStream((prev: any) => prev ? { ...prev, 
+             battle_status: nextStream.battle_status,
+             battle_end_time: nextStream.battle_end_time
+           } : prev);
+         }
+         return;
+       }
+       // Normal stream updates for non-battle state
+       handleStreamRealtimeUpdate(event.new);
+     },
+     onGift: (event) => {
+       const rawGift = event?.new ?? event
+       if (rawGift) {
+         void processGiftEvent(rawGift)
+       }
+     },
+   });
 
   useEffect(() => {
-    console.log('[BroadcastPage] gift effect deps changed', {
-      streamId,
-      isHost,
-      hasProfile: !!broadcasterProfile,
-      remoteParticipantsCount: remoteParticipants.size,
-      localTracksLength: localTracks?.length || 0,
-    });
-
     if (!streamId) return;
 
-    const presenceKey = user?.id || anonymousViewerIdRef.current;
-    const channel = supabase.channel(`stream:${streamId}`, {
-      config: { presence: { key: presenceKey } },
+    const channel = supabase.channel(`stream-presence:${streamId}`, {
+      config: { presence: { key: user?.id || anonymousViewerIdRef.current } },
     });
 
     const mergeActiveViewerRows = async (viewerMap: Map<string, any>, broadcasterId?: string) => {
@@ -1674,7 +2029,7 @@ useEffect(() => {
 
       Object.values(state).forEach((presences) => {
         (presences as any[]).forEach((presence) => {
-          const id = String(presence?.user_id || presenceKey);
+          const id = String(presence?.user_id || presence?.key || '');
           if (!id || id === broadcasterId) return;
           viewerIds.add(id);
           viewerMap.set(id, {
@@ -1810,33 +2165,14 @@ useEffect(() => {
       clearInterval(heartbeatInterval);
       supabase.removeChannel(channel);
     };
-  }, [streamId, navigate, user?.id, isHost]);
+    }, [streamId, navigate, user?.id, isHost]);
 
-  // Stable gift channel subscription - depends only on streamId
-  useEffect(() => {
-    if (!streamId) return;
-
-    const giftChannel = supabase.channel(`stream-gifts:${streamId}`, {
-      config: { presence: { key: null } },
-    });
-
-    giftChannel
-      .on('broadcast', { event: 'gift_sent' }, (payload) => {
-        if (import.meta.env.DEV) {
-          console.log('[BroadcastPage] 🎁 Received gift_sent broadcast event:', payload.payload);
-        }
-        processGiftEvent(payload.payload);
-      })
-      .subscribe((status) => {
-        if (import.meta.env.DEV) {
-          console.log('[BroadcastPage] Gift channel status:', status, { streamId });
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(giftChannel);
-    };
-  }, [streamId]);
+  // ★ Gift animations are now driven exclusively by useStreamRealtime.onGift
+  // (stream_gifts postgres_changes).  The broadcast gift_sent channel is no
+  // longer subscribed here — the postgres event fires once per INSERT and
+  // both channels resolved to the same animationId (stream_gifts row UUID).
+  // ★ If you are building a minimal overlay or chat overlay that only shows
+  // the in-chat gift line, re-subscribe to `giftChannel` here instead.
 
   useEffect(() => {
     if (recentGifts.length > 0) {
@@ -1846,15 +2182,27 @@ useEffect(() => {
 
   // Listen for broadcast-balance-update events to update both broadcaster profile and auth store
   useEffect(() => {
+    const processedGiftIdsRef = { current: new Set<string>() } as { current: Set<string> };
+
     const handleBroadcastBalanceUpdate = (event: Event) => {
       const detail = (event as CustomEvent).detail || {};
-      const senderId = detail.sender_id || detail.senderId;
-      const receiverId = detail.receiver_id || detail.receiverId;
+      const senderId = detail.sender_id || detail.senderId || detail.sender;
+      const receiverId = detail.receiver_id || detail.receiverId || detail.receiver;
       const amount = Number(detail.amount || detail.coins || detail.value || 0);
+      const giftId = detail.gift_id || detail.giftId || detail.id || null;
 
       if (!amount || !senderId || !receiverId) return;
 
-      console.log('[BroadcastPage] Balance update received:', { senderId, receiverId, amount });
+      // If we have a giftId, dedupe repeated balance events to avoid double-application
+      if (giftId) {
+        if (processedGiftIdsRef.current.has(String(giftId))) {
+          if (import.meta.env.DEV) console.debug('[BroadcastPage] Ignoring duplicate balance update for giftId', giftId);
+          return;
+        }
+        processedGiftIdsRef.current.add(String(giftId));
+      }
+
+      if (import.meta.env.DEV) console.log('[BroadcastPage] Balance update received:', { senderId, receiverId, amount, giftId });
 
       const broadcasterId = streamRef.current?.user_id;
       const currentUserId = user?.id;
@@ -1895,6 +2243,20 @@ useEffect(() => {
       window.removeEventListener('broadcast-balance-update', handleBroadcastBalanceUpdate as EventListener);
     };
   }, [user?.id]);
+
+  // Fetch stream mods for the floating overlay badges
+  useEffect(() => {
+    const fetchMods = async () => {
+      const targetHostId = stream?.user_id;
+      if (!targetHostId) return;
+      const { data } = await supabase
+        .from('stream_moderators')
+        .select('user_id')
+        .eq('broadcaster_id', targetHostId);
+      if (data) setStreamMods(data.map(d => d.user_id));
+    };
+    fetchMods();
+  }, [stream?.user_id]);
 
   const handleLiveKitParticipantConnected = useCallback((participant: RemoteParticipant) => {
     console.log('[BroadcastPage] Participant connected:', participant.identity)
@@ -2190,12 +2552,11 @@ useEffect(() => {
               ...videoPreset,
               facingMode: 'user'
             },
-            audioCaptureDefaults: {
-              ...AudioPresets.audio,
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            }
+             audioCaptureDefaults: {
+               echoCancellation: true,
+               noiseSuppression: true,
+               autoGainControl: true
+             }
           })
           livekitRoomCreatedCountRef.current += 1
           DEBUG_COUNTERS.livekitRoomCreatedCount++
@@ -2668,11 +3029,197 @@ user?.id, // user.id is used for identity
      // In the future, a dedicated mod actions popup could be shown
    }, [])
 
-   const handleCloseModActions = useCallback(() => {
-     // No-op
-   }, [])
+    const handleCloseModActions = useCallback(() => {
+      // No-op
+    }, [])
 
-  const clickHistoryRef = useRef<number[]>([]);
+   // ── Troll Button ───────────────────────────────────────────────────────
+   // Viewers (non-host) can click once per broadcast to trigger a random
+   // temporary prank effect.  The host can never be targeted by their own
+   // broadcast's troll button.
+   const [trollUsedThisBroadcast, setTrollUsedThisBroadcast] = useState(false)
+   const trollEffectsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
+   // Load whether the current user already used their troll this broadcast
+   useEffect(() => {
+     if (!streamId || !user?.id || isHost) return
+
+     const channel = supabase
+       .channel(`troll-usage:${streamId}:${user.id}`)
+       .on(
+         'broadcast',
+         { event: 'troll_used' },
+         (payload: any) => {
+           if (payload?.payload?.user_id === user.id) {
+             setTrollUsedThisBroadcast(true)
+           }
+         },
+       )
+       .subscribe()
+
+     // Also pre-load from DB
+     supabase
+       .from('broadcast_troll_usages')
+       .select('id')
+       .eq('stream_id', streamId)
+       .eq('user_id', user.id)
+       .maybeSingle()
+       .then(({ data }) => {
+         if (data) setTrollUsedThisBroadcast(true)
+       })
+
+     trollEffectsChannelRef.current = channel
+     return () => {
+       supabase.removeChannel(channel)
+       trollEffectsChannelRef.current = null
+     }
+   }, [streamId, user?.id, isHost, supabase])
+
+   // ── Troll Prank Definitions ─────────────────────────────────────────────
+   // Each prank is a temporary effect (±10 s) expressed as a broadcast_active_effects
+   // entry so the existing BroadcastAbilityEffects overlay can render it.
+   type TrollPrank = {
+     name: string
+     icon: string
+     description: string
+     ability_id: string            // matches a BroadcastAbilityEffects entry
+     targetUserLabel?: string      // displayed in the system banner
+     extraData: Record<string, any>
+   }
+
+   const TROLL_PRANKS: TrollPrank[] = [
+     {
+       name:      'Coin Vanish',
+       icon:      '💸',
+       description: 'Broadcaster Troll Coins drained for 10 seconds!',
+       ability_id: 'troll_coin_drain',
+       targetUserLabel: 'broadcaster_coins',
+       extraData: { prankType: 'coin_drain', duration: 10 },
+     },
+     {
+       name:      'Gift Lock',
+       icon:      '🎁',
+       description: 'Gifts disabled in battle mode for 10 seconds!',
+       ability_id: 'troll_gift_lock',
+       targetUserLabel: 'battle_gifts',
+       extraData: { prankType: 'gift_lock', duration: 10 },
+     },
+     {
+       name:      'Worthless Gifts',
+       icon:      '😂',
+       description: 'All gifts worth 1 coin for the next 10 seconds!',
+       ability_id: 'troll_worthless_gifts',
+       targetUserLabel: 'worthless_gifts',
+       extraData: { prankType: 'worthless_gifts', duration: 10 },
+     },
+     {
+       name:      'Troll Flash',
+       icon:      '⚡',
+       description: 'Broadcaster screen flashed for everyone to see!',
+       ability_id: 'troll_flash',
+       targetUserLabel: 'flash',
+       extraData: { prankType: 'flash', duration: 10 },
+     },
+     {
+       name:      'Chaos Audio',
+       icon:      '🔊',
+       description: "Can't hear the broadcaster for 10 seconds!",
+       ability_id: 'troll_audio_gag',
+       targetUserLabel: 'audio_gag',
+       extraData: { prankType: 'audio_gag', duration: 10 },
+     },
+     {
+       name:      'Liar Liar',
+       icon:      '🪞',
+       description: 'Broadcaster video gets a funhouse mirror effect!',
+       ability_id: 'troll_mirror',
+       targetUserLabel: 'mirror',
+       extraData: { prankType: 'mirror', duration: 10 },
+     },
+   ]
+
+   const handleTroll = useCallback(async () => {
+     if (!user || !stream || isHost) {
+       toast.error('Only viewers can troll during a broadcast!')
+       return
+     }
+     if (trollUsedThisBroadcast) {
+       toast.error("You've already used your Troll button this broadcast!")
+       return
+     }
+     if (!streamId) return
+
+     // Pick a random prank the user has NOT triggered yet in this session
+     // (fall back to fully random once all have been used)
+     const channel = trollEffectsChannelRef.current
+     if (!channel) return
+
+     const prank = TROLL_PRANKS[Math.floor(Math.random() * TROLL_PRANKS.length)]
+     const now = new Date()
+     const expiresAt = new Date(now.getTime() + 10_000) // 10 seconds
+
+     try {
+       // 1) Record troll usage (DB + local)
+       await supabase
+         .from('broadcast_troll_usages')
+         .insert({ stream_id: streamId, user_id: user.id, prank_name: prank.name, created_at: now.toISOString() })
+         .then(() => setTrollUsedThisBroadcast(true))
+
+       // Inform all participants that this user has used their troll
+       await channel.send({
+         type: 'broadcast',
+         event: 'troll_used',
+         payload: { user_id: user.id, prank: prank.name },
+       })
+
+       // 2) Insert active effect so BroadcastAbilityEffects renders it
+       const { data: effectData } = await supabase
+         .from('broadcast_active_effects')
+         .insert({
+           stream_id:     streamId,
+           ability_id:    prank.ability_id,
+           activator_id:  user.id,
+           activator_username: profile?.username || 'Anonymous',
+           target_user_id:   null,
+           target_username:   null,
+           started_at:    now.toISOString(),
+           expires_at:    expiresAt.toISOString(),
+           data:          prank.extraData,
+         })
+         .select()
+         .single()
+
+       // 3) Log it
+       await supabase.from('broadcast_ability_logs').insert({
+         stream_id:       streamId,
+         ability_id:      prank.ability_id,
+         activator_id:    user.id,
+         activator_username: profile?.username || 'Anonymous',
+         target_user_id:  null,
+         target_username:  null,
+         amount:          null,
+       })
+
+       // 4) Auto-delete the effect after 10 s so the overlay disappears
+       if (effectData?.id) {
+         setTimeout(async () => {
+           await supabase.from('broadcast_active_effects').delete().eq('id', effectData.id)
+         }, 10_500)
+       }
+
+       toast.success(
+         `😈 Troll used: ${prank.icon} ${prank.name}\n${prank.description}`,
+         { duration: 5000 },
+       )
+
+// 5) Badge functionality has been removed
+      } catch (err: any) {
+        console.error('[handleTroll] Error:', err)
+        toast.error(err.message || 'Troll failed. Try again!')
+      }
+    }, [user, stream, streamId, isHost, trollUsedThisBroadcast, profile?.username, supabase])
+
+   const clickHistoryRef = useRef<number[]>([]);
   const [isClickBlocked, setIsClickBlocked] = useState(false);
 
   const checkClickRate = useCallback(() => {
@@ -3427,6 +3974,13 @@ const handleLike = useCallback(async () => {
                   return vt;
                 })()} />
 
+                {/* Floating Chat Overlay (Stage/Video anchor) */}
+                <FloatingChatOverlay
+                  messages={floatingChatMessages}
+                  streamMods={streamMods}
+                  hostId={stream?.user_id || ''}
+                />
+
                 {/* Gradient overlay — sits above video/fallback */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
@@ -3512,19 +4066,6 @@ const handleLike = useCallback(async () => {
                 })()}
               </section>
 
-                {/* Open Stage Pass (quick action for host, bottom-right of host card) */}
-                {isHost && (
-                  <div className="absolute bottom-5 right-5 z-10">
-                    <button
-                      onClick={handleOpenStagePassModal}
-                      className={cn('flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-black transition-colors', theme.hostCardPrimary)}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Stage Pass
-                    </button>
-                  </div>
-                )}
-
               {/* ── MIDDLE: Stage Guest Grid ── */}
               <section className={cn('flex min-h-0 flex-col overflow-hidden', theme.guestsPanel)}>
                 {/* Chip row */}
@@ -3548,139 +4089,205 @@ const handleLike = useCallback(async () => {
                   })()}
                 </div>
 
-                {/* Guest / empty-slot grid */}
-                <div className="flex-1 min-h-0 overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start">
-                  {(() => {
-                    const livePasses = stagePassesHook.stagePasses.filter(
-                      (p: StagePass) => p.status === 'approved' || p.status === 'live',
-                    );
-                    const emptySlots = Math.max(1, 6 - livePasses.length);
+                 {/* Guest / empty-slot grid */}
+                 <div className="flex-1 min-h-0 overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start">
+                   {(() => {
+                     const livePasses = stagePassesHook.stagePasses.filter(
+                       (p: StagePass) => p.status === 'approved' || p.status === 'live',
+                     );
 
-                    return livePasses.map((pass: StagePass) => {
-                      const username = (pass as any).user_profile?.username || (pass as any).profile?.username || (pass as any).username || 'Stage Guest';
-                      const avatar = (pass as any).user_profile?.avatar_url || (pass as any).profile?.avatar_url || (pass as any).avatar_url || null;
+                     return livePasses.map((pass: StagePass) => {
+                       const username = (pass as any).user_profile?.username || (pass as any).profile?.username || (pass as any).username || 'Stage Guest';
+                       const avatar = (pass as any).user_profile?.avatar_url || (pass as any).profile?.avatar_url || (pass as any).avatar_url || null;
 
-                      return (
-                        <div key={pass.id} className={cn('relative min-h-[210px] rounded-2xl border border-purple-400/40 bg-gradient-to-b from-[#160d2b] to-[#070711] p-4 shadow-[0_0_24px_rgba(168,85,247,0.25)] overflow-hidden', theme.panel)}>
-                          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.18),transparent_45%)]" />
+                       return (
+                         <div key={pass.id} className={cn('relative min-h-[210px] rounded-2xl border border-purple-400/40 bg-gradient-to-b from-[#160d2b] to-[#070711] p-4 shadow-[0_0_24px_rgba(168,85,247,0.25)] overflow-hidden', theme.panel)}>
+                           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.18),transparent_45%)]" />
 
-                          <div className="relative z-10 flex items-start justify-between gap-2">
-                            <span className={guestLabel}>
-                              Stage Guest
-                            </span>
-                            {isHost && (
-                              <button
-                                onClick={async () => {
-                                  await stagePassesHook.removeStageGuest(pass.id);
-                                  await stagePassesHook.refetch();
-                                }}
-                                className="relative z-20 grid h-8 w-8 place-items-center rounded-lg bg-white/8 hover:bg-red-500/15 text-white/70 hover:text-red-300 transition-colors"
-                                aria-label="Remove from stage"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
+                           <div className="relative z-10 flex items-start justify-between gap-2">
+                             <span className={guestLabel}>
+                               Stage Guest
+                             </span>
+                             {isHost && (
+                               <button
+                                 onClick={async () => {
+                                   await stagePassesHook.removeStageGuest(pass.id);
+                                   await stagePassesHook.refetch();
+                                 }}
+                                 className="relative z-20 grid h-8 w-8 place-items-center rounded-lg bg-white/8 hover:bg-red-500/15 text-white/70 hover:text-red-300 transition-colors"
+                                 aria-label="Remove from stage"
+                               >
+                                 <X className="h-4 w-4" />
+                               </button>
+                             )}
+                           </div>
 
-                          <p className="relative z-10 mt-1.5 flex items-center gap-1.5 text-[10px] font-black text-emerald-400">
-                            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                            On Stage
-                          </p>
+                           <p className="relative z-10 mt-1.5 flex items-center gap-1.5 text-[10px] font-black text-emerald-400">
+                             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                             On Stage
+                           </p>
 
-                          <div className="relative z-10 mt-4 flex flex-col items-center">
-                            {avatar ? (
-                              <img src={avatar} alt={username} className="h-20 w-20 rounded-full border-2 border-purple-400 object-cover shadow-[0_0_22px_rgba(168,85,247,0.45)]" />
-                            ) : (
-                              <div className="h-20 w-20 rounded-full border-2 border-purple-400/50 bg-black/50 grid place-items-center text-cyan-200">
-                                <svg className="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                                </svg>
-                              </div>
-                            )}
-                            <p className="mt-3 text-sm font-black text-cyan-100 truncate max-w-full">{username}</p>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-
-                  {/* Empty slots — only show at least one so the section is never empty */}
-                  {Array.from({ length: Math.max(1, 6 - stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'approved' || p.status === 'live').length) }).map((_, i) => (
-                    <button
-                      key={`empty-${i}`}
-                      onClick={isHost ? handleOpenStagePassModal : (async () => {
-                        const openPass = stagePassesHook.stagePasses.find((p: StagePass) => p.status === 'open');
-                        if (openPass) {
-                          const result = await stagePassesHook.requestStagePass(openPass.id);
-                          if (!result.success) toast.error(result.error || 'Failed to request');
-                        }
-                      })}
-                      disabled={!isHost && !stagePassesHook.stagePasses.some((p: StagePass) => p.status === 'open')}
-                      className="min-h-[210px] rounded-2xl border border-dashed border-white/15 bg-black/20 p-4 text-center hover:border-purple-400/60 hover:bg-purple-500/10 transition-all disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <div className="mx-auto mt-10 grid h-16 w-16 place-items-center rounded-full border border-white/15 bg-white/5">
-                        <Plus className="h-8 w-8 text-white/80" />
-                      </div>
-                      <p className="mt-5 text-base font-bold text-slate-300">
-                        {isHost ? 'Open Stage Pass' : (stagePassesHook.stagePasses.some((p: StagePass) => p.status === 'open') ? 'Request Stage Pass' : 'Stage Pass')}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {isHost ? 'to fill this slot' : 'ask to join stage'}
-                      </p>
-                    </button>
-                  ))}
-                </div>
+                           <div className="relative z-10 mt-4 flex flex-col items-center">
+                             {avatar ? (
+                               <img src={avatar} alt={username} className="h-20 w-20 rounded-full border-2 border-purple-400 object-cover shadow-[0_0_22px_rgba(168,85,247,0.45)]" />
+                             ) : (
+                               <div className="h-20 w-20 rounded-full border-2 border-purple-400/50 bg-black/50 grid place-items-center text-cyan-200">
+                                 <svg className="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                                 </svg>
+                               </div>
+                             )}
+                             <p className="mt-3 text-sm font-black text-cyan-100 truncate max-w-full">{username}</p>
+                           </div>
+                         </div>
+                       );
+                     });
+                   })()}
+                 </div>
               </section>
 
               {/* ── RIGHT: Chat Panel ── */}
-              <aside className={theme.chatPanel}>
+              <aside className={cn(theme.chatPanel, 'bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]')}>
                 {/* Chat tabs */}
-                <div className="grid grid-cols-4 border-b border-white/10">
-                  {['Chat', 'Gifts', 'Top Fans', 'Settings'].map((tab, tIdx) => (
-                    <button
-                      key={tab}
-                      className={`relative h-16 text-sm font-black transition-colors ${
-                        tIdx === 0 ? 'text-white' : 'text-white/60 hover:text-white/80'
-                      } data-[active=true]:text-cyan-300`}
-                      data-active={tIdx === 0}
-                    >
-                      {tab}
-                      {tIdx === 0 && (
-                        <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
-                      )}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-3 border-b border-white/10 bg-black/10">
+                  {['Chat',  'Top Fans', 'Settings'].map((tab) => {
+                    const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'gifts' | 'top-fans' | 'settings'
+                    const active = chatTab === tabKey
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setChatTab(tabKey)}
+                        className={cn(
+                          'relative h-16 text-sm font-black transition-colors',
+                          active ? 'text-white' : 'text-white/60 hover:text-white/80',
+                        )}
+                        data-active={active}
+                      >
+                        {tab}
+                        {active && (
+                          <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
 
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <BroadcastChat
-                    streamId={streamId || ''}
-                    hostId={stream?.user_id || ''}
-                    isViewer
-                    onMessageSent={handleLike}
-                  />
+                  {chatTab === 'chat' ? (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent [&_*]:border-white/10 [&_form]:mt-auto [&_form]:order-last [&_form]:border-t [&_form]:bg-black/10 [&_form]:backdrop-blur-md [&_input]:!bg-black/20 [&_input]:!text-white [&_input]:placeholder:text-white/35 [&_textarea]:!bg-black/20 [&_textarea]:!text-white [&_textarea]:placeholder:text-white/35">
+                      <BroadcastChat
+                        streamId={streamId || ''}
+                        hostId={stream?.user_id || ''}
+                        onFloatingMessage={pushFloatingChatMessage}
+                        onMessageSent={() => {
+                          setHasReceivedChatMessage(true);
+                        }}
+                        isHost={isHost}
+                      />
+                    </div>
+                  ) : chatTab === 'gifts' ? (
+                    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>
+                      {recentGifts.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
+                          No gifts yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {recentGifts.slice(0, 12).map((gift) => (
+                            <div key={gift.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-bold text-white truncate">{gift.sender_username || 'Anonymous'}</div>
+                                  <div className="text-xs text-slate-400 truncate">Sent {gift.quantity || 1} {gift.gift_name || 'gift'}</div>
+                                </div>
+                                <div className="text-xs font-semibold text-cyan-300">{gift.coins_amount?.toLocaleString() || gift.amount?.toLocaleString() || '0'} coins</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : chatTab === 'top-fans' ? (
+                    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto bg-transparent p-4 text-sm text-slate-200">
+                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">All-Time Top Gifters</div>
+                      {isAllTimeTopGiftersLoading ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">Loading top gifters...</div>
+                      ) : allTimeTopGifters.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">No all-time gifters yet.</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {allTimeTopGifters.map((fan, index) => (
+                            <Link
+                              key={fan.sender_id}
+                              to={`/profile/${fan.sender_id}`}
+                              className="block rounded-2xl border border-white/10 bg-black/20 p-3 transition-all hover:border-cyan-300/40 hover:bg-cyan-500/10"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-cyan-300/25 bg-cyan-500/10 text-xs font-black text-cyan-200">
+                                    #{index + 1}
+                                  </div>
+                                  {fan.sender_avatar_url ? (
+                                    <img
+                                      src={fan.sender_avatar_url}
+                                      alt={fan.sender_username}
+                                      className="h-10 w-10 shrink-0 rounded-full border border-cyan-300/40 object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-black text-white">
+                                      {fan.sender_username?.charAt(0)?.toUpperCase() || '?'}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-black text-white hover:text-cyan-200">{fan.sender_username || 'Troll Citizen'}</div>
+                                    <div className="truncate text-xs text-slate-400">
+                                      {fan.last_gift_at
+                                        ? `Last gift: ${new Date(fan.last_gift_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                        : 'All-time supporter'}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <div className="text-sm font-black text-cyan-300">{fan.total_gift_coins.toLocaleString()}</div>
+                                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">coins gifted</div>
+                                </div>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col flex-1 min-h-0 items-center justify-center p-4 text-sm text-slate-500">
+                      <p className="mb-2 font-bold text-white">Settings</p>
+                      <p>Use broadcaster controls to update chat behavior and moderation.</p>
+                    </div>
+                  )}
                 </div>
               </aside>
             </main>
 
-            {/* ── BOTTOM CONTROL BAR ── */}
-            <BroadcastBottomBar
-              openPassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
-              isMicOn={micEnabled}
-              isCamOn={cameraEnabled}
-              isLive={stream.status === 'live'}
-              isGiftTrayOpen={isGiftModalOpen}
-              isOfficerModalOpen={!!(stagePassesHook as any)?.showOfficer}
-              onToggleMic={toggleMicrophone}
-              onToggleCam={toggleCamera}
-              onGift={handleGiftHost}
-              onShare={handleOpenShareModal}
-              onOpenMoreMenu={() => setIsStagePassModalOpen(true)}
-              onEndStream={handleStreamEnd}
-              onOpenStagePass={handleOpenStagePassModal}
-              onManageStagePass={() => setIsStagePassModalOpen(true)}
-              onOpenCoinStore={handleOpenCoinStore}
-            />
+             {/* ── BOTTOM CONTROL BAR ── */}
+             <BroadcastBottomBar
+               openPassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
+               isMicOn={micEnabled}
+               isCamOn={cameraEnabled}
+               isLive={stream.status === 'live'}
+               isGiftTrayOpen={isGiftModalOpen}
+               isOfficerModalOpen={!!(stagePassesHook as any)?.showOfficer}
+               onToggleMic={toggleMicrophone}
+               onToggleCam={toggleCamera}
+               onGift={handleGiftHost}
+               onShare={handleOpenShareModal}
+               onOpenStagePass={() => {}}
+               onManageStagePass={() => {}}
+               onOpenMoreMenu={() => undefined}
+               onEndStream={handleStreamEnd}
+               onOpenCoinStore={handleOpenCoinStore}
+               isHost={isHost}
+             />
 
             {/* ── FOOTER STATUS STRIP ── */}
             <div className={theme.footerStrip}>
@@ -3743,22 +4350,39 @@ const handleLike = useCallback(async () => {
                   onGiftUserPositions={handleGetUserPositions}
                 />
               )}
+              <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} nameMap={giftNameMap} />
+              {/* Stage pass requests panel for broadcasters */}
+              {isHost && (
+                <div className="pointer-events-auto absolute top-20 right-6 z-50">
+                  <StagePassRequestsPanel
+                    requests={requests}
+                    onApprove={(id) => void approveStagePass(id)}
+                    onDeny={(id) => void denyStagePass(id)}
+                  />
+                </div>
+              )}
               {isShareModalOpen && (
+                <div className="pointer-events-auto">
                 <ShareModal
                   isOpen={isShareModalOpen}
                   onClose={handleCloseShareModal}
-                  stream={stream}
-                  broadcasterProfile={broadcasterProfile}
+                  streamTitle={stream?.title || 'Untitled Stream'}
+                  streamUrl={`${window.location.origin}/broadcast/${streamId}`}
+                  broadcasterName={(broadcasterProfile && (broadcasterProfile.display_name || broadcasterProfile.username)) || 'someone'}
                 />
+                </div>
               )}
               {isStagePassModalOpen && (
+                <div className="pointer-events-auto">
                 <OpenStagePassModal
                   isOpen={isStagePassModalOpen}
                   onClose={handleCloseStagePassModal}
                   onConfirm={handleOpenStagePassConfirm}
                 />
+                </div>
               )}
               {isPinProductModalOpen && (
+                <div className="pointer-events-auto">
                 <PinProductModal
                   isOpen={isPinProductModalOpen}
                   onClose={handleClosePinProductModal}
@@ -3770,10 +4394,12 @@ const handleLike = useCallback(async () => {
                     }
                   }}
                 />
+                </div>
               )}
 
               {/* User Action Modal (for gifts, mod actions, etc.) */}
               {userActionTarget && (
+                <div className="pointer-events-auto">
                 <UserActionModal
                   onClose={handleCloseUserAction}
                   userId={userActionTarget.userId}
@@ -3790,10 +4416,12 @@ const handleLike = useCallback(async () => {
                   onArrest={() => handleArrest(userActionTarget.userId, userActionTarget.username || '')}
                   onBlock={() => handleBlock(userActionTarget.userId, userActionTarget.username || '')}
                 />
+                </div>
               )}
 
               {/* Broadcaster Stats Modal */}
               {showHostStats && isHost && (
+                <div className="pointer-events-auto">
                 <BroadcasterStatsModal
                   stream={stream}
                   onClose={handleCloseHostStats}
@@ -3805,10 +4433,12 @@ const handleLike = useCallback(async () => {
                   onFlipCamera={flipCamera}
                   cameraFacingMode={cameraFacingMode}
                 />
+                </div>
               )}
 
               {/* User Stats Modal */}
               {showUserStats && (
+                <div className="pointer-events-auto">
                 <UserStatsModal
                   isOpen={true}
                   onClose={handleCloseUserStats}
@@ -3819,19 +4449,23 @@ const handleLike = useCallback(async () => {
                   licensePlate={showUserStats.licensePlate}
                   isSeatUser={showUserStats.isSeatUser}
                 />
+                </div>
               )}
 
               {/* Coin Store Modal */}
               {isCoinStoreOpen && (
+                <div className="pointer-events-auto">
                 <CoinStoreModal
                   isOpen={isCoinStoreOpen}
                   onClose={handleCloseCoinStore}
                   streamId={streamId}
                 />
+                </div>
               )}
 
               {/* Ability Box Modal */}
               {isAbilityBoxOpen && (
+                <div className="pointer-events-auto">
                 <AbilityBox
                   isOpen={isAbilityBoxOpen}
                   onClose={handleCloseAbilityBox}
@@ -3843,6 +4477,7 @@ const handleLike = useCallback(async () => {
                   getCooldownRemaining={getCooldownRemaining}
                   getEffectRemaining={getEffectRemaining}
                 />
+                </div>
               )}
 
               {/* Broadcast Ability Effects */}

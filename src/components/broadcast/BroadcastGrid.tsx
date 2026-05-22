@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect, useCallback, memo, type CSSProperties } from 'react';
+import { useMemo, useState, useRef, useEffect, useCallback, memo, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { LocalVideoTrack, LocalAudioTrack, RemoteParticipant, RemoteVideoTrack, RemoteAudioTrack } from 'livekit-client';
 import { StagePass, Stream } from '../../types/broadcast';
@@ -485,6 +485,63 @@ const BroadcastGridComponent = function BroadcastGrid({
    }
 
 const { profile } = useAuthStore();
+const stagePassesHook = useStagePasses(streamStatus === 'live' ? stream.id : undefined);
+
+  const liveStagePasses = useMemo(() => {
+    return stagePassesHook.stagePasses
+      .filter((pass: StagePass) => pass.status === 'approved' || pass.status === 'live')
+      .sort((a, b) => (a.stage_index || 0) - (b.stage_index || 0))
+  }, [stagePassesHook.stagePasses]);
+
+  const stageGuestVideoNodes = useMemo(() => {
+    const nodes: Record<string, ReactNode> = {};
+
+    liveStagePasses.forEach((pass) => {
+      const userId = pass.user_id;
+      if (!userId) return;
+
+      const { videoTrack, isScreenShare } = getParticipantAndTracks(userId);
+      if (!videoTrack) return;
+
+      nodes[userId] = (
+        <LiveKitVideoPlayer
+          videoTrack={videoTrack}
+          isLocal={false}
+          isScreenShare={isScreenShare}
+          themeUrl={stream.broadcast_theme_slug}
+          isRgbEnabled={!!stream.has_rgb_effect}
+          broadcasterProfile={broadcasterProfile}
+        />
+      );
+    });
+
+    return nodes;
+  }, [
+    liveStagePasses,
+    stream.broadcast_theme_slug,
+    stream.has_rgb_effect,
+    broadcasterProfile,
+    localTracks,
+    remoteUsers,
+    userIdToLiveKitIdentity,
+  ]);
+
+  const stageGuestMicCam = useMemo(() => {
+    const mapping: Record<string, { micOn: boolean; camOn: boolean }> = {};
+
+    liveStagePasses.forEach((pass) => {
+      const userId = pass.user_id;
+      if (!userId) return;
+
+      const { audioTrack, videoTrack } = getParticipantAndTracks(userId);
+      mapping[userId] = {
+        micOn: !!audioTrack,
+        camOn: !!videoTrack,
+      };
+    });
+
+    return mapping;
+  }, [liveStagePasses, localTracks, remoteUsers, userIdToLiveKitIdentity]);
 
     // seatUserIds for license plate lookup and other seat user checks
     const seatUserIds = useMemo(() => {
@@ -1110,13 +1167,11 @@ const { profile } = useAuthStore();
             denyStagePass: spDenyPass,
             removeStageGuest: spRemoveGuest,
             refetch: spRefetch,
-          } = useStagePasses(streamStatus === 'live' ? stream : undefined);
+          } = stagePassesHook;
 
           if (streamStatus !== 'live') return null;
 
-          const livePasses = spStagePasses.filter(
-            (p: StagePass) => p.status === 'approved' || p.status === 'live',
-          );
+          const livePasses = liveStagePasses;
 
           // Who the broadcaster is
           const isLocalHost = stream.user_id === localUserId;
@@ -1150,9 +1205,7 @@ const { profile } = useAuthStore();
               }
             : undefined;
 
-          const currentUserPassStatus =
-            useStagePasses(stream!)?.currentUserStagePass?.status || null;
-          const _hookFresh = useStagePasses(stream!); // silences unused-streamId lint
+          const currentUserPassStatus = stagePassesHook.currentUserStagePass?.status || null;
           const hasOpenPass = spStagePasses.some(
             (p: StagePass) => p.status === 'open',
           );
@@ -1184,7 +1237,8 @@ const { profile } = useAuthStore();
                 })()
               }
               livePasses={livePasses}
-              guestMicCam={{}}
+              guestMicCam={stageGuestMicCam}
+              guestVideoNodes={stageGuestVideoNodes}
               coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
               isHost={isHost}
               hasOpenPass={isHost ? Boolean(livePasses.length < 6) : hasOpenPass}
@@ -1595,19 +1649,23 @@ boxClass,
                      }
                    }}
                >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white truncate max-w-[120px]">
-                    {displayProfile.username}
-                  </span>
-                  {((displayProfile as any).is_broadofficer || (displayProfile as any).is_broadcast_officer || (displayProfile as any).is_troll_officer || (displayProfile as any).is_lead_officer) && (
-                    <Shield size={12} className="text-cyan-300" />
-                  )}
-                  {licensePlate && (
-                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-100 bg-white/10 px-2 py-0.5 rounded-full">
-                      {licensePlate}
-                    </span>
-                  )}
-                </div>
+<div className="flex items-center gap-2">
+                   {seatIndex !== 0 && (
+                     <>
+                       <span className="text-xs font-bold text-white truncate max-w-[120px]">
+                         {displayProfile.username}
+                       </span>
+                       {((displayProfile as any).is_broadofficer || (displayProfile as any).is_broadcast_officer || (displayProfile as any).is_troll_officer || (displayProfile as any).is_lead_officer) && (
+                         <Shield size={12} className="text-cyan-300" />
+                       )}
+                       {licensePlate && (
+                         <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-100 bg-white/10 px-2 py-0.5 rounded-full">
+                           {licensePlate}
+                         </span>
+                       )}
+                     </>
+                   )}
+                 </div>
 <div className="flex items-center gap-2">
                    <BroadcastHouseIcon 
                      broadcasterId={userId} 

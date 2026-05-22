@@ -3,7 +3,7 @@ import { User, Gift, MicOff, Ban, Shield, X, UserPlus, MessageSquare, Eye, Alert
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
-import { shouldBlockKick } from '../../lib/insuranceSystem';
+import { shouldBlockKick, shouldBlockJail } from '../../lib/insuranceSystem';
 import { shouldBlockModeration } from '../../lib/perkEffects';
 import { useAuthStore } from '../../lib/store';
 import { useNavigate } from 'react-router-dom';
@@ -190,8 +190,8 @@ export default function UserActionModal({
           return;
       }
 
-      // Check for ban insurance - only admins/moderators can ban users with insurance
-      const isProtected = await shouldBlockKick(userId);
+       // Check for ban insurance - only admins/moderators can ban users with insurance
+       const isProtected = await shouldBlockJail(userId);
       
       if (isProtected) {
           const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -213,10 +213,10 @@ export default function UserActionModal({
             currentUserProfile?.is_troll_officer === true ||
             currentUserProfile?.is_lead_officer === true;
           
-          if (!isKickerAdmin && !isKickerModerator) {
-              toast.error("This user has Insurance! Only admins can ban insured users.");
-              return;
-          }
+               if (!isKickerAdmin && !isKickerModerator) {
+                   toast.error("This user has Jail Insurance! Only admins can ban insured users.");
+                   return;
+               }
       }
 
       if (!confirm("Permanently BAN this user from your broadcasts?")) return;

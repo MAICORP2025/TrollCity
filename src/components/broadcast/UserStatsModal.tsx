@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   X, Gem, Coins, Home, AlertTriangle, Shield, Hammer, Wrench,
-  User, Car, CreditCard, History, ShieldCheck, Gift
+  User, Car, CreditCard, History, ShieldCheck, Gift,
+  FileText, Gavel, UserX, ShieldAlert, Ban, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -9,6 +10,8 @@ import { toast } from 'sonner';
 import { spendCoins } from '../../lib/coinUtils';
 import { useInsurance } from '../../lib/hooks/useInsurance';
 import SubscribeButton from '../user/SubscribeButton';
+import HouseRaidModal from './HouseRaidModal';
+import HouseRaidAnimation from './HouseRaidAnimation';
 
 interface House {
   id: string;
@@ -75,6 +78,9 @@ export default function UserStatsModal({
   const [processing, setProcessing] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
   const [subLoading, setSubLoading] = useState(false);
+  const [licenseData, setLicenseData] = useState<{ status: string; suspended_until?: string; expires_at?: string } | null>(null);
+  const [insuranceData, setInsuranceData] = useState<{ homeowners?: any; car?: any; broadcast?: any }>({});
+  const [jailData, setJailData] = useState<{ id: string; release_time: string; created_at: string; reason?: string } | null>(null);
 
   // Live display balances. These prevent the modal from staying stuck on stale props.
   const [displayTrollCoins, setDisplayTrollCoins] = useState(Number(trollCoins || 0));
@@ -90,6 +96,10 @@ export default function UserStatsModal({
 
   const isRaided = raids.some((r) => !r.repaired_at);
   const latestRaid = raids.find((r) => !r.repaired_at);
+  const [showRaidAnimation, setShowRaidAnimation] = useState(false);
+
+  // Calculate cash value: 100 Troll Coins = $1
+  const houseCashValue = house ? Math.round((house.condition || 100) / 100) : 0;
 
   const hasInsurance = hasHomeownersInsurance();
   const insuranceDeductible = currentProfile?.homeowners_insurance_deductible ?? 25;
@@ -297,11 +307,24 @@ export default function UserStatsModal({
         return;
       }
 
+      const oldCondition = house.condition;
+
+      // Insert house raid log
       await supabase.from('house_raids').insert({
         house_id: house.id,
         raided_by_user_id: currentUser.id,
         damage_level: 'minor',
         raided_at: new Date().toISOString()
+      });
+
+      // Insert into raid logs table for tracking
+      await supabase.from('house_raid_logs').insert({
+        house_id: house.id,
+        raider_id: currentUser.id,
+        target_user_id: userId,
+        old_condition: oldCondition,
+        new_condition: Math.max(0, oldCondition - 10),
+        damage_amount: 10
       });
 
       await supabase.rpc('update_house_condition', {
@@ -310,6 +333,10 @@ export default function UserStatsModal({
       });
 
       toast.success(`House raided! -${RAID_COST} TC`);
+
+      // Show raid animation
+      setShowRaidAnimation(true);
+      setTimeout(() => setShowRaidAnimation(false), 4000);
 
       await Promise.all([fetchData(), fetchTransactions(), refreshProfileBalances()]);
 
@@ -337,16 +364,25 @@ export default function UserStatsModal({
     if (!currentUser || !house || !latestRaid) return;
 
     const canRepairWithInsurance = (isOwnProfile || isSeatUser) && hasInsurance;
-    const actualRepairCost = canRepairWithInsurance ? insuranceDeductible : 200;
+    const insuranceDeductible = currentProfile?.homeowners_insurance_deductible ?? 25;
+    
+    // Calculate repair: 100 coins = 5% condition
+    // Current condition, need to calculate how many coins needed for full repair
+    const conditionDeficit = 100 - (house.condition || 0);
+    const repairUnits = Math.ceil(conditionDeficit / 5); // 1 unit = 5%
+    const actualRepairCost = canRepairWithInsurance 
+      ? insuranceDeductible 
+      : repairUnits * 100; // 100 coins per 5% unit
 
-    if ((currentProfile?.troll_coins || 0) < actualRepairCost) {
+    const coinsNeeded = (currentProfile?.troll_coins || 0);
+    if (coinsNeeded < actualRepairCost) {
       toast.error(`Need ${actualRepairCost} Troll Coins to repair${canRepairWithInsurance ? ' (deductible)' : ''}`);
       return;
     }
 
     const confirmMsg = canRepairWithInsurance
-      ? `Pay ${actualRepairCost} TC deductible to repair this house?`
-      : `Pay ${actualRepairCost} TC to repair this house?`;
+      ? `Pay ${actualRepairCost} TC deductible to repair this house to 100%?`
+      : `Pay ${actualRepairCost} TC to repair this house to 100%?`;
 
     if (!confirm(confirmMsg)) return;
 
@@ -362,6 +398,8 @@ export default function UserStatsModal({
           raid_id: latestRaid.id,
           insurance_used: canRepairWithInsurance,
           deductible_paid: canRepairWithInsurance ? actualRepairCost : 0,
+          repair_units: repairUnits,
+          condition_before: house.condition,
           stream_id: streamId
         },
         source: 'broadcast'
@@ -372,6 +410,9 @@ export default function UserStatsModal({
         return;
       }
 
+      const oldCondition = house.condition;
+
+      // Update raid log
       await supabase
         .from('house_raids')
         .update({
@@ -381,6 +422,16 @@ export default function UserStatsModal({
         .eq('house_id', house.id)
         .is('repaired_at', null);
 
+      // Insert repair log
+      await supabase.from('house_repair_logs').insert({
+        house_id: house.id,
+        repaired_by: currentUser.id,
+        coins_spent: actualRepairCost,
+        condition_before: oldCondition,
+        condition_after: 100
+      });
+
+      // Update house condition to 100%
       await supabase
         .from('houses')
         .update({ condition: 100 })
@@ -526,42 +577,58 @@ export default function UserStatsModal({
                   </div>
 
                   {/* House Stats */}
-                  <div className="flex-1">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-zinc-500">Condition</span>
-                        <p
-                          className={`font-bold ${
-                            house.condition < 50
-                              ? 'text-red-400'
-                              : house.condition < 85
-                                ? 'text-yellow-400'
-                                : 'text-green-400'
-                          }`}
-                        >
-                          {house.condition}%
-                        </p>
-                      </div>
+<div className="flex-1">
+                     <div className="grid grid-cols-2 gap-2 text-sm">
+                       <div>
+                         <span className="text-zinc-500">Condition</span>
+                         <p
+                             className={`font-bold ${
+                               house.condition < 50
+                                 ? 'text-red-400'
+                                 : house.condition < 85
+                                   ? 'text-yellow-400'
+                                   : 'text-green-400'
+                             }`}
+                           >
+                             {house.condition}%
+                           </p>
+                         </div>
 
-                      <div>
-                        <span className="text-zinc-500">Level</span>
-                        <p className="font-bold text-white">{house.upgrade_level || 1}</p>
-                      </div>
+                       <div>
+                         <span className="text-zinc-500">Cash Value</span>
+                         <p className="font-bold text-cyan-300">${houseCashValue.toFixed(2)}</p>
+                       </div>
 
-                      <div>
-                        <span className="text-zinc-500">Style</span>
-                        <p className="font-bold text-white capitalize">
-                          {house.house_style?.replace('_', ' ') || 'Standard'}
-                        </p>
-                      </div>
+                       <div>
+                         <span className="text-zinc-500">Level</span>
+                         <p className="font-bold text-white">{house.upgrade_level || 1}</p>
+                       </div>
 
-                      <div>
-                        <span className="text-zinc-500">Neighborhood</span>
-                        <p className="font-bold text-white">
-                          {house.neighborhood_id?.substring(0, 8) || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
+                       <div>
+                         <span className="text-zinc-500">Style</span>
+                         <p className="font-bold text-white capitalize">
+                           {house.house_style?.replace('_', ' ') || 'Standard'}
+                         </p>
+                       </div>
+
+                       <div>
+                         <span className="text-zinc-500">Neighborhood</span>
+                         <p className="font-bold text-white">
+                           {house.neighborhood_id?.substring(0, 8) || 'N/A'}
+                         </p>
+                       </div>
+
+                       <div>
+                         <span className="text-zinc-500">Repair Info</span>
+                         <p className="font-bold text-yellow-300">
+                           {(() => {
+                             const deficit = 100 - (house.condition || 0);
+                             const units = Math.ceil(deficit / 5);
+                             return `${units * 100} coins needed`;
+                           })()}
+                         </p>
+                       </div>
+                     </div>
 
                     {licensePlate && (
                       <div className="mt-2 flex items-center gap-2">
@@ -705,6 +772,12 @@ export default function UserStatsModal({
               </div>
             )}
           </div>
+
+           {/* Raid Animation Overlay */}
+          <HouseRaidAnimation 
+            isVisible={showRaidAnimation} 
+            onDismiss={() => setShowRaidAnimation(false)} 
+          />
         </div>
       </div>
     </div>

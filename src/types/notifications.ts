@@ -2,6 +2,7 @@
 
 // ACCOUNT / SECURITY
 export type NotificationType =
+  // ACCOUNT / SECURITY
   | 'new_login_detected'
   | 'password_changed'
   | 'email_changed'
@@ -9,9 +10,19 @@ export type NotificationType =
   | 'account_warning'
   | 'account_restriction_started'
   | 'account_restriction_expired'
+
+  // JAIL / RESTRICTIONS
   | 'jail_sentence_started'
   | 'jail_release_reminder'
   | 'jail_release_completed'
+  | 'jail_status_changed'
+  | 'jail_insurance_purchased'
+  | 'jail_insurance_expiring_soon'
+  | 'jail_insurance_expired'
+  | 'get_out_of_jail_coin_won'
+  | 'get_out_of_jail_coin_used'
+  | 'get_out_of_jail_coin_denied'
+
   // BROADCAST / LIVE
   | 'someone_you_follow_went_live'
   | 'your_stream_started'
@@ -25,9 +36,19 @@ export type NotificationType =
   | 'broadofficer_removed'
   | 'chat_disabled'
   | 'kicked_from_live'
-  | 'banned_from_live'
+  | 'restricted_from_live'
   | 'live_received_report'
   | 'live_ended_by_staff'
+
+  // STAGE PASS / LIVE GUEST SYSTEM
+  | 'stage_pass_opened'
+  | 'stage_pass_requested'
+  | 'stage_pass_approved'
+  | 'stage_pass_denied'
+  | 'stage_pass_removed'
+  | 'stage_pass_live_started'
+  | 'stage_pass_live_ended'
+
   // CHAT / SOCIAL
   | 'new_private_message'
   | 'message_request_received'
@@ -39,6 +60,7 @@ export type NotificationType =
   | 'tcps_mail_received'
   | 'paid_message_received'
   | 'paid_message_unlocked'
+
   // GIFTS / COINS / WALLET
   | 'gift_received'
   | 'gift_sent'
@@ -56,7 +78,15 @@ export type NotificationType =
   | 'cashout_hold_removed'
   | 'wallet_adjustment'
   | 'refund_issued'
-  // COURT / JAIL / CITY GOVERNANCE
+
+  // HYPE COINS
+  | 'hype_coin_earned'
+  | 'hype_coin_daily_cap_reached'
+  | 'hype_coin_weekly_cap_reached'
+  | 'hype_coins_converted'
+  | 'hype_coin_adjustment'
+
+  // COURT / CITY GOVERNANCE
   | 'court_case_opened'
   | 'added_to_case'
   | 'court_hearing_scheduled'
@@ -72,6 +102,7 @@ export type NotificationType =
   | 'license_suspension_ended'
   | 'appeal_submitted'
   | 'appeal_decision'
+
   // AUCTIONS / MARKETPLACE
   | 'auction_starting_soon'
   | 'seller_you_follow_auction'
@@ -90,6 +121,7 @@ export type NotificationType =
   | 'dispute_resolved'
   | 'seller_rating_received'
   | 'buyer_rating_received'
+
   // FAMILIES / NEIGHBORHOODS
   | 'family_invite_received'
   | 'family_invite_accepted'
@@ -98,6 +130,7 @@ export type NotificationType =
   | 'neighborhood_event_started'
   | 'family_challenge_started'
   | 'family_challenge_completed'
+
   // STORE / INVENTORY
   | 'purchase_successful'
   | 'purchase_failed'
@@ -115,7 +148,7 @@ export interface Notification {
   type: NotificationType
   title: string
   message: string
-  metadata: Record<string, any>
+  metadata: NotificationMetadata
   is_read: boolean
   is_dismissed?: boolean
   created_at: string
@@ -125,32 +158,69 @@ export interface Notification {
 
 export interface NotificationMetadata {
   action_url?: string
+
+  // User / actor
+  actor_id?: string
+  actor_username?: string
+  actor_avatar_url?: string
+
+  // Follow / live notification
+  followed_user_id?: string
+  followed_username?: string
+  followed_avatar_url?: string
+
   // Gift related
   gift_id?: string
+  gift_name?: string
   sender_id?: string
   sender_username?: string
   sender_glowing_color?: string
   coins_spent?: number
+
   // Stream related
   stream_id?: string
   stream_title?: string
   broadcaster_id?: string
+  broadcaster_username?: string
+  broadcaster_avatar_url?: string
+
+  // Stage Pass
+  stage_pass_id?: string
+  stage_index?: number
+  stage_pass_status?: 'open' | 'requested' | 'approved' | 'denied' | 'removed' | 'live' | 'expired'
+  price_coins?: number
+  paid_amount?: number
+
   // Badge related
   badge_id?: string
   earned_at?: string
+
   // Payout related
   payout_id?: string
   status?: string
   amount?: number
   cash_amount?: number
+
+  // Hype Coins
+  hype_coin_amount?: number
+  hype_coins_balance?: number
+  daily_earned?: number
+  daily_cap?: number
+  weekly_earned?: number
+  weekly_cap?: number
+  conversion_rate?: number
+  converted_troll_coins?: number
+
   // Moderation
   action_id?: string
   action_type?: string
   reason?: string
+
   // Battle
   battle_id?: string
   winner_id?: string
   coins_earned?: number
+
   // Court/Jail
   case_id?: string
   docket_id?: string
@@ -158,6 +228,15 @@ export interface NotificationMetadata {
   evidence_id?: string
   appeal_id?: string
   decision?: string
+  jail_sentence_id?: string
+  jail_release_id?: string
+
+  // Jail Insurance / Jail Inventory
+  jail_insurance_id?: string
+  jail_insurance_expires_at?: string
+  get_out_of_jail_coin_id?: string
+  get_out_of_jail_coin_balance?: number
+
   // Auction/Marketplace
   order_id?: string
   listing_id?: string
@@ -165,14 +244,18 @@ export interface NotificationMetadata {
   tracking_number?: string
   dispute_id?: string
   rating?: number
+
   // Family
   family_id?: string
   role?: string
   xp_milestone?: number
+
   // Store
   item_id?: string
   order_number?: string
+
   // Referral
   referred_user_id?: string
+
   [key: string]: any
 }

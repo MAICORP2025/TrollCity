@@ -162,6 +162,8 @@ function StageGuestTile({
   const passId = pass.id
   const username = getPassUsername(pass)
   const avatar = getPassAvatar(pass)
+  const isWaitingForGuest = pass.status === 'approved' && !videoNode
+  const statusText = isWaitingForGuest ? 'Approved — waiting on guest' : 'On Stage'
 
   return (
     <div
@@ -178,7 +180,7 @@ function StageGuestTile({
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            On Stage
+            {statusText}
           </div>
         </div>
 
@@ -341,7 +343,10 @@ export default function BroadcastStageLayout({
 }: BroadcastStageLayoutProps) {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
 
-  const visiblePasses = useMemo(() => livePasses.slice(0, 5), [livePasses])
+  const visiblePasses = useMemo(
+    () => [...livePasses].sort((a, b) => (a.stage_index || 0) - (b.stage_index || 0)).slice(0, 5),
+    [livePasses],
+  )
   const totalOnStage = 1 + livePasses.length
   const viewerCanRequest =
     !isHost &&
@@ -399,7 +404,6 @@ export default function BroadcastStageLayout({
                 ) : (
                   <UserRound size={92} className="text-cyan-200/80" />
                 )}
-                <div className="mt-5 text-xl font-black text-white">{hostName}</div>
                 <div className="mt-1 text-sm text-cyan-200/70">
                   {hostIsScreenSharing ? 'Screen share active' : hostIsCamOn ? 'Camera starting...' : 'Camera off'}
                 </div>
@@ -409,11 +413,10 @@ export default function BroadcastStageLayout({
 
           <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-black/70 via-transparent to-black/25" />
 
-          {/* Host badge */}
-          <div className="absolute left-5 top-5 z-20 inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-400/15 px-4 py-2 text-sm font-black text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.28)] backdrop-blur-xl">
-            <Crown size={16} />
-            Host
-          </div>
+{/* Host badge */}
+<div className="absolute left-5 top-5 z-20 inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-400/15 px-4 py-2 text-sm font-black text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.28)] backdrop-blur-xl">
+  <Crown size={16} />
+</div>
 
           {/* Host media state */}
           <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
@@ -421,16 +424,7 @@ export default function BroadcastStageLayout({
             <MediaPill active={hostIsCamOn || hostIsScreenSharing} type="camera" />
           </div>
 
-          {/* Host name overlay */}
-          <div className="absolute bottom-5 left-5 z-20 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-yellow-300 shadow-[0_0_14px_rgba(250,204,21,0.28)]">
-              <Crown size={18} />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-black text-white drop-shadow">{hostName}</span>
-              <VerifiedBadge />
-            </div>
-          </div>
+
 
           {/* Pinned product overlay */}
           {pinnedProduct && (

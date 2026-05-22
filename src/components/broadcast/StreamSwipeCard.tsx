@@ -51,6 +51,8 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
   const roomRef = useRef<Room | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const hasJoinedRef = useRef(false);
+  const clickTimesRef = useRef<number[]>([]);
+  const blockedUntilRef = useRef<number | null>(null);
   
   // Convert stream ID to numeric UID for Agora
   const stringToUid = (str: string): number => {
@@ -181,7 +183,30 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
       navigate('/auth?mode=signup');
       return;
     }
-    
+
+    const now = Date.now();
+    if (blockedUntilRef.current && now < blockedUntilRef.current) {
+      const secondsLeft = Math.ceil((blockedUntilRef.current - now) / 1000);
+      toast.error(`You're temporarily blocked from liking (${secondsLeft}s)`);
+      return;
+    }
+
+    const times = clickTimesRef.current;
+    times.push(now);
+    const cutoff = now - 1000;
+    while (times.length && times[0] < cutoff) times.shift();
+
+    const tapsPerSec = times.length;
+    if (tapsPerSec >= 20) {
+      blockedUntilRef.current = now + 60 * 1000;
+      clickTimesRef.current = [];
+      toast.error('Rate limited for 1 minute due to suspected auto-clicking');
+      return;
+    }
+
+    const likeIncrement = 2;
+    setLikeCount((prev) => (Number(prev || 0) + likeIncrement));
+
     try {
       const edgeUrl = `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-like`;
       const { data: { session } } = await supabase.auth.getSession();
@@ -251,7 +276,7 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
       <div 
         ref={videoContainerRef}
         className="absolute inset-0"
-        onClick={handleTap}
+        onClick={(e) => { e.stopPropagation(); handleLike(); }}
       >
         {remoteUsers.length > 0 ? (
           <div className={cn(
@@ -340,16 +365,7 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
       
       {/* Action buttons - Bottom right */}
       <div className="absolute bottom-16 right-3 z-10 flex flex-col items-center gap-3 sm:bottom-20 sm:right-4 sm:gap-4">
-        {/* Like button */}
-        <button
-          onClick={(e) => { e.stopPropagation(); handleLike(); }}
-          className="flex flex-col items-center gap-1"
-        >
-          <div className="w-11 h-11 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 hover:bg-white/20 transition-colors sm:w-12 sm:h-12">
-            <Heart className="w-5 h-5 text-white sm:w-6 sm:h-6" />
-          </div>
-          <span className="hidden text-xs text-white/80 sm:block">{likeCount > 0 ? likeCount.toLocaleString() : ''}</span>
-        </button>
+        {/* Like button removed - use tap on video to like */}
         
         {/* Comment button */}
         <button

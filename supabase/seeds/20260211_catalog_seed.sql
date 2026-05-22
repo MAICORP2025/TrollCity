@@ -35,9 +35,8 @@ WHERE NOT EXISTS (SELECT 1 FROM public.shop_items);
 -- Insurance options
 INSERT INTO public.insurance_options (id, name, cost, description, duration_hours, protection_type, icon, is_active)
 SELECT * FROM (VALUES
-  ('basic', 'Basic', 200, 'Basic coverage', 168, 'kick', '🛡️', true),
-  ('standard', 'Standard', 500, 'Standard coverage', 720, 'bankrupt', '🧯', true),
-  ('premium', 'Premium', 1200, 'Premium coverage', 2160, 'full', '💎', true)
+  ('jail_week', 'Jail Insurance Weekly', 5000, 'Weekly jail protection', 168, 'jail', '🛡️', true),
+  ('jail_month', 'Jail Insurance Monthly', 15000, 'Monthly jail protection', 720, 'jail', '🛡️', true)
 ) AS v(id, name, cost, description, duration_hours, protection_type, icon, is_active)
 WHERE NOT EXISTS (SELECT 1 FROM public.insurance_options);
 

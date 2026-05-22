@@ -1,0 +1,2071 @@
+{
+  "checkedAt": "2026-05-20T22:55:46.734Z",
+  "counts": {
+    "total": 49
+  },
+  "missingFiles": [
+    {
+      "id": "76d81ee1-7dd5-4422-acb5-50021af6579e",
+      "slug": "gift_rose",
+      "resolvedName": "Troll ",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_rose.webm",
+        "/gift-animations/troll_gift_rose.webm"
+      ]
+    },
+    {
+      "id": "c9f6bb42-8e9b-48e8-97dc-545330a4c69b",
+      "slug": "gift_coffee",
+      "resolvedName": "Coffee",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_coffee.webm",
+        "/gift-animations/coffee_gift_coffee.webm"
+      ]
+    },
+    {
+      "id": "f3f618aa-f533-474d-9971-5024391b518b",
+      "slug": "gift_heart",
+      "resolvedName": "Heart",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_heart.webm",
+        "/gift-animations/heart_gift_heart.webm"
+      ]
+    },
+    {
+      "id": "7be3f4d5-072d-4d2d-8eb4-5d26cfc7b5e4",
+      "slug": "gift_fire",
+      "resolvedName": "Fire",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_fire.webm",
+        "/gift-animations/fire_gift_fire.webm"
+      ]
+    },
+    {
+      "id": "3a7a4aa7-70c6-4741-86dc-b0165232a564",
+      "slug": "gift_dragon",
+      "resolvedName": "Dragon",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_dragon.webm",
+        "/gift-animations/dragon.webm"
+      ]
+    },
+    {
+      "id": "9af596d5-83e7-474b-a2f3-58cc2eaa0738",
+      "slug": "gift_cookie",
+      "resolvedName": "Cookie",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_cookie.webm",
+        "/gift-animations/cookie_gift_cookie.webm"
+      ]
+    },
+    {
+      "id": "7d7918c5-ee64-4864-a779-5e429e52d518",
+      "slug": "gift_icecream",
+      "resolvedName": "Ice Cream",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_icecream.webm",
+        "/gift-animations/ice_cream_gift_icecream.webm"
+      ]
+    },
+    {
+      "id": "fc13d77c-179b-4da8-86f3-1e4edf477765",
+      "slug": "gift_pizza",
+      "resolvedName": "Pizza",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_pizza.webm",
+        "/gift-animations/pizza_gift_pizza.webm"
+      ]
+    },
+    {
+      "id": "b2b56670-ec6b-45c4-949f-78bea438b14d",
+      "slug": "gift_beer",
+      "resolvedName": "Beer",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_beer.webm",
+        "/gift-animations/beer_gift_beer.webm"
+      ]
+    },
+    {
+      "id": "22dbbdd7-6777-4a13-96d2-7a945568bb4f",
+      "slug": "gift_thumbsup",
+      "resolvedName": "Thumbs Up",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_thumbsup.webm",
+        "/gift-animations/thumbs_up_gift_thumbsup.webm"
+      ]
+    },
+    {
+      "id": "2cf7c5df-7d12-49fb-9cf8-600ba55631c6",
+      "slug": "gift_clap",
+      "resolvedName": "Clap",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_clap.webm",
+        "/gift-animations/clap_gift_clap.webm"
+      ]
+    },
+    {
+      "id": "bc2c07c1-8d63-4c50-bf97-47521c5388c3",
+      "slug": "gift_clown",
+      "resolvedName": "Clown",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_clown.webm",
+        "/gift-animations/clown_gift_clown.webm"
+      ]
+    },
+    {
+      "id": "a82c95de-ee6e-4371-8d4e-743c9d6f6192",
+      "slug": "gift_salt",
+      "resolvedName": "Salt",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_salt.webm",
+        "/gift-animations/salt_gift_salt.webm"
+      ]
+    },
+    {
+      "id": "a4bb384a-3d85-4be6-9945-aa23ddeb1d4b",
+      "slug": "gift_toiletpaper",
+      "resolvedName": "Toilet Paper",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_toiletpaper.webm",
+        "/gift-animations/toilet_paper_gift_toiletpaper.webm"
+      ]
+    },
+    {
+      "id": "1a103913-a224-47e7-ab3e-f60d8c08d79c",
+      "slug": "gift_eggplant",
+      "resolvedName": "Eggplant",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_eggplant.webm",
+        "/gift-animations/eggplant_gift_eggplant.webm"
+      ]
+    },
+    {
+      "id": "81dfeec9-65cd-499a-89c2-e206f93344d8",
+      "slug": "gift_peach",
+      "resolvedName": "Peach",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_peach.webm",
+        "/gift-animations/peach_gift_peach.webm"
+      ]
+    },
+    {
+      "id": "b43422b1-8598-4f39-98d8-169f5fba6f72",
+      "slug": "gift_kiss",
+      "resolvedName": "Kiss",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_kiss.webm",
+        "/gift-animations/kiss_gift_kiss.webm"
+      ]
+    },
+    {
+      "id": "9d47cebb-0d99-4b49-bcd1-53c4d8338c03",
+      "slug": "gift_loveletter",
+      "resolvedName": "Love Letter",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_loveletter.webm",
+        "/gift-animations/love_letter_gift_loveletter.webm"
+      ]
+    },
+    {
+      "id": "a616547f-89a8-482a-9e5d-a20f6d43f018",
+      "slug": "gift_bouquet",
+      "resolvedName": "Bouquet",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_bouquet.webm",
+        "/gift-animations/bouquet_gift_bouquet.webm"
+      ]
+    },
+    {
+      "id": "1f99bdfc-6a30-43bc-a6a9-9f2e8885bf81",
+      "slug": "gift_teddybear",
+      "resolvedName": "Teddy Bear",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_teddybear.webm",
+        "/gift-animations/teddy_bear_gift_teddybear.webm"
+      ]
+    },
+    {
+      "id": "0a7d1181-fb9c-401e-9847-391db24d34a9",
+      "slug": "gift_trollface",
+      "resolvedName": "Troll Face",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_trollface.webm",
+        "/gift-animations/troll_face_gift_trollface.webm"
+      ]
+    },
+    {
+      "id": "72925556-b47d-4218-af9b-0ee9cc3ed157",
+      "slug": "gift_banhammer",
+      "resolvedName": "Ban Hammer",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_banhammer.webm",
+        "/gift-animations/ban_hammer_gift_banhammer.webm"
+      ]
+    },
+    {
+      "id": "92cd274a-3342-40c8-84a0-649287480457",
+      "slug": "gift_warning",
+      "resolvedName": "Warning",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_warning.webm",
+        "/gift-animations/warning_gift_warning.webm"
+      ]
+    },
+    {
+      "id": "f6f6e001-1f99-4763-b2d8-3eafd2c8b608",
+      "slug": "gift_dumpsterfire",
+      "resolvedName": "Dumpster Fire",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_dumpsterfire.webm",
+        "/gift-animations/dumpster_fire_gift_dumpsterfire.webm"
+      ]
+    },
+    {
+      "id": "111a1de2-8647-428e-90ef-e24c88ddf66a",
+      "slug": "gift_skull",
+      "resolvedName": "RIP",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_skull.webm",
+        "/gift-animations/rip_gift_skull.webm"
+      ]
+    },
+    {
+      "id": "c0eef595-4de2-454b-87cf-247de3d26993",
+      "slug": "gift_party",
+      "resolvedName": "Party",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_party.webm",
+        "/gift-animations/party_gift_party.webm"
+      ]
+    },
+    {
+      "id": "01a809d1-0f0f-40b3-a9c1-4965e24ab1e1",
+      "slug": "gift_confetti",
+      "resolvedName": "Confetti",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_confetti.webm",
+        "/gift-animations/confetti_gift_confetti.webm"
+      ]
+    },
+    {
+      "id": "9b3df248-12be-4f78-bcd4-0b2b37358ec7",
+      "slug": "gift_100",
+      "resolvedName": "100",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_100.webm",
+        "/gift-animations/100_gift_100.webm"
+      ]
+    },
+    {
+      "id": "f06ac789-e2d1-4bf3-8b70-586ce246488c",
+      "slug": "gift_siren",
+      "resolvedName": "Siren",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_siren.webm",
+        "/gift-animations/siren_gift_siren.webm"
+      ]
+    },
+    {
+      "id": "8d06c82b-9257-4031-a409-a64a000b7928",
+      "slug": "gift_cash",
+      "resolvedName": "Cash Stack",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_cash.webm",
+        "/gift-animations/cash_stack.webm"
+      ]
+    },
+    {
+      "id": "b1bb297a-f7ff-48ab-a44f-76f308c7647d",
+      "slug": "gift_car",
+      "resolvedName": "Sports Car",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_car.webm",
+        "/gift-animations/sports_car.webm"
+      ]
+    },
+    {
+      "id": "e0a7fb0d-fdba-4014-9cad-d9f490d8b493",
+      "slug": "gift_mansion",
+      "resolvedName": "Mansion",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_mansion.webm",
+        "/gift-animations/mansion.webm"
+      ]
+    },
+    {
+      "id": "c02d0335-7caa-4e2b-9b4b-2dea0a70cd34",
+      "slug": "gift_galaxy",
+      "resolvedName": "Galaxy",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_galaxy.webm",
+        "/gift-animations/galaxy.webm"
+      ]
+    },
+    {
+      "id": "4ce1f796-8c3e-4f1f-b382-dbee7d6f7932",
+      "slug": "gift_blackhole",
+      "resolvedName": "Black Hole",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_blackhole.webm",
+        "/gift-animations/black_hole.webm"
+      ]
+    },
+    {
+      "id": "d8e85faa-5bbb-4d25-b47d-8168b221f606",
+      "slug": "gift_unicorn",
+      "resolvedName": "Unicorn",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_unicorn.webm",
+        "/gift-animations/unicorn.webm"
+      ]
+    },
+    {
+      "id": "2afa3c62-a503-48ee-b938-9ea1889843e3",
+      "slug": "gift_phoenix",
+      "resolvedName": "Phoenix",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_phoenix.webm",
+        "/gift-animations/phoenix.webm"
+      ]
+    },
+    {
+      "id": "8e248319-6fba-47a8-99df-810cb3876d65",
+      "slug": "gift_timemachine",
+      "resolvedName": "Time Machine",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_timemachine.webm",
+        "/gift-animations/time_machine.webm"
+      ]
+    },
+    {
+      "id": "03c74b72-134d-4e62-af55-83dd60ae8109",
+      "slug": "gift_alien",
+      "resolvedName": "Alien Invasion",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_alien.webm",
+        "/gift-animations/alien_invasion.webm"
+      ]
+    },
+    {
+      "id": "cb443f73-11bb-453b-afc1-fffe2efad9ce",
+      "slug": "gift_diamond",
+      "resolvedName": "Diamond",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_diamond.webm",
+        "/gift-animations/diamond.webm"
+      ]
+    },
+    {
+      "id": "581891dc-458e-4c2d-a7b8-1bb716e78018",
+      "slug": "gift_medal",
+      "resolvedName": "Troll Girl",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_medal.webm",
+        "/gift-animations/troll_girl_gift_medal.webm"
+      ]
+    },
+    {
+      "id": "dcd66067-16ee-4b54-9a35-68363b7f5852",
+      "slug": "gift_ring",
+      "resolvedName": "Mai Ring",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_ring.webm",
+        "/gift-animations/ring.webm"
+      ]
+    },
+    {
+      "id": "1eceedc0-58a0-4067-bf39-5b48ea83f62d",
+      "slug": "gift_lag",
+      "resolvedName": "Troll Guy",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_lag.webm",
+        "/gift-animations/troll_guy_gift_lag.webm"
+      ]
+    },
+    {
+      "id": "ea49b3b1-e623-4cd6-b2b1-8c9fccc1cf49",
+      "slug": "gift_trophy",
+      "resolvedName": "dog",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_trophy.webm",
+        "/gift-animations/trophy.webm"
+      ]
+    },
+    {
+      "id": "1de18d5b-fcba-4211-b031-bb730021625b",
+      "slug": "gift_crown",
+      "resolvedName": "cat",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_crown.webm",
+        "/gift-animations/cat_gift_crown.webm"
+      ]
+    },
+    {
+      "id": "81c15ad7-f304-4671-9e33-e035a5d65211",
+      "slug": "gift_chocolate",
+      "resolvedName": "Tiger",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_chocolate.webm",
+        "/gift-animations/tiger_gift_chocolate.webm"
+      ]
+    },
+    {
+      "id": "245592a8-3438-4749-aea0-a55958df2e98",
+      "slug": "gift_muscle",
+      "resolvedName": "Arm",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_muscle.webm",
+        "/gift-animations/arm_gift_muscle.webm"
+      ]
+    },
+    {
+      "id": "658795a3-ecdc-405b-b4d5-90038e40fc55",
+      "slug": "gift_rocket",
+      "resolvedName": "Rocket",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_rocket.webm",
+        "/gift-animations/rocket.webm"
+      ]
+    },
+    {
+      "id": "17d4fa82-bda2-48b7-a0a9-4061e3da9743",
+      "slug": "gift_yacht",
+      "resolvedName": "Yacht",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_yacht.webm",
+        "/gift-animations/yacht.webm"
+      ]
+    },
+    {
+      "id": "1727a211-9dc1-490c-9138-d1c552e5e69c",
+      "slug": "gift_poo",
+      "resolvedName": "Poop",
+      "suggestedPaths": [
+        "/gift-videos/gift_gift_poo.webm",
+        "/gift-animations/poop_gift_poo.webm"
+      ]
+    }
+  ],
+  "genericNameGifts": [],
+  "nullUrlGifts": [
+    {
+      "id": "76d81ee1-7dd5-4422-acb5-50021af6579e",
+      "slug": "gift_rose",
+      "resolvedName": "Troll "
+    },
+    {
+      "id": "c9f6bb42-8e9b-48e8-97dc-545330a4c69b",
+      "slug": "gift_coffee",
+      "resolvedName": "Coffee"
+    },
+    {
+      "id": "f3f618aa-f533-474d-9971-5024391b518b",
+      "slug": "gift_heart",
+      "resolvedName": "Heart"
+    },
+    {
+      "id": "7be3f4d5-072d-4d2d-8eb4-5d26cfc7b5e4",
+      "slug": "gift_fire",
+      "resolvedName": "Fire"
+    },
+    {
+      "id": "3a7a4aa7-70c6-4741-86dc-b0165232a564",
+      "slug": "gift_dragon",
+      "resolvedName": "Dragon"
+    },
+    {
+      "id": "9af596d5-83e7-474b-a2f3-58cc2eaa0738",
+      "slug": "gift_cookie",
+      "resolvedName": "Cookie"
+    },
+    {
+      "id": "7d7918c5-ee64-4864-a779-5e429e52d518",
+      "slug": "gift_icecream",
+      "resolvedName": "Ice Cream"
+    },
+    {
+      "id": "fc13d77c-179b-4da8-86f3-1e4edf477765",
+      "slug": "gift_pizza",
+      "resolvedName": "Pizza"
+    },
+    {
+      "id": "b2b56670-ec6b-45c4-949f-78bea438b14d",
+      "slug": "gift_beer",
+      "resolvedName": "Beer"
+    },
+    {
+      "id": "22dbbdd7-6777-4a13-96d2-7a945568bb4f",
+      "slug": "gift_thumbsup",
+      "resolvedName": "Thumbs Up"
+    },
+    {
+      "id": "2cf7c5df-7d12-49fb-9cf8-600ba55631c6",
+      "slug": "gift_clap",
+      "resolvedName": "Clap"
+    },
+    {
+      "id": "bc2c07c1-8d63-4c50-bf97-47521c5388c3",
+      "slug": "gift_clown",
+      "resolvedName": "Clown"
+    },
+    {
+      "id": "a82c95de-ee6e-4371-8d4e-743c9d6f6192",
+      "slug": "gift_salt",
+      "resolvedName": "Salt"
+    },
+    {
+      "id": "a4bb384a-3d85-4be6-9945-aa23ddeb1d4b",
+      "slug": "gift_toiletpaper",
+      "resolvedName": "Toilet Paper"
+    },
+    {
+      "id": "1a103913-a224-47e7-ab3e-f60d8c08d79c",
+      "slug": "gift_eggplant",
+      "resolvedName": "Eggplant"
+    },
+    {
+      "id": "81dfeec9-65cd-499a-89c2-e206f93344d8",
+      "slug": "gift_peach",
+      "resolvedName": "Peach"
+    },
+    {
+      "id": "b43422b1-8598-4f39-98d8-169f5fba6f72",
+      "slug": "gift_kiss",
+      "resolvedName": "Kiss"
+    },
+    {
+      "id": "9d47cebb-0d99-4b49-bcd1-53c4d8338c03",
+      "slug": "gift_loveletter",
+      "resolvedName": "Love Letter"
+    },
+    {
+      "id": "a616547f-89a8-482a-9e5d-a20f6d43f018",
+      "slug": "gift_bouquet",
+      "resolvedName": "Bouquet"
+    },
+    {
+      "id": "1f99bdfc-6a30-43bc-a6a9-9f2e8885bf81",
+      "slug": "gift_teddybear",
+      "resolvedName": "Teddy Bear"
+    },
+    {
+      "id": "0a7d1181-fb9c-401e-9847-391db24d34a9",
+      "slug": "gift_trollface",
+      "resolvedName": "Troll Face"
+    },
+    {
+      "id": "72925556-b47d-4218-af9b-0ee9cc3ed157",
+      "slug": "gift_banhammer",
+      "resolvedName": "Ban Hammer"
+    },
+    {
+      "id": "92cd274a-3342-40c8-84a0-649287480457",
+      "slug": "gift_warning",
+      "resolvedName": "Warning"
+    },
+    {
+      "id": "f6f6e001-1f99-4763-b2d8-3eafd2c8b608",
+      "slug": "gift_dumpsterfire",
+      "resolvedName": "Dumpster Fire"
+    },
+    {
+      "id": "111a1de2-8647-428e-90ef-e24c88ddf66a",
+      "slug": "gift_skull",
+      "resolvedName": "RIP"
+    },
+    {
+      "id": "c0eef595-4de2-454b-87cf-247de3d26993",
+      "slug": "gift_party",
+      "resolvedName": "Party"
+    },
+    {
+      "id": "01a809d1-0f0f-40b3-a9c1-4965e24ab1e1",
+      "slug": "gift_confetti",
+      "resolvedName": "Confetti"
+    },
+    {
+      "id": "9b3df248-12be-4f78-bcd4-0b2b37358ec7",
+      "slug": "gift_100",
+      "resolvedName": "100"
+    },
+    {
+      "id": "f06ac789-e2d1-4bf3-8b70-586ce246488c",
+      "slug": "gift_siren",
+      "resolvedName": "Siren"
+    },
+    {
+      "id": "8d06c82b-9257-4031-a409-a64a000b7928",
+      "slug": "gift_cash",
+      "resolvedName": "Cash Stack"
+    },
+    {
+      "id": "b1bb297a-f7ff-48ab-a44f-76f308c7647d",
+      "slug": "gift_car",
+      "resolvedName": "Sports Car"
+    },
+    {
+      "id": "e0a7fb0d-fdba-4014-9cad-d9f490d8b493",
+      "slug": "gift_mansion",
+      "resolvedName": "Mansion"
+    },
+    {
+      "id": "c02d0335-7caa-4e2b-9b4b-2dea0a70cd34",
+      "slug": "gift_galaxy",
+      "resolvedName": "Galaxy"
+    },
+    {
+      "id": "4ce1f796-8c3e-4f1f-b382-dbee7d6f7932",
+      "slug": "gift_blackhole",
+      "resolvedName": "Black Hole"
+    },
+    {
+      "id": "d8e85faa-5bbb-4d25-b47d-8168b221f606",
+      "slug": "gift_unicorn",
+      "resolvedName": "Unicorn"
+    },
+    {
+      "id": "2afa3c62-a503-48ee-b938-9ea1889843e3",
+      "slug": "gift_phoenix",
+      "resolvedName": "Phoenix"
+    },
+    {
+      "id": "8e248319-6fba-47a8-99df-810cb3876d65",
+      "slug": "gift_timemachine",
+      "resolvedName": "Time Machine"
+    },
+    {
+      "id": "03c74b72-134d-4e62-af55-83dd60ae8109",
+      "slug": "gift_alien",
+      "resolvedName": "Alien Invasion"
+    },
+    {
+      "id": "cb443f73-11bb-453b-afc1-fffe2efad9ce",
+      "slug": "gift_diamond",
+      "resolvedName": "Diamond"
+    },
+    {
+      "id": "581891dc-458e-4c2d-a7b8-1bb716e78018",
+      "slug": "gift_medal",
+      "resolvedName": "Troll Girl"
+    },
+    {
+      "id": "dcd66067-16ee-4b54-9a35-68363b7f5852",
+      "slug": "gift_ring",
+      "resolvedName": "Mai Ring"
+    },
+    {
+      "id": "1eceedc0-58a0-4067-bf39-5b48ea83f62d",
+      "slug": "gift_lag",
+      "resolvedName": "Troll Guy"
+    },
+    {
+      "id": "ea49b3b1-e623-4cd6-b2b1-8c9fccc1cf49",
+      "slug": "gift_trophy",
+      "resolvedName": "dog"
+    },
+    {
+      "id": "1de18d5b-fcba-4211-b031-bb730021625b",
+      "slug": "gift_crown",
+      "resolvedName": "cat"
+    },
+    {
+      "id": "81c15ad7-f304-4671-9e33-e035a5d65211",
+      "slug": "gift_chocolate",
+      "resolvedName": "Tiger"
+    },
+    {
+      "id": "245592a8-3438-4749-aea0-a55958df2e98",
+      "slug": "gift_muscle",
+      "resolvedName": "Arm"
+    },
+    {
+      "id": "658795a3-ecdc-405b-b4d5-90038e40fc55",
+      "slug": "gift_rocket",
+      "resolvedName": "Rocket"
+    },
+    {
+      "id": "17d4fa82-bda2-48b7-a0a9-4061e3da9743",
+      "slug": "gift_yacht",
+      "resolvedName": "Yacht"
+    },
+    {
+      "id": "1727a211-9dc1-490c-9138-d1c552e5e69c",
+      "slug": "gift_poo",
+      "resolvedName": "Poop"
+    }
+  ],
+  "perGift": [
+    {
+      "id": "76d81ee1-7dd5-4422-acb5-50021af6579e",
+      "slug": "gift_rose",
+      "resolvedName": "Troll ",
+      "animationKey": "troll_gift_rose",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_rose.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_rose.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/troll_gift_rose.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/troll_gift_rose.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c9f6bb42-8e9b-48e8-97dc-545330a4c69b",
+      "slug": "gift_coffee",
+      "resolvedName": "Coffee",
+      "animationKey": "coffee_gift_coffee",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_coffee.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_coffee.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/coffee_gift_coffee.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/coffee_gift_coffee.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f3f618aa-f533-474d-9971-5024391b518b",
+      "slug": "gift_heart",
+      "resolvedName": "Heart",
+      "animationKey": "heart_gift_heart",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_heart.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_heart.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/heart_gift_heart.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/heart_gift_heart.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "7be3f4d5-072d-4d2d-8eb4-5d26cfc7b5e4",
+      "slug": "gift_fire",
+      "resolvedName": "Fire",
+      "animationKey": "fire_gift_fire",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_fire.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_fire.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/fire_gift_fire.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/fire_gift_fire.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3a7a4aa7-70c6-4741-86dc-b0165232a564",
+      "slug": "gift_dragon",
+      "resolvedName": "Dragon",
+      "animationKey": "dragon",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_dragon.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_dragon.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/dragon.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/dragon.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "9af596d5-83e7-474b-a2f3-58cc2eaa0738",
+      "slug": "gift_cookie",
+      "resolvedName": "Cookie",
+      "animationKey": "cookie_gift_cookie",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_cookie.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_cookie.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/cookie_gift_cookie.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/cookie_gift_cookie.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "7d7918c5-ee64-4864-a779-5e429e52d518",
+      "slug": "gift_icecream",
+      "resolvedName": "Ice Cream",
+      "animationKey": "ice_cream_gift_icecream",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_icecream.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_icecream.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/ice_cream_gift_icecream.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/ice_cream_gift_icecream.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fc13d77c-179b-4da8-86f3-1e4edf477765",
+      "slug": "gift_pizza",
+      "resolvedName": "Pizza",
+      "animationKey": "pizza_gift_pizza",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_pizza.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_pizza.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/pizza_gift_pizza.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/pizza_gift_pizza.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b2b56670-ec6b-45c4-949f-78bea438b14d",
+      "slug": "gift_beer",
+      "resolvedName": "Beer",
+      "animationKey": "beer_gift_beer",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_beer.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_beer.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/beer_gift_beer.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/beer_gift_beer.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "22dbbdd7-6777-4a13-96d2-7a945568bb4f",
+      "slug": "gift_thumbsup",
+      "resolvedName": "Thumbs Up",
+      "animationKey": "thumbs_up_gift_thumbsup",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_thumbsup.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_thumbsup.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/thumbs_up_gift_thumbsup.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/thumbs_up_gift_thumbsup.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2cf7c5df-7d12-49fb-9cf8-600ba55631c6",
+      "slug": "gift_clap",
+      "resolvedName": "Clap",
+      "animationKey": "clap_gift_clap",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_clap.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_clap.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/clap_gift_clap.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/clap_gift_clap.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bc2c07c1-8d63-4c50-bf97-47521c5388c3",
+      "slug": "gift_clown",
+      "resolvedName": "Clown",
+      "animationKey": "clown_gift_clown",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_clown.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_clown.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/clown_gift_clown.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/clown_gift_clown.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a82c95de-ee6e-4371-8d4e-743c9d6f6192",
+      "slug": "gift_salt",
+      "resolvedName": "Salt",
+      "animationKey": "salt_gift_salt",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_salt.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_salt.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/salt_gift_salt.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/salt_gift_salt.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a4bb384a-3d85-4be6-9945-aa23ddeb1d4b",
+      "slug": "gift_toiletpaper",
+      "resolvedName": "Toilet Paper",
+      "animationKey": "toilet_paper_gift_toiletpaper",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_toiletpaper.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_toiletpaper.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/toilet_paper_gift_toiletpaper.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/toilet_paper_gift_toiletpaper.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1a103913-a224-47e7-ab3e-f60d8c08d79c",
+      "slug": "gift_eggplant",
+      "resolvedName": "Eggplant",
+      "animationKey": "eggplant_gift_eggplant",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_eggplant.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_eggplant.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/eggplant_gift_eggplant.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/eggplant_gift_eggplant.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "81dfeec9-65cd-499a-89c2-e206f93344d8",
+      "slug": "gift_peach",
+      "resolvedName": "Peach",
+      "animationKey": "peach_gift_peach",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_peach.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_peach.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/peach_gift_peach.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/peach_gift_peach.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b43422b1-8598-4f39-98d8-169f5fba6f72",
+      "slug": "gift_kiss",
+      "resolvedName": "Kiss",
+      "animationKey": "kiss_gift_kiss",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_kiss.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_kiss.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/kiss_gift_kiss.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/kiss_gift_kiss.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "9d47cebb-0d99-4b49-bcd1-53c4d8338c03",
+      "slug": "gift_loveletter",
+      "resolvedName": "Love Letter",
+      "animationKey": "love_letter_gift_loveletter",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_loveletter.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_loveletter.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/love_letter_gift_loveletter.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/love_letter_gift_loveletter.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a616547f-89a8-482a-9e5d-a20f6d43f018",
+      "slug": "gift_bouquet",
+      "resolvedName": "Bouquet",
+      "animationKey": "bouquet_gift_bouquet",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_bouquet.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_bouquet.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/bouquet_gift_bouquet.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/bouquet_gift_bouquet.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1f99bdfc-6a30-43bc-a6a9-9f2e8885bf81",
+      "slug": "gift_teddybear",
+      "resolvedName": "Teddy Bear",
+      "animationKey": "teddy_bear_gift_teddybear",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_teddybear.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_teddybear.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/teddy_bear_gift_teddybear.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/teddy_bear_gift_teddybear.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0a7d1181-fb9c-401e-9847-391db24d34a9",
+      "slug": "gift_trollface",
+      "resolvedName": "Troll Face",
+      "animationKey": "troll_face_gift_trollface",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_trollface.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_trollface.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/troll_face_gift_trollface.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/troll_face_gift_trollface.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "72925556-b47d-4218-af9b-0ee9cc3ed157",
+      "slug": "gift_banhammer",
+      "resolvedName": "Ban Hammer",
+      "animationKey": "ban_hammer_gift_banhammer",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_banhammer.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_banhammer.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/ban_hammer_gift_banhammer.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/ban_hammer_gift_banhammer.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "92cd274a-3342-40c8-84a0-649287480457",
+      "slug": "gift_warning",
+      "resolvedName": "Warning",
+      "animationKey": "warning_gift_warning",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_warning.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_warning.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/warning_gift_warning.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/warning_gift_warning.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f6f6e001-1f99-4763-b2d8-3eafd2c8b608",
+      "slug": "gift_dumpsterfire",
+      "resolvedName": "Dumpster Fire",
+      "animationKey": "dumpster_fire_gift_dumpsterfire",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_dumpsterfire.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_dumpsterfire.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/dumpster_fire_gift_dumpsterfire.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/dumpster_fire_gift_dumpsterfire.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "111a1de2-8647-428e-90ef-e24c88ddf66a",
+      "slug": "gift_skull",
+      "resolvedName": "RIP",
+      "animationKey": "rip_gift_skull",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_skull.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_skull.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/rip_gift_skull.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/rip_gift_skull.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c0eef595-4de2-454b-87cf-247de3d26993",
+      "slug": "gift_party",
+      "resolvedName": "Party",
+      "animationKey": "party_gift_party",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_party.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_party.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/party_gift_party.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/party_gift_party.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "01a809d1-0f0f-40b3-a9c1-4965e24ab1e1",
+      "slug": "gift_confetti",
+      "resolvedName": "Confetti",
+      "animationKey": "confetti_gift_confetti",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_confetti.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_confetti.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/confetti_gift_confetti.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/confetti_gift_confetti.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "9b3df248-12be-4f78-bcd4-0b2b37358ec7",
+      "slug": "gift_100",
+      "resolvedName": "100",
+      "animationKey": "100_gift_100",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_100.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_100.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/100_gift_100.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/100_gift_100.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f06ac789-e2d1-4bf3-8b70-586ce246488c",
+      "slug": "gift_siren",
+      "resolvedName": "Siren",
+      "animationKey": "siren_gift_siren",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_siren.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_siren.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/siren_gift_siren.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/siren_gift_siren.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "8d06c82b-9257-4031-a409-a64a000b7928",
+      "slug": "gift_cash",
+      "resolvedName": "Cash Stack",
+      "animationKey": "cash_stack",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_cash.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_cash.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/cash_stack.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/cash_stack.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b1bb297a-f7ff-48ab-a44f-76f308c7647d",
+      "slug": "gift_car",
+      "resolvedName": "Sports Car",
+      "animationKey": "sports_car",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_car.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_car.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/sports_car.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/sports_car.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e0a7fb0d-fdba-4014-9cad-d9f490d8b493",
+      "slug": "gift_mansion",
+      "resolvedName": "Mansion",
+      "animationKey": "mansion",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_mansion.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_mansion.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/mansion.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/mansion.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c02d0335-7caa-4e2b-9b4b-2dea0a70cd34",
+      "slug": "gift_galaxy",
+      "resolvedName": "Galaxy",
+      "animationKey": "galaxy",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_galaxy.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_galaxy.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/galaxy.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/galaxy.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "4ce1f796-8c3e-4f1f-b382-dbee7d6f7932",
+      "slug": "gift_blackhole",
+      "resolvedName": "Black Hole",
+      "animationKey": "black_hole",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_blackhole.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_blackhole.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/black_hole.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/black_hole.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "d8e85faa-5bbb-4d25-b47d-8168b221f606",
+      "slug": "gift_unicorn",
+      "resolvedName": "Unicorn",
+      "animationKey": "unicorn",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_unicorn.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_unicorn.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/unicorn.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/unicorn.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2afa3c62-a503-48ee-b938-9ea1889843e3",
+      "slug": "gift_phoenix",
+      "resolvedName": "Phoenix",
+      "animationKey": "phoenix",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_phoenix.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_phoenix.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/phoenix.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/phoenix.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "8e248319-6fba-47a8-99df-810cb3876d65",
+      "slug": "gift_timemachine",
+      "resolvedName": "Time Machine",
+      "animationKey": "time_machine",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_timemachine.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_timemachine.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/time_machine.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/time_machine.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03c74b72-134d-4e62-af55-83dd60ae8109",
+      "slug": "gift_alien",
+      "resolvedName": "Alien Invasion",
+      "animationKey": "alien_invasion",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_alien.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_alien.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/alien_invasion.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/alien_invasion.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cb443f73-11bb-453b-afc1-fffe2efad9ce",
+      "slug": "gift_diamond",
+      "resolvedName": "Diamond",
+      "animationKey": "diamond",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_diamond.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_diamond.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/diamond.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/diamond.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "581891dc-458e-4c2d-a7b8-1bb716e78018",
+      "slug": "gift_medal",
+      "resolvedName": "Troll Girl",
+      "animationKey": "troll_girl_gift_medal",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_medal.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_medal.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/troll_girl_gift_medal.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/troll_girl_gift_medal.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dcd66067-16ee-4b54-9a35-68363b7f5852",
+      "slug": "gift_ring",
+      "resolvedName": "Mai Ring",
+      "animationKey": "ring",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_ring.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_ring.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/ring.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/ring.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1eceedc0-58a0-4067-bf39-5b48ea83f62d",
+      "slug": "gift_lag",
+      "resolvedName": "Troll Guy",
+      "animationKey": "troll_guy_gift_lag",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_lag.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_lag.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/troll_guy_gift_lag.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/troll_guy_gift_lag.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ea49b3b1-e623-4cd6-b2b1-8c9fccc1cf49",
+      "slug": "gift_trophy",
+      "resolvedName": "dog",
+      "animationKey": "trophy",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_trophy.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_trophy.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/trophy.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/trophy.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1de18d5b-fcba-4211-b031-bb730021625b",
+      "slug": "gift_crown",
+      "resolvedName": "cat",
+      "animationKey": "cat_gift_crown",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_crown.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_crown.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/cat_gift_crown.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/cat_gift_crown.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "81c15ad7-f304-4671-9e33-e035a5d65211",
+      "slug": "gift_chocolate",
+      "resolvedName": "Tiger",
+      "animationKey": "tiger_gift_chocolate",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_chocolate.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_chocolate.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/tiger_gift_chocolate.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/tiger_gift_chocolate.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "245592a8-3438-4749-aea0-a55958df2e98",
+      "slug": "gift_muscle",
+      "resolvedName": "Arm",
+      "animationKey": "arm_gift_muscle",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_muscle.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_muscle.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/arm_gift_muscle.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/arm_gift_muscle.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "658795a3-ecdc-405b-b4d5-90038e40fc55",
+      "slug": "gift_rocket",
+      "resolvedName": "Rocket",
+      "animationKey": "rocket",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_rocket.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_rocket.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/rocket.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/rocket.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "17d4fa82-bda2-48b7-a0a9-4061e3da9743",
+      "slug": "gift_yacht",
+      "resolvedName": "Yacht",
+      "animationKey": "yacht",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_yacht.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_yacht.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/yacht.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/yacht.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1727a211-9dc1-490c-9138-d1c552e5e69c",
+      "slug": "gift_poo",
+      "resolvedName": "Poop",
+      "animationKey": "poop_gift_poo",
+      "candidates": [
+        {
+          "candidate": "/gift-videos/gift_gift_poo.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-videos/gift_gift_poo.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        },
+        {
+          "candidate": "/gift-animations/poop_gift_poo.webm",
+          "tried": [
+            {
+              "url": "https://yjxpwfalenorzrqxwmtr.supabase.co/gift-animations/poop_gift_poo.webm",
+              "ok": false,
+              "status": 404
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

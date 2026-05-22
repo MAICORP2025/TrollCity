@@ -308,6 +308,20 @@ export default function UserProfileWidget() {
               </div>
             </div>
 
+            {/* Jail Free Card — green pass */}
+            <div className="flex items-center justify-between rounded-xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500/12 to-green-600/10 px-2.5 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base leading-none">🔓</span>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-wide text-emerald-300/90 block leading-tight">Get Out of Jail Free</span>
+                  <span className="text-[9px] font-bold text-emerald-400/70 block">Troll Economy Pass</span>
+                </div>
+              </div>
+              <span className="rounded-full border border-emerald-400/25 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-300 whitespace-nowrap">
+                1×
+              </span>
+            </div>
+
             {/* Cashout Coins */}
             <button
               type="button"

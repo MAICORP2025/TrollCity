@@ -9,27 +9,221 @@ import TrollWallFeed from '@/components/home/TrollWallFeed'
 import CityLawsFeesTab from '@/components/home/CityLawsFeesTab'
 import LeaguesTab from '@/components/home/LeaguesTab'
 import PresidentCandidatesTab from '@/components/home/PresidentCandidatesTab'
+import LiveAuctionMiniWindow from '@/components/home/LiveAuctionMiniWindow'
 import { Radio, Users, Play, Eye, X, ChevronRight, Link2, Sparkles, FileText, Trophy, Vote } from 'lucide-react'
+import LevelSystemShowcase from '@/components/home/LevelSystemShowcase'
+
+interface AuctionShow {
+  id: string
+  title: string
+  description?: string | null
+  category?: string | null
+  thumbnail_url?: string | null
+  status: 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled'
+  scheduled_for?: string | null
+  live_started_at?: string | null
+  ended_at?: string | null
+  livekit_room_name?: string | null
+  auctioneer_id: string
+  current_lot_id?: string | null
+  hls_url?: string | null
+  egress_id?: string | null
+}
 
 const PWAInstallPrompt = lazy(() => import('../components/PWAInstallPrompt'))
 const TCNNPopupWidget = lazy(() => import('@/components/tcnn/TCNNPopupWidget'))
 const FeaturedBroadcasts = lazy(() => import('@/components/broadcast/FeaturedBroadcasts'))
 const PromoSlot = lazy(() => import('@/components/promo/PromoSlot'))
 
-// Animated gradient background - memoized to prevent unnecessary re-renders
+// Animated gradient background — multi-layer atmosphere for desktop
 const AnimatedGradient = React.memo(() => {
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
+      {/* ── LAYER 0: Deep base gradient ── */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-      <div className="absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.13),transparent_44%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
-      <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-300/65 to-transparent" />
+
+      {/* ── LAYER 1: Large animated colour blobs ── */}
+      {/* Left-side purple / cyan drift */}
+      <div
+        className="absolute w-[600px] h-[600px] rounded-full blur-[140px] animate-bg-drift-1"
+        style={{
+          left: '-8%',
+          top: '5%',
+          background: 'radial-gradient(circle, rgba(147,51,234,0.28) 0%, rgba(34,211,238,0.10) 50%, transparent 70%)',
+        }}
+      />
+      {/* Right-top blue / pink drift */}
+      <div
+        className="absolute w-[500px] h-[500px] rounded-full blur-[130px] animate-bg-drift-2"
+        style={{
+          right: '-4%',
+          top: '-2%',
+          background: 'radial-gradient(circle, rgba(6,182,212,0.22) 0%, rgba(236,72,153,0.12) 50%, transparent 70%)',
+        }}
+      />
+      {/* Bottom-right pink / purple drift */}
+      <div
+        className="absolute w-[550px] h-[550px] rounded-full blur-[150px] animate-bg-drift-3"
+        style={{
+          right: '-6%',
+          bottom: '-8%',
+          background: 'radial-gradient(circle, rgba(236,72,153,0.20) 0%, rgba(147,51,234,0.15) 50%, transparent 70%)',
+        }}
+      />
+      {/* Bottom-left cyan accent */}
+      <div
+        className="absolute w-[450px] h-[450px] rounded-full blur-[120px] animate-bg-drift-4"
+        style={{
+          left: '15%',
+          bottom: '-5%',
+          background: 'radial-gradient(circle, rgba(6,182,212,0.14) 0%, rgba(109,40,217,0.08) 50%, transparent 70%)',
+        }}
+      />
+
+      {/* ── LAYER 2: Static radial glow under key content zones ── */}
+      {/* Glow behind the left / main content feed */}
+      <div
+        className="absolute bg-[radial-gradient(ellipse_at_60%_50%,rgba(109,40,217,0.10)_0%,transparent_60%)]"
+        style={{ top: '18%', left: '8%', width: '80%', height: '72%' }}
+      />
+      {/* Glow behind the sidebar / right-side area */}
+      <div
+        className="absolute bg-[radial-gradient(ellipse_at_50%_30%,rgba(6,182,212,0.07)_0%,transparent_55%)]"
+        style={{ top: '16%', left: '55%', width: '48%', height: '68%' }}
+      />
+      {/* Glow behind the top tab bar / ad band */}
+      <div
+        className="absolute bg-[radial-gradient(ellipse_at_50%_10%,rgba(147,51,234,0.14)_0%,transparent_55%)]"
+        style={{ top: '0%', left: '10%', width: '80%', height: '30%' }}
+      />
+
+      {/* ── LAYER 3: Vignette — soft edge darkening at all four corners ── */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(2,6,23,0.55)_100%)]" />
+      {/* Per-corner vignette patches for a more organic fade */}
+      <div className="absolute -top-32 -left-32 w-[440px] h-[440px] bg-[radial-gradient(circle,rgba(0,0,0,0.45),transparent_65%)] pointer-events-none" />
+      <div className="absolute -top-24 -right-24 w-[360px] h-[360px] bg-[radial-gradient(circle,rgba(0,0,0,0.40),transparent_65%)] pointer-events-none" />
+      <div className="absolute -bottom-36 -left-36 w-[480px] h-[480px] bg-[radial-gradient(circle,rgba(0,0,0,0.50),transparent_65%)] pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-[440px] h-[440px] bg-[radial-gradient(circle,rgba(0,0,0,0.45),transparent_65%)] pointer-events-none" />
+
+      {/* ── LAYER 4: Low-opacity grid texture ── */}
+      <div
+        className="absolute inset-0 bg-[linear-gradient(rgba(109,40,217,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(109,40,217,0.055)_1px,transparent_1px)] bg-[length:56px_56px]"
+        style={{ maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.35), transparent 75%)', WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.35), transparent 75%)' }}
+      />
+
+      {/* ── LAYER 5: Atmospheric digital haze ── */}
+      {/* A thin, barely-there vertical shimmer across the upper-left */}
+      <div
+        className="absolute w-px left-[22%] top-0 h-full opacity-[0.12]"
+        style={{
+          background: 'linear-gradient(to bottom, transparent 0%, rgba(147,51,234,0.35) 25%, rgba(6,182,212,0.25) 60%, transparent 100%)',
+        }}
+      />
+      <div
+        className="absolute w-px left-[78%] top-0 h-full opacity-[0.08]"
+        style={{
+          background: 'linear-gradient(to bottom, transparent 0%, rgba(236,72,153,0.30) 35%, rgba(109,40,217,0.20) 65%, transparent 100%)',
+        }}
+      />
+      {/* Very faint diagonal digital haze */}
+      <div
+        className="absolute inset-0 opacity-[0.04]"
+        style={{
+          background:
+            'linear-gradient(138deg, rgba(6,182,212,0.12) 0%, transparent 35%), linear-gradient(248deg, rgba(147,51,234,0.10) 0%, transparent 40%), linear-gradient(58deg, rgba(236,72,153,0.08) 0%, transparent 45%)',
+        }}
+      />
+
+      {/* ── LAYER 6: Glass-panel stage — sits under the main content area ── */}
+      {/* Provides the "anchor glass" feel behind the feed without competing with posts */}
+      <div className="absolute left-0 right-0 top-[15%] mx-auto w-full max-w-[1300px] h-[78%] pointer-events-none" style={{ zIndex: 1 }}>
+        <div className="glass-panel h-full rounded-3xl" />
+      </div>
+
+      {/* ── LAYER 7: Content-zone glow cushions ── */}
+      {/* Soft coloured orb that sits behind central feed for depth */}
+      <div
+        className="absolute rounded-full blur-[90px] opacity-[0.12]"
+        style={{
+          width: '420px',
+          height: '420px',
+          left: '6%',
+          top: '32%',
+          background: 'radial-gradient(circle, rgba(147,51,234,0.6) 0%, transparent 70%)',
+        }}
+      />
+      {/* Soft orb behind sidebar / right column */}
+      <div
+        className="absolute rounded-full blur-[100px] opacity-[0.10]"
+        style={{
+          width: '380px',
+          height: '380px',
+          left: '58%',
+          top: '20%',
+          background: 'radial-gradient(circle, rgba(6,182,212,0.55) 0%, transparent 70%)',
+        }}
+      />
+
+      {/* ── LAYER 8: Falling coin sprites ── */}
+      {/* Gold TC coins — top-right cluster */}
+      {Array.from({ length: 6 }).map((_, i) => (
+        <CoinSprite
+          key={`gc-${i}`}
+          color="gold"
+          delayMs={i * 1400}
+          startX={62 + i * 4.8}
+          size={8 + (i % 3)}
+        />
+      ))}
+      {/* Green jail-free coins — bottom-left cluster */}
+      {Array.from({ length: 5 }).map((_, i) => (
+        <CoinSprite
+          key={`jc-${i}`}
+          color="green"
+          delayMs={i * 1600 + 700}
+          startX={10 + i * 7}
+          size={7 + (i % 3)}
+        />
+      ))}
     </div>
   );
 });
 AnimatedGradient.displayName = 'AnimatedGradient'
+
+// ─── falling coin sprite component ───
+function CoinSprite({
+  color,
+  delayMs,
+  startX,
+  size,
+}: {
+  color: 'gold' | 'green'
+  delayMs: number
+  startX: number
+  size: number
+}) {
+  const goldBase =
+    'radial-gradient(circle at 35% 35%, #fff8c4 0%, #fde68a 30%, #f59e0b 65%, #b45309 100%)'
+  const greenBase =
+    'radial-gradient(circle at 35% 35%, #d1fae5 0%, #6ee7b7 30%, #10b981 65%, #065f46 100%)'
+  return (
+    <div
+      className="absolute rounded-full opacity-0"
+      style={{
+        left: `${startX}%`,
+        top: '-16px',
+        width: `${size}px`,
+        height: `${size}px`,
+        background: color === 'gold' ? goldBase : greenBase,
+        boxShadow:
+          color === 'gold'
+            ? '0 0 6px rgba(245,158,11,0.55), 0 0 14px rgba(245,158,11,0.25)'
+            : '0 0 6px rgba(16,185,129,0.55), 0 0 14px rgba(16,185,129,0.25)',
+        animation: `coin-fall${color === 'gold' ? '-gold' : '-green'} ${14 + Math.random() * 6}s ease-in ${delayMs}ms infinite`,
+      }}
+    />
+  );
+}
 
 
 
@@ -57,6 +251,8 @@ export default function Home() {
   const [totalViewers, setTotalViewers] = useState(0)
   const [loadingLive, setLoadingLive] = useState(true)
   const [showLiveGrid, setShowLiveGrid] = useState<boolean | null>(null)
+  const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([])
+  const [loadingLiveAuctions, setLoadingLiveAuctions] = useState(false)
 
   // Wait for auth to load before rendering
   // Auto-scroll to top on page load
@@ -64,86 +260,122 @@ export default function Home() {
     window.scrollTo(0, 0)
   }, [])
 
-  // Fetch live streams and podcasts
-  useEffect(() => {
-    let mounted = true
+    // Fetch live streams and podcasts
+    useEffect(() => {
+      let mounted = true
 
-    const fetchLiveContent = async () => {
-      try {
-        // Fetch live streams with featured status
-        // Note: Fetch without broadcaster_id join due to ambiguous relationship in DB schema
-        const { data: streamsData, error: streamsError } = await supabase
-          .from('streams')
-          .select(`
-            id,
-            title,
-            current_viewers,
-            viewer_count,
-            is_featured,
-            battle_mode,
-            battle_format,
-            battle_status,
-            broadcaster_id
-          `)
-          .eq('is_live', true)
-          .order('is_featured', { ascending: false })
-          .order('current_viewers', { ascending: false })
-          .limit(100)
+      const fetchLiveContent = async () => {
+        try {
+          // Fetch live streams with featured status
+          // Note: Fetch without broadcaster_id join due to ambiguous relationship in DB schema
+          const { data: streamsData, error: streamsError } = await supabase
+            .from('streams')
+            .select(`
+              id,
+              title,
+              current_viewers,
+              viewer_count,
+              is_featured,
+              battle_mode,
+              battle_format,
+              battle_status,
+              broadcaster_id
+            `)
+            .eq('is_live', true)
+            .order('is_featured', { ascending: false })
+            .order('current_viewers', { ascending: false })
+            .limit(100)
 
-        if (streamsError) throw streamsError
+          if (streamsError) throw streamsError
 
-        // Fetch broadcaster info separately
-        const broadcasterIds = Array.from(new Set((streamsData || []).map((s: any) => s.broadcaster_id).filter(Boolean)))
-        let broadcasterMap = new Map<string, any>()
-        
-        if (broadcasterIds.length > 0) {
-          const { data: broadcasters, error: broadcasterError } = await supabase
-            .from('user_profiles')
-            .select('id, username, avatar_url')
-            .in('id', broadcasterIds)
+          // Fetch broadcaster info separately
+          const broadcasterIds = Array.from(new Set((streamsData || []).map((s: any) => s.broadcaster_id).filter(Boolean)))
+          let broadcasterMap = new Map<string, any>()
           
-          if (!broadcasterError && broadcasters) {
-            broadcasterMap = new Map(broadcasters.map((b: any) => [b.id, b]))
-          }
-        }
-
-        if (mounted) {
-          const streams: LiveItem[] = (streamsData || []).map((stream: any) => {
-            const broadcaster = broadcasterMap.get(stream.broadcaster_id)
-            return {
-              id: stream.id,
-              title: stream.title || 'Untitled Stream',
-              type: 'stream',
-              viewerCount: stream.current_viewers || stream.viewer_count || 0,
-              streamerName: broadcaster?.username || 'Unknown',
-              streamerAvatar: broadcaster?.avatar_url || null,
-              isFeatured: stream.is_featured || false,
-              isBattle: stream.battle_mode === 'universal',
-              battleFormat: stream.battle_format,
-              battleStatus: stream.battle_status,
+          if (broadcasterIds.length > 0) {
+            const { data: broadcasters, error: broadcasterError } = await supabase
+              .from('user_profiles')
+              .select('id, username, avatar_url')
+              .in('id', broadcasterIds)
+            
+            if (!broadcasterError && broadcasters) {
+              broadcasterMap = new Map(broadcasters.map((b: any) => [b.id, b]))
             }
-          })
+          }
 
-          setLiveItems(streams)
-          setTotalViewers(streams.reduce((sum, item) => sum + item.viewerCount, 0))
+          if (mounted) {
+            const streams: LiveItem[] = (streamsData || []).map((stream: any) => {
+              const broadcaster = broadcasterMap.get(stream.broadcaster_id)
+              return {
+                id: stream.id,
+                title: stream.title || 'Untitled Stream',
+                type: 'stream',
+                viewerCount: stream.current_viewers || stream.viewer_count || 0,
+                streamerName: broadcaster?.username || 'Unknown',
+                streamerAvatar: broadcaster?.avatar_url || null,
+                isFeatured: stream.is_featured || false,
+                isBattle: stream.battle_mode === 'universal',
+                battleFormat: stream.battle_format,
+                battleStatus: stream.battle_status,
+              }
+            })
+
+            setLiveItems(streams)
+            setTotalViewers(streams.reduce((sum, item) => sum + item.viewerCount, 0))
+          }
+        } catch (err) {
+          console.error('Error fetching live content:', err)
+        } finally {
+          if (mounted) setLoadingLive(false)
         }
-      } catch (err) {
-        console.error('Error fetching live content:', err)
-      } finally {
-        if (mounted) setLoadingLive(false)
       }
-    }
 
-    fetchLiveContent()
-    
-    // Poll every 60 seconds (reduced from 30s to lower server load)
-    const interval = setInterval(fetchLiveContent, 60000)
+      fetchLiveContent()
+      
+      // Poll every 60 seconds (reduced from 30s to lower server load)
+      const interval = setInterval(fetchLiveContent, 60000)
 
-    return () => {
-      mounted = false
-      clearInterval(interval)
-    }
-  }, [])
+      return () => {
+        mounted = false
+        clearInterval(interval)
+      }
+    }, [])
+
+    // Fetch live auctions
+    useEffect(() => {
+      let mounted = true
+
+      const fetchLiveAuctions = async () => {
+        setLoadingLiveAuctions(true)
+        try {
+          const { data, error } = await supabase
+            .from('auction_shows')
+            .select('*')
+            .eq('status', 'live')
+            .order('live_started_at', { ascending: false })
+            .limit(1)
+
+          if (error) throw error
+          if (mounted) {
+            setLiveAuctions(data || [])
+          }
+        } catch (err) {
+          console.error('Error fetching live auctions:', err)
+        } finally {
+          if (mounted) setLoadingLiveAuctions(false)
+        }
+      }
+
+      fetchLiveAuctions()
+
+      // Poll every 30 seconds for live auction updates
+      const interval = setInterval(fetchLiveAuctions, 30000)
+
+      return () => {
+        mounted = false
+        clearInterval(interval)
+      }
+    }, [])
 
   const requireAuth = useCallback(
     (intent?: string) => {
@@ -185,9 +417,17 @@ export default function Home() {
       </Suspense>
 
 {/* Content */}
-        <div className="relative z-10 flex flex-col flex-1 min-h-0 px-3 md:px-5 pt-2 pb-1 safe-top">
-
-        <div className="max-w-7xl mx-auto flex flex-col flex-1 min-h-0 w-full">
+        {/* Content-stage wrapper — glass panel that sits behind the centred content to reinforce the "dashboard" depth */}
+        <div className="relative z-10 flex flex-col flex-1 min-h-0 px-3 md:px-5 pt-2 pb-1 safe-top home-content-stage">
+          <div
+            className="max-w-7xl mx-auto flex flex-col flex-1 min-h-0 w-full home-inner-stage"
+            style={{
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)',
+              borderRadius: '1.5rem',
+              boxShadow:
+                'inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 48px rgba(0,0,0,0.25), 0 2px 12px rgba(147,51,234,0.04)',
+            }}
+          >
           {/* Header with Tabs */}
           <section 
             className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-2 flex-shrink-0`}
@@ -461,21 +701,41 @@ export default function Home() {
              </Suspense>
            </div>
            
-           {/* Main Content Area */}
-           <div className={`flex-1 min-h-0 mt-1 ${activeTab === 'wall' ? '' : 'hidden'}`}>
-             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 h-full">
-               <div className="col-span-1 lg:col-span-8 min-h-0">
-                 <TrollWallFeed onRequireAuth={requireAuth} />
+             {/* Main Content Area */}
+             <div className={`flex-1 min-h-0 mt-1 ${activeTab === 'wall' ? '' : 'hidden'}`}>
+               <div className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-3 h-full">
+                 {liveAuctions.length > 0 ? (
+                   <>
+                     <div className="col-span-1 md:col-span-6 lg:col-span-8">
+                       <TrollWallFeed onRequireAuth={requireAuth} feedClassName="md:col-span-12 lg:col-span-12" />
+                     </div>
+                     <div className="col-span-1 md:col-span-4 lg:col-span-2">
+                       <LiveAuctionMiniWindow auction={liveAuctions[0]} onRequireAuth={requireAuth} />
+                     </div>
+                     <div className="hidden md:block md:col-span-2 lg:col-span-2 space-y-2">
+                       <LevelSystemShowcase className="mb-4" />
+                       <Suspense fallback={null}>
+                         <PromoSlot placement="right_panel_featured" variant="featured" />
+                       </Suspense>
+                     </div>
+                   </>
+                 ) : (
+                   <>
+                     <div className="col-span-1 md:col-span-8 lg:col-span-10 min-h-0">
+                       <TrollWallFeed onRequireAuth={requireAuth} feedClassName="md:col-span-12 lg:col-span-12" />
+                     </div>
+                     <div className="hidden md:block md:col-span-4 lg:col-span-2 space-y-2">
+                       <LevelSystemShowcase className="mb-4" />
+                       <Suspense fallback={null}>
+                         <PromoSlot placement="right_panel_featured" variant="featured" />
+                       </Suspense>
+                     </div>
+                   </>
+                 )}
                </div>
-                <div className="hidden lg:block lg:col-span-4 space-y-2">
-                  <Suspense fallback={null}>
-                    <PromoSlot placement="right_panel_featured" variant="featured" />
-                  </Suspense>
-                </div>
              </div>
-           </div>
-        </div>
-        <div className="safe-bottom flex-shrink-0" />
+         </div>
+         <div className="safe-bottom flex-shrink-0" />
 
         {/* Footer Links */}
         <div className="flex-shrink-0 px-4 py-6 bg-slate-950/80 border-t border-slate-800">

@@ -100,7 +100,7 @@ export default function AdminAdvertisements() {
 
   const rotateQueue = async () => {
     try {
-      const { data, error } = await supabase.rpc('rotate_ad_queue');
+      const { data, error } = await supabase.rpc('rotate_ad_queue', { p_force: true });
       if (error) throw error;
       toast.success(`Queue rotated: ${data.rotations_performed} changes`);
       fetchAds();

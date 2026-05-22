@@ -1,5 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import AgoraRTC, {
+  IAgoraRTCClient,
+  IAgoraRTCRemoteUser,
+  ICameraVideoTrack,
+  IMicrophoneAudioTrack,
+  IRemoteAudioTrack,
+  IRemoteVideoTrack,
+} from 'agora-rtc-sdk-ng'
 import {
   Crown,
   FileText,
@@ -22,7 +30,6 @@ import RequireRole from '../components/RequireRole'
 import CourtChat from '../components/CourtChat'
 import CourtDocketModal from '../components/CourtDocketModal'
 import GiftBoxModal from '../components/broadcast/GiftBoxModal'
-import useLiveKitRoom from '../hooks/useLiveKitRoom'
 import { Button } from '../components/ui/button'
 
 type CourtRole =
@@ -49,12 +56,22 @@ type CourtStudioSpot =
   | 'witness'
   | 'audience'
 
-type CombinedUserTrack = {
+type AgoraCourtTrack = {
   uid: string | number
-  videoTrack?: any
-  audioTrack?: any
+  videoTrack?: ICameraVideoTrack | IRemoteVideoTrack | null
+  audioTrack?: IMicrophoneAudioTrack | IRemoteAudioTrack | null
   username?: string | null
-  role?: string | null
+  role?: CourtStudioSpot | string | null
+  isLocal?: boolean
+}
+
+type AgoraTokenResponse = {
+  appId?: string
+  token?: string | null
+  channel?: string
+  channelName?: string
+  uid?: string | number
+  role?: 'publisher' | 'audience'
 }
 
 const UUID_REGEX =
@@ -130,6 +147,10 @@ function getAutoStudioSpot(role: CourtRole): CourtStudioSpot {
   return 'audience'
 }
 
+function canPublishFromSpot(spot: CourtStudioSpot | null) {
+  return Boolean(spot && spot !== 'audience')
+}
+
 function spotLabel(spot: CourtStudioSpot) {
   switch (spot) {
     case 'judge':
@@ -187,80 +208,159 @@ function spotPosition(spot: CourtStudioSpot) {
   }
 }
 
+async function getAgoraCourtToken({
+  channelName,
+  uid,
+  role,
+}: {
+  channelName: string
+  uid: string
+  role: 'publisher' | 'audience'
+}): Promise<AgoraTokenResponse> {
+  const payload = {
+    channelName,
+    channel: channelName,
+    uid,
+    role,
+    roomType: 'court',
+  }
+
+  const candidates = ['agora-token', 'agora-rtc-token', 'rtc-token']
+
+  let lastError: any = null
+
+  for (const functionName of candidates) {
+    try {
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: payload,
+      })
+
+      if (error) {
+        lastError = error
+        continue
+      }
+
+      if (data?.appId || import.meta.env.VITE_AGORA_APP_ID) {
+        return {
+          appId: data?.appId || import.meta.env.VITE_AGORA_APP_ID,
+          token: data?.token ?? null,
+          channel: data?.channel || data?.channelName || channelName,
+          channelName: data?.channelName || data?.channel || channelName,
+          uid: data?.uid || uid,
+          role,
+        }
+      }
+
+      lastError = new Error(`${functionName} did not return appId`)
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  const fallbackAppId = import.meta.env.VITE_AGORA_APP_ID
+
+  if (fallbackAppId) {
+    return {
+      appId: fallbackAppId,
+      token: null,
+      channel: channelName,
+      channelName,
+      uid,
+      role,
+    }
+  }
+
+  throw lastError || new Error('Agora token/appId not available.')
+}
+
 function CourtStudioTile({
   spot,
   userTrack,
   isLocal,
   localUserId,
+  canEnterSpot,
+  isJoiningSpot,
+  onEnterSpot,
   onGiftUser,
 }: {
   spot: CourtStudioSpot
-  userTrack?: CombinedUserTrack
+  userTrack?: AgoraCourtTrack
   isLocal?: boolean
   localUserId: string
+  canEnterSpot?: boolean
+  isJoiningSpot?: boolean
+  onEnterSpot?: () => void
   onGiftUser?: (userId: string) => void
 }) {
   const videoContainerRef = useRef<HTMLDivElement>(null)
-  const attachedSidRef = useRef<string | null>(null)
-
-  const videoTrack = userTrack?.videoTrack
-  const audioTrack = userTrack?.audioTrack
+  const videoTrack = userTrack?.videoTrack || null
+  const audioTrack = userTrack?.audioTrack || null
   const uid = String(userTrack?.uid || '')
   const username = userTrack?.username || spotLabel(spot)
-  const canGift = isValidUuid(uid) && uid !== localUserId
+  const canGift = Boolean(userTrack && isValidUuid(uid) && uid !== localUserId)
+  const canClickEnter = !userTrack && Boolean(canEnterSpot && onEnterSpot)
 
   useEffect(() => {
     const container = videoContainerRef.current
     if (!container) return
 
-    if (!videoTrack) {
-      attachedSidRef.current = null
-      while (container.firstChild) container.removeChild(container.firstChild)
-      return
-    }
-
-    const trackSid = videoTrack.sid || videoTrack.mediaStreamTrack?.id || 'track'
-
-    if (attachedSidRef.current === trackSid) return
-
-    attachedSidRef.current = trackSid
-
     while (container.firstChild) container.removeChild(container.firstChild)
 
-    const videoElement = videoTrack.attach()
-    videoElement.style.cssText = `
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 9999px;
-      filter: saturate(1.12) contrast(1.05);
-    `
-    videoElement.playsInline = true
-    videoElement.autoplay = true
-    videoElement.muted = Boolean(isLocal)
+    if (!videoTrack) return
 
-    container.appendChild(videoElement)
+    try {
+      videoTrack.play(container)
+
+      requestAnimationFrame(() => {
+        const videoElements = container.querySelectorAll('video')
+        videoElements.forEach((video) => {
+          video.style.width = '100%'
+          video.style.height = '100%'
+          video.style.objectFit = 'cover'
+          video.style.borderRadius = '9999px'
+          video.playsInline = true
+          video.autoplay = true
+          video.muted = Boolean(isLocal)
+        })
+
+        const wrapperElements = container.querySelectorAll('div')
+        wrapperElements.forEach((element) => {
+          element.style.width = '100%'
+          element.style.height = '100%'
+          element.style.borderRadius = '9999px'
+          element.style.overflow = 'hidden'
+        })
+      })
+    } catch (err) {
+      console.error('[CourtRoom:Agora] failed to play video track', err)
+    }
 
     return () => {
       try {
-        videoTrack.detach(videoElement)
+        videoTrack.stop()
       } catch {
         // no-op
       }
 
-      attachedSidRef.current = null
-
-      if (container.contains(videoElement)) {
-        container.removeChild(videoElement)
-      }
+      while (container.firstChild) container.removeChild(container.firstChild)
     }
-  }, [videoTrack?.sid, videoTrack, isLocal])
+  }, [videoTrack, isLocal])
 
   useEffect(() => {
-    if (audioTrack && !isLocal) audioTrack.play?.()
+    if (!audioTrack || isLocal) return
+
+    try {
+      audioTrack.play()
+    } catch (err) {
+      console.error('[CourtRoom:Agora] failed to play audio track', err)
+    }
 
     return () => {
-      if (audioTrack && !isLocal) audioTrack.stop?.()
+      try {
+        audioTrack.stop()
+      } catch {
+        // no-op
+      }
     }
   }, [audioTrack, isLocal])
 
@@ -271,14 +371,19 @@ function CourtStudioTile({
         'absolute z-20 overflow-hidden rounded-full border-2 bg-black/40 backdrop-blur-sm transition',
         spotPosition(spot),
         spotTone(spot),
-        canGift ? 'cursor-pointer hover:scale-[1.03]' : 'cursor-default',
+        canGift || canClickEnter ? 'cursor-pointer hover:scale-[1.03]' : 'cursor-default',
       ].join(' ')}
       onClick={() => {
+        if (canClickEnter && onEnterSpot) {
+          onEnterSpot()
+          return
+        }
+
         if (canGift && onGiftUser) onGiftUser(uid)
       }}
     >
       {videoTrack ? (
-        <div ref={videoContainerRef} className="h-full w-full rounded-full" />
+        <div ref={videoContainerRef} className="h-full w-full rounded-full overflow-hidden" />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-black/45 text-white/70">
           {spot === 'judge' ? (
@@ -286,15 +391,26 @@ function CourtStudioTile({
           ) : (
             <User className="mb-1 h-6 w-6 text-white/70" />
           )}
+
           <span className="max-w-[80%] truncate text-[10px] font-black">
-            {userTrack ? username : spotLabel(spot)}
+            {userTrack
+              ? username
+              : canClickEnter
+                ? isJoiningSpot
+                  ? 'Entering...'
+                  : `Enter ${spotLabel(spot)}`
+                : spotLabel(spot)}
           </span>
         </div>
       )}
 
       <div className="absolute bottom-0 left-1/2 w-[92%] -translate-x-1/2 rounded-full bg-black/80 px-2 py-1 text-center">
         <p className="truncate text-[10px] font-black text-white">
-          {userTrack ? username : `Waiting for ${spotLabel(spot)}`}
+          {userTrack
+            ? username
+            : canClickEnter
+              ? `Click to enter ${spotLabel(spot)}`
+              : `Waiting for ${spotLabel(spot)}`}
         </p>
       </div>
     </button>
@@ -336,10 +452,12 @@ function StudioControls({
     <div className="absolute bottom-4 left-1/2 z-40 flex w-[min(920px,calc(100%-32px))] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-amber-300/25 bg-black/75 p-3 shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
       <div className="min-w-0">
         <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-200/70">
-          Virtual Court Studio
+          Agora Court Studio
         </p>
         <p className="truncate text-sm font-black text-amber-50">
-          {activeSpot ? `You are in the ${spotLabel(activeSpot)} spot` : `Your assigned spot: ${spotLabel(autoSpot)}`}
+          {activeSpot
+            ? `You are in the ${spotLabel(activeSpot)} spot`
+            : `Your assigned spot: ${spotLabel(autoSpot)}`}
         </p>
       </div>
 
@@ -377,7 +495,7 @@ function StudioControls({
       </div>
 
       <div className="hidden items-center gap-2 rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs font-black text-amber-100 lg:flex">
-        {isConnected ? '🟢 LIVE' : '⚫ OFFLINE'}
+        {isConnected ? '🟢 AGORA LIVE' : '⚫ OFFLINE'}
       </div>
     </div>
   )
@@ -400,42 +518,182 @@ export default function CourtRoom() {
   const [giftOpen, setGiftOpen] = useState(false)
   const [showChat, setShowChat] = useState(false)
 
+  const [agoraClient, setAgoraClient] = useState<IAgoraRTCClient | null>(null)
+  const [agoraJoined, setAgoraJoined] = useState(false)
+  const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([])
+  const [localAudioTrack, setLocalAudioTrack] = useState<IMicrophoneAudioTrack | null>(null)
+  const [localVideoTrack, setLocalVideoTrack] = useState<ICameraVideoTrack | null>(null)
+  const [micOn, setMicOn] = useState(false)
+  const [cameraOn, setCameraOn] = useState(false)
+
+  const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null)
+  const localVideoRef = useRef<ICameraVideoTrack | null>(null)
+  const agoraClientRef = useRef<IAgoraRTCClient | null>(null)
+  const joinedRef = useRef(false)
+
   const effectiveRole = useMemo(() => normalizeCourtRole(profile), [profile])
   const autoSpot = useMemo(() => getAutoStudioSpot(effectiveRole), [effectiveRole])
 
-  const canPublish = activeSpot !== null && activeSpot !== 'audience'
-  const canUseMicCamera = activeSpot !== null && activeSpot !== 'audience'
+  const canUseMicCamera = canPublishFromSpot(activeSpot)
   const canEnd = canEndCourt(effectiveRole)
 
-  const liveKitRoomId = courtId ? makeCourtRoomName(courtId) : ''
+  const agoraChannelName = courtId ? makeCourtRoomName(courtId) : ''
 
-  const {
-    isConnected: isLiveKitConnected,
-    remoteUsers: liveKitRemoteUsers,
-    localAudioTrack,
-    localVideoTrack,
-    joinAsPublisher,
-    joinAsAudience,
-    leaveRoom,
-    toggleCamera,
-    toggleMicrophone,
-  } = useLiveKitRoom({
-    roomId: liveKitRoomId,
-    roomType: 'court',
-    audioOnly: false,
-    publish: canPublish,
-    userName: profile?.username || user?.email || 'Court User',
-    onUserJoined: () => {},
-    onUserLeft: () => {},
-    onError: (err) => {
-      toast.error(`Audio/Video error: ${err.message}`)
+  const cleanupLocalTracks = useCallback(() => {
+    try {
+      localAudioRef.current?.stop()
+      localAudioRef.current?.close()
+    } catch {
+      // no-op
+    }
+
+    try {
+      localVideoRef.current?.stop()
+      localVideoRef.current?.close()
+    } catch {
+      // no-op
+    }
+
+    localAudioRef.current = null
+    localVideoRef.current = null
+    setLocalAudioTrack(null)
+    setLocalVideoTrack(null)
+    setMicOn(false)
+    setCameraOn(false)
+  }, [])
+
+  const leaveAgora = useCallback(async () => {
+    const client = agoraClientRef.current
+
+    try {
+      if (client && joinedRef.current) {
+        const tracks = [localAudioRef.current, localVideoRef.current].filter(Boolean) as any[]
+        if (tracks.length > 0) {
+          try {
+            await client.unpublish(tracks)
+          } catch {
+            // no-op
+          }
+        }
+
+        await client.leave()
+      }
+    } catch (error) {
+      console.error('[CourtRoom:Agora] leave failed', error)
+    } finally {
+      cleanupLocalTracks()
+      joinedRef.current = false
+      setAgoraJoined(false)
+      setRemoteUsers([])
+    }
+  }, [cleanupLocalTracks])
+
+  const ensureAgoraClient = useCallback(() => {
+    if (agoraClientRef.current) return agoraClientRef.current
+
+    const client = AgoraRTC.createClient({
+      mode: 'rtc',
+      codec: 'vp8',
+    })
+
+    client.on('user-published', async (remoteUser, mediaType) => {
+      try {
+        await client.subscribe(remoteUser, mediaType)
+
+        setRemoteUsers((prev) => {
+          const exists = prev.some((item) => String(item.uid) === String(remoteUser.uid))
+          if (exists) {
+            return prev.map((item) => (String(item.uid) === String(remoteUser.uid) ? remoteUser : item))
+          }
+          return [...prev, remoteUser]
+        })
+
+        if (mediaType === 'audio') {
+          remoteUser.audioTrack?.play()
+        }
+      } catch (error) {
+        console.error('[CourtRoom:Agora] subscribe failed', error)
+      }
+    })
+
+    client.on('user-unpublished', (remoteUser) => {
+      setRemoteUsers((prev) =>
+        prev.map((item) => (String(item.uid) === String(remoteUser.uid) ? remoteUser : item)),
+      )
+    })
+
+    client.on('user-left', (remoteUser) => {
+      setRemoteUsers((prev) => prev.filter((item) => String(item.uid) !== String(remoteUser.uid)))
+    })
+
+    agoraClientRef.current = client
+    setAgoraClient(client)
+
+    return client
+  }, [])
+
+  const joinAgora = useCallback(
+    async (spot: CourtStudioSpot) => {
+      if (!user?.id || !agoraChannelName) {
+        throw new Error('Missing user or court Agora channel.')
+      }
+
+      const publish = canPublishFromSpot(spot)
+      const agoraRole: 'publisher' | 'audience' = publish ? 'publisher' : 'audience'
+
+      const client = ensureAgoraClient()
+
+      if (joinedRef.current) {
+        return
+      }
+
+      const tokenResponse = await getAgoraCourtToken({
+        channelName: agoraChannelName,
+        uid: user.id,
+        role: agoraRole,
+      })
+
+      if (!tokenResponse.appId) {
+        throw new Error('Agora App ID missing.')
+      }
+
+      client.setClientRole?.(publish ? 'host' : 'audience')
+
+      await client.join(
+        tokenResponse.appId,
+        tokenResponse.channelName || tokenResponse.channel || agoraChannelName,
+        tokenResponse.token || null,
+        String(tokenResponse.uid || user.id),
+      )
+
+      joinedRef.current = true
+      setAgoraJoined(true)
+
+      if (!publish) {
+        return
+      }
+
+      const [microphoneTrack, cameraTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+        {},
+        {
+          encoderConfig: '480p_1',
+          optimizationMode: 'motion',
+        },
+      )
+
+      localAudioRef.current = microphoneTrack
+      localVideoRef.current = cameraTrack
+      setLocalAudioTrack(microphoneTrack)
+      setLocalVideoTrack(cameraTrack)
+      setMicOn(true)
+      setCameraOn(true)
+
+      await client.publish([microphoneTrack, cameraTrack])
     },
-  })
+    [agoraChannelName, ensureAgoraClient, user?.id],
+  )
 
-  const micOn = Boolean(localAudioTrack?.isEnabled ?? localAudioTrack?.enabled)
-  const cameraOn = Boolean(localVideoTrack?.isEnabled ?? localVideoTrack?.enabled)
-
-  const fetchCourtSession = async () => {
+  const fetchCourtSession = useCallback(async () => {
     if (!courtId) return
 
     const { data, error } = await supabase
@@ -451,9 +709,9 @@ export default function CourtRoom() {
     }
 
     setCourtSession(data)
-  }
+  }, [courtId, navigate])
 
-  const fetchCourtParticipants = async () => {
+  const fetchCourtParticipants = useCallback(async () => {
     if (!courtId) return
 
     const { data, error } = await supabase
@@ -464,7 +722,7 @@ export default function CourtRoom() {
     if (!error && data) {
       setCourtParticipants(data)
     }
-  }
+  }, [courtId])
 
   useEffect(() => {
     if (!rawCourtId) return
@@ -482,7 +740,7 @@ export default function CourtRoom() {
     fetchCourtParticipants()
 
     const sessionChannel = supabase
-      .channel(`court_session_studio_${courtId}`)
+      .channel(`court_session_agora_${courtId}`)
       .on(
         'postgres_changes',
         {
@@ -501,12 +759,12 @@ export default function CourtRoom() {
             toast.info('Court session ended.')
             navigate('/troll-court')
           }
-        }
+        },
       )
       .subscribe()
 
     const participantChannel = supabase
-      .channel(`court_participants_studio_${courtId}`)
+      .channel(`court_participants_agora_${courtId}`)
       .on(
         'postgres_changes',
         {
@@ -517,7 +775,7 @@ export default function CourtRoom() {
         },
         () => {
           fetchCourtParticipants()
-        }
+        },
       )
       .subscribe()
 
@@ -525,7 +783,13 @@ export default function CourtRoom() {
       supabase.removeChannel(sessionChannel)
       supabase.removeChannel(participantChannel)
     }
-  }, [courtId, navigate])
+  }, [courtId, fetchCourtParticipants, fetchCourtSession, navigate])
+
+  useEffect(() => {
+    return () => {
+      leaveAgora()
+    }
+  }, [leaveAgora])
 
   const upsertParticipantRole = async (spot: CourtStudioSpot) => {
     if (!courtId || !user?.id) return
@@ -544,7 +808,7 @@ export default function CourtRoom() {
     await fetchCourtParticipants()
   }
 
-  const enterCourtroom = async () => {
+  const enterCourtroom = async (forcedSpot?: CourtStudioSpot) => {
     if (!courtId || !user?.id) {
       toast.error('Court ID or user missing.')
       return
@@ -553,15 +817,10 @@ export default function CourtRoom() {
     setIsJoining(true)
 
     try {
-      const spot = autoSpot
+      const spot = forcedSpot || autoSpot
 
       await upsertParticipantRole(spot)
-
-      if (spot === 'audience') {
-        await joinAsAudience(user.id)
-      } else {
-        await joinAsPublisher(user.id)
-      }
+      await joinAgora(spot)
 
       if (spot === 'judge') {
         await supabase
@@ -570,7 +829,6 @@ export default function CourtRoom() {
             judge_id: user.id,
             judge_username: profile?.username || user.email || 'Judge',
             status: courtSession?.status === 'waiting' ? 'active' : courtSession?.status || 'active',
-            livekit_room_name: liveKitRoomId,
           })
           .eq('id', courtId)
 
@@ -579,16 +837,21 @@ export default function CourtRoom() {
           judge_id: user.id,
           judge_username: profile?.username || user.email || 'Judge',
           status: prev?.status === 'waiting' ? 'active' : prev?.status || 'active',
-          livekit_room_name: liveKitRoomId,
         }))
       }
 
       setActiveSpot(spot)
-      toast.success(`Entered courtroom as ${spotLabel(spot)}.`)
+      toast.success(
+        spot === 'audience'
+          ? 'Joined courtroom audience.'
+          : `Entered courtroom as ${spotLabel(spot)}.`,
+      )
     } catch (error: any) {
+      console.error('[CourtRoom:Agora] enter failed', error)
       toast.error(error?.message || 'Failed to enter courtroom.')
+
       try {
-        await leaveRoom()
+        await leaveAgora()
       } catch {
         // no-op
       }
@@ -599,7 +862,7 @@ export default function CourtRoom() {
 
   const leaveCurrentSpot = async () => {
     try {
-      await leaveRoom()
+      await leaveAgora()
 
       if (courtId && user?.id) {
         await supabase
@@ -623,8 +886,15 @@ export default function CourtRoom() {
       return
     }
 
+    if (!localAudioRef.current) {
+      toast.error('Microphone track is not ready.')
+      return
+    }
+
     try {
-      await toggleMicrophone()
+      const next = !micOn
+      await localAudioRef.current.setEnabled(next)
+      setMicOn(next)
     } catch (error: any) {
       toast.error(error?.message || 'Failed to toggle mic.')
     }
@@ -636,8 +906,15 @@ export default function CourtRoom() {
       return
     }
 
+    if (!localVideoRef.current) {
+      toast.error('Camera track is not ready.')
+      return
+    }
+
     try {
-      await toggleCamera()
+      const next = !cameraOn
+      await localVideoRef.current.setEnabled(next)
+      setCameraOn(next)
     } catch (error: any) {
       toast.error(error?.message || 'Failed to toggle camera.')
     }
@@ -660,7 +937,7 @@ export default function CourtRoom() {
         })
         .eq('id', courtId)
 
-      await leaveRoom()
+      await leaveAgora()
       setActiveSpot(null)
       toast.success('Court session ended.')
       navigate('/troll-court')
@@ -671,33 +948,24 @@ export default function CourtRoom() {
 
   const findParticipantBySpot = (spot: CourtStudioSpot) => {
     return courtParticipants.find(
-      (participant) => String(participant.role || '').toLowerCase() === spot
+      (participant) => String(participant.role || '').toLowerCase() === spot,
     )
+  }
+
+  const findRemoteAgoraUser = (id?: string | null) => {
+    if (!id) return undefined
+
+    return remoteUsers.find((remoteUser) => String(remoteUser.uid) === String(id))
   }
 
   const findTrackUser = (
     id?: string | null,
     username?: string | null,
-    role?: CourtStudioSpot
-  ): CombinedUserTrack | undefined => {
+    role?: CourtStudioSpot,
+  ): AgoraCourtTrack | undefined => {
     if (!id) return undefined
 
     const cleanId = cleanCourtUuid(id) || id
-
-    const remote = liveKitRemoteUsers.find((remoteUser: any) => {
-      const identity = String(remoteUser.uid || remoteUser.identity || '')
-      return identity === String(cleanId) || identity.endsWith(String(cleanId))
-    })
-
-    if (remote) {
-      return {
-        uid: remote.uid || remote.identity,
-        videoTrack: remote.videoTrack,
-        audioTrack: remote.audioTrack,
-        username: username || remote.name || remote.identity,
-        role,
-      }
-    }
 
     if (cleanId === user?.id) {
       return {
@@ -706,6 +974,20 @@ export default function CourtRoom() {
         audioTrack: localAudioTrack,
         username: username || profile?.username || 'You',
         role,
+        isLocal: true,
+      }
+    }
+
+    const remote = findRemoteAgoraUser(cleanId)
+
+    if (remote) {
+      return {
+        uid: remote.uid,
+        videoTrack: remote.videoTrack || null,
+        audioTrack: remote.audioTrack || null,
+        username: username || String(remote.uid),
+        role,
+        isLocal: false,
       }
     }
 
@@ -713,6 +995,7 @@ export default function CourtRoom() {
       uid: cleanId,
       username,
       role,
+      isLocal: false,
     }
   }
 
@@ -731,45 +1014,76 @@ export default function CourtRoom() {
         courtSession?.judge_username ||
           judgeParticipant?.user_profiles?.username ||
           'Judge',
-        'judge'
+        'judge',
       ),
       prosecutor: findTrackUser(
         prosecutorParticipant?.user_id,
         prosecutorParticipant?.user_profiles?.username || 'Prosecutor',
-        'prosecutor'
+        'prosecutor',
       ),
       attorney: findTrackUser(
         attorneyParticipant?.user_id,
         attorneyParticipant?.user_profiles?.username || 'Defense Attorney',
-        'attorney'
+        'attorney',
       ),
       defendant: findTrackUser(
         courtSession?.defendant_id || defendantParticipant?.user_id,
         courtSession?.defendant_username ||
           defendantParticipant?.user_profiles?.username ||
           'Defendant',
-        'defendant'
+        'defendant',
       ),
       witness: findTrackUser(
         witnessParticipant?.user_id,
         witnessParticipant?.user_profiles?.username || 'Witness',
-        'witness'
+        'witness',
       ),
       audience:
         activeSpot === 'audience' && user?.id
-          ? findTrackUser(user.id, profile?.username || 'You', 'audience')
+          ? {
+              uid: user.id,
+              username: profile?.username || 'You',
+              role: 'audience',
+              isLocal: true,
+            }
           : undefined,
     }
   }, [
     courtParticipants,
     courtSession,
-    liveKitRemoteUsers,
+    remoteUsers,
     user?.id,
     localVideoTrack,
     localAudioTrack,
     activeSpot,
     profile?.username,
   ])
+
+  const handleGiftTarget = (targetUserId: string) => {
+    if (!user) {
+      navigate('/auth?mode=signup')
+      return
+    }
+
+    if (targetUserId === user.id) {
+      toast.error('You cannot gift yourself')
+      return
+    }
+
+    setGiftRecipientId(targetUserId)
+    setGiftOpen(true)
+  }
+
+  const canEnterSpecificSpot = (spot: CourtStudioSpot) => {
+    if (activeSpot || isJoining) return false
+    if (spot === 'audience') return autoSpot === 'audience'
+
+    if (autoSpot === spot) return true
+
+    if (canJudge(effectiveRole) && spot === 'judge') return true
+
+    return false
+  }
 
   return (
     <RequireRole
@@ -799,7 +1113,7 @@ export default function CourtRoom() {
         </div>
 
         <div className="absolute right-4 top-4 z-30 flex items-center gap-2 rounded-2xl border border-amber-300/25 bg-black/70 px-4 py-3 text-xs font-black text-amber-100 shadow-[0_0_26px_rgba(0,0,0,0.6)] backdrop-blur-md">
-          {isLiveKitConnected ? '🟢 LIVE COURTROOM' : '⚫ STUDIO OFFLINE'}
+          {agoraJoined ? '🟢 AGORA COURTROOM' : '⚫ STUDIO OFFLINE'}
         </div>
 
         <CourtStudioTile
@@ -807,20 +1121,10 @@ export default function CourtRoom() {
           userTrack={spotUsers.judge}
           isLocal={String(spotUsers.judge?.uid || '') === user?.id}
           localUserId={user?.id || ''}
-          onGiftUser={(targetUserId) => {
-            if (!user) {
-              navigate('/auth?mode=signup')
-              return
-            }
-
-            if (targetUserId === user.id) {
-              toast.error('You cannot gift yourself')
-              return
-            }
-
-            setGiftRecipientId(targetUserId)
-            setGiftOpen(true)
-          }}
+          canEnterSpot={canEnterSpecificSpot('judge')}
+          isJoiningSpot={isJoining && autoSpot === 'judge'}
+          onEnterSpot={() => enterCourtroom('judge')}
+          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
@@ -828,12 +1132,10 @@ export default function CourtRoom() {
           userTrack={spotUsers.prosecutor}
           isLocal={String(spotUsers.prosecutor?.uid || '') === user?.id}
           localUserId={user?.id || ''}
-          onGiftUser={(targetUserId) => {
-            if (!user) return
-            if (targetUserId === user.id) return toast.error('You cannot gift yourself')
-            setGiftRecipientId(targetUserId)
-            setGiftOpen(true)
-          }}
+          canEnterSpot={canEnterSpecificSpot('prosecutor')}
+          isJoiningSpot={isJoining && autoSpot === 'prosecutor'}
+          onEnterSpot={() => enterCourtroom('prosecutor')}
+          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
@@ -841,12 +1143,10 @@ export default function CourtRoom() {
           userTrack={spotUsers.attorney}
           isLocal={String(spotUsers.attorney?.uid || '') === user?.id}
           localUserId={user?.id || ''}
-          onGiftUser={(targetUserId) => {
-            if (!user) return
-            if (targetUserId === user.id) return toast.error('You cannot gift yourself')
-            setGiftRecipientId(targetUserId)
-            setGiftOpen(true)
-          }}
+          canEnterSpot={canEnterSpecificSpot('attorney')}
+          isJoiningSpot={isJoining && autoSpot === 'attorney'}
+          onEnterSpot={() => enterCourtroom('attorney')}
+          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
@@ -854,12 +1154,10 @@ export default function CourtRoom() {
           userTrack={spotUsers.witness}
           isLocal={String(spotUsers.witness?.uid || '') === user?.id}
           localUserId={user?.id || ''}
-          onGiftUser={(targetUserId) => {
-            if (!user) return
-            if (targetUserId === user.id) return toast.error('You cannot gift yourself')
-            setGiftRecipientId(targetUserId)
-            setGiftOpen(true)
-          }}
+          canEnterSpot={canEnterSpecificSpot('witness')}
+          isJoiningSpot={isJoining && autoSpot === 'witness'}
+          onEnterSpot={() => enterCourtroom('witness')}
+          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
@@ -867,12 +1165,10 @@ export default function CourtRoom() {
           userTrack={spotUsers.defendant}
           isLocal={String(spotUsers.defendant?.uid || '') === user?.id}
           localUserId={user?.id || ''}
-          onGiftUser={(targetUserId) => {
-            if (!user) return
-            if (targetUserId === user.id) return toast.error('You cannot gift yourself')
-            setGiftRecipientId(targetUserId)
-            setGiftOpen(true)
-          }}
+          canEnterSpot={canEnterSpecificSpot('defendant')}
+          isJoiningSpot={isJoining && autoSpot === 'defendant'}
+          onEnterSpot={() => enterCourtroom('defendant')}
+          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
@@ -880,6 +1176,9 @@ export default function CourtRoom() {
           userTrack={spotUsers.audience}
           isLocal={activeSpot === 'audience'}
           localUserId={user?.id || ''}
+          canEnterSpot={canEnterSpecificSpot('audience')}
+          isJoiningSpot={isJoining && autoSpot === 'audience'}
+          onEnterSpot={() => enterCourtroom('audience')}
         />
 
         <div className="absolute right-4 top-24 z-30 flex flex-col gap-2">
@@ -907,13 +1206,13 @@ export default function CourtRoom() {
 
         <StudioControls
           activeSpot={activeSpot}
-          isConnected={isLiveKitConnected}
+          isConnected={agoraJoined}
           isJoining={isJoining}
           canUseMicCamera={canUseMicCamera}
           micOn={micOn}
           cameraOn={cameraOn}
           autoSpot={autoSpot}
-          onEnter={enterCourtroom}
+          onEnter={() => enterCourtroom(autoSpot)}
           onLeave={leaveCurrentSpot}
           onToggleMic={safeToggleMic}
           onToggleCamera={safeToggleCamera}

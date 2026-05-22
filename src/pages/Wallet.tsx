@@ -20,6 +20,7 @@ import { supabase } from '../lib/supabase'
 import { format12hr } from '../utils/timeFormat'
 import { cn } from '../lib/utils'
 import MAIPayCard from '../components/MAIPayCard'
+import PayoutMethodManager from '../components/PayoutMethodManager'
 import type { CashoutRequest } from '../types/cashout'
 import {
   calculateFeeCoins,
@@ -483,11 +484,20 @@ export default function Wallet() {
               )}
             </section>
           </>
-        ) : (
-          /* Cashout Tab Content */
-          <div className="space-y-6">
-            {/* Cashout Summary Card */}
-            <section className={cn(panel, 'p-6')}>
+) : (
+           /* Cashout Tab Content */
+           <div className="space-y-6">
+             {/* Payout Method Setup */}
+             <section className={cn(panel, 'p-6')}>
+               <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                 <DollarSign className="text-troll-gold" />
+                 Payout Methods
+               </h3>
+               <PayoutMethodManager />
+             </section>
+
+             {/* Cashout Summary Card */}
+             <section className={cn(panel, 'p-6')}>
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-bold text-white flex items-center gap-2">

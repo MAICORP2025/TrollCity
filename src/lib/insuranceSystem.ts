@@ -4,7 +4,7 @@
 import { supabase } from './supabase';
 import { runStandardPurchaseFlow } from './purchases';
 
-export type ProtectionType = 'kick' | 'full';
+export type ProtectionType = 'kick' | 'full' | 'jail';
 
 export interface InsurancePlan {
   id: string;
@@ -279,31 +279,38 @@ export async function purchaseInsurance(userId: string, planId: string): Promise
  * Check if kick penalty should be blocked
  */
 export async function shouldBlockKick(userId: string): Promise<boolean> {
-  return await hasProtection(userId, 'kick');
+   return await hasProtection(userId, 'kick');
+}
+
+/**
+ * Check if jail penalty should be blocked
+ */
+export async function shouldBlockJail(userId: string): Promise<boolean> {
+   return await hasProtection(userId, 'jail');
 }
 
 /**
  * Apply kick penalty (with insurance check)
  */
 export async function applyKickPenalty(userId: string): Promise<{blocked: boolean, insuranceUsed?: ActiveInsurance}> {
-  const blocked = await shouldBlockKick(userId);
+   const blocked = await hasProtection(userId, 'kick');
 
-  if (blocked) {
-    // Log the block
-    const activeInsurance = await getActiveInsurance(userId);
-    const insurance = activeInsurance.find(ins =>
-      ins.protection_type === 'kick' || ins.protection_type === 'full'
-    );
+   if (blocked) {
+     // Log the block
+     const activeInsurance = await getActiveInsurance(userId);
+     const insurance = activeInsurance.find(ins =>
+       ins.protection_type === 'kick' || ins.protection_type === 'full'
+     );
 
-    if (insurance) {
-      await logInsuranceBlock(userId, insurance.protection_type, 'kick');
-      return { blocked: true, insuranceUsed: insurance };
-    }
-  }
+     if (insurance) {
+       await logInsuranceBlock(userId, insurance.protection_type, 'kick');
+       return { blocked: true, insuranceUsed: insurance };
+     }
+   }
 
-  // Apply penalty - kick user
-  await kickUserFromStream(userId);
-  return { blocked: false };
+   // Apply penalty - kick user
+   await kickUserFromStream(userId);
+   return { blocked: false };
 }
 
 /**

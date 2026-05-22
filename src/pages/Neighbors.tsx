@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import L from 'leaflet'
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
@@ -24,8 +24,6 @@ import {
   Briefcase,
   Building2,
   Calendar,
-  Car,
-  CheckCircle2,
   Home,
   Map,
   Navigation,
@@ -35,14 +33,13 @@ import {
   Trophy,
   Users,
   X,
-  XCircle,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
-import { useDriverTest } from '@/lib/hooks/useVehicleSystem'
 import { cn } from '@/lib/utils'
 
+// Leaflet marker icon fix for Vite/React builds.
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -87,13 +84,59 @@ const tcButton =
 const tcPrimary =
   'border border-cyan-300/30 bg-cyan-300 text-slate-950 hover:bg-cyan-200 font-black shadow-[0_0_24px_rgba(34,211,238,0.22)]'
 
-const tcDanger =
-  'border border-red-300/25 bg-red-500/15 text-red-100 hover:bg-red-500/25'
+const tcDanger = 'border border-red-300/25 bg-red-500/15 text-red-100 hover:bg-red-500/25'
 
 const tcSelectContent =
   'z-[99999] border border-cyan-300/20 bg-slate-950 text-white shadow-[0_0_40px_rgba(34,211,238,0.2)] backdrop-blur-2xl'
 
-function resetEventForm() {
+type Coordinates = [number, number]
+
+type NeighborEventForm = {
+  title: string
+  description: string
+  category: string
+  latitude: number
+  longitude: number
+  city: string
+  state: string
+  start_time: string
+  end_time: string
+  duration_minutes: number
+  max_participants: number
+  reward_coins: number
+  requirements: string
+  images: string[]
+  visibility: 'public' | 'neighborhood'
+}
+
+type BusinessFormState = {
+  business_name: string
+  description: string
+  category: string
+  phone: string
+  email: string
+  website: string
+  address: string
+  latitude: number
+  longitude: number
+  city: string
+  state: string
+  logo_url: string
+}
+
+type HiringFormState = {
+  business_id: string
+  title: string
+  description: string
+  requirements: string
+  contact_email: string
+  contact_phone: string
+  location: string
+  job_type: string
+  pay_rate: string
+}
+
+function resetEventForm(): NeighborEventForm {
   return {
     title: '',
     description: '',
@@ -113,7 +156,7 @@ function resetEventForm() {
   }
 }
 
-function resetBusinessForm() {
+function resetBusinessForm(): BusinessFormState {
   return {
     business_name: '',
     description: '',
@@ -130,7 +173,7 @@ function resetBusinessForm() {
   }
 }
 
-function resetHiringForm() {
+function resetHiringForm(): HiringFormState {
   return {
     business_id: '',
     title: '',
@@ -144,252 +187,32 @@ function resetHiringForm() {
   }
 }
 
-function DriverTestManual() {
-  const { license, takeTest, loading } = useDriverTest()
-  const [currentQuestion, setCurrentQuestion] = useState(0)
-  const [answers, setAnswers] = useState<number[]>([])
-  const [showResults, setShowResults] = useState(false)
-  const [testResult, setTestResult] = useState<any>(null)
-  const [showManual, setShowManual] = useState(true)
+function safeDateToInput(value?: string | null) {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toISOString().slice(0, 16)
+}
 
-  const manual = [
-    {
-      title: 'Traffic Signals & Signs',
-      content: 'Yellow means slow down and prepare to stop. Red means stop. Green means go while yielding to pedestrians.',
-      rules: ['Yellow: stop if safe', 'Red: complete stop', 'Flashing red: stop sign', 'Flashing yellow: proceed with caution'],
-    },
-    {
-      title: 'Speed Limits',
-      content: 'Always obey posted limits and adjust for traffic, weather, and road conditions.',
-      rules: ['School zones: 15-25 mph', 'Residential: usually 25 mph', 'Highways: posted limit', 'Construction: reduced speed'],
-    },
-    {
-      title: 'Right of Way',
-      content: 'Yield to traffic already in the intersection and always yield to pedestrians in crosswalks.',
-      rules: ['Yield to traffic on your right', 'Pull over for emergency vehicles', 'Do not cut funeral processions', 'Stop for school buses'],
-    },
-  ]
+function dateInputToIso(value: string) {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString()
+}
 
-  const questions = [
-    {
-      question: 'What does a yellow traffic light mean?',
-      options: ['Stop if safe', 'Speed up', 'Go normally', 'Stop immediately'],
-      correct: 0,
-    },
-    {
-      question: 'When is it illegal to use your horn?',
-      options: ['In traffic', 'To warn danger', 'In a school zone at night', 'To signal anger'],
-      correct: 3,
-    },
-    {
-      question: "What's the speed limit in a school zone?",
-      options: ['15 mph', '25 mph', '35 mph', '45 mph'],
-      correct: 0,
-    },
-    {
-      question: 'When must you use your turn signal?',
-      options: ['Before turning', 'While turning', 'After turning', 'Only at night'],
-      correct: 0,
-    },
-    {
-      question: 'What does a double yellow line mean?',
-      options: ['Passing allowed', 'No passing', 'School zone', 'Construction'],
-      correct: 1,
-    },
-    {
-      question: "What's the minimum following distance?",
-      options: ['1 second', '2 seconds', '3 seconds', '5 seconds'],
-      correct: 2,
-    },
-    {
-      question: 'When can you pass another vehicle?',
-      options: ['Anytime', 'When lines are solid', 'When dashed lines show', 'Never'],
-      correct: 2,
-    },
-    {
-      question: 'What does a flashing red light mean?',
-      options: ['Speed up', 'Treat as stop sign', 'Slow down only', 'Keep going'],
-      correct: 1,
-    },
-    {
-      question: 'When must you stop for a school bus?',
-      options: ['Only if children present', 'When red lights flashing', 'Only at night', 'Never'],
-      correct: 1,
-    },
-    {
-      question: "What's the legal BAC limit?",
-      options: ['0.05%', '0.08%', '0.10%', '0.15%'],
-      correct: 1,
-    },
-  ]
+function normalizeKmDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const r = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
 
-  const answerQuestion = (answerIndex: number) => {
-    setAnswers((prev) => {
-      const next = [...prev]
-      next[currentQuestion] = answerIndex
-      return next
-    })
-  }
-
-  const submitTest = async () => {
-    if (answers.length !== questions.length) return
-    const result = await takeTest(answers)
-    setTestResult(result)
-    setShowResults(true)
-  }
-
-  const resetTest = () => {
-    setCurrentQuestion(0)
-    setAnswers([])
-    setShowResults(false)
-    setTestResult(null)
-  }
-
-  return (
-    <div className="space-y-5">
-      <section className={cn(tcPanel, 'p-5')}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-white">Driver License Center</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Study the Troll City driver manual and pass the test to unlock your license.
-            </p>
-          </div>
-
-          <Car className="h-8 w-8 text-cyan-200" />
-        </div>
-
-        {license && (
-          <div className="mt-4 rounded-2xl border border-emerald-300/25 bg-emerald-400/10 p-3">
-            <div className="flex items-center gap-2 text-emerald-100">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="font-bold">License Status: {license.status === 'active' ? 'Active' : 'Suspended'}</span>
-            </div>
-            {license.license_number && (
-              <p className="mt-1 text-sm text-emerald-200/80">License #: {license.license_number}</p>
-            )}
-          </div>
-        )}
-      </section>
-
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => setShowManual(true)} className={showManual ? tcPrimary : tcButton}>
-          Study Manual
-        </Button>
-        <Button onClick={() => setShowManual(false)} className={!showManual ? tcPrimary : tcButton}>
-          Take Test
-        </Button>
-      </div>
-
-      {showManual ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {manual.map((section) => (
-            <Card key={section.title} className={cn(tcCard, 'p-5')}>
-              <h3 className="text-lg font-black text-white">{section.title}</h3>
-              <p className="mt-2 text-sm text-slate-300">{section.content}</p>
-              <ul className="mt-4 space-y-2">
-                {section.rules.map((rule) => (
-                  <li key={rule} className="flex gap-2 text-sm text-slate-400">
-                    <span className="text-cyan-300">•</span>
-                    {rule}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <Card className={cn(tcCard, 'p-5')}>
-          {!showResults ? (
-            <>
-              <div className="mb-5 flex items-center justify-between gap-3">
-                <h3 className="text-xl font-black text-white">
-                  Question {currentQuestion + 1} of {questions.length}
-                </h3>
-                <Badge className="border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">
-                  {answers.filter((a) => a !== undefined).length}/{questions.length} answered
-                </Badge>
-              </div>
-
-              <h4 className="mb-4 text-lg font-bold text-white">{questions[currentQuestion].question}</h4>
-
-              <div className="space-y-2">
-                {questions[currentQuestion].options.map((option, index) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => answerQuestion(index)}
-                    className={cn(
-                      'w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold transition',
-                      answers[currentQuestion] === index
-                        ? 'border-cyan-300/50 bg-cyan-300 text-slate-950'
-                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-cyan-300/30 hover:bg-cyan-400/10 hover:text-white'
-                    )}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-6 flex justify-between">
-                <Button
-                  type="button"
-                  disabled={currentQuestion === 0}
-                  onClick={() => setCurrentQuestion((prev) => Math.max(prev - 1, 0))}
-                  className={tcButton}
-                >
-                  Previous
-                </Button>
-
-                {currentQuestion < questions.length - 1 ? (
-                  <Button
-                    type="button"
-                    disabled={answers[currentQuestion] === undefined}
-                    onClick={() => setCurrentQuestion((prev) => prev + 1)}
-                    className={tcPrimary}
-                  >
-                    Next
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    disabled={answers.length !== questions.length || loading}
-                    onClick={submitTest}
-                    className="border border-emerald-300/30 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/25"
-                  >
-                    {loading ? 'Submitting...' : 'Submit Test'}
-                  </Button>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="py-8 text-center">
-              <div
-                className={cn(
-                  'mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full',
-                  testResult?.passed ? 'bg-emerald-500/20 text-emerald-200' : 'bg-red-500/20 text-red-200'
-                )}
-              >
-                {testResult?.passed ? <CheckCircle2 className="h-8 w-8" /> : <XCircle className="h-8 w-8" />}
-              </div>
-
-              <h3 className={cn('text-2xl font-black', testResult?.passed ? 'text-emerald-300' : 'text-red-300')}>
-                {testResult?.passed ? 'Test Passed!' : 'Test Failed'}
-              </h3>
-
-              <p className="mt-2 text-slate-300">
-                Score: {testResult?.score || 0}/{questions.length}
-              </p>
-
-              <Button onClick={resetTest} className={cn(tcPrimary, 'mt-5')}>
-                {testResult?.passed ? 'Take Test Again' : 'Try Again'}
-              </Button>
-            </div>
-          )}
-        </Card>
-      )}
-    </div>
-  )
+  return r * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
 }
 
 export default function NeighborsPage() {
@@ -397,7 +220,7 @@ export default function NeighborsPage() {
   const { profile } = useAuthStore()
 
   const [activeTab, setActiveTab] = useState('nearby')
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null)
   const [searchRadius, setSearchRadius] = useState(40)
   const [events, setEvents] = useState<any[]>([])
   const [businesses, setBusinesses] = useState<any[]>([])
@@ -419,26 +242,100 @@ export default function NeighborsPage() {
   const [creatingBusiness, setCreatingBusiness] = useState(false)
   const [creatingHiring, setCreatingHiring] = useState(false)
   const [businessSuccess, setBusinessSuccess] = useState(false)
+  const [editingEvent, setEditingEvent] = useState<any>(null)
+  const [editingBusiness, setEditingBusiness] = useState<any>(null)
+  const [editingHiring, setEditingHiring] = useState<any>(null)
 
-  const [eventFormData, setEventFormData] = useState(resetEventForm())
-  const [businessFormData, setBusinessFormData] = useState(resetBusinessForm())
-  const [hiringFormData, setHiringFormData] = useState(resetHiringForm())
+  const [eventFormData, setEventFormData] = useState<NeighborEventForm>(resetEventForm())
+  const [businessFormData, setBusinessFormData] = useState<BusinessFormState>(resetBusinessForm())
+  const [hiringFormData, setHiringFormData] = useState<HiringFormState>(resetHiringForm())
 
   const profileReady = Boolean(profile?.neighborhood_id || profile?.house_id)
+  const mapCenter = useMemo<Coordinates>(() => userLocation || [39.8283, -98.5795], [userLocation])
 
-  const kmDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const r = 6371
-    const dLat = ((lat2 - lat1) * Math.PI) / 180
-    const dLon = ((lon2 - lon1) * Math.PI) / 180
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2)
+  const loadNearbyEvents = useCallback(async () => {
+    if (!userLocation) return
 
-    return r * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
-  }
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('get_nearby_neighbors_events', {
+        lat: userLocation[0],
+        lng: userLocation[1],
+        radius: searchRadius,
+      })
+
+      if (error) throw error
+      setEvents(data || [])
+    } catch (error) {
+      console.error('[NeighborsPage] Error fetching nearby events:', error)
+      setEvents([])
+    } finally {
+      setLoading(false)
+    }
+  }, [searchRadius, userLocation])
+
+  const loadBusinesses = useCallback(async () => {
+    if (!userLocation) return
+
+    const { data, error } = await supabase
+      .from('neighbors_businesses')
+      .select('*')
+      .or('verified.eq.true,approval_status.eq.approved')
+
+    if (error) {
+      console.error('[NeighborsPage] Error fetching businesses:', error)
+      setBusinesses([])
+      return
+    }
+
+    setBusinesses(
+      (data || []).filter((business) => {
+        if (!business.latitude || !business.longitude) return true
+        return (
+          normalizeKmDistance(userLocation[0], userLocation[1], business.latitude, business.longitude) <=
+          searchRadius
+        )
+      })
+    )
+  }, [searchRadius, userLocation])
+
+  const loadBaseData = useCallback(async () => {
+    const [{ data: participantsData }, { data: neighborhoodsData }, { data: housesData }, { data: hiringData }] =
+      await Promise.all([
+        supabase.from('neighbors_participants').select('*'),
+        supabase.from('neighborhoods').select('*'),
+        supabase
+          .from('houses')
+          .select('*, neighborhoods(name, zip_code), user_profiles!houses_owner_user_id_fkey(username)')
+          .is('owner_user_id', null),
+        supabase.from('neighbors_hiring').select('*, neighbors_businesses(business_name)').eq('is_active', true),
+      ])
+
+    setParticipants(participantsData || [])
+    setNeighborhoods(neighborhoodsData || [])
+    setAvailableHouses(housesData || [])
+    setHiringPosts(hiringData || [])
+  }, [])
+
+  const refreshProfile = useCallback(async () => {
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData?.user) return
+
+    setLoadingProfile(true)
+    try {
+      const [{ data: businessRows }, { data: eventRows }] = await Promise.all([
+        supabase.from('neighbors_businesses').select('*').eq('owner_user_id', userData.user.id),
+        supabase.from('neighbors_events').select('*').eq('created_by_user_id', userData.user.id),
+      ])
+
+      setMyBusinesses(businessRows || [])
+      setMyEvents(eventRows || [])
+    } catch (error) {
+      console.error('[NeighborsPage] Error refreshing profile:', error)
+    } finally {
+      setLoadingProfile(false)
+    }
+  }, [])
 
   useEffect(() => {
     const init = async () => {
@@ -475,110 +372,68 @@ export default function NeighborsPage() {
       },
       () => {
         setUserLocation([39.8283, -98.5795])
-      }
+      },
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 8000 }
     )
   }, [])
 
   useEffect(() => {
-    const loadEvents = async () => {
-      if (!userLocation) return
-      setLoading(true)
-
-      try {
-        const { data, error } = await supabase.rpc('get_nearby_neighbors_events', {
-          lat: userLocation[0],
-          lng: userLocation[1],
-          radius: searchRadius,
-        })
-
-        if (error) throw error
-        setEvents(data || [])
-      } catch (error) {
-        console.error('Error fetching nearby events:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    void loadEvents()
-  }, [userLocation, searchRadius])
+    void loadNearbyEvents()
+  }, [loadNearbyEvents])
 
   useEffect(() => {
-    const loadBusinesses = async () => {
-      if (!userLocation) return
-
-      const { data, error } = await supabase
-        .from('neighbors_businesses')
-        .select('*')
-        .or('verified.eq.true,approval_status.eq.approved')
-
-      if (error) {
-        console.error('Error fetching businesses:', error)
-        return
-      }
-
-      setBusinesses(
-        (data || []).filter((business) => {
-          if (!business.latitude || !business.longitude) return true
-          return kmDistance(userLocation[0], userLocation[1], business.latitude, business.longitude) <= searchRadius
-        })
-      )
-    }
-
     void loadBusinesses()
-  }, [userLocation, searchRadius])
+  }, [loadBusinesses])
 
   useEffect(() => {
-    const loadBaseData = async () => {
-      const [{ data: participantsData }, { data: neighborhoodsData }, { data: housesData }, { data: hiringData }] =
-        await Promise.all([
-          supabase.from('neighbors_participants').select('*'),
-          supabase.from('neighborhoods').select('*'),
-          supabase
-            .from('houses')
-            .select('*, neighborhoods(name, zip_code), user_profiles!houses_owner_user_id_fkey(username)')
-            .is('owner_user_id', null),
-          supabase.from('neighbors_hiring').select('*, neighbors_businesses(business_name)').eq('is_active', true),
-        ])
-
-      setParticipants(participantsData || [])
-      setNeighborhoods(neighborhoodsData || [])
-      setAvailableHouses(housesData || [])
-      setHiringPosts(hiringData || [])
-    }
-
     void loadBaseData()
-  }, [])
+  }, [loadBaseData])
 
   useEffect(() => {
     const loadNeighborhoodManager = async () => {
       if (!user?.id) return
 
-      const { data: neighborhoodData } = await supabase
+      const { data: neighborhoodData, error: neighborhoodError } = await supabase
         .from('neighborhoods')
         .select('*')
         .eq('leader_user_id', user.id)
         .maybeSingle()
 
+      if (neighborhoodError) {
+        console.error('[NeighborsPage] Error loading managed neighborhood:', neighborhoodError)
+        return
+      }
+
       if (!neighborhoodData) return
 
       setMyNeighborhood(neighborhoodData)
 
-      const { data: propertiesData } = await supabase
+      const { data: propertiesData, error: propertiesError } = await supabase
         .from('houses')
         .select('*, user_profiles!houses_owner_user_id_fkey(username)')
         .eq('neighborhood_id', neighborhoodData.id)
 
-      setMyProperties(propertiesData || [])
-      setMyTenants((propertiesData || []).filter((p) => p.owner_user_id && p.owner_user_id !== user.id))
+      if (propertiesError) {
+        console.error('[NeighborsPage] Error loading properties:', propertiesError)
+        return
+      }
 
-      const propertyIds = (propertiesData || []).map((p) => p.id)
+      const properties = propertiesData || []
+      setMyProperties(properties)
+      setMyTenants(properties.filter((property) => property.owner_user_id && property.owner_user_id !== user.id))
+
+      const propertyIds = properties.map((property) => property.id).filter(Boolean)
       if (propertyIds.length > 0) {
-        const { data: applicationsData } = await supabase
+        const { data: applicationsData, error: applicationsError } = await supabase
           .from('apartment_applications')
           .select('*')
           .in('property_id', propertyIds)
           .eq('status', 'pending')
+
+        if (applicationsError) {
+          console.error('[NeighborsPage] Error loading applications:', applicationsError)
+          return
+        }
 
         setPendingApplications(applicationsData || [])
       }
@@ -587,141 +442,374 @@ export default function NeighborsPage() {
     void loadNeighborhoodManager()
   }, [user?.id])
 
-  const participantStatus = (eventId: string, userId?: string) => {
-    return participants.find((p) => p.event_id === eventId && p.user_id === userId)?.status
-  }
-
-  const participantCount = (eventId: string) => {
-    return participants.filter((p) => p.event_id === eventId).length
-  }
-
-  const refreshProfile = async () => {
-    const { data: userData } = await supabase.auth.getUser()
-    if (!userData?.user) return
-
-    setLoadingProfile(true)
-
-    try {
-      const [{ data: businessRows }, { data: eventRows }] = await Promise.all([
-        supabase.from('neighbors_businesses').select('*').eq('owner_user_id', userData.user.id),
-        supabase.from('neighbors_events').select('*').eq('created_by_user_id', userData.user.id),
-      ])
-
-      setMyBusinesses(businessRows || [])
-      setMyEvents(eventRows || [])
-    } finally {
-      setLoadingProfile(false)
-    }
-  }
-
   useEffect(() => {
-    if (activeTab === 'my-profile' || activeTab === 'hiring') void refreshProfile()
-  }, [activeTab])
+    if (activeTab === 'my-profile' || activeTab === 'hiring' || activeTab === 'my-events') {
+      void refreshProfile()
+    }
+  }, [activeTab, refreshProfile])
+
+  const participantStatus = useCallback(
+    (eventId: string, userId?: string) => participants.find((p) => p.event_id === eventId && p.user_id === userId)?.status,
+    [participants]
+  )
+
+  const participantCount = useCallback(
+    (eventId: string) => participants.filter((p) => p.event_id === eventId).length,
+    [participants]
+  )
 
   const handleCreateEvent = async (event: React.FormEvent) => {
     event.preventDefault()
 
     const { data: userData, error: userError } = await supabase.auth.getUser()
-    if (userError || !userData.user) return
-
-    const payload = {
-      ...eventFormData,
-      created_by_user_id: userData.user.id,
-      latitude: eventFormData.latitude || userLocation?.[0] || 0,
-      longitude: eventFormData.longitude || userLocation?.[1] || 0,
-      start_time: new Date(eventFormData.start_time).toISOString(),
-      end_time: new Date(eventFormData.end_time).toISOString(),
+    if (userError || !userData.user) {
+      console.error('[NeighborsPage] User must be logged in to create an event.', userError)
+      return
     }
 
-    const { error } = await supabase.from('neighbors_events').insert([payload])
+    const startIso = dateInputToIso(eventFormData.start_time)
+    const endIso = dateInputToIso(eventFormData.end_time)
+
+    if (!startIso || !endIso) {
+      console.error('[NeighborsPage] Start time and end time are required.')
+      return
+    }
+
+    const payload = {
+      title: eventFormData.title,
+      description: eventFormData.description,
+      category: eventFormData.category,
+      latitude: eventFormData.latitude || userLocation?.[0] || 0,
+      longitude: eventFormData.longitude || userLocation?.[1] || 0,
+      city: eventFormData.city,
+      state: eventFormData.state,
+      start_time: startIso,
+      end_time: endIso,
+      duration_minutes: eventFormData.duration_minutes,
+      max_participants: eventFormData.max_participants,
+      reward_coins: eventFormData.reward_coins,
+      requirements: eventFormData.requirements ? [{ text: eventFormData.requirements }] : [],
+      images: eventFormData.images || [],
+      visibility: eventFormData.visibility === 'neighborhood' ? 'neighbors_only' : 'public',
+      created_by_user_id: userData.user.id,
+      is_active: true,
+      approval_status: 'approved',
+    }
+
+    const { error } = await supabase.from('neighbors_events').insert(payload)
     if (error) {
-      console.error('Error creating event:', error)
+      console.error('[NeighborsPage] Error creating event:', error)
       return
     }
 
     setCreatingEvent(false)
+    setEditingEvent(null)
     setEventFormData(resetEventForm())
+    await Promise.all([loadNearbyEvents(), refreshProfile()])
+  }
 
-    if (userLocation) {
-      const { data } = await supabase.rpc('get_nearby_neighbors_events', {
-        lat: userLocation[0],
-        lng: userLocation[1],
-        radius: searchRadius,
-      })
-      setEvents(data || [])
+  const handleUpdateEvent = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!editingEvent?.id) return
+
+    const startIso = dateInputToIso(eventFormData.start_time)
+    const endIso = dateInputToIso(eventFormData.end_time)
+
+    if (!startIso || !endIso) {
+      console.error('[NeighborsPage] Start time and end time are required.')
+      return
     }
+
+    const { error } = await supabase
+      .from('neighbors_events')
+      .update({
+        title: eventFormData.title,
+        description: eventFormData.description,
+        category: eventFormData.category,
+        latitude: eventFormData.latitude || userLocation?.[0] || 0,
+        longitude: eventFormData.longitude || userLocation?.[1] || 0,
+        city: eventFormData.city,
+        state: eventFormData.state,
+        start_time: startIso,
+        end_time: endIso,
+        duration_minutes: eventFormData.duration_minutes,
+        max_participants: eventFormData.max_participants,
+        reward_coins: eventFormData.reward_coins,
+        requirements: eventFormData.requirements ? [{ text: eventFormData.requirements }] : [],
+        images: eventFormData.images || [],
+        visibility: eventFormData.visibility === 'neighborhood' ? 'neighbors_only' : 'public',
+      })
+      .eq('id', editingEvent.id)
+
+    if (error) {
+      console.error('[NeighborsPage] Error updating event:', error)
+      return
+    }
+
+    setCreatingEvent(false)
+    setEditingEvent(null)
+    setEventFormData(resetEventForm())
+    await Promise.all([loadNearbyEvents(), refreshProfile()])
+  }
+
+  const handleDeleteEvent = async (eventId: string) => {
+    const { error } = await supabase.from('neighbors_events').delete().eq('id', eventId)
+    if (error) {
+      console.error('[NeighborsPage] Error deleting event:', error)
+      return
+    }
+
+    setMyEvents((prev) => prev.filter((event) => event.id !== eventId))
+    setEvents((prev) => prev.filter((event) => event.id !== eventId))
+  }
+
+  const handleEditEvent = (event: any) => {
+    setEditingEvent(event)
+    setEventFormData({
+      title: event.title || '',
+      description: event.description || '',
+      category: event.category || '',
+      latitude: Number(event.latitude || 0),
+      longitude: Number(event.longitude || 0),
+      city: event.city || '',
+      state: event.state || '',
+      start_time: safeDateToInput(event.start_time),
+      end_time: safeDateToInput(event.end_time),
+      duration_minutes: Number(event.duration_minutes || 60),
+      max_participants: Number(event.max_participants || 10),
+      reward_coins: Number(event.reward_coins || 100),
+      requirements: Array.isArray(event.requirements) ? event.requirements?.[0]?.text || '' : event.requirements || '',
+      images: Array.isArray(event.images) ? event.images : [],
+      visibility: event.visibility === 'neighbors_only' ? 'neighborhood' : 'public',
+    })
+    setCreatingEvent(true)
   }
 
   const handleRegisterBusiness = async (event: React.FormEvent) => {
     event.preventDefault()
 
     const { data: userData, error: userError } = await supabase.auth.getUser()
-    if (userError || !userData.user) return
+    if (userError || !userData.user) {
+      console.error('[NeighborsPage] User must be logged in to register a business.', userError)
+      return
+    }
 
     const payload = {
-      ...businessFormData,
+      business_name: businessFormData.business_name,
+      description: businessFormData.description,
+      category: businessFormData.category,
+      phone: businessFormData.phone,
+      email: businessFormData.email,
+      website: businessFormData.website,
+      address: businessFormData.address,
       latitude: businessFormData.latitude || userLocation?.[0] || 0,
       longitude: businessFormData.longitude || userLocation?.[1] || 0,
+      city: businessFormData.city,
+      state: businessFormData.state,
+      logo_url: businessFormData.logo_url,
       owner_user_id: userData.user.id,
       verified: false,
       approval_status: 'pending',
     }
 
-    const { error } = await supabase.from('neighbors_businesses').insert([payload])
+    const { error } = await supabase.from('neighbors_businesses').insert(payload)
     if (error) {
-      console.error('Error registering business:', error)
+      console.error('[NeighborsPage] Error registering business:', error)
       return
     }
 
     setCreatingBusiness(false)
+    setEditingBusiness(null)
     setBusinessSuccess(true)
     setBusinessFormData(resetBusinessForm())
+    await Promise.all([loadBusinesses(), refreshProfile()])
+  }
+
+  const handleEditBusiness = (business: any) => {
+    setEditingBusiness(business)
+    setBusinessFormData({
+      business_name: business.business_name || '',
+      description: business.description || '',
+      category: business.category || '',
+      phone: business.phone || '',
+      email: business.email || '',
+      website: business.website || '',
+      address: business.address || '',
+      latitude: Number(business.latitude || 0),
+      longitude: Number(business.longitude || 0),
+      city: business.city || '',
+      state: business.state || '',
+      logo_url: business.logo_url || '',
+    })
+    setCreatingBusiness(true)
+  }
+
+  const handleUpdateBusiness = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!editingBusiness?.id) return
+
+    const { error } = await supabase
+      .from('neighbors_businesses')
+      .update({
+        business_name: businessFormData.business_name,
+        description: businessFormData.description,
+        category: businessFormData.category,
+        phone: businessFormData.phone,
+        email: businessFormData.email,
+        website: businessFormData.website,
+        address: businessFormData.address,
+        latitude: businessFormData.latitude || userLocation?.[0] || 0,
+        longitude: businessFormData.longitude || userLocation?.[1] || 0,
+        city: businessFormData.city,
+        state: businessFormData.state,
+        logo_url: businessFormData.logo_url,
+      })
+      .eq('id', editingBusiness.id)
+
+    if (error) {
+      console.error('[NeighborsPage] Error updating business:', error)
+      return
+    }
+
+    setCreatingBusiness(false)
+    setEditingBusiness(null)
+    setBusinessFormData(resetBusinessForm())
+    await Promise.all([loadBusinesses(), refreshProfile()])
+  }
+
+  const handleDeleteBusiness = async (businessId: string) => {
+    const { error } = await supabase.from('neighbors_businesses').delete().eq('id', businessId)
+    if (error) {
+      console.error('[NeighborsPage] Error deleting business:', error)
+      return
+    }
+
+    setMyBusinesses((prev) => prev.filter((business) => business.id !== businessId))
+    setBusinesses((prev) => prev.filter((business) => business.id !== businessId))
   }
 
   const handleCreateHiring = async (event: React.FormEvent) => {
     event.preventDefault()
 
-    const { data: userData } = await supabase.auth.getUser()
-    if (!userData?.user) return
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData?.user) {
+      console.error('[NeighborsPage] User must be logged in to create a job post.', userError)
+      return
+    }
 
-    const { error } = await supabase.from('neighbors_hiring').insert([
-      {
-        ...hiringFormData,
-        owner_user_id: userData.user.id,
-        is_active: true,
-      },
-    ])
+    const { error } = await supabase.from('neighbors_hiring').insert({
+      business_id: hiringFormData.business_id,
+      title: hiringFormData.title,
+      description: hiringFormData.description,
+      requirements: hiringFormData.requirements,
+      contact_email: hiringFormData.contact_email,
+      contact_phone: hiringFormData.contact_phone,
+      location: hiringFormData.location,
+      job_type: hiringFormData.job_type,
+      pay_rate: hiringFormData.pay_rate,
+      owner_user_id: userData.user.id,
+      is_active: true,
+    })
 
     if (error) {
-      console.error('Error posting job:', error)
+      console.error('[NeighborsPage] Error posting job:', error)
       return
     }
 
     setCreatingHiring(false)
+    setEditingHiring(null)
     setHiringFormData(resetHiringForm())
+    await refreshHiringPosts()
+  }
 
-    const { data } = await supabase
+  const refreshHiringPosts = async () => {
+    const { data, error } = await supabase
       .from('neighbors_hiring')
       .select('*, neighbors_businesses(business_name)')
       .eq('is_active', true)
 
+    if (error) {
+      console.error('[NeighborsPage] Error refreshing hiring posts:', error)
+      return
+    }
+
     setHiringPosts(data || [])
   }
 
-  const handleJoinEvent = async (eventId: string) => {
-    const { data: userData } = await supabase.auth.getUser()
-    if (!userData?.user) return
+  const handleEditHiring = (post: any) => {
+    setEditingHiring(post)
+    setHiringFormData({
+      business_id: post.business_id || '',
+      title: post.title || '',
+      description: post.description || '',
+      requirements: post.requirements || '',
+      contact_email: post.contact_email || '',
+      contact_phone: post.contact_phone || '',
+      location: post.location || '',
+      job_type: post.job_type || 'full-time',
+      pay_rate: post.pay_rate || '',
+    })
+    setCreatingHiring(true)
+  }
 
-    const { error } = await supabase.from('neighbors_participants').insert([
+  const handleUpdateHiring = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!editingHiring?.id) return
+
+    const { error } = await supabase
+      .from('neighbors_hiring')
+      .update({
+        business_id: hiringFormData.business_id,
+        title: hiringFormData.title,
+        description: hiringFormData.description,
+        requirements: hiringFormData.requirements,
+        contact_email: hiringFormData.contact_email,
+        contact_phone: hiringFormData.contact_phone,
+        location: hiringFormData.location,
+        job_type: hiringFormData.job_type,
+        pay_rate: hiringFormData.pay_rate,
+      })
+      .eq('id', editingHiring.id)
+
+    if (error) {
+      console.error('[NeighborsPage] Error updating hiring post:', error)
+      return
+    }
+
+    setCreatingHiring(false)
+    setEditingHiring(null)
+    setHiringFormData(resetHiringForm())
+    await refreshHiringPosts()
+  }
+
+  const handleDeleteHiring = async (postId: string) => {
+    const { error } = await supabase.from('neighbors_hiring').delete().eq('id', postId)
+    if (error) {
+      console.error('[NeighborsPage] Error deleting hiring post:', error)
+      return
+    }
+
+    setHiringPosts((prev) => prev.filter((post) => post.id !== postId))
+  }
+
+  const handleJoinEvent = async (eventId: string) => {
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData?.user) {
+      console.error('[NeighborsPage] User must be logged in to join event.', userError)
+      return
+    }
+
+    const { error } = await supabase.from('neighbors_participants').upsert(
       {
         event_id: eventId,
         user_id: userData.user.id,
         status: 'joined',
       },
-    ])
+      { onConflict: 'event_id,user_id' }
+    )
 
     if (error) {
-      console.error('Error joining event:', error)
+      console.error('[NeighborsPage] Error joining event:', error)
       return
     }
 
@@ -729,12 +817,29 @@ export default function NeighborsPage() {
     setParticipants(data || [])
   }
 
+  const closeEventModal = () => {
+    setCreatingEvent(false)
+    setEditingEvent(null)
+    setEventFormData(resetEventForm())
+  }
+
+  const closeBusinessModal = () => {
+    setCreatingBusiness(false)
+    setEditingBusiness(null)
+    setBusinessFormData(resetBusinessForm())
+  }
+
+  const closeHiringModal = () => {
+    setCreatingHiring(false)
+    setEditingHiring(null)
+    setHiringFormData(resetHiringForm())
+  }
+
   const tabItems = [
     ['nearby', Calendar, 'Nearby'],
     ['map', Map, 'Map'],
     ['neighborhoods', Home, 'Neighborhoods'],
     ['my-neighborhood', Building2, 'My Hood'],
-    ['driver-test', Car, 'Driver Test'],
     ['my-events', Users, 'My Events'],
     ['create-event', Plus, 'Create'],
     ['businesses', Briefcase, 'Biz'],
@@ -742,8 +847,6 @@ export default function NeighborsPage() {
     ['hiring', Briefcase, 'Hiring'],
     ['leaderboard', Trophy, 'Top'],
   ] as const
-
-  const mapCenter = userLocation || [39.8283, -98.5795]
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#050714] px-4 pb-10 pt-24 text-white md:px-8">
@@ -765,20 +868,18 @@ export default function NeighborsPage() {
 
         <header className={cn(tcPanel, 'mb-6 overflow-hidden p-5 md:p-6')}>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_26px_rgba(34,211,238,0.18)]">
-                  <Home className="h-6 w-6 text-cyan-200" />
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_26px_rgba(34,211,238,0.18)]">
+                <Home className="h-6 w-6 text-cyan-200" />
+              </div>
 
-                <div>
-                  <h1 className="bg-gradient-to-r from-cyan-200 via-fuchsia-200 to-cyan-300 bg-clip-text text-3xl font-black text-transparent md:text-5xl">
-                    Troll City Neighbors
-                  </h1>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Local events, businesses, neighborhoods, driver tests, jobs, and community rewards.
-                  </p>
-                </div>
+              <div>
+                <h1 className="bg-gradient-to-r from-cyan-200 via-fuchsia-200 to-cyan-300 bg-clip-text text-3xl font-black text-transparent md:text-5xl">
+                  Troll City Neighbors
+                </h1>
+                <p className="mt-1 text-sm text-slate-400">
+                  Local events, businesses, neighborhoods, driver tests, jobs, and community rewards.
+                </p>
               </div>
             </div>
 
@@ -798,7 +899,7 @@ export default function NeighborsPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className={cn(tcPanel, 'mb-6 p-2')}>
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-11">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-10">
               {tabItems.map(([value, Icon, label]) => (
                 <TabsTrigger
                   key={value}
@@ -824,7 +925,16 @@ export default function NeighborsPage() {
 
                 <div className="flex items-center gap-3">
                   <Label className="text-cyan-100">Radius</Label>
-                  <Slider value={searchRadius} onValueChange={setSearchRadius} min={5} max={100} step={5} className="w-40" />
+                  <Slider
+                    value={searchRadius}
+                    onValueChange={(value: number | number[]) =>
+                      setSearchRadius(Array.isArray(value) ? Number(value[0] || 40) : Number(value))
+                    }
+                    min={5}
+                    max={100}
+                    step={5}
+                    className="w-40"
+                  />
                   <span className="text-sm font-bold text-cyan-200">{searchRadius} km</span>
                 </div>
               </div>
@@ -863,11 +973,8 @@ export default function NeighborsPage() {
 
             <Card className={cn(tcCard, 'overflow-hidden p-3')}>
               <div className="h-[620px] overflow-hidden rounded-[1.5rem] border border-cyan-300/15">
-                <MapContainer center={mapCenter as [number, number]} zoom={6} className="h-full w-full">
-                  <TileLayer
-                    attribution="&copy; OpenStreetMap contributors"
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
+                <MapContainer center={mapCenter} zoom={6} className="h-full w-full">
+                  <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
                   {events.map((event) => (
                     <Marker key={`event-${event.id}`} position={[event.latitude || mapCenter[0], event.longitude || mapCenter[1]]}>
@@ -914,9 +1021,7 @@ export default function NeighborsPage() {
                           <h3 className="text-lg font-black">{neighborhood.name}</h3>
                           <p className="text-sm text-slate-400">ZIP: {neighborhood.zip_code || 'N/A'}</p>
                         </div>
-                        <Badge className="border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">
-                          {houses.length} open
-                        </Badge>
+                        <Badge className="border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">{houses.length} open</Badge>
                       </div>
 
                       <Button onClick={() => navigate('/living')} className={cn(tcButton, 'mt-5 w-full')}>
@@ -946,9 +1051,7 @@ export default function NeighborsPage() {
                     {myProperties.map((property) => (
                       <div key={property.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                         <p className="font-bold text-white">{property.name || property.address || 'Property'}</p>
-                        <p className="text-sm text-slate-400">
-                          Owner: {property.user_profiles?.username || 'Available'}
-                        </p>
+                        <p className="text-sm text-slate-400">Owner: {property.user_profiles?.username || 'Available'}</p>
                       </div>
                     ))}
                   </div>
@@ -957,21 +1060,46 @@ export default function NeighborsPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="driver-test">
-            <DriverTestManual />
-          </TabsContent>
-
           <TabsContent value="my-events">
-            <PanelTitle title="My Events" subtitle="Events you created or joined." />
-            <EmptyPanel
-              title="My Events module is ready"
-              subtitle="Connect this tab to joined/created event queries when the backend is finalized."
-              button={
-                <Button onClick={() => setCreatingEvent(true)} className={tcPrimary}>
-                  Create Event
-                </Button>
-              }
-            />
+            <PanelTitle title="My Events" subtitle="Events you created." />
+
+            <Card className={cn(tcCard, 'p-5')}>
+              {myEvents.length === 0 ? (
+                <EmptyPanel
+                  title="You have not created any events yet"
+                  subtitle="Create your first community event to see it here."
+                  button={
+                    <Button onClick={() => setCreatingEvent(true)} className={tcPrimary}>
+                      Create Event
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {myEvents.map((event) => (
+                    <Card key={event.id} className={cn(tcCard, 'p-4')}>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-black">{event.title}</h3>
+                        <div className="flex gap-1">
+                          <Button size="sm" onClick={() => handleEditEvent(event)} className={tcButton}>
+                            Edit
+                          </Button>
+                          <Button size="sm" onClick={() => handleDeleteEvent(event.id)} className={tcDanger}>
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-400">{event.description}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {event.category && <Badge className="border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">{event.category}</Badge>}
+                        <Badge className="border border-fuchsia-300/25 bg-fuchsia-400/10 text-fuchsia-100">{event.reward_coins || 0} coins</Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">{event.start_time ? new Date(event.start_time).toLocaleString() : 'TBD'}</p>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </Card>
           </TabsContent>
 
           <TabsContent value="create-event">
@@ -981,6 +1109,7 @@ export default function NeighborsPage() {
               setEventFormData={setEventFormData}
               onSubmit={handleCreateEvent}
               onClear={() => setEventFormData(resetEventForm())}
+              submitLabel="Create Event"
             />
           </TabsContent>
 
@@ -1057,6 +1186,16 @@ export default function NeighborsPage() {
                         {post.contact_email && <Badge className="bg-white/10 text-slate-200">{post.contact_email}</Badge>}
                         {post.contact_phone && <Badge className="bg-white/10 text-slate-200">{post.contact_phone}</Badge>}
                       </div>
+                      {post.owner_user_id === user?.id && (
+                        <div className="mt-4 flex gap-2">
+                          <Button size="sm" onClick={() => handleEditHiring(post)} className={tcButton}>
+                            Edit
+                          </Button>
+                          <Button size="sm" onClick={() => handleDeleteHiring(post.id)} className={tcDanger}>
+                            Delete
+                          </Button>
+                        </div>
+                      )}
                     </Card>
                   ))}
                 </div>
@@ -1072,34 +1211,37 @@ export default function NeighborsPage() {
       </div>
 
       {creatingEvent && (
-        <Modal title="Create New Event" onClose={() => setCreatingEvent(false)}>
+        <Modal title={editingEvent ? 'Edit Event' : 'Create New Event'} onClose={closeEventModal}>
           <EventForm
             eventFormData={eventFormData}
             setEventFormData={setEventFormData}
-            onSubmit={handleCreateEvent}
+            onSubmit={editingEvent ? handleUpdateEvent : handleCreateEvent}
             onClear={() => setEventFormData(resetEventForm())}
+            submitLabel={editingEvent ? 'Update Event' : 'Create Event'}
           />
         </Modal>
       )}
 
       {creatingBusiness && (
-        <Modal title="Register Business" onClose={() => setCreatingBusiness(false)}>
+        <Modal title={editingBusiness ? 'Edit Business' : 'Register Business'} onClose={closeBusinessModal}>
           <BusinessForm
             businessFormData={businessFormData}
             setBusinessFormData={setBusinessFormData}
-            onSubmit={handleRegisterBusiness}
+            onSubmit={editingBusiness ? handleUpdateBusiness : handleRegisterBusiness}
             onClear={() => setBusinessFormData(resetBusinessForm())}
+            submitLabel={editingBusiness ? 'Update Business' : 'Register Business'}
           />
         </Modal>
       )}
 
       {creatingHiring && (
-        <Modal title="Post a Job" onClose={() => setCreatingHiring(false)}>
+        <Modal title={editingHiring ? 'Edit Job Posting' : 'Post a Job'} onClose={closeHiringModal}>
           <HiringForm
             hiringFormData={hiringFormData}
             setHiringFormData={setHiringFormData}
             myBusinesses={myBusinesses}
-            onSubmit={handleCreateHiring}
+            onSubmit={editingHiring ? handleUpdateHiring : handleCreateHiring}
+            submitLabel={editingHiring ? 'Update Job' : 'Post Job'}
           />
         </Modal>
       )}
@@ -1158,7 +1300,7 @@ function EventCard({ event, participantCount, joined, onJoin }: any) {
           <h3 className="text-lg font-black">{event.title}</h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-400">{event.description}</p>
         </div>
-        <Badge className="border border-fuchsia-300/25 bg-fuchsia-400/10 text-fuchsia-100">{event.category}</Badge>
+        {event.category && <Badge className="border border-fuchsia-300/25 bg-fuchsia-400/10 text-fuchsia-100">{event.category}</Badge>}
       </div>
 
       <div className="mt-4 space-y-2 text-sm text-slate-300">
@@ -1168,7 +1310,7 @@ function EventCard({ event, participantCount, joined, onJoin }: any) {
         </p>
         <p className="flex items-center gap-2">
           <Navigation className="h-4 w-4 text-cyan-300" />
-          {event.city}, {event.state}
+          {[event.city, event.state].filter(Boolean).join(', ') || 'Location TBD'}
         </p>
         <p className="flex items-center gap-2">
           <Users className="h-4 w-4 text-cyan-300" />
@@ -1198,12 +1340,12 @@ function BusinessCard({ business }: any) {
           <h3 className="text-lg font-black">{business.business_name}</h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-400">{business.description}</p>
         </div>
-        <Badge className="border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">{business.category}</Badge>
+        {business.category && <Badge className="border border-cyan-300/25 bg-cyan-400/10 text-cyan-100">{business.category}</Badge>}
       </div>
 
       <div className="mt-4 space-y-2 text-sm text-slate-300">
-        <p>{business.address}</p>
-        <p>{business.city}, {business.state}</p>
+        {business.address && <p>{business.address}</p>}
+        {(business.city || business.state) && <p>{[business.city, business.state].filter(Boolean).join(', ')}</p>}
         {business.phone && <p>{business.phone}</p>}
         {business.email && <p>{business.email}</p>}
       </div>
@@ -1222,7 +1364,7 @@ function PopupCard({ title, description, badges }: any) {
       <h3 className="text-lg font-black">{title}</h3>
       <p className="mt-1 text-sm text-slate-700">{description}</p>
       <div className="mt-3 flex flex-wrap gap-1">
-        {badges.map((badge: string) => (
+        {(badges || []).filter(Boolean).map((badge: string) => (
           <span key={badge} className="rounded-full bg-slate-900 px-2 py-1 text-xs font-bold text-white">
             {badge}
           </span>
@@ -1241,13 +1383,18 @@ function FormField({ label, children }: any) {
   )
 }
 
-function EventForm({ eventFormData, setEventFormData, onSubmit, onClear }: any) {
+function EventForm({ eventFormData, setEventFormData, onSubmit, onClear, submitLabel }: any) {
   return (
     <Card className={cn(tcCard, 'p-5')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <FormField label="Event Title">
-            <Input className={tcInput} value={eventFormData.title} onChange={(e) => setEventFormData({ ...eventFormData, title: e.target.value })} required />
+            <Input
+              className={tcInput}
+              value={eventFormData.title}
+              onChange={(event) => setEventFormData({ ...eventFormData, title: event.target.value })}
+              required
+            />
           </FormField>
 
           <FormField label="Category">
@@ -1267,41 +1414,78 @@ function EventForm({ eventFormData, setEventFormData, onSubmit, onClear }: any) 
         </div>
 
         <FormField label="Description">
-          <Textarea className={tcInput} rows={3} value={eventFormData.description} onChange={(e) => setEventFormData({ ...eventFormData, description: e.target.value })} required />
+          <Textarea
+            className={tcInput}
+            rows={3}
+            value={eventFormData.description}
+            onChange={(event) => setEventFormData({ ...eventFormData, description: event.target.value })}
+            required
+          />
         </FormField>
 
         <div className="grid gap-4 md:grid-cols-2">
           <FormField label="City">
-            <Input className={tcInput} value={eventFormData.city} onChange={(e) => setEventFormData({ ...eventFormData, city: e.target.value })} required />
+            <Input className={tcInput} value={eventFormData.city} onChange={(event) => setEventFormData({ ...eventFormData, city: event.target.value })} required />
           </FormField>
 
           <FormField label="State">
-            <Input className={tcInput} value={eventFormData.state} onChange={(e) => setEventFormData({ ...eventFormData, state: e.target.value })} required />
+            <Input className={tcInput} value={eventFormData.state} onChange={(event) => setEventFormData({ ...eventFormData, state: event.target.value })} required />
           </FormField>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <FormField label="Start Time">
-            <Input className={tcInput} type="datetime-local" value={eventFormData.start_time} onChange={(e) => setEventFormData({ ...eventFormData, start_time: e.target.value })} required />
+            <Input
+              className={tcInput}
+              type="datetime-local"
+              value={eventFormData.start_time}
+              onChange={(event) => setEventFormData({ ...eventFormData, start_time: event.target.value })}
+              required
+            />
           </FormField>
 
           <FormField label="End Time">
-            <Input className={tcInput} type="datetime-local" value={eventFormData.end_time} onChange={(e) => setEventFormData({ ...eventFormData, end_time: e.target.value })} required />
+            <Input
+              className={tcInput}
+              type="datetime-local"
+              value={eventFormData.end_time}
+              onChange={(event) => setEventFormData({ ...eventFormData, end_time: event.target.value })}
+              required
+            />
           </FormField>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <FormField label="Max Participants">
-            <Input className={tcInput} type="number" min="1" max="100" value={eventFormData.max_participants} onChange={(e) => setEventFormData({ ...eventFormData, max_participants: Number(e.target.value) })} />
+            <Input
+              className={tcInput}
+              type="number"
+              min="1"
+              max="100"
+              value={eventFormData.max_participants}
+              onChange={(event) => setEventFormData({ ...eventFormData, max_participants: Number(event.target.value) })}
+            />
           </FormField>
 
           <FormField label="Reward Coins">
-            <Input className={tcInput} type="number" min="0" max="10000" value={eventFormData.reward_coins} onChange={(e) => setEventFormData({ ...eventFormData, reward_coins: Number(e.target.value) })} />
+            <Input
+              className={tcInput}
+              type="number"
+              min="0"
+              max="10000"
+              value={eventFormData.reward_coins}
+              onChange={(event) => setEventFormData({ ...eventFormData, reward_coins: Number(event.target.value) })}
+            />
           </FormField>
         </div>
 
         <FormField label="Requirements">
-          <Textarea className={tcInput} rows={2} value={eventFormData.requirements} onChange={(e) => setEventFormData({ ...eventFormData, requirements: e.target.value })} />
+          <Textarea
+            className={tcInput}
+            rows={2}
+            value={eventFormData.requirements}
+            onChange={(event) => setEventFormData({ ...eventFormData, requirements: event.target.value })}
+          />
         </FormField>
 
         <FormField label="Visibility">
@@ -1310,150 +1494,194 @@ function EventForm({ eventFormData, setEventFormData, onSubmit, onClear }: any) 
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper" sideOffset={8} className={tcSelectContent}>
-              <SelectItem value="public" className="focus:bg-cyan-400/20">Public</SelectItem>
-              <SelectItem value="neighborhood" className="focus:bg-cyan-400/20">Neighborhood Only</SelectItem>
+              <SelectItem value="public" className="focus:bg-cyan-400/20">
+                Public
+              </SelectItem>
+              <SelectItem value="neighborhood" className="focus:bg-cyan-400/20">
+                Neighborhood Only
+              </SelectItem>
             </SelectContent>
           </Select>
         </FormField>
 
         <div className="flex flex-wrap gap-2 pt-2">
-          <Button type="submit" className={tcPrimary}>Create Event</Button>
-          <Button type="button" onClick={onClear} className={tcButton}>Clear Form</Button>
+          <Button type="submit" className={tcPrimary}>
+            {submitLabel || 'Save Event'}
+          </Button>
+          <Button type="button" onClick={onClear} className={tcButton}>
+            Clear Form
+          </Button>
         </div>
       </form>
     </Card>
   )
 }
 
-function BusinessForm({ businessFormData, setBusinessFormData, onSubmit, onClear }: any) {
+function BusinessForm({ businessFormData, setBusinessFormData, onSubmit, onClear, submitLabel }: any) {
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <FormField label="Business Name">
-        <Input className={tcInput} value={businessFormData.business_name} onChange={(e) => setBusinessFormData({ ...businessFormData, business_name: e.target.value })} required />
-      </FormField>
-
-      <FormField label="Category">
-        <Select value={businessFormData.category} onValueChange={(value) => setBusinessFormData({ ...businessFormData, category: value })}>
-          <SelectTrigger className={tcInput}>
-            <SelectValue placeholder="Select category" />
-          </SelectTrigger>
-          <SelectContent position="popper" sideOffset={8} className={tcSelectContent}>
-            {businessCategories.map((category) => (
-              <SelectItem key={category} value={category} className="focus:bg-cyan-400/20">
-                {category}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FormField>
-
-      <FormField label="Description">
-        <Textarea className={tcInput} value={businessFormData.description} onChange={(e) => setBusinessFormData({ ...businessFormData, description: e.target.value })} rows={3} />
-      </FormField>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField label="Phone">
-          <Input className={tcInput} value={businessFormData.phone} onChange={(e) => setBusinessFormData({ ...businessFormData, phone: e.target.value })} />
+    <Card className={cn(tcCard, 'p-5')}>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <FormField label="Business Name">
+          <Input
+            className={tcInput}
+            value={businessFormData.business_name}
+            onChange={(event) => setBusinessFormData({ ...businessFormData, business_name: event.target.value })}
+            required
+          />
         </FormField>
 
-        <FormField label="Email">
-          <Input className={tcInput} type="email" value={businessFormData.email} onChange={(e) => setBusinessFormData({ ...businessFormData, email: e.target.value })} />
-        </FormField>
-      </div>
-
-      <FormField label="Website">
-        <Input className={tcInput} value={businessFormData.website} onChange={(e) => setBusinessFormData({ ...businessFormData, website: e.target.value })} />
-      </FormField>
-
-      <FormField label="Address">
-        <Input className={tcInput} value={businessFormData.address} onChange={(e) => setBusinessFormData({ ...businessFormData, address: e.target.value })} />
-      </FormField>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField label="City">
-          <Input className={tcInput} value={businessFormData.city} onChange={(e) => setBusinessFormData({ ...businessFormData, city: e.target.value })} />
-        </FormField>
-
-        <FormField label="State">
-          <Input className={tcInput} value={businessFormData.state} onChange={(e) => setBusinessFormData({ ...businessFormData, state: e.target.value })} />
-        </FormField>
-      </div>
-
-      <div className="flex flex-wrap justify-end gap-2 pt-2">
-        <Button type="button" onClick={onClear} className={tcButton}>Clear</Button>
-        <Button type="submit" className={tcPrimary}>Register Business</Button>
-      </div>
-    </form>
-  )
-}
-
-function HiringForm({ hiringFormData, setHiringFormData, myBusinesses, onSubmit }: any) {
-  return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <FormField label="Business">
-        <Select value={hiringFormData.business_id} onValueChange={(value) => setHiringFormData({ ...hiringFormData, business_id: value })}>
-          <SelectTrigger className={tcInput}>
-            <SelectValue placeholder="Select your business" />
-          </SelectTrigger>
-          <SelectContent position="popper" sideOffset={8} className={tcSelectContent}>
-            {myBusinesses.map((business: any) => (
-              <SelectItem key={business.id} value={business.id} className="focus:bg-cyan-400/20">
-                {business.business_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FormField>
-
-      <FormField label="Job Title">
-        <Input className={tcInput} value={hiringFormData.title} onChange={(e) => setHiringFormData({ ...hiringFormData, title: e.target.value })} required />
-      </FormField>
-
-      <FormField label="Description">
-        <Textarea className={tcInput} value={hiringFormData.description} onChange={(e) => setHiringFormData({ ...hiringFormData, description: e.target.value })} rows={3} />
-      </FormField>
-
-      <FormField label="Requirements">
-        <Textarea className={tcInput} value={hiringFormData.requirements} onChange={(e) => setHiringFormData({ ...hiringFormData, requirements: e.target.value })} rows={2} />
-      </FormField>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField label="Job Type">
-          <Select value={hiringFormData.job_type} onValueChange={(value) => setHiringFormData({ ...hiringFormData, job_type: value })}>
+        <FormField label="Category">
+          <Select value={businessFormData.category} onValueChange={(value) => setBusinessFormData({ ...businessFormData, category: value })}>
             <SelectTrigger className={tcInput}>
-              <SelectValue />
+              <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent position="popper" sideOffset={8} className={tcSelectContent}>
-              <SelectItem value="full-time" className="focus:bg-cyan-400/20">Full-time</SelectItem>
-              <SelectItem value="part-time" className="focus:bg-cyan-400/20">Part-time</SelectItem>
-              <SelectItem value="contract" className="focus:bg-cyan-400/20">Contract</SelectItem>
+              {businessCategories.map((category) => (
+                <SelectItem key={category} value={category} className="focus:bg-cyan-400/20">
+                  {category}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </FormField>
 
-        <FormField label="Pay Rate">
-          <Input className={tcInput} value={hiringFormData.pay_rate} onChange={(e) => setHiringFormData({ ...hiringFormData, pay_rate: e.target.value })} />
+        <FormField label="Description">
+          <Textarea
+            className={tcInput}
+            value={businessFormData.description}
+            onChange={(event) => setBusinessFormData({ ...businessFormData, description: event.target.value })}
+            rows={3}
+          />
         </FormField>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField label="Contact Email">
-          <Input className={tcInput} type="email" value={hiringFormData.contact_email} onChange={(e) => setHiringFormData({ ...hiringFormData, contact_email: e.target.value })} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField label="Phone">
+            <Input className={tcInput} value={businessFormData.phone} onChange={(event) => setBusinessFormData({ ...businessFormData, phone: event.target.value })} />
+          </FormField>
+
+          <FormField label="Email">
+            <Input
+              className={tcInput}
+              type="email"
+              value={businessFormData.email}
+              onChange={(event) => setBusinessFormData({ ...businessFormData, email: event.target.value })}
+            />
+          </FormField>
+        </div>
+
+        <FormField label="Website">
+          <Input className={tcInput} value={businessFormData.website} onChange={(event) => setBusinessFormData({ ...businessFormData, website: event.target.value })} />
         </FormField>
 
-        <FormField label="Contact Phone">
-          <Input className={tcInput} value={hiringFormData.contact_phone} onChange={(e) => setHiringFormData({ ...hiringFormData, contact_phone: e.target.value })} />
+        <FormField label="Address">
+          <Input className={tcInput} value={businessFormData.address} onChange={(event) => setBusinessFormData({ ...businessFormData, address: event.target.value })} />
         </FormField>
-      </div>
 
-      <FormField label="Location">
-        <Input className={tcInput} value={hiringFormData.location} onChange={(e) => setHiringFormData({ ...hiringFormData, location: e.target.value })} />
-      </FormField>
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField label="City">
+            <Input className={tcInput} value={businessFormData.city} onChange={(event) => setBusinessFormData({ ...businessFormData, city: event.target.value })} />
+          </FormField>
 
-      <div className="flex justify-end pt-2">
-        <Button type="submit" className={tcPrimary}>Post Job</Button>
-      </div>
-    </form>
+          <FormField label="State">
+            <Input className={tcInput} value={businessFormData.state} onChange={(event) => setBusinessFormData({ ...businessFormData, state: event.target.value })} />
+          </FormField>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
+          <Button type="button" onClick={onClear} className={tcButton}>
+            Clear
+          </Button>
+          <Button type="submit" className={tcPrimary}>
+            {submitLabel || 'Save Business'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+function HiringForm({ hiringFormData, setHiringFormData, myBusinesses, onSubmit, submitLabel }: any) {
+  return (
+    <Card className={cn(tcCard, 'p-5')}>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <FormField label="Business">
+          <Select value={hiringFormData.business_id} onValueChange={(value) => setHiringFormData({ ...hiringFormData, business_id: value })}>
+            <SelectTrigger className={tcInput}>
+              <SelectValue placeholder="Select your business" />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={8} className={tcSelectContent}>
+              {myBusinesses.map((business: any) => (
+                <SelectItem key={business.id} value={business.id} className="focus:bg-cyan-400/20">
+                  {business.business_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
+
+        <FormField label="Job Title">
+          <Input className={tcInput} value={hiringFormData.title} onChange={(event) => setHiringFormData({ ...hiringFormData, title: event.target.value })} required />
+        </FormField>
+
+        <FormField label="Description">
+          <Textarea className={tcInput} value={hiringFormData.description} onChange={(event) => setHiringFormData({ ...hiringFormData, description: event.target.value })} rows={3} />
+        </FormField>
+
+        <FormField label="Requirements">
+          <Textarea className={tcInput} value={hiringFormData.requirements} onChange={(event) => setHiringFormData({ ...hiringFormData, requirements: event.target.value })} rows={2} />
+        </FormField>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField label="Job Type">
+            <Select value={hiringFormData.job_type} onValueChange={(value) => setHiringFormData({ ...hiringFormData, job_type: value })}>
+              <SelectTrigger className={tcInput}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" sideOffset={8} className={tcSelectContent}>
+                <SelectItem value="full-time" className="focus:bg-cyan-400/20">
+                  Full-time
+                </SelectItem>
+                <SelectItem value="part-time" className="focus:bg-cyan-400/20">
+                  Part-time
+                </SelectItem>
+                <SelectItem value="contract" className="focus:bg-cyan-400/20">
+                  Contract
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </FormField>
+
+          <FormField label="Pay Rate">
+            <Input className={tcInput} value={hiringFormData.pay_rate} onChange={(event) => setHiringFormData({ ...hiringFormData, pay_rate: event.target.value })} />
+          </FormField>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField label="Contact Email">
+            <Input
+              className={tcInput}
+              type="email"
+              value={hiringFormData.contact_email}
+              onChange={(event) => setHiringFormData({ ...hiringFormData, contact_email: event.target.value })}
+            />
+          </FormField>
+
+          <FormField label="Contact Phone">
+            <Input className={tcInput} value={hiringFormData.contact_phone} onChange={(event) => setHiringFormData({ ...hiringFormData, contact_phone: event.target.value })} />
+          </FormField>
+        </div>
+
+        <FormField label="Location">
+          <Input className={tcInput} value={hiringFormData.location} onChange={(event) => setHiringFormData({ ...hiringFormData, location: event.target.value })} />
+        </FormField>
+
+        <div className="flex justify-end pt-2">
+          <Button type="submit" className={tcPrimary}>
+            {submitLabel || 'Save Job'}
+          </Button>
+        </div>
+      </form>
+    </Card>
   )
 }
 
@@ -1462,9 +1690,7 @@ function Modal({ title, children, onClose }: any) {
     <div className="fixed inset-0 z-[99990] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-cyan-300/20 bg-slate-950 p-6 text-white shadow-[0_0_60px_rgba(34,211,238,0.22)]">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="bg-gradient-to-r from-cyan-200 to-fuchsia-200 bg-clip-text text-2xl font-black text-transparent">
-            {title}
-          </h2>
+          <h2 className="bg-gradient-to-r from-cyan-200 to-fuchsia-200 bg-clip-text text-2xl font-black text-transparent">{title}</h2>
           <button onClick={onClose} className={cn(tcDanger, 'rounded-xl p-2')}>
             <X className="h-5 w-5" />
           </button>

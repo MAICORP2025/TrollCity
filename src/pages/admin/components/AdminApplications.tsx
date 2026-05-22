@@ -489,20 +489,19 @@ export default function AdminApplications() {
 
   const handleScheduleJobInterview = useCallback(async (app: JobApplication) => {
     if (!user) return toast.error('You must be logged in')
-
     try {
       setLoading(true)
       const { error } = await supabase
         .from('job_applications')
-        .update({ status: 'interview_scheduled', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+        .update({ status: 'approved', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
         .eq('id', app.id)
 
       if (error) throw error
 
-      toast.success('Interview scheduled for job applicant')
+      toast.success('Job application approved!')
       await loadApplications()
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to schedule interview'
+      const message = err instanceof Error ? err.message : 'Failed to approve application'
       toast.error(message)
     } finally {
       setLoading(false)
@@ -1104,9 +1103,9 @@ export default function AdminApplications() {
                           </button>
                           <button
                             onClick={() => handleScheduleJobInterview(jobApp)}
-                            className="px-3 py-2 bg-purple-600 text-white text-xs rounded-lg"
+                            className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg"
                           >
-                            SCHEDULE INTERVIEW
+                            APPROVE
                           </button>
                         </>
                       )}

@@ -50,7 +50,7 @@ interface AuctionLot {
   buy_now_price: number | null
   quantity: number
   condition: string
-  status: 'draft' | 'queued' | 'active' | 'sold' | 'passed' | 'removed'
+  status: 'draft' | 'queued' | 'live' | 'sold' | 'pass' | 'removed'
   queue_position: number
   created_at: string
 }
@@ -83,6 +83,28 @@ const secondary =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-100 transition hover:bg-cyan-400/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50'
 const danger =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-red-300/25 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-100 transition hover:bg-red-500/20'
+
+function getErrorMessage(error: any, fallback: string) {
+  return error?.message || error?.details || error?.hint || fallback
+}
+
+function logStudioError(scope: string, error: any, fallback: string) {
+  const message = getErrorMessage(error, fallback)
+
+  console.error(`[AuctionStudio] ${scope}:`, {
+    message,
+    code: error?.code,
+    details: error?.details,
+    hint: error?.hint,
+    stack: error?.stack,
+  })
+
+  return message
+}
+
+function getAgoraChannelName(showId: string) {
+  return `auction-${showId}`
+}
 
 export default function AuctionStudio() {
   const navigate = useNavigate()
@@ -120,7 +142,7 @@ export default function AuctionStudio() {
     condition: 'Good',
   })
 
-  const activeLot = useMemo(() => lots.find((lot) => lot.status === 'active') || null, [lots])
+  const activeLot = useMemo(() => lots.find((lot) => lot.status === 'live') || null, [lots])
   const queuedLots = useMemo(
     () => lots.filter((lot) => lot.status === 'queued').sort((a, b) => a.queue_position - b.queue_position),
     [lots]
@@ -136,7 +158,7 @@ export default function AuctionStudio() {
         show.category?.toLowerCase().includes(value) ||
         show.status?.toLowerCase().includes(value)
       )
-    })
+   })
   }, [shows, query])
 
   const fetchMyShows = useCallback(async () => {
@@ -153,10 +175,10 @@ export default function AuctionStudio() {
         .maybeSingle()
 
       if (!auctioneer?.id) {
-        toast.error('You must be an approved auctioneer to use the studio')
+       toast.error('You must be an approved auctioneer to use the studio')
         navigate('/auctions')
         return
-      }
+    }
 
       setAuctioneerId(auctioneer.id)
 
@@ -176,20 +198,20 @@ export default function AuctionStudio() {
             .eq('auction_show_id', show.id)
 
           return { ...show, lot_count: count || 0 }
-        })
+     })
       )
 
       setShows(showsWithCounts)
 
       if (!selectedShow && showsWithCounts.length > 0) {
         setSelectedShow(showsWithCounts[0])
-      }
-    } catch (error) {
+    }
+   } catch (error) {
       console.error('Error fetching shows:', error)
       toast.error('Failed to load auction studio')
-    } finally {
+   } finally {
       setLoading(false)
-    }
+   }
   }, [user?.id, navigate, selectedShow])
 
   const fetchLots = useCallback(async (showId: string) => {
@@ -205,12 +227,12 @@ export default function AuctionStudio() {
 
       if (error) throw error
       setLots(data || [])
-    } catch (error) {
+   } catch (error) {
       console.error('Error loading auction lots:', error)
       toast.error('Failed to load auction items')
-    } finally {
+   } finally {
       setLotsLoading(false)
-    }
+   }
   }, [])
 
   useEffect(() => {
@@ -225,7 +247,7 @@ export default function AuctionStudio() {
     if (!showForm.title.trim()) {
       toast.error('Show title is required')
       return
-    }
+   }
 
     try {
       const { data: rpcData, error: rpcError } = await supabase.rpc('create_auction_show', {
@@ -234,15 +256,15 @@ export default function AuctionStudio() {
         p_category: showForm.category || null,
         p_thumbnail_url: showForm.thumbnail_url || null,
         p_scheduled_for: showForm.scheduled_for ? new Date(showForm.scheduled_for).toISOString() : null,
-      })
+    })
 
       if (rpcError) throw rpcError
 
       const result = rpcData as any
       if (result && result.success === false) {
-        toast.error(result.error || 'Failed to create show')
+       toast.error(result.error || 'Failed to create show')
         return
-      }
+    }
 
       toast.success('Auction show created')
       setShowCreator(false)
@@ -252,12 +274,12 @@ export default function AuctionStudio() {
         category: 'Collectibles',
         thumbnail_url: '',
         scheduled_for: '',
-      })
+    })
 
       await fetchMyShows()
-    } catch (error: any) {
+   } catch (error: any) {
       toast.error(error.message || 'Failed to create show')
-    }
+   }
   }
 
   const deleteShow = async (showId: string) => {
@@ -270,9 +292,9 @@ export default function AuctionStudio() {
       toast.success('Show deleted')
       if (selectedShow?.id === showId) setSelectedShow(null)
       await fetchMyShows()
-    } catch {
+   } catch {
       toast.error('Failed to delete show')
-    }
+   }
   }
 
   const uploadLotImage = async (file: File) => {
@@ -287,7 +309,7 @@ export default function AuctionStudio() {
       const { error } = await supabase.storage.from('auction-items').upload(path, file, {
         upsert: false,
         contentType: file.type,
-      })
+    })
 
       if (error) throw error
 
@@ -295,11 +317,11 @@ export default function AuctionStudio() {
 
       setLotForm((prev) => ({ ...prev, image_url: data.publicUrl }))
       toast.success('Item image uploaded')
-    } catch (error: any) {
+   } catch (error: any) {
       toast.error(error.message || 'Image upload failed')
-    } finally {
+   } finally {
       setUploadingImage(false)
-    }
+   }
   }
 
   const createLot = async () => {
@@ -323,7 +345,7 @@ export default function AuctionStudio() {
         condition: lotForm.condition,
         status: 'queued',
         queue_position: maxPosition + 1,
-      }
+    }
 
       const { error } = await supabase.from('auction_lots').insert(payload)
 
@@ -341,13 +363,13 @@ export default function AuctionStudio() {
         buy_now_price: 0,
         quantity: 1,
         condition: 'Good',
-      })
+    })
 
       await fetchLots(selectedShow.id)
       await fetchMyShows()
-    } catch (error: any) {
+   } catch (error: any) {
       toast.error(error.message || 'Failed to add auction item')
-    }
+   }
   }
 
   const updateLotStatus = async (lotId: string, status: AuctionLot['status']) => {
@@ -359,9 +381,9 @@ export default function AuctionStudio() {
 
       await fetchLots(selectedShow.id)
       toast.success(`Lot marked ${status}`)
-    } catch (error: any) {
+   } catch (error: any) {
       toast.error(error.message || 'Failed to update lot')
-    }
+   }
   }
 
   const sendLotToStage = async (lotId: string) => {
@@ -369,17 +391,17 @@ export default function AuctionStudio() {
 
     try {
       if (activeLot) {
-        await supabase.from('auction_lots').update({ status: 'passed' }).eq('id', activeLot.id)
-      }
+        await supabase.from('auction_lots').update({ status: 'pass' }).eq('id', activeLot.id)
+    }
 
-      const { error } = await supabase.from('auction_lots').update({ status: 'active' }).eq('id', lotId)
+      const { error } = await supabase.from('auction_lots').update({ status: 'live' }).eq('id', lotId)
       if (error) throw error
 
       await fetchLots(selectedShow.id)
       toast.success('Lot is now showing on stage')
-    } catch (error: any) {
+   } catch (error: any) {
       toast.error(error.message || 'Failed to send lot to stage')
-    }
+   }
   }
 
   const reorderLot = async (lot: AuctionLot, direction: 'up' | 'down') => {
@@ -400,16 +422,16 @@ export default function AuctionStudio() {
       ])
 
       await fetchLots(selectedShow.id)
-    } catch {
+   } catch {
       toast.error('Failed to reorder queue')
-    }
+   }
   }
 
   const goLive = async (show: AuctionShow) => {
     if ((show.lot_count || lots.length) <= 0) {
       toast.error('Add at least one item before going live')
       return
-    }
+   }
 
     try {
       const { error } = await supabase
@@ -417,17 +439,18 @@ export default function AuctionStudio() {
         .update({
           status: 'live',
           live_started_at: new Date().toISOString(),
-          livekit_room_name: show.livekit_room_name || `auction-${show.id}`,
-        })
+          // Auctions are Agora-only now. This legacy column is reused as the Agora channel name.
+          livekit_room_name: show.livekit_room_name || getAgoraChannelName(show.id),
+     })
         .eq('id', show.id)
 
       if (error) throw error
 
       toast.success('Auction show is live')
       navigate(`/auctions/studio/${show.id}/live`)
-    } catch (error: any) {
+   } catch (error: any) {
       toast.error(error.message || 'Failed to go live')
-    }
+   }
   }
 
   const getStatusBadge = (status: string) => {
@@ -437,7 +460,7 @@ export default function AuctionStudio() {
       live: 'border-red-300/30 bg-red-500/10 text-red-100',
       ended: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100',
       cancelled: 'border-red-300/30 bg-red-900/20 text-red-200',
-    }
+   }
 
     return styles[status] || styles.draft
   }
@@ -628,7 +651,7 @@ export default function AuctionStudio() {
                             onUp={() => reorderLot(lot, 'up')}
                             onDown={() => reorderLot(lot, 'down')}
                             onSold={() => updateLotStatus(lot.id, 'sold')}
-                            onPass={() => updateLotStatus(lot.id, 'passed')}
+                            onPass={() => updateLotStatus(lot.id, 'pass')}
                             onRemove={() => updateLotStatus(lot.id, 'removed')}
                           />
                         ))}
@@ -715,7 +738,7 @@ export default function AuctionStudio() {
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (file) void uploadLotImage(file)
-                }}
+             }}
                 className="hidden"
                 id="auction-item-upload"
               />

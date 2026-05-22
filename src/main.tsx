@@ -39,16 +39,16 @@ if (isMobilePlatform) {
 // AFTER the page-loaded script has run.  Re-check here and rebuild if missing.
 (function () {
   if (typeof navigator === 'undefined') return;
-  var hasWebkit =
+  const hasWebkit =
     typeof navigator.webkitGetUserMedia === 'function' ||
     typeof navigator.webkitGetDisplayMedia === 'function';
-  var hasStandard =
+  const hasStandard =
     typeof navigator.mediaDevices !== 'undefined' &&
     !!navigator.mediaDevices.getUserMedia;
 
   if (!hasStandard && hasWebkit) {
     console.info('[iOS Guard] navigator.mediaDevices missing after bootstrap, rebuilding from webkit shims');
-    var MD: any = {};
+    const MD: any = {};
 
     if (typeof navigator.webkitGetUserMedia === 'function') {
       MD.getUserMedia = function (constraints: MediaStreamConstraints): Promise<MediaStream> {

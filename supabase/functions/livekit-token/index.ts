@@ -137,7 +137,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    let participantName = String(
+    const participantName = String(
       body.identity || body.participantIdentity || body.userId || body.user_name || body.participantName || 'participant'
     );
 

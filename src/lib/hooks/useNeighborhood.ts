@@ -456,7 +456,7 @@ export function useHouseRaids(houseId: string | null) {
       if (error) throw error
 
       // Update house condition
-      const conditionLoss = damageLevel === 'minor' ? 15 : damageLevel === 'major' ? 30 : 50
+      const conditionLoss = damageLevel === 'minor' ? 10 : damageLevel === 'major' ? 25 : 50
       await supabase.rpc('update_house_condition', { house_id: houseId, condition_change: -conditionLoss })
 
       await fetchRaids()

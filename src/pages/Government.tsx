@@ -29,7 +29,7 @@ import { useGovernmentSystem } from '@/hooks/useGovernmentSystem'
 
 import LawsTab from '@/components/government/LawsTab'
 import VotingTab from '@/components/government/VotingTab'
-import EnforcementTab from '@/components/government/EnforcementTab'
+import JailTab from '@/components/government/JailTab'
 import RolesTab from '@/components/government/RolesTab'
 import HistoryTab from '@/components/government/HistoryTab'
 import ElectionsTab from '@/components/government/ElectionsTab'
@@ -53,7 +53,7 @@ const secondaryButton =
 type TabId =
   | 'laws'
   | 'voting'
-  | 'enforcement'
+  | 'jail'
   | 'roles'
   | 'history'
   | 'elections'
@@ -115,11 +115,11 @@ const tabConfig: Record<
     label: 'Voting',
     description: 'Vote on active legislation',
   },
-  enforcement: {
-    component: EnforcementTab,
-    icon: Shield,
-    label: 'Enforcement',
-    description: 'Moderation and law enforcement',
+  jail: {
+    component: JailTab,
+    icon: Lock,
+    label: 'Jail',
+    description: 'Jail management and enforcement',
   },
   roles: {
     component: RolesTab,
@@ -300,7 +300,7 @@ const currentTab = searchParams.get('tab') || 'laws'
                   Troll City Government
                 </h1>
                 <p className="mt-1 text-sm text-slate-400">
-                  Laws, voting, enforcement, elections, protests, and officer operations.
+                  Laws, voting, jail, elections, protests, and officer operations.
                 </p>
               </div>
             </div>
