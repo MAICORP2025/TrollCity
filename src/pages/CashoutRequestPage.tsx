@@ -87,8 +87,13 @@ export default function CashoutRequestPage() {
         );
 
         if (eligibleError) throw eligibleError;
-        if (eligibleData && eligibleData.length > 0) {
-          setEligibleCoins(eligibleData[0].total_eligible_coins || 0);
+
+        const eligibleTotal = Array.isArray(eligibleData)
+          ? eligibleData[0]?.total_eligible_coins
+          : eligibleData?.total_eligible_coins
+
+        if (typeof eligibleTotal === 'number') {
+          setEligibleCoins(eligibleTotal);
         }
 
         // Load recent cashout requests from visa_redemptions
@@ -102,8 +107,8 @@ export default function CashoutRequestPage() {
         if (requestsError) throw requestsError;
         setRecentRequests(requestsData || []);
 
-        // Auto-select highest eligible tier
-        const eligibleTier = [...TIERS].reverse().find(t => t.coins <= eligibleCoins) || TIERS[0];
+        // Auto-select highest eligible tier based on the loaded eligible coins
+        const eligibleTier = [...TIERS].reverse().find(t => t.coins <= (typeof eligibleTotal === 'number' ? eligibleTotal : 0)) || TIERS[0];
         if (eligibleTier) setSelectedTier(eligibleTier);
       } catch (err: any) {
         console.error('Failed to load cashout data:', err);

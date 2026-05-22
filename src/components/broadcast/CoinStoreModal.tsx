@@ -33,6 +33,7 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
   const MINIMUM_TAX_RATE = 0.03; // 3% minimum tax on all coin packs
 
   const [showPayPalPayment, setShowPayPalPayment] = useState(false);
+  const [showCardPayment, setShowCardPayment] = useState(false);
 
   // Check if user is a new user (less than 1 week on platform)
   const checkNewUserStatus = useCallback(async () => {
@@ -117,6 +118,19 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
     };
     setSelectedPack(pkgWithTax);
     setShowPayPalPayment(true);
+  };
+
+  const handleCardCheckout = (pkg: CoinPackage) => {
+    const finalPrice = getFinalPrice(pkg.price);
+    const pkgWithTax: any = {
+      ...pkg,
+      price: finalPrice.toFixed(2),
+      purchaseType: 'coins',
+      metadata: { source: 'broadcast_quick_store', baseCoins: pkg.baseCoins, bonusCoins: pkg.bonusCoins },
+      forceCard: true,
+    };
+    setSelectedPack(pkgWithTax);
+    setShowCardPayment(true);
   };
 
   // Helper to calculate final price with minimum tax
@@ -225,6 +239,20 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
                     <span className="text-[9px] text-zinc-500">
                       +${(isNewUser ? getTaxAmount(pkg.price) : getTaxAmount(pkg.price)).toFixed(2)} tax
                     </span>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePackageSelect(pkg); }}
+                        className="px-3 py-1 bg-cyan-600 text-black font-bold rounded-md text-sm"
+                      >
+                        PayPal
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleCardCheckout(pkg); }}
+                        className="px-3 py-1 bg-zinc-800 text-white rounded-md text-sm border border-zinc-700"
+                      >
+                        Credit Card
+                      </button>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -239,9 +267,10 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
       </div>
 
       <PayPalPaymentModal
-        isOpen={showPayPalPayment}
+        isOpen={showPayPalPayment || showCardPayment}
         onClose={() => {
           setShowPayPalPayment(false);
+          setShowCardPayment(false);
           setSelectedPack(null);
         }}
         pkg={selectedPack}

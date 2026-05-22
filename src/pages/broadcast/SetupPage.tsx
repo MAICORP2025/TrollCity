@@ -32,7 +32,6 @@ import {
   AVAILABLE_RELIGIONS,
   BroadcastCategoryId
 } from '../../config/broadcastCategories';
-import DriverTestRequiredModal from './DriverTestRequiredModal';
 
 /* ============================================================================
  * 🛡️  LIVEKIT STREAMING INFRASTRUCTURE
@@ -324,14 +323,12 @@ export default function SetupPage() {
     profile.is_admin || 
     profile.is_troll_officer || 
     profile.is_lead_officer || 
-    profile.is_staff ||
     (profile.level !== undefined && profile.level >= 50)
   );
 
   // Determine if user is admin for quality settings (1080p admin, 720p regular)
   const isStreamAdmin = !!(profile && (
     profile.role === 'admin' || profile.is_admin ||
-    profile.role === 'superadmin' || profile.is_superadmin ||
     profile.role === 'owner'
   ));
   
@@ -694,7 +691,6 @@ export default function SetupPage() {
       localStorage.setItem('tc_camera_permissions_timestamp', Date.now().toString());
       
       setPermissionStatus('granted');
-      setShowPermissionPrompt(false);
       
       toast.success('Camera and microphone permissions granted!');
       
@@ -826,8 +822,8 @@ export default function SetupPage() {
       mediaElement.setAttribute('muted', '');
       mediaElement.setAttribute('playsinline', '');
       mediaElement.autoplay = true;
-      mediaElement.muted = true;
-      mediaElement.playsInline = true;
+      (mediaElement as HTMLVideoElement).muted = true;
+      (mediaElement as HTMLVideoElement).playsInline = true;
       mediaElement.style.display = 'block';
       mediaElement.style.backgroundColor = 'black';
       mediaElement.style.width = '100%';
@@ -1726,7 +1722,7 @@ export default function SetupPage() {
         selectedThemeUrl = normalizedSelectedTheme;
       }
 
-       // Build insert object with optional password protection
+        // Build insert object with optional password protection
         const insertData: Record<string, unknown> = {
           id: streamId,
           user_id: user.id,
@@ -1756,6 +1752,7 @@ export default function SetupPage() {
             universe_mode: true,
             battle_status: 'waiting'
           }),
+          ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? { battle_mode: 'random_queue' } : {}),
         };
 
       // Add password protection if enabled
@@ -1827,15 +1824,19 @@ export default function SetupPage() {
         });
         await publishSetupTracksToRoom(room, livekitTracksRef.current, screenTrack, isScreenShareMode);
 
-        // Mark stream as live now that LiveKit is connected and tracks are published
-        const { error: updateError } = await supabase
-          .from('streams')
-          .update({
-            status: 'live',
-            is_live: true,
-            started_at: new Date().toISOString(),
-          })
-          .eq('id', data.id);
+         // Mark stream as live now that LiveKit is connected and tracks are published
+         const { error: updateError } = await supabase
+           .from('streams')
+           .update({
+             status: 'live',
+             is_live: true,
+             started_at: new Date().toISOString(),
+             ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? {
+               random_battle_queued_at: new Date().toISOString(),
+               battle_mode: 'random_queue'
+             } : {}),
+           })
+           .eq('id', data.id);
 
         if (updateError) {
           console.error('[SetupPage] Failed to mark stream as live:', updateError);
@@ -2601,4 +2602,3 @@ export default function SetupPage() {
     </div>
   );
 }
-

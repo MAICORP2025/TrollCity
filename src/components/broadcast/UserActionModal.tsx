@@ -157,13 +157,14 @@ export default function UserActionModal({
         }
     }
 
-    if (!confirm("Kick this user for 100 coins? They will be removed for 24h unless they pay the fee.")) return;
+    if (!confirm("Kick this user for 100 coins? They will be removed for 30 minutes unless they pay the fee.")) return;
     
     // Use the new paid kick RPC
     const { data, error } = await supabase.rpc('kick_user_paid', { 
-        p_stream_id: streamId, 
-        p_target_user_id: userId,
-        p_kicker_id: (await supabase.auth.getUser()).data.user?.id 
+      p_stream_id: streamId, 
+      p_target_user_id: userId,
+      p_kicker_id: (await supabase.auth.getUser()).data.user?.id,
+      p_duration_minutes: 30
     });
 
     if (error) {

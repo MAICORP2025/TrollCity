@@ -146,6 +146,8 @@ export interface UserProfile {
   troll_coins: number
   hype_coins: number
   paid_coins?: number
+  cashout_coins?: number
+  cashout_reserved_coins?: number
   reserved_troll_coins?: number
   has_paid?: boolean
   total_earned_coins: number

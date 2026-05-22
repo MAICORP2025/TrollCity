@@ -587,7 +587,8 @@ export default function AdminDashboard() {
     setCoinPurchasesLoading(true)
 
     try {
-      const { data, error } = await supabase
+      // Primary source: public.transactions
+      const { data: txData, error: txError } = await supabase
         .from('transactions')
         .select(
           'id,user_id,type,transaction_type,coins_used,amount,description,status,metadata,created_at'
@@ -606,9 +607,45 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false })
         .limit(2000)
 
+      // Secondary source: legacy coinstore sales ledger (if present)
+      const { data: storeData, error: storeError } = await supabase
+        .from('coin_store_sales')
+        .select('id,user_id,amount_coins,amount_usd,paypal_order_id,paypal_capture_id,payer_email,package_id,created_at,status')
+        .order('created_at', { ascending: false })
+        .limit(2000)
+
+      if (txError && !storeData) throw txError
+
+      const data = (txData || []) as any[]
+      const storeRows = (storeData || []) as any[]
+      // Merge both sources; prefer public.transactions rows but include store rows that aren't present
+      const combined = [...data]
+      const existingIds = new Set(combined.map((r) => r.id))
+      for (const s of storeRows) {
+        if (!existingIds.has(s.id)) {
+          combined.push({
+            id: s.id,
+            user_id: s.user_id,
+            type: 'purchase',
+            transaction_type: 'purchase',
+            coins_used: s.amount_coins,
+            amount: s.amount_usd,
+            description: 'Coin Store purchase',
+            status: s.status,
+            metadata: {
+              package_id: s.package_id,
+              paypal_order_id: s.paypal_order_id,
+              paypal_capture_id: s.paypal_capture_id,
+              payer_email: s.payer_email,
+            },
+            created_at: s.created_at,
+          })
+        }
+      }
+
       if (error) throw error
 
-      const txRows = (data || []) as TransactionRow[]
+      const txRows = (combined || []) as TransactionRow[]
       const userIds = [...new Set(txRows.map((tx) => tx.user_id).filter(Boolean))] as string[]
 
       const userMap = new Map<string, string>()

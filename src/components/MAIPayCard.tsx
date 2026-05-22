@@ -4,6 +4,11 @@ import { useAuthStore } from '../lib/store'
 import { cn } from '../lib/utils'
 import { TIERS } from '../config/coinConfig'
 
+interface MAIPayCardProps {
+  className?: string
+  disableContinue?: boolean
+}
+
 // Map the central config tiers to the format expected by this component
 const CASHOUT_TIERS = TIERS.map(tier => ({
   coins: tier.coins,
@@ -29,7 +34,7 @@ function getCashoutEstimate(availableCoins: number) {
   }
 }
 
-export default function MAIPayCard({ className }: MAIPayCardProps) {
+export default function MAIPayCard({ className, disableContinue = false }: MAIPayCardProps) {
   const { user, profile } = useAuthStore() as any
 
   const rawCoins = Number(profile?.troll_coins || 0)
@@ -134,10 +139,10 @@ export default function MAIPayCard({ className }: MAIPayCardProps) {
 
       <button
         onClick={handleContinueToMAIPay}
-        disabled={!cashoutEstimate.isEligible}
+        disabled={disableContinue || !cashoutEstimate.isEligible}
         className={cn(
           'inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 shadow-[0_0_24px_rgba(34,211,238,0.22)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-45',
-          !cashoutEstimate.isEligible && 'cursor-not-allowed opacity-50'
+          (disableContinue || !cashoutEstimate.isEligible) && 'cursor-not-allowed opacity-50'
         )}
       >
         Continue to MAI Pay

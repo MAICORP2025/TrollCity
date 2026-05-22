@@ -60,9 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_cashout_documents_type ON public.cashout_document
 
 CREATE TABLE IF NOT EXISTS public.cashout_gift_breakdown (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    cashout_request_id UUID NOT NULL REFERENCES public.visa_redemp
-
-tions(id) ON DELETE CASCADE,
+    cashout_request_id UUID NOT NULL REFERENCES public.visa_redemptions(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES auth.users(id),
     sender_username TEXT NOT NULL,
     total_gift_coins BIGINT NOT NULL,
@@ -139,25 +137,33 @@ DECLARE
     v_gift_summary JSONB := '[]'::JSONB;
     v_breakdown JSONB := '[]'::JSONB;
 BEGIN
-    -- Get total eligible coins from gift_received transactions (paid coin_type only) excluding Friday battle bonuses
+    -- Get total eligible coins from gift_received transactions (paid coin_type only) excluding Friday battle bonuses,
+    -- plus the initial signup bonus coins for new users.
     SELECT
         COALESCE(SUM(amount), 0)::BIGINT,
         jsonb_agg(
             jsonb_build_object(
                 'sender_id', from_user_id,
-                'sender_username', from_user_name,
+                'sender_username', COALESCE(from_user_name, 'Signup Bonus'),
                 'total_coins', SUM(amount),
                 'gift_count', COUNT(*),
                 'coin_type', 'paid'
             )
         )
     INTO v_total_eligible, v_breakdown
-    FROM coin_transactions
-    WHERE user_id = p_user_id
-      AND type = 'gift_received'
-      AND amount > 0
-      AND (metadata->>'is_friday_bonus') IS NOT DISTINCT FROM NULL  -- Exclude Friday bonus
-      AND coin_type = 'paid'
+    FROM (
+        SELECT
+            from_user_id,
+            from_user_name,
+            amount
+        FROM public.coin_transactions
+        WHERE user_id = p_user_id
+          AND amount > 0
+          AND (
+            (type = 'gift_received' AND (metadata->>'is_friday_bonus') IS NOT DISTINCT FROM NULL AND coin_type = 'paid')
+            OR description = 'Welcome bonus coins'
+          )
+    ) sub
     GROUP BY from_user_id, from_user_name
     ORDER BY SUM(amount) DESC;
 
@@ -255,9 +261,11 @@ BEGIN
     v_fee_coins := CEIL(p_coins_to_redeem * 0.029);
     v_net_coins := p_coins_to_redeem - v_fee_coins;
 
-    -- Reserve coins (add to reserved_troll_coins)
+    -- Reserve coins for cashout (track both legacy and current reservation columns)
     UPDATE public.user_profiles
-    SET reserved_troll_coins = COALESCE(reserved_troll_coins, 0) + (p_coins_to_redeem + v_fee_coins)
+    SET
+        reserved_troll_coins = COALESCE(reserved_troll_coins, 0) + (p_coins_to_redeem + v_fee_coins),
+        cashout_reserved_coins = COALESCE(cashout_reserved_coins, 0) + (p_coins_to_redeem + v_fee_coins)
     WHERE id = p_user_id;
 
     -- Create cashout request
@@ -323,7 +331,11 @@ BEGIN
         p_user_id,
         'cashout_submitted',
         'Cashout Request Submitted',
-        'Your cashout request for ' || p_coins_to_redeem || ' coins ($$' || v_cashout_amount_usd || ') has been submitted and is pending review.',
+        format(
+            'Your cashout request for %s coins ($%s) has been submitted and is pending review.',
+            p_coins_to_redeem,
+            v_cashout_amount_usd
+        ),
         jsonb_build_object(
             'cashout_id', v_cashout_id,
             'amount_usd', v_cashout_amount_usd,
@@ -543,7 +555,8 @@ BEGIN
         UPDATE public.user_profiles
         SET
             troll_coins = COALESCE(troll_coins, 0) + v_request.eligible_gift_coins_used,
-            reserved_troll_coins = COALESCE(reserved_troll_coins, 0) - (v_request.eligible_gift_coins_used + v_request.fee_coins)
+            reserved_troll_coins = COALESCE(reserved_troll_coins, 0) - (v_request.eligible_gift_coins_used + v_request.fee_coins),
+            cashout_reserved_coins = COALESCE(cashout_reserved_coins, 0) - (v_request.eligible_gift_coins_used + v_request.fee_coins)
         WHERE id = v_request.user_id;
 
         -- Create refund transaction
@@ -802,7 +815,8 @@ BEGIN
             'email', v_user.email,
             'troll_coins', v_user.troll_coins,
             'reserved_troll_coins', v_user.reserved_troll_coins,
-            'available_coins', v_user.troll_coins - COALESCE(v_user.reserved_troll_coins, 0)
+            'cashout_reserved_coins', COALESCE(v_user.cashout_reserved_coins, 0),
+            'available_coins', v_user.troll_coins - COALESCE(v_user.cashout_reserved_coins, COALESCE(v_user.reserved_troll_coins, 0))
         ),
         'gift_breakdown', v_gift_breakdown,
         'summary', jsonb_build_object(

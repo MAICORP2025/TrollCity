@@ -41,6 +41,12 @@ export default function PayPalPaymentModal({
   saveOnly = false,
   onProfileUpdate,
 }: PayPalPaymentModalProps) {
+  const [forceCard, setForceCard] = useState<boolean>(false);
+  // allow parent to pass a flag via window-scoped temporary (CoinStoreModal will set)
+  useEffect(() => {
+    const val = (pkg && pkg.forceCard) || false;
+    setForceCard(Boolean(val));
+  }, [pkg]);
   const [step, setStep] = useState<'select' | 'processing' | 'success'>('select');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentResult, setPaymentResult] = useState<any>(null);
@@ -99,7 +105,7 @@ export default function PayPalPaymentModal({
   const renderPayPalButtons = () => {
     if (!window.paypal || !paypalButtonsRef.current) return;
 
-    window.paypal.Buttons({
+    const buttonsConfig: any = {
       createOrder: async () => {
         try {
           const { data, error } = await supabase.functions.invoke('create-paypal-order', {
@@ -164,14 +170,14 @@ export default function PayPalPaymentModal({
         setStep('select');
       },
 
-       style: {
-         layout: 'vertical',
-         color: 'black',
-         shape: 'rect',
-         label: 'paypal',
-         height: 48,
-       },
-    }).render(paypalButtonsRef.current);
+    }
+
+    // If forceCard is requested, instruct PayPal to render card funding option
+    if (forceCard && window.paypal && window.paypal.FUNDING && window.paypal.FUNDING.CARD) {
+      buttonsConfig.fundingSource = window.paypal.FUNDING.CARD;
+    }
+
+    window.paypal.Buttons(buttonsConfig).render(paypalButtonsRef.current);
   };
 
    // Reset PayPal button container margins when modal opens

@@ -1758,6 +1758,8 @@ interface BattleViewProps {
   remoteUsers?: RemoteParticipant[];
   userIdToLiveKitIdentity?: Record<string, string>;
   onReturnToStream?: () => void;
+  challengerHlsUrl?: string | null;
+  opponentHlsUrl?: string | null;
 }
 
 export default function BattleView({ battleId, currentStreamId, viewerId, localTracks: passedLocalTracks, remoteUsers: _passedRemoteUsers, userIdToLiveKitIdentity, onReturnToStream }: BattleViewProps) {

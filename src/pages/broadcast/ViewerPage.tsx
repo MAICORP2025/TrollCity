@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import type { RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from 'livekit-client'
 import { Track } from 'livekit-client'
+import { motion, AnimatePresence } from 'framer-motion'
 
 import type { Stream } from '../../types/broadcast'
 import type { BroadcastGift } from '../../hooks/useBroadcastRealtime'
@@ -335,7 +336,15 @@ function ViewerPage() {
    }
    const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
    const [chatInput, setChatInput] = useState('')
-   const floatingChatContainerRef = useRef<HTMLDivElement>(null)
+    const floatingChatContainerRef = useRef<HTMLDivElement>(null)
+
+  // Desktop floating chat: always scroll to top so newest messages are visible
+  useEffect(() => {
+    const el = floatingChatContainerRef.current
+    if (el) {
+      el.scrollTop = 0
+    }
+  }, [floatingMessages.length])
   // Global per-page dedupe of gift animations.  The same stream_gifts row can
   // arrive via postgres_changes and via the broadcast channel; both resolve to
   // the same animationId (row UUID) so this Set catches the second arrival.
@@ -770,6 +779,32 @@ const {
     setUserActionTarget(info)
   }, [])
 
+  const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
+    if (!username || username === 'Anonymous') return
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, username, created_at, role, troll_role')
+        .eq('username', username)
+        .maybeSingle()
+      
+      if (error || !data?.id) {
+        toast.error('User not found')
+        return
+      }
+      
+      handleOpenUserAction({
+        userId: data.id,
+        username: data.username || username,
+        role: data.role || data.troll_role,
+        createdAt: data.created_at,
+      })
+    } catch (err) {
+      console.error('[ViewerPage] Error opening user action:', err)
+      toast.error('Failed to open user profile')
+    }
+  }, [])
+
   const refreshStream = useCallback(async () => {
     if (!streamId) return
 
@@ -1142,22 +1177,22 @@ useStreamRealtime(
   useEffect(() => {
     if (!streamId) return
 
-    const channel = supabase.channel(`floating-chat:${streamId}`)
+     const channel = supabase.channel(`floating-chat:${streamId}`)
 
-    channel
-      .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
-        const { username, content } = payload.payload || {}
-        if (!username || !content) return
-        const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
+     channel
+       .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
+         const { username, content } = payload.payload || {}
+         if (!username || !content) return
+         const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+         setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
 
-        setTimeout(() => {
-          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
-        }, 60_000)
-      })
-      .subscribe()
+         setTimeout(() => {
+           setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+         }, 20_000)
+       })
+       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+     return () => { supabase.removeChannel(channel) }
   }, [streamId])
 
   useEffect(() => {
@@ -1310,18 +1345,13 @@ useStreamRealtime(
             />
           )}
 
-          <main
-            className={cn(
-              'relative z-10 grid flex-1 min-h-0 gap-4 px-5 py-4',
-              isMobileViewer ? 'grid-cols-1 overflow-y-auto pb-28' : 'overflow-hidden',
-            )}
-            style={
-              isMobileViewer
-                ? undefined
-                : { gridTemplateColumns: 'minmax(520px, 1.2fr) minmax(380px, 0.82fr) 360px' }
-            }
-          >
-            <section className={cn('relative min-h-[520px] overflow-hidden', theme.hostVideoPanel)}>
+            <main
+              className={cn(
+                'relative z-10 flex flex-1 min-h-0 flex-col',
+                isMobileViewer ? 'overflow-y-auto pb-28' : '',
+              )}
+            >
+            <section className={cn('relative min-h-0 overflow-hidden', isMobileViewer ? 'min-h-[600px]' : 'min-h-[520px]', theme.hostVideoPanel)}>
 
                 <RemoteVideoSurface
                   participant={hostParticipant}
@@ -1392,356 +1422,301 @@ useStreamRealtime(
                 {broadcasterProfile?.is_verified && <BadgeCheck className="h-5 w-5 text-purple-400" />}
               </div>
 
-              <div className="absolute bottom-6 left-6 z-20 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => onGift(hostId)}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.purpleButton)}
-                >
-                  <Gift className="h-4 w-4" />
-                  Gift
-                </button>
-                <button
-                  onClick={handleShare}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
-                >
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </button>
-              </div>
-            </section>
+<div className="absolute bottom-6 left-6 z-20 flex flex-wrap items-center gap-2">
+{!isMobileViewer && (
+  <>
+    <button
+      onClick={() => onGift(hostId)}
+      className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.purpleButton)}
+    >
+      <Gift className="h-4 w-4" />
+      Gift
+    </button>
+    <button
+      onClick={handleShare}
+      className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
+    >
+      <Share2 className="h-4 w-4" />
+      Share
+    </button>
+  </>
+)}
+               </div>
+             </section>
+           </main>
 
-            <section className={cn('flex min-h-[520px] flex-col overflow-hidden', theme.guestsPanel)}>
-                <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
-                  <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm font-bold text-white/70 backdrop-blur">
-                    <Users className="h-4 w-4 text-white/45" />
-                    Stage Guests
-                  </span>
-                  <span className="flex items-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-xs font-black text-cyan-300">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  On Stage {activeSeats.length}/{Math.max(1, effectiveBoxCount - 1)}
-                </span>
-              </div>
+{/* ── MOBILE FLOATING CHAT OVERLAY ───────────────────────────────────── */}
+{isMobileViewer && (
+  <div className="pointer-events-none absolute inset-x-3 bottom-20 z-30 flex flex-col-reverse gap-2">
+    <AnimatePresence initial={false}>
+      {floatingMessages.slice(-6).map((message) => (
+<motion.div
+  key={message.id}
+  initial={{ opacity: 0, y: 20, scale: 0.96 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 2.5, ease: 'easeOut' }}
+  className="max-w-[82%] rounded-2xl border border-cyan-300/20 bg-black/55 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
+>
+          <span className="font-black text-cyan-200">
+            {message.username}:
+          </span>{' '}
+          <span className="text-white/90">{message.content}</span>
+        </motion.div>
+      ))}
+    </AnimatePresence>
+  </div>
+)}
 
-                <div className="grid flex-1 content-start gap-3 overflow-y-auto p-4 sm:grid-cols-2">
-                  {stageSlots.liveSeats.map((seat: any, index: number) => {
-                  const seatUserId = seat?.user_id || seat?.guest_id
-                  const seatProfile = seat?.user_profile || seat?.profile || {}
-                  const username = getDisplayName(seatProfile, `Stage Guest ${index + 1}`)
-                  const avatar = seatProfile?.avatar_url
-                  const stageParticipant = remoteParticipants.find((participant: any) =>
-                    participantMatchesUser(participant, seatUserId),
-                  )
 
-                  return (
-                    <div
-                      key={seat?.id || seatUserId || `seat-${index}`}
-                      className="relative min-h-[210px] overflow-hidden rounded-2xl border border-purple-400/40 bg-gradient-to-b from-[#160d2b] to-[#070711] shadow-[0_0_24px_rgba(168,85,247,0.25)]"
-                    >
-                      <RemoteVideoSurface
-                        participant={stageParticipant}
-                        className="absolute inset-0"
-                        onTap={handleLike}
-                        fallback={
-                          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-[#160d2b] to-[#070711] p-4">
-                            {avatar ? (
-                              <img
-                                src={avatar}
-                                alt={username}
-                                className="h-20 w-20 rounded-full border-2 border-purple-400 object-cover shadow-[0_0_22px_rgba(168,85,247,0.45)]"
-                              />
-                            ) : (
-                              <div className="grid h-20 w-20 place-items-center rounded-full border-2 border-purple-400/50 bg-black/50 text-cyan-200">
-                                <Users className="h-9 w-9" />
-                              </div>
-                            )}
-                            <p className="mt-3 max-w-full truncate text-sm font-black text-cyan-100">{username}</p>
-                            <p className="mt-1 text-xs text-slate-400">Camera starting…</p>
-                          </div>
-                        }
-                      />
 
-                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
+{/* ── MOBILE CHAT INPUT AT BOTTOM ─────────────────────────────────────── */}
+{isMobileViewer && (
+  <div className="relative z-20 mx-4 mb-4 mt-2">
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault()
+        const text = chatInput.trim()
+        if (!text || !user) return
 
-                      <div className="absolute left-3 top-3 z-10">
-                        <span className="rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]">
-                          Stage Guest
-                        </span>
-                        <p className="mt-1.5 flex items-center gap-1.5 text-[10px] font-black text-emerald-400">
-                          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                          On Stage
-                        </p>
-                      </div>
+        const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+        const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-                      <button
-                        onClick={() => onGift(seatUserId)}
-                        className="absolute right-3 top-3 z-20 grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-white/80 backdrop-blur transition-colors hover:bg-purple-500/20 hover:text-purple-200"
-                        aria-label="Gift stage guest"
-                      >
-                        <Gift className="h-4 w-4" />
-                      </button>
+        setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
+        setChatInput('')
 
-                      <p className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[15]">
-                        <UserStatsOrb
-                          userId={seatUserId}
-                          username={username}
-                          streamId={streamId}
-                          isSeatUser={isUserOnStage}
-                        />
-                      </p>
+        setTimeout(() => {
+          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+        }, 60_000)
 
-                      <p className="absolute bottom-3 left-3 right-3 z-10 truncate text-sm font-black text-cyan-100 drop-shadow">
-                        {username}
-                      </p>
-                    </div>
-                  )
-                })}
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session) {
+            await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'chat',
+                stream_id: streamId,
+                data: { content: text },
+              }),
+            })
+          }
+          const chatChannel = supabase.channel(`floating-chat:${streamId}`)
+          chatChannel.send({
+            type: 'broadcast',
+            event: 'floating_chat',
+            payload: { username, content: text },
+          }).catch(() => {})
+        } catch { /* silent */ }
+      }}
+      className="flex gap-2"
+    >
+      <input
+        type="text"
+        value={chatInput}
+        onChange={(e) => setChatInput(e.target.value)}
+        placeholder="Say something…"
+        className="flex-1 h-11 rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+        maxLength={280}
+      />
+      <button
+        type="submit"
+        disabled={!chatInput.trim()}
+        className={cn('inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-black', chatInput.trim() ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30' : 'bg-white/5 text-white/30 border border-white/10')}
+      >
+        Send
+      </button>
+    </form>
+  </div>
+)}
 
-                {Array.from({ length: stageSlots.emptyCount }).map((_, index) => {
-                  const slotIndex = stageSlots.liveSeats.length + index + 1
-                  const openPass = stagePassesHook.stagePasses.find(
-                    (p) => p.status === 'open' && p.stage_index === slotIndex,
-                  ) || stagePassesHook.stagePasses.find((p) => p.status === 'open')
-                  const canJoinAfterApproval = currentUserStagePass?.status === 'approved' || currentUserStagePass?.status === 'live'
-                  const isPendingRequest = currentUserStagePass?.status === 'requested'
-                  const isDisabled = (stream as any)?.are_seats_locked || isUserOnStage || isPendingRequest
-
+          {/* ── FLOATING CHAT PANEL ─────────────────────────────────────────── */}
+          <div className="hidden lg:block absolute bottom-28 left-6 w-[340px] max-h-[70vh] z-20 flex flex-col pointer-events-auto">
+            <aside className={cn(theme.chatPanel, "flex flex-col h-full min-h-0 overflow-hidden")}>
+              {/* ── Chat tab bar ── */}
+              <div className="grid grid-cols-3 border-b border-white/10">
+                {['Chat', 'Gifts', 'Top Fans'].map((tab) => {
+                  const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'gifts' | 'top-fans'
+                  const active = chatTab === tabKey
                   return (
                     <button
-                      key={`empty-${index}`}
-                      onClick={async () => {
-                        if (!user?.id) {
-                          toast.error('Login to request a stage spot')
-                          return
-                        }
-                        if ((stream as any)?.are_seats_locked) {
-                          toast.error('Stage is locked right now')
-                          return
-                        }
-                        if (isUserOnStage) return
-
-                        if (canJoinAfterApproval && currentUserStagePass?.stage_index) {
-                          manualStageLeaveRef.current = false
-                          await joinSeat(currentUserStagePass.stage_index, 0)
-                          return
-                        }
-
-                        if (isPendingRequest) {
-                          toast('Stage pass request pending')
-                          return
-                        }
-
-                        if (!openPass) {
-                          console.debug('[ViewerPage] no open stage pass found', { streamId, userId: user?.id, availablePasses: stagePassesHook.stagePasses })
-                          toast.error('Seats Are Temp Disabled Until 5-25-2025')
-                          return
-                        }
-
-                        console.debug('[ViewerPage] requesting stage pass', { streamId, userId: user?.id, stagePassId: openPass.id, stageIndex: openPass.stage_index })
-                        const result = await stagePassesHook.requestStagePass(openPass.id)
-                        if (!result.success) {
-                          toast.error(result.error || 'Failed to request stage pass')
-                        } else {
-                          toast.success('Stage pass request sent')
-                        }
-                      }}
-                      disabled={isDisabled}
-                      className={cn('min-h-[210px] rounded-2xl border border-dashed border-white/15 bg-black/20 p-4 text-center transition-all disabled:cursor-not-allowed disabled:opacity-40', theme.emptySlot)}
+                      key={tab}
+                      type="button"
+                      onClick={() => setChatTab(tabKey)}
+                      className={cn(
+                        'relative h-16 text-sm font-black transition-colors',
+                        active ? 'text-white' : 'text-white/60 hover:text-white/80',
+                      )}
+                      data-active={active}
                     >
-                      <div className="mx-auto mt-10 grid h-16 w-16 place-items-center rounded-full border border-white/15 bg-white/5">
-                        <Plus className="h-8 w-8" />
-                      </div>
-                      <p className="mt-5 text-base font-bold text-slate-300">
-                        {isUserOnStage
-                          ? 'You are on stage'
-                          : canJoinAfterApproval
-                            ? 'Join Stage Spot'
-                            : isPendingRequest
-                              ? 'Request Pending'
-                              : 'Seats Are Temp Disabled Until 5-25-2026'}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {isUserOnStage
-                          ? 'Leave first to switch spots'
-                          : canJoinAfterApproval
-                            ? 'Approved — join now'
-                            : isPendingRequest
-                              ? 'Your request is waiting for approval'
-                              : 'ask to join the broadcast'}
-                      </p>
+                      {tab}
+                      {active && (
+                        <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
+                      )}
                     </button>
                   )
                 })}
               </div>
-            </section>
 
-            {(!isMobileViewer || isChatOpen) && (
-              <aside className={theme.chatPanel}>
-                <div className="grid grid-cols-3 border-b border-white/10">
-                  {['Chat', 'Gifts', 'Top Fans'].map((tab, tabIndex) => {
-                    const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'gifts' | 'top-fans'
-                    const active = chatTab === tabKey
-                    return (
-                      <button
-                        key={tab}
-                        onClick={() => setChatTab(tabKey)}
-                        className={cn(
-                          'relative h-16 text-sm font-black transition-colors',
-                          active ? 'text-white' : 'text-white/60 hover:text-white/80',
-                        )}
-                        type="button"
-                        data-active={active}
-                      >
-                        {tab}
-                        {active && (
-                          <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  {chatTab === 'chat' ? (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
-                      {/* Floating messages area */}
+              {/* ── Tab content ── */}
+              <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+                {chatTab === 'chat' ? (
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
+                      {/* Floating messages area—newest on top, scrolls to top on update */}
                       <div
                         ref={floatingChatContainerRef}
-                        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide max-h-[calc(100%-60px)]"
+                        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide overscroll-contain"
                       >
-                        {floatingMessages.length === 0 && (
-                          <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
-                            No messages yet – say something!
-                          </div>
-                        )}
-                        {floatingMessages.map((msg) => (
-                          <div
-                            key={msg.id}
-                            className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
-                            style={{ animation: 'slideInFromTop 0.3s ease-out' }}
-                          >
-                            <span className="font-black text-cyan-300">{msg.username}</span>
-                            <span className="text-white/40 mx-1">:</span>
-                            <span className="text-white/90">{msg.content}</span>
+                       {floatingMessages.length === 0 && (
+                         <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
+                           No messages yet – say something!
+                         </div>
+                       )}
+                       <AnimatePresence initial={false}>
+                       {floatingMessages.map((msg) => (
+                         <motion.div
+                           key={msg.id}
+                           initial={{ opacity: 0, y: 20, scale: 0.96 }}
+                           animate={{ opacity: 1, y: 0, scale: 1 }}
+                           exit={{ opacity: 0, y: -90 }}
+                           transition={{ duration: 2.5, ease: 'easeOut' }}
+                           onAnimationComplete={() => {
+                             setFloatingMessages(prev => prev.filter(m => m.id !== msg.id))
+                           }}
+                           className="text-sm leading-relaxed break-words"
+                         >
+                           <button
+                             onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                             className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                             title={`View ${msg.username}'s profile`}
+                           >
+                             {msg.username}
+                           </button>
+                           <span className="text-white/40 mx-1">:</span>
+                           <span className="text-white/90">{msg.content}</span>
+                         </motion.div>
+                       ))}
+                       </AnimatePresence>
+                     </div>
+
+                    {/* Live-chat input form */}
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault()
+                        const text = chatInput.trim()
+                        if (!text || !user) return
+
+                        const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                        const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+                        setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
+                        setChatInput('')
+
+                        // Auto-remove after 60 seconds
+         setTimeout(() => {
+           setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+         }, 20_000)
+
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession()
+                          if (session) {
+                            await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+                              method: 'POST',
+                              headers: {
+                                Authorization: `Bearer ${session.access_token}`,
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({
+                                type: 'chat',
+                                stream_id: streamId,
+                                data: { content: text },
+                              }),
+                            })
+                          }
+                          const chatChannel = supabase.channel(`floating-chat:${streamId}`)
+                          chatChannel.send({
+                            type: 'broadcast',
+                            event: 'floating_chat',
+                            payload: { username, content: text },
+                          }).catch(() => {})
+                        } catch { /* silent */ }
+                      }}
+                      className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
+                    >
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Say something…"
+                        className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                        maxLength={280}
+                      />
+                    </form>
+                  </div>
+                ) : chatTab === 'gifts' ? (
+                  <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                    <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>
+                    {recentGifts.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
+                        No gifts have been received yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {recentGifts.slice(0, 12).map((gift) => (
+                          <div key={gift.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-bold text-white truncate">
+                                  {gift.sender_username || 'Anonymous'}
+                                </div>
+                                <div className="text-xs text-slate-400 truncate">
+                                  Sent {gift.quantity || 1} {gift.gift_name || 'gift'}
+                                </div>
+                              </div>
+                              <div className="text-xs font-semibold text-cyan-300">
+                                {gift.coins_amount?.toLocaleString() || gift.amount?.toLocaleString() || '0'} coins
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
-
-                      {/* Input at the bottom */}
-                      <form
-                        onSubmit={async (e) => {
-                          e.preventDefault()
-                          const text = chatInput.trim()
-                          if (!text || !user) return
-
-                          const username = profile?.username || profile?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
-                          const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-
-                          setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
-                          setChatInput('')
-
-                          // Auto-remove after 60 seconds
-                          setTimeout(() => {
-                            setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
-                          }, 60_000)
-
-                          // Save to DB + broadcast via Supabase
-                          try {
-                            const { data: { session } } = await supabase.auth.getSession()
-                            if (session) {
-                              await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
-                                method: 'POST',
-                                headers: {
-                                  Authorization: `Bearer ${session.access_token}`,
-                                  'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                  type: 'chat',
-                                  stream_id: streamId,
-                                  data: { content: text },
-                                }),
-                              })
-                            }
-                            const chatChannel = supabase.channel(`floating-chat:${streamId}`)
-                            chatChannel.send({
-                              type: 'broadcast',
-                              event: 'floating_chat',
-                              payload: { username, content: text },
-                            }).catch(() => {})
-                          } catch { /* silent */ }
-                        }}
-                        className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
-                      >
-                        <input
-                          type="text"
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Say something…"
-                          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-                          maxLength={280}
-                        />
-                      </form>
-                    </div>
-                  ) : chatTab === 'gifts' ? (
-                    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
-                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>
-                      {recentGifts.length === 0 ? (
-                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
-                          No gifts have been received yet.
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {recentGifts.slice(0, 12).map((gift) => (
-                            <div key={gift.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="text-sm font-bold text-white truncate">
-                                    {gift.sender_username || 'Anonymous'}
-                                  </div>
-                                  <div className="text-xs text-slate-400 truncate">
-                                    Sent {gift.quantity || 1} {gift.gift_name || 'gift'}
-                                  </div>
-                                </div>
-                                <div className="text-xs font-semibold text-cyan-300">
-                                  {gift.coins_amount?.toLocaleString() || gift.amount?.toLocaleString() || '0'} coins
-                                </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                    <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Top Fans</div>
+                    {isTopFansLoading ? (
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">Loading top fans...</div>
+                    ) : topGifters.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">No fan activity yet.</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {topGifters.map((fan) => (
+                          <div key={fan.sender_id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-10 w-10 shrink-0 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold">
+                                {fan.sender_username?.charAt(0)?.toUpperCase() || '?'}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
-                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Top Fans</div>
-                      {isTopFansLoading ? (
-                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">Loading top fans...</div>
-                      ) : topGifters.length === 0 ? (
-                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">No fan activity yet.</div>
-                      ) : (
-                        <div className="space-y-3">
-                          {topGifters.map((fan) => (
-                            <div key={fan.sender_id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold">
-                                    {fan.sender_username?.charAt(0)?.toUpperCase() || '?'}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="truncate text-sm font-bold text-white">{fan.sender_username || 'Troll Citizen'}</div>
-                                    <div className="truncate text-xs text-slate-400">Last gift: {new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
-                                  </div>
-                                </div>
-                                <div className="text-xs font-semibold text-cyan-300">{fan.total_gift_coins.toLocaleString()} coins</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-bold text-white">{fan.sender_username || 'Troll Citizen'}</div>
+                                <div className="truncate text-xs text-slate-400">Last gift: {new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
                               </div>
+                              <div className="text-xs font-semibold text-cyan-300 whitespace-nowrap">{fan.total_gift_coins.toLocaleString()} coins</div>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </aside>
-            )}
-          </main>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </aside>
+          </div>
+
+          {/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
 
           <div className={cn('relative z-20 shrink-0 border-t border-white/10 px-4 py-3', theme.bottomBar)}>
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_100%,rgba(168,85,247,0.12),transparent)]" />
@@ -1759,13 +1734,6 @@ useStreamRealtime(
 
               <div className="flex w-full items-center justify-end gap-2 md:w-auto">
                 <button
-                  onClick={handleToggleChat}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.glassButton)}
-                >
-                  <MessageSquare className="h-4 w-4" />
-                  {isChatOpen ? 'Hide Chat' : 'Chat'}
-                </button>
-                <button
                   onClick={handleLike}
                   className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.pinkButton)}
                 >
@@ -1778,6 +1746,13 @@ useStreamRealtime(
                 >
                   <Gift className="h-4 w-4" />
                   Gift
+                </button>
+                <button
+                  onClick={handleShare}
+                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.cyanButton)}
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share
                 </button>
                 <button
                   onClick={isUserOnStage ? handleLeaveSeat : handleLeave}

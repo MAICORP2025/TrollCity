@@ -5,7 +5,6 @@ import {
   Video,
   VideoOff,
   Camera,
-  Settings,
   Shield,
   LogOut,
   Gift,
@@ -16,6 +15,7 @@ import {
   UserCheck,
   Radio,
   Crown,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -38,6 +38,11 @@ interface MoreControlsDrawerProps {
   areSeatsLocked?: boolean;
   onManageStagePass?: () => void;
   openStagePassCount?: number;
+  /* Assign broadofficer (host only) */
+  onAssignBroadofficer?: () => void;
+  /* ── RGB effect ───────────────────────────────── */
+  onToggleRGB?: () => void;
+  hasRgbEffect?: boolean;
   /* ── mod-action callbacks (officers only) ─────── */
   isOfficer?: boolean;
   onMuteUser?: (userId: string) => void;
@@ -63,6 +68,9 @@ export default function MoreControlsDrawer({
   areSeatsLocked = false,
   onManageStagePass,
   openStagePassCount = 0,
+  onToggleRGB,
+  hasRgbEffect = false,
+  onAssignBroadofficer,
   isHost = false,
   isOfficer = false,
   onMuteUser,
@@ -137,8 +145,8 @@ export default function MoreControlsDrawer({
         {/* Grab bar */}
         <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6" />
 
-        {/* ── Mic / Cam / Flip / Settings ── */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        {/* ── Mic / Cam / Flip ── */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
           <ControlButton
             icon={isMuted ? MicOff : Mic}
             label={isMuted ? "Unmute" : "Mute"}
@@ -154,8 +162,6 @@ export default function MoreControlsDrawer({
           />
 
           <ControlButton icon={Camera} label="Flip" onClick={onFlipCamera} />
-
-          <ControlButton icon={Settings} label="Settings" onClick={onSettings} />
         </div>
 
         {/* ── Stream Controls (host / officer) ── */}
@@ -181,6 +187,21 @@ export default function MoreControlsDrawer({
                   icon={UserCheck}
                   label={`Pass${openStagePassCount ? ` (${openStagePassCount})` : ''}`}
                   onClick={onManageStagePass}
+                />
+              )}
+              {isHost && onAssignBroadofficer && (
+                <ControlButton
+                  icon={Shield}
+                  label="Assign Officer"
+                  onClick={onAssignBroadofficer}
+                />
+              )}
+              {isHost && onToggleRGB && (
+                <ControlButton
+                  icon={Sparkles}
+                  label={hasRgbEffect ? "RGB On" : "RGB Off"}
+                  onClick={onToggleRGB}
+                  active={hasRgbEffect}
                 />
               )}
             </div>

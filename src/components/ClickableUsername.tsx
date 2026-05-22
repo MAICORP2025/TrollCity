@@ -437,14 +437,15 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                 break;
            }
 
-            if (!confirm("Kick this user for 100 coins? They will be removed for 24h unless they pay the fee.")) return;
+            if (!confirm("Kick this user for 100 coins? They will be removed for 30 minutes unless they pay the fee.")) return;
 
             try {
-                // Use the new paid kick RPC
+                // Use the new paid kick RPC and request a 30-minute duration for regular users
                 const { data, error } = await supabase.rpc('kick_user_paid', { 
                     p_stream_id: streamId, 
                     p_target_user_id: targetUserId,
-                    p_kicker_id: currentUser?.id 
+                    p_kicker_id: currentUser?.id,
+                    p_duration_minutes: 30
                 });
 
                 if (error) throw error;

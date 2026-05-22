@@ -85,8 +85,8 @@ export default function Wallet() {
   }, [profile?.troll_coins])
 
   const reservedCoins = useMemo(() => {
-    return Math.max(0, Number(profile?.cashout_reserved_coins || 0))
-  }, [profile?.cashout_reserved_coins])
+    return Math.max(0, Number((profile?.cashout_reserved_coins ?? profile?.reserved_troll_coins) || 0))
+  }, [profile?.cashout_reserved_coins, profile?.reserved_troll_coins])
 
   const availableCoins = useMemo(() => {
     return Math.max(0, totalCoins - reservedCoins)
@@ -125,8 +125,12 @@ export default function Wallet() {
       setTxs(transactions)
       setCashoutRequests(cashoutData || [])
 
-      if (eligibleData && eligibleData.length > 0) {
-        setEligibleCoins(eligibleData[0].total_eligible_coins || 0)
+      const eligibleTotal = Array.isArray(eligibleData)
+        ? eligibleData[0]?.total_eligible_coins
+        : eligibleData?.total_eligible_coins
+
+      if (typeof eligibleTotal === 'number') {
+        setEligibleCoins(eligibleTotal)
       }
 
       const earned = transactions
@@ -366,7 +370,7 @@ export default function Wallet() {
             </section>
 
             <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
-              <MAIPayCard />
+              <MAIPayCard disableContinue />
 
               <div className={cn(panel, 'p-5')}>
                 <h2 className="text-xl font-black text-white">Cashout Estimate</h2>

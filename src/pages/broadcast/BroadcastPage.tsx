@@ -121,10 +121,10 @@ if (typeof window !== 'undefined') {
  */
 export function BroadcastPage() {
   const params = useParams()
+  const navigate = useNavigate()
   const streamId = params.id || params.streamId
 
   const { user, profile } = useAuthStore()
-  const navigate = useNavigate()
   const { clearTracks, screenTrack, screenAudioTrack, cameraTrack } = useStreamStore()
   const { isMobileWidth, hasMounted } = useIsMobile()
 
@@ -362,10 +362,11 @@ export function BroadcastPage() {
         localTrackPublishedCountRef.current += 1
         return candidate
       } catch (err) {
+        const trackIdentifier = (candidate as any).trackId || (candidate as any).sid || 'unknown'
         console.warn(
           `[BroadcastPage] Failed to publish ${kind} track`,
           err,
-           { trackId: candidate.trackId, kind }
+          { trackId: trackIdentifier, kind }
         )
         return undefined
       }
@@ -376,7 +377,9 @@ export function BroadcastPage() {
 
     // If direct publication fails, attempt to recreate the LiveKit track from the native MediaStreamTrack
     try {
-             const mediaTrack = track.mediaStreamTrack ? track.mediaStreamTrack() : undefined;
+      const mediaTrack =
+        (track as any).getMediaStreamTrack?.() ||
+        (track as any).mediaStreamTrack?.();
       if (!mediaTrack) {
         console.warn('[BroadcastPage] No native media track available for clone publish', { kind })
         return undefined
@@ -385,7 +388,7 @@ export function BroadcastPage() {
       console.log('[BroadcastPage] Cloning preflight track from native MediaStreamTrack', {
         kind,
         label: mediaTrack.label,
-        enabled: mediaTrack.enabled
+        enabled: mediaTrack.enabled,
       })
 
       const clonedTrack = kind === 'video'
@@ -468,7 +471,6 @@ export function BroadcastPage() {
   const [hasReceivedChatMessage, setHasReceivedChatMessage] = useState(false)
   const streamStartTimeRef = useRef<Date | null>(null)
   const autoEndCheckedRef = useRef(false)
-  const tcpsMessageBubbleRef = useRef<{ message: string; type: string } | null>(null)
   
   const hasJoinedRef = useRef(false)
   const roomRef = useRef<Room | null>(null)
@@ -508,9 +510,11 @@ export function BroadcastPage() {
      createdAt: number
    }
 
-   const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
-   const [chatInput, setChatInput] = useState('')
-   const floatingChatContainerRef = useRef<HTMLDivElement>(null)
+    const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
+    const [messages, setMessages] = useState<Array<{id: string; username: string; content: string; createdAt: number}>>([])
+    const [chatInput, setChatInput] = useState('')
+    const floatingChatContainerRef = useRef<HTMLDivElement>(null)
+    const chatContainerRef = useRef<HTMLDivElement>(null)
 
    useEffect(() => {
      const broadcasterId = stream?.user_id;
@@ -594,7 +598,7 @@ export function BroadcastPage() {
              const total = totals.get(senderId)!;
 
              return {
-               sender_id: senderId,
+               user_id: senderId,
                sender_username:
                  profileRow?.username ||
                  profileRow?.display_name ||
@@ -688,7 +692,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
 
           const preflightVideoTrack = PreflightStore.getLivekitTracks()?.[1];
           if (preflightVideoTrack) {
-            const mediaTrack = preflightVideoTrack.mediaStreamTrack?.();
+            const mediaTrack = preflightVideoTrack.mediaStreamTrack;
             const isLiveTrack = mediaTrack && mediaTrack.readyState === 'live';
 
             console.log('[BroadcastPage] Preflight camera overlay candidate:', {
@@ -2922,6 +2926,32 @@ user?.id, // user.id is used for identity
      setUserActionTarget(info)
    }, [])
 
+   const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
+     if (!username || username === 'Anonymous') return
+     try {
+       const { data, error } = await supabase
+         .from('user_profiles')
+         .select('id, username, created_at, role, troll_role')
+         .eq('username', username)
+         .maybeSingle()
+       
+       if (error || !data?.id) {
+         toast.error('User not found')
+         return
+       }
+       
+       handleOpenUserAction({
+         userId: data.id,
+         username: data.username || username,
+         role: data.role || data.troll_role,
+         createdAt: data.created_at,
+       })
+     } catch (err) {
+       console.error('[BroadcastPage] Error opening user action:', err)
+       toast.error('Failed to open user profile')
+     }
+   }, [])
+
    const handleCloseUserAction = useCallback(() => {
      setUserActionTarget(null)
    }, [])
@@ -3697,6 +3727,86 @@ const handleLike = useCallback(async () => {
     stream?.is_battle === true &&
     (stream?.battle_status === 'starting' || stream?.battle_status === 'active');
 
+   function handleMute(userId: string, reason?: string) {
+     toast.info(`Mute user ${userId}`);
+   }
+
+   function handleGeneralKick() {
+     toast.info('Kick issued');
+   }
+
+   function handleArrest(userId: string, reason?: string) {
+     toast.info(`Arrest user ${userId}`);
+   }
+
+   function handleBlock(userId: string, reason?: string) {
+     toast.info(`Block user ${userId}`);
+   }
+
+  const handleAssignBroadofficer = useCallback(async () => {
+    if (!isHost) {
+      toast.error('Only the broadcaster can assign broadofficers');
+      return;
+    }
+    const entry = window.prompt('Enter username of user to promote to Broadofficer (exact):');
+    if (!entry) return;
+
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('id, username')
+        .ilike('username', entry)
+        .limit(1)
+        .maybeSingle();
+
+      if (!profile || !profile.id) {
+        toast.error('User not found');
+        return;
+      }
+
+      const { error } = await supabase.rpc('assign_broadofficer', { p_user_id: profile.id });
+      if (error) throw error;
+      toast.success(`${profile.username} is now a Broadofficer`);
+    } catch (err: any) {
+      console.error('Assign broadofficer error:', err);
+      toast.error(err?.message || 'Failed to assign broadofficer');
+    }
+  }, [isHost]);
+
+  
+  function startDrag(event: React.MouseEvent<HTMLDivElement>): void {
+    // Start a horizontal resize for the desktop chat panel
+    try {
+      event.preventDefault();
+      const divider = event.currentTarget as HTMLDivElement;
+      const panel = divider.parentElement as HTMLElement | null;
+      if (!panel) return;
+
+      const startX = event.clientX;
+      const startWidth = panel.getBoundingClientRect().width;
+
+      const minWidth = 200;
+      const maxWidth = 720;
+
+      function onMouseMove(e: MouseEvent) {
+        const dx = startX - e.clientX; // dragging left increases width
+        let newWidth = startWidth + dx;
+        if (newWidth < minWidth) newWidth = minWidth;
+        if (newWidth > maxWidth) newWidth = maxWidth;
+        panel.style.width = `${Math.round(newWidth)}px`;
+      }
+
+      function onMouseUp() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    } catch (err) {
+    }
+  }
+
   if (error) {
     return (
       <div className={cn('flex flex-col items-center justify-center h-dvh', theme.pageBg + ' text-white')}>
@@ -3753,58 +3863,7 @@ const handleLike = useCallback(async () => {
     );
   }
 
-   function handleMute(userId: string, reason?: string) {
-     toast.info(`Mute user ${userId}`);
-   }
-
-   function handleGeneralKick() {
-     toast.info('Kick issued');
-   }
-
-   function handleArrest(userId: string, reason?: string) {
-     toast.info(`Arrest user ${userId}`);
-   }
-
-   function handleBlock(userId: string, reason?: string) {
-     toast.info(`Block user ${userId}`);
-   }
-
-  
-  function startDrag(event: React.MouseEvent<HTMLDivElement>): void {
-    // Start a horizontal resize for the desktop chat panel
-    try {
-      event.preventDefault();
-      const divider = event.currentTarget as HTMLDivElement;
-      const panel = divider.parentElement as HTMLElement | null;
-      if (!panel) return;
-
-      const startX = event.clientX;
-      const startWidth = panel.getBoundingClientRect().width;
-
-      const minWidth = 200;
-      const maxWidth = 720;
-
-      function onMouseMove(e: MouseEvent) {
-        const dx = startX - e.clientX; // dragging left increases width
-        let newWidth = startWidth + dx;
-        if (newWidth < minWidth) newWidth = minWidth;
-        if (newWidth > maxWidth) newWidth = maxWidth;
-        panel.style.width = `${Math.round(newWidth)}px`;
-      }
-
-      function onMouseUp() {
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-      }
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    } catch (err) {
-      // ignore
-    }
-  }
-
-    return (
+  return (
       <GiftSystemProvider streamId={streamId} defaultReceiverId={stream?.user_id}>
           <ErrorBoundary>
 
@@ -3841,10 +3900,10 @@ const handleLike = useCallback(async () => {
               />
             )}
 
-            {/* ── MAIN CONTENT GRID (3-column) ── */}
+            {/* ── MAIN CONTENT GRID (2-column) ── */}
             <main
               className="grid flex-1 min-h-0 gap-4 px-5 py-4"
-              style={{ gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(380px, 0.85fr) 360px' }}
+              style={{ gridTemplateColumns: 'minmax(430px, 1.2fr) 360px' }}
             >
               {/* ── LEFT: Host Video Card ── */}
               <section className={cn('relative min-h-0 overflow-hidden', theme.hostVideoPanel)}>
@@ -3860,7 +3919,7 @@ const handleLike = useCallback(async () => {
                         remoteParticipants.forEach((rp: RemoteParticipant) => {
                           if (rp.identity === broadcasterUserId) {
                             const pub = (rp as any).videoTrackPublications
-                              ? Array.from((rp as any).videoTrackPublications.values())
+                              ? Array.from((rp as any).videoTrackPublications.values()) as any[]
                               : [];
                             const found = pub.find((p: any) => p.track && typeof (p.track as any).attach === 'function');
                             if (found) vt = found.track;
@@ -3941,126 +4000,40 @@ const handleLike = useCallback(async () => {
                    const title = (pinned as any).title || (pinned as any).name || (pinned as any)?.product?.name || 'Product';
                    const priceVal = (pinned as any).price_coins || (pinned as any).coin_price || (pinned as any).price || (pinned as any)?.product?.price || 0;
                    return (
-                  <div className="absolute bottom-6 left-6 z-20 w-[min(310px,calc(100%-32px))] rounded-2xl border border-purple-400/30 bg-[#120b1f]/90 p-4 shadow-[0_0_30px_rgba(168,85,247,0.35)] backdrop-blur-xl">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="rounded-lg bg-purple-500/40 px-2.5 py-1 text-[11px] font-black uppercase text-purple-100">
-                        Pinned Product
-                      </span>
-                      {isHost && (
-                        <button
-                          onClick={() => pinProduct(pinned.id)}
-                          className="rounded-md p-1 text-white/50 hover:text-white transition-colors"
-                          aria-label="Remove pinned product"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="h-16 w-16 shrink-0 rounded-xl bg-white/8 overflow-hidden">
-                        {imgSrc ? (
-                          <img src={imgSrc} alt={title} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="h-full w-full grid place-items-center text-violet-300">
-                            <Ticket className="h-7 w-7" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black text-white truncate">{title}</p>
-                        <p className="mt-2 flex items-center gap-2 text-sm font-black text-white">
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-violet-500/25 text-violet-200 text-xs">◆</span>
-                          {Number(priceVal).toLocaleString()}
-                        </p>
-                        <button className="mt-2 w-full rounded-xl border border-violet-300/30 bg-gradient-to-r from-violet-700 to-purple-600 px-3 py-1.5 text-xs font-black text-white shadow-[0_0_16px_rgba(168,85,247,0.35)]">
-                          View Product
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-                })()}
-              </section>
-
-              {/* ── MIDDLE: Stage Guest Grid ── */}
-              <section className={cn('flex min-h-0 flex-col overflow-hidden', theme.guestsPanel)}>
-                {/* Chip row */}
-                <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
-                  <span className={sectionLabel}>
-                    <svg className="h-4 w-4 text-white/45" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M9 19l3 3 3-3M19 9l3 3-3 3M15 5l3 3-3 3M15 19l-3 3-3-3"/>
-                    </svg>
-                    Stage Guests
-                  </span>
-                  {(() => {
-                    const livePassesCount = stagePassesHook.stagePasses.filter(
-                      (p: StagePass) => p.status === 'approved' || p.status === 'live',
-                    ).length;
-                    return (
-                      <span className={theme.stageCountLabel}>
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        On Stage {livePassesCount}/6
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                 {/* Guest / empty-slot grid */}
-                 <div className="flex-1 min-h-0 overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start">
-                   {(() => {
-                     const livePasses = stagePassesHook.stagePasses.filter(
-                       (p: StagePass) => p.status === 'approved' || p.status === 'live',
-                     );
-
-                     return livePasses.map((pass: StagePass) => {
-                       const username = (pass as any).user_profile?.username || (pass as any).profile?.username || (pass as any).username || 'Stage Guest';
-                       const avatar = (pass as any).user_profile?.avatar_url || (pass as any).profile?.avatar_url || (pass as any).avatar_url || null;
-
-                       return (
-                         <div key={pass.id} className={cn('relative min-h-[210px] rounded-2xl border border-purple-400/40 bg-gradient-to-b from-[#160d2b] to-[#070711] p-4 shadow-[0_0_24px_rgba(168,85,247,0.25)] overflow-hidden', theme.panel)}>
-                           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.18),transparent_45%)]" />
-
-                           <div className="relative z-10 flex items-start justify-between gap-2">
-                             <span className={guestLabel}>
-                               Stage Guest
-                             </span>
-                             {isHost && (
-                               <button
-                                 onClick={async () => {
-                                   await stagePassesHook.removeStageGuest(pass.id);
-                                   await stagePassesHook.refetch();
-                                 }}
-                                 className="relative z-20 grid h-8 w-8 place-items-center rounded-lg bg-white/8 hover:bg-red-500/15 text-white/70 hover:text-red-300 transition-colors"
-                                 aria-label="Remove from stage"
-                               >
-                                 <X className="h-4 w-4" />
-                               </button>
-                             )}
-                           </div>
-
-                           <p className="relative z-10 mt-1.5 flex items-center gap-1.5 text-[10px] font-black text-emerald-400">
-                             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                             On Stage
-                           </p>
-
-                           <div className="relative z-10 mt-4 flex flex-col items-center">
-                             {avatar ? (
-                               <img src={avatar} alt={username} className="h-20 w-20 rounded-full border-2 border-purple-400 object-cover shadow-[0_0_22px_rgba(168,85,247,0.45)]" />
-                             ) : (
-                               <div className="h-20 w-20 rounded-full border-2 border-purple-400/50 bg-black/50 grid place-items-center text-cyan-200">
-                                 <svg className="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                                 </svg>
-                               </div>
-                             )}
-                             <p className="mt-3 text-sm font-black text-cyan-100 truncate max-w-full">{username}</p>
-                           </div>
+                     <div className="absolute bottom-6 left-6 z-20 w-[min(310px,calc(100%-32px))] rounded-2xl border border-purple-400/30 bg-[#120b1f]/90 p-4 shadow-[0_0_30px_rgba(168,85,247,0.35)] backdrop-blur-xl">
+                       <div className="mb-3 flex items-center justify-between">
+                         <span className="rounded-lg bg-purple-500/40 px-2.5 py-1 text-[11px] font-black uppercase text-purple-100">
+                           Pinned Product
+                         </span>
+                         {isHost && (
+                           <button
+                             onClick={() => pinProduct(pinned.id)}
+                             className="rounded-md p-1 text-white/50 hover:text-white transition-colors"
+                             aria-label="Remove pinned product"
+                           >
+                             <X className="h-4 w-4" />
+                           </button>
+                         )}
+                       </div>
+                       <div className="flex items-center gap-3">
+                         <div className="h-16 w-16 shrink-0 rounded-xl bg-white/8 overflow-hidden">
+                           {imgSrc ? (
+                             <img src={imgSrc} alt={title} className="h-full w-full object-cover" />
+                           ) : (
+                             <div className="h-full w-full grid place-items-center text-violet-300">
+                               <Ticket className="h-7 w-7" />
+                             </div>
+                           )}
                          </div>
-                       );
-                     });
-                   })()}
-                 </div>
-              </section>
+                         <div className="min-w-0">
+                           <p className="text-sm font-bold text-white truncate">{title}</p>
+                           <p className="mt-1 text-xs text-white/60">{priceVal.toLocaleString()} coins</p>
+                         </div>
+                       </div>
+                     </div>
+                   )
+                 })()}
+               </section>
 
               {/* ── RIGHT: Chat Panel ── */}
               <aside className={cn(
@@ -4111,7 +4084,13 @@ const handleLike = useCallback(async () => {
                             className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
                             style={{ animation: 'slideInFromTop 0.3s ease-out' }}
                           >
-                            <span className="font-black text-cyan-300">{msg.username}</span>
+                            <button
+                              onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                              className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                              title={`View ${msg.username}'s profile`}
+                            >
+                              {msg.username}
+                            </button>
                             <span className="text-white/40 mx-1">:</span>
                             <span className="text-white/90">{msg.content}</span>
                           </div>
@@ -4125,7 +4104,7 @@ const handleLike = useCallback(async () => {
                           const text = chatInput.trim()
                           if (!text || !user) return
 
-                          const username = profile?.username || profile?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                          const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
                           const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                           setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
@@ -4310,15 +4289,13 @@ const handleLike = useCallback(async () => {
             {isMobileViewer && (
               <div className="absolute bottom-3 left-3 z-50">
                 <button
-                  onClick={() => {
-                    isMobileViewer(!isMobileViewer);
-                  }}
+                  onClick={() => setIsChatOpen((prev) => !prev)}
                   className="rounded-lg bg-black/40 backdrop-blur border border-white/10 flex items-center gap-1.5 px-2.5 py-1.5 text-white/70 hover:text-white transition-all"
-                  title={isMobileViewer ? 'Fullscreen View' : 'Vertical View'}
-                  aria-label={isMobileViewer ? 'Fullscreen view' : 'Vertical view'}
+                  title={isChatOpen ? 'Close Chat' : 'Open Chat'}
+                  aria-label={isChatOpen ? 'Close chat' : 'Open chat'}
                 >
                   <Maximize2 className="h-4 w-4" />
-                  <span className="hidden sm:inline text-[10px] font-bold">{isMobileViewer ? 'Fullscreen' : 'Vertical'}</span>
+                  <span className="hidden sm:inline text-[10px] font-bold">{isChatOpen ? 'Close' : 'Chat'}</span>
                 </button>
               </div>
             )}
@@ -4332,23 +4309,16 @@ const handleLike = useCallback(async () => {
                   onClose={handleCloseGiftModal}
                   streamId={streamId}
                   recipientId={giftRecipientId}
-                  onSetRecipientId={setGiftRecipientId}
-                  recentGifts={recentGifts}
-                  giftNameMap={giftNameMap}
-                  onGiftUserPositions={handleGetUserPositions}
                 />
               )}
+
+            </div>
               <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} nameMap={giftNameMap} />
-              {/* Stage pass requests panel for broadcasters */}
-              {isHost && (
-                <div className="pointer-events-auto absolute top-20 right-6 z-50">
-                  <StagePassRequestsPanel
-                    requests={requests}
-                    onApprove={(id) => void approveStagePass(id)}
-                    onDeny={(id) => void denyStagePass(id)}
-                  />
-                </div>
-              )}
+               {/* Stage pass requests panel for broadcasters - TEMPORARILY DISABLED */}
+                   {/* <StagePassRequestsPanel
+                     onApprove={(id) => void approveStagePass(id)}
+                     onDeny={(id) => void denyStagePass(id)}
+                   /> */}
               {isShareModalOpen && (
                 <div className="pointer-events-auto">
                 <ShareModal
@@ -4374,7 +4344,6 @@ const handleLike = useCallback(async () => {
                 <PinProductModal
                   isOpen={isPinProductModalOpen}
                   onClose={handleClosePinProductModal}
-                  streamId={streamId}
                   onProductPinned={async (productId) => {
                     const result = await pinProduct(productId);
                     if (!result.success) {
@@ -4389,9 +4358,9 @@ const handleLike = useCallback(async () => {
               {userActionTarget && (
                 <div className="pointer-events-auto">
                 <UserActionModal
+                  streamId={streamId}
                   onClose={handleCloseUserAction}
                   userId={userActionTarget.userId}
-                  streamId={streamId || ''}
                   username={userActionTarget.username}
                   role={userActionTarget.role}
                   createdAt={userActionTarget.createdAt}
@@ -4399,10 +4368,7 @@ const handleLike = useCallback(async () => {
                   isModerator={isModerator || isCurrentUserBroadofficer}
                   isOfficer={isOfficer}
                   onGift={() => onGift(userActionTarget.userId)}
-                  onMute={() => handleMute(userActionTarget.userId, userActionTarget.username || '')}
-                  onKick={() => handleGeneralKick()}
-                  onArrest={() => handleArrest(userActionTarget.userId, userActionTarget.username || '')}
-                  onBlock={() => handleBlock(userActionTarget.userId, userActionTarget.username || '')}
+                  onKickStage={() => handleGeneralKick()}
                 />
                 </div>
               )}
@@ -4446,7 +4412,6 @@ const handleLike = useCallback(async () => {
                 <CoinStoreModal
                   isOpen={isCoinStoreOpen}
                   onClose={handleCloseCoinStore}
-                  streamId={streamId}
                 />
                 </div>
               )}
@@ -4460,40 +4425,33 @@ const handleLike = useCallback(async () => {
                   abilities={userAbilities}
                   activeEffects={abilityActiveEffects}
                   loading={abilityLoading}
-                  useAbility={activateAbility}
+                  onActivate={activateAbility}
                   isEffectActive={isEffectActive}
                   getCooldownRemaining={getCooldownRemaining}
                   getEffectRemaining={getEffectRemaining}
+                  isInBroadcast={canPublish}
                 />
                 </div>
               )}
 
               {/* Broadcast Ability Effects */}
               <BroadcastAbilityEffects
-                streamId={streamId}
+                activeEffects={abilityActiveEffects}
               />
 
               {/* TCPS Message Bubble */}
-              {tcpsMessageBubbleRef.current && (
+              {stream?.user_id && (
                 <TCPSMessageBubble
-                  message={tcpsMessageBubbleRef.current.message}
-                  type={tcpsMessageBubbleRef.current.type}
-                  onClose={() => {
-                    tcpsMessageBubbleRef.current = null;
-                  }}
+                  broadcasterId={stream.user_id}
                 />
               )}
 
               {/* Ticker Control Panel */}
               {isTickerPanelOpen && (
                 <TickerControlPanel
-                  isOpen={isTickerPanelOpen}
                   onClose={handleCloseTickerPanel}
-                  streamId={streamId}
-                  broadcastSettings={tickerBroadcastSettings}
+                  onBroadcastSettings={tickerBroadcastSettings}
                   onSendMessage={tickerSendMessage}
-                  onSendPriority={tickerSendPriority}
-                  onClearPriority={tickerClearPriority}
                   onDeleteMessage={tickerDeleteMessage}
                 />
               )}
@@ -4501,39 +4459,38 @@ const handleLike = useCallback(async () => {
               {/* More Controls Drawer */}
               {isMoreControlsOpen && (
                 <div className="pointer-events-auto">
-                <MoreControlsDrawer
-                  isOpen={isMoreControlsOpen}
-                  onClose={handleCloseMoreMenu}
-                  isMuted={!micEnabled}
-                  isCameraOff={!cameraEnabled}
-                  onToggleMic={toggleMicrophone}
-                  onToggleCamera={toggleCamera}
-                  onFlipCamera={flipCamera}
-                  onSettings={() => {}}
-                  onLeave={handleLeave}
-                  onGift={handleGiftHost}
-                  onShare={handleOpenShareModal}
-                  onEndStream={handleStreamEnd}
-                  onToggleSeatsLock={handleToggleSeatsLock}
-                  areSeatsLocked={!!stream?.are_seats_locked}
-                  onManageStagePass={() => setIsStagePassModalOpen(true)}
-                  openStagePassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
-                  isHost={isHost}
-                  isOfficer={isOfficer}
-                  onMuteUser={handleMute}
-                  onBanUser={handleBlock}
-                  onRemoveFromStage={() => {}}
-                  onModGift={handleGiftHost}
-                />
+                  <MoreControlsDrawer
+                    isOpen={isMoreControlsOpen}
+                    onClose={handleCloseMoreMenu}
+                    isMuted={!micEnabled}
+                    isCameraOff={!cameraEnabled}
+                    onToggleMic={toggleMicrophone}
+                    onToggleCamera={toggleCamera}
+                    onFlipCamera={flipCamera}
+                    onLeave={handleLeave}
+                    isHost={isHost}
+                    isOfficer={isOfficer}
+                    onGift={handleGiftHost}
+                    onShare={handleOpenShareModal}
+                    onEndStream={handleStreamEnd}
+                    areSeatsLocked={!!stream?.are_seats_locked}
+                    onManageStagePass={() => {}}
+                    openStagePassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
+                    onAssignBroadofficer={handleAssignBroadofficer}
+                    onMuteUser={handleMute}
+                    onBanUser={handleBlock}
+                    onRemoveFromStage={() => {}}
+                    onModGift={handleGiftHost}
+                    onToggleRGB={toggleStreamRgb}
+                    hasRgbEffect={!!stream?.has_rgb_effect}
+                  />
                 </div>
               )}
-            </div>
 
         </ErrorBoundary>
-    </GiftSystemProvider>
-)
-
-}
+      </GiftSystemProvider>
+    );
+  }
 
 function isStaffProfile(profile: UserProfile | null) {
   if (!profile) return false

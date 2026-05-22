@@ -414,7 +414,7 @@ import CashoutManager from "./pages/admin/CashoutManager.js";
 import CourtRoom from "./pages/CourtRoom.js";
 import TeamMeetingRoom from "./pages/TeamMeetingRoom.js";
 import CoinsComplete from "./pages/CoinsComplete.js";
-import { Wallet } from "lucide-react";
+import WalletPage from "./pages/Wallet";
 
 function AppContent() {
   // Lightweight render counter (dev only)
@@ -1380,7 +1380,7 @@ function AppContent() {
                   <Route path="/store" element={<CoinStore />} />
                   <Route path="/coins" element={<CoinStore />} />
                   <Route path="/coins/complete" element={<CoinsComplete />} />
-                  <Route path="/wallet" element={<Wallet />} />
+                  <Route path="/wallet" element={<WalletPage />} />
                   <Route path="/stats" element={<Stats />} />
                   <Route path="/payouts/setup" element={<PayoutSetupPage />} />
                   <Route path="/payouts/request" element={<PayoutRequest />} />

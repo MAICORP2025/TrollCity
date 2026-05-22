@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { Save, Check, X, AlertCircle, DollarSign, CreditCard, Wallet } from 'lucide-react'
-import { cn } from '../../lib/utils'
+import { cn } from '../lib/utils'
 import { toast } from 'sonner'
-import { supabase } from '../../lib/supabase'
-import { useAuthStore } from '../../lib/store'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../lib/store'
 
 type PayoutMethod = 'cash_app' | 'paypal' | 'venmo'
 
