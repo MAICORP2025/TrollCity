@@ -24,7 +24,6 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
 
-import BroadcastChat from '../../components/broadcast/BroadcastChat'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import GiftBoxModal from '../../components/broadcast/GiftBoxModal'
@@ -44,8 +43,7 @@ import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
 import { useStagePasses } from '../../hooks/useStagePasses'
 import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
-import { FloatingChatOverlay } from '../../components/broadcast/FloatingChatOverlay'
-import { Message } from '../../hooks/useStreamChat'
+import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -321,14 +319,23 @@ function ViewerPage() {
   const [error, setError] = useState<string | null>(null)
   const [streamLoaded, setStreamLoaded] = useState(false)
   const [viewerCount, setViewerCount] = useState(0)
-  const [isChatOpen, setIsChatOpen] = useState(true)
-  const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans'>('chat')
-  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
-  const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
-  const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
-  const [floatingChatMessages, setFloatingChatMessages] = useState<Message[]>([])
-  const [streamMods, setStreamMods] = useState<string[]>([])
-  const processedGiftIdsRef = useRef<Set<string>>(new Set())
+   const [isChatOpen, setIsChatOpen] = useState(true)
+   const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans'>('chat')
+   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
+   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
+   const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
+   const [streamMods, setStreamMods] = useState<string[]>([])
+   const processedGiftIdsRef = useRef<Set<string>>(new Set())
+   // Floating chat
+   interface FloatingMessage {
+     id: string
+     username: string
+     content: string
+     createdAt: number
+   }
+   const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
+   const [chatInput, setChatInput] = useState('')
+   const floatingChatContainerRef = useRef<HTMLDivElement>(null)
   // Global per-page dedupe of gift animations.  The same stream_gifts row can
   // arrive via postgres_changes and via the broadcast channel; both resolve to
   // the same animationId (row UUID) so this Set catches the second arrival.
@@ -464,136 +471,11 @@ function ViewerPage() {
     return enrichedGift
   }, [])
 
-  const handleRemoveGiftOverlay = useCallback((giftId: string) => {
-    setRecentGifts((current) => current.filter((gift) => gift.id !== giftId))
-  }, [])
+   const handleRemoveGiftOverlay = useCallback((giftId: string) => {
+     setRecentGifts((current) => current.filter((gift) => gift.id !== giftId))
+   }, [])
 
-  const resolveFloatingChatProfile = useCallback(async (message: Message) => {
-    const existingProfile = (message as any).user_profiles;
-
-    const existingUsername =
-      existingProfile?.username ||
-      (message as any).username ||
-      (message as any).user_name ||
-      (message as any).display_name ||
-      '';
-
-    const badNames = new Set(['', 'unknown', 'unknown:', 'guest', 'user']);
-
-    const hasGoodUsername =
-      typeof existingUsername === 'string' &&
-      existingUsername.trim() &&
-      !badNames.has(existingUsername.trim().toLowerCase());
-
-    if (hasGoodUsername && existingProfile?.username) {
-      return message;
-    }
-
-    if (!message.user_id) {
-      return message;
-    }
-
-    const { data: profileRow, error } = await supabase
-      .from('user_profiles')
-      .select(`
-        id,
-        username,
-        display_name,
-        email,
-        avatar_url,
-        role,
-        troll_role,
-        created_at,
-        rgb_username_expires_at,
-        glowing_username_color
-      `)
-      .eq('id', message.user_id)
-      .maybeSingle();
-
-    if (error) {
-      console.warn('[FloatingChat] Failed to hydrate user profile:', error);
-    }
-
-    const username =
-      profileRow?.username ||
-      profileRow?.display_name ||
-      profileRow?.email?.split('@')?.[0] ||
-      existingUsername ||
-      'Troll Citizen';
-
-    return {
-      ...message,
-      username,
-      user_name: username,
-      user_avatar:
-        profileRow?.avatar_url ||
-        (message as any).user_avatar ||
-        existingProfile?.avatar_url ||
-        '',
-      user_role:
-        profileRow?.role ||
-        (message as any).user_role ||
-        existingProfile?.role ||
-        null,
-      user_troll_role:
-        profileRow?.troll_role ||
-        (message as any).user_troll_role ||
-        existingProfile?.troll_role ||
-        null,
-      user_created_at:
-        profileRow?.created_at ||
-        (message as any).user_created_at ||
-        existingProfile?.created_at ||
-        null,
-      user_rgb_expires_at:
-        profileRow?.rgb_username_expires_at ||
-        (message as any).user_rgb_expires_at ||
-        existingProfile?.rgb_username_expires_at ||
-        null,
-      user_glowing_username_color:
-        profileRow?.glowing_username_color ||
-        (message as any).user_glowing_username_color ||
-        existingProfile?.glowing_username_color ||
-        null,
-      user_profiles: {
-        ...(existingProfile || {}),
-        username,
-        display_name: profileRow?.display_name || existingProfile?.display_name || null,
-        email: profileRow?.email || existingProfile?.email || null,
-        avatar_url: profileRow?.avatar_url || existingProfile?.avatar_url || '',
-        role: profileRow?.role || existingProfile?.role || null,
-        troll_role: profileRow?.troll_role || existingProfile?.troll_role || null,
-        created_at: profileRow?.created_at || existingProfile?.created_at || null,
-        rgb_username_expires_at:
-          profileRow?.rgb_username_expires_at ||
-          existingProfile?.rgb_username_expires_at ||
-          null,
-        glowing_username_color:
-          profileRow?.glowing_username_color ||
-          existingProfile?.glowing_username_color ||
-          null,
-      },
-    } as Message;
-  }, []);
-
-  const pushFloatingChatMessage = useCallback(async (message: Message) => {
-    if (!message?.id || !message?.content) return;
-
-    const hydratedMessage = await resolveFloatingChatProfile(message);
-
-    setFloatingChatMessages(prev => {
-      if (prev.some(existing => existing.id === hydratedMessage.id)) return prev;
-      return [...prev, hydratedMessage].slice(-6);
-    });
-
-    window.setTimeout(() => {
-      setFloatingChatMessages(prev =>
-        prev.filter(existing => existing.id !== hydratedMessage.id)
-      );
-    }, 9000);
-  }, [resolveFloatingChatProfile]);
-
-  const processGiftEvent = useCallback(async (giftData: any) => {
+   const processGiftEvent = useCallback(async (giftData: any) => {
     if (!giftData) return
 
     // Normalise to a stable animationId that is the same whether the event
@@ -1256,6 +1138,28 @@ useStreamRealtime(
     } as any,
   )
 
+  // ── Floating Chat: receive broadcasts ────────────────────────────────────
+  useEffect(() => {
+    if (!streamId) return
+
+    const channel = supabase.channel(`floating-chat:${streamId}`)
+
+    channel
+      .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
+        const { username, content } = payload.payload || {}
+        if (!username || !content) return
+        const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
+
+        setTimeout(() => {
+          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+        }, 60_000)
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [streamId])
+
   useEffect(() => {
     return () => {
       console.log('[ViewerPage] unmount cleanup: leaving LiveKit audience')
@@ -1443,14 +1347,7 @@ useStreamRealtime(
                     </div>
                   </div>
                 }
-              />
-
-              {/* Floating Chat Overlay (Stage/Video anchor) */}
-              <FloatingChatOverlay
-                messages={floatingChatMessages}
-                streamMods={streamMods}
-                hostId={hostId}
-              />
+               />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/25" />
 
@@ -1704,19 +1601,85 @@ useStreamRealtime(
                 </div>
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   {chatTab === 'chat' ? (
-                    <BroadcastChat
-                      streamId={streamId}
-                      hostId={hostId}
-                      isHost={false}
-                      isViewer={true}
-                      isGuest={!user}
-                      isBattleActive={(stream as any).is_battle}
-                      isChatOpen={isChatOpen}
-                      seats={seats}
-                      broadcasterProfile={broadcasterProfile}
-                      onFloatingMessage={pushFloatingChatMessage}
-                      onMessageSent={() => {}}
-                    />
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
+                      {/* Floating messages area */}
+                      <div
+                        ref={floatingChatContainerRef}
+                        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide max-h-[calc(100%-60px)]"
+                      >
+                        {floatingMessages.length === 0 && (
+                          <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
+                            No messages yet – say something!
+                          </div>
+                        )}
+                        {floatingMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
+                            style={{ animation: 'slideInFromTop 0.3s ease-out' }}
+                          >
+                            <span className="font-black text-cyan-300">{msg.username}</span>
+                            <span className="text-white/40 mx-1">:</span>
+                            <span className="text-white/90">{msg.content}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Input at the bottom */}
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault()
+                          const text = chatInput.trim()
+                          if (!text || !user) return
+
+                          const username = profile?.username || profile?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                          const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+                          setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
+                          setChatInput('')
+
+                          // Auto-remove after 60 seconds
+                          setTimeout(() => {
+                            setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                          }, 60_000)
+
+                          // Save to DB + broadcast via Supabase
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession()
+                            if (session) {
+                              await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+                                method: 'POST',
+                                headers: {
+                                  Authorization: `Bearer ${session.access_token}`,
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  type: 'chat',
+                                  stream_id: streamId,
+                                  data: { content: text },
+                                }),
+                              })
+                            }
+                            const chatChannel = supabase.channel(`floating-chat:${streamId}`)
+                            chatChannel.send({
+                              type: 'broadcast',
+                              event: 'floating_chat',
+                              payload: { username, content: text },
+                            }).catch(() => {})
+                          } catch { /* silent */ }
+                        }}
+                        className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
+                      >
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Say something…"
+                          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                          maxLength={280}
+                        />
+                      </form>
+                    </div>
                   ) : chatTab === 'gifts' ? (
                     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
                       <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>

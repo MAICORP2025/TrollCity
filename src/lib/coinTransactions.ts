@@ -284,10 +284,27 @@ export async function deductCoins(params: {
           return { success: false, newBalance: 0, transaction: null, error: creditError.message }
        }
 
-       if (creditSuccess === true) {
-          // Success! We don't return a new coin balance because coins weren't touched.
-          // We return success: true.
-          return { success: true, newBalance: balanceAfter || 0, transaction: { id: 'credit-tx', amount: normalizedAmount, type: 'credit_spend' } }
+        if (creditSuccess === true) {
+           // Success! We don't return a new coin balance because coins weren't touched.
+           // We return success: true.
+
+           // Track small purchases (under 100 coins) for the installment credit-building system
+           if (normalizedAmount < 100) {
+             try {
+               await supabase.from('small_installment_purchases').insert({
+                 user_id:          userId,
+                 original_price:   normalizedAmount,
+                 purchase_context: creditContext,
+                 item_type:        type,
+                 item_id:          metadata?.item_id || metadata?.perk_id || metadata?.insurance_id || null,
+                 item_name:        metadata?.perk_name || metadata?.insurance_name || metadata?.item_name || `Purchase #${Date.now()}`,
+               })
+             } catch (trackErr) {
+               console.warn('[deductCoins] small_purchase tracking failed (non-fatal):', trackErr)
+             }
+           }
+
+           return { success: true, newBalance: balanceAfter || 0, transaction: { id: 'credit-tx', amount: normalizedAmount, type: 'credit_spend' } }
        } else {
           return { success: false, newBalance: 0, transaction: null, error: 'Credit Card declined (Limit reached or Restricted context)' }
        }

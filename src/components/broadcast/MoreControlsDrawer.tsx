@@ -8,6 +8,14 @@ import {
   Settings,
   Shield,
   LogOut,
+  Gift,
+  Share2,
+  ShieldAlert,
+  Ban,
+  UserMinus,
+  UserCheck,
+  Radio,
+  Crown,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -22,6 +30,20 @@ interface MoreControlsDrawerProps {
   onSettings?: () => void;
   onLeave?: () => void;
   isHost?: boolean;
+  /* ── stream-control callbacks ─────────────────── */
+  onGift?: () => void;
+  onShare?: () => void;
+  onEndStream?: () => void;
+  onToggleSeatsLock?: () => void;
+  areSeatsLocked?: boolean;
+  onManageStagePass?: () => void;
+  openStagePassCount?: number;
+  /* ── mod-action callbacks (officers only) ─────── */
+  isOfficer?: boolean;
+  onMuteUser?: (userId: string) => void;
+  onBanUser?: (userId: string) => void;
+  onRemoveFromStage?: (userId: string) => void;
+  onModGift?: (userId: string) => void;
 }
 
 export default function MoreControlsDrawer({
@@ -34,7 +56,19 @@ export default function MoreControlsDrawer({
   onFlipCamera,
   onSettings,
   onLeave,
-  isHost,
+  onGift,
+  onShare,
+  onEndStream,
+  onToggleSeatsLock,
+  areSeatsLocked = false,
+  onManageStagePass,
+  openStagePassCount = 0,
+  isHost = false,
+  isOfficer = false,
+  onMuteUser,
+  onBanUser,
+  onRemoveFromStage,
+  onModGift,
 }: MoreControlsDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -96,14 +130,15 @@ export default function MoreControlsDrawer({
         className="fixed bottom-0 left-0 right-0 z-[90]
                    bg-zinc-900 rounded-t-3xl
                    border-t border-white/10
+                   max-h-[95vh] overflow-y-auto
                    p-6 pb-[calc(env(safe-area-inset-bottom)+24px)]
                    animate-slide-up"
       >
         {/* Grab bar */}
         <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6" />
 
-        {/* Controls */}
-        <div className="grid grid-cols-4 gap-4 mb-8">
+        {/* ── Mic / Cam / Flip / Settings ── */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
           <ControlButton
             icon={isMuted ? MicOff : Mic}
             label={isMuted ? "Unmute" : "Mute"}
@@ -121,13 +156,51 @@ export default function MoreControlsDrawer({
           <ControlButton icon={Camera} label="Flip" onClick={onFlipCamera} />
 
           <ControlButton icon={Settings} label="Settings" onClick={onSettings} />
-
-          {isHost && (
-            <ControlButton icon={Shield} label="Admin" onClick={() => {}} />
-          )}
         </div>
 
-        {/* Leave */}
+        {/* ── Stream Controls (host / officer) ── */}
+        {(isHost || isOfficer) && (
+          <div className="mb-6">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.18em] mb-3">Stream Controls</p>
+            <div className="grid grid-cols-4 gap-3">
+              {onGift && <ControlButton icon={Gift} label="Gift" onClick={onGift} />}
+              {onShare && <ControlButton icon={Share2} label="Share" onClick={onShare} />}
+              {isHost && onEndStream && (
+                <ControlButton icon={Radio} label="End Stream" onClick={onEndStream} active={false} danger />
+              )}
+              {isHost && onToggleSeatsLock && (
+                <ControlButton
+                  icon={ShieldAlert}
+                  label={areSeatsLocked ? "Unlock Seats" : "Lock Seats"}
+                  onClick={onToggleSeatsLock}
+                  active={areSeatsLocked}
+                />
+              )}
+              {isHost && onManageStagePass && (
+                <ControlButton
+                  icon={UserCheck}
+                  label={`Pass${openStagePassCount ? ` (${openStagePassCount})` : ''}`}
+                  onClick={onManageStagePass}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Mod Actions (officers only) ── */}
+        {isOfficer && (
+          <div className="mb-6">
+            <p className="text-[10px] font-black text-red-400/70 uppercase tracking-[0.18em] mb-3">Mod Actions</p>
+            <div className="grid grid-cols-4 gap-3">
+              {onMuteUser && <ControlButton icon={MicOff} label="Mute User" onClick={() => {}} />}
+              {onBanUser && <ControlButton icon={Ban} label="Ban User" onClick={() => {}} />}
+              {onRemoveFromStage && <ControlButton icon={UserMinus} label="Remove Stage" onClick={() => {}} />}
+              {onModGift && <ControlButton icon={Gift} label="Mod Gift" onClick={() => {}} />}
+            </div>
+          </div>
+        )}
+
+        {/* ── Leave / End ── */}
         <button
           onClick={onLeave}
           className="w-full bg-zinc-800 text-red-400 font-bold py-3.5 rounded-xl
@@ -142,21 +215,23 @@ export default function MoreControlsDrawer({
   );
 }
 
-function ControlButton({ icon: Icon, label, active, onClick }: any) {
+function ControlButton({ icon: Icon, label, active, onClick, danger }: any) {
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-2">
       <div
         className={cn(
           "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-200",
-          active
-            ? "bg-zinc-800 text-white border border-white/10"
-            : "bg-zinc-800/50 text-zinc-400 border border-transparent"
+          danger
+            ? "bg-red-500/15 text-red-400 border border-red-500/25"
+            : active
+              ? "bg-zinc-800 text-white border border-white/10"
+              : "bg-zinc-800/50 text-zinc-400 border border-transparent"
         )}
       >
         <Icon size={24} />
       </div>
 
-      <span className="text-xs text-zinc-400 font-medium">{label}</span>
+      <span className={cn("text-xs font-medium", danger ? "text-red-300" : "text-zinc-400")}>{label}</span>
     </button>
   );
 }

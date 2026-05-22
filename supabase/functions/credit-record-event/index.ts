@@ -39,6 +39,10 @@ const RULES: Record<string, { base: number; cap?: number; windowDays?: number }>
   loan_late_payment: { base: -2, cap: -20, windowDays: 7 },
   loan_missed_payment: { base: -15 },
   loan_default: { base: -60 },
+  // Credit Card Specific
+  credit_cc_purchase: { base: -20 },
+  credit_bill_payment: { base: 25, cap: 25, windowDays: 30 },
+
   loan_high_outstanding: { base: -1, cap: -5, windowDays: 1 },
 };
 

@@ -1,10 +1,10 @@
 // src/pages/TrollBank.tsx
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useBank } from '@/lib/hooks/useBank'
 import { useCoins } from '@/lib/hooks/useCoins'
 import { toast } from 'sonner'
-import { Coins, CreditCard, Landmark, History, AlertCircle, CheckCircle, Lock, Plus } from 'lucide-react'
+import { Coins, CreditCard, Landmark, History, AlertCircle, CheckCircle, Lock, Plus, ArrowUpRight } from 'lucide-react'
 import { trollCityTheme } from '@/styles/trollCityTheme'
 import SquarePaymentModal from '@/components/broadcast/SquarePaymentModal'
 import TrollCardSaver from '@/components/payments/TrollCardSaver'
@@ -20,6 +20,29 @@ export default function TrollBank() {
   
   const [savedCards, setSavedCards] = useState<any[]>([])
   const [showSaveCardModal, setShowSaveCardModal] = useState(false)
+
+  // Small installment purchases (credit-building credit-card items under 100 coins)
+  const [smallPurchases, setSmallPurchases] = useState<any[]>([])
+  const [smallPurchasesLoading, setSmallPurchasesLoading] = useState(false)
+
+  const fetchSmallPurchases = useCallback(async () => {
+    if (!user?.id) return
+    setSmallPurchasesLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('small_installment_purchases')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (error) throw error
+      setSmallPurchases(data || [])
+    } catch (err) {
+      console.error('Failed to fetch small purchases:', err)
+    } finally {
+      setSmallPurchasesLoading(false)
+    }
+  }, [user?.id])
 
   // Refresh profile if not loaded
   useEffect(() => {
@@ -49,6 +72,13 @@ export default function TrollBank() {
   useEffect(() => {
     fetchSavedCards()
   }, [user?.id])
+
+  // Fetch small purchase credit-building trackers
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchSmallPurchases()
+    // eslint-enable react-hooks/exhaustive-deps
+  }, [])
 
   // Fetch and Subscribe to Bank Reserves
   useEffect(() => {
@@ -100,7 +130,8 @@ export default function TrollBank() {
     
     if (result.success) {
       setPayAmount('')
-      refreshCoins() 
+      refreshCoins()
+      fetchSmallPurchases() // refresh small-installment trackers after paying the bill
     }
   }
 
@@ -270,6 +301,59 @@ export default function TrollBank() {
                  <li><strong>Cashouts:</strong> Blocked until debt is fully paid.</li>
              </ul>
           </div>
+        </div>
+
+        {/* ── Small Installment Purchase Credit Building ─────────────────── */}
+        <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6`}>
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <ArrowUpRight className="w-5 h-5 text-amber-400" />
+            Small Purchase Credit Building
+          </h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Any credit-card purchase under <span className="text-amber-400 font-bold">100 troll coins</span> is tracked
+            as a micro-installment. Pay it back over time and earn credit-score points at 25 %, 50 %, 75 %, and 100 % repayment.
+          </p>
+
+          {smallPurchasesLoading ? (
+            <p className="text-gray-400 text-sm">Loading…</p>
+          ) : smallPurchases.length === 0 ? (
+            <p className="text-gray-500 text-sm">
+              No small credit-card purchases yet. Buy a store item under 100 troll coins with your credit card
+              to start building credit points!
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {smallPurchases.map((p) => {
+                const pct   = Math.round((p.total_paid / p.original_price) * 100)
+                const isPaid= p.is_active === false
+                return (
+                  <div key={p.id} className="p-4 bg-zinc-800/70 border border-zinc-700/50 rounded-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-white font-medium text-sm">{p.item_name || 'Unknown item'}</p>
+                        <p className="text-xs text-gray-500">{p.purchase_context} • {new Date(p.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${isPaid ? 'bg-green-500/20 text-green-300' : pct >= 75 ? 'bg-amber-500/20 text-amber-300' : 'bg-zinc-700/30 text-gray-300'}`}>
+                        {isPaid ? '✓ Paid Off' : `${pct}% repaid`}
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-zinc-900/80 rounded-full h-2 overflow-hidden mb-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${isPaid ? 'bg-green-500' : pct >= 75 ? 'bg-amber-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-blue-500'}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>{p.total_paid.toLocaleString()} / {p.original_price.toLocaleString()} coins repaid</span>
+                      <span>Milestone reached: {p.milestone_level}/4</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Saved Payment Methods */}

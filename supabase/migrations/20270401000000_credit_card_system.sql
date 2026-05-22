@@ -22,6 +22,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'credit_status') THEN
         ALTER TABLE public.user_profiles ADD COLUMN credit_status TEXT DEFAULT 'active';
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'billing_month') THEN
+        ALTER TABLE public.user_profiles ADD COLUMN billing_month TEXT;
+    END IF;
     
     -- Set initial credit limits for existing users based on tenure (Simple rule: 1000 + 10 * days_active)
     -- This ensures the feature is usable immediately
@@ -165,6 +168,40 @@ BEGIN
             p_metadata || jsonb_build_object('credit_charge', v_total_added, 'principal', p_amount)
         );
 
+        -- Deduct -20 credit score points for using the credit card
+        INSERT INTO public.credit_events (user_id, event_type, delta, event_key, metadata)
+        VALUES (
+            p_user_id,
+            'credit_cc_purchase',
+            -20,
+            'cc_purchase:' || p_user_id::text || ':' || EXTRACT(EPOCH FROM NOW())::text,
+            jsonb_build_object('principal', p_amount, 'total_charge', v_total_added, 'context', p_context)
+        );
+
+        -- Recalculate and store updated score + tier in user_credit
+        UPDATE public.user_credit uc
+           SET score = LEAST(400 + e.net_delta, 800),
+               tier = CASE
+                         WHEN LEAST(400 + e.net_delta, 800) < 300 THEN 'Untrusted'
+                         WHEN LEAST(400 + e.net_delta, 800) < 450 THEN 'Shaky'
+                         WHEN LEAST(400 + e.net_delta, 800) < 600 THEN 'Building'
+                         WHEN LEAST(400 + e.net_delta, 800) < 700 THEN 'Reliable'
+                         WHEN LEAST(400 + e.net_delta, 800) < 800 THEN 'Trusted'
+                         ELSE 'Elite'
+                       END,
+               updated_at = NOW(),
+               last_event_at = NOW()
+         FROM (SELECT user_id, SUM(delta) AS net_delta
+                 FROM public.credit_events
+                WHERE user_id = p_user_id
+                GROUP BY user_id) e
+         WHERE uc.user_id = e.user_id;
+
+        -- Keep user_profiles.credit_score in sync
+        UPDATE public.user_profiles
+           SET credit_score = (SELECT score FROM public.user_credit WHERE user_id = p_user_id)
+         WHERE id = p_user_id;
+
         RETURN TRUE;
     EXCEPTION WHEN OTHERS THEN
         RETURN FALSE;
@@ -185,7 +222,10 @@ DECLARE
     v_pay_amount BIGINT;
     v_interest_amount BIGINT;
     v_new_credit_used BIGINT;
-    v_new_credit_score INTEGER;
+    v_current_month TEXT;
+    v_already_paid_bill_this_month BOOLEAN;
+    v_bill_payment_event_key TEXT;
+    v_new_credit_score INTEGER := LEAST(COALESCE((SELECT score FROM public.user_credit WHERE user_id = v_user_id), 400), 800);
 BEGIN
     IF v_user_id IS NULL THEN
         RETURN jsonb_build_object('success', false, 'message', 'Not authenticated');
@@ -219,12 +259,6 @@ BEGIN
     WHERE id = v_user_id
     RETURNING credit_used INTO v_new_credit_used;
 
-    -- Increase user's credit score (up to 800)
-    UPDATE public.user_profiles
-    SET credit_score = LEAST(credit_score + 5, 800)
-    WHERE id = v_user_id
-    RETURNING credit_score INTO v_new_credit_score;
-
     -- Send 8% interest to admin account
     UPDATE public.user_profiles
     SET troll_coins = troll_coins + v_interest_amount
@@ -252,13 +286,59 @@ BEGIN
         jsonb_build_object('payer', v_user_id, 'original_payment', v_pay_amount)
     );
 
+    -- ── Credit Score Award ──────────────────────────────────────────────
+    -- 25 pts = once per calendar month (idempotent via billing_month column)
+    v_current_month := TO_CHAR(NOW(), 'YYYY-MM');
+
+    SELECT billing_month = v_current_month
+      INTO v_already_paid_bill_this_month
+      FROM public.user_profiles
+     WHERE id = v_user_id;
+
+    v_bill_payment_event_key := 'bill:' || v_user_id::text || ':' || v_current_month;
+
+    IF NOT v_already_paid_bill_this_month THEN
+        -- Call credit-record-event (+25 pts / month)
+        INSERT INTO public.credit_events (user_id, event_type, delta, event_key, metadata)
+        VALUES (v_user_id, 'credit_bill_payment', 25, v_bill_payment_event_key,
+                jsonb_build_object('paid_amount', v_pay_amount, 'interest_to_admin', v_interest_amount, 'month', v_current_month));
+
+        -- Recalculate score from all events and update user_credit + tier
+        UPDATE public.user_credit uc
+           SET score = LEAST(400 + e.net_delta, 800),
+               tier = CASE
+                         WHEN LEAST(400 + e.net_delta, 800) < 300 THEN 'Untrusted'
+                         WHEN LEAST(400 + e.net_delta, 800) < 450 THEN 'Shaky'
+                         WHEN LEAST(400 + e.net_delta, 800) < 600 THEN 'Building'
+                         WHEN LEAST(400 + e.net_delta, 800) < 700 THEN 'Reliable'
+                         WHEN LEAST(400 + e.net_delta, 800) < 800 THEN 'Trusted'
+                         ELSE 'Elite'
+                       END,
+               updated_at = NOW(),
+               last_event_at = NOW()
+         FROM (SELECT user_id, SUM(delta) AS net_delta
+                 FROM public.credit_events
+                WHERE user_id = v_user_id
+                GROUP BY user_id) e
+         WHERE uc.user_id = e.user_id;
+
+        -- Also update credit_score on user_profiles for cross-reference
+        UPDATE public.user_profiles
+           SET credit_score = (SELECT score FROM public.user_credit WHERE user_id = v_user_id)
+         WHERE id = v_user_id;
+
+        -- Stamp billing month to prevent double-award within the same month
+        UPDATE public.user_profiles
+           SET billing_month = v_current_month
+         WHERE id = v_user_id;
+    END IF;
+
     RETURN jsonb_build_object(
         'success', true, 
         'paid', v_pay_amount, 
         'interest_to_admin', v_interest_amount,
         'remaining_debt', v_new_credit_used,
-        'new_credit_score', v_new_credit_score,
-        'remaining_coins', v_profile.troll_coins - v_pay_amount
+        'bill_payment_rewarded': NOT v_already_paid_bill_this_month
     );
 END;
 $$;

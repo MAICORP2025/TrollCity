@@ -15,7 +15,7 @@ import { shouldAutoHideMessage, canControlSlowMode, shouldShowGoldenBanner } fro
 import { useChatBlockStatus } from '../../hooks/useChatBlockStatus';
 import { useStreamRealtime } from '../../hooks/useStreamRealtime';
 
-export interface Message {
+interface Message {
   id: string;
   txn_id?: string;
   user_id: string;
@@ -80,7 +80,6 @@ interface BroadcastChatProps {
     onChallengeBroadcaster?: () => void;
     hasPendingChallenge?: boolean;
     // Challenge management props
-    onFloatingMessage?: (message: Message) => void;
     pendingChallenges?: ChallengeNotification[];
     onAcceptChallenge?: (challengeId: string, challengerId: string) => void;
     onDenyChallenge?: (challengeId: string) => void;
@@ -104,7 +103,6 @@ export default function BroadcastChat({
   onChallengeBroadcaster, 
   hasPendingChallenge = false,
   pendingChallenges = [],
-  onFloatingMessage,
   onAcceptChallenge,
   onDenyChallenge,
   isBattleActive = false,
@@ -124,7 +122,6 @@ export default function BroadcastChat({
 
   const buildUserProfile = (source: any) => ({
     username:
-      source?.sender_name ||
       source?.user_name ||
       source?.username ||
       source?.user_profiles?.username ||
@@ -190,14 +187,7 @@ export default function BroadcastChat({
         type: normalizedType,
         gift_type: payload.gift_slug || payload.gift_name?.toLowerCase().replace(/\s+/g, '-'),
         gift_amount: payload.quantity || payload.amount || 1,
-        sender_name:
-          payload.sender_name ||
-          payload.user_name ||
-          payload.username ||
-          payload.user_profiles?.username ||
-          payload.display_name ||
-          payload.user_profiles?.display_name ||
-          'Troll Citizen',
+        sender_name: payload.sender_name || payload.user_name,
         receiver_id: payload.receiver_id,
         receiver_name: payload.receiver_name,
         challenge_id: payload.challenge_id,
@@ -254,14 +244,6 @@ export default function BroadcastChat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [isChatFocused, setIsChatFocused] = useState(true);
   const userIdRef = useRef<string | undefined>(user?.id);
-
-  const pushMessageToFloatingOverlay = (message: Message) => {
-    if (!message?.content) return;
-    if (message.type === 'gift') return;
-
-    onFloatingMessage?.(message);
-  };
-
   const isChatOpenRef = useRef(isChatOpen);
   const isChatFocusedRef = useRef(isChatFocused);
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
@@ -609,19 +591,21 @@ export default function BroadcastChat({
 
       if (import.meta.env.DEV) console.debug('[BroadcastChat] 📥 fetch messages started for streamId:', streamId)
 
-      const fetchMessages = async () => {
+const fetchMessages = async () => {
           // Thundering Herd Prevention: Jitter on initial chat load (0-400ms when lazy loading)
           await new Promise(resolve => setTimeout(resolve, Math.random() * 400))
 
-          const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
-
-          const { data } = await supabase
+          const { data, error } = await supabase
               .from('stream_messages')
               .select('*, user_profiles(username, display_name, email, avatar_url, role, troll_role, created_at, rgb_username_expires_at, glowing_username_color)')
               .eq('stream_id', streamId)
-              .gte('created_at', twoMinutesAgo)
               .order('created_at', { ascending: false })
               .limit(50)
+
+          if (error) {
+              console.error('[BroadcastChat] Failed to fetch messages:', error)
+              return
+          }
 
           if (data) {
               const processedMessages = data.reverse().map((m: any) => {
@@ -711,7 +695,7 @@ export default function BroadcastChat({
   useEffect(() => {
     if (!streamId) return;
 
-    const channelName = `broadcast-chat:${streamId}`
+    const channelName = `stream-chat:${streamId}`
 
     // Refs for singleton behavior
     // (declared lazily via existing broadcastChannelRef pattern below)
@@ -788,8 +772,6 @@ export default function BroadcastChat({
                     return;
                 }
 
-                pushMessageToFloatingOverlay(msg);
-
                 // Add message to UI when chat is open
                 setMessages(prev => {
                     // Triple-check for duplicates by txn_id, id, and content+user+timestamp
@@ -828,8 +810,6 @@ export default function BroadcastChat({
                 if (!msg) return;
 
                 if (import.meta.env.DEV) console.debug('[BroadcastChat] Received message event:', msg.type, msg.content, 'from user:', msg.user_id);
-
-                pushMessageToFloatingOverlay(msg);
 
                 if (!isChatOpenRef.current) {
                     setUnreadCount(prev => prev + 1);
@@ -877,11 +857,11 @@ export default function BroadcastChat({
               type: 'gift',
               gift_type: giftData.gift_slug || giftData.gift_name?.toLowerCase().replace(/\s+/g, '-'),
               gift_amount: giftData.quantity || 1,
-              sender_name: giftData.sender_name || giftData.user_name || 'Troll Citizen',
+              sender_name: giftData.sender_name || giftData.user_name || 'Someone',
               receiver_id: giftData.receiver_id,
               receiver_name: giftData.receiver_name || 'user',
               user_profiles: {
-                username: giftData.sender_name || giftData.user_name || 'Troll Citizen',
+                username: giftData.sender_name || giftData.user_name || 'Someone',
                 avatar_url: null
               }
             };
@@ -1070,8 +1050,6 @@ export default function BroadcastChat({
         return updated;
     });
 
-    pushMessageToFloatingOverlay(msg);
-
     // 4. Track txn_id to prevent duplicates
     receivedTxnIdsRef.current.add(txnId);
 
@@ -1223,7 +1201,7 @@ export default function BroadcastChat({
           </div>
         )}
         
-          <div className="p-4 border-b border-white/10 font-bold bg-black/20 backdrop-blur flex items-center justify-between gap-2">
+         <div className="p-4 border-b border-white/10 font-bold bg-transparent flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
                 <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>
                 Live Chat
@@ -1285,7 +1263,7 @@ export default function BroadcastChat({
             if (userId && userId !== hostId) {
               seatUsers.push({
                 id: userId,
-                username: seat?.user_profile?.username || 'Troll Citizen',
+                username: seat?.user_profile?.username || 'User',
                 avatar_url: seat?.user_profile?.avatar_url || null,
                 isBroadcaster: false
               });
@@ -1370,7 +1348,7 @@ export default function BroadcastChat({
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-1">
                                         <span className="font-bold text-purple-300 text-xs truncate">
-                                            {notification.challenger_username || 'Troll Citizen'}
+                                            {notification.challenger_username || 'Unknown'}
                                         </span>
                                         {notification.challenger_crowns !== undefined && (
                                             <span className="text-amber-400 text-[10px] flex items-center gap-0.5">
@@ -1409,29 +1387,29 @@ export default function BroadcastChat({
                 </div>
             )}
             
-            {/* Floating Messages - Full scrollable chat history */}
-            <div className={`absolute left-0 right-0 top-0 flex flex-col gap-1 p-2 overflow-y-auto`}>
-                {messages.slice(-10).map((msg, index) => {
+{/* Chat Message History */}
+              <div className="absolute left-0 right-0 top-0 flex flex-col gap-1 p-2 overflow-y-auto">
+                  {[...messages].reverse().map((msg, index) => {
                     // Calculate animation delay based on index (newer messages appear on top)
                     const isSystem = msg.type === 'system';
                     
                     // Check if this is a gift message
                     const isGift = msg.type === 'gift' || msg.content?.startsWith('GIFT_EVENT:');
                     
-                     if (isSystem) {
-                         return (
-                             <div 
-                                 key={msg.id}
-                                 className="flex items-center gap-2 text-zinc-400 text-xs italic bg-black/10 backdrop-blur p-1.5 rounded-lg border border-white/5 animate-in slide-in-from-bottom-2 fade-in duration-300"
-                             >
+                    if (isSystem) {
+                        return (
+                            <div 
+                                key={msg.id}
+                                className="flex items-center gap-2 text-zinc-400 text-xs italic bg-transparent p-1.5 rounded-lg border border-white/5 animate-in slide-in-from-bottom-2 fade-in duration-300"
+                            >
                                 <Sparkles size={12} className="text-yellow-500 flex-shrink-0" />
                                 <button
                                     type="button"
-                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'Troll Citizen', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
                                     className="font-bold text-zinc-300 hover:text-yellow-300 transition-colors flex items-center gap-1 truncate"
                                     title="Send gift"
                                 >
-                                    {msg.user_profiles?.username || 'Troll Citizen'}
+                                    {msg.user_profiles?.username || 'User'}
                                 </button>
                                 <span className="truncate">{msg.content}</span>
                             </div>
@@ -1441,15 +1419,15 @@ export default function BroadcastChat({
                     // Check if this is a challenge message
                     if (msg.type === 'challenge') {
                         return (
-                                 <div 
-                                 key={msg.id}
-                                 className="flex items-center gap-2 bg-purple-900/10 border border-purple-500/20 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
-                             >
+                            <div 
+                                key={msg.id}
+                                className="flex items-center gap-2 bg-purple-900/40 border border-purple-500/30 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
+                            >
                                 <Swords size={14} className="text-purple-400 flex-shrink-0" />
                                 <div className="flex-1">
                                     <div className="flex items-center gap-1">
                                         <span className="font-bold text-purple-400 text-xs">
-                                            {msg.user_profiles?.username || msg.challenger_username || 'Troll Citizen'}
+                                            {msg.user_profiles?.username || msg.challenger_username || 'Someone'}
                                         </span>
                                         <span className="text-zinc-400 text-xs">sent a challenge!</span>
                                     </div>
@@ -1504,9 +1482,9 @@ export default function BroadcastChat({
                         let parsedCurrencyUsed: string | undefined;
                         let parsedCoinsBack = 0;
                         // Use sender_name from message data, user_profiles, or enriched data
-                        const senderName = msg.sender_name || msg.user_profiles?.username || 'Troll Citizen';
+                        const senderName = msg.sender_name || msg.user_profiles?.username || 'Someone';
                         // Use receiver_name from message data
-                        const receiverName = msg.receiver_name || 'Troll Citizen';
+                        const receiverName = msg.receiver_name || 'user';
                         
                         // If not already parsed, try to parse from content
                         if (!msg.gift_type && msg.content) {
@@ -1547,7 +1525,7 @@ export default function BroadcastChat({
                                 <span className="text-xs">
                                     <button
                                         type="button"
-                                        onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'Troll Citizen', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+                                        onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
                                         className="font-bold text-yellow-400 hover:text-yellow-300 transition-colors"
                                         title="Send gift"
                                     >
@@ -1574,11 +1552,11 @@ export default function BroadcastChat({
                         );
                     }
 
-                     return (
-                         <div 
-                             key={msg.id}
-                             className={`flex items-center gap-2 bg-black/20 backdrop-blur p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300 ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''}`}
-                         >
+                    return (
+                        <div 
+                            key={msg.id}
+                            className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300 ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''}`}
+                        >
                             {/* Golden Flex Banner indicator */}
                             {showGoldenBanner && msg.user_id === user?.id && (
                                 <span className="text-yellow-400 text-xs">👑</span>
@@ -1593,11 +1571,11 @@ export default function BroadcastChat({
                             <div className="flex-1 min-w-0 flex items-center gap-1">
                                 <button
                                     type="button"
-                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'Troll Citizen', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
                                     className={`font-bold text-xs truncate hover:text-yellow-300 transition-colors ${showGoldenBanner && msg.user_id === user?.id ? 'text-yellow-400' : 'text-yellow-400'}`}
                                     title="Send gift"
                                 >
-                                    {msg.user_profiles?.username || 'Troll Citizen'}:
+                                    {msg.user_profiles?.username || 'User'}:
                                 </button>
                                 <span className="text-white text-xs truncate">{msg.content}</span>
                             </div>

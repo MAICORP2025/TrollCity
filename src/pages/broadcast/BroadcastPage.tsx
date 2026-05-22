@@ -17,10 +17,10 @@ import { cn } from '../../lib/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 import { Stream, StagePass } from '../../types/broadcast'
-import BroadcastChat, { Message } from '../../components/broadcast/BroadcastChat'
 import BroadcastControls from '../../components/broadcast/BroadcastControls'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
+import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
 import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
 
@@ -68,7 +68,6 @@ import GiftVideoOverlay from '@/components/broadcast/GiftVideoOverlay'
 import OpenStagePassModal from '@/components/broadcast/OpenStagePassModal'
 import PinProductModal from '@/components/broadcast/PinProductModal'
 import TickerControlPanel from '@/components/broadcast/TickerControlPanel'
-import { FloatingChatOverlay } from '@/components/broadcast/FloatingChatOverlay'
 import UserActionModal from '@/components/broadcast/UserActionModal'
 import UserStatsModal from '@/components/broadcast/UserStatsModal'
 
@@ -159,6 +158,7 @@ export function BroadcastPage() {
 
    const [stream, setStream] = useState<Stream | null>(null)
    const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
+   const [streamMods, setStreamMods] = useState<string[]>([]);
    // Accumulate gift amounts received while broadcasterProfile is still loading (null);
    // applied once the profile arrives via @see applyPendingGiftsEffect
    const pendingBroadcasterGiftsRef = useRef(0);
@@ -196,10 +196,13 @@ export function BroadcastPage() {
   console.debug('[BroadcastPage StagePass Requests]', { streamId, requests, stagePasses })
 
   const roomName = useMemo(() => {
-    if (stream?.agora_channel) return stream.agora_channel;
-    if (stream?.room_name) return stream.room_name;
-    return streamId || ''; 
-  }, [stream?.agora_channel, stream?.room_name, streamId]);
+  return (
+    stream?.livekit_room_name ||
+    stream?.room_name ||
+    streamId ||
+    ''
+  );
+}, [stream?.livekit_room_name, stream?.room_name, streamId]);
 
   const hasValidStreamId = !!streamId && typeof streamId === 'string' && streamId.trim() !== '';
   const sessionReady = !!user && !!profile && hasValidStreamId && !!roomName;
@@ -461,133 +464,6 @@ export function BroadcastPage() {
   const [selectedBattleTheme, setSelectedBattleTheme] = useState<string>(DEFAULT_BATTLE_THEME_ID);
   
   // Auto-end stream if no viewers and no messages for 10 minutes
-  const [floatingChatMessages, setFloatingChatMessages] = useState<Message[]>([]);
-  const [streamMods, setStreamMods] = useState<string[]>([]);
-
-  const resolveFloatingChatProfile = useCallback(async (message: Message) => {
-    const existingProfile = (message as any).user_profiles;
-
-    const existingUsername =
-      existingProfile?.username ||
-      (message as any).username ||
-      (message as any).user_name ||
-      (message as any).display_name ||
-      '';
-
-    const badNames = new Set(['', 'unknown', 'unknown:', 'guest', 'user']);
-
-    const hasGoodUsername =
-      typeof existingUsername === 'string' &&
-      existingUsername.trim() &&
-      !badNames.has(existingUsername.trim().toLowerCase());
-
-    if (hasGoodUsername && existingProfile?.username) {
-      return message;
-    }
-
-    if (!message.user_id) {
-      return message;
-    }
-
-    const { data: profileRow, error } = await supabase
-      .from('user_profiles')
-      .select(`
-        id,
-        username,
-        display_name,
-        email,
-        avatar_url,
-        role,
-        troll_role,
-        created_at,
-        rgb_username_expires_at,
-        glowing_username_color
-      `)
-      .eq('id', message.user_id)
-      .maybeSingle();
-
-    if (error) {
-      console.warn('[FloatingChat] Failed to hydrate user profile:', error);
-    }
-
-    const username =
-      profileRow?.username ||
-      profileRow?.display_name ||
-      profileRow?.email?.split('@')?.[0] ||
-      existingUsername ||
-      'Troll Citizen';
-
-    return {
-      ...message,
-      username,
-      user_name: username,
-      user_avatar:
-        profileRow?.avatar_url ||
-        (message as any).user_avatar ||
-        existingProfile?.avatar_url ||
-        '',
-      user_role:
-        profileRow?.role ||
-        (message as any).user_role ||
-        existingProfile?.role ||
-        null,
-      user_troll_role:
-        profileRow?.troll_role ||
-        (message as any).user_troll_role ||
-        existingProfile?.troll_role ||
-        null,
-      user_created_at:
-        profileRow?.created_at ||
-        (message as any).user_created_at ||
-        existingProfile?.created_at ||
-        null,
-      user_rgb_expires_at:
-        profileRow?.rgb_username_expires_at ||
-        (message as any).user_rgb_expires_at ||
-        existingProfile?.rgb_username_expires_at ||
-        null,
-      user_glowing_username_color:
-        profileRow?.glowing_username_color ||
-        (message as any).user_glowing_username_color ||
-        existingProfile?.glowing_username_color ||
-        null,
-      user_profiles: {
-        ...(existingProfile || {}),
-        username,
-        display_name: profileRow?.display_name || existingProfile?.display_name || null,
-        email: profileRow?.email || existingProfile?.email || null,
-        avatar_url: profileRow?.avatar_url || existingProfile?.avatar_url || '',
-        role: profileRow?.role || existingProfile?.role || null,
-        troll_role: profileRow?.troll_role || existingProfile?.troll_role || null,
-        created_at: profileRow?.created_at || existingProfile?.created_at || null,
-        rgb_username_expires_at:
-          profileRow?.rgb_username_expires_at ||
-          existingProfile?.rgb_username_expires_at ||
-          null,
-        glowing_username_color:
-          profileRow?.glowing_username_color ||
-          existingProfile?.glowing_username_color ||
-          null,
-      },
-    } as Message;
-  }, []);
-
-  const pushFloatingChatMessage = useCallback(async (message: Message) => {
-    if (!message?.id || !message?.content) return;
-
-    const hydratedMessage = await resolveFloatingChatProfile(message);
-
-    setFloatingChatMessages(prev => {
-      if (prev.some(existing => existing.id === hydratedMessage.id)) return prev;
-      return [...prev, hydratedMessage].slice(-6);
-    });
-
-    window.setTimeout(() => {
-      setFloatingChatMessages(prev =>
-        prev.filter(existing => existing.id !== hydratedMessage.id)
-      );
-    }, 9000);
-  }, [resolveFloatingChatProfile]);
 
   const [hasReceivedChatMessage, setHasReceivedChatMessage] = useState(false)
   const streamStartTimeRef = useRef<Date | null>(null)
@@ -613,6 +489,7 @@ export function BroadcastPage() {
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
    const [isStagePassModalOpen, setIsStagePassModalOpen] = useState(false)
+   const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
    const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans' | 'settings'>('chat')
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
@@ -620,14 +497,20 @@ export function BroadcastPage() {
    const [giftUserPositions, setGiftUserPositions] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({})
     const getGiftUserPositionsRef = useRef<() => Record<string, { top: number; left: number; width: number; height: number }>>(() => ({}))
     const giftNameMapRef = useRef<Record<string, string>>({})
-   const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{
-     sender_id: string;
-     sender_username: string;
-     sender_avatar_url: string | null;
-     total_gift_coins: number;
-     last_gift_at: string | null;
-   }>>([])
+   const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{user_id: string; sender_username: string; sender_avatar_url: string | null; total_gift_coins: number; last_gift_at: string | null}>>([])
    const [isAllTimeTopGiftersLoading, setIsAllTimeTopGiftersLoading] = useState(false)
+
+   // ── Floating Chat ─────────────────────────────────────────────────────────
+   interface FloatingMessage {
+     id: string
+     username: string
+     content: string
+     createdAt: number
+   }
+
+   const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
+   const [chatInput, setChatInput] = useState('')
+   const floatingChatContainerRef = useRef<HTMLDivElement>(null)
 
    useEffect(() => {
      const broadcasterId = stream?.user_id;
@@ -1507,11 +1390,13 @@ useEffect(() => {
     navigate('/')
   }, [isHost, localTracks, navigate])
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
-  const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
-  const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
-  const handleClosePinProductModal = useCallback(() => setIsPinProductModalOpen(false), [])
-  const handleOpenStagePassModal = useCallback(() => setIsStagePassModalOpen(true), [])
-  const handleCloseStagePassModal = useCallback(() => setIsStagePassModalOpen(false), [])
+   const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
+   const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
+   const handleClosePinProductModal = useCallback(() => setIsPinProductModalOpen(false), [])
+   const handleOpenStagePassModal = useCallback(() => setIsStagePassModalOpen(true), [])
+   const handleCloseStagePassModal = useCallback(() => setIsStagePassModalOpen(false), [])
+   const handleOpenMoreMenu = useCallback(() => setIsMoreControlsOpen(true), [])
+   const handleCloseMoreMenu = useCallback(() => setIsMoreControlsOpen(false), [])
 
   const handleOpenStagePassConfirm = useCallback(async (count: number, priceCoins: number) => {
     try {
@@ -2166,6 +2051,48 @@ useStreamRealtime(streamId, {
       supabase.removeChannel(channel);
     };
     }, [streamId, navigate, user?.id, isHost]);
+
+   // ── Floating Chat: receive broadcasts ────────────────────────────────────
+useEffect(() => {
+  if (!streamId) return;
+
+  const timers = new Set<number>();
+  const channel = supabase.channel(`floating-chat:${streamId}`);
+
+  channel
+    .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
+      const { username, content } = payload.payload || {};
+      if (!username || !content) return;
+
+      const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      setFloatingMessages(prev =>
+        [
+          {
+            id: msgId,
+            username,
+            content,
+            createdAt: Date.now(),
+          },
+          ...prev,
+        ].slice(0, 50)
+      );
+
+      const timer = window.setTimeout(() => {
+        setFloatingMessages(prev => prev.filter(m => m.id !== msgId));
+        timers.delete(timer);
+      }, 60_000);
+
+      timers.add(timer);
+    })
+    .subscribe();
+
+  return () => {
+    timers.forEach(timer => window.clearTimeout(timer));
+    timers.clear();
+    supabase.removeChannel(channel);
+  };
+}, [streamId, supabase]);
 
   // ★ Gift animations are now driven exclusively by useStreamRealtime.onGift
   // (stream_gifts postgres_changes).  The broadcast gift_sent channel is no
@@ -3827,17 +3754,22 @@ const handleLike = useCallback(async () => {
   }
 
    function handleMute(userId: string, reason?: string) {
+     toast.info(`Mute user ${userId}`);
    }
 
    function handleGeneralKick() {
+     toast.info('Kick issued');
    }
 
    function handleArrest(userId: string, reason?: string) {
+     toast.info(`Arrest user ${userId}`);
    }
 
    function handleBlock(userId: string, reason?: string) {
+     toast.info(`Block user ${userId}`);
    }
 
+  
   function startDrag(event: React.MouseEvent<HTMLDivElement>): void {
     // Start a horizontal resize for the desktop chat panel
     try {
@@ -3877,7 +3809,7 @@ const handleLike = useCallback(async () => {
           <ErrorBoundary>
 
           {/* ── Outer layout: header + 3-column grid + bottom bar + footer ── */}
-          <div className={cn(theme.pageShell, 'flex flex-col')}>
+          <div className={cn(theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden')}>
 
             {/* Background layers — identical to Sidebar ShellBackdrop */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
@@ -3974,13 +3906,6 @@ const handleLike = useCallback(async () => {
                   return vt;
                 })()} />
 
-                {/* Floating Chat Overlay (Stage/Video anchor) */}
-                <FloatingChatOverlay
-                  messages={floatingChatMessages}
-                  streamMods={streamMods}
-                  hostId={stream?.user_id || ''}
-                />
-
                 {/* Gradient overlay — sits above video/fallback */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
@@ -4006,16 +3931,7 @@ const handleLike = useCallback(async () => {
                   </span>
                 </div>
 
-                 {/* Host identity — lower left */}
-                 <div className="absolute bottom-28 left-6 z-20 flex items-center gap-2">
-                  <img
-                    src={broadcasterProfile?.avatar_url || ''}
-                    alt=""
-                    className="h-8 w-8 rounded-md border border-cyan-300/60 object-cover shadow-[0_0_18px_rgba(45,212,191,0.28)]"
-                  />
-                  <span className="text-base font-black text-white">{broadcasterProfile?.display_name || broadcasterProfile?.username || 'Broadcaster'}</span>
-                  {broadcasterProfile?.is_verified && <BadgeCheck className="h-5 w-5 text-purple-400" />}
-                </div>
+                 
 
                  {/* Pinned product overlay */}
                  {(() => {
@@ -4147,7 +4063,10 @@ const handleLike = useCallback(async () => {
               </section>
 
               {/* ── RIGHT: Chat Panel ── */}
-              <aside className={cn(theme.chatPanel, 'bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]')}>
+              <aside className={cn(
+    theme.chatPanel,
+    'flex min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
+  )}>
                 {/* Chat tabs */}
                 <div className="grid grid-cols-3 border-b border-white/10 bg-black/10">
                   {['Chat',  'Top Fans', 'Settings'].map((tab) => {
@@ -4175,16 +4094,85 @@ const handleLike = useCallback(async () => {
 
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   {chatTab === 'chat' ? (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent [&_*]:border-white/10 [&_form]:mt-auto [&_form]:order-last [&_form]:border-t [&_form]:bg-black/10 [&_form]:backdrop-blur-md [&_input]:!bg-black/20 [&_input]:!text-white [&_input]:placeholder:text-white/35 [&_textarea]:!bg-black/20 [&_textarea]:!text-white [&_textarea]:placeholder:text-white/35">
-                      <BroadcastChat
-                        streamId={streamId || ''}
-                        hostId={stream?.user_id || ''}
-                        onFloatingMessage={pushFloatingChatMessage}
-                        onMessageSent={() => {
-                          setHasReceivedChatMessage(true);
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
+                      {/* Floating messages area — newest on top, scrollable */}
+<div
+  ref={floatingChatContainerRef}
+  className="min-h-0 flex-1 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide overscroll-contain"
+>
+                        {floatingMessages.length === 0 && (
+                          <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
+                            No messages yet – say something!
+                          </div>
+                        )}
+                        {floatingMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
+                            style={{ animation: 'slideInFromTop 0.3s ease-out' }}
+                          >
+                            <span className="font-black text-cyan-300">{msg.username}</span>
+                            <span className="text-white/40 mx-1">:</span>
+                            <span className="text-white/90">{msg.content}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Input at the bottom */}
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault()
+                          const text = chatInput.trim()
+                          if (!text || !user) return
+
+                          const username = profile?.username || profile?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                          const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+                          setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
+                          setChatInput('')
+
+                          // Auto-remove after 60 seconds
+                          setTimeout(() => {
+                            setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                          }, 60_000)
+
+                          // Save to DB + broadcast to other viewers
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession()
+                            if (session) {
+                              await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+                                method: 'POST',
+                                headers: {
+                                  Authorization: `Bearer ${session.access_token}`,
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  type: 'chat',
+                                  stream_id: streamId,
+                                  data: { content: text },
+                                }),
+                              })
+                            }
+                            // Broadcast to other viewers via Supabase channel
+                            const chatChannel = supabase.channel(`floating-chat:${streamId}`)
+                            chatChannel.send({
+                              type: 'broadcast',
+                              event: 'floating_chat',
+                              payload: { username, content: text },
+                            }).catch(() => {})
+                          } catch { /* silent */ }
                         }}
-                        isHost={isHost}
-                      />
+                        className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
+                      >
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Say something…"
+                          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                          maxLength={280}
+                        />
+                      </form>
                     </div>
                   ) : chatTab === 'gifts' ? (
                     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
@@ -4269,25 +4257,25 @@ const handleLike = useCallback(async () => {
               </aside>
             </main>
 
-             {/* ── BOTTOM CONTROL BAR ── */}
-             <BroadcastBottomBar
-               openPassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
-               isMicOn={micEnabled}
-               isCamOn={cameraEnabled}
-               isLive={stream.status === 'live'}
-               isGiftTrayOpen={isGiftModalOpen}
-               isOfficerModalOpen={!!(stagePassesHook as any)?.showOfficer}
-               onToggleMic={toggleMicrophone}
-               onToggleCam={toggleCamera}
-               onGift={handleGiftHost}
-               onShare={handleOpenShareModal}
-               onOpenStagePass={() => {}}
-               onManageStagePass={() => {}}
-               onOpenMoreMenu={() => undefined}
-               onEndStream={handleStreamEnd}
-               onOpenCoinStore={handleOpenCoinStore}
-               isHost={isHost}
-             />
+              {/* ── BOTTOM CONTROL BAR ── */}
+              <BroadcastBottomBar
+                openPassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
+                isMicOn={micEnabled}
+                isCamOn={cameraEnabled}
+                isLive={stream.status === 'live'}
+                isGiftTrayOpen={isGiftModalOpen}
+                isOfficerModalOpen={!!(stagePassesHook as any)?.showOfficer}
+                onToggleMic={toggleMicrophone}
+                onToggleCam={toggleCamera}
+                onGift={handleGiftHost}
+                onShare={handleOpenShareModal}
+                onOpenStagePass={() => {}}
+                onManageStagePass={() => {}}
+                onOpenMoreMenu={handleOpenMoreMenu}
+                onEndStream={handleStreamEnd}
+                onOpenCoinStore={handleOpenCoinStore}
+                isHost={isHost}
+              />
 
             {/* ── FOOTER STATUS STRIP ── */}
             <div className={theme.footerStrip}>
@@ -4508,6 +4496,36 @@ const handleLike = useCallback(async () => {
                   onClearPriority={tickerClearPriority}
                   onDeleteMessage={tickerDeleteMessage}
                 />
+              )}
+
+              {/* More Controls Drawer */}
+              {isMoreControlsOpen && (
+                <div className="pointer-events-auto">
+                <MoreControlsDrawer
+                  isOpen={isMoreControlsOpen}
+                  onClose={handleCloseMoreMenu}
+                  isMuted={!micEnabled}
+                  isCameraOff={!cameraEnabled}
+                  onToggleMic={toggleMicrophone}
+                  onToggleCamera={toggleCamera}
+                  onFlipCamera={flipCamera}
+                  onSettings={() => {}}
+                  onLeave={handleLeave}
+                  onGift={handleGiftHost}
+                  onShare={handleOpenShareModal}
+                  onEndStream={handleStreamEnd}
+                  onToggleSeatsLock={handleToggleSeatsLock}
+                  areSeatsLocked={!!stream?.are_seats_locked}
+                  onManageStagePass={() => setIsStagePassModalOpen(true)}
+                  openStagePassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
+                  isHost={isHost}
+                  isOfficer={isOfficer}
+                  onMuteUser={handleMute}
+                  onBanUser={handleBlock}
+                  onRemoveFromStage={() => {}}
+                  onModGift={handleGiftHost}
+                />
+                </div>
               )}
             </div>
 

@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils";
 import { ChatMessage } from "../../types/broadcast";
 import ProfileFrame from "../live/ProfileFrame";
 import { getDiamondForLevel } from "../../types/liveStreaming";
+import { resolveUsername as resolveUsernameUtil, DEFAULT_USERNAME } from "../../lib/chatUtils";
 
 interface ChatBottomSheetProps {
   messages: ChatMessage[];
@@ -36,17 +37,17 @@ type AnyChatMessage = ChatMessage & {
   } | null;
 };
 
-function resolveChatUsername(msg: ChatMessage, fallback = "Unknown") {
+function resolveChatUsername(msg: ChatMessage, fallback = DEFAULT_USERNAME) {
   const chatMsg = msg as AnyChatMessage;
 
-  return (
+  return resolveUsernameUtil(
     chatMsg.user_profiles?.username ||
     chatMsg.user_profiles?.display_name ||
     chatMsg.user?.username ||
     chatMsg.user?.display_name ||
     chatMsg.username ||
     chatMsg.user_name ||
-    chatMsg.display_name ||
+    chatMsg.display_name,
     fallback
   );
 }
@@ -278,7 +279,7 @@ function UserMessage({
 }) {
   const level = resolveChatLevel(msg);
   const avatarUrl = resolveChatAvatar(msg);
-  const username = resolveChatUsername(msg, "Unknown");
+  const username = resolveChatUsername(msg);
   const chatText = resolveChatText(msg);
 
   return (

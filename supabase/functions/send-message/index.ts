@@ -463,13 +463,13 @@ serve(async (req) => {
         content: data.content,
         type: type,
         txn_id: txn_id,
-        user_name: profile.username,
-        user_avatar: profile.avatar_url,
-        user_role: profile.role,
-        user_troll_role: profile.troll_role,
-        user_created_at: profile.created_at,
-        user_rgb_expires_at: profile.rgb_username_expires_at,
-        user_glowing_username_color: profile.glowing_username_color,
+        user_name: userProfile.username,
+        user_avatar: userProfile.avatar_url,
+        user_role: userProfile.role,
+        user_troll_role: userProfile.troll_role,
+        user_created_at: userProfile.created_at,
+        user_rgb_expires_at: userProfile.rgb_username_expires_at,
+        user_glowing_username_color: userProfile.glowing_username_color,
       });
 
     if (insertError) {
@@ -481,6 +481,32 @@ serve(async (req) => {
 
     // Send push notification via Web Push (VAPID) using our push-notifications Edge Function
     try {
+      // Get stream title and broadcaster info for push notifications
+      const { data: streamData, error: streamDataError } = await supabase
+        .from("streams")
+        .select("title, user_id, broadcaster_id")
+        .eq("id", stream_id)
+        .single();
+      
+      const streamTitle = streamData?.title || `Stream ${stream_id}`;
+      const broadcasterId = streamData?.user_id || streamData?.broadcaster_id;
+      
+      // Get sender name
+      const senderName = userProfile.username || user.email?.split('@')[0] || 'Anonymous';
+      
+      // Get follower IDs for the broadcaster (if we have a broadcaster ID)
+      let followerIds: string[] = [];
+      if (broadcasterId) {
+        const { data: followersData, error: followersError } = await supabase
+          .from("follows")
+          .select("follower_id")
+          .eq("followed_id", broadcasterId);
+        
+        if (!followersError && followersData) {
+          followerIds = followersData.map((f: any) => f.follower_id);
+        }
+      }
+      
       console.log('[Push] Sending Web Push for private message to followerIds:', followerIds);
       const pushResult = await supabase.functions.invoke('push-notifications', {
         body: {

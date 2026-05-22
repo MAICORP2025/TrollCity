@@ -487,7 +487,6 @@ profile?.role === 'superadmin' ||
             {isApprovedAuctioneer && (
               <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Auction Studio" to="/auctions/studio" active={location.pathname.startsWith('/auctions/studio')} highlight={isUpdated('/auctions/studio')} onClick={() => markAsViewed('/auctions/studio')} className="text-green-400" tone="green" />
             )}
-            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Careers" to="/career" active={isActive('/career')} highlight={isUpdated('/career')} onClick={() => markAsViewed('/career')} tone="default" />
             <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Credit" to="/credit-scores" active={isActive('/credit-scores')} highlight={isUpdated('/credit-scores')} onClick={() => markAsViewed('/credit-scores')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={Shuffle} label="Creator" to="/creator-switch" active={isActive('/creator-switch')} highlight={isUpdated('/creator-switch')} onClick={() => markAsViewed('/creator-switch')} tone="purple" />
              {canSeeCourt && (
@@ -521,9 +520,7 @@ profile?.role === 'superadmin' ||
             {canSeeInmates && (
               <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Inmates" to="/inmates" active={isActive('/inmates')} highlight={isUpdated('/inmates')} onClick={() => markAsViewed('/inmates')} className="text-red-300" tone="red" />
             )}
-            {isLead && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Star} label="Lead HQ" to="/lead-officer" active={location.pathname.startsWith('/lead-officer')} highlight={isUpdated('/lead-officer')} onClick={() => markAsViewed('/lead-officer')} className="text-cyan-300" tone="cyan" />
-            )}
+            
             {canAccessOrgDashboard && (
               <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Organization" to="/organization/dashboard" active={isActive('/organization/dashboard')} highlight={isUpdated('/organization/dashboard')} onClick={() => markAsViewed('/organization/dashboard')} className="text-purple-400" tone="purple" />
             )}

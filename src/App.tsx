@@ -187,7 +187,6 @@ const TrollFamilyCity = lazyWithRetry(() => import("./pages/TrollFamilyCity"));
 const FamilyProfilePage = lazyWithRetry(() => import("./pages/FamilyProfilePage"));
 const FamilyChatPage = lazyWithRetry(() => import("./pages/FamilyChatPage"));
 const FamilyWarsPage = lazyWithRetry(() => import("./pages/FamilyWarsPage"));
-const Career = lazyWithRetry(() => import("./pages/Career"));
 const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
 const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
 const Support = lazyWithRetry(() => import("./pages/Support"));
@@ -1428,12 +1427,7 @@ function AppContent() {
                   <Route path="/family/leaderboard" element={<FamilyLeaderboard />} />
                   <Route path="/family/shop" element={<FamilyShop />} />
 
-                   {/* 📝 Applications - All handled by Career component */}
-                    <Route path="/apply" element={<Career />} />
-                    <Route path="/apply/*" element={<Career />} />
-                   <Route path="/attorney" element={<AttorneyDashboard />} />
-                   <Route path="/prosecutor" element={<ProsecutorDashboard />} />
-                    <Route path="/career" element={<Career />} />
+                   
 
                   {/* 👮 Officer */}
                   <Route

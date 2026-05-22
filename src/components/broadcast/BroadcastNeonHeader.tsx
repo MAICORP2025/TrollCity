@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useEffect } from 'react';
+import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import {
   Coins,
   Crown,
@@ -14,6 +14,10 @@ import {
   Ticket,
   X,
   Sparkles,
+  UserPlus,
+  MessageSquare,
+  Shield,
+  Flag,
 } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
@@ -21,6 +25,7 @@ import { getCategoryConfig } from '../../config/broadcastCategories';
 import { Stream } from '../../types/broadcast';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * BroadcastNeonHeader
@@ -112,22 +117,119 @@ export default function BroadcastNeonHeader({
 
   const categoryConfig = getCategoryConfig(stream.category || 'general');
   const isLikingRef = React.useRef(false);
+  const navigate = useNavigate();
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [profileMenuOpen]);
+
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  const handleFollow = useCallback(async () => {
+    const { user } = useAuthStore.getState();
+    if (!user) { navigate('/auth?mode=signup'); return; }
+    if (!broadcasterProfile?.username) return;
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await supabase.from('user_follows').delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', stream.user_id);
+        setIsFollowing(false);
+        toast.success('Unfollowed');
+      } else {
+        await supabase.from('user_follows').insert({ follower_id: user.id, following_id: stream.user_id });
+        setIsFollowing(true);
+        toast.success(`Following ${broadcasterProfile.username}!`);
+      }
+    } catch { toast.error('Action failed'); }
+    finally { setFollowLoading(false); }
+  }, [isFollowing, broadcasterProfile, stream.user_id, navigate]);
+
+  const handleMessage = useCallback(() => {
+    if (!broadcasterProfile?.username) return;
+    // Open chat bubble via Zustand store
+    (window as any)._tcOpenUserChat?.(stream.user_id, broadcasterProfile.username, broadcasterProfile.avatar_url);
+    setProfileMenuOpen(false);
+  }, [broadcasterProfile, stream.user_id]);
+
+  const handleReport = useCallback(() => {
+    navigate(`/report?targetId=${stream.user_id}&targetType=user&streamId=${stream.id}`);
+  }, [navigate, stream.user_id, stream.id]);
   return (
     <header className="flex h-[104px] shrink-0 items-center justify-between px-5 border-b border-white/10 bg-black/70 backdrop-blur-xl">
       {/* ── LEFT: Broadcaster Identity ─────────────────────────────── */}
       <div className="flex items-center gap-4">
-        {/* Avatar */}
-        <div className="relative h-20 w-20 rounded-full p-[2px] bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 shadow-[0_0_35px_rgba(168,85,247,0.45)]">
-          {broadcasterProfile?.avatar_url ? (
-            <img
-              src={broadcasterProfile.avatar_url}
-              alt={broadcasterProfile.username || 'Broadcaster'}
-              className="h-full w-full rounded-full object-cover bg-black"
-            />
-          ) : (
-            <div className="h-full w-full rounded-full bg-[#111] flex items-center justify-center">
-              <Crown className="h-8 w-8 text-purple-400" />
+        {/* Avatar — clickable with dropdown */}
+        <div className="relative" ref={profileMenuRef}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setProfileMenuOpen(prev => !prev); }}
+            className="relative h-20 w-20 rounded-full p-[2px] bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 shadow-[0_0_35px_rgba(168,85,247,0.45)] hover:shadow-[0_0_45px_rgba(168,85,247,0.65)] transition-shadow outline-none"
+            aria-label="Broadcaster profile menu"
+          >
+            {broadcasterProfile?.avatar_url ? (
+              <img
+                src={broadcasterProfile.avatar_url}
+                alt={broadcasterProfile.username || 'Broadcaster'}
+                className="h-full w-full rounded-full object-cover bg-black"
+              />
+            ) : (
+              <div className="h-full w-full rounded-full bg-[#111] flex items-center justify-center">
+                <Crown className="h-8 w-8 text-purple-400" />
+              </div>
+            )}
+          </button>
+
+          {/* Dropdown menu */}
+          {profileMenuOpen && (
+            <div className="absolute left-0 top-full mt-2 z-[100] w-56 overflow-hidden rounded-xl border border-white/15 bg-slate-950/98 p-1.5 shadow-2xl backdrop-blur-xl">
+              {/* Broadcaster info */}
+              <div className="px-3 py-2 border-b border-white/8 mb-1">
+                <p className="text-sm font-black text-white truncate">{broadcasterProfile?.display_name || broadcasterProfile?.username || 'Broadcaster'}</p>
+                <p className="text-[11px] text-zinc-400 truncate">@{broadcasterProfile?.username || 'unknown'}</p>
+              </div>
+
+              {/* Follow */}
+              <button
+                type="button"
+                onClick={handleFollow}
+                disabled={followLoading}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-bold text-white transition-colors hover:bg-white/8"
+              >
+                <UserPlus size={15} className={isFollowing ? 'text-emerald-400' : 'text-cyan-400'} />
+                {isFollowing ? 'Following' : 'Follow'}
+              </button>
+
+              {/* Message */}
+              <button
+                type="button"
+                onClick={handleMessage}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-bold text-white transition-colors hover:bg-white/8"
+              >
+                <MessageSquare size={15} className="text-purple-400" />
+                Message
+              </button>
+
+              {/* Report */}
+              <button
+                type="button"
+                onClick={handleReport}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-bold text-amber-300 transition-colors hover:bg-white/8"
+              >
+                <Flag size={15} className="text-amber-400" />
+                Report
+              </button>
             </div>
           )}
         </div>

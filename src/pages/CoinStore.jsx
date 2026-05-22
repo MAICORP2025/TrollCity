@@ -29,7 +29,7 @@ const MANUAL_PROVIDERS = [
 
 const coinPackages = COIN_PACKAGES.map(p => ({
   ...p,
-  price: p.priceDisplay // Map priceDisplay to price for backward compatibility with this component's expectations (string with $)
+  price: `$${p.usdPrice.toFixed(2)}` // Generate price string from usdPrice
 }));
 
 const SAMPLE_EFFECTS = ENTRANCE_EFFECTS_DATA;
@@ -1198,24 +1198,24 @@ export default function CoinStore() {
                 )}
               </div>
               
-              {/* Use Credit Card Toggle */}
-              {creditInfo?.limit > 0 && creditInfo?.available > 0 && (
-                <div className="ml-4 flex items-center gap-2 px-3 py-2 bg-zinc-900 border border-purple-500/30 rounded-lg">
-                  <CreditCard className="w-4 h-4 text-purple-400" />
-                  <label className="text-sm text-gray-300 flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useCredit}
-                      onChange={(e) => setUseCredit(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-600 bg-zinc-800 text-purple-600 focus:ring-purple-500"
-                    />
-                    Use Credit Card
-                  </label>
-                  <span className="text-xs text-gray-500">
-                    (${creditInfo?.available?.toLocaleString()} available)
-                  </span>
-                </div>
-              )}
+{/* Use Credit Card Toggle */}
+{creditInfo?.limit > 0 && ((creditInfo?.limit || 0) - (creditInfo?.used || 0)) > 0 && (
+  <div className="ml-4 flex items-center gap-2 px-3 py-2 bg-zinc-900 border border-purple-500/30 rounded-lg">
+    <CreditCard className="w-4 h-4 text-purple-400" />
+    <label className="text-sm text-gray-300 flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={useCredit}
+        onChange={(e) => setUseCredit(e.target.checked)}
+        className="w-4 h-4 rounded border-gray-600 bg-zinc-800 text-purple-600 focus:ring-purple-500"
+      />
+      Use Credit Card
+    </label>
+    <span className="text-xs text-gray-500">
+      (${((creditInfo?.limit || 0) - (creditInfo?.used || 0)).toLocaleString()} available)
+    </span>
+  </div>
+)}
             </div>
             <div className="md:hidden w-full space-y-2">
               <select
@@ -1623,7 +1623,7 @@ export default function CoinStore() {
               {selectedPackage && (manualPaymentModalOpen || paypalPaymentModalOpen) ? null : (
                 <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {coinPackages.map((pkg) => {
-                    const priceMatch = pkg.price.match(/\$(\d+\.?\d*)/);
+                    const priceMatch = pkg.price?.match(/\$(\d+\.?\d*)/);
                     const originalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
                     // Apply new user discount (4%) or employee discount (1.5%)
                     let discountedPrice = originalPrice;

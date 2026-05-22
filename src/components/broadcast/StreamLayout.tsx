@@ -25,6 +25,9 @@ interface Props {
   }
 
   forceViewMode?: 'dashboard' | 'fullscreen' | 'vertical'
+
+  /** Called when the "More" button in the bottom bar is clicked — opens the MoreControlsDrawer */
+  onMoreMenu?: () => void;
 }
 
 export default function StreamLayout({

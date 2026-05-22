@@ -25,7 +25,6 @@ interface GuestMicCamState {
 
 interface BroadcastStageLayoutProps {
   // Host
-  hostName: string
   hostAvatarUrl?: string | null
   hostIsMicOn: boolean
   hostIsCamOn: boolean
@@ -319,7 +318,6 @@ function EmptyStagePassTile({
 }
 
 export default function BroadcastStageLayout({
-  hostName,
   hostAvatarUrl,
   hostIsMicOn,
   hostIsCamOn,
@@ -398,7 +396,6 @@ export default function BroadcastStageLayout({
                 {hostAvatarUrl ? (
                   <img
                     src={hostAvatarUrl}
-                    alt={hostName}
                     className="h-36 w-36 rounded-full border border-cyan-300/50 object-cover shadow-[0_0_34px_rgba(34,211,238,0.35)]"
                   />
                 ) : (

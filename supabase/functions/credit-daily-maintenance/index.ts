@@ -116,6 +116,29 @@ export default async function handler(req: Request) {
       }
     }
     
+    // 5. Also fire off the small-purchase installment milestone checker
+    //    so credit points from small installments are processed the same day.
+    try {
+      const milestoneUrl = `${supabaseUrl}/functions/v1/credit-small-purchase-milestone`;
+      const milestoneResp = await fetch(milestoneUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: supabaseServiceKey,
+          authorization: `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({ source: 'credit-daily-maintenance' }),
+      });
+      const milestoneJson = await milestoneResp.json().catch(() => ({}));
+      if (!milestoneResp.ok) {
+        console.error('credit-small-purchase-milestone call failed:', milestoneJson);
+      } else {
+        console.log('credit-small-purchase-milestone result:', JSON.stringify(milestoneJson));
+      }
+    } catch (fireErr: any) {
+      console.error('credit-small-purchase-milestone fire-and-forget error:', fireErr.message);
+    }
+    
     // 5. Ensure all profiles have a credit record (for those with 0 events)
     // We can't easily do "NOT IN" via JS efficiently without fetching all IDs.
     // But we can rely on the fact that if they have 0 events, they keep their default or current score.
