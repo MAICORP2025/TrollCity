@@ -147,7 +147,7 @@ const GlobalTicker = () => {
     if (visibleEvents.length <= 1) return
     const interval = setInterval(() => {
       setCurrentEventIndex((prev) => (prev + 1) % visibleEvents.length)
-    }, 5000)
+    }, 9000)
     return () => clearInterval(interval)
   }, [visibleEvents.length])
 

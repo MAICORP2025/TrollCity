@@ -76,22 +76,10 @@ const HomeRedirect = () => {
     }
   }, [user?.id, profile, profileRole, navigate]);
 
-  if (!user) return null;
+  // Return null to prevent any flash - the redirect happens in useEffect
+  if (!user || isLoading) return null;
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="animate-pulse px-6 py-3 rounded bg-[#121212] border border-[#2C2C2C] text-white">
-          Loading…
-        </div>
-      </div>
-    );
-  }
-
-  if (user && !profile) {
-    return <Navigate to="/profile/setup" replace />;
-  }
-
+  // This should not be reached, but just in case
   return null;
 };
 import Auth from "./pages/Auth";

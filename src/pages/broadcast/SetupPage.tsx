@@ -638,7 +638,7 @@ export default function SetupPage() {
       const currentCount = uniqueBroadcasters.size;
       
       // Max limit is fixed at 50 broadcasters per month
-      const maxLimit = 50;
+      const maxLimit = 20;
 
       // Check if current user has already broadcasted this month (they get a free pass)
       const hasUserBroadcasted = uniqueBroadcasters.has(user.id);

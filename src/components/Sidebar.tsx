@@ -469,7 +469,7 @@ profile?.role === 'superadmin' ||
             <SectionTitle title="City Core" collapsed={isSidebarCollapsed} />
             <GridItem collapsed={isSidebarCollapsed} icon={Home} label="Home" to="/home" active={isActive('/home')} highlight={isUpdated('/home')} onClick={() => markAsViewed('/home')} tone="purple" />
             <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Buy Coins" to="/store" active={isActive('/store')} highlight={isUpdated('/store')} onClick={() => markAsViewed('/store')} tone="green" glow="green" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Live Auctions" to="/auctions" active={isActive('/auctions')} highlight={isUpdated('/auctions')} onClick={() => markAsViewed('/auctions')} className="text-green-400" tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Live Auctions" to="/auctions" active={isActive('/auctions')} highlight={isUpdated('/auctions')} onClick={() => markAsViewed('/auctions')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
             <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} highlight={isUpdated('/troll-court')} onClick={() => markAsViewed('/troll-court')} tone="purple" />
             <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighbors" to="/neighbors" active={isActive('/neighbors')} highlight={isUpdated('/neighbors')} onClick={() => markAsViewed('/neighbors')} className="text-blue-400" tone="blue" />
             <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighborhood" to="/neighborhood-setup" active={isActive('/neighborhood-setup')} highlight={isUpdated('/neighborhood-setup')} onClick={() => markAsViewed('/neighborhood-setup')} className="text-cyan-400" tone="cyan" />
@@ -484,9 +484,9 @@ profile?.role === 'superadmin' ||
             {isAttorney && (
               <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Attorney" to="/attorney" active={isActive('/attorney')} highlight={isUpdated('/attorney')} onClick={() => markAsViewed('/attorney')} className="text-cyan-200" tone="cyan" />
             )}
-            {isApprovedAuctioneer && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Auction Studio" to="/auctions/studio" active={location.pathname.startsWith('/auctions/studio')} highlight={isUpdated('/auctions/studio')} onClick={() => markAsViewed('/auctions/studio')} className="text-green-400" tone="green" />
-            )}
+{isApprovedAuctioneer && (
+  <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Auction Studio" to="/auctions/studio" active={location.pathname.startsWith('/auctions/studio')} highlight={isUpdated('/auctions/studio')} onClick={() => markAsViewed('/auctions/studio')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
+)}
             <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Credit" to="/credit-scores" active={isActive('/credit-scores')} highlight={isUpdated('/credit-scores')} onClick={() => markAsViewed('/credit-scores')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={Shuffle} label="Creator" to="/creator-switch" active={isActive('/creator-switch')} highlight={isUpdated('/creator-switch')} onClick={() => markAsViewed('/creator-switch')} tone="purple" />
              {canSeeCourt && (
@@ -501,7 +501,7 @@ profile?.role === 'superadmin' ||
             {canAccessMaiClass && (
               <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Mai Class" to="/mai-class" active={isActive('/mai-class')} highlight={isUpdated('/mai-class')} onClick={() => markAsViewed('/mai-class')} className="text-green-400" glow="green" tone="green" />
             )}
-            <GridItem collapsed={isSidebarCollapsed} icon={Star} label="Mai Talent" to="/mai-talent" active={isActive('/mai-talent')} highlight={isUpdated('/mai-talent')} onClick={() => markAsViewed('/mai-talent')} className="text-pink-400" tone="pink" glow="pink" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Star} label="Mai Talent" to="/mai-talent" active={isActive('/mai-talent')} highlight={isUpdated('/mai-talent')} onClick={() => markAsViewed('/mai-talent')} className="text-pink-400" tone="pink" glow="pink" underConstruction={!isAdmin} />
             <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} highlight={isUpdated('/marketplace')} onClick={() => markAsViewed('/marketplace')} tone="purple" />
             {isApprovedAuctioneer && (
               <GridItem collapsed={isSidebarCollapsed} icon={List} label="My Shows" to="/auctions/my-shows" active={location.pathname.startsWith('/auctions/my-shows')} highlight={isUpdated('/auctions/my-shows')} onClick={() => markAsViewed('/auctions/my-shows')} className="text-green-400" tone="green" />
@@ -509,7 +509,7 @@ profile?.role === 'superadmin' ||
             <GridItem collapsed={isSidebarCollapsed} icon={Waves} label="Pool" to="/pool" active={isActive('/pool')} highlight={isUpdated('/pool')} onClick={() => markAsViewed('/pool')} className="text-cyan-400" tone="cyan" />
             <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Troll Church" to="/church" active={isActive('/church')} highlight={isUpdated('/church')} onClick={() => markAsViewed('/church')} tone="purple" />
-            <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400" tone="green" />
+             <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
             <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} highlight={isUpdated('/troll-wheel')} onClick={() => markAsViewed('/troll-wheel')} className="text-cyan-300" tone="cyan" />
 
@@ -575,8 +575,13 @@ function GridItem({
   collapsed = false,
   tone = 'default',
   badge,
+  underConstruction = false,
 }: GridItemProps) {
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (underConstruction) {
+      e.preventDefault()
+      return
+    }
     if (onClick) onClick()
   }
 
@@ -601,9 +606,12 @@ function GridItem({
     teal: { boxShadow: '0 0 20px rgba(45,212,191,0.34), inset 0 0 14px rgba(45,212,191,0.08)' },
   }
 
+  const isUnderConstruction = underConstruction ?? false
+  const effectiveActive = !isUnderConstruction && active
+
   return (
     <Link
-      to={to}
+      to={isUnderConstruction ? '#' : to}
       onClick={handleClick}
       title={collapsed ? label : undefined}
       aria-label={label}
@@ -611,13 +619,14 @@ function GridItem({
         'group relative z-0 flex overflow-hidden rounded-2xl border bg-gradient-to-br transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/[0.07]',
         toneMap[tone],
         collapsed ? 'h-14 items-center justify-center p-2' : 'min-h-[74px] flex-col items-center justify-center gap-1.5 p-3',
-        active ? 'border-cyan-300/60 bg-white/[0.09] text-white shadow-[0_0_18px_rgba(45,212,191,0.23),inset_0_1px_0_rgba(255,255,255,0.08)]' : 'text-slate-400 hover:text-white',
+        effectiveActive ? 'border-cyan-300/60 bg-white/[0.09] text-white shadow-[0_0_18px_rgba(45,212,191,0.23),inset_0_1px_0_rgba(255,255,255,0.08)]' : 'text-slate-400 hover:text-white',
+        isUnderConstruction ? 'opacity-50 cursor-not-allowed' : '',
         className
       )}
       style={glow ? glowMap[glow] : undefined}
     >
       <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),transparent_48%)] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-      {active && <span className="absolute left-0 top-2 h-[calc(100%-1rem)] w-1 rounded-r-full bg-gradient-to-b from-cyan-200 via-purple-400 to-pink-400 shadow-[0_0_12px_rgba(45,212,191,0.55)]" />}
+      {effectiveActive && <span className="absolute left-0 top-2 h-[calc(100%-1rem)] w-1 rounded-r-full bg-gradient-to-b from-cyan-200 via-purple-400 to-pink-400 shadow-[0_0_12px_rgba(45,212,191,0.55)]" />}
 
       <span className="relative z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-slate-950/42 transition-all duration-200 group-hover:border-white/20 group-hover:bg-slate-950/62">
         <Icon size={20} className="shrink-0" />
@@ -625,16 +634,15 @@ function GridItem({
 
       {!collapsed && <span className="relative z-10 text-center text-[10px] font-bold leading-tight tracking-tight">{label}</span>}
 
-      {highlight && (
+      {highlight && !isUnderConstruction && (
         <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
       )}
 
-      {badge && !collapsed && (
+      {badge && !collapsed && !isUnderConstruction && (
         <span className="absolute right-1 top-1 rounded bg-cyan-300 px-1.5 py-0.5 text-[8px] font-black uppercase text-slate-950 shadow-[0_0_6px_rgba(45,212,191,0.45)]">
           {badge}
         </span>
       )}
-
     </Link>
   )
 }

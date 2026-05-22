@@ -611,8 +611,12 @@ export function setupProfileRealtime(userId: string) {
     )
     .subscribe()
 
-  // Also subscribe to user_credit table for credit score updates
-  creditChannel = supabase
+// Debounce ref to prevent excessive profile refreshes
+let creditDebounceRef = 0
+const CREDIT_DEBOUNCE_MS = 10000 // 10 seconds minimum between credit-triggered refreshes
+
+// Also subscribe to user_credit table for credit score updates
+creditChannel = supabase
     .channel(`credit-${userId}`)
     .on(
       'postgres_changes',
@@ -625,12 +629,17 @@ export function setupProfileRealtime(userId: string) {
       (payload) => {
         console.log('[CreditRealtime] user_credit updated:', payload)
         // When user_credit is updated, also refresh the profile to get the latest credit_score
-        const currentProfile = useAuthStore.getState().profile
-        if (currentProfile && currentProfile.id === userId) {
-          console.log('[CreditRealtime] Refreshing profile to sync credit_score')
-          // Force refresh to get latest credit_score from user_profiles
-          lastRefreshProfileTime = 0
-          useAuthStore.getState().refreshProfile(true)
+        const now = Date.now()
+        // Debounce: only refresh once per 10 seconds to prevent flickering
+        if (now - creditDebounceRef > CREDIT_DEBOUNCE_MS) {
+          creditDebounceRef = now
+          const currentProfile = useAuthStore.getState().profile
+          if (currentProfile && currentProfile.id === userId) {
+            console.log('[CreditRealtime] Refreshing profile to sync credit_score')
+            // Force refresh to get latest credit_score from user_profiles
+            lastRefreshProfileTime = 0
+            useAuthStore.getState().refreshProfile(true)
+          }
         }
       }
     )

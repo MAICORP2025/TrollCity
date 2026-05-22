@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import {
@@ -122,11 +122,27 @@ export default function PublicLandingPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
+  // Track if we've already navigated to prevent multiple redirects
+  const hasNavigatedRef = useRef(false)
+
   useEffect(() => {
-    if (user) {
+    if (user && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true
       navigate('/home', { replace: true })
     }
   }, [user, navigate])
+
+  // Show loading state while redirecting (prevents flash)
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#02040b] text-white">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">Loading Troll City...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#02040b] text-white">
@@ -158,6 +174,29 @@ export default function PublicLandingPage() {
                 Go live. Build your community. Earn gifts. Explore a city-style social experience
                 where entertainment, opportunity, and live interaction all connect.
               </p>
+              
+              {/* Get Started Button with glowing red/green effect */}
+              <div className="mt-6">
+                <button
+                  onClick={() => navigate('/auth')}
+                  className="relative px-10 py-4 rounded-2xl font-black text-lg uppercase tracking-wide text-white overflow-hidden group transition-all duration-300 hover:scale-105"
+                >
+                  <span className="absolute inset-0 bg-gradient-to-r from-red-600 via-pink-600 to-green-600" />
+                  <span className="absolute inset-0 bg-gradient-to-r from-green-600 via-emerald-500 to-red-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <span className="absolute inset-0 rounded-2xl shadow-[0_0_30px_rgba(239,68,68,0.5)] group-hover:shadow-[0_0_40px_rgba(239,68,68,0.7),0_0_40px_rgba(34,197,94,0.7)] transition-shadow" />
+                  <span className="absolute inset-0 rounded-2xl animate-pulse-glow" />
+                  <span className="relative">Get Started Here</span>
+                </button>
+                <style>{`
+                  @keyframes pulse-glow {
+                    0%, 100% { box-shadow: 0 0 20px rgba(239,68,68,0.5), 0 0 30px rgba(34,197,94,0.4); }
+                    50% { box-shadow: 0 0 30px rgba(239,68,68,0.8), 0 0 40px rgba(34,197,94,0.6); }
+                  }
+                  .animate-pulse-glow {
+                    animation: pulse-glow 2s ease-in-out infinite;
+                  }
+                `}</style>
+              </div>
             </div>
 
             <div className="relative min-h-[380px] overflow-hidden rounded-[2rem] border border-purple-400/25 bg-[#050816]/80 p-6 shadow-[0_0_45px_rgba(168,85,247,0.22)]">
