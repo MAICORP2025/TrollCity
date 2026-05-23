@@ -314,6 +314,12 @@ function ViewerPage() {
   const location = useLocation()
   const { isMobileWidth, hasMounted } = useIsMobile()
   const isMobileViewer = hasMounted && isMobileWidth
+  
+  // Mobile layout constants
+  const MOBILE_CONTROL_BAR_HEIGHT = 76
+  const MOBILE_CHAT_INPUT_HEIGHT = 68
+  const MOBILE_SAFE_BOTTOM = 'env(safe-area-inset-bottom)'
+  const CHAT_FLOAT_MS = isMobileViewer ? 10000 : 20000
 
   const [stream, setStream] = useState<Stream | null>(null)
   const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
@@ -1186,9 +1192,9 @@ useStreamRealtime(
          const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
          setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
 
-         setTimeout(() => {
-           setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
-         }, 20_000)
+          setTimeout(() => {
+            setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+          }, CHAT_FLOAT_MS)
        })
        .subscribe()
 
@@ -1342,23 +1348,31 @@ useStreamRealtime(
               streamStartedAt={(stream as any).started_at} />
           )}
 
-          <main
-            className={cn(
-              'relative z-10 flex flex-1 min-h-0',
-              isMobileViewer
-                ? 'flex-col overflow-hidden px-0 py-0'
-                : 'grid gap-4 px-5 py-4'
-            )}
-            style={!isMobileViewer ? { gridTemplateColumns: 'minmax(430px, 1.2fr) 360px' } : undefined}
-          >
+<main
+  className={cn(
+    'relative z-10 flex flex-1 min-h-0',
+    isMobileViewer
+      ? 'flex-col overflow-hidden px-0 pt-0'
+      : 'grid gap-4 px-5 py-4'
+  )}
+  style={
+    !isMobileViewer
+      ? { gridTemplateColumns: 'minmax(430px, 1.2fr) 360px' }
+      : {
+          paddingBottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT}px + ${MOBILE_SAFE_BOTTOM})`,
+        }
+  }
+>
             {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
-            <section
-              className={cn(
-                'relative min-h-0 overflow-hidden',
-                theme.hostVideoPanel,
-                isMobileViewer ? 'h-full flex-1 rounded-none border-0' : ''
-              )}
-            >
+<section
+  className={cn(
+    'relative min-h-0 overflow-hidden',
+    theme.hostVideoPanel,
+    isMobileViewer
+      ? 'h-[calc(100dvh-150px-env(safe-area-inset-bottom))] max-h-[calc(100dvh-150px-env(safe-area-inset-bottom))] flex-none rounded-none border-0'
+      : ''
+  )}
+>
               <RemoteVideoSurface
                 participant={hostParticipant}
                 mirror={false}
@@ -1456,24 +1470,30 @@ useStreamRealtime(
 
             {/* ── Mobile floating messages: fixed overlay at top, floats upward ── */}
 {isMobileViewer && (
-               <div className="pointer-events-none absolute inset-x-3 top-12 z-20 flex max-h-[28vh] flex-col gap-2 overflow-hidden">
-                 <AnimatePresence initial={false}>
-                   {floatingMessages.slice(0, 6).map((message) => (
-                     <motion.div
-                       key={message.id}
-                       initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                       exit={{ opacity: 0, y: -60, scale: 0.9 }}
-                       transition={{ duration: 0.5, ease: 'easeOut' }}
-                       className="max-w-[82%] rounded-2xl border border-cyan-300/20 bg-black/55 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
-                     >
-                      <span className="font-black text-cyan-200">{message.username}:</span>{' '}
-                      <span className="text-white/90">{message.content}</span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
+  <div
+    className="pointer-events-none absolute inset-x-3 z-30 flex flex-col-reverse gap-2 overflow-hidden"
+    style={{
+      bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT + 12}px + env(safe-area-inset-bottom))`,
+      maxHeight: '34vh',
+    }}
+  >
+    <AnimatePresence initial={false}>
+      {floatingMessages.slice(0, 4).map((message) => (
+        <motion.div
+          key={message.id}
+          initial={{ opacity: 0, y: 28, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -90, scale: 0.94 }}
+          transition={{ duration: 0.65, ease: 'easeOut' }}
+          className="max-w-[84%] rounded-2xl border border-cyan-300/20 bg-black/60 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
+        >
+          <span className="font-black text-cyan-200">{message.username}:</span>{' '}
+          <span className="text-white/90">{message.content}</span>
+        </motion.div>
+      ))}
+    </AnimatePresence>
+  </div>
+)}
           </section>
 
           {/* ── RIGHT: Desktop Chat Panel — same flow layout style as BroadcastPage ── */}
@@ -1562,7 +1582,7 @@ useStreamRealtime(
 
                         window.setTimeout(() => {
                           setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
-                        }, 20000)
+                        }, CHAT_FLOAT_MS)
 
                         try {
                           const { data: { session } } = await supabase.auth.getSession()
@@ -1736,7 +1756,20 @@ useStreamRealtime(
 
         {/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
 
-        <div className={cn('relative z-20 shrink-0 border-t border-white/10 px-4 py-3', theme.bottomBar)}>
+        <div
+  className={cn(
+    'relative z-20 shrink-0 border-t border-white/10 px-4 py-3',
+    theme.bottomBar,
+    isMobileViewer && 'absolute inset-x-0'
+  )}
+  style={
+    isMobileViewer
+      ? {
+          bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
+        }
+      : undefined
+  }
+>
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_100%,rgba(168,85,247,0.12),transparent)]" />
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
             <div className="hidden items-center gap-5 text-sm font-semibold text-slate-400 md:flex">
