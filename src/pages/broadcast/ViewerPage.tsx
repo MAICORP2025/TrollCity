@@ -1323,15 +1323,13 @@ useStreamRealtime(
           {!isMobileViewer && (
             <BroadcastNeonHeader
               stream={stream}
-              broadcasterProfile={
-                broadcasterProfile
-                  ? {
-                      username: broadcasterProfile.username,
-                      avatar_url: broadcasterProfile.avatar_url,
-                      display_name: broadcasterProfile.display_name,
-                    }
-                  : null
-              }
+              broadcasterProfile={broadcasterProfile
+                ? {
+                  username: broadcasterProfile.username,
+                  avatar_url: broadcasterProfile.avatar_url,
+                  display_name: broadcasterProfile.display_name,
+                }
+                : null}
               isHost={false}
               liveViewerCount={viewerCount}
               handleLike={handleLike}
@@ -1341,43 +1339,47 @@ useStreamRealtime(
               coinBalance={(profile as any)?.troll_coins ?? 0}
               onOpenCoinStore={() => toast.info('Coin Store opens from the viewer action bar.')}
               isLive={isActive}
-              streamStartedAt={(stream as any).started_at}
-            />
+              streamStartedAt={(stream as any).started_at} />
           )}
 
-            <main
+          <main
+            className={cn(
+              'relative z-10 flex flex-1 min-h-0',
+              isMobileViewer
+                ? 'flex-col overflow-hidden px-0 py-0'
+                : 'grid gap-4 px-5 py-4'
+            )}
+            style={!isMobileViewer ? { gridTemplateColumns: 'minmax(430px, 1.2fr) 360px' } : undefined}
+          >
+            {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
+            <section
               className={cn(
-                'relative z-10 flex flex-1 min-h-0 flex-col',
-                isMobileViewer ? 'overflow-y-auto pb-28' : '',
+                'relative min-h-0 overflow-hidden',
+                theme.hostVideoPanel,
+                isMobileViewer ? 'h-full flex-1 rounded-none border-0' : ''
               )}
             >
-            <section className={cn('relative min-h-0 overflow-hidden', isMobileViewer ? 'min-h-[600px]' : 'min-h-[520px]', theme.hostVideoPanel)}>
-
-                <RemoteVideoSurface
-                  participant={hostParticipant}
-                  mirror={false}
-                  className="absolute inset-0"
-                  onTap={handleLike}
-                fallback={
-                  <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
-                    <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
-                      {broadcasterProfile?.avatar_url ? (
-                        <img
-                          src={broadcasterProfile.avatar_url}
-                          alt={hostName}
-                          className="mx-auto h-24 w-24 rounded-full border-2 border-cyan-300/60 object-cover shadow-[0_0_28px_rgba(34,211,238,0.45)]"
-                        />
-                      ) : (
-                        <Video className="mx-auto h-12 w-12 text-cyan-200/70" />
-                      )}
-                      <div className="mt-4 text-lg font-black">{hostName}</div>
-                      <div className="mt-2 text-sm text-slate-300">
-                        {isActive ? 'Camera starting…' : 'Waiting for broadcast…'}
-                      </div>
+              <RemoteVideoSurface
+                participant={hostParticipant}
+                mirror={false}
+                className="absolute inset-0"
+                onTap={handleLike}
+                fallback={<div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
+                  <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
+                    {broadcasterProfile?.avatar_url ? (
+                      <img
+                        src={broadcasterProfile.avatar_url}
+                        alt={hostName}
+                        className="mx-auto h-24 w-24 rounded-full border-2 border-cyan-300/60 object-cover shadow-[0_0_28px_rgba(34,211,238,0.45)]" />
+                    ) : (
+                      <Video className="mx-auto h-12 w-12 text-cyan-200/70" />
+                    )}
+                    <div className="mt-4 text-lg font-black">{hostName}</div>
+                    <div className="mt-2 text-sm text-slate-300">
+                      {isActive ? 'Camera starting…' : 'Waiting for broadcast…'}
                     </div>
                   </div>
-                }
-               />
+                </div>} />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/25" />
 
@@ -1386,13 +1388,21 @@ useStreamRealtime(
                 Host
               </div>
 
+              {/* Mobile: Username centered at top between Host and LIVE */}
+              {isMobileViewer && (
+                <div className="absolute top-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+                  <span className="text-xs font-black text-white">{hostName}</span>
+                  {broadcasterProfile?.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-purple-400" />}
+                </div>
+              )}
+
               <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
                 <span
                   className={cn(
                     'inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-black shadow-inner backdrop-blur-xl',
                     isActive
                       ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300 shadow-emerald-500/10'
-                      : 'border-yellow-400/30 bg-yellow-500/15 text-yellow-200 shadow-yellow-500/10',
+                      : 'border-yellow-400/30 bg-yellow-500/15 text-yellow-200 shadow-yellow-500/10'
                   )}
                 >
                   <span className="h-2 w-2 rounded-full bg-current shadow-[0_0_10px_currentColor]" />
@@ -1400,144 +1410,81 @@ useStreamRealtime(
                 </span>
               </div>
 
-              {viewerError && (
-                <div className="absolute inset-x-4 top-16 z-30 rounded-2xl border border-red-400/35 bg-gradient-to-r from-red-950/90 to-red-900/80 px-4 py-3 text-sm font-bold text-red-100 shadow-[0_0_30px_rgba(239,68,68,0.25)] backdrop-blur-2xl">
-                  {viewerError}
-                </div>
-              )}
+{viewerError && (
+                  <div className="absolute inset-x-4 top-16 z-30 rounded-2xl border border-red-400/35 bg-gradient-to-r from-red-950/90 to-red-900/80 px-4 py-3 text-sm font-bold text-red-100 shadow-[0_0_30px_rgba(239,68,68,0.25)] backdrop-blur-2xl">
+                    {viewerError}
+                  </div>
+                )}
 
-              <div className="absolute bottom-28 left-6 z-20 flex items-center gap-2">
+               {/* Desktop only: Broadcaster box with avatar and name at bottom */}
+              {!isMobileViewer && (
+               <div className={cn('absolute left-6 z-20 flex items-center gap-1.5', isMobileViewer ? 'bottom-36' : 'bottom-24')}>
                 {broadcasterProfile?.avatar_url ? (
                   <img
                     src={broadcasterProfile.avatar_url}
                     alt={hostName}
-                    className="h-9 w-9 rounded-md border border-white/20 object-cover shadow-[0_0_18px_rgba(45,212,191,0.28)]"
-                  />
+                    className={cn('border border-white/20 object-cover shadow-[0_0_18px_rgba(45,212,191,0.28)]', isMobileViewer ? 'h-6 w-6 rounded-md' : 'h-9 w-9 rounded-md')} />
                 ) : (
-                  <div className="grid h-9 w-9 place-items-center rounded-md border border-white/20 bg-white/10">
-                    <Crown className="h-5 w-5 text-cyan-200" />
+                  <div className={cn('place-items-center border border-white/20 bg-white/10', isMobileViewer ? 'grid h-6 w-6 rounded-md' : 'grid h-9 w-9 rounded-md')}>
+                    <Crown className={cn('text-cyan-200', isMobileViewer ? 'h-3.5 w-3.5' : 'h-5 w-5')} />
                   </div>
                 )}
-                <span className="text-base font-black text-white">{hostName}</span>
-                {broadcasterProfile?.is_verified && <BadgeCheck className="h-5 w-5 text-purple-400" />}
+                <span className={cn('font-black text-white', isMobileViewer ? 'text-xs' : 'text-base')}>{hostName}</span>
+                {broadcasterProfile?.is_verified && <BadgeCheck className={cn('text-purple-400', isMobileViewer ? 'h-3.5 w-3.5' : 'h-5 w-5')} />}
               </div>
+            )}
 
-<div className="absolute bottom-6 left-6 z-20 flex flex-wrap items-center gap-2">
-{!isMobileViewer && (
-  <>
-    <button
-      onClick={() => onGift(hostId)}
-      className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.purpleButton)}
-    >
-      <Gift className="h-4 w-4" />
-      Gift
-    </button>
-    <button
-      onClick={handleShare}
-      className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
-    >
-      <Share2 className="h-4 w-4" />
-      Share
-    </button>
-  </>
-)}
-               </div>
-             </section>
-           </main>
+            {/* Desktop Gift/Share buttons */}
+            {!isMobileViewer && (
+              <div className="absolute bottom-6 left-6 z-20 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => onGift(hostId)}
+                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.purpleButton)}
+                >
+                  <Gift className="h-4 w-4" />
+                  Gift
+                </button>
+                <button
+                  onClick={handleShare}
+                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share
+                </button>
+              </div>
+            )}
 
-{/* ── MOBILE FLOATING CHAT OVERLAY ───────────────────────────────────── */}
+            {/* ── Mobile floating messages: fixed overlay at top, floats upward ── */}
 {isMobileViewer && (
-  <div className="pointer-events-none absolute inset-x-3 bottom-20 z-30 flex flex-col-reverse gap-2">
-    <AnimatePresence initial={false}>
-      {floatingMessages.slice(-6).map((message) => (
-<motion.div
-  key={message.id}
-  initial={{ opacity: 0, y: 20, scale: 0.96 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 2.5, ease: 'easeOut' }}
-  className="max-w-[82%] rounded-2xl border border-cyan-300/20 bg-black/55 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
->
-          <span className="font-black text-cyan-200">
-            {message.username}:
-          </span>{' '}
-          <span className="text-white/90">{message.content}</span>
-        </motion.div>
-      ))}
-    </AnimatePresence>
-  </div>
-)}
+               <div className="pointer-events-none absolute inset-x-3 top-12 z-20 flex max-h-[28vh] flex-col gap-2 overflow-hidden">
+                 <AnimatePresence initial={false}>
+                   {floatingMessages.slice(0, 6).map((message) => (
+                     <motion.div
+                       key={message.id}
+                       initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                       animate={{ opacity: 1, y: 0, scale: 1 }}
+                       exit={{ opacity: 0, y: -60, scale: 0.9 }}
+                       transition={{ duration: 0.5, ease: 'easeOut' }}
+                       className="max-w-[82%] rounded-2xl border border-cyan-300/20 bg-black/55 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
+                     >
+                      <span className="font-black text-cyan-200">{message.username}:</span>{' '}
+                      <span className="text-white/90">{message.content}</span>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+          </section>
 
-
-
-{/* ── MOBILE CHAT INPUT AT BOTTOM ─────────────────────────────────────── */}
-{isMobileViewer && (
-  <div className="relative z-20 mx-4 mb-4 mt-2">
-    <form
-      onSubmit={async (e) => {
-        e.preventDefault()
-        const text = chatInput.trim()
-        if (!text || !user) return
-
-        const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
-        const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-
-        setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
-        setChatInput('')
-
-        setTimeout(() => {
-          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
-        }, 60_000)
-
-        try {
-          const { data: { session } } = await supabase.auth.getSession()
-          if (session) {
-            await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                type: 'chat',
-                stream_id: streamId,
-                data: { content: text },
-              }),
-            })
-          }
-          const chatChannel = supabase.channel(`floating-chat:${streamId}`)
-          chatChannel.send({
-            type: 'broadcast',
-            event: 'floating_chat',
-            payload: { username, content: text },
-          }).catch(() => {})
-        } catch { /* silent */ }
-      }}
-      className="flex gap-2"
-    >
-      <input
-        type="text"
-        value={chatInput}
-        onChange={(e) => setChatInput(e.target.value)}
-        placeholder="Say something…"
-        className="flex-1 h-11 rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-        maxLength={280}
-      />
-      <button
-        type="submit"
-        disabled={!chatInput.trim()}
-        className={cn('inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-black', chatInput.trim() ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30' : 'bg-white/5 text-white/30 border border-white/10')}
-      >
-        Send
-      </button>
-    </form>
-  </div>
-)}
-
-          {/* ── FLOATING CHAT PANEL ─────────────────────────────────────────── */}
-          <div className="hidden lg:block absolute bottom-28 left-6 w-[340px] max-h-[70vh] z-20 flex flex-col pointer-events-auto">
-            <aside className={cn(theme.chatPanel, "flex flex-col h-full min-h-0 overflow-hidden")}>
-              {/* ── Chat tab bar ── */}
-              <div className="grid grid-cols-3 border-b border-white/10">
+          {/* ── RIGHT: Desktop Chat Panel — same flow layout style as BroadcastPage ── */}
+          {!isMobileViewer && (
+            <aside
+              className={cn(
+                theme.chatPanel,
+                'flex h-full min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
+              )}
+            >
+              <div className="grid shrink-0 grid-cols-3 border-b border-white/10 bg-black/10">
                 {['Chat', 'Gifts', 'Top Fans'].map((tab) => {
                   const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'gifts' | 'top-fans'
                   const active = chatTab === tabKey
@@ -1548,7 +1495,7 @@ useStreamRealtime(
                       onClick={() => setChatTab(tabKey)}
                       className={cn(
                         'relative h-16 text-sm font-black transition-colors',
-                        active ? 'text-white' : 'text-white/60 hover:text-white/80',
+                        active ? 'text-white' : 'text-white/60 hover:text-white/80'
                       )}
                       data-active={active}
                     >
@@ -1561,48 +1508,46 @@ useStreamRealtime(
                 })}
               </div>
 
-              {/* ── Tab content ── */}
-              <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {chatTab === 'chat' ? (
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
-                      {/* Floating messages area—newest on top, scrolls to top on update */}
-                      <div
-                        ref={floatingChatContainerRef}
-                        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide overscroll-contain"
-                      >
-                       {floatingMessages.length === 0 && (
-                         <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
-                           No messages yet – say something!
-                         </div>
-                       )}
-                       <AnimatePresence initial={false}>
-                       {floatingMessages.map((msg) => (
-                         <motion.div
-                           key={msg.id}
-                           initial={{ opacity: 0, y: 20, scale: 0.96 }}
-                           animate={{ opacity: 1, y: 0, scale: 1 }}
-                           exit={{ opacity: 0, y: -90 }}
-                           transition={{ duration: 2.5, ease: 'easeOut' }}
-                           onAnimationComplete={() => {
-                             setFloatingMessages(prev => prev.filter(m => m.id !== msg.id))
-                           }}
-                           className="text-sm leading-relaxed break-words"
-                         >
-                           <button
-                             onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                             className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
-                             title={`View ${msg.username}'s profile`}
-                           >
-                             {msg.username}
-                           </button>
-                           <span className="text-white/40 mx-1">:</span>
-                           <span className="text-white/90">{msg.content}</span>
-                         </motion.div>
-                       ))}
-                       </AnimatePresence>
-                     </div>
+                    <div
+                      ref={floatingChatContainerRef}
+                      className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2 scrollbar-hide"
+                    >
+                      {floatingMessages.length === 0 ? (
+                        <div className="flex h-full items-center justify-center text-sm font-bold text-white/25">
+                          No messages yet – say something!
+                        </div>
+                      ) : (
+<div className="flex min-h-full flex-col gap-1.5">
+                           <AnimatePresence initial={false}>
+                             {floatingMessages.map((msg) => (
+                               <motion.div
+                                 key={msg.id}
+                                 initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                                 animate={{ opacity: 1, y: 0, scale: 1 }}
+                                 exit={{ opacity: 0, y: -40, scale: 0.96 }}
+                                 transition={{ duration: 0.4, ease: 'easeOut' }}
+                                 className="text-sm leading-relaxed break-words"
+                               >
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                                  className="cursor-pointer font-black text-cyan-300 transition-colors hover:text-cyan-100"
+                                  title={`View ${msg.username}'s profile`}
+                                >
+                                  {msg.username}
+                                </button>
+                                <span className="mx-1 text-white/40">:</span>
+                                <span className="text-white/90">{msg.content}</span>
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Live-chat input form */}
                     <form
                       onSubmit={async (e) => {
                         e.preventDefault()
@@ -1612,13 +1557,12 @@ useStreamRealtime(
                         const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
                         const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-                        setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
+                        setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))
                         setChatInput('')
 
-                        // Auto-remove after 60 seconds
-         setTimeout(() => {
-           setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
-         }, 20_000)
+                        window.setTimeout(() => {
+                          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                        }, 20000)
 
                         try {
                           const { data: { session } } = await supabase.auth.getSession()
@@ -1641,23 +1585,24 @@ useStreamRealtime(
                             type: 'broadcast',
                             event: 'floating_chat',
                             payload: { username, content: text },
-                          }).catch(() => {})
-                        } catch { /* silent */ }
-                      }}
-                      className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
+                          }).catch(() => { })
+                        } catch {
+                          // keep local optimistic message visible
+                        }
+                      } }
+                      className="shrink-0 border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
                     >
                       <input
                         type="text"
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         placeholder="Say something…"
-                        className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-                        maxLength={280}
-                      />
+                        className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                        maxLength={280} />
                     </form>
                   </div>
                 ) : chatTab === 'gifts' ? (
-                  <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-slate-200 scrollbar-hide">
                     <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>
                     {recentGifts.length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
@@ -1669,15 +1614,15 @@ useStreamRealtime(
                           <div key={gift.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="text-sm font-bold text-white truncate">
-                                  {gift.sender_username || 'Anonymous'}
+                                <div className="truncate text-sm font-bold text-white">
+                                  {gift.sender_name || (gift as any).sender_username || 'Anonymous'}
                                 </div>
-                                <div className="text-xs text-slate-400 truncate">
+                                <div className="truncate text-xs text-slate-400">
                                   Sent {gift.quantity || 1} {gift.gift_name || 'gift'}
                                 </div>
                               </div>
-                              <div className="text-xs font-semibold text-cyan-300">
-                                {gift.coins_amount?.toLocaleString() || gift.amount?.toLocaleString() || '0'} coins
+                              <div className="whitespace-nowrap text-xs font-semibold text-cyan-300">
+                                {Number((gift as any).coins_amount || gift.amount || 0).toLocaleString()} coins
                               </div>
                             </div>
                           </div>
@@ -1686,7 +1631,7 @@ useStreamRealtime(
                     )}
                   </div>
                 ) : (
-                  <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-slate-200 scrollbar-hide">
                     <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Top Fans</div>
                     {isTopFansLoading ? (
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">Loading top fans...</div>
@@ -1696,15 +1641,17 @@ useStreamRealtime(
                       <div className="space-y-3">
                         {topGifters.map((fan) => (
                           <div key={fan.sender_id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="h-10 w-10 shrink-0 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 font-bold text-white">
                                 {fan.sender_username?.charAt(0)?.toUpperCase() || '?'}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-bold text-white">{fan.sender_username || 'Troll Citizen'}</div>
-                                <div className="truncate text-xs text-slate-400">Last gift: {new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+                                <div className="truncate text-xs text-slate-400">
+                                  Last gift: {fan.last_gift_at ? new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
+                                </div>
                               </div>
-                              <div className="text-xs font-semibold text-cyan-300 whitespace-nowrap">{fan.total_gift_coins.toLocaleString()} coins</div>
+                              <div className="whitespace-nowrap text-xs font-semibold text-cyan-300">{fan.total_gift_coins.toLocaleString()} coins</div>
                             </div>
                           </div>
                         ))}
@@ -1714,97 +1661,166 @@ useStreamRealtime(
                 )}
               </div>
             </aside>
+          )}
+        </main>
+
+        {/* ── MOBILE CHAT INPUT AT BOTTOM — fixed overlay, not document flow ── */}
+        {isMobileViewer && (
+          <div className="absolute inset-x-3 bottom-3 z-40 pointer-events-auto">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                const text = chatInput.trim()
+                if (!text || !user) return
+
+                const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+                setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))
+                setChatInput('')
+
+                window.setTimeout(() => {
+                  setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                }, 20000)
+
+                try {
+                  const { data: { session } } = await supabase.auth.getSession()
+                  if (session) {
+                    await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+                      method: 'POST',
+                      headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        type: 'chat',
+                        stream_id: streamId,
+                        data: { content: text },
+                      }),
+                    })
+                  }
+                  const chatChannel = supabase.channel(`floating-chat:${streamId}`)
+                  chatChannel.send({
+                    type: 'broadcast',
+                    event: 'floating_chat',
+                    payload: { username, content: text },
+                  }).catch(() => { })
+                } catch {
+                  // keep local optimistic message visible
+                }
+              } }
+              className="flex gap-2 rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_0_24px_rgba(34,211,238,0.16)] backdrop-blur-xl"
+            >
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Say something…"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                maxLength={280} />
+              <button
+                type="submit"
+                disabled={!chatInput.trim()}
+                className={cn(
+                  'inline-flex h-11 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-black',
+                  chatInput.trim()
+                    ? 'border border-cyan-400/30 bg-cyan-500/20 text-cyan-300'
+                    : 'border border-white/10 bg-white/5 text-white/30'
+                )}
+              >
+                Send
+              </button>
+            </form>
           </div>
+        )}
 
-          {/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
+        {/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
 
-          <div className={cn('relative z-20 shrink-0 border-t border-white/10 px-4 py-3', theme.bottomBar)}>
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_100%,rgba(168,85,247,0.12),transparent)]" />
-            <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-              <div className="hidden items-center gap-5 text-sm font-semibold text-slate-400 md:flex">
-                <span className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-purple-400" />
-                  Viewer mode
-                </span>
-                <span className="text-white/15">•</span>
-                <span>{viewerCount.toLocaleString()} watching</span>
-                <span className="text-white/15">•</span>
-                <span className="font-bold text-emerald-400">{Number(hypeCoins || 0).toLocaleString()} Hype Coins</span>
-              </div>
-
-              <div className="flex w-full items-center justify-end gap-2 md:w-auto">
-                <button
-                  onClick={handleLike}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.pinkButton)}
-                >
-                  <Heart className="h-4 w-4" />
-                  Like
-                </button>
-                <button
-                  onClick={() => onGift(hostId)}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.purpleButton)}
-                >
-                  <Gift className="h-4 w-4" />
-                  Gift
-                </button>
-                <button
-                  onClick={handleShare}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.cyanButton)}
-                >
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </button>
-                <button
-                  onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.danger)}
-                >
-                  <LogOut className="h-4 w-4" />
-                  {isUserOnStage ? 'Leave Stage' : 'Leave'}
-                </button>
-              </div>
+        <div className={cn('relative z-20 shrink-0 border-t border-white/10 px-4 py-3', theme.bottomBar)}>
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_100%,rgba(168,85,247,0.12),transparent)]" />
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <div className="hidden items-center gap-5 text-sm font-semibold text-slate-400 md:flex">
+              <span className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-400" />
+                Viewer mode
+              </span>
+              <span className="text-white/15">•</span>
+              <span>{viewerCount.toLocaleString()} watching</span>
+              <span className="text-white/15">•</span>
+              <span className="font-bold text-emerald-400">{Number(hypeCoins || 0).toLocaleString()} Hype Coins</span>
             </div>
-          </div>
 
-          <div className="pointer-events-none absolute inset-0 z-30">
-            <div className="pointer-events-auto">
-              <GiftBoxModal
-                isOpen={isGiftModalOpen}
-                onClose={() => {
-                  setIsGiftModalOpen(false)
-                  setGiftRecipientId(null)
-                }}
-                recipientId={giftRecipientId || hostId}
-                streamId={streamId}
-                broadcasterId={hostId}
-                activeUserIds={activeUserIds}
-                userProfiles={userProfiles}
-              />
-
-              {userActionTarget && (
-                <UserActionModal
-                  onClose={() => setUserActionTarget(null)}
-                  userId={userActionTarget.userId}
-                  streamId={streamId || ''}
-                  username={userActionTarget.username}
-                  role={userActionTarget.role}
-                  createdAt={userActionTarget.createdAt}
-                  isHost={false}
-                  isModerator={false}
-                  isOfficer={isOfficer}
-                  onGift={() => onGift(userActionTarget.userId)}
-                />
-              )}
+            <div className="flex w-full items-center justify-end gap-2 md:w-auto">
+              <button
+                onClick={handleLike}
+                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.pinkButton)}
+              >
+                <Heart className="h-4 w-4" />
+                Like
+              </button>
+              <button
+                onClick={() => onGift(hostId)}
+                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.purpleButton)}
+              >
+                <Gift className="h-4 w-4" />
+                Gift
+              </button>
+              <button
+                onClick={handleShare}
+                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.cyanButton)}
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </button>
+              <button
+                onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
+                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.danger)}
+              >
+                <LogOut className="h-4 w-4" />
+                {isUserOnStage ? 'Leave Stage' : 'Leave'}
+              </button>
             </div>
           </div>
         </div>
-      </ErrorBoundary>
 
-      <HypeCoinPopup
-        isVisible={showHypeCoinPopup}
-        onDismiss={() => setShowHypeCoinPopup(false)}
-      />
-    </GiftSystemProvider>
-  )
+        <div className="pointer-events-none absolute inset-0 z-30">
+          <div className="pointer-events-auto">
+            <GiftBoxModal
+              isOpen={isGiftModalOpen}
+              onClose={() => {
+                setIsGiftModalOpen(false)
+                setGiftRecipientId(null)
+              } }
+              recipientId={giftRecipientId || hostId}
+              streamId={streamId}
+              broadcasterId={hostId}
+              activeUserIds={activeUserIds}
+              userProfiles={userProfiles} />
+
+{userActionTarget && (
+              <UserActionModal
+                onClose={() => setUserActionTarget(null)}
+                userId={userActionTarget.userId}
+                streamId={streamId || ''}
+                username={userActionTarget.username}
+                role={userActionTarget.role}
+                createdAt={userActionTarget.createdAt}
+                isHost={false}
+                isModerator={false}
+                isOfficer={isOfficer}
+                onGift={() => onGift(userActionTarget.userId)}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </ErrorBoundary>
+    <HypeCoinPopup
+      isVisible={showHypeCoinPopup}
+      onDismiss={() => setShowHypeCoinPopup(false)}
+    />
+  </GiftSystemProvider>
+)
 }
 
 export default ViewerPage

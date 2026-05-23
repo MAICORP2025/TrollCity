@@ -114,20 +114,20 @@ BEGIN
     AND user_id IS NOT NULL
   ON CONFLICT (battle_id, user_id) DO NOTHING;
 
-  INSERT INTO public.battle_participants (battle_id, user_id, team, role, source_stream_id, seat_index)
-  SELECT v_battle_id, user_id, 'opponent', 'stage', v_opponent.id, seat_index
-  FROM public.stream_seat_sessions
-  WHERE stream_id = v_opponent.id
-    AND status = 'active'
-    AND user_id IS NOT NULL
-  ON CONFLICT (battle_id, user_id) DO NOTHING;
+   INSERT INTO public.battle_participants (battle_id, user_id, team, role, source_stream_id, seat_index)
+   SELECT v_battle_id, user_id, 'opponent', 'stage', v_opponent.id, seat_index
+   FROM public.stream_seat_sessions
+   WHERE stream_id = v_opponent.id
+     AND status = 'active'
+     AND user_id IS NOT NULL
+   ON CONFLICT (battle_id, user_id) DO NOTHING;
 
-  UPDATE public.streams
-  SET random_battle_queue_enabled = false,
-      random_battle_queued_at = null,
-      battle_mode = 'random_queue',
-      battle_status = 'starting',
-      is_battle = true,
+   UPDATE public.streams
+   SET random_battle_queue_enabled = false,
+       random_battle_queued_at = null,
+       battle_mode = 'random_queue',
+       battle_status = 'starting',
+       is_battle = true,
       battle_id = v_battle_id,
       battle_start_time = v_started_at,
       battle_end_time = v_ends_at,

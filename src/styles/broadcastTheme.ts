@@ -41,6 +41,9 @@ export const trollCityBroadcastTheme = {
   // Chat/gifts/top-fans sidebar panel
   chatPanel: 'rounded-[22px] border border-white/10 bg-white/[0.035] shadow-[0_0_25px_rgba(0,0,0,0.35)] backdrop-blur-2xl',
 
+  // Floating chat overlay - for mobile, positioned above broadcaster video (like TikTok)
+  floatingChatOverlay: 'absolute inset-x-3 top-4 z-50 max-h-[40%] min-h-[120px] overflow-hidden pointer-events-none',
+
   // Bottom bar / footer strip
   bottomBar: 'rounded-xl border border-white/8 bg-white/[0.03] backdrop-blur-2xl',
   footerStrip: 'shrink-0 mx-5 mb-3 flex h-12 items-center gap-5 rounded-xl border border-white/8 bg-white/[0.03] backdrop-blur-2xl px-5 text-sm font-semibold text-slate-400',

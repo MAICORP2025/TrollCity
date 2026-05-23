@@ -92,23 +92,29 @@ export function useRandomBattleQueueController({
       if (error) throw error;
 
       if (data?.matched) {
+        clearActivationTimer();
         onStreamUpdate?.({
           is_battle: true,
           battle_id: data.battle_id,
           battle_mode: 'random_queue' as any,
-          battle_status: 'starting' as any,
+          battle_status: 'active' as any,
           random_battle_queue_enabled: false,
+          random_battle_queued_at: null,
+          random_battle_cooldown_until: null,
           battle_start_time: data.battle_started_at,
           battle_end_time: data.battle_ends_at,
+          battle_end_reason: null,
+          battle_winner_id: null,
+          battle_forfeited_by: null,
         } as Partial<Stream>);
-        toast.success('Battle starts soon...');
+        toast.success('Battle activated');
       }
     } catch (err: any) {
       console.error('[RandomBattleQueue] Matchmaking failed:', err);
     } finally {
       matchingRef.current = false;
     }
-  }, [canUseRandomBattles, isBattleActive, isQueueEnabled, onStreamUpdate, stream?.id, stream?.status, userId]);
+  }, [canUseRandomBattles, clearActivationTimer, isBattleActive, isQueueEnabled, onStreamUpdate, stream?.id, stream?.status, userId]);
 
   useEffect(() => {
     clearTimers();

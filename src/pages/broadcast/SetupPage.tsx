@@ -822,8 +822,8 @@ export default function SetupPage() {
       mediaElement.setAttribute('muted', '');
       mediaElement.setAttribute('playsinline', '');
       mediaElement.autoplay = true;
-      (mediaElement as HTMLVideoElement).muted = true;
-      (mediaElement as HTMLVideoElement).playsInline = true;
+      mediaElement.muted = true;
+      mediaElement.playsInline = true;
       mediaElement.style.display = 'block';
       mediaElement.style.backgroundColor = 'black';
       mediaElement.style.width = '100%';
@@ -2602,3 +2602,4 @@ export default function SetupPage() {
     </div>
   );
 }
+
