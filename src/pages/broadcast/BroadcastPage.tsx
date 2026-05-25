@@ -51,8 +51,43 @@ function getRemoteParticipantMetadata(participant: any): any {
   }
 }
 
+function normalizeLiveKitIdentity(value?: string | null) {
+  return String(value || '').trim()
+}
+
 function normalizeIdentityToken(value?: string | null): string {
-  return String(value || '').replace(/^viewer-/, '').trim()
+  return normalizeLiveKitIdentity(value).replace(/^viewer-/, '').trim()
+}
+
+function participantMatchesSeat(
+  participant: any,
+  seatUserId?: string | null,
+  seatIdentity?: string | null,
+) {
+  if (!participant) return false
+
+  const participantIdentity = getRemoteParticipantIdentity(participant)
+  const metadata = getRemoteParticipantMetadata(participant)
+  const userId = normalizeIdentityToken(seatUserId)
+  const identity = normalizeIdentityToken(seatIdentity)
+  const participantToken = normalizeIdentityToken(participantIdentity)
+
+  const candidates = [userId, identity].filter(Boolean)
+
+  return candidates.some((candidate) => {
+    return (
+      participantToken === candidate ||
+      participantToken.startsWith(candidate) ||
+      candidate.startsWith(participantToken) ||
+      participantToken.endsWith(`-${candidate}`) ||
+      participantIdentity === candidate ||
+      participantIdentity.endsWith(`-${candidate}`) ||
+      metadata.user_id === candidate ||
+      metadata.userId === candidate ||
+      participant?.user_id === candidate ||
+      participant?.userId === candidate
+    )
+  })
 }
 
 function remoteParticipantMatchesUser(
@@ -99,6 +134,21 @@ function remoteParticipantMatchesUser(
 function getVideoTrackFromRemoteParticipant(participant: any): RemoteVideoTrack | null {
   if (!participant) return null
 
+  const directCandidates = [
+    participant.videoTrack,
+    participant.cameraTrack,
+    participant.track,
+    participant.video,
+    participant.getTrackPublication?.(Track.Source.Camera)?.track,
+    participant.getTrackPublication?.(Track.Kind.Video)?.track,
+  ]
+
+  for (const candidate of directCandidates) {
+    if (candidate?.attach && (candidate?.kind === Track.Kind.Video || candidate?.mediaStreamTrack?.kind === 'video')) {
+      return candidate as RemoteVideoTrack
+    }
+  }
+
   const publications: RemoteTrackPublication[] = []
   const collectFromMap = (maybeMap: any) => {
     if (!maybeMap) return
@@ -114,14 +164,207 @@ function getVideoTrackFromRemoteParticipant(participant: any): RemoteVideoTrack 
   collectFromMap(participant.tracks)
   collectFromMap(participant.publications)
 
-  const cameraPub =
-    publications.find((pub: any) => pub?.source === Track.Source.Camera && pub?.track?.attach) ||
-    publications.find((pub: any) => pub?.source !== Track.Source.Microphone && pub?.kind === Track.Kind.Video && pub?.track?.attach) ||
-    publications.find((pub: any) => pub?.kind === Track.Kind.Video && pub?.track?.attach) ||
-    publications.find((pub: any) => pub?.track?.kind === Track.Kind.Video && pub?.track?.attach) ||
-    publications.find((pub: any) => pub?.track?.mediaStreamTrack?.kind === 'video' && pub?.track?.attach)
+  for (const pub of publications as any[]) {
+    const track = pub?.track || pub?.videoTrack || pub?.trackPublication?.track || null
+    if (!track?.attach) continue
 
-  return (cameraPub?.track as RemoteVideoTrack) || null
+    const isVideo =
+      pub?.source === Track.Source.Camera ||
+      pub?.kind === Track.Kind.Video ||
+      pub?.track?.kind === Track.Kind.Video ||
+      track?.kind === Track.Kind.Video ||
+      track?.mediaStreamTrack?.kind === 'video'
+
+    if (isVideo) return track as RemoteVideoTrack
+  }
+
+  return null
+}
+
+
+function getAudioTrackFromRemoteParticipant(participant: any): RemoteAudioTrack | null {
+  if (!participant) return null
+
+  const publications: RemoteTrackPublication[] = []
+  const collectFromMap = (maybeMap: any) => {
+    if (!maybeMap) return
+    if (typeof maybeMap.values === 'function') {
+      publications.push(...(Array.from(maybeMap.values()) as RemoteTrackPublication[]))
+      return
+    }
+    if (Array.isArray(maybeMap)) publications.push(...maybeMap)
+  }
+
+  collectFromMap(participant.audioTrackPublications)
+  collectFromMap(participant.trackPublications)
+  collectFromMap(participant.tracks)
+  collectFromMap(participant.publications)
+
+  const audioPub =
+    publications.find((pub: any) => pub?.source === Track.Source.Microphone && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.kind === Track.Kind.Audio && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.track?.kind === Track.Kind.Audio && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.track?.mediaStreamTrack?.kind === 'audio' && pub?.track?.attach)
+
+  return (audioPub?.track as RemoteAudioTrack) || null
+}
+
+function RemoteSeatSurface({
+  participant,
+  fallback,
+  mirror = false,
+}: {
+  participant: RemoteParticipant | null
+  fallback: React.ReactNode
+  mirror?: boolean
+}) {
+  const videoRef = React.useRef<HTMLVideoElement | null>(null)
+  const audioRef = React.useRef<HTMLAudioElement | null>(null)
+
+  // Do NOT memoize these by participant object. LiveKit mutates the same
+  // RemoteParticipant instance when tracks subscribe, so memoization can keep
+  // returning null even after TrackSubscribed fires.
+  const videoTrack = getVideoTrackFromRemoteParticipant(participant)
+  const audioTrack = getAudioTrackFromRemoteParticipant(participant)
+
+  React.useEffect(() => {
+    const videoEl = videoRef.current
+    if (!videoEl || !videoTrack) return
+
+    try {
+      videoTrack.attach(videoEl)
+      videoEl.play().catch(() => {})
+    } catch (err) {
+      console.warn('[BroadcastPage] Failed to attach remote seat video track:', err)
+    }
+
+    return () => {
+      try {
+        videoTrack.detach(videoEl)
+      } catch {
+        // ignore detach errors
+      }
+    }
+  }, [videoTrack])
+
+  React.useEffect(() => {
+    const audioEl = audioRef.current
+    if (!audioEl || !audioTrack) return
+
+    try {
+      audioTrack.attach(audioEl)
+      audioEl.play().catch(() => {})
+    } catch (err) {
+      console.warn('[BroadcastPage] Failed to attach remote seat audio track:', err)
+    }
+
+    return () => {
+      try {
+        audioTrack.detach(audioEl)
+      } catch {
+        // ignore detach errors
+      }
+    }
+  }, [audioTrack])
+
+  if (!videoTrack) {
+    return <>{fallback}</>
+  }
+
+  return (
+    <>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={false}
+        className={cn('absolute inset-0 h-full w-full object-cover', mirror && '-scale-x-100')}
+      />
+      <audio ref={audioRef} autoPlay />
+    </>
+  )
+}
+
+function findSeatRemoteParticipant(
+  participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
+  seatUserId?: string | null,
+  seatIdentity?: string | null,
+): RemoteParticipant | null {
+  if (!participants) return null
+
+  const list = Array.isArray(participants)
+    ? participants
+    : typeof participants.values === 'function'
+      ? Array.from(participants.values())
+      : []
+
+  const exact = list.find((participant: any) => participantMatchesSeat(participant, seatUserId, seatIdentity))
+  if (exact) return exact as RemoteParticipant
+
+  const userToken = normalizeIdentityToken(seatUserId)
+  const identityToken = normalizeIdentityToken(seatIdentity)
+
+  return (list.find((participant: any) => {
+    const participantToken = normalizeIdentityToken(getRemoteParticipantIdentity(participant))
+    return (
+      (userToken && participantToken.includes(userToken)) ||
+      (identityToken && participantToken.includes(identityToken))
+    )
+  }) as RemoteParticipant) || null
+}
+
+function getParticipantLabel(participant: any, fallback = 'Viewer') {
+  if (!participant) return fallback
+
+  const metadata = getRemoteParticipantMetadata(participant)
+  const identity = getRemoteParticipantIdentity(participant)
+
+  return (
+    metadata.display_name ||
+    metadata.displayName ||
+    metadata.username ||
+    participant?.name ||
+    identity?.replace(/^viewer-[^-]+-/, '') ||
+    fallback
+  )
+}
+
+function getParticipantList(
+  participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
+): RemoteParticipant[] {
+  if (!participants) return []
+  if (Array.isArray(participants)) return participants
+  if (typeof participants.values === 'function') return Array.from(participants.values())
+  return []
+}
+
+function getFallbackSeatParticipant(
+  participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
+  seatIndex: number,
+  occupiedSeatIdentities: Array<string | null | undefined>,
+): RemoteParticipant | null {
+  const list = getParticipantList(participants)
+  if (list.length === 0) return null
+
+  const occupiedTokens = occupiedSeatIdentities
+    .map((value) => normalizeIdentityToken(value))
+    .filter(Boolean)
+
+  const unclaimedParticipants = list.filter((participant: any) => {
+    const identity = getRemoteParticipantIdentity(participant)
+    const token = normalizeIdentityToken(identity)
+
+    return !occupiedTokens.some((occupiedToken) => {
+      return (
+        token === occupiedToken ||
+        token.endsWith(`-${occupiedToken}`) ||
+        occupiedToken.endsWith(`-${token}`) ||
+        identity.includes(occupiedToken)
+      )
+    })
+  })
+
+  return (unclaimedParticipants[seatIndex - 1] || unclaimedParticipants[0] || null) as RemoteParticipant | null
 }
 
 function getRemoteSeatVideoTrack(
@@ -357,13 +600,16 @@ export function BroadcastPage() {
         ? Number(stream.seat_prices[seatIndex] ?? stream?.seat_price ?? 0)
         : Number(stream?.seat_price ?? 0)
       const seatStatus = String(seat?.status || '').toLowerCase()
-      const isOccupied = Boolean(seatUserId && ['active', 'camera_starting', 'live'].includes(seatStatus))
+      const seatIdentity = seat?.livekit_participant_identity || seatUserId
+      const isOccupied = Boolean(
+        ['active', 'live', 'reserved', 'camera_starting'].includes(seatStatus) &&
+          (seat?.user_id || seat?.guest_id)
+      )
       const displayName =
         seat?.user_profile?.display_name ||
         seat?.user_profile?.username ||
         'Viewer'
       const avatarUrl = seat?.user_profile?.avatar_url || null
-      const livekitParticipantIdentity = seat?.livekit_participant_identity || null
       return {
         seatIndex,
         seatUserId,
@@ -371,7 +617,8 @@ export function BroadcastPage() {
         isOccupied,
         displayName,
         avatarUrl,
-        livekitParticipantIdentity,
+        seatStatus,
+        seatIdentity,
       }
     })
   }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices])
@@ -467,6 +714,10 @@ export function BroadcastPage() {
   }
 
   const connectRoom = async (room: Room, token: string) => {
+    if (room.state === 'connected') {
+      return
+    }
+
     const livekitUrl = getLiveKitUrl()
     if (!livekitUrl) {
       throw new Error('LiveKit URL not configured')
@@ -668,6 +919,22 @@ export function BroadcastPage() {
       participants: Array.from(remoteParticipants.keys())
     })
   }, [remoteParticipants])
+
+  useEffect(() => {
+    console.log('[BroadcastSeatState]', {
+      streamId,
+      seats,
+      viewerSeatCards,
+    })
+  }, [streamId, seats, viewerSeatCards])
+
+  useEffect(() => {
+    console.log('[BroadcastRemoteParticipants]', {
+      streamId,
+      count: remoteParticipants.size,
+      identities: Array.from(remoteParticipants.values()).map((p: any) => p.identity),
+    })
+  }, [streamId, remoteParticipants])
   
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
@@ -2481,6 +2748,17 @@ useEffect(() => {
       next.set(participant.identity, participant)
       return next
     })
+
+    // LiveKit mutates the participant/publication object in place. Bump the Map again
+    // on the next frame so seat surfaces re-run track resolution after the SDK attaches
+    // the subscribed camera/mic track.
+    window.requestAnimationFrame(() => {
+      setRemoteParticipants(prev => {
+        const next = new Map(prev)
+        next.set(participant.identity, participant)
+        return next
+      })
+    })
   }, [])
 
   const handleLiveKitTrackUnsubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
@@ -2764,6 +3042,25 @@ useEffect(() => {
           attachLiveKitHandlers(room)
         }
 
+        if (roomToUse.state !== 'connected') {
+          await connectRoom(roomToUse, data.token)
+        }
+
+        const existingParticipants = roomToUse.remoteParticipants
+          ? Array.from(roomToUse.remoteParticipants.values()) as RemoteParticipant[]
+          : []
+        setRemoteParticipants(() => {
+          const next = new Map<string, RemoteParticipant>()
+          existingParticipants.forEach((participant) => next.set(participant.identity, participant))
+          return next
+        })
+        if (import.meta.env.DEV) {
+          console.log('[BroadcastPage] Host: synced existing remote participants after connect', {
+            count: existingParticipants.length,
+            identities: existingParticipants.map((participant) => participant.identity),
+          })
+        }
+
         const existingMicPublication =
           roomToUse.localParticipant.getTrackPublication(Track.Source.Microphone) ||
           Array.from(roomToUse.localParticipant.audioTrackPublications.values()).find((pub: any) =>
@@ -2778,7 +3075,62 @@ useEffect(() => {
             pub?.track?.kind === 'video'
           )
 
-        if (preflightTracks?.videoTrack || preflightTracks?.audioTrack) {
+        const hasUsableVideo = Boolean(
+          videoTrackRef.current &&
+          videoTrackRef.current.mediaStreamTrack?.readyState === 'live'
+        )
+        const hasUsableAudio = Boolean(
+          audioTrackRef.current &&
+          audioTrackRef.current.mediaStreamTrack?.readyState === 'live'
+        )
+
+        if (!hasUsableVideo || !hasUsableAudio) {
+          console.log('[BroadcastPage] 🔄 Recreating host tracks after refresh', {
+            hasUsableVideo,
+            hasUsableAudio,
+            currentVideoReadyState: videoTrackRef.current?.mediaStreamTrack?.readyState,
+            currentAudioReadyState: audioTrackRef.current?.mediaStreamTrack?.readyState,
+          })
+
+          if (existingCameraPublication?.track) {
+            try {
+              await roomToUse.localParticipant.unpublishTrack(existingCameraPublication.track)
+              existingCameraPublication.track.stop()
+            } catch (err) {
+              console.warn('[BroadcastPage] Failed to replace stale host camera track', err)
+            }
+          }
+
+          if (existingMicPublication?.track) {
+            try {
+              await roomToUse.localParticipant.unpublishTrack(existingMicPublication.track)
+              existingMicPublication.track.stop()
+            } catch (err) {
+              console.warn('[BroadcastPage] Failed to replace stale host audio track', err)
+            }
+          }
+
+          const freshTracks = await createLocalTracks({
+            audio: true,
+            video: {
+              facingMode: 'user',
+            },
+          })
+
+          if (freshTracks.length > 0) {
+            localTrackCreatedCountRef.current += freshTracks.length
+            freshTracks.forEach((track) => {
+              if (track.kind === 'video') {
+                DEBUG_COUNTERS.hostVideoTrackCreatedCount++
+              } else if (track.kind === 'audio') {
+                DEBUG_COUNTERS.hostAudioTrackCreatedCount++
+              }
+            })
+          }
+
+          activeAudioTrack = freshTracks.find((track) => track.kind === Track.Kind.Audio) as LocalAudioTrack | undefined || null
+          activeVideoTrack = freshTracks.find((track) => track.kind === Track.Kind.Video) as LocalVideoTrack | undefined || null
+        } else if (preflightTracks?.videoTrack || preflightTracks?.audioTrack) {
           // ✅ Use preflight tracks from SetupPage
           console.log('[BroadcastPage] ✅ Using preflight tracks from SetupPage')
           activeAudioTrack = (existingMicPublication?.track as LocalAudioTrack | null) || preflightTracks.audioTrack
@@ -2786,15 +3138,11 @@ useEffect(() => {
         } else {
           // Create new tracks only if no preflight tracks
           console.log('[BroadcastPage] ⚠️ No preflight tracks - creating new tracks')
-          const shouldCreateAudio = !existingMicPublication
-          const shouldCreateVideo = !existingCameraPublication
           const tracks = await createLocalTracks({
-            audio: shouldCreateAudio,
-            video: shouldCreateVideo
-              ? {
-                  resolution: isScreenShareExisting ? VideoPresets.h720.resolution : videoPreset.resolution,
-                }
-              : false,
+            audio: true,
+            video: {
+              resolution: isScreenShareExisting ? VideoPresets.h720.resolution : videoPreset.resolution,
+            },
           })
 
           if (tracks.length > 0) {
@@ -4327,35 +4675,37 @@ const handleLike = useCallback(async () => {
                     </p>
                   </div>
                   <div className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-sm font-bold text-cyan-100">
-                    {viewerSeatCards.filter((seat) => seat.isOccupied).length}/{currentViewerSeatCount} live
+                    {Math.max(viewerSeatCards.filter((seat) => seat.isOccupied).length, remoteParticipants.size)}/{currentViewerSeatCount} live
                   </div>
                 </div>
 
                 <div className="mt-4 grid min-h-0 flex-1 grid-cols-2 auto-rows-fr gap-4">
                   {viewerSeatCards.map((seat) => {
-                    const seatVideoTrack = getRemoteSeatVideoTrack(
-                      remoteParticipants,
-                      seat.seatUserId,
-                      seat.livekitParticipantIdentity,
-                    )
+                    const occupiedSeatIdentities = viewerSeatCards
+                      .filter((candidate) => candidate.seatUserId || candidate.seatIdentity)
+                      .flatMap((candidate) => [candidate.seatUserId, candidate.seatIdentity])
 
-                    console.log('[SeatRenderDebug]', {
-                      page: 'BroadcastPage',
-                      seatIndex: seat.seatIndex,
-                      seatStatus: seat.isOccupied ? 'occupied' : 'open',
-                      seatUserId: seat.seatUserId,
-                      seatIdentity: seat.livekitParticipantIdentity || seat.seatUserId,
-                      remoteIdentities: Array.from(remoteParticipants.values()).map((p: any) => p.identity),
-                      matchedIdentity: remoteParticipants && Array.from(remoteParticipants.values()).find((participant: any) => {
-                        const participantIdentity = String(participant?.identity || '')
-                        return (
-                          remoteParticipantMatchesUser(participant, seat.seatUserId, seat.livekitParticipantIdentity) ||
-                          participantIdentity === String(seat.livekitParticipantIdentity || seat.seatUserId) ||
-                          participantIdentity.endsWith(`-${String(seat.livekitParticipantIdentity || seat.seatUserId)}`) ||
-                          String(seat.livekitParticipantIdentity || seat.seatUserId).endsWith(participantIdentity)
-                        )
-                      })?.identity || null,
-                    })
+                    const exactParticipant = findSeatRemoteParticipant(remoteParticipants, seat.seatUserId, seat.seatIdentity)
+                    const fallbackParticipant = !exactParticipant && !seat.isOccupied
+                      ? getFallbackSeatParticipant(remoteParticipants, seat.seatIndex, occupiedSeatIdentities)
+                      : null
+                    const matchedParticipant = exactParticipant || fallbackParticipant
+                    const participantDisplayName = matchedParticipant
+                      ? getParticipantLabel(matchedParticipant, seat.displayName)
+                      : seat.displayName
+
+                    if (import.meta.env.DEV) {
+                      console.log('[BroadcastSeatRenderDebug]', {
+                        seatIndex: seat.seatIndex,
+                        seatStatus: seat.seatStatus,
+                        seatUserId: seat.seatUserId,
+                        seatIdentity: seat.seatIdentity,
+                        remoteIdentities: Array.from(remoteParticipants.values()).map((p: any) => p.identity),
+                        matchedIdentity: matchedParticipant?.identity || null,
+                        matchedByFallback: Boolean(fallbackParticipant),
+                        hasVideoTrack: Boolean(getVideoTrackFromRemoteParticipant(matchedParticipant)),
+                      })
+                    }
 
                     return (
                     <div
@@ -4367,19 +4717,37 @@ const handleLike = useCallback(async () => {
                           : 'border-cyan-400/45 shadow-[0_0_24px_rgba(34,211,238,0.12)]'
                       )}
                     >
-                      {seat.isOccupied && seatVideoTrack ? (
-                        <TrackAttach track={seatVideoTrack} />
-                      ) : (
+                      {matchedParticipant ? (
+                        <RemoteSeatSurface
+                          participant={matchedParticipant}
+                          fallback={
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
+                              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-purple-500/10">
+                                <Users className="h-6 w-6 text-purple-200/80" />
+                              </div>
+                              <div className="mt-3 px-3 text-sm font-black text-white">{participantDisplayName}</div>
+                              <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200/70">Camera starting</div>
+                            </div>
+                          }
+                        />
+                      ) : seat.isOccupied ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
-                          {seat.isOccupied && seat.avatarUrl ? (
+                          {seat.avatarUrl ? (
                             <img
                               src={seat.avatarUrl}
-                              alt={seat.displayName}
+                              alt={participantDisplayName}
                               className="h-12 w-12 rounded-full border border-emerald-300/50 object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]"
                             />
                           ) : (
                             <Users className="h-10 w-10 text-cyan-200/35" />
                           )}
+                          <div className="mt-3 text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
+                            Camera starting
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
+                          <Users className="h-10 w-10 text-cyan-200/35" />
                         </div>
                       )}
 
@@ -4391,15 +4759,15 @@ const handleLike = useCallback(async () => {
 
                       <div className="absolute bottom-3 left-3 right-3 z-10">
                         <div className="truncate text-sm font-black text-white">
-                          {seat.isOccupied ? seat.displayName : 'Open Seat'}
+                          {matchedParticipant ? participantDisplayName : seat.isOccupied ? participantDisplayName : 'Open Seat'}
                         </div>
                         <div className={cn(
                           'mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em]',
-                          seat.isOccupied
+                          matchedParticipant || seat.isOccupied
                             ? 'border-emerald-300/30 bg-emerald-500/15 text-emerald-200'
                             : 'border-purple-300/30 bg-purple-500/15 text-purple-200'
                         )}>
-                          {seat.isOccupied ? 'On Camera' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                          {matchedParticipant ? 'On Camera' : seat.isOccupied ? 'Camera starting' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
                         </div>
                       </div>
                     </div>
