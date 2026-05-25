@@ -11,7 +11,8 @@ import {
   AudioCaptureOptions,
   VideoPresets,
   AudioPresets,
-  createLocalAudioTrack
+  createLocalAudioTrack,
+  createLocalVideoTrack
 } from 'livekit-client';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -158,11 +159,13 @@ export function useLiveKitRoom({
        setLocalAudioTrack(audioTrack);
        localAudioTrackRef.current = audioTrack;
 
+       let videoTrack: LocalVideoTrack | null = null
+
        // Video track - only create if not audio-only room
        if (!audioOnly && roomType !== 'pod') {
          try {
            const { createLocalVideoTrack } = await import('livekit-client');
-           const videoTrack = await createLocalVideoTrack({
+           videoTrack = await createLocalVideoTrack({
              ...videoPreset,
              facingMode: 'user'
            });
@@ -173,7 +176,7 @@ export function useLiveKitRoom({
          }
        }
 
-      return { audioTrack, videoTrack: localVideoTrack };
+      return { audioTrack, videoTrack };
     } catch (err) {
       console.error('[useLiveKitRoom] Error creating local tracks:', err);
       throw err;
@@ -236,10 +239,9 @@ export function useLiveKitRoom({
       console.warn('[useLiveKitRoom] Join prevented: already joined');
       return roomRef.current;
     }
-    
+
     if (joiningRef.current) {
       console.warn('[useLiveKitRoom] Join prevented: already joining');
-      // Wait for existing join to complete
       let attempts = 0;
       while (joiningRef.current && attempts < 50) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -247,7 +249,7 @@ export function useLiveKitRoom({
       }
       return roomRef.current;
     }
-    
+
     if (!roomId || !userId) {
       console.warn('[useLiveKitRoom] Join prevented: missing params');
       return;
@@ -258,8 +260,12 @@ export function useLiveKitRoom({
     setError(null);
     localUserIdRef.current = userId;
 
+    let room: Room | null = null;
+    let audioTrack: LocalAudioTrack | null = null;
+    let videoTrack: LocalVideoTrack | null = null;
+
     try {
-      const room = new Room({
+      room = new Room({
         adaptiveStream: true,
         dynacast: true,
         videoCaptureDefaults: {
@@ -276,35 +282,10 @@ export function useLiveKitRoom({
 
       roomRef.current = room;
 
-      let prePublishAudioTrack: LocalAudioTrack | null = null;
-      if (publish) {
-try {
-           prePublishAudioTrack = await createLocalAudioTrack();
-           prePublishAudioTrack.enable();
-           setLocalAudioTrack(prePublishAudioTrack);
-           localAudioTrackRef.current = prePublishAudioTrack;
-           console.log('[useLiveKitRoom] Created pre-connect audio track for publish');
-        } catch (trackErr) {
-          console.error('[useLiveKitRoom] Failed to create pre-connect audio track:', trackErr);
-          throw trackErr;
-        }
-      }
-
-      // Set up event listeners
       room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
       room.on(RoomEvent.ParticipantDisconnected, handleParticipantLeft);
       room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
       room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-      
-      // Ensure pre-created tracks are enabled before publishing
-      if (prePublishAudioTrack) {
-        await prePublishAudioTrack.enable();
-      }
-      if (localAudioTrack) {
-        await localAudioTrack.enable();
-      }
-      
-      // Handle disconnection events - delay reset for pods
       room.on(RoomEvent.Disconnected, () => {
         console.log('[useLiveKitRoom] Room disconnected');
         joinedRef.current = false;
@@ -312,19 +293,14 @@ try {
         setIsConnected(false);
         setIsPublishing(false);
       });
-
-      // Handle reconnection events
       room.on(RoomEvent.Reconnecting, () => {
         console.log('[useLiveKitRoom] Room reconnecting...');
       });
-
       room.on(RoomEvent.Reconnected, () => {
         console.log('[useLiveKitRoom] Room reconnected');
         joinedRef.current = true;
         setIsConnected(true);
       });
-
-      // Handle connection state changes
       room.on(RoomEvent.ConnectionStateChanged, (state) => {
         console.log('[useLiveKitRoom] Connection state changed:', state);
         if (state === 'disconnected') {
@@ -333,156 +309,99 @@ try {
         }
       });
 
-      // Get token
       const token = await fetchToken(roomId, userId, userName);
       const url = getLiveKitUrl();
       const apiKey = getLiveKitApiKey();
 
       if (!url || !apiKey) {
-        console.error('[useLiveKitRoom] Missing LiveKit config:', { 
-          hasUrl: !!url, 
-          hasApiKey: !!apiKey 
+        console.error('[useLiveKitRoom] Missing LiveKit config:', {
+          hasUrl: !!url,
+          hasApiKey: !!apiKey
         });
         throw new Error(`Missing LiveKit env vars: VITE_LIVEKIT_URL=${url ? 'set' : 'MISSING'}, VITE_LIVEKIT_API_KEY=${apiKey ? 'set' : 'MISSING'}`);
       }
-      
+
       if (!token) {
         throw new Error('Failed to get LiveKit token from server');
       }
 
-      // Connect to room - include explicit identity/name for publisher sessions
+      audioTrack = await createLocalAudioTrack();
+      await audioTrack.enable();
+
+      const { createLocalVideoTrack } = await import('livekit-client');
+      videoTrack = await createLocalVideoTrack({
+        ...videoPreset,
+        facingMode: 'user'
+      });
+
+      setLocalAudioTrack(audioTrack);
+      setLocalVideoTrack(videoTrack);
+      localAudioTrackRef.current = audioTrack;
+      localVideoTrackRef.current = videoTrack;
+
       await room.connect(url, token, { name: roomId, identity: userId });
       await waitForRoomConnected(room, 5000);
 
-      // Create and publish local tracks if publishing
-      if (publish) {
-        await waitForRoomConnected(room, 5000);
-       console.log('[useLiveKitRoom] Ready to publish audio after stable connect', {
-         state: room.state,
-         connectionState: room.connectionState,
-         sessionId: (room as any).sessionId,
-         participantCount: room.remoteParticipants?.size,
-       });
+      await room.localParticipant.publishTrack(audioTrack);
+      await room.localParticipant.publishTrack(videoTrack);
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+      setIsConnected(true);
+      setIsPublishing(true);
 
-        // Create and publish audio track  
-        let audioTrack: LocalAudioTrack | null = localAudioTrack;
-if (!audioTrack) {
-           try {
-             audioTrack = await createLocalAudioTrack();
-             await audioTrack.enable();
-             setLocalAudioTrack(audioTrack);
-             localAudioTrackRef.current = audioTrack;
-           } catch (trackErr) {
-            console.error('[useLiveKitRoom] Error creating audio track before publish:', trackErr);
-            throw trackErr;
-          }
-        } else {
-          // Ensure existing track is enabled
-          await audioTrack.enable();
-        }
-
-try {
-           await room.localParticipant.publishTrack(audioTrack);
-           setLocalAudioTrack(audioTrack);
-           localAudioTrackRef.current = audioTrack;
-           console.log('[useLiveKitRoom] Published audio track after connect', {
-            source: roomType === 'pod' ? 'pod' : 'standard',
-            audioTrackId: audioTrack.sid,
-          });
-} catch (trackErr) {
-           console.error('[useLiveKitRoom] Error publishing audio track after connect:', trackErr);
-           if (audioTrack) {
-             try {
-               audioTrack.stop();
-             } catch (stopErr) {
-               console.warn('[useLiveKitRoom] Failed to stop audio track after publish error:', stopErr);
-             }
-           }
-           setLocalAudioTrack(null);
-           localAudioTrackRef.current = null;
-         }
-
-// Create and publish video track (if not audioOnly)
-         if (!audioOnly && roomType !== 'pod') {
-           try {
-             const { createLocalVideoTrack } = await import('livekit-client');
-             const videoTrack = await createLocalVideoTrack({
-               ...videoPreset,
-               facingMode: 'user'
-             });
-             videoTrack.enable();
-             setLocalVideoTrack(videoTrack);
-             localVideoTrackRef.current = videoTrack;
-             await room.localParticipant.publishTrack(videoTrack);
-            console.log('[useLiveKitRoom] Published video track after connect', {
-              videoTrackId: videoTrack.sid,
-            });
-          } catch (videoErr) {
-            console.warn('[useLiveKitRoom] Error creating/publishing video track:', videoErr);
-          }
-        }
-
-        setIsPublishing(true);
-      }
-
-       // Get existing participants - guard against undefined
-       const existingParticipants = room.remoteParticipants ? Array.from(room.remoteParticipants.values()) : [];
-       console.log('[useLiveKitRoom] Existing participants after connect:', existingParticipants.map(p => ({
-         identity: p.identity,
-         hasAudio: !!p.audioTrack,
-         audioTrackSid: p.audioTrack?.sid
-       })));
-       setRemoteUsers(existingParticipants);
+      const existingParticipants = room.remoteParticipants ? Array.from(room.remoteParticipants.values()) : [];
+      console.log('[useLiveKitRoom] Existing participants after connect:', existingParticipants.map(p => ({
+        identity: p.identity,
+        hasAudio: !!p.audioTrack,
+        audioTrackSid: p.audioTrack?.sid
+      })));
+      setRemoteUsers(existingParticipants);
 
       joinedRef.current = true;
-      setIsConnected(true);
       setIsJoining(false);
       joiningRef.current = false;
 
       return room;
     } catch (err: any) {
       console.error('[useLiveKitRoom] Error joining as publisher:', err);
-      
-      // Check if this is a getUserMedia error - these often happen in LiveKit's internal
-      // reconnection logic and don't necessarily mean the connection failed
-      const errorMessage = err?.message || String(err) || '';
-      const isGetUserMediaError = errorMessage.includes('getUserMedia');
-      
-      // Only reset state and call onError if it's NOT a getUserMedia error
-      // or if we haven't successfully connected yet
-      if (!isGetUserMediaError || !roomRef.current) {
-        if (localAudioTrack) {
-          try {
-            localAudioTrack.stop();
-          } catch (stopErr) {
-            console.warn('[useLiveKitRoom] Failed to stop audio track on join error:', stopErr);
-          }
-        }
-        // Reset state on error
-        joinedRef.current = false;
-        setIsConnected(false);
-        setIsPublishing(false);
-        setError(err.message || 'Failed to join room');
-        setIsJoining(false);
-        joiningRef.current = false;
-        onError?.(err);
-        throw err;
-      } else {
-        // For getUserMedia errors, just log but don't fail
-        console.warn('[useLiveKitRoom] Ignoring getUserMedia error - connection may still work');
-        // If we got here, the connection might have succeeded despite the error
-        if (roomRef.current && !joinedRef.current) {
-          joinedRef.current = true;
-          setIsConnected(true);
-          setIsJoining(false);
-          joiningRef.current = false;
-          return roomRef.current;
+
+      if (audioTrack) {
+        try {
+          audioTrack.stop();
+        } catch (stopErr) {
+          console.warn('[useLiveKitRoom] Failed to stop audio track on join error:', stopErr);
         }
       }
+
+      if (videoTrack) {
+        try {
+          videoTrack.stop();
+        } catch (stopErr) {
+          console.warn('[useLiveKitRoom] Failed to stop video track on join error:', stopErr);
+        }
+      }
+
+      if (room) {
+        try {
+          await room.disconnect();
+        } catch (disconnectErr) {
+          console.warn('[useLiveKitRoom] Failed to disconnect room after publish error:', disconnectErr);
+        }
+      }
+
+      setLocalAudioTrack(null);
+      setLocalVideoTrack(null);
+      localAudioTrackRef.current = null;
+      localVideoTrackRef.current = null;
+      joinedRef.current = false;
+      setIsConnected(false);
+      setIsPublishing(false);
+      setError(err?.message || 'Failed to join room');
+      setIsJoining(false);
+      joiningRef.current = false;
+      onError?.(err);
+      throw err;
     }
-  }, [roomId, publish, audioOnly, roomType, videoPreset, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError]);
+  }, [roomId, videoPreset, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError, userName]);
 
   // Join as viewer (LiveKit)
   const joinAsAudience = useCallback(async (userId: string) => {

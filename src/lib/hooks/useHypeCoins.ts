@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, ensureSupabaseSession } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
+import { awardWatchHypeReward } from '@/lib/hypeRewards'
 
 interface HypeCoinWatchResponse {
   success: boolean
@@ -123,27 +124,7 @@ export function useHypeCoins() {
       setError(null)
 
       try {
-        await ensureSupabaseSession(supabase)
-
-        const { data, error: rpcError } = await supabase.rpc(
-          'earn_hype_coin_watch_reward',
-          {
-            p_stream_id: streamId,
-          }
-        )
-
-        if (rpcError) {
-          console.error('[useHypeCoins] RPC error:', rpcError)
-          setError(rpcError.message || 'Failed to earn Hype Coin')
-          return null
-        }
-
-        if (!data) {
-          console.warn('[useHypeCoins] No response from RPC')
-          return null
-        }
-
-        const response = data as HypeCoinWatchResponse
+        const response = await awardWatchHypeReward(streamId)
 
         // Update local state if successful
         if (response.success) {

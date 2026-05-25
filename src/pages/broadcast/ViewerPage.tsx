@@ -15,7 +15,7 @@ import {
   Users,
   Video,
 } from 'lucide-react'
-import type { RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from 'livekit-client'
+import type { LocalAudioTrack, LocalVideoTrack, RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from 'livekit-client'
 import { Track } from 'livekit-client'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -42,8 +42,11 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
+import { useStreamAudiencePresence } from '../../hooks/useStreamAudiencePresence'
+import { AudienceBubbleTicker } from '../../components/broadcast/AudienceBubbleTicker'
 import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
 import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
+import { awardWatchHypeReward } from '../../lib/hypeRewards'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -190,6 +193,7 @@ function getVideoTrackFromParticipant(participant: any): RemoteVideoTrack | null
 
   const cameraPub =
     publications.find((pub: any) => pub?.source === Track.Source.Camera && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.source !== Track.Source.Microphone && pub?.kind === Track.Kind.Video && pub?.track?.attach) ||
     publications.find((pub: any) => pub?.kind === Track.Kind.Video && pub?.track?.attach) ||
     publications.find((pub: any) => pub?.track?.kind === Track.Kind.Video && pub?.track?.attach) ||
     publications.find((pub: any) => pub?.track?.mediaStreamTrack?.kind === 'video' && pub?.track?.attach)
@@ -314,6 +318,82 @@ function RemoteVideoSurface({
   )
 }
 
+function LocalVideoSurface({
+  videoTrack,
+  audioTrack,
+  mirror = true,
+  className,
+  fallback,
+}: {
+  videoTrack: LocalVideoTrack | null
+  audioTrack: LocalAudioTrack | null
+  mirror?: boolean
+  className?: string
+  fallback: React.ReactNode
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    const videoEl = videoRef.current
+    if (!videoEl || !videoTrack) return
+
+    try {
+      videoTrack.attach(videoEl)
+      videoEl.play().catch(() => {})
+    } catch (err) {
+      console.warn('[ViewerPage] Failed to attach local video track:', err)
+    }
+
+    return () => {
+      try {
+        videoTrack.detach(videoEl)
+      } catch {
+        // ignore detach errors
+      }
+    }
+  }, [videoTrack])
+
+  useEffect(() => {
+    const audioEl = audioRef.current
+    if (!audioEl || !audioTrack) return
+
+    try {
+      audioTrack.attach(audioEl)
+      audioEl.play().catch(() => {})
+    } catch (err) {
+      console.warn('[ViewerPage] Failed to attach local audio track:', err)
+    }
+
+    return () => {
+      try {
+        audioTrack.detach(audioEl)
+      } catch {
+        // ignore detach errors
+      }
+    }
+  }, [audioTrack])
+
+  return (
+    <div className={cn('relative h-full w-full overflow-hidden bg-black', className)}>
+      {videoTrack ? (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={true}
+            className={cn('h-full w-full object-cover', mirror && '-scale-x-100')}
+          />
+          <audio ref={audioRef} autoPlay />
+        </>
+      ) : (
+        fallback
+      )}
+    </div>
+  )
+}
+
 function ViewerPage() {
   const params = useParams()
   const streamId = params.id || params.streamId || ''
@@ -330,11 +410,40 @@ function ViewerPage() {
   const MOBILE_SAFE_BOTTOM = 'env(safe-area-inset-bottom)'
   const CHAT_FLOAT_MS = isMobileViewer ? 10000 : 20000
 
-  const [stream, setStream] = useState<Stream | null>(null)
-  const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [streamLoaded, setStreamLoaded] = useState(false)
-  const [viewerCount, setViewerCount] = useState(0)
+   const [stream, setStream] = useState<Stream | null>(null)
+   const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
+   const [error, setError] = useState<string | null>(null)
+   const [streamLoaded, setStreamLoaded] = useState(false)
+   const [viewerCount, setViewerCount] = useState(0)
+   // Local tracks for publishing when in a seat
+   const audioTrackRef = useRef<LocalAudioTrack | null>(null)
+   const videoTrackRef = useRef<LocalVideoTrack | null>(null)
+   const [localTracksVersion, setLocalTracksVersion] = useState(0)
+   const localTracksRef = useRef<[LocalAudioTrack | null, LocalVideoTrack | null] | null>(null)
+
+   const setLocalTracks = useCallback((
+     next:
+       | [LocalAudioTrack | null, LocalVideoTrack | null]
+       | null
+       | ((prev: [LocalAudioTrack | null, LocalVideoTrack | null] | null) => [LocalAudioTrack | null, LocalVideoTrack | null] | null)
+   ) => {
+     const previous: [LocalAudioTrack | null, LocalVideoTrack | null] | null =
+       audioTrackRef.current || videoTrackRef.current
+         ? [audioTrackRef.current, videoTrackRef.current]
+         : null
+     const resolved = typeof next === 'function' ? next(previous) : next
+     const nextAudioTrack = resolved?.[0] || null
+     const nextVideoTrack = resolved?.[1] || null
+
+     if (audioTrackRef.current === nextAudioTrack && videoTrackRef.current === nextVideoTrack) {
+       return
+     }
+
+     audioTrackRef.current = nextAudioTrack
+     videoTrackRef.current = nextVideoTrack
+     localTracksRef.current = resolved
+     setLocalTracksVersion((version) => version + 1)
+   }, [])
    const [isChatOpen, setIsChatOpen] = useState(true)
    const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans'>('chat')
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
@@ -588,8 +697,8 @@ function ViewerPage() {
   const viewerIdentityRef = useRef<string>(
     `viewer-${streamId}-${user?.id || Math.random().toString(36).slice(2, 9)}`,
   )
-  const watchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastEarnTimeRef = useRef<number>(0)
+  const hypeRewardIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastHypeRewardAttemptRef = useRef<number>(0)
   const clickTimesRef = useRef<number[]>([])
   const blockedUntilRef = useRef<number | null>(null)
   const manualStageLeaveRef = useRef(false)
@@ -617,26 +726,32 @@ function ViewerPage() {
     return Math.max(1, Math.min(rawBoxCount || 1, 6))
   }, [stream, hookBoxCount])
 
-  const {
-    seats,
-    mySession: userSeat,
-    seatJoinTransition,
-    joinSeat,
-    leaveSeat,
-  } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+   const {
+     seats,
+     mySeat,
+     joiningSeatId,
+     leavingSeatId,
+     joinSeat,
+     leaveSeat,
+     markSeatLive,
+   } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+   const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
 
-  const isUserOnStage = Boolean(
-    userSeat?.status === 'active' && (userSeat?.user_id || userSeat?.guest_id),
-  )
+   const isUserOnStage = Boolean(
+     mySeat &&
+       ['reserved', 'camera_starting', 'active', 'live'].includes(String(mySeat.status || '')) &&
+       (mySeat.user_id === user?.id || mySeat.guest_id === user?.id),
+   )
 
   const availableSeatIndex = useMemo(() => {
     if (effectiveBoxCount <= 1) return null
 
     for (let seatIndex = 1; seatIndex < effectiveBoxCount; seatIndex += 1) {
       const seat = seats?.[seatIndex]
-      if (!seat || seat.status !== 'active') {
-        return seatIndex
+      if (!seat || !['empty', 'failed'].includes(String(seat.status || ''))) {
+        continue
       }
+      return seatIndex
     }
 
     return null
@@ -708,6 +823,8 @@ function ViewerPage() {
 
   const {
     remoteUsers,
+    localVideoTrack,
+    localAudioTrack,
     isPublishing,
     joinAsAudience,
     joinAsPublisher,
@@ -744,11 +861,13 @@ function ViewerPage() {
       (profile as any)?.is_lead_officer,
   )
 
-  const activeSeats = useMemo(() => {
-    return Object.values(seats || {}).filter(
-      (seat: any) => seat?.status === 'active' && (seat?.user_id || seat?.guest_id),
-    )
-  }, [seats])
+   const activeSeats = useMemo(() => {
+     return Object.values(seats || {}).filter(
+       (seat: any) =>
+         ['active', 'camera_starting', 'reserved', 'live'].includes(String(seat?.status || '')) &&
+         (seat?.user_id || seat?.guest_id),
+     )
+   }, [seats])
 
   const activeUserIds = useMemo(() => {
     const ids: string[] = []
@@ -784,7 +903,7 @@ function ViewerPage() {
     return profiles
   }, [activeSeats, broadcasterProfile, hostId])
 
-  const { earnHypeCoinFromWatch, hypeCoins } = useHypeCoins()
+  const { hypeCoins, refreshHypeCoins } = useHypeCoins()
 
   const onGift = useCallback((userId?: string | null) => {
     setGiftRecipientId(userId || hostId || null)
@@ -961,53 +1080,51 @@ function ViewerPage() {
     }
   }, [streamId, stream])
 
+  const isStreamLive = isActive
+
   useEffect(() => {
-    if (!streamId || !user?.id || !stream || !isActive || hostId === user.id) {
-      if (watchTimerRef.current) {
-        clearTimeout(watchTimerRef.current)
-        watchTimerRef.current = null
+    if (!streamId || !user?.id || !isStreamLive || hostId === user.id) {
+      if (hypeRewardIntervalRef.current) {
+        clearInterval(hypeRewardIntervalRef.current)
+        hypeRewardIntervalRef.current = null
       }
       return
     }
 
-    const startWatchTimer = () => {
+    const attemptReward = async () => {
       const now = Date.now()
-      const timeSinceLastEarn = now - lastEarnTimeRef.current
-      const timeUntilNextEarn = Math.max(0, 300000 - timeSinceLastEarn)
 
-      watchTimerRef.current = setTimeout(() => {
-        earnHypeCoinFromWatch(streamId).then((result) => {
-          if (result?.success && result.earned_amount > 0) {
-            setShowHypeCoinPopup(true)
-            lastEarnTimeRef.current = Date.now()
-          }
-        })
-        startWatchTimer()
-      }, Math.min(300000, timeUntilNextEarn))
-    }
+      if (now - lastHypeRewardAttemptRef.current < 5 * 60 * 1000) {
+        return
+      }
 
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        if (watchTimerRef.current) {
-          clearTimeout(watchTimerRef.current)
-          watchTimerRef.current = null
+      lastHypeRewardAttemptRef.current = now
+
+      try {
+        const result = await awardWatchHypeReward(streamId)
+
+        if (result.success && (result.earned_amount ?? 0) > 0) {
+          setShowHypeCoinPopup(true)
+          await refreshHypeCoins()
         }
-      } else if (!watchTimerRef.current) {
-        startWatchTimer()
+      } catch (error) {
+        console.warn('[ViewerPage] Hype reward failed:', error)
       }
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    if (!document.hidden) startWatchTimer()
+    void attemptReward()
+
+    hypeRewardIntervalRef.current = setInterval(() => {
+      void attemptReward()
+    }, 5 * 60 * 1000)
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      if (watchTimerRef.current) {
-        clearTimeout(watchTimerRef.current)
-        watchTimerRef.current = null
+      if (hypeRewardIntervalRef.current) {
+        clearInterval(hypeRewardIntervalRef.current)
+        hypeRewardIntervalRef.current = null
       }
     }
-  }, [streamId, user?.id, stream, isActive, hostId, earnHypeCoinFromWatch])
+  }, [streamId, user?.id, isStreamLive, hostId, refreshHypeCoins])
 
   useEffect(() => {
     if (!streamId) {
@@ -1218,12 +1335,6 @@ useStreamRealtime(
     }
   }, [leaveLiveKitRoom])
 
-  useEffect(() => {
-    if (seatJoinTransition && user?.id) {
-      viewerIdentityRef.current = user.id
-    }
-  }, [seatJoinTransition, user?.id])
-
    useEffect(() => {
      if (!streamId || !roomId || !isActive) return
 
@@ -1277,18 +1388,31 @@ useStreamRealtime(
            .finally(() => {
              joiningPublisherRef.current = true
              currentRoomKeyRef.current = audienceRoomKey
-             const identity = user?.id || viewerIdentityRef.current
-             viewerIdentityRef.current = identity
+             const publisherIdentity = user?.id
 
-             joinAsPublisher(identity)
-               .then(() => {
+             if (!publisherIdentity) {
+               setViewerError('Unable to join stage: missing user id')
+               joiningPublisherRef.current = false
+               return
+             }
+
+             viewerIdentityRef.current = publisherIdentity
+
+             joinAsPublisher(publisherIdentity)
+               .then(async () => {
                  setViewerError(null)
-                 console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity })
+                 if (mySeat?.seat_index != null) {
+                   await markSeatLive(mySeat.seat_index, String(user.id))
+                 }
+                 console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity: publisherIdentity })
                })
-               .catch((err: any) => {
+               .catch(async (err: any) => {
                  const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit publisher join failed'
                  console.warn('[ViewerPage] joinAsPublisher failed:', err, { errorDetail })
                  setViewerError(errorDetail)
+                 if (mySeat?.id) {
+                   await leaveSeat()
+                 }
                })
                .finally(() => {
                  joiningPublisherRef.current = false
@@ -1299,18 +1423,31 @@ useStreamRealtime(
 
        joiningPublisherRef.current = true
        currentRoomKeyRef.current = audienceRoomKey
-       const identity = user?.id || viewerIdentityRef.current
-       viewerIdentityRef.current = identity
+       const publisherIdentity = user?.id
 
-       joinAsPublisher(identity)
-         .then(() => {
+       if (!publisherIdentity) {
+         setViewerError('Unable to join stage: missing user id')
+         joiningPublisherRef.current = false
+         return
+       }
+
+       viewerIdentityRef.current = publisherIdentity
+
+       joinAsPublisher(publisherIdentity)
+         .then(async () => {
            setViewerError(null)
-           console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity })
+           if (mySeat?.seat_index != null) {
+             await markSeatLive(mySeat.seat_index, String(user.id))
+           }
+           console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity: publisherIdentity })
          })
-         .catch((err: any) => {
+         .catch(async (err: any) => {
            const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit publisher join failed'
            console.warn('[ViewerPage] joinAsPublisher failed:', err, { errorDetail })
            setViewerError(errorDetail)
+           if (mySeat?.id) {
+             await leaveSeat()
+           }
          })
          .finally(() => {
            joiningPublisherRef.current = false
@@ -1362,12 +1499,17 @@ useStreamRealtime(
     return Array.from({ length: effectiveBoxCount - 1 }, (_, offset) => {
       const seatIndex = offset + 1
       const seat = seats?.[seatIndex]
+      const seatStatus = String(seat?.status || '').toLowerCase()
       const isMine = Boolean(user?.id && (seat?.user_id === user.id || seat?.guest_id === user.id))
-      const isOccupied = Boolean(seat?.status === 'active' && (seat?.user_id || seat?.guest_id))
+      const isOccupied = Boolean(
+        seat &&
+          (seat?.user_id || seat?.guest_id) &&
+          ['active', 'reserved', 'camera_starting', 'live'].includes(seatStatus),
+      )
       const isLocked = Boolean((stream as any)?.are_seats_locked)
       const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
       const displayName = getDisplayName(seat?.user_profile || null, 'Viewer')
-      const canJoin = !!user && !isLocked && !isOccupied && !isMine
+      const canJoin = !isLocked && !isOccupied && !isMine
 
       return {
         seatIndex,
@@ -1418,27 +1560,39 @@ useStreamRealtime(
 
           <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
 
-          {!isMobileViewer && (
-            <BroadcastNeonHeader
-              stream={stream}
-              broadcasterProfile={broadcasterProfile
-                ? {
-                  username: broadcasterProfile.username,
-                  avatar_url: broadcasterProfile.avatar_url,
-                  display_name: broadcasterProfile.display_name,
-                }
-                : null}
-              isHost={false}
-              liveViewerCount={viewerCount}
-              handleLike={handleLike}
-              onGift={() => onGift(hostId)}
-              onShare={handleShare}
-              onEndStream={handleLeave}
-              coinBalance={(profile as any)?.troll_coins ?? 0}
-              onOpenCoinStore={() => toast.info('Coin Store opens from the viewer action bar.')}
-              isLive={isActive}
-              streamStartedAt={(stream as any).started_at} />
-          )}
+           {!isMobileViewer && (
+             <>
+               <BroadcastNeonHeader
+                 stream={stream}
+                 broadcasterProfile={broadcasterProfile
+                   ? {
+                     username: broadcasterProfile.username,
+                     avatar_url: broadcasterProfile.avatar_url,
+                     display_name: broadcasterProfile.display_name,
+                   }
+                   : null}
+                 isHost={false}
+                 liveViewerCount={viewerCount}
+                 handleLike={handleLike}
+                 onGift={() => onGift(hostId)}
+                 onShare={handleShare}
+                 onEndStream={handleLeave}
+                 coinBalance={(profile as any)?.troll_coins ?? 0}
+                 onOpenCoinStore={() => toast.info('Coin Store opens from the viewer action bar.')}
+                 isLive={isActive}
+                 streamStartedAt={(stream as any).started_at} />
+               {/* Audience Bubble Ticker */}
+               <div className="flex items-center gap-3 px-4 py-2">
+                 <AudienceBubbleTicker
+                   streamId={streamId}
+                   audience={audience}
+                   currentUserId={user?.id}
+                   maxVisible={8}
+                   className="hidden sm:flex"
+                 />
+               </div>
+             </>
+           )}
 
 <main
             className={cn(
@@ -1614,12 +1768,35 @@ useStreamRealtime(
 
                 <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
                   {seatCards.map((seat) => {
+                    const seatStatus = String(seat.seat?.status || '').toLowerCase()
                     const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
-                    const seatParticipant = seatUserId
-                      ? remoteParticipants.find((participant: any) => participantMatchesUser(participant, seatUserId))
+                    const seatIdentity = seat.seat?.livekit_participant_identity || seatUserId
+                    const isMine = Boolean(user?.id && (seat.seat?.user_id === user.id || seat.seat?.guest_id === user.id))
+                    const seatParticipant = !isMine && seatIdentity
+                      ? remoteParticipants.find((participant: any) => {
+                          const participantIdentity = String(participant?.identity || '')
+                          return (
+                            participantMatchesUser(participant, seatIdentity) ||
+                            participantMatchesUser(participant, seatUserId) ||
+                            participantIdentity === String(seatIdentity) ||
+                            participantIdentity.endsWith(`-${seatIdentity}`) ||
+                            String(seatIdentity).endsWith(participantIdentity)
+                          )
+                        })
                       : null
 
-                    const statusLabel = seat.isMine
+                    console.log('[SeatRenderDebug]', {
+                      page: 'ViewerPage',
+                      seatIndex: seat.seatIndex,
+                      isMine,
+                      seatStatus,
+                      seatUserId,
+                      seatIdentity,
+                      remoteIdentities: remoteParticipants.map((p: any) => p.identity),
+                      matchedIdentity: seatParticipant?.identity || null,
+                    })
+
+                    const statusLabel = isMine
                       ? 'You'
                       : seat.isOccupied
                         ? seat.displayName
@@ -1634,7 +1811,7 @@ useStreamRealtime(
                         key={seat.seatIndex}
                         className={cn(
                           'relative min-h-[155px] overflow-hidden rounded-2xl border bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)] shadow-[inset_0_0_18px_rgba(15,23,42,0.78)] transition-all',
-                          seat.isMine
+                          isMine
                             ? 'border-emerald-300/60 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
                             : seat.isOccupied
                               ? 'border-purple-300/45 shadow-[0_0_24px_rgba(168,85,247,0.16)]'
@@ -1643,7 +1820,22 @@ useStreamRealtime(
                                 : 'border-cyan-300/45 hover:border-cyan-200/70 hover:shadow-[0_0_24px_rgba(34,211,238,0.22)]'
                         )}
                       >
-                        {seat.isOccupied ? (
+                        {isMine ? (
+                          <LocalVideoSurface
+                            videoTrack={localVideoTrack}
+                            audioTrack={localAudioTrack}
+                            className="absolute inset-0"
+                            fallback={
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+                                <div className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-300/30 bg-emerald-500/10">
+                                  <Users className="h-6 w-6 text-emerald-100/80" />
+                                </div>
+                                <div className="px-3 text-sm font-black text-white">Your camera</div>
+                                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200/70">Camera starting</div>
+                              </div>
+                            }
+                          />
+                        ) : seat.isOccupied ? (
                           <RemoteVideoSurface
                             participant={seatParticipant}
                             mirror={false}

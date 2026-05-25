@@ -55,23 +55,35 @@ function normalizeIdentityToken(value?: string | null): string {
   return String(value || '').replace(/^viewer-/, '').trim()
 }
 
-function remoteParticipantMatchesUser(participant: any, userId?: string | null): boolean {
-  if (!participant || !userId) return false
+function remoteParticipantMatchesUser(
+  participant: any,
+  userId?: string | null,
+  preferredIdentity?: string | null,
+): boolean {
+  if (!participant) return false
 
   const identity = getRemoteParticipantIdentity(participant)
   const metadata = getRemoteParticipantMetadata(participant)
   const normalizedIdentity = normalizeIdentityToken(identity)
   const normalizedUserId = normalizeIdentityToken(userId)
+  const normalizedPreferredIdentity = normalizeIdentityToken(preferredIdentity)
+
+  const matchesIdentity = (candidate?: string | null) => {
+    const normalizedCandidate = normalizeIdentityToken(candidate)
+    if (!normalizedCandidate) return false
+
+    return (
+      identity === candidate ||
+      normalizedIdentity === normalizedCandidate ||
+      normalizedIdentity.startsWith(normalizedCandidate) ||
+      normalizedCandidate.startsWith(normalizedIdentity) ||
+      identity.endsWith(`-${candidate}`) ||
+      normalizedIdentity.endsWith(`-${normalizedCandidate}`)
+    )
+  }
 
   const identityMatchesUser =
-    identity === userId ||
-    identity.endsWith(`-${userId}`) ||
-    normalizedIdentity === normalizedUserId ||
-    normalizedIdentity.startsWith(normalizedUserId) ||
-    normalizedUserId.startsWith(normalizedIdentity)
-
-  return (
-    identityMatchesUser ||
+    matchesIdentity(userId) ||
     metadata.user_id === userId ||
     metadata.user_id === normalizedUserId ||
     metadata.userId === userId ||
@@ -80,7 +92,8 @@ function remoteParticipantMatchesUser(participant: any, userId?: string | null):
     participant?.user_id === normalizedUserId ||
     participant?.userId === userId ||
     participant?.userId === normalizedUserId
-  )
+
+  return identityMatchesUser || matchesIdentity(preferredIdentity)
 }
 
 function getVideoTrackFromRemoteParticipant(participant: any): RemoteVideoTrack | null {
@@ -103,6 +116,7 @@ function getVideoTrackFromRemoteParticipant(participant: any): RemoteVideoTrack 
 
   const cameraPub =
     publications.find((pub: any) => pub?.source === Track.Source.Camera && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.source !== Track.Source.Microphone && pub?.kind === Track.Kind.Video && pub?.track?.attach) ||
     publications.find((pub: any) => pub?.kind === Track.Kind.Video && pub?.track?.attach) ||
     publications.find((pub: any) => pub?.track?.kind === Track.Kind.Video && pub?.track?.attach) ||
     publications.find((pub: any) => pub?.track?.mediaStreamTrack?.kind === 'video' && pub?.track?.attach)
@@ -113,8 +127,9 @@ function getVideoTrackFromRemoteParticipant(participant: any): RemoteVideoTrack 
 function getRemoteSeatVideoTrack(
   participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
   userId?: string | null,
+  livekitParticipantIdentity?: string | null,
 ): RemoteVideoTrack | null {
-  if (!participants || !userId) return null
+  if (!participants) return null
 
   const list = Array.isArray(participants)
     ? participants
@@ -122,8 +137,37 @@ function getRemoteSeatVideoTrack(
       ? Array.from(participants.values())
       : []
 
-  const participant = list.find((entry: any) => remoteParticipantMatchesUser(entry, userId))
+  const seatIdentity = normalizeIdentityToken(livekitParticipantIdentity || userId)
+  const participant = list.find((entry: any) => {
+    const identity = getRemoteParticipantIdentity(entry)
+    const metadata = getRemoteParticipantMetadata(entry)
+
+    if (seatIdentity && normalizeIdentityToken(identity) === seatIdentity) {
+      return true
+    }
+
+    if (livekitParticipantIdentity && matchesNormalizedIdentity(identity, livekitParticipantIdentity)) {
+      return true
+    }
+
+    return remoteParticipantMatchesUser(entry, userId, livekitParticipantIdentity)
+  })
+
   return getVideoTrackFromRemoteParticipant(participant)
+}
+
+function matchesNormalizedIdentity(identity: string, candidate?: string | null): boolean {
+  const normalizedIdentity = normalizeIdentityToken(identity)
+  const normalizedCandidate = normalizeIdentityToken(candidate)
+  if (!normalizedIdentity || !normalizedCandidate) return false
+
+  return (
+    normalizedIdentity === normalizedCandidate ||
+    normalizedIdentity.startsWith(normalizedCandidate) ||
+    normalizedCandidate.startsWith(normalizedIdentity) ||
+    normalizedIdentity.endsWith(`-${normalizedCandidate}`) ||
+    normalizedCandidate.endsWith(`-${normalizedIdentity}`)
+  )
 }
 
 
@@ -141,6 +185,8 @@ import { useBroadcastTicker } from '@/hooks/useBroadcastTicker'
 import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueController'
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStreamSeats } from '@/hooks/useStreamSeats'
+import { useStreamAudiencePresence } from '@/hooks/useStreamAudiencePresence'
+import { AudienceBubbleTicker } from '@/components/broadcast/AudienceBubbleTicker'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
 import { GiftItem } from '@/lib/giftConstants'
@@ -281,10 +327,11 @@ export function BroadcastPage() {
     }
   }, [broadcasterProfile]);
 
-  const isHost = stream?.user_id === user?.id
-  const isBroadcaster = isHost;
+   const isHost = stream?.user_id === user?.id
+   const isBroadcaster = isHost;
 
-  const { seats } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+   const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+   const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
   const configuredViewerSeatCount = useMemo(() => {
     const derivedFromPrices = Array.isArray(stream?.seat_prices)
       ? Math.max(0, stream.seat_prices.length - 1)
@@ -309,14 +356,14 @@ export function BroadcastPage() {
       const seatPrice = Array.isArray(stream?.seat_prices)
         ? Number(stream.seat_prices[seatIndex] ?? stream?.seat_price ?? 0)
         : Number(stream?.seat_price ?? 0)
-      const isOccupied = Boolean(seat?.status === 'active' && seatUserId)
+      const seatStatus = String(seat?.status || '').toLowerCase()
+      const isOccupied = Boolean(seatUserId && ['active', 'camera_starting', 'live'].includes(seatStatus))
       const displayName =
         seat?.user_profile?.display_name ||
         seat?.user_profile?.username ||
-        seat?.profile?.display_name ||
-        seat?.profile?.username ||
         'Viewer'
-      const avatarUrl = seat?.user_profile?.avatar_url || seat?.profile?.avatar_url || null
+      const avatarUrl = seat?.user_profile?.avatar_url || null
+      const livekitParticipantIdentity = seat?.livekit_participant_identity || null
       return {
         seatIndex,
         seatUserId,
@@ -324,6 +371,7 @@ export function BroadcastPage() {
         isOccupied,
         displayName,
         avatarUrl,
+        livekitParticipantIdentity,
       }
     })
   }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices])
@@ -4097,27 +4145,39 @@ const handleLike = useCallback(async () => {
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-300/65 to-transparent" />
 
-            {/* TOP HEADER */}
-            {!isMobileViewer && (
-              <BroadcastNeonHeader
-                stream={stream}
-                broadcasterProfile={broadcasterProfile ? {
-                  username: broadcasterProfile.username,
-                  avatar_url: broadcasterProfile.avatar_url,
-                  display_name: broadcasterProfile.display_name,
-                } : null}
-                isHost={isHost}
-                liveViewerCount={liveViewerCount}
-                handleLike={handleLike}
-                onGift={handleGiftHost}
-                onShare={handleOpenShareModal}
-                onEndStream={handleStreamEnd}
-                coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
-                onOpenCoinStore={handleOpenCoinStore}
-                isLive={stream.status === 'live'}
-                streamStartedAt={stream.started_at}
-              />
-            )}
+             {/* TOP HEADER */}
+             {!isMobileViewer && (
+               <>
+                 <BroadcastNeonHeader
+                   stream={stream}
+                   broadcasterProfile={broadcasterProfile ? {
+                     username: broadcasterProfile.username,
+                     avatar_url: broadcasterProfile.avatar_url,
+                     display_name: broadcasterProfile.display_name,
+                   } : null}
+                   isHost={isHost}
+                   liveViewerCount={liveViewerCount}
+                   handleLike={handleLike}
+                   onGift={handleGiftHost}
+                   onShare={handleOpenShareModal}
+                   onEndStream={handleStreamEnd}
+                   coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+                   onOpenCoinStore={handleOpenCoinStore}
+                   isLive={stream.status === 'live'}
+                   streamStartedAt={stream.started_at}
+                 />
+                 {/* Audience Bubble Ticker */}
+                 <div className="flex items-center gap-3 px-4 py-2">
+                   <AudienceBubbleTicker
+                     streamId={streamId}
+                     audience={audience}
+                     currentUserId={user?.id}
+                     maxVisible={8}
+                     className="hidden sm:flex"
+                   />
+                 </div>
+               </>
+             )}
 
             {/* ── MAIN CONTENT GRID (3-column) ── */}
             <main
@@ -4273,7 +4333,29 @@ const handleLike = useCallback(async () => {
 
                 <div className="mt-4 grid min-h-0 flex-1 grid-cols-2 auto-rows-fr gap-4">
                   {viewerSeatCards.map((seat) => {
-                    const seatVideoTrack = getRemoteSeatVideoTrack(remoteParticipants, seat.seatUserId)
+                    const seatVideoTrack = getRemoteSeatVideoTrack(
+                      remoteParticipants,
+                      seat.seatUserId,
+                      seat.livekitParticipantIdentity,
+                    )
+
+                    console.log('[SeatRenderDebug]', {
+                      page: 'BroadcastPage',
+                      seatIndex: seat.seatIndex,
+                      seatStatus: seat.isOccupied ? 'occupied' : 'open',
+                      seatUserId: seat.seatUserId,
+                      seatIdentity: seat.livekitParticipantIdentity || seat.seatUserId,
+                      remoteIdentities: Array.from(remoteParticipants.values()).map((p: any) => p.identity),
+                      matchedIdentity: remoteParticipants && Array.from(remoteParticipants.values()).find((participant: any) => {
+                        const participantIdentity = String(participant?.identity || '')
+                        return (
+                          remoteParticipantMatchesUser(participant, seat.seatUserId, seat.livekitParticipantIdentity) ||
+                          participantIdentity === String(seat.livekitParticipantIdentity || seat.seatUserId) ||
+                          participantIdentity.endsWith(`-${String(seat.livekitParticipantIdentity || seat.seatUserId)}`) ||
+                          String(seat.livekitParticipantIdentity || seat.seatUserId).endsWith(participantIdentity)
+                        )
+                      })?.identity || null,
+                    })
 
                     return (
                     <div
