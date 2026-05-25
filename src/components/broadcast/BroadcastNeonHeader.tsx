@@ -87,6 +87,7 @@ export default function BroadcastNeonHeader({
   const { profile } = useAuthStore();
   const coinDisplay = coinBalance ?? profile?.troll_coins ?? 0;
   const streamTitle = stream.title || stream.category || 'Live';
+  const [now, setNow] = useState(Date.now());
 
   // Poll coin balance so it stays fresh on the header (same hook as old BroadcastHeader)
   React.useEffect(() => {
@@ -103,12 +104,16 @@ export default function BroadcastNeonHeader({
     return () => { window.clearInterval(t); };
   }, [profile?.id]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const timerMs = useMemo(() => {
     if (!streamStartedAt) return 0;
     const start = new Date(streamStartedAt).getTime();
-    return Math.max(0, Date.now() - start);
-  }, [streamStartedAt]);
+    return Math.max(0, now - start);
+  }, [now, streamStartedAt]);
   const timerStr = useMemo(() => formatTimer(timerMs), [timerMs]);
 
   const handleLikeLocal = useCallback(() => {

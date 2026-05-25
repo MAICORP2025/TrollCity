@@ -61,8 +61,8 @@ function HostActionButton({
   );
 }
 
-/** Open Stage Pass card — the large purple button in the bottom bar */
-export function OpenStagePassCard({ onClick, label = 'Open Stage Pass' }: { onClick: () => void; label?: string }) {
+/** Seats action card — the large purple button in the bottom bar */
+export function OpenStagePassCard({ onClick, label = 'Seats' }: { onClick: () => void; label?: string }) {
   const theme = trollCityBroadcastTheme
   return (
     <button
@@ -75,7 +75,7 @@ export function OpenStagePassCard({ onClick, label = 'Open Stage Pass' }: { onCl
   );
 }
 
-/** Stage Pass summary card — left card in the bottom bar */
+/** Seats summary card — left card in the bottom bar */
 export function StagePassSummaryCard({
   openPassCount,
   onManage,
@@ -91,9 +91,9 @@ export function StagePassSummaryCard({
           <Ticket className="h-7 w-7" />
         </div>
         <div>
-          <p className="text-base font-black text-white">Stage Pass</p>
+          <p className="text-base font-black text-white">Seats</p>
           <p className="mt-1 text-sm font-black text-emerald-400">
-            {openPassCount} Open
+            {openPassCount} open
           </p>
         </div>
       </div>
@@ -101,7 +101,7 @@ export function StagePassSummaryCard({
         onClick={onManage}
         className={cn('rounded-xl px-5 py-2.5 text-sm font-bold text-white', theme.glassButton)}
       >
-        Manage
+        Edit
       </button>
     </div>
   );
@@ -165,7 +165,7 @@ export default function BroadcastBottomBar({
       <div className={bottomBarAmbient} />
 
       <div className="grid gap-4" style={{ gridTemplateColumns: '290px 1fr 360px' }}>
-        {/* Left: Stage Pass summary */}
+        {/* Left: Seats summary */}
         <StagePassSummaryCard
           openPassCount={openPassCount}
           onManage={onManageStagePass}
@@ -217,8 +217,8 @@ export default function BroadcastBottomBar({
           </button>
         </div>
 
-        {/* Right: large Stage Pass open button (hidden for broadcaster to avoid duplicate controls) */}
-        {!isHost && <OpenStagePassCard onClick={onOpenStagePass} />}
+        {/* Right: large Seats action button */}
+        <OpenStagePassCard onClick={onOpenStagePass} />
       </div>
     </div>
   );

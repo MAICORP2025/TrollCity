@@ -6,6 +6,7 @@ import { SeatSession } from '../../hooks/useStreamSeats';
 interface ParticipantStripProps {
   seats: Record<number, SeatSession>;
   onJoinRequest?: (index: number) => void;
+  onUserClick?: (seat: SeatSession) => void;
   className?: string;
   compact?: boolean;
   orientation?: 'portrait' | 'landscape';
@@ -14,6 +15,7 @@ interface ParticipantStripProps {
 export default function ParticipantStrip({
   seats,
   onJoinRequest,
+  onUserClick,
   className,
   compact = false,
   orientation: _orientation = 'portrait',
@@ -58,10 +60,13 @@ export default function ParticipantStrip({
         const profile = seat.user_profile;
         return (
           <div key={index} className="flex-shrink-0 flex flex-col items-center gap-1">
-            <div 
+            <button
+              type="button"
+              onClick={() => onUserClick?.(seat)}
               className={cn(
-                "rounded-full overflow-hidden border-2 flex items-center justify-center relative",
-                compact ? "w-10 h-10" : "w-12 h-12"
+                "rounded-full overflow-hidden border-2 flex items-center justify-center relative transition-all",
+                compact ? "w-10 h-10" : "w-12 h-12",
+                onUserClick ? "hover:scale-105 hover:border-white/60" : ""
               )}
               style={{ borderColor: profile?.glowing_username_color || 'rgba(255,255,255,0.2)' }}
             >
@@ -76,7 +81,7 @@ export default function ParticipantStrip({
                   {(profile?.username || 'Guest').slice(0, 2).toUpperCase()}
                 </div>
               )}
-            </div>
+            </button>
             <span className={cn(
               "text-white/80 truncate max-w-[48px] text-center",
               compact ? "text-[9px]" : "text-[10px]"

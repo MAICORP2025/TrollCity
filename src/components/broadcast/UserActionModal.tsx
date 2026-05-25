@@ -8,6 +8,7 @@ import { shouldBlockModeration } from '../../lib/perkEffects';
 import { useAuthStore } from '../../lib/store';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../../lib/chatStore';
+import UserMiniProfile from '../user/UserMiniProfile';
 
 function getTierColor(tier: string) {
   switch (tier) {
@@ -57,6 +58,7 @@ export default function UserActionModal({
   const [fetchedAvatar, setFetchedAvatar] = React.useState<string | null>(null);
   const [isFollowing, setIsFollowing] = React.useState(false);
   const [showReportModal, setShowReportModal] = React.useState(false);
+  const [showMiniProfile, setShowMiniProfile] = React.useState(false);
   const [selectedReason, setSelectedReason] = React.useState<string>('');
   const [reportDescription, setReportDescription] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -441,10 +443,9 @@ export default function UserActionModal({
     onClose();
   };
 
-  const handleViewProfile = () => {
-    navigate(`/profile/${userId}`);
-    onClose();
-  };
+const handleViewProfile = () => {
+     setShowMiniProfile(true);
+   };
 
   return (
     <div 
@@ -704,6 +705,15 @@ export default function UserActionModal({
             </div>
           </div>
         </div>
+      )}
+
+      {showMiniProfile && (
+        <UserMiniProfile
+          userId={userId}
+          username={displayName}
+          avatarUrl={fetchedAvatar}
+          onClose={() => setShowMiniProfile(false)}
+        />
       )}
     </div>
   );

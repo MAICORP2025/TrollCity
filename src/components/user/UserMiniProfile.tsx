@@ -4,8 +4,9 @@ import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { 
   User, MessageCircle, Gift, Flag, Camera, 
-  Crown, Check, X, Heart, Users
+  Crown, Check, X, Heart, Users, Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import SubscribeButton from './SubscribeButton';
 
 interface UserMiniProfileProps {

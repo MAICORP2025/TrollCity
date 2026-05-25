@@ -70,7 +70,7 @@ export function useStreamSeats(
 
   const joinSeat = useCallback(async (seatIndex: number, _price?: number) => {
     if (!effectiveUserId || !_streamId) {
-      toast.error('Login to request a stage spot')
+      toast.error('Login to join a stage seat')
       return false
     }
 
@@ -89,12 +89,12 @@ export function useStreamSeats(
 
       if (error) {
         console.warn('[useStreamSeats] joinSeat rpc error', error)
-        toast.error('Failed to request seat')
+        toast.error('Failed to join seat')
         return false
       }
 
       if (data && (data as any).success) {
-        toast.success('Seat requested')
+        toast.success('Seat joined')
         await fetchSeats()
         return true
       }
@@ -102,7 +102,7 @@ export function useStreamSeats(
       return false
     } catch (err) {
       console.warn('[useStreamSeats] joinSeat failed', err)
-      toast.error('Failed to request seat')
+      toast.error('Failed to join seat')
       return false
     }
   }, [_streamId, effectiveUserId, _streamData, fetchSeats])

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { usePresenceStore } from '@/lib/presenceStore';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { toast } from 'sonner';
 import {
   Activity,
@@ -1038,25 +1039,38 @@ const openAction = useCallback((user: UserListItem, action: string) => {
 
     if (!isStaff) return null;
 
-    const renderFloatingButton = () => (
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className={`fixed bottom-4 right-4 z-[100] flex h-10 min-w-[2.5rem] items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${
-          showSignupFlash ? 'ring-4 ring-blue-500 ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.6)]' : ''
-        }`}
-        style={{
-          backgroundColor: stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
-          boxShadow: `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
-        }}
-        title={`RTC Monitor - ${stats.liveStreams} live streams`}
-      >
-        <Monitor className="h-4 w-4 text-white" />
-        <span className="inline-flex items-center justify-center rounded-full bg-emerald-300 px-1.5 py-0.5 text-[9px] font-bold leading-none text-black">
-          {onlineCount}
-        </span>
-      </button>
-    );
+    const renderFloatingButton = () => {
+      const { isMobileWidth } = useIsMobile();
+      
+      // Only render on web (not mobile)
+      if (isMobileWidth) return null;
+      
+      const buttonSize = isOpen ? 'h-10 min-w-[2.5rem]' : 'h-20 min-w-[5rem]';
+      const iconSize = isOpen ? 'h-4 w-4' : 'h-8 w-8';
+      const badgePx = isOpen ? 'px-1.5' : 'px-3';
+      const badgePy = isOpen ? 'py-0.5' : 'py-1';
+      const badgeTextSize = isOpen ? 'text-[9px]' : 'text-[18px]';
+
+      return (
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          className={`fixed bottom-4 right-4 z-[100] flex ${buttonSize} items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${
+            showSignupFlash ? 'ring-4 ring-blue-500 ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.6)]' : ''
+          }`}
+          style={{
+            backgroundColor: stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
+            boxShadow: `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
+          }}
+          title={`RTC Monitor - ${stats.liveStreams} live streams`}
+        >
+          <Monitor className={`${iconSize} text-white`} />
+          <span className={`inline-flex items-center justify-center rounded-full bg-emerald-300 ${badgePx} ${badgePy} ${badgeTextSize} font-bold leading-none text-black`}>
+            {onlineCount}
+          </span>
+        </button>
+      );
+    };
 
   const monitorTabs: Array<{ id: MainTab; label: string; icon: React.ReactNode; adminOnly?: boolean }> = [
     { id: 'rtc', label: 'RTC Monitor', icon: <Radio className="h-3 w-3" /> },

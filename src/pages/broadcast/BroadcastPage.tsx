@@ -16,8 +16,7 @@ import { cn } from '../../lib/utils'
 
 import { useIsMobile } from '../../hooks/useIsMobile'
 
-import { Stream, StagePass } from '../../types/broadcast'
-import BroadcastControls from '../../components/broadcast/BroadcastControls'
+import { Stream } from '../../types/broadcast'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
@@ -30,9 +29,105 @@ import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
 const guestLabel = 'rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]'
 const sectionLabel = 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm font-bold text-white/70 backdrop-blur'
 
+function getRemoteParticipantIdentity(participant: any): string {
+  return String(
+    participant?.identity ||
+      participant?.participantIdentity ||
+      participant?.name ||
+      participant?.metadata?.user_id ||
+      participant?.metadata?.userId ||
+      '',
+  )
+}
+
+function getRemoteParticipantMetadata(participant: any): any {
+  const raw = participant?.metadata
+  if (!raw) return {}
+  if (typeof raw === 'object') return raw
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
+}
+
+function normalizeIdentityToken(value?: string | null): string {
+  return String(value || '').replace(/^viewer-/, '').trim()
+}
+
+function remoteParticipantMatchesUser(participant: any, userId?: string | null): boolean {
+  if (!participant || !userId) return false
+
+  const identity = getRemoteParticipantIdentity(participant)
+  const metadata = getRemoteParticipantMetadata(participant)
+  const normalizedIdentity = normalizeIdentityToken(identity)
+  const normalizedUserId = normalizeIdentityToken(userId)
+
+  const identityMatchesUser =
+    identity === userId ||
+    identity.endsWith(`-${userId}`) ||
+    normalizedIdentity === normalizedUserId ||
+    normalizedIdentity.startsWith(normalizedUserId) ||
+    normalizedUserId.startsWith(normalizedIdentity)
+
+  return (
+    identityMatchesUser ||
+    metadata.user_id === userId ||
+    metadata.user_id === normalizedUserId ||
+    metadata.userId === userId ||
+    metadata.userId === normalizedUserId ||
+    participant?.user_id === userId ||
+    participant?.user_id === normalizedUserId ||
+    participant?.userId === userId ||
+    participant?.userId === normalizedUserId
+  )
+}
+
+function getVideoTrackFromRemoteParticipant(participant: any): RemoteVideoTrack | null {
+  if (!participant) return null
+
+  const publications: RemoteTrackPublication[] = []
+  const collectFromMap = (maybeMap: any) => {
+    if (!maybeMap) return
+    if (typeof maybeMap.values === 'function') {
+      publications.push(...(Array.from(maybeMap.values()) as RemoteTrackPublication[]))
+      return
+    }
+    if (Array.isArray(maybeMap)) publications.push(...maybeMap)
+  }
+
+  collectFromMap(participant.videoTrackPublications)
+  collectFromMap(participant.trackPublications)
+  collectFromMap(participant.tracks)
+  collectFromMap(participant.publications)
+
+  const cameraPub =
+    publications.find((pub: any) => pub?.source === Track.Source.Camera && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.kind === Track.Kind.Video && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.track?.kind === Track.Kind.Video && pub?.track?.attach) ||
+    publications.find((pub: any) => pub?.track?.mediaStreamTrack?.kind === 'video' && pub?.track?.attach)
+
+  return (cameraPub?.track as RemoteVideoTrack) || null
+}
+
+function getRemoteSeatVideoTrack(
+  participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
+  userId?: string | null,
+): RemoteVideoTrack | null {
+  if (!participants || !userId) return null
+
+  const list = Array.isArray(participants)
+    ? participants
+    : typeof participants.values === 'function'
+      ? Array.from(participants.values())
+      : []
+
+  const participant = list.find((entry: any) => remoteParticipantMatchesUser(entry, userId))
+  return getVideoTrackFromRemoteParticipant(participant)
+}
+
 
 import BroadcastStageLayout from '../../components/broadcast/BroadcastStageLayout'
-import StagePassRequestsPanel from '@/components/broadcast/StagePassRequestsPanel'
 
 import ShareModal from '@/components/broadcast/ShareModal'
 import ErrorBoundary from '@/components/ErrorBoundary'
@@ -45,7 +140,7 @@ import { BroadcastGift } from '@/hooks/useBroadcastRealtime'
 import { useBroadcastTicker } from '@/hooks/useBroadcastTicker'
 import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueController'
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
-import { useStagePasses } from '@/hooks/useStagePasses'
+import { useStreamSeats } from '@/hooks/useStreamSeats'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
 import { GiftItem } from '@/lib/giftConstants'
@@ -55,7 +150,7 @@ import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
 import { useTickerStore } from '@/stores/tickerStore'
 import { AnimatePresence } from 'framer-motion'
-import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, ShieldCheck, Sparkles, Skull } from 'lucide-react'
+import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, ShieldCheck, Sparkles, Skull, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
 import AbilityBox from '@/components/broadcast/AbilityBox'
@@ -189,11 +284,49 @@ export function BroadcastPage() {
   const isHost = stream?.user_id === user?.id
   const isBroadcaster = isHost;
 
-  // Stage Pass System
-  const stagePassesHook = useStagePasses(streamId)
-  const { stagePasses, requests, approveStagePass, denyStagePass } = stagePassesHook
+  const { seats } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+  const configuredViewerSeatCount = useMemo(() => {
+    const derivedFromPrices = Array.isArray(stream?.seat_prices)
+      ? Math.max(0, stream.seat_prices.length - 1)
+      : 0
 
-  console.debug('[BroadcastPage StagePass Requests]', { streamId, requests, stagePasses })
+    if (derivedFromPrices > 0) {
+      return Math.min(6, derivedFromPrices)
+    }
+
+    const derivedFromBoxCount = Math.max(0, Number(stream?.box_count ?? 0) - 1)
+    return Math.min(6, derivedFromBoxCount)
+  }, [stream?.box_count, stream?.seat_prices])
+  const currentViewerSeatCount = configuredViewerSeatCount
+
+  const viewerSeatCards = useMemo(() => {
+    if (currentViewerSeatCount <= 0) return []
+
+    return Array.from({ length: currentViewerSeatCount }, (_, offset) => {
+      const seatIndex = offset + 1
+      const seat = seats?.[seatIndex]
+      const seatUserId = seat?.user_id || seat?.guest_id || null
+      const seatPrice = Array.isArray(stream?.seat_prices)
+        ? Number(stream.seat_prices[seatIndex] ?? stream?.seat_price ?? 0)
+        : Number(stream?.seat_price ?? 0)
+      const isOccupied = Boolean(seat?.status === 'active' && seatUserId)
+      const displayName =
+        seat?.user_profile?.display_name ||
+        seat?.user_profile?.username ||
+        seat?.profile?.display_name ||
+        seat?.profile?.username ||
+        'Viewer'
+      const avatarUrl = seat?.user_profile?.avatar_url || seat?.profile?.avatar_url || null
+      return {
+        seatIndex,
+        seatUserId,
+        seatPrice,
+        isOccupied,
+        displayName,
+        avatarUrl,
+      }
+    })
+  }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices])
 
   const roomName = useMemo(() => {
   return (
@@ -490,12 +623,33 @@ export function BroadcastPage() {
   
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
-   const [isStagePassModalOpen, setIsStagePassModalOpen] = useState(false)
+   const [isSeatsModalOpen, setIsSeatsModalOpen] = useState(false)
+   const [seatModalCount, setSeatModalCount] = useState(1)
+   const [seatModalPrices, setSeatModalPrices] = useState<number[]>([0])
+   const [selectedSeatIndex, setSelectedSeatIndex] = useState(0)
    const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
    const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans' | 'settings'>('chat')
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
    const [giftNameMap, setGiftNameMap] = useState<Record<string, string>>({})
+
+   useEffect(() => {
+     setSeatModalPrices((current) => {
+       const fallbackPrice = Math.max(0, Number(stream?.seat_price ?? current[0] ?? 0))
+       const next = [...current].slice(0, seatModalCount)
+
+       while (next.length < seatModalCount) {
+         const lastPrice = next.length > 0 ? next[next.length - 1] : fallbackPrice
+         next.push(Math.max(0, Number(lastPrice ?? fallbackPrice)))
+       }
+
+       return next
+     })
+   }, [seatModalCount, stream?.seat_price])
+
+   useEffect(() => {
+     setSelectedSeatIndex((current) => Math.max(0, Math.min(current, Math.max(0, seatModalCount - 1))))
+   }, [seatModalCount])
    const [giftUserPositions, setGiftUserPositions] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({})
     const getGiftUserPositionsRef = useRef<() => Record<string, { top: number; left: number; width: number; height: number }>>(() => ({}))
     const giftNameMapRef = useRef<Record<string, string>>({})
@@ -632,10 +786,8 @@ export function BroadcastPage() {
     setRecentGifts((current) => current.filter((gift) => gift.id !== giftId))
   }, [])
 
-  // Determine if current user can publish based on Stage Pass status
+  // Determine if current user can publish from host role
   const canPublish = isHost
-    || stagePassesHook.currentUserStagePass?.status === 'live'
-    || stagePassesHook.currentUserStagePass?.status === 'approved';
 
     // Modal state lifted from BroadcastGrid
     const [userActionTarget, setUserActionTarget] = useState<{
@@ -1397,24 +1549,93 @@ useEffect(() => {
    const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
    const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
    const handleClosePinProductModal = useCallback(() => setIsPinProductModalOpen(false), [])
-   const handleOpenStagePassModal = useCallback(() => setIsStagePassModalOpen(true), [])
-   const handleCloseStagePassModal = useCallback(() => setIsStagePassModalOpen(false), [])
+   const handleOpenSeatsModal = useCallback(() => {
+     const fallbackPrice = Math.max(0, Number(stream?.seat_price ?? 0))
+     const existingSeatPrices = Array.isArray(stream?.seat_prices)
+       ? stream.seat_prices.slice(1, 1 + Math.max(0, currentViewerSeatCount))
+       : []
+     const normalizedPrices = Array.from({ length: Math.max(0, currentViewerSeatCount) }, (_, index) => {
+       const existingPrice = existingSeatPrices[index]
+       return Math.max(0, Number(typeof existingPrice === 'number' ? existingPrice : fallbackPrice))
+     })
+
+     setSeatModalCount(Math.max(0, Math.min(6, currentViewerSeatCount)))
+     setSeatModalPrices(normalizedPrices)
+     setSelectedSeatIndex(0)
+     setIsSeatsModalOpen(true)
+   }, [currentViewerSeatCount, stream?.seat_price, stream?.seat_prices])
+   const handleCloseSeatsModal = useCallback(() => setIsSeatsModalOpen(false), [])
    const handleOpenMoreMenu = useCallback(() => setIsMoreControlsOpen(true), [])
    const handleCloseMoreMenu = useCallback(() => setIsMoreControlsOpen(false), [])
+   const handleSeatPriceStep = useCallback((seatIndex: number, delta: number) => {
+     if (seatModalCount <= 0 || seatIndex < 0 || seatIndex >= seatModalCount) return
+     setSeatModalPrices((current) => {
+       const next = [...current]
+       next[seatIndex] = Math.max(0, Number(next[seatIndex] ?? 0) + delta)
+       return next
+     })
+   }, [seatModalCount])
+   const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
+     if (seatModalCount <= 0 || seatIndex < 0 || seatIndex >= seatModalCount) return
+     setSeatModalPrices((current) => {
+       const next = [...current]
+       next[seatIndex] = Math.max(0, Number(value || 0))
+       return next
+     })
+   }, [seatModalCount])
 
-  const handleOpenStagePassConfirm = useCallback(async (count: number, priceCoins: number) => {
+  const handleApplySeatConfiguration = useCallback(async (count: number, prices: number[]) => {
     try {
       if (!streamId || !user?.id) {
         toast.error('Not connected to a live stream');
         return;
       }
-      await stagePassesHook.openStagePasses(Math.min(count, 5), Math.max(0, priceCoins));
-      await stagePassesHook.loadStagePasses();
-      setIsStagePassModalOpen(false);
+
+      const desiredViewerSeats = Math.max(0, Math.min(6, count));
+      const totalBoxes = desiredViewerSeats + 1;
+      const normalizedPrices = Array.from({ length: desiredViewerSeats }, (_, index) =>
+        Math.max(0, Number(prices[index] ?? 0)),
+      )
+      const nextSeatPrices = [0, ...normalizedPrices]
+
+      const seatsToRemove = Object.values(seats).filter(
+        (seat) => seat.status === 'active' && (seat.seat_index ?? 0) >= totalBoxes,
+      )
+
+      for (const seat of seatsToRemove) {
+        const { error: leaveError } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
+        if (leaveError) {
+          throw leaveError
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('streams')
+        .update({
+          box_count: totalBoxes,
+          seat_price: normalizedPrices[0] ?? 0,
+          seat_prices: nextSeatPrices,
+        })
+        .eq('id', streamId)
+        .eq('user_id', user.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      setStream((current) => current ? {
+        ...current,
+        box_count: totalBoxes,
+        seat_price: normalizedPrices[0] ?? 0,
+        seat_prices: nextSeatPrices,
+      } : current)
+
+      toast.success(`Seats updated to ${desiredViewerSeats} viewer seat${desiredViewerSeats === 1 ? '' : 's'}`)
+      setIsSeatsModalOpen(false)
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to open Stage Passes');
+      toast.error(err?.message || 'Failed to update seats')
     }
-  }, [stagePassesHook, streamId, user?.id])
+  }, [seats, setStream, streamId, user?.id])
   const handleOpenCoinStore = useCallback(() => setIsCoinStoreOpen(true), [])
   const handleCloseCoinStore = useCallback(() => setIsCoinStoreOpen(false), [])
   const handleOpenAbilityBox = useCallback(() => setIsAbilityBoxOpen(true), [])
@@ -2302,10 +2523,8 @@ useEffect(() => {
       return
     }
 
-     const shouldPublish = isHost
-     || stagePassesHook.currentUserStagePass?.status === 'live'
-     || stagePassesHook.currentUserStagePass?.status === 'approved'
-    
+    const shouldPublish = isHost
+
     // Determine the user identity for LiveKit
     // Use user.id for logged-in users, or anonymous viewer for guests
     const userIdentity = user?.id || anonymousViewerIdRef.current;
@@ -2336,7 +2555,7 @@ useEffect(() => {
       if (!shouldPublish) {
         // OPTIMIZED: Don't block UI - connect in background without isJoining state
         try {
-          const viewerIdentity = `viewer-${userIdentity.substring(0, 12)}`
+          const viewerIdentity = userIdentity
           // OPTIMIZED: Use parallel fetch for faster token get
           console.log('[BroadcastPage] 📡 Fetching LiveKit token from Supabase Edge Function...', {
             streamId: stream.id,
@@ -2348,7 +2567,7 @@ useEffect(() => {
           const { data, error } = await supabase.functions.invoke('livekit-token', {
             body: {
               room: stream.id,
-              identity: viewerIdentity, // Use viewerIdentity for audience
+              identity: viewerIdentity,
               name: profile?.username || user?.email || 'Guest Viewer',
               role: 'audience',
               isHost: false
@@ -3900,13 +4119,13 @@ const handleLike = useCallback(async () => {
               />
             )}
 
-            {/* ── MAIN CONTENT GRID (2-column) ── */}
+            {/* ── MAIN CONTENT GRID (3-column) ── */}
             <main
               className="grid flex-1 min-h-0 gap-4 px-5 py-4"
-              style={{ gridTemplateColumns: 'minmax(430px, 1.2fr) 360px' }}
+              style={{ gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }}
             >
               {/* ── LEFT: Host Video Card ── */}
-              <section className={cn('relative min-h-0 overflow-hidden', theme.hostVideoPanel)}>
+              <section className={cn('relative h-full min-h-0 overflow-hidden', theme.hostVideoPanel)}>
 
                 {/* Camera starting fallback — shows when no video track is available */}
                 {(() => {
@@ -4034,6 +4253,78 @@ const handleLike = useCallback(async () => {
                    )
                  })()}
                </section>
+
+              <aside
+                className={cn(
+                  'flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/25 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.14),transparent_36%),rgba(2,6,23,0.78)] p-4 backdrop-blur-xl shadow-[0_0_30px_rgba(45,212,191,0.16)]'
+                )}
+              >
+                <div className="flex shrink-0 items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.25em] text-cyan-200/80">Seats</p>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Same viewer layout: clean boxes beside the broadcaster, never layered over the host camera.
+                    </p>
+                  </div>
+                  <div className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-sm font-bold text-cyan-100">
+                    {viewerSeatCards.filter((seat) => seat.isOccupied).length}/{currentViewerSeatCount} live
+                  </div>
+                </div>
+
+                <div className="mt-4 grid min-h-0 flex-1 grid-cols-2 auto-rows-fr gap-4">
+                  {viewerSeatCards.map((seat) => {
+                    const seatVideoTrack = getRemoteSeatVideoTrack(remoteParticipants, seat.seatUserId)
+
+                    return (
+                    <div
+                      key={seat.seatIndex}
+                      className={cn(
+                        'relative min-h-[155px] overflow-hidden rounded-2xl border bg-black/30 shadow-[0_0_20px_rgba(15,23,42,0.45)] transition-all',
+                        seat.isOccupied
+                          ? 'border-emerald-400/45 shadow-[0_0_24px_rgba(16,185,129,0.16)]'
+                          : 'border-cyan-400/45 shadow-[0_0_24px_rgba(34,211,238,0.12)]'
+                      )}
+                    >
+                      {seat.isOccupied && seatVideoTrack ? (
+                        <TrackAttach track={seatVideoTrack} />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
+                          {seat.isOccupied && seat.avatarUrl ? (
+                            <img
+                              src={seat.avatarUrl}
+                              alt={seat.displayName}
+                              className="h-12 w-12 rounded-full border border-emerald-300/50 object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]"
+                            />
+                          ) : (
+                            <Users className="h-10 w-10 text-cyan-200/35" />
+                          )}
+                        </div>
+                      )}
+
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/15" />
+
+                      <div className="absolute left-3 top-3 z-10 rounded-full border border-cyan-300/25 bg-black/45 px-3 py-1 text-xs font-black text-white backdrop-blur-md">
+                        Seat {seat.seatIndex}
+                      </div>
+
+                      <div className="absolute bottom-3 left-3 right-3 z-10">
+                        <div className="truncate text-sm font-black text-white">
+                          {seat.isOccupied ? seat.displayName : 'Open Seat'}
+                        </div>
+                        <div className={cn(
+                          'mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em]',
+                          seat.isOccupied
+                            ? 'border-emerald-300/30 bg-emerald-500/15 text-emerald-200'
+                            : 'border-purple-300/30 bg-purple-500/15 text-purple-200'
+                        )}>
+                          {seat.isOccupied ? 'On Camera' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                        </div>
+                      </div>
+                    </div>
+                    )
+                  })}
+                </div>
+              </aside>
 
               {/* ── RIGHT: Chat Panel ── */}
               <aside className={cn(
@@ -4238,18 +4529,18 @@ const handleLike = useCallback(async () => {
 
               {/* ── BOTTOM CONTROL BAR ── */}
               <BroadcastBottomBar
-                openPassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
+                openPassCount={currentViewerSeatCount}
                 isMicOn={micEnabled}
                 isCamOn={cameraEnabled}
                 isLive={stream.status === 'live'}
                 isGiftTrayOpen={isGiftModalOpen}
-                isOfficerModalOpen={!!(stagePassesHook as any)?.showOfficer}
+                isOfficerModalOpen={false}
                 onToggleMic={toggleMicrophone}
                 onToggleCam={toggleCamera}
                 onGift={handleGiftHost}
                 onShare={handleOpenShareModal}
-                onOpenStagePass={() => {}}
-                onManageStagePass={() => {}}
+                onOpenStagePass={handleOpenSeatsModal}
+                onManageStagePass={handleOpenSeatsModal}
                 onOpenMoreMenu={handleOpenMoreMenu}
                 onEndStream={handleStreamEnd}
                 onOpenCoinStore={handleOpenCoinStore}
@@ -4330,13 +4621,159 @@ const handleLike = useCallback(async () => {
                 />
                 </div>
               )}
-              {isStagePassModalOpen && (
-                <div className="pointer-events-auto">
-                <OpenStagePassModal
-                  isOpen={isStagePassModalOpen}
-                  onClose={handleCloseStagePassModal}
-                  onConfirm={handleOpenStagePassConfirm}
-                />
+              {isSeatsModalOpen && (
+                <div className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/70 px-4 py-4 backdrop-blur-xl">
+                  <div className="relative w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-hidden rounded-[32px] border border-cyan-300/25 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.18),transparent_42%),rgba(2,6,23,0.96)] text-white shadow-[0_0_55px_rgba(34,211,238,0.22)]">
+                    <div className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-5">
+                      <button
+                        type="button"
+                        onClick={handleCloseSeatsModal}
+                        className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition hover:border-rose-300/35 hover:bg-rose-500/15 hover:text-white"
+                        aria-label="Close manage seats"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+
+                      <div className="pr-12">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.22em] text-cyan-200">
+                          <Users className="h-4 w-4" />
+                          Manage Seats
+                        </div>
+                        <h2 className="mt-4 text-2xl font-black tracking-tight">Broadcast seat controls</h2>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                          Toggle how many viewer seats appear beside the host box, then tap any live seat to assign its price. Your changes save instantly when you hit Save Seat Layout.
+                        </p>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr,1.1fr]">
+                        <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
+                          <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200/75">Viewer Seats</p>
+                          <div className="mt-4 flex items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setSeatModalCount((value) => Math.max(0, value - 1))}
+                              className="grid h-12 w-12 place-items-center rounded-2xl border border-rose-300/30 bg-rose-500/15 text-rose-100 shadow-[0_0_18px_rgba(244,63,94,0.18)] transition hover:bg-rose-500/25"
+                              aria-label="Deduct one seat"
+                            >
+                              <Minus className="h-6 w-6" />
+                            </button>
+                            <div className="text-center">
+                              <div className="text-5xl font-black text-white">{seatModalCount}</div>
+                              <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Max 6</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSeatModalCount((value) => Math.min(6, value + 1))}
+                              className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-300/35 bg-cyan-500/15 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.18)] transition hover:bg-cyan-500/25"
+                              aria-label="Add one seat"
+                            >
+                              <Plus className="h-6 w-6" />
+                            </button>
+                          </div>
+                          <p className="mt-4 text-sm leading-relaxed text-slate-300">
+                            Every active seat slot below can be tapped to set an individual price. Inactive slots are hidden until you increase the count.
+                          </p>
+                        </div>
+
+                        <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-black uppercase tracking-[0.22em] text-purple-200/75">Seat editor</p>
+                              <p className="mt-2 text-sm text-slate-200">
+                                {seatModalCount > 0 ? 'Tap a seat to edit its price.' : 'Add a seat to start assigning prices.'}
+                              </p>
+                            </div>
+                            <div className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1 text-xs font-black text-cyan-100">
+                              {seatModalCount > 0 ? `Seat ${selectedSeatIndex + 1}` : 'No seats'}
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            {Array.from({ length: 6 }, (_, index) => {
+                              const active = index < seatModalCount
+                              const selected = index === selectedSeatIndex
+                              const price = seatModalPrices[index] ?? 0
+                              return (
+                                <button
+                                  key={index}
+                                  type="button"
+                                  disabled={!active}
+                                  onClick={() => active && setSelectedSeatIndex(index)}
+                                  className={cn(
+                                    'flex h-20 flex-col justify-center rounded-2xl border px-3 text-left transition',
+                                    active
+                                      ? selected
+                                        ? 'border-cyan-300/70 bg-cyan-500/20 text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.18)]'
+                                        : 'border-cyan-300/25 bg-cyan-500/10 text-cyan-50'
+                                      : 'border-white/10 bg-white/[0.03] text-white/20 cursor-not-allowed'
+                                  )}
+                                >
+                                  <span className="text-[11px] font-black uppercase tracking-[0.18em]">Seat {index + 1}</span>
+                                  <span className="mt-2 text-lg font-black">{active ? `${price} coins` : 'Hidden'}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+
+                          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/55">Selected seat price</p>
+                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => handleSeatPriceStep(selectedSeatIndex, -10)}
+                                disabled={seatModalCount <= 0}
+                                className="grid h-11 w-11 place-items-center rounded-xl border border-rose-300/30 bg-rose-500/15 text-rose-100 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-white/20"
+                                aria-label={`Subtract 10 from seat ${selectedSeatIndex + 1}`}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <div className="flex min-w-[140px] items-center gap-2 rounded-2xl border border-purple-300/25 bg-black/35 px-3 py-2">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={seatModalCount > 0 ? seatModalPrices[selectedSeatIndex] ?? 0 : 0}
+                                  onChange={(event) => handleSeatPriceInput(selectedSeatIndex, event.target.value)}
+                                  disabled={seatModalCount <= 0}
+                                  className="w-full bg-transparent text-lg font-black text-white outline-none disabled:cursor-not-allowed disabled:text-white/20"
+                                  aria-label={`Price for seat ${selectedSeatIndex + 1}`}
+                                />
+                                <span className="text-sm font-bold text-white/60">coins</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleSeatPriceStep(selectedSeatIndex, 10)}
+                                disabled={seatModalCount <= 0}
+                                className="grid h-11 w-11 place-items-center rounded-xl border border-cyan-300/35 bg-cyan-500/15 text-cyan-100 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-white/20"
+                                aria-label={`Add 10 to seat ${selectedSeatIndex + 1}`}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <p className="mt-3 text-xs leading-relaxed text-slate-300">
+                              Use the plus or minus buttons or type a number directly to set the exact price for the selected seat.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={handleCloseSeatsModal}
+                          className="h-12 rounded-2xl border border-white/10 bg-white/5 px-5 text-sm font-black text-white/75 transition hover:bg-white/10 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplySeatConfiguration(seatModalCount, seatModalPrices)}
+                          className="h-12 rounded-2xl border border-cyan-300/35 bg-gradient-to-r from-cyan-500 to-purple-600 px-6 text-sm font-black text-white shadow-[0_0_22px_rgba(34,211,238,0.28)] transition hover:scale-[1.01]"
+                        >
+                          Save Seat Layout
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
               {isPinProductModalOpen && (
@@ -4474,8 +4911,8 @@ const handleLike = useCallback(async () => {
                     onShare={handleOpenShareModal}
                     onEndStream={handleStreamEnd}
                     areSeatsLocked={!!stream?.are_seats_locked}
-                    onManageStagePass={() => {}}
-                    openStagePassCount={stagePassesHook.stagePasses.filter((p: StagePass) => p.status === 'open').length}
+                    onManageStagePass={handleOpenSeatsModal}
+                    openStagePassCount={currentViewerSeatCount}
                     onAssignBroadofficer={handleAssignBroadofficer}
                     onMuteUser={handleMute}
                     onBanUser={handleBlock}

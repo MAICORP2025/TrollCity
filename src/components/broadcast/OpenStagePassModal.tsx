@@ -7,6 +7,8 @@ interface OpenStagePassModalProps {
   onClose: () => void;
   onConfirm: (count: number, priceCoins: number) => void;
   loading?: boolean;
+  initialCount?: number;
+  initialPrice?: number;
 }
 
 export default function OpenStagePassModal({
@@ -14,24 +16,23 @@ export default function OpenStagePassModal({
   onClose,
   onConfirm,
   loading = false,
+  initialCount = 1,
+  initialPrice = 0,
 }: OpenStagePassModalProps) {
-  const [count, setCount] = useState(1);
-  const [priceCoins, setPriceCoins] = useState(0);
+  const [count, setCount] = useState(Math.min(6, Math.max(1, initialCount)));
+  const [priceCoins, setPriceCoins] = useState(Math.max(0, initialPrice));
 
-  // Reset on open
   useEffect(() => {
     if (isOpen) {
-      setCount(1);
-      setPriceCoins(0);
+      setCount(Math.min(6, Math.max(1, initialCount)));
+      setPriceCoins(Math.max(0, initialPrice));
     }
-  }, [isOpen]);
+  }, [isOpen, initialCount, initialPrice]);
 
   if (!isOpen) return null;
 
-    const isFree = priceCoins === 0;
+  const isFree = priceCoins === 0;
   const estimatedEarnings = count * priceCoins;
-
-  const presetLabels = ['Open', 'Open', 'Open', 'Open', 'Open'];
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -55,10 +56,10 @@ export default function OpenStagePassModal({
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
           <div>
             <h2 className="text-lg font-black text-white tracking-tight">
-              Open Stage Pass
+              Seats
             </h2>
             <p className="text-[11px] text-slate-400 mt-1">
-              Open Stage Passes to let viewers request to join you live.
+              Choose up to 6 viewer seats. Your broadcaster slot counts as 1 of 7 total boxes.
             </p>
           </div>
           <button
@@ -71,10 +72,10 @@ export default function OpenStagePassModal({
 
         {/* Content */}
         <div className="px-5 py-4 space-y-5">
-          {/* Number of Stage Passes */}
+          {/* Number of viewer seats */}
           <div>
             <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">
-              Number of Stage Passes
+              Viewer seats
             </label>
             <div className="flex items-center gap-3">
               <button
@@ -95,11 +96,11 @@ export default function OpenStagePassModal({
               </div>
 
               <button
-                onClick={() => setCount((c) => Math.min(5, c + 1))}
-                disabled={count >= 5}
+                onClick={() => setCount((c) => Math.min(6, c + 1))}
+                disabled={count >= 6}
                 className={cn(
                   'w-10 h-10 rounded-xl border flex items-center justify-center transition-all',
-                  count >= 5
+                  count >= 6
                     ? 'bg-white/5 border-white/10 text-white/25 cursor-not-allowed'
                     : 'bg-white/5 border-white/15 text-white hover:bg-white/10 hover:border-cyan-500/40'
                 )}
@@ -109,10 +110,10 @@ export default function OpenStagePassModal({
             </div>
           </div>
 
-          {/* Price per Stage Pass */}
+          {/* Price per viewer seat */}
           <div>
             <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">
-              Price per Stage Pass (coins)
+              Price per viewer seat (coins)
             </label>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -139,17 +140,17 @@ export default function OpenStagePassModal({
               </button>
             </div>
             <p className="text-[10px] text-slate-500 mt-1.5">
-              Viewers will use coins to request a Stage Pass when there&apos;s a price.
+              Viewers will pay coins to claim a seat when the price is above 0.
             </p>
           </div>
 
-          {/* Stage Pass Slots Preview */}
+          {/* Viewer seat preview */}
           <div>
             <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">
-              Stage Pass Slots
+              Seat layout
             </label>
-            <div className="grid grid-cols-5 gap-2">
-              {Array.from({ length: 5 }, (_, i) => {
+            <div className="grid grid-cols-6 gap-2">
+              {Array.from({ length: 6 }, (_, i) => {
                 const slotNum = i + 1;
                 const isOpen = slotNum <= count;
                 return (
@@ -176,16 +177,16 @@ export default function OpenStagePassModal({
           <div className="p-3 rounded-xl bg-white/3 border border-white/8 space-y-1.5">
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-slate-400">You will open</span>
-              <span className="font-bold text-white">{count} Stage Pass{count !== 1 ? 'es' : ''}</span>
+              <span className="font-bold text-white">{count} viewer seat{count !== 1 ? 's' : ''}</span>
             </div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Price per request</span>
+              <span className="text-slate-400">Price per seat</span>
               <span className="font-bold text-white">{isFree ? 'Free' : `${priceCoins} coins`}</span>
             </div>
             <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-white/8">
-              <span className="text-slate-400">You will receive</span>
+              <span className="text-slate-400">Estimated total</span>
               <span className="font-bold text-amber-400">
-                {estimatedEarnings} coins / approved pass
+                {estimatedEarnings} coins
               </span>
             </div>
           </div>
@@ -204,8 +205,8 @@ export default function OpenStagePassModal({
           >
             <span className="text-white">
               {loading
-                ? 'Opening…'
-                : `Open ${count} Stage Pass${count !== 1 ? 'es' : ''}`}
+                ? 'Applying…'
+                : `Apply ${count} seat${count !== 1 ? 's' : ''}`}
             </span>
           </button>
         </div>

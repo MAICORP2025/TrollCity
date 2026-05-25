@@ -185,7 +185,7 @@ export default function MoreControlsDrawer({
               {isHost && onManageStagePass && (
                 <ControlButton
                   icon={UserCheck}
-                  label={`Pass${openStagePassCount ? ` (${openStagePassCount})` : ''}`}
+                  label={`Seats${openStagePassCount ? ` (${openStagePassCount})` : ''}`}
                   onClick={onManageStagePass}
                 />
               )}

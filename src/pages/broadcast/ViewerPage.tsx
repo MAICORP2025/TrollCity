@@ -42,7 +42,6 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
-import { useStagePasses } from '../../hooks/useStagePasses'
 import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
 import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
 
@@ -90,6 +89,16 @@ function parseKickData(raw: string | null) {
 function isKickBanActive(kickData: any) {
   if (!kickData || typeof kickData.timestamp !== 'number') return false
   return Date.now() - kickData.timestamp < KICK_BAN_DURATION_MS
+}
+
+function getSeatPriceForIndex(stream: Stream | null, seatIndex: number) {
+  if (!stream) return 0
+
+  if (Array.isArray((stream as any)?.seat_prices) && typeof (stream as any).seat_prices[seatIndex] === 'number') {
+    return Number((stream as any).seat_prices[seatIndex])
+  }
+
+  return Number((stream as any)?.seat_price ?? 0)
 }
 
 /**
@@ -574,6 +583,7 @@ function ViewerPage() {
 
   const hasJoinedAudienceRef = useRef(false)
   const joiningAudienceRef = useRef(false)
+  const joiningPublisherRef = useRef(false)
   const currentRoomKeyRef = useRef<string | null>(null)
   const viewerIdentityRef = useRef<string>(
     `viewer-${streamId}-${user?.id || Math.random().toString(36).slice(2, 9)}`,
@@ -594,22 +604,18 @@ function ViewerPage() {
     isHost: false,
   })
 
-  const stagePassesHook = useStagePasses(streamId || undefined)
-  const currentUserStagePass = stagePassesHook.currentUserStagePass
-
   const effectiveBoxCount = useMemo(() => {
     const seatCountFromPrices = Array.isArray((stream as any)?.seat_prices)
-      ? (stream as any).seat_prices.length
+      ? Math.max(1, (stream as any).seat_prices.length)
       : 0
-    const rawBoxCount = (stream as any)?.box_count ?? hookBoxCount ?? seatCountFromPrices ?? 1
-    const computedBoxCount = Number(rawBoxCount) || seatCountFromPrices || 1
-    const stagePassMaxIndex = stagePassesHook.stagePasses.reduce(
-      (max, pass) => Math.max(max, pass.stage_index || 0),
-      0,
-    )
-    const inferredSeatCount = stagePassMaxIndex > 0 ? stagePassMaxIndex + 1 : 0
-    return Math.max(1, Math.min(Math.max(computedBoxCount, inferredSeatCount), 6))
-  }, [stream, hookBoxCount, stagePassesHook.stagePasses])
+
+    if (seatCountFromPrices > 0) {
+      return Math.max(1, Math.min(seatCountFromPrices, 6))
+    }
+
+    const rawBoxCount = Number((stream as any)?.box_count ?? hookBoxCount ?? 1)
+    return Math.max(1, Math.min(rawBoxCount || 1, 6))
+  }, [stream, hookBoxCount])
 
   const {
     seats,
@@ -623,35 +629,37 @@ function ViewerPage() {
     userSeat?.status === 'active' && (userSeat?.user_id || userSeat?.guest_id),
   )
 
-  useEffect(() => {
-    if (!streamId || !user?.id) return;
-    if (!currentUserStagePass) return;
-    if (isUserOnStage) return;
-    if (manualStageLeaveRef.current) return;
-    if (!['approved', 'live'].includes(currentUserStagePass.status)) return;
-    if (currentUserStagePass.stage_index == null) return;
+  const availableSeatIndex = useMemo(() => {
+    if (effectiveBoxCount <= 1) return null
 
-    console.debug('[ViewerPage] auto-joining approved stage pass', {
-      streamId,
-      userId: user.id,
-      stagePass: currentUserStagePass,
-      existingSeat: userSeat,
-    });
-
-    void joinSeat(currentUserStagePass.stage_index, 0);
-  }, [streamId, user?.id, currentUserStagePass, isUserOnStage, joinSeat, userSeat]);
-
-  useEffect(() => {
-    if (isUserOnStage) {
-      manualStageLeaveRef.current = false;
+    for (let seatIndex = 1; seatIndex < effectiveBoxCount; seatIndex += 1) {
+      const seat = seats?.[seatIndex]
+      if (!seat || seat.status !== 'active') {
+        return seatIndex
+      }
     }
-  }, [isUserOnStage]);
 
-  useEffect(() => {
-    if (!currentUserStagePass || !['approved', 'live'].includes(currentUserStagePass.status)) {
-      manualStageLeaveRef.current = false;
-    }
-  }, [currentUserStagePass?.status]);
+    return null
+  }, [effectiveBoxCount, seats])
+
+  const availableSeatPrice = useMemo(() => {
+    if (typeof availableSeatIndex !== 'number') return 0
+
+    return Array.isArray((stream as any)?.seat_prices)
+      ? (stream as any).seat_prices[availableSeatIndex]
+      : (stream as any)?.seat_price ?? 0
+  }, [availableSeatIndex, stream])
+
+  const handleJoinAvailableSeat = useCallback(async () => {
+    if (typeof availableSeatIndex !== 'number') return
+    await joinSeat(availableSeatIndex, availableSeatPrice)
+  }, [availableSeatIndex, availableSeatPrice, joinSeat])
+
+  const handleJoinSeatByIndex = useCallback(async (seatIndex: number) => {
+    if (typeof seatIndex !== 'number') return
+    const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
+    await joinSeat(seatIndex, seatPrice)
+  }, [joinSeat, stream])
 
   // Fetch stream mods for the floating overlay badges
   useEffect(() => {
@@ -698,21 +706,23 @@ function ViewerPage() {
 
   const noopCallback = useCallback(() => {}, [])
 
-const {
-  remoteUsers,
-  joinAsAudience,
-  leaveRoom: leaveLiveKitRoom,
-} = useLiveKitRoom({
-  roomId,
-  roomType: 'broadcast',
-  role: isUserOnStage ? 'publisher' : 'viewer',
-  publish: isUserOnStage,
-  audioOnly: false,
-  userName: audienceName,
-  onUserJoined: noopCallback,
-  onUserLeft: noopCallback,
-  onError: handleLiveKitError,
-})
+  const {
+    remoteUsers,
+    isPublishing,
+    joinAsAudience,
+    joinAsPublisher,
+    leaveRoom: leaveLiveKitRoom,
+  } = useLiveKitRoom({
+    roomId,
+    roomType: 'broadcast',
+    role: isUserOnStage ? 'publisher' : 'viewer',
+    publish: isUserOnStage,
+    audioOnly: false,
+    userName: audienceName,
+    onUserJoined: noopCallback,
+    onUserLeft: noopCallback,
+    onError: handleLiveKitError,
+  })
 
   const remoteParticipants = useMemo(() => {
     return Array.isArray(remoteUsers) ? remoteUsers : []
@@ -1236,6 +1246,7 @@ useStreamRealtime(
          leaveLiveKitRoom().catch(() => {})
          hasJoinedAudienceRef.current = false
          joiningAudienceRef.current = false
+         joiningPublisherRef.current = false
          currentRoomKeyRef.current = null
          navigate('/', { replace: true })
          return
@@ -1246,22 +1257,77 @@ useStreamRealtime(
        }
      }
 
-     // When user is on stage, we don't join as audience
-     // The LiveKit connection should be handled by the hook with publisher role
+     const audienceRoomKey = `${streamId}:${roomId}`
+
      if (isUserOnStage) {
-       // If we were previously joined as audience, we should leave
+       if (isPublishing) {
+         currentRoomKeyRef.current = audienceRoomKey
+         viewerIdentityRef.current = user?.id || viewerIdentityRef.current
+         return
+       }
+
+       if (joiningPublisherRef.current || joiningAudienceRef.current) return
+
        if (hasJoinedAudienceRef.current) {
-         leaveLiveKitRoom().catch(() => {})
          hasJoinedAudienceRef.current = false
          joiningAudienceRef.current = false
          currentRoomKeyRef.current = null
+         void leaveLiveKitRoom()
+           .catch(() => {})
+           .finally(() => {
+             joiningPublisherRef.current = true
+             currentRoomKeyRef.current = audienceRoomKey
+             const identity = user?.id || viewerIdentityRef.current
+             viewerIdentityRef.current = identity
+
+             joinAsPublisher(identity)
+               .then(() => {
+                 setViewerError(null)
+                 console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity })
+               })
+               .catch((err: any) => {
+                 const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit publisher join failed'
+                 console.warn('[ViewerPage] joinAsPublisher failed:', err, { errorDetail })
+                 setViewerError(errorDetail)
+               })
+               .finally(() => {
+                 joiningPublisherRef.current = false
+               })
+           })
+         return
        }
+
+       joiningPublisherRef.current = true
+       currentRoomKeyRef.current = audienceRoomKey
+       const identity = user?.id || viewerIdentityRef.current
+       viewerIdentityRef.current = identity
+
+       joinAsPublisher(identity)
+         .then(() => {
+           setViewerError(null)
+           console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity })
+         })
+         .catch((err: any) => {
+           const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit publisher join failed'
+           console.warn('[ViewerPage] joinAsPublisher failed:', err, { errorDetail })
+           setViewerError(errorDetail)
+         })
+         .finally(() => {
+           joiningPublisherRef.current = false
+         })
        return
      }
 
-     const audienceRoomKey = `${streamId}:${roomId}`
+     if (isPublishing) {
+       hasJoinedAudienceRef.current = false
+       joiningPublisherRef.current = false
+       currentRoomKeyRef.current = null
+       void leaveLiveKitRoom().catch(() => {})
+       return
+     }
+
      if (hasJoinedAudienceRef.current && currentRoomKeyRef.current === audienceRoomKey) return
-     if (joiningAudienceRef.current) return
+     if (joiningAudienceRef.current || joiningPublisherRef.current) return
 
      joiningAudienceRef.current = true
      currentRoomKeyRef.current = audienceRoomKey
@@ -1282,13 +1348,39 @@ useStreamRealtime(
        .finally(() => {
          joiningAudienceRef.current = false
        })
-   }, [streamId, roomId, isActive, isUserOnStage, joinAsAudience, leaveLiveKitRoom, user?.id, navigate])
+   }, [streamId, roomId, isActive, isUserOnStage, isPublishing, joinAsAudience, joinAsPublisher, leaveLiveKitRoom, user?.id, navigate])
 
   const stageSlots = useMemo(() => {
     const liveSeats = activeSeats.slice(0, Math.max(0, effectiveBoxCount - 1))
     const emptyCount = Math.max(1, effectiveBoxCount - 1 - liveSeats.length)
     return { liveSeats, emptyCount }
   }, [activeSeats, effectiveBoxCount])
+
+  const seatCards = useMemo(() => {
+    if (effectiveBoxCount <= 1) return []
+
+    return Array.from({ length: effectiveBoxCount - 1 }, (_, offset) => {
+      const seatIndex = offset + 1
+      const seat = seats?.[seatIndex]
+      const isMine = Boolean(user?.id && (seat?.user_id === user.id || seat?.guest_id === user.id))
+      const isOccupied = Boolean(seat?.status === 'active' && (seat?.user_id || seat?.guest_id))
+      const isLocked = Boolean((stream as any)?.are_seats_locked)
+      const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
+      const displayName = getDisplayName(seat?.user_profile || null, 'Viewer')
+      const canJoin = !!user && !isLocked && !isOccupied && !isMine
+
+      return {
+        seatIndex,
+        seat,
+        isMine,
+        isOccupied,
+        isLocked,
+        canJoin,
+        seatPrice,
+        displayName,
+      }
+    })
+  }, [effectiveBoxCount, seats, stream, user?.id])
 
   if (error) {
     return (
@@ -1349,51 +1441,60 @@ useStreamRealtime(
           )}
 
 <main
-  className={cn(
-    'relative z-10 flex flex-1 min-h-0',
-    isMobileViewer
-      ? 'flex-col overflow-hidden px-0 pt-0'
-      : 'grid gap-4 px-5 py-4'
-  )}
-  style={
-    !isMobileViewer
-      ? { gridTemplateColumns: 'minmax(430px, 1.2fr) 360px' }
-      : {
-          paddingBottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT}px + ${MOBILE_SAFE_BOTTOM})`,
-        }
-  }
->
+            className={cn(
+              'relative z-10 flex flex-1 min-h-0',
+              isMobileViewer
+                ? 'flex-col overflow-hidden px-0 pt-0'
+                : 'grid gap-4 px-5 py-4'
+            )}
+            style={
+              !isMobileViewer
+                ? {
+                    gridTemplateColumns:
+                      seatCards.length > 0
+                        ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
+                        : 'minmax(560px, 1fr) 360px',
+                  }
+                : {
+                    paddingBottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT}px + ${MOBILE_SAFE_BOTTOM})`,
+                  }
+            }
+          >
             {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
-<section
-  className={cn(
-    'relative min-h-0 overflow-hidden',
-    theme.hostVideoPanel,
-    isMobileViewer
-      ? 'h-[calc(100dvh-150px-env(safe-area-inset-bottom))] max-h-[calc(100dvh-150px-env(safe-area-inset-bottom))] flex-none rounded-none border-0'
-      : ''
-  )}
->
+            <section
+              className={cn(
+                'relative min-h-0 overflow-hidden',
+                theme.hostVideoPanel,
+                isMobileViewer
+                  ? 'h-[calc(100dvh-150px-env(safe-area-inset-bottom))] max-h-[calc(100dvh-150px-env(safe-area-inset-bottom))] flex-none rounded-none border-0'
+                  : ''
+              )}
+            >
               <RemoteVideoSurface
                 participant={hostParticipant}
                 mirror={false}
                 className="absolute inset-0"
                 onTap={handleLike}
-                fallback={<div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
-                  <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
-                    {broadcasterProfile?.avatar_url ? (
-                      <img
-                        src={broadcasterProfile.avatar_url}
-                        alt={hostName}
-                        className="mx-auto h-24 w-24 rounded-full border-2 border-cyan-300/60 object-cover shadow-[0_0_28px_rgba(34,211,238,0.45)]" />
-                    ) : (
-                      <Video className="mx-auto h-12 w-12 text-cyan-200/70" />
-                    )}
-                    <div className="mt-4 text-lg font-black">{hostName}</div>
-                    <div className="mt-2 text-sm text-slate-300">
-                      {isActive ? 'Camera starting…' : 'Waiting for broadcast…'}
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
+                    <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
+                      {broadcasterProfile?.avatar_url ? (
+                        <img
+                          src={broadcasterProfile.avatar_url}
+                          alt={hostName}
+                          className="mx-auto h-24 w-24 rounded-full border-2 border-cyan-300/60 object-cover shadow-[0_0_28px_rgba(34,211,238,0.45)]"
+                        />
+                      ) : (
+                        <Video className="mx-auto h-12 w-12 text-cyan-200/70" />
+                      )}
+                      <div className="mt-4 text-lg font-black">{hostName}</div>
+                      <div className="mt-2 text-sm text-slate-300">
+                        {isActive ? 'Camera starting…' : 'Waiting for broadcast…'}
+                      </div>
                     </div>
                   </div>
-                </div>} />
+                }
+              />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/25" />
 
@@ -1402,9 +1503,8 @@ useStreamRealtime(
                 Host
               </div>
 
-              {/* Mobile: Username centered at top between Host and LIVE */}
               {isMobileViewer && (
-                <div className="absolute top-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+                <div className="absolute top-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5">
                   <span className="text-xs font-black text-white">{hostName}</span>
                   {broadcasterProfile?.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-purple-400" />}
                 </div>
@@ -1424,77 +1524,182 @@ useStreamRealtime(
                 </span>
               </div>
 
-{viewerError && (
-                  <div className="absolute inset-x-4 top-16 z-30 rounded-2xl border border-red-400/35 bg-gradient-to-r from-red-950/90 to-red-900/80 px-4 py-3 text-sm font-bold text-red-100 shadow-[0_0_30px_rgba(239,68,68,0.25)] backdrop-blur-2xl">
-                    {viewerError}
-                  </div>
-                )}
+              {viewerError && (
+                <div className="absolute inset-x-4 top-16 z-30 rounded-2xl border border-red-400/35 bg-gradient-to-r from-red-950/90 to-red-900/80 px-4 py-3 text-sm font-bold text-red-100 shadow-[0_0_30px_rgba(239,68,68,0.25)] backdrop-blur-2xl">
+                  {viewerError}
+                </div>
+              )}
 
-               {/* Desktop only: Broadcaster box with avatar and name at bottom */}
               {!isMobileViewer && (
-               <div className={cn('absolute left-6 z-20 flex items-center gap-1.5', isMobileViewer ? 'bottom-36' : 'bottom-24')}>
-                {broadcasterProfile?.avatar_url ? (
-                  <img
-                    src={broadcasterProfile.avatar_url}
-                    alt={hostName}
-                    className={cn('border border-white/20 object-cover shadow-[0_0_18px_rgba(45,212,191,0.28)]', isMobileViewer ? 'h-6 w-6 rounded-md' : 'h-9 w-9 rounded-md')} />
-                ) : (
-                  <div className={cn('place-items-center border border-white/20 bg-white/10', isMobileViewer ? 'grid h-6 w-6 rounded-md' : 'grid h-9 w-9 rounded-md')}>
-                    <Crown className={cn('text-cyan-200', isMobileViewer ? 'h-3.5 w-3.5' : 'h-5 w-5')} />
+                <div className="absolute bottom-24 left-6 z-20 flex items-center gap-1.5">
+                  {broadcasterProfile?.avatar_url ? (
+                    <img
+                      src={broadcasterProfile.avatar_url}
+                      alt={hostName}
+                      className="h-9 w-9 rounded-md border border-white/20 object-cover shadow-[0_0_18px_rgba(45,212,191,0.28)]"
+                    />
+                  ) : (
+                    <div className="grid h-9 w-9 place-items-center rounded-md border border-white/20 bg-white/10">
+                      <Crown className="h-5 w-5 text-cyan-200" />
+                    </div>
+                  )}
+                  <span className="text-base font-black text-white">{hostName}</span>
+                  {broadcasterProfile?.is_verified && <BadgeCheck className="h-5 w-5 text-purple-400" />}
+                </div>
+              )}
+
+              {!isMobileViewer && (
+                <div className="absolute bottom-6 left-6 z-20 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onGift(hostId)}
+                    className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.purpleButton)}
+                  >
+                    <Gift className="h-4 w-4" />
+                    Gift
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Share
+                  </button>
+                </div>
+              )}
+
+              {/* ── Mobile floating messages: fixed overlay at bottom of watch surface ── */}
+              {isMobileViewer && (
+                <div
+                  className="pointer-events-none absolute inset-x-3 z-30 flex flex-col-reverse gap-2 overflow-hidden"
+                  style={{
+                    bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT + 12}px + env(safe-area-inset-bottom))`,
+                    maxHeight: '34vh',
+                  }}
+                >
+                  <AnimatePresence initial={false}>
+                    {floatingMessages.slice(0, 4).map((message) => (
+                      <motion.div
+                        key={message.id}
+                        initial={{ opacity: 0, y: 28, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -90, scale: 0.94 }}
+                        transition={{ duration: 0.65, ease: 'easeOut' }}
+                        className="max-w-[84%] rounded-2xl border border-cyan-300/20 bg-black/60 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
+                      >
+                        <span className="font-black text-cyan-200">{message.username}:</span>{' '}
+                        <span className="text-white/90">{message.content}</span>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </section>
+
+            {/* ── CENTER: Seats belong beside the broadcaster, never over it ── */}
+            {!isMobileViewer && seatCards.length > 0 && (
+              <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/25 bg-black/20 p-4 shadow-[0_0_28px_rgba(45,212,191,0.18)] backdrop-blur-xl">
+                <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.25em] text-cyan-200/80">Live Seats</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-300">
+                      Seat coins deduct automatically when a viewer joins.
+                    </p>
                   </div>
-                )}
-                <span className={cn('font-black text-white', isMobileViewer ? 'text-xs' : 'text-base')}>{hostName}</span>
-                {broadcasterProfile?.is_verified && <BadgeCheck className={cn('text-purple-400', isMobileViewer ? 'h-3.5 w-3.5' : 'h-5 w-5')} />}
-              </div>
-            )}
+                  <div className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-sm font-black text-cyan-100">
+                    {seatCards.filter((seat) => !seat.isOccupied).length} open
+                  </div>
+                </div>
 
-            {/* Desktop Gift/Share buttons */}
-            {!isMobileViewer && (
-              <div className="absolute bottom-6 left-6 z-20 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => onGift(hostId)}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.purpleButton)}
-                >
-                  <Gift className="h-4 w-4" />
-                  Gift
-                </button>
-                <button
-                  onClick={handleShare}
-                  className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
-                >
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </button>
-              </div>
-            )}
+                <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
+                  {seatCards.map((seat) => {
+                    const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
+                    const seatParticipant = seatUserId
+                      ? remoteParticipants.find((participant: any) => participantMatchesUser(participant, seatUserId))
+                      : null
 
-            {/* ── Mobile floating messages: fixed overlay at top, floats upward ── */}
-{isMobileViewer && (
-  <div
-    className="pointer-events-none absolute inset-x-3 z-30 flex flex-col-reverse gap-2 overflow-hidden"
-    style={{
-      bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT + 12}px + env(safe-area-inset-bottom))`,
-      maxHeight: '34vh',
-    }}
-  >
-    <AnimatePresence initial={false}>
-      {floatingMessages.slice(0, 4).map((message) => (
-        <motion.div
-          key={message.id}
-          initial={{ opacity: 0, y: 28, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -90, scale: 0.94 }}
-          transition={{ duration: 0.65, ease: 'easeOut' }}
-          className="max-w-[84%] rounded-2xl border border-cyan-300/20 bg-black/60 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
-        >
-          <span className="font-black text-cyan-200">{message.username}:</span>{' '}
-          <span className="text-white/90">{message.content}</span>
-        </motion.div>
-      ))}
-    </AnimatePresence>
-  </div>
-)}
-          </section>
+                    const statusLabel = seat.isMine
+                      ? 'You'
+                      : seat.isOccupied
+                        ? seat.displayName
+                        : seat.isLocked
+                          ? 'Locked'
+                          : seat.seatPrice === 0
+                            ? 'Free Seat'
+                            : `${seat.seatPrice} Coins`
+
+                    return (
+                      <div
+                        key={seat.seatIndex}
+                        className={cn(
+                          'relative min-h-[155px] overflow-hidden rounded-2xl border bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)] shadow-[inset_0_0_18px_rgba(15,23,42,0.78)] transition-all',
+                          seat.isMine
+                            ? 'border-emerald-300/60 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
+                            : seat.isOccupied
+                              ? 'border-purple-300/45 shadow-[0_0_24px_rgba(168,85,247,0.16)]'
+                              : seat.isLocked
+                                ? 'border-white/10 opacity-70'
+                                : 'border-cyan-300/45 hover:border-cyan-200/70 hover:shadow-[0_0_24px_rgba(34,211,238,0.22)]'
+                        )}
+                      >
+                        {seat.isOccupied ? (
+                          <RemoteVideoSurface
+                            participant={seatParticipant}
+                            mirror={false}
+                            className="absolute inset-0"
+                            fallback={
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+                                <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-purple-500/10">
+                                  <Users className="h-6 w-6 text-purple-200/80" />
+                                </div>
+                                <div className="px-3 text-sm font-black text-white">{seat.displayName}</div>
+                                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200/70">Camera starting</div>
+                              </div>
+                            }
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!seat.canJoin}
+                            onClick={() => seat.canJoin && handleJoinSeatByIndex(seat.seatIndex)}
+                            className="flex h-full w-full flex-col items-center justify-center gap-3 p-4 text-center disabled:cursor-not-allowed"
+                          >
+                            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-300/25 bg-cyan-500/10">
+                              <Users className="h-6 w-6 text-cyan-100/75" />
+                            </div>
+                            <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-2 text-sm font-black text-white">
+                              Seat {seat.seatIndex}
+                            </div>
+                            <div className={cn('text-xs font-bold', seat.canJoin ? 'text-cyan-100/80' : 'text-slate-500')}>
+                              {statusLabel}
+                            </div>
+                          </button>
+                        )}
+
+                        {seat.isOccupied && (
+                          <div className="absolute inset-x-3 bottom-3 z-20 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-black text-white">Seat {seat.seatIndex}</p>
+                              <p className="truncate text-[11px] font-bold text-cyan-100/70">{statusLabel}</p>
+                            </div>
+                            {seat.isMine && (
+                              <button
+                                type="button"
+                                onClick={handleLeaveSeat}
+                                className="rounded-lg border border-red-300/25 bg-red-500/15 px-2 py-1 text-[11px] font-black text-red-100"
+                              >
+                                Leave
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </aside>
+            )}
 
           {/* ── RIGHT: Desktop Chat Panel — same flow layout style as BroadcastPage ── */}
           {!isMobileViewer && (
@@ -1804,6 +2009,14 @@ useStreamRealtime(
               >
                 <Share2 className="h-4 w-4" />
                 Share
+              </button>
+              <button
+                onClick={isUserOnStage ? handleLeaveSeat : handleJoinAvailableSeat}
+                disabled={!isUserOnStage && typeof availableSeatIndex !== 'number'}
+                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', !isUserOnStage && typeof availableSeatIndex === 'number' ? theme.purpleButton : 'bg-white/5 text-slate-400')}
+              >
+                <Users className="h-4 w-4" />
+                {isUserOnStage ? 'Leave Stage' : typeof availableSeatIndex === 'number' ? 'Join Seat' : 'No Seats'}
               </button>
               <button
                 onClick={isUserOnStage ? handleLeaveSeat : handleLeave}

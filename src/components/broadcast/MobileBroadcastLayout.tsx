@@ -9,8 +9,8 @@ import { GiftSystemProvider } from '../../lib/hooks/useGiftSystem';
 import GiftTray from './GiftTray';
 import ParticipantStrip from './ParticipantStrip';
 import BroadcastControls from './BroadcastControls';
-import FloatingActionCluster from './FloatingActionCluster';
 import MoreControlsDrawer from './MoreControlsDrawer';
+import UserActionModal from './UserActionModal';
 import { MessageSquare } from 'lucide-react';
 
 interface MobileBroadcastLayoutProps {
@@ -26,6 +26,7 @@ interface MobileBroadcastLayoutProps {
   onFlipCamera: () => void;
   onLeave: () => void;
   onJoinSeat: (index: number) => void;
+  onGift?: (userId: string) => void;
   hostGlowingColor?: string;
   onShare?: () => void;
   isMicEnabled?: boolean;
@@ -49,6 +50,7 @@ export default function MobileBroadcastLayout({
   onFlipCamera,
   onLeave,
   onJoinSeat,
+  onGift,
   hostGlowingColor,
   onShare,
   isMicEnabled = true,
@@ -67,6 +69,12 @@ export default function MobileBroadcastLayout({
   const [isGiftOpen, setIsGiftOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [selectedSeatUser, setSelectedSeatUser] = useState<{
+    userId: string;
+    username?: string;
+    role?: string;
+    createdAt?: string;
+  } | null>(null);
 
   // Track unread messages when chat is closed
   useEffect(() => {
@@ -100,6 +108,27 @@ export default function MobileBroadcastLayout({
     setIsGiftOpen(true);
   }, []);
 
+  const handleSeatUserClick = useCallback((seat: SeatSession) => {
+    if (!seat.user_id) return;
+
+    setSelectedSeatUser({
+      userId: seat.user_id,
+      username: seat.user_profile?.username,
+      role: seat.user_profile?.role || seat.user_profile?.troll_role,
+      createdAt: seat.user_profile?.created_at,
+    });
+  }, []);
+
+  const handleCloseSeatUser = useCallback(() => {
+    setSelectedSeatUser(null);
+  }, []);
+
+  const handleGiftSelectedUser = useCallback(() => {
+    if (!selectedSeatUser) return;
+    onGift?.(selectedSeatUser.userId);
+    setSelectedSeatUser(null);
+  }, [onGift, selectedSeatUser]);
+
   // Calculate stage height based on viewport
   const stageHeight = `calc(100dvh - ${headerHeight}px - ${isMinimized ? '60' : dockHeight}px)`;
 
@@ -125,6 +154,8 @@ export default function MobileBroadcastLayout({
           onGiftHost={handleGift}
           onLeave={handleLeave}
           onShare={onShare}
+          handleLike={() => {}}
+          toggleBattleMode={() => {}}
           localTracks={localTracks}
           toggleCamera={handleToggleCamera}
           toggleMicrophone={handleToggleMic}
@@ -138,7 +169,6 @@ export default function MobileBroadcastLayout({
           <ChatBottomSheet
             messages={messages}
             onSendMessage={onSendMessage}
-            isOpen={isChatOpen}
           />
         )}
         <MoreControlsDrawer
@@ -208,9 +238,10 @@ export default function MobileBroadcastLayout({
 
           {/* Participant Strip (Guests) */}
           <div className="absolute top-2 left-0 right-0 z-20">
-            <ParticipantStrip 
-              seats={seats} 
+            <ParticipantStrip
+              seats={seats}
               onJoinRequest={onJoinSeat}
+              onUserClick={handleSeatUserClick}
             />
           </div>
         </div>
@@ -255,6 +286,20 @@ export default function MobileBroadcastLayout({
             </div>
           </div>
         </div>
+      )}
+
+      {selectedSeatUser && (
+        <UserActionModal
+          streamId={stream.id}
+          userId={selectedSeatUser.userId}
+          username={selectedSeatUser.username}
+          role={selectedSeatUser.role}
+          createdAt={selectedSeatUser.createdAt}
+          isHost={isHost}
+          isModerator={isModerator}
+          onClose={handleCloseSeatUser}
+          onGift={handleGiftSelectedUser}
+        />
       )}
 
       {/* 4. Bottom Dock - Compact Controls */}

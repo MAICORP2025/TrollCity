@@ -4,6 +4,7 @@ import { useAuthStore } from '../../lib/store';
 import { X, UserPlus, Shield, Ban, Gift, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import UserMiniProfile from '../user/UserMiniProfile';
 
 interface GifterBubble {
   gifter_id: string;
@@ -22,6 +23,7 @@ function GiftersBubbleStrip({ streamId, hostId }: GiftersBubbleStripProps) {
   const [loading, setLoading] = useState(true);
   const [selectedGifter, setSelectedGifter] = useState<GifterBubble | null>(null);
   const [showPopup, setShowPopup] = useState(false);
+  const [showMiniProfile, setShowMiniProfile] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -194,12 +196,10 @@ function GiftersBubbleStrip({ streamId, hostId }: GiftersBubbleStripProps) {
     }
   };
 
-  const handleViewProfile = () => {
-    if (selectedGifter) {
-      navigate(`/profile/${selectedGifter.gifter_id}`);
-      setShowPopup(false);
-    }
-  };
+const handleViewProfile = () => {
+     setShowMiniProfile(true);
+     setShowPopup(false);
+   };
 
   if (loading && gifters.length === 0) {
     return null; // Don't show anything while loading
@@ -360,6 +360,15 @@ function GiftersBubbleStrip({ streamId, hostId }: GiftersBubbleStripProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {showMiniProfile && selectedGifter && (
+        <UserMiniProfile
+          userId={selectedGifter.gifter_id}
+          username={selectedGifter.gifter_username}
+          avatarUrl={selectedGifter.gifter_avatar_url}
+          onClose={() => setShowMiniProfile(false)}
+        />
       )}
     </>
   );
