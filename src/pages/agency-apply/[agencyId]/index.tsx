@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
-import { Button } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
-import { Loader } from '../../components/ui/loader';
-import { EmptyState } from '../../components/ui/empty-state';
-import { Checkbox } from '../../components/ui/checkbox';
-import { Textarea } from '../../components/ui/textarea';
-import { Input } from '../../components/ui/input';
+import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../hooks/useAuth';
+import { Button } from '../../../components/ui/button';
+import { Card } from '../../../components/ui/card';
+import { Loader } from '../../../components/ui/loader';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Checkbox } from '../../../components/ui/checkbox';
+import { Textarea } from '../../../components/ui/textarea';
+import { Input } from '../../../components/ui/input';
 
 export default function AgencyApplyPage() {
   const { agencyId } = useParams<{ agencyId: string }>();

@@ -1,214 +1,325 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
-import { Button } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
-import { Loader } from '../../components/ui/loader';
-import { EmptyState } from '../../components/ui/empty-state';
-import { Badge } from '../../components/ui/badge';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../hooks/useAuth';
+import { Button } from '../../../components/ui/button';
+import { Loader } from '../../../components/ui/loader';
+import { Badge } from '../../../components/ui/badge';
+
+type Agency = {
+  id: string;
+  owner_id: string;
+  name: string;
+  slug?: string | null;
+  bio?: string | null;
+  logo_url?: string | null;
+  banner_url?: string | null;
+  status: string;
+  default_split_percent?: number | null;
+  created_at?: string;
+};
+
+type AgencyMember = {
+  id?: string;
+  agency_id: string;
+  user_id: string;
+  role: 'owner' | 'manager' | 'recruiter' | 'creator' | string;
+  status: string;
+  user_profiles?: {
+    username?: string | null;
+    avatar_url?: string | null;
+    rgb_username_expires_at?: string | null;
+  } | null;
+};
+
+type AgencyGoal = {
+  id: string;
+  agency_id: string;
+  title: string;
+  description?: string | null;
+  status: string;
+  target_value: number;
+  progress_value?: number | null;
+  created_at?: string;
+};
+
+type AgencyStats = {
+  liveHours: number;
+  giftEarnings: number;
+  battleCount: number;
+  creatorCount: number;
+};
+
+const getGoalPercent = (goal: AgencyGoal) => {
+  const target = Number(goal.target_value || 0);
+  const progress = Number(goal.progress_value || 0);
+
+  if (!target || target <= 0) return 0;
+
+  return Math.min((progress / target) * 100, 100);
+};
 
 export default function AgencyProfilePage() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  
-  const [agency, setAgency] = useState(null);
-  const [members, setMembers] = useState([]);
-  const [topCreators, setTopCreators] = useState([]);
-  const [weeklyStats, setWeeklyStats] = useState(null);
-  const [monthlyStats, setMonthlyStats] = useState(null);
-  const [goals, setGoals] = useState([]);
+  const location = useLocation();
+
+  const [agency, setAgency] = useState<Agency | null>(null);
+  const [ownerUsername, setOwnerUsername] = useState<string>('Unknown');
+  const [members, setMembers] = useState<AgencyMember[]>([]);
+  const [topCreators, setTopCreators] = useState<AgencyMember[]>([]);
+  const [weeklyStats, setWeeklyStats] = useState<AgencyStats | null>(null);
+  const [monthlyStats, setMonthlyStats] = useState<AgencyStats | null>(null);
+  const [goals, setGoals] = useState<AgencyGoal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [userRole, setUserRole] = useState<'owner' | 'manager' | 'creator' | null>(null);
 
+  const activeSection = useMemo(() => {
+    if (location.pathname.includes('/roster')) return 'roster';
+    if (location.pathname.includes('/goals')) return 'goals';
+    return 'overview';
+  }, [location.pathname]);
+
   useEffect(() => {
-    fetchAgencyData();
-  }, [agencyId]);
+    void fetchAgencyData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agencyId, user?.id]);
 
   const fetchAgencyData = async () => {
+    if (!agencyId) {
+      setError('Missing agency id.');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      
-      // Fetch agency info
+      setError(null);
+      setIsMember(false);
+      setUserRole(null);
+
       const { data: agencyData, error: agencyError } = await supabase
         .from('agencies')
         .select('*')
         .eq('id', agencyId)
         .eq('status', 'approved')
-        .single();
+        .maybeSingle();
 
       if (agencyError) throw agencyError;
+
       if (!agencyData) {
-        setError('Agency not found');
+        setError('Agency not found or not approved yet.');
+        setAgency(null);
         return;
       }
-      setAgency(agencyData);
 
-      // Fetch owner info
-      const { data: ownerData } = await supabase
+      const typedAgency = agencyData as Agency;
+      setAgency(typedAgency);
+
+      const { data: ownerData, error: ownerError } = await supabase
         .from('user_profiles')
         .select('username')
-        .eq('id', agencyData.owner_id)
-        .single();
+        .eq('id', typedAgency.owner_id)
+        .maybeSingle();
 
-      // Fetch members
-      const { data: membersData } = await supabase
+      if (!ownerError && ownerData?.username) {
+        setOwnerUsername(ownerData.username);
+      } else {
+        setOwnerUsername('Unknown');
+      }
+
+      const { data: membersData, error: membersError } = await supabase
         .from('agency_members')
-        .select(`
+        .select(
+          `
           *,
-          user_profiles:user_id (username, avatar_url, rgb_username_expires_at)
-        `)
+          user_profiles:user_id (
+            username,
+            avatar_url,
+            rgb_username_expires_at
+          )
+        `,
+        )
         .eq('agency_id', agencyId)
         .eq('status', 'active');
 
-      if (membersData) {
-        setMembers(membersData);
-        // Check if current user is a member and their role
-        if (user) {
-          const member = membersData.find(m => m.user_id === user.id);
-          if (member) {
-            setIsMember(true);
-            setUserRole(member.role as any);
+      if (membersError) throw membersError;
+
+      const typedMembers = (membersData || []) as AgencyMember[];
+      setMembers(typedMembers);
+
+      if (user) {
+        const currentMember = typedMembers.find((member) => member.user_id === user.id);
+
+        if (currentMember) {
+          setIsMember(true);
+
+          if (
+            currentMember.role === 'owner' ||
+            currentMember.role === 'manager' ||
+            currentMember.role === 'creator'
+          ) {
+            setUserRole(currentMember.role);
           }
         }
       }
 
-      // Fetch top creators (simplified - would need actual stats calculation)
-      setTopCreators(membersData
-        ?.filter(m => m.role === 'creator')
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3) || []);
+      const creators = typedMembers.filter((member) => member.role === 'creator');
 
-      // Fetch weekly stats (placeholder)
+      setTopCreators(creators.slice(0, 3));
+
       setWeeklyStats({
-        liveHours: Math.floor(Math.random() * 100),
-        giftEarnings: Math.floor(Math.random() * 10000),
-        battleCount: Math.floor(Math.random() * 50),
-        creatorCount: membersData?.filter(m => m.role === 'creator').length || 0
+        liveHours: 0,
+        giftEarnings: 0,
+        battleCount: 0,
+        creatorCount: creators.length,
       });
 
-      // Fetch monthly stats (placeholder)
       setMonthlyStats({
-        liveHours: Math.floor(Math.random() * 400),
-        giftEarnings: Math.floor(Math.random() * 40000),
-        battleCount: Math.floor(Math.random() * 200),
-        creatorCount: membersData?.filter(m => m.role === 'creator').length || 0
+        liveHours: 0,
+        giftEarnings: 0,
+        battleCount: 0,
+        creatorCount: creators.length,
       });
 
-      // Fetch agency goals
-      const { data: goalsData } = await supabase
+      const { data: goalsData, error: goalsError } = await supabase
         .from('agency_goals')
         .select('*')
         .eq('agency_id', agencyId)
         .in('status', ['active', 'completed'])
         .order('created_at', { ascending: false });
 
-      if (goalsData) setGoals(goalsData);
-
-      setError(null);
-    } catch (err) {
-      setError(err.message);
+      if (!goalsError && goalsData) {
+        setGoals(goalsData as AgencyGoal[]);
+      } else {
+        setGoals([]);
+      }
+    } catch (err: any) {
+      console.error('Error loading agency profile:', err);
+      setError(err?.message || 'Failed to load agency profile.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleJoin = async () => {
+  const handleJoin = () => {
     if (!user) {
       navigate('/auth');
       return;
     }
-    
+
     navigate(`/agency-apply/${agencyId}`);
   };
 
   const handleManageMembership = () => {
-    navigate(`/agency-dashboard`);
+    navigate('/agency-dashboard');
   };
 
   if (loading) return <Loader />;
-  if (error) return <div className="text-red-400 p-4">{error}</div>;
-  if (!agency) return <div className="text-center py-8">Loading agency...</div>;
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black px-4 py-8 text-white">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-red-400/30 bg-red-500/10 p-6 text-red-200">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  if (!agency) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black px-4 py-8 text-center text-white">
+        Loading agency...
+      </div>
+    );
+  }
+
+  const creatorCount = members.filter((member) => member.role === 'creator').length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden mb-6">
-          {agency.banner_url && (
-            <div className="h-48 bg-cover bg-center" style={{ backgroundImage: `url(${agency.banner_url})` }}></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black py-8 text-white">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-6 overflow-hidden rounded-2xl border border-cyan-400/20 bg-slate-900/70 shadow-[0_0_40px_rgba(34,211,238,0.10)] backdrop-blur-xl">
+          {agency.banner_url ? (
+            <div
+              className="h-48 bg-cover bg-center"
+              style={{ backgroundImage: `url(${agency.banner_url})` }}
+            />
+          ) : (
+            <div className="h-48 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.22),transparent_35%),linear-gradient(135deg,rgba(15,23,42,1),rgba(88,28,135,0.45),rgba(15,23,42,1))]" />
           )}
-          
+
           <div className="p-6">
-            <div className="flex items-center space-x-4 mb-4">
+            <div className="mb-4 flex items-center gap-4">
               {agency.logo_url ? (
-                <img 
-                  src={agency.logo_url} 
-                  alt={`${agency.name} logo`} 
-                  className="w-16 h-16 rounded-full border-2 border-cyan-500/30"
+                <img
+                  src={agency.logo_url}
+                  alt={`${agency.name} logo`}
+                  className="h-16 w-16 rounded-full border-2 border-cyan-500/40 object-cover"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-full border-2 border-cyan-500/30 flex items-center justify-center bg-slate-700">
-                  <span className="text-cyan-400 font-bold text-2xl">{agency.name.charAt(0)}</span>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-cyan-500/40 bg-slate-800">
+                  <span className="text-2xl font-black text-cyan-300">
+                    {agency.name.charAt(0)}
+                  </span>
                 </div>
               )}
+
               <div>
-                <h2 className="text-2xl font-bold text-white">{agency.name}</h2>
+                <h2 className="text-2xl font-black text-white">{agency.name}</h2>
                 <p className="text-sm text-slate-400">
-                  Owner: <span className="text-cyan-400">@{ownerData?.username || 'Unknown'}</span>
+                  Owner: <span className="text-cyan-300">@{ownerUsername}</span>
                 </p>
               </div>
             </div>
 
-            {agency.bio && (
-              <p className="text-slate-300 mb-4">
-                {agency.bio}
-              </p>
-            )}
+            {agency.bio && <p className="mb-4 max-w-4xl text-slate-300">{agency.bio}</p>}
 
-            <div className="flex flex-wrap gap-4 mb-4">
-              <Badge variant="outline" className="text-cyan-400 border-cyan-500/30">
-                👥 {members.filter(m => m.role === 'creator').length} Creators
+            <div className="mb-4 flex flex-wrap gap-4">
+              <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
+                👥 {creatorCount} Creators
               </Badge>
-              <Badge variant="outline" className="text-blue-400 border-blue-500/30">
-                ⏰ {weeklyStats?.liveHours} hrs/wk
+              <Badge variant="outline" className="border-blue-500/30 text-blue-300">
+                ⏰ {weeklyStats?.liveHours ?? 0} hrs/wk
               </Badge>
-              <Badge variant="outline" className="text-purple-400 border-purple-500/30">
-                🎁 {weeklyStats?.giftEarnings.toLocaleString()} coins/wk
+              <Badge variant="outline" className="border-purple-500/30 text-purple-300">
+                🎁 {(weeklyStats?.giftEarnings ?? 0).toLocaleString()} coins/wk
               </Badge>
-              <Badge variant="outline" className="text-pink-400 border-pink-500/30">
-                ⚔️ {weeklyStats?.battleCount} battles/wk
+              <Badge variant="outline" className="border-pink-500/30 text-pink-300">
+                ⚔️ {weeklyStats?.battleCount ?? 0} battles/wk
               </Badge>
             </div>
 
-            <div className="flex justify-between items-center mt-4">
-              <div className="flex items-center space-x-2">
+            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-500">Agency Rank:</span>
-                <span className="text-sm font-medium text-cyan-400">#{Math.floor(Math.random() * 50) + 1}</span>
+                <span className="text-sm font-bold text-cyan-300">Coming soon</span>
               </div>
+
               {!user ? (
-                <button 
-                  className="px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded text-sm hover:bg-slate-600/50"
-                  onClick={() => alert('Please log in to join')}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-slate-600 bg-slate-800/60 text-slate-200 hover:bg-slate-700/70"
+                  onClick={() => navigate('/auth')}
                 >
-                  Apply to Join
-                </button>
+                  Log In to Apply
+                </Button>
               ) : isMember ? (
-                <Button 
-                  variant="outline" 
-                  className="px-4 py-2 bg-transparent border border-cyan-500/30 hover:bg-cyan-500/10"
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-cyan-500/30 bg-transparent text-cyan-200 hover:bg-cyan-500/10"
                   onClick={handleManageMembership}
                 >
                   Manage Membership
                 </Button>
               ) : (
-                <Button 
-                  variant="primary" 
-                  className="px-4 py-2"
-                  onClick={handleJoin}
-                >
+                <Button type="button" variant="primary" onClick={handleJoin}>
                   Apply to Join
                 </Button>
               )}
@@ -216,26 +327,39 @@ export default function AgencyProfilePage() {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="mb-6">
-          <div className="flex border-b border-slate-700/50 mb-4">
-            <button 
-              className="px-4 py-2 text-sm font-medium 
-                ${window.location.pathname.includes('/stats') ? 'text-cyan-400 border-b-2 border-cyan-500' : 'text-slate-400 hover:text-white'}"
-              onClick={() => navigate(`/agency/${agencyId}/stats`)}
+          <div className="mb-4 flex flex-wrap border-b border-slate-700/50">
+            <button
+              type="button"
+              className={`px-4 py-2 text-sm font-bold ${
+                activeSection === 'overview'
+                  ? 'border-b-2 border-cyan-500 text-cyan-300'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              onClick={() => navigate(`/agency/${agencyId}`)}
             >
               Overview
             </button>
-            <button 
-              className="px-4 py-2 text-sm font-medium 
-                ${window.location.pathname.includes('/roster') ? 'text-cyan-400 border-b-2 border-cyan-500' : 'text-slate-400 hover:text-white'}"
+
+            <button
+              type="button"
+              className={`px-4 py-2 text-sm font-bold ${
+                activeSection === 'roster'
+                  ? 'border-b-2 border-cyan-500 text-cyan-300'
+                  : 'text-slate-400 hover:text-white'
+              }`}
               onClick={() => navigate(`/agency/${agencyId}/roster`)}
             >
               Roster
             </button>
-            <button 
-              className="px-4 py-2 text-sm font-medium 
-                ${window.location.pathname.includes('/goals') ? 'text-cyan-400 border-b-2 border-cyan-500' : 'text-slate-400 hover:text-white'}"
+
+            <button
+              type="button"
+              className={`px-4 py-2 text-sm font-bold ${
+                activeSection === 'goals'
+                  ? 'border-b-2 border-cyan-500 text-cyan-300'
+                  : 'text-slate-400 hover:text-white'
+              }`}
               onClick={() => navigate(`/agency/${agencyId}/goals`)}
             >
               Goals
@@ -243,36 +367,146 @@ export default function AgencyProfilePage() {
           </div>
         </div>
 
-        {/* Content based on route - simplified for now */}
-        {!window.location.pathname.includes('/stats') && 
-        !window.location.pathname.includes('/roster') && 
-        !window.location.pathname.includes('/goals') && (
+        {activeSection === 'roster' && (
+          <div className="mb-6">
+            <h3 className="mb-3 text-lg font-bold text-cyan-300">Agency Roster</h3>
+
+            {members.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {members.map((member) => (
+                  <Link
+                    key={member.user_id}
+                    to={`/profile/${member.user_id}`}
+                    className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4 transition hover:border-cyan-400/40"
+                  >
+                    <div className="flex items-center gap-3">
+                      {member.user_profiles?.avatar_url ? (
+                        <img
+                          src={member.user_profiles.avatar_url}
+                          alt={`${member.user_profiles?.username || 'Member'} avatar`}
+                          className="h-10 w-10 rounded-full border-2 border-cyan-500/30 object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-cyan-500/30 bg-slate-800">
+                          <span className="font-bold text-cyan-300">
+                            {member.user_profiles?.username?.charAt(0) || '?'}
+                          </span>
+                        </div>
+                      )}
+
+                      <div>
+                        <h4 className="font-bold text-white">
+                          {member.user_profiles?.username || 'Unknown Member'}
+                        </h4>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">{member.role}</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-slate-400">No agency members yet.</p>
+            )}
+          </div>
+        )}
+
+        {activeSection === 'goals' && (
+          <div className="mb-6">
+            <h3 className="mb-3 text-lg font-bold text-cyan-300">Current Goals</h3>
+
+            {goals.length > 0 ? (
+              <div className="space-y-3">
+                {goals.map((goal) => {
+                  const percent = getGoalPercent(goal);
+
+                  return (
+                    <div
+                      key={goal.id}
+                      className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4"
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-4">
+                        <h4 className="font-bold text-white">{goal.title}</h4>
+
+                        <span
+                          className={`rounded px-2 py-1 text-xs ${
+                            goal.status === 'active'
+                              ? 'bg-cyan-500/20 text-cyan-300'
+                              : goal.status === 'completed'
+                                ? 'bg-purple-500/20 text-purple-300'
+                                : 'bg-slate-500/20 text-slate-300'
+                          }`}
+                        >
+                          {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
+                        </span>
+                      </div>
+
+                      {goal.description && (
+                        <p className="mb-2 line-clamp-2 text-slate-300">{goal.description}</p>
+                      )}
+
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <span className="text-xs text-slate-500">Target: </span>
+                          <span className="text-xs font-bold text-cyan-300">
+                            {goal.target_value}
+                          </span>
+                        </div>
+
+                        <div className="w-20 text-right">
+                          <span className="text-xs font-bold text-cyan-300">
+                            {percent.toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 h-1.5 w-full rounded bg-slate-700/50">
+                        <div
+                          className="h-1.5 rounded bg-cyan-500"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-slate-400">No active goals.</p>
+            )}
+          </div>
+        )}
+
+        {activeSection === 'overview' && (
           <>
-            {/* Top Creators */}
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-cyan-400 mb-3">Top Creators</h3>
+              <h3 className="mb-3 text-lg font-bold text-cyan-300">Top Creators</h3>
+
               {topCreators.length > 0 ? (
                 <div className="grid gap-4 sm:grid-cols-3">
-                  {topCreators.map(creator => (
-                    <Link 
-                      key={creator.user_id} 
+                  {topCreators.map((creator) => (
+                    <Link
+                      key={creator.user_id}
                       to={`/profile/${creator.user_id}`}
-                      className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4 hover:shadow-xl transition-shadow duration-300"
+                      className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4 transition hover:border-cyan-400/40"
                     >
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-3">
                         {creator.user_profiles?.avatar_url ? (
-                          <img 
-                            src={creator.user_profiles.avatar_url} 
-                            alt={`${creator.user_profiles?.username || 'Creator'} avatar`} 
-                            className="w-10 h-10 rounded-full border-2 border-cyan-500/30"
+                          <img
+                            src={creator.user_profiles.avatar_url}
+                            alt={`${creator.user_profiles?.username || 'Creator'} avatar`}
+                            className="h-10 w-10 rounded-full border-2 border-cyan-500/30 object-cover"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full border-2 border-cyan-500/30 flex items-center justify-center bg-slate-700">
-                            <span className="text-cyan-400 font-bold">{creator.user_profiles?.username?.charAt(0) || '?'}</span>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-cyan-500/30 bg-slate-800">
+                            <span className="font-bold text-cyan-300">
+                              {creator.user_profiles?.username?.charAt(0) || '?'}
+                            </span>
                           </div>
                         )}
+
                         <div>
-                          <h4 className="text-lg font-semibold text-white">{creator.user_profiles?.username || 'Unknown Creator'}</h4>
+                          <h4 className="text-lg font-bold text-white">
+                            {creator.user_profiles?.username || 'Unknown Creator'}
+                          </h4>
                           <p className="text-sm text-slate-400">Top Performer</p>
                         </div>
                       </div>
@@ -280,93 +514,90 @@ export default function AgencyProfilePage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-slate-400 text-center py-8">No creators yet</p>
+                <p className="py-8 text-center text-slate-400">No creators yet.</p>
               )}
             </div>
 
-            {/* Weekly Stats */}
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-cyan-400 mb-3">Weekly Stats</h3>
+              <h3 className="mb-3 text-lg font-bold text-cyan-300">Weekly Stats</h3>
+
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className="text-cyan-400">⏰</span>
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-cyan-300">⏰</span>
                     <span className="text-sm text-slate-400">Live Hours</span>
                   </div>
-                  <p className="text-2xl font-bold text-white">{weeklyStats?.liveHours}</p>
+                  <p className="text-2xl font-black text-white">{weeklyStats?.liveHours ?? 0}</p>
                   <p className="text-xs text-slate-500">This week</p>
                 </div>
-                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className="text-purple-400">🎁</span>
+
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-purple-300">🎁</span>
                     <span className="text-sm text-slate-400">Gift Earnings</span>
                   </div>
-                  <p className="text-2xl font-bold text-white">{weeklyStats?.giftEarnings?.toLocaleString()}</p>
+                  <p className="text-2xl font-black text-white">
+                    {(weeklyStats?.giftEarnings ?? 0).toLocaleString()}
+                  </p>
                   <p className="text-xs text-slate-500">This week</p>
                 </div>
-                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className="text-pink-400">⚔️</span>
+
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-pink-300">⚔️</span>
                     <span className="text-sm text-slate-400">Battles</span>
                   </div>
-                  <p className="text-2xl font-bold text-white">{weeklyStats?.battleCount}</p>
+                  <p className="text-2xl font-black text-white">
+                    {weeklyStats?.battleCount ?? 0}
+                  </p>
                   <p className="text-xs text-slate-500">This week</p>
                 </div>
-                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className="text-blue-400">👥</span>
+
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-blue-300">👥</span>
                     <span className="text-sm text-slate-400">Creators</span>
                   </div>
-                  <p className="text-2xl font-bold text-white">{weeklyStats?.creatorCount}</p>
+                  <p className="text-2xl font-black text-white">
+                    {weeklyStats?.creatorCount ?? 0}
+                  </p>
                   <p className="text-xs text-slate-500">Active creators</p>
                 </div>
               </div>
             </div>
 
-            {/* Agency Goals */}
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-cyan-400 mb-3">Current Goals</h3>
-              {goals.length > 0 ? (
-                <div className="space-y-3">
-                  {goals.map(goal => (
-                    <div key={goal.id} className="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-semibold text-white">{goal.title}</h4>
-                        <span className="px-2 py-1 text-xs rounded 
-                          ${goal.status === 'active' ? 'bg-cyan-500/20 text-cyan-400' : 
-                            goal.status === 'completed' ? 'bg-purple-500/20 text-purple-400' : 
-                            'bg-slate-500/20 text-slate-400'}">
-                          {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
-                        </span>
-                      </div>
-                      {goal.description && (
-                        <p className="text-slate-300 mb-2 line-clamp-2">{goal.description}</p>
-                      )}
-                      <div className="flex items-center space-x-3">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-slate-500">Target:</span>
-                            <span className="text-xs font-medium text-cyan-400">{goal.target_value}</span>
-                          </div>
-                        </div>
-                        <div className="w-20 text-right">
-                          <span className="text-xs font-medium text-cyan-400">
-                            {Math.min((goal.progress_value || 0) / goal.target_value * 100, 100)}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-slate-700/50 rounded h-1.5 mt-1">
-                        <div 
-                          className="bg-cyan-500 h-1.5 rounded" 
-                          style={{ width: `${Math.min((goal.progress_value || 0) / goal.target_value * 100, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
+              <h3 className="mb-3 text-lg font-bold text-cyan-300">Monthly Stats</h3>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <p className="text-sm text-slate-400">Monthly Live Hours</p>
+                  <p className="mt-2 text-2xl font-black text-white">
+                    {monthlyStats?.liveHours ?? 0}
+                  </p>
                 </div>
-              ) : (
-                <p className="text-slate-400 text-center py-8">No active goals</p>
-              )}
+
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <p className="text-sm text-slate-400">Monthly Gift Earnings</p>
+                  <p className="mt-2 text-2xl font-black text-white">
+                    {(monthlyStats?.giftEarnings ?? 0).toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <p className="text-sm text-slate-400">Monthly Battles</p>
+                  <p className="mt-2 text-2xl font-black text-white">
+                    {monthlyStats?.battleCount ?? 0}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4">
+                  <p className="text-sm text-slate-400">Monthly Creators</p>
+                  <p className="mt-2 text-2xl font-black text-white">
+                    {monthlyStats?.creatorCount ?? 0}
+                  </p>
+                </div>
+              </div>
             </div>
           </>
         )}
