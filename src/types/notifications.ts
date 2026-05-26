@@ -101,10 +101,17 @@ export type NotificationType =
   | 'license_suspension_started'
   | 'license_suspension_ended'
   | 'appeal_submitted'
-  | 'appeal_decision'
+| 'appeal_decision'
 
-  // AUCTIONS / MARKETPLACE
-  | 'auction_starting_soon'
+   // TRMAIL NOTIFICATIONS
+   | 'tromail_received'
+   | 'tromail_important'
+   | 'team_meeting_scheduled'
+   | 'team_meeting_rescheduled'
+   | 'team_meeting_cancelled'
+
+   // AUCTIONS / MARKETPLACE
+   | 'auction_starting_soon'
   | 'seller_you_follow_auction'
   | 'you_placed_bid'
   | 'you_were_outbid'

@@ -1,47 +1,50 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
-  AlertTriangle,
-  Banknote,
-  BookOpen,
-  Briefcase,
-  Building2,
-  ChevronLeft,
-  ChevronRight,
-  Coins,
-  Crown,
-  FileText,
-  Gamepad2,
-  Gavel,
-  Home,
-  Landmark,
-  LayoutDashboard,
-  LifeBuoy,
-  List,
-  Lock,
-  Megaphone,
-  MessageSquare,
-  Newspaper,
-  Package,
-  Radio,
-  Scale,
-  Shield,
-  ShoppingBag,
-  Shuffle,
-  Star,
-  Store,
-  TrendingUp,
-  Trophy,
-  Users,
-  Video,
-  Warehouse,
-  Waves,
-} from 'lucide-react'
+   AlertTriangle,
+   Banknote,
+   BookOpen,
+   Briefcase,
+   Building2,
+   Calendar,
+   ChevronLeft,
+   ChevronRight,
+   Coins,
+   Crown,
+   FileText,
+   Gamepad2,
+   Gavel,
+   Home,
+   Landmark,
+   LayoutDashboard,
+   LifeBuoy,
+   List,
+   Lock,
+   Mail,
+   Megaphone,
+   MessageSquare,
+   Newspaper,
+   Package,
+   Radio,
+   Scale,
+   Shield,
+   ShoppingBag,
+   Shuffle,
+   Star,
+   Store,
+   TrendingUp,
+   Trophy,
+   Users,
+   Video,
+   Warehouse,
+   Waves,
+ } from 'lucide-react'
 
 import CourtEntryModal from './CourtEntryModal'
 import UserProfileWidget from './sidebar/UserProfileWidget'
 import { useAuthStore } from '@/lib/store'
 import { supabase, UserRole } from '@/lib/supabase'
+import { canAccessTromail } from '@/lib/tromail'
 import { useCoins } from '@/lib/hooks/useCoins'
 import { useXPStore } from '@/stores/useXPStore'
 import { useSidebarUpdates } from '@/hooks/useSidebarUpdates'
@@ -134,10 +137,16 @@ export default function Sidebar() {
     profile?.role === UserRole.ADMIN ||
     profile?.troll_role === UserRole.ADMIN ||
     profile?.role === UserRole.HR_ADMIN ||
+    profile?.role === UserRole.AGENCY_HR_MANAGER ||
     profile?.is_admin ||
 profile?.role === 'superadmin' ||
     profile?.troll_role === 'ceo' ||
     !!(profile as { is_superadmin?: boolean })?.is_superadmin
+
+  const isAgentHRManager =
+    profile?.role === UserRole.AGENCY_HR_MANAGER ||
+    profile?.role === UserRole.HR_ADMIN ||
+    profile?.role === UserRole.ADMIN
 
   const isSecretary = profile?.role === UserRole.SECRETARY || profile?.troll_role === UserRole.SECRETARY
 
@@ -324,7 +333,7 @@ profile?.role === 'superadmin' ||
   if (isLead) specialAccessPaths.push('/lead-officer')
   if (canSeeSecretary || isAdmin) specialAccessPaths.push('/secretary')
   if (isAdmin) specialAccessPaths.push('/admin/applications')
-  if (profile?.role === 'president' || profile?.troll_role === 'president') specialAccessPaths.push('/government')
+  if (profile?.role === UserRole.PRESIDENT || profile?.troll_role === UserRole.PRESIDENT) specialAccessPaths.push('/government')
     const systemPaths = ['/apply', '/wallet']
   const isAnyUpdated = (paths: string[]) => paths.some(path => isUpdated(path))
 
@@ -509,18 +518,17 @@ profile?.role === 'superadmin' ||
             <GridItem collapsed={isSidebarCollapsed} icon={Waves} label="Pool" to="/pool" active={isActive('/pool')} highlight={isUpdated('/pool')} onClick={() => markAsViewed('/pool')} className="text-cyan-400" tone="cyan" />
             <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Troll Church" to="/church" active={isActive('/church')} highlight={isUpdated('/church')} onClick={() => markAsViewed('/church')} tone="purple" />
-             <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
+            <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
             <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} highlight={isUpdated('/troll-wheel')} onClick={() => markAsViewed('/troll-wheel')} className="text-cyan-300" tone="cyan" />
 
             <SectionTitle title="Control Room" collapsed={isSidebarCollapsed} />
-            {(canSeeOfficer || canSeeSecretary || profile?.role === 'president' || profile?.troll_role === 'president' || isAdmin) && (
+            {(canSeeOfficer || canSeeSecretary || profile?.role === UserRole.PRESIDENT || profile?.troll_role === UserRole.PRESIDENT || isAdmin) && (
               <GridItem collapsed={isSidebarCollapsed} icon={Landmark} label="Government" to="/government" active={location.pathname === '/government'} highlight={isUpdated('/government')} onClick={() => markAsViewed('/government')} className="text-cyan-300" tone="cyan" />
             )}
             {canSeeInmates && (
               <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Inmates" to="/inmates" active={isActive('/inmates')} highlight={isUpdated('/inmates')} onClick={() => markAsViewed('/inmates')} className="text-red-300" tone="red" />
             )}
-            
             {canAccessOrgDashboard && (
               <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Organization" to="/organization/dashboard" active={isActive('/organization/dashboard')} highlight={isUpdated('/organization/dashboard')} onClick={() => markAsViewed('/organization/dashboard')} className="text-purple-400" tone="purple" />
             )}
@@ -528,19 +536,40 @@ profile?.role === 'superadmin' ||
             {(canSeeOfficer || canSeeSecretary || isAdmin) && (
               <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Streams" to="/government/streams" active={location.pathname.startsWith('/government/streams')} highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')} className="text-red-400" tone="red" />
             )}
-              {(canSeeSecretary || isAdmin) && (
-                <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} className="text-cyan-200" tone="cyan" />
-              )}
-              {isAdmin && (
-                <>
-                  <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Coin Purchase Ledger" to="/admin/coinpurchase-ledger" active={location.pathname.startsWith('/admin/coinpurchase-ledger')} highlight={isUpdated('/admin/coinpurchase-ledger')} onClick={() => markAsViewed('/admin/coinpurchase-ledger')} className="text-cyan-300" tone="cyan" />
-                  <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Startup Expense Tracker" to="/admin/startup-expense-tracker" active={location.pathname.startsWith('/admin/startup-expense-tracker')} highlight={isUpdated('/admin/startup-expense-tracker')} onClick={() => markAsViewed('/admin/startup-expense-tracker')} className="text-cyan-300" tone="cyan" />
-                </>
-              )}
+            {(isAdmin || profile?.role === UserRole.PRESIDENT || profile?.troll_role === UserRole.PRESIDENT) && (
+              <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Treasury" to="/president/treasury" active={isActive('/president/treasury')} highlight={isUpdated('/president/treasury')} onClick={() => markAsViewed('/president/treasury')} className="text-emerald-300" tone="green" />
+            )}
+            {(canSeeSecretary || isAdmin) && (
+              <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} className="text-cyan-200" tone="cyan" />
+            )}
+{isAdmin && (
+               <>
+                 <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Coin Purchase Ledger" to="/admin/coinpurchase-ledger" active={location.pathname.startsWith('/admin/coinpurchase-ledger')} highlight={isUpdated('/admin/coinpurchase-ledger')} onClick={() => markAsViewed('/admin/coinpurchase-ledger')} className="text-cyan-300" tone="cyan" />
+                 <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Startup Expense Tracker" to="/admin/startup-expense-tracker" active={location.pathname.startsWith('/admin/startup-expense-tracker')} highlight={isUpdated('/admin/startup-expense-tracker')} onClick={() => markAsViewed('/admin/startup-expense-tracker')} className="text-cyan-300" tone="cyan" />
+               </>
+             )}
+
+             {/* 📧 Tromail - Internal Role Email for approved roles */}
+             {canAccessTromail && canAccessTromail(profile) && (
+               <GridItem collapsed={isSidebarCollapsed} icon={Mail} label="Tromail" to="/tromail" active={isActive('/tromail')} highlight={isUpdated('/tromail')} onClick={() => markAsViewed('/tromail')} className="text-cyan-300" tone="cyan" />
+             )}
 
              <SectionTitle title="Talent Offices" collapsed={isSidebarCollapsed} />
-             <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
+            {isAgentHRManager && (
+              <GridItem
+                collapsed={isSidebarCollapsed}
+                icon={Briefcase}
+                label="Agency HR"
+                to="/agency-hr-dashboard"
+                active={isActive('/agency-hr-dashboard')}
+                highlight={isUpdated('/agency-hr-dashboard')}
+                onClick={() => markAsViewed('/agency-hr-dashboard')}
+                className="text-cyan-200"
+                tone="cyan"
+               />
+             )}
 
             <SectionTitle title="Support" collapsed={isSidebarCollapsed} />
             <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} tone="blue" />

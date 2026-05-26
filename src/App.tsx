@@ -132,6 +132,7 @@ const AuctioneerDashboard = lazyWithRetry(() => import("./pages/auction/Auctione
 const PresidentPage = lazyWithRetry(() => import("./pages/President"));
 const PresidentDashboard = lazyWithRetry(() => import("./pages/president/PresidentDashboard"));
 const SecretaryDashboard = lazyWithRetry(() => import("./pages/president/SecretaryDashboard"));
+const TreasuryDashboard = lazyWithRetry(() => import("./pages/TreasuryDashboard"));
 
 // Gift store pages removed
 const ApplicationPage = lazyWithRetry(() => import("./pages/ApplicationPage"));
@@ -156,6 +157,7 @@ const CreateAgencyPage = lazyWithRetry(() => import("./pages/agencies/CreateAgen
 const AgencyProfilePage = lazyWithRetry(() => import("./pages/agency/[agencyId]"));
 const AgencyApplyPage = lazyWithRetry(() => import("./pages/agency-apply/[agencyId]"));
 const AgencyDashboard = lazyWithRetry(() => import("./pages/agency-dashboard"));
+const AgencyHRDashboard = lazyWithRetry(() => import("./pages/agency-hr-dashboard"));
 const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
 const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
 const Support = lazyWithRetry(() => import("./pages/Support"));
@@ -273,6 +275,9 @@ const ExecutiveSecretaries = lazyWithRetry(() => import("./pages/admin/Executive
 const ExecutiveReports = lazyWithRetry(() => import("./pages/admin/ExecutiveReports"));
 const AdminTrollTownDeeds = lazyWithRetry(() => import("./pages/admin/AdminTrollTownDeeds"));
 const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersTournament"));
+
+// Tromail
+const TromailPage = lazyWithRetry(() => import("./pages/tromail/TromailPage"));
 
 const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
@@ -1227,6 +1232,14 @@ function AppContent() {
                   
                   {/* Talent Office Dashboard (Protected) */}
                   <Route path="/agency-dashboard" element={<AgencyDashboard />} />
+                  <Route
+                    path="/agency-hr-dashboard"
+                    element={
+                      <RequireRole roles={[UserRole.AGENCY_HR_MANAGER, UserRole.HR_ADMIN]}>
+                        <AgencyHRDashboard />
+                      </RequireRole>
+                    }
+                  />
                   <Route path="/home" element={<LandingHome />} />
                   <Route path="/" element={<LandingHome />} />
                   <Route path="/broadcast/setup" element={<SetupPage />} />
@@ -1247,7 +1260,11 @@ function AppContent() {
                       <SecretaryDashboard />
                     </RequireRole>
                   } />
-
+                  <Route path="/president/treasury" element={
+                    <RequireRole roles={[UserRole.PRESIDENT, UserRole.ADMIN]}>
+                      <TreasuryDashboard />
+                    </RequireRole>
+                  } />
 
                   <Route path="/mobile" element={<Navigate to="/home" replace />} />
                   <Route path="/live" element={<ExploreFeed />} />
@@ -1355,7 +1372,12 @@ function AppContent() {
                   {/* � Team Meeting Room */}
                   <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
                   
-                  {/* �🔨 Live Auctions */}
+                  <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
+
+                   {/* 📧 Tromail - Internal Role Email */}
+                   <Route path="/tromail" element={<TromailPage />} />
+
+                   {/* 🎥 Team Meeting Room */}
                   <Route path="/auctions" element={<AuctionsPage />} />
                   <Route path="/auctions/studio" element={<AuctionStudio />} />
                   <Route path="/auctions/studio/:showId/lots" element={<AuctionStudioLots />} />

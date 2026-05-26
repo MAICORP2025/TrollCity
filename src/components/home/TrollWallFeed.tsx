@@ -350,7 +350,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
 
       return (
         <div className="pb-4">
-          <article className="group relative overflow-hidden rounded-3xl border border-cyan-400/10 bg-[#050816]/90 p-4 shadow-[0_0_25px_rgba(34,211,238,0.08)] transition-all duration-300 hover:border-cyan-300/25 hover:shadow-[0_0_45px_rgba(34,211,238,0.18)]">
+          <div className="group relative overflow-hidden rounded-3xl border border-cyan-400/10 bg-[#050816]/90 p-4 shadow-[0_0_25px_rgba(34,211,238,0.08)] transition-all duration-300 hover:border-cyan-300/25 hover:shadow-[0_0_45px_rgba(34,211,238,0.18)]">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.08),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent)]" />
 
             {post.is_pinned && (
@@ -358,92 +358,111 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             )}
 
             <div className="relative">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!post.user_id || !post.username) return
-                      setSelectedUserId(post.user_id)
-                      setSelectedUsername(post.username)
-                    }}
-                    className="relative shrink-0"
-                  >
-                    <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 opacity-70 blur-sm transition group-hover:opacity-100" />
-                    <img
-                      src={avatarUrl}
-                      alt={post.username || 'User'}
-                      loading="lazy"
-                      className="relative h-10 w-10 rounded-full border border-white/10 object-cover"
-                    />
-                  </button>
+             <div className="flex items-start justify-between gap-3">
+                 <div className="flex min-w-0 items-center gap-3">
+                   <button
+                     type="button"
+                     onClick={() => {
+                       if (!post.user_id || !post.username) return
+                       setSelectedUserId(post.user_id)
+                       setSelectedUsername(post.username)
+                     }}
+                     className="relative shrink-0"
+                   >
+                     <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 opacity-70 blur-sm transition group-hover:opacity-100" />
+                     <img
+                       src={avatarUrl}
+                       alt={post.username || 'User'}
+                       loading="lazy"
+                       className="relative h-10 w-10 rounded-full border border-white/10 object-cover"
+                     />
+                   </button>
 
-                  <div className="min-w-0">
+                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      {post.username ? (
-                        <NeonGlowUsername
-                          username={post.username}
-                          avatarUrl={post.avatar_url}
-                          profile={{
-                            is_admin: post.is_admin,
-                            is_troll_officer: post.is_troll_officer,
-                            is_og_user: post.is_og_user,
-                            is_verified: post.user_verified,
-                            is_gold: post.user_is_gold,
-                            role: post.user_role,
-                            officer_level: post.officer_level,
-                            troller_level: post.troller_level,
-                            is_troller: post.is_troller,
-                            username_style: post.username_style,
-                            badge: post.badge,
-                            empire_role: post.empire_role,
-                          }}
-                          size="sm"
-                          onClick={() => {
-                            setSelectedUserId(post.user_id)
-                            setSelectedUsername(post.username || null)
-                          }}
-                        />
-                      ) : (
-                        <span className="text-sm font-semibold text-white/60">
-                          Deleted User
-                        </span>
-                      )}
-
-                      {post.is_pinned && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-yellow-300/20 bg-yellow-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-yellow-300">
-                          <Pin className="h-2.5 w-2.5 fill-current" />
-                          City Pinned
-                        </span>
-                      )}
-
-                      {isTrending && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-pink-300/20 bg-pink-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-pink-300">
-                          <Flame className="h-2.5 w-2.5" />
-                          Trending
-                        </span>
-                      )}
+                        {post.is_system_generated ? (
+                            <>
+                                <div className="relative h-10 w-10 rounded-full border border-white/10 object-cover">
+                                    <div className="absolute inset-0 flex items-center justify-center text-cyan-400 text-[10px]">
+                                        ⚡
+                                    </div>
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-semibold text-cyan-400">
+                                            Troll City System
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-300">
+                                            <span className="text-[10px]">⚡</span>
+                                            System
+                                        </span>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                {post.username ? (
+                                    <NeonGlowUsername
+                                        username={post.username}
+                                        avatarUrl={avatarUrl}
+                                        profile={{
+                                            is_admin: post.is_admin,
+                                            is_troll_officer: post.is_troll_officer,
+                                            is_og_user: post.is_og_user,
+                                            is_verified: post.user_verified,
+                                            is_gold: post.user_is_gold,
+                                            role: post.user_role,
+                                            officer_level: post.officer_level,
+                                            troller_level: post.troller_level,
+                                            is_troller: post.is_troller,
+                                            username_style: post.username_style,
+                                            badge: post.badge,
+                                            empire_role: post.empire_role,
+                                        }}
+                                        size="sm"
+                                        onClick={() => {
+                                            setSelectedUserId(post.user_id)
+                                            setSelectedUsername(post.username || null)
+                                        }}
+                                    />
+                                ) : (
+                                    <span className="text-sm font-semibold text-white/60">
+                                        Deleted User
+                                    </span>
+                                )}
+                            </>
+                        )}
                     </div>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-white/40">
-                      <span>{new Date(post.created_at).toLocaleString()}</span>
-                      <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-cyan-100/70">
-                        Troll City Feed
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-white/40">
+                       <span>{new Date(post.created_at).toLocaleString()}</span>
+                       <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-cyan-100/70">
+                         Troll City Feed
+                       </span>
+                     </div>
+                   </div>
+                 </div>
 
-              {post.reply_to_post_id && (
-                <p className="mt-2 rounded-full bg-purple-500/10 px-3 py-1 text-[10px] font-bold text-purple-300">
-                  Replying to a post
-                </p>
-              )}
+                 {post.reply_to_post_id && (
+                   <p className="mt-2 rounded-full bg-purple-500/10 px-3 py-1 text-[10px] font-bold text-purple-300">
+                     Replying to a post
+                   </p>
+                 )}
 
-              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-white/90">
-                {parseTextWithLinks(post.content)}
-              </p>
+             </div>
+               <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-white/90">
+                 {post.is_system_generated ? (
+                   <>
+                     <span className="flex items-center gap-2 text-cyan-400">
+                       <span className="text-[10px]">⚡</span>
+                       <span className="font-semibold">Troll City System</span>
+                     </span>
+                     <span className="block mt-1">{parseTextWithLinks(post.content)}</span>
+                   </>
+                 ) : (
+                   parseTextWithLinks(post.content)
+                 )}
+               </p>
 
               {post.metadata?.image_url && (
                 <div className="mt-3 overflow-hidden rounded-2xl border border-cyan-300/10 bg-black/30">
@@ -674,7 +693,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                 </div>
               )}
             </div>
-          </article>
+          </div>
         </div>
       )
     },

@@ -540,6 +540,7 @@ export enum UserRole {
   MODERATOR = 'moderator',
   ADMIN = 'admin',
   OWNER = 'owner',
+  AGENCY_HR_MANAGER = 'agency_hr_manager',
   HR_ADMIN = 'hr_admin',
   LEAD_TROLL_OFFICER = 'lead_troll_officer',
   TROLL_OFFICER = 'troll_officer',
@@ -664,6 +665,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   [UserRole.HR_ADMIN]: [
     // HR Admin has user management permissions
+    Permission.MANAGE_USERS,
+    Permission.MODERATE_CHAT,
+    Permission.MODERATE_STREAMS,
+    Permission.MANAGE_REPORTS,
+    Permission.ISSUE_WARNINGS,
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE
+  ],
+  [UserRole.AGENCY_HR_MANAGER]: [
     Permission.MANAGE_USERS,
     Permission.MODERATE_CHAT,
     Permission.MODERATE_STREAMS,
@@ -884,6 +895,7 @@ export const getRoleDisplayName = (role?: string | null, isAdmin?: boolean): str
     'secretary': 'Secretary',
     'president': 'President',
     'vice_president': 'Vice President',
+    'agency_hr_manager': 'Agency HR Manager',
     'hr_admin': 'HR Admin',
     'temp_city_admin': 'Temp Admin',
     'temp_admin': 'Temp Admin',

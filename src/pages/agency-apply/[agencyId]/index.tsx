@@ -133,6 +133,10 @@ export default function AgencyApplyPage() {
       }
 
       // Insert application
+      const parsedSocialLinks = formData.social_links
+        ? JSON.parse(formData.social_links)
+        : {};
+
       const { error: insertError } = await supabase
         .from('agency_applications')
         .insert({
@@ -142,8 +146,7 @@ export default function AgencyApplyPage() {
           content_type: formData.content_type,
           live_schedule: formData.live_schedule,
           battle_interest: formData.battle_interest,
-          social_links: formData.social_links ? JSON.parse(formData.social_links) : {},
-          agree_to_split: formData.agree_to_split
+          social_links: parsedSocialLinks,
         });
 
       if (insertError) throw insertError;

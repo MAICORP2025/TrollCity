@@ -9,7 +9,7 @@ export type WallPostType =
   | 'family_announce'
   | 'badge_earned'
   | 'system'
-  | 'announcement'
+  | 'announcement';
 
 export interface WallPost {
   id: string
@@ -34,6 +34,19 @@ export interface WallPost {
   gifts?: Record<string, { count: number; coins: number }> // gift_type -> data
   // Nested replies (merged into parent post)
   replies?: WallPost[]
+  // System-generated post fields
+  is_system_generated?: boolean
+  system_actor?: string
+  actor_user_id?: string
+  stream_id?: string
+  activity_type?: string
+  expires_at?: string
+}
+
+// Extended interface for system-generated posts in Troll Wall feed
+export interface SystemWallPost extends WallPost {
+  username?: string; // Will be overridden to show "Troll City System"
+  avatar_url?: string; // Optional system avatar
 }
 
 export interface WallPostMetadata {

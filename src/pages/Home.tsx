@@ -10,6 +10,8 @@ import CityLawsFeesTab from '@/components/home/CityLawsFeesTab'
 import LeaguesTab from '@/components/home/LeaguesTab'
 import PresidentCandidatesTab from '@/components/home/PresidentCandidatesTab'
 import LiveAuctionMiniWindow from '@/components/home/LiveAuctionMiniWindow'
+import SupportGoalReminderModal from '@/components/SupportGoalReminderModal'
+import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { Radio, Users, Play, Eye, X, ChevronRight, Link2, Sparkles, FileText, Trophy, Vote } from 'lucide-react'
 import LevelSystemShowcase from '@/components/home/LevelSystemShowcase'
 
@@ -253,12 +255,31 @@ export default function Home() {
   const [showLiveGrid, setShowLiveGrid] = useState<boolean | null>(null)
   const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([])
   const [loadingLiveAuctions, setLoadingLiveAuctions] = useState(false)
+  const [supportGoalReminder, setSupportGoalReminder] = useState<any>(null)
+  const [reminderLoading, setReminderLoading] = useState(false)
+
+  // Support goal reminder hook
+  const { reminder: supportReminder, loading: reminderLoadingState, error: reminderError, refetch: fetchSupportReminder } = useSupportGoalReminder()
 
   // Wait for auth to load before rendering
   // Auto-scroll to top on page load
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [])
+
+  // Fetch support goal reminder when user loads
+  useEffect(() => {
+    if (user?.id) {
+      // The hook already fetches on mount, but we can refetch if needed
+      // fetchSupportReminder() // Already called by hook
+    }
+  }, [user?.id, fetchSupportReminder])
+
+  // Update local state from hook
+  useEffect(() => {
+    setSupportGoalReminder(supportReminder);
+    setReminderLoading(reminderLoadingState);
+  }, [supportReminder, reminderLoadingState])
 
     // Fetch live streams and podcasts
     useEffect(() => {
@@ -737,24 +758,33 @@ export default function Home() {
          </div>
          <div className="safe-bottom flex-shrink-0" />
 
-        {/* Footer Links */}
-        <div className="flex-shrink-0 px-4 py-6 bg-slate-950/80 border-t border-slate-800">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
-              <Link to="/legal/terms" className="text-slate-400 hover:text-purple-400 transition-colors">Terms of Service</Link>
-              <span className="text-slate-600">•</span>
-              <Link to="/legal/privacy" className="text-slate-400 hover:text-purple-400 transition-colors">Privacy Policy</Link>
-              <span className="text-slate-600">•</span>
-              <Link to="/legal/safety" className="text-slate-400 hover:text-purple-400 transition-colors">Safety Guidelines</Link>
-              <span className="text-slate-600">•</span>
-              <Link to="/support" className="text-slate-400 hover:text-purple-400 transition-colors">Support</Link>
-            </div>
-            <div className="text-center mt-3 text-slate-500 text-xs">
-              © 2026 Mai Troll City. All rights reserved.
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+           {/* Footer Links */}
+         <div className="flex-shrink-0 px-4 py-6 bg-slate-950/80 border-t border-slate-800">
+           <div className="max-w-7xl mx-auto">
+             <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+               <Link to="/legal/terms" className="text-slate-400 hover:text-purple-400 transition-colors">Terms of Service</Link>
+               <span className="text-slate-600">•</span>
+               <Link to="/legal/privacy" className="text-slate-400 hover:text-purple-400 transition-colors">Privacy Policy</Link>
+               <span className="text-slate-600">•</span>
+               <Link to="/legal/safety" className="text-slate-400 hover:text-purple-400 transition-colors">Safety Guidelines</Link>
+               <span className="text-slate-600">•</span>
+               <Link to="/support" className="text-slate-400 hover:text-purple-400 transition-colors">Support</Link>
+             </div>
+             <div className="text-center mt-3 text-slate-500 text-xs">
+               © 2026 Mai Troll City. All rights reserved.
+             </div>
+           </div>
+         </div>
+         
+         {/* Support Goal Reminder Modal */}
+         {supportGoalReminder && (
+           <SupportGoalReminderModal
+             isOpen={true}
+             onClose={() => setSupportGoalReminder(null)}
+             broadcaster={supportGoalReminder}
+           />
+         )}
+       </div>
+     </div>
+   )
+ }

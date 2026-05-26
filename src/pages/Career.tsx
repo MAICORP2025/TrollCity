@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/store'
+import { UserRole } from '@/lib/supabase'
 import {
   ArrowLeft,
   Briefcase,
@@ -298,11 +299,17 @@ export default function OpenPositions() {
   const isAdminOrLead =
     profile?.role === 'admin' ||
     profile?.troll_role === 'admin' ||
-    profile?.role === 'hr_admin' ||
+    profile?.role === UserRole.HR_ADMIN ||
+    profile?.role === UserRole.AGENCY_HR_MANAGER ||
     profile?.is_admin ||
     profile?.role === 'lead_troll_officer' ||
     profile?.troll_role === 'lead_troll_officer' ||
     profile?.is_lead_officer
+
+  const canOpenAgencyHRDashboard =
+    profile?.role === UserRole.AGENCY_HR_MANAGER ||
+    profile?.role === UserRole.HR_ADMIN ||
+    profile?.role === UserRole.ADMIN
 
   const filteredJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -370,6 +377,19 @@ export default function OpenPositions() {
                 Apply for real Troll City roles across TCPS, Troll Court, TCNN, broadcasting,
                 commerce, auctions, support, HR, operations, and MAI Class student pathways.
               </p>
+
+              {canOpenAgencyHRDashboard && (
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/agency-hr-dashboard')}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-50 transition hover:border-cyan-200/50 hover:bg-cyan-500/15"
+                  >
+                    Open Agency HR Dashboard
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

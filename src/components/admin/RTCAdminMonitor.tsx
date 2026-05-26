@@ -12,6 +12,7 @@ import {
   Bug,
   Clock,
   Coins,
+  Mail,
   Monitor,
   MoreVertical,
   Radio,
@@ -129,7 +130,7 @@ interface StreamAnalyticsDaily {
   peak_concurrent_viewers: number;
 }
 
-type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'team_meeting' | 'bug_center';
+type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'team_meeting' | 'bug_center' | 'tromail';
 type UserListType = 'online' | 'all' | null;
 
 function formatDuration(seconds: number): string {
@@ -157,7 +158,7 @@ export default function RTCAdminMonitor() {
   const navigate = useNavigate();
   const onlineCount = usePresenceStore((state) => state.onlineCount);
 
- const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer'];
+ const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager'];
  const isStaff = profile?.is_admin === true || staffRoles.includes(profile?.role || '');
  const isFullAdmin = profile?.is_admin === true || ['admin', 'ceo', 'superadmin'].includes(profile?.role || '');
 
@@ -1081,6 +1082,7 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     { id: 'cashout', label: 'Cashout Bonus', icon: <Coins className="h-3 w-3" />, adminOnly: true },
     { id: 'team_meeting', label: 'Team Meeting', icon: <Video className="h-3 w-3" />, adminOnly: true },
     { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
+    { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
   ];
 
   const visibleMonitorTabs = monitorTabs.filter((tab) => !tab.adminOnly || isFullAdmin);
@@ -1478,6 +1480,25 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     </div>
   );
 
+  const renderTromailTab = () => (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <Mail className="h-4 w-4 text-cyan-400" />
+          <span className="text-sm font-bold text-cyan-400">Tromail System</span>
+        </div>
+        <p className="text-xs text-gray-400 mb-3">Internal role-based email system for Troll City staff. Send secure messages to approved roles.</p>
+        <button
+          type="button"
+          onClick={() => navigate('/tromail')}
+          className="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-700"
+        >
+          Open Tromail
+        </button>
+      </div>
+    </div>
+  );
+
   const renderActiveTab = () => {
     if (activeMainTab === 'rtc') return renderRtcTab();
     if (activeMainTab === 'mod_actions') return renderModActionsTab();
@@ -1486,6 +1507,7 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     if (isFullAdmin && activeMainTab === 'team_meeting') return renderTeamMeetingTab();
     if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
     if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
+    if (activeMainTab === 'tromail') return renderTromailTab();
     return <div className="rounded-lg bg-white/5 p-4 text-center text-xs text-gray-500">No access to this tab.</div>;
   };
 

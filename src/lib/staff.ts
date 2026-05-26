@@ -9,6 +9,7 @@ const STAFF_ROLES = new Set([
   'secretary',
   'prosecutor',
   'attorney',
+  'agency_hr_manager',
   'hr_admin',
   'marketing_readonly',
   'empire_partner',

@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS public.agencies (
     banner_url TEXT,
     status TEXT CHECK (status IN ('pending', 'approved', 'suspended', 'denied')) DEFAULT 'pending',
     default_split_percent INTEGER DEFAULT 10 CHECK (default_split_percent >= 0 AND default_split_percent <= 50),
+    agency_fee_percent INTEGER DEFAULT 0 CHECK (agency_fee_percent >= 0 AND agency_fee_percent <= 100),
+    platform_fee_percent INTEGER DEFAULT 0 CHECK (platform_fee_percent >= 0 AND platform_fee_percent <= 100),
+    leader_commission_percent INTEGER DEFAULT 0 CHECK (leader_commission_percent >= 0 AND leader_commission_percent <= 100),
+    recruiter_commission_percent INTEGER DEFAULT 0 CHECK (recruiter_commission_percent >= 0 AND recruiter_commission_percent <= 100),
+    fee_updated_at TIMESTAMPTZ,
+    fee_updated_by UUID REFERENCES auth.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -55,7 +61,8 @@ CREATE TABLE IF NOT EXISTS public.agency_applications (
     status TEXT CHECK (status IN ('pending', 'approved', 'denied', 'withdrawn')) DEFAULT 'pending',
     reviewed_by UUID REFERENCES auth.users(id),
     reviewed_at TIMESTAMPTZ NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    application_fee_paid BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- ============================================
@@ -78,15 +85,28 @@ CREATE TABLE IF NOT EXISTS public.agency_invites (
 CREATE TABLE IF NOT EXISTS public.agency_contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     agency_id UUID NOT NULL REFERENCES public.agencies(id) ON DELETE CASCADE,
-    creator_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    creator_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id),
+    title TEXT,
+    contract_type TEXT DEFAULT 'agency_leader',
+    contract_body TEXT,
+    body TEXT,
+    fee_percentage INTEGER DEFAULT 0 CHECK (fee_percentage >= 0 AND fee_percentage <= 100),
+    payout_terms TEXT,
+    agency_responsibilities TEXT,
+    leader_responsibilities TEXT,
+    termination_terms TEXT,
     split_percent INTEGER NOT NULL CHECK (split_percent >= 0 AND split_percent <= 50),
     applies_to TEXT CHECK (applies_to = 'gifts') DEFAULT 'gifts',
     status TEXT CHECK (status IN ('pending', 'active', 'ended', 'cancelled')) DEFAULT 'pending',
     creator_accepted_at TIMESTAMPTZ NULL,
     agency_accepted_at TIMESTAMPTZ NULL,
+    effective_date TIMESTAMPTZ,
+    expiration_date TIMESTAMPTZ,
     starts_at TIMESTAMPTZ NULL,
     ends_at TIMESTAMPTZ NULL,
     cooldown_ends_at TIMESTAMPTZ NULL,
+    created_by UUID REFERENCES auth.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

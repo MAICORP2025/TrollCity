@@ -15,6 +15,7 @@ export const STAFF_ROLES: UserRole[] = [
   UserRole.TROLL_OFFICER,
   UserRole.MODERATOR,
   UserRole.OWNER,
+  UserRole.AGENCY_HR_MANAGER,
   UserRole.HR_ADMIN,
   UserRole.TEMP_CITY_ADMIN,
   UserRole.TEMP_ADMIN,
