@@ -149,6 +149,13 @@ const TrollFamilyCity = lazyWithRetry(() => import("./pages/TrollFamilyCity"));
 const FamilyProfilePage = lazyWithRetry(() => import("./pages/FamilyProfilePage"));
 const FamilyChatPage = lazyWithRetry(() => import("./pages/FamilyChatPage"));
 const FamilyWarsPage = lazyWithRetry(() => import("./pages/FamilyWarsPage"));
+
+// Agency Pages (lazy-loaded)
+const AgenciesPage = lazyWithRetry(() => import("./pages/agencies"));
+const CreateAgencyPage = lazyWithRetry(() => import("./pages/agencies/CreateAgencyPage"));
+const AgencyProfilePage = lazyWithRetry(() => import("./pages/agency/[agencyId]"));
+const AgencyApplyPage = lazyWithRetry(() => import("./pages/agency-apply/[agencyId]"));
+const AgencyDashboard = lazyWithRetry(() => import("./pages/agency-dashboard"));
 const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
 const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
 const Support = lazyWithRetry(() => import("./pages/Support"));
@@ -1209,9 +1216,17 @@ function AppContent() {
                 {/* Safety Page (standalone) */}
                 <Route path="/safety" element={<Safety />} />
 
+{/* 🏢 Talent Offices (Public) */}
+                 <Route path="/agencies" element={<AgenciesPage />} />
+                 <Route path="/agencies/create" element={<CreateAgencyPage />} />
+                 <Route path="/agency/:agencyId" element={<AgencyProfilePage />} />
+                <Route path="/agency-apply/:agencyId" element={<AgencyApplyPage />} />
 
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
+                  
+                  {/* Talent Office Dashboard (Protected) */}
+                  <Route path="/agency-dashboard" element={<AgencyDashboard />} />
                   <Route path="/home" element={<LandingHome />} />
                   <Route path="/" element={<LandingHome />} />
                   <Route path="/broadcast/setup" element={<SetupPage />} />
