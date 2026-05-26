@@ -899,8 +899,6 @@ export default function LeadOfficerDashboard() {
         </div>
   )
 }
- 
-}
 
 function TabButton({
   active,

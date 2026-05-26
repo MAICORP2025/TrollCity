@@ -244,6 +244,8 @@ const ReferralBonuses = lazyWithRetry(() => import("./pages/admin/ReferralBonuse
 const ControlPanel = lazyWithRetry(() => import("./pages/admin/ControlPanel"));
 const TestDiagnosticsPage = lazyWithRetry(() => import("./pages/admin/TestDiagnosticsPage"));
 const ResetMaintenance = lazyWithRetry(() => import("./pages/admin/ResetMaintenance"));
+const Government = lazyWithRetry(() => import("./pages/Government"));
+const GovernmentStreams = lazyWithRetry(() => import("./pages/government/GovernmentStreams"));
 const AdminHR = lazyWithRetry(() => import("./pages/admin/AdminHR"));
 const UserFormsTab = lazyWithRetry(() => import("./pages/admin/components/UserFormsTab"));
 const BucketsDashboard = lazyWithRetry(() => import("./pages/admin/BucketsDashboard"));
@@ -1402,7 +1404,11 @@ function AppContent() {
 
                    
 
-                  {/* 👮 Officer */}
+                  {/* Government */}
+                   <Route path="/government" element={<Government />} />
+                   <Route path="/government/streams" element={<GovernmentStreams />} />
+
+                   {/* 👮 Officer */}
                   <Route
                     path="/lead-officer"
                     element={
