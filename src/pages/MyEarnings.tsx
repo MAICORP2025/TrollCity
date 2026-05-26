@@ -9,7 +9,6 @@ import {
 } from 'lucide-react'
 import { EarningsView, MonthlyEarnings } from '../types/earnings'
 import RequestPayoutModal from '../components/RequestPayoutModal'
-import EmpirePartnerSection from '../components/empire/EmpirePartnerSection'
 // Payment tiers based on payout amounts - imported from central config
 import { TIERS } from '../config/coinConfig'
 
@@ -370,9 +369,6 @@ export default function MyEarnings() {
                 <p className="text-xs text-gray-500 mt-1">lifetime payouts</p>
               </div>
             </div>
-
-            {/* Empire Partner Program */}
-            <EmpirePartnerSection />
 
             {/* Payment Tiers Section */}
             <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl p-6 border border-purple-500/30 shadow-lg">

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 
 interface TromailRecipient {
   user_id: string
-  tromail_address: string
+  email_address: string
   role: string
   display_name: string | null
   username: string
@@ -39,7 +39,7 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
 
     supabase
       .from('tromail_accounts')
-      .select('user_id, tromail_address, role, display_name')
+      .select('user_id, email_address, role, display_name')
       .eq('is_active', true)
       .then(({ data }) => {
         if (data) {
@@ -62,7 +62,7 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
 
   const filteredRecipients = recipients.filter(
     (r) =>
-      r.tromail_address.toLowerCase().includes(searchRecipient.toLowerCase()) ||
+      r.email_address.toLowerCase().includes(searchRecipient.toLowerCase()) ||
       (r.display_name?.toLowerCase() || '').includes(searchRecipient.toLowerCase()) ||
       r.username.toLowerCase().includes(searchRecipient.toLowerCase())
   )
@@ -79,7 +79,7 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
       const senderRole = profile?.role || profile?.troll_role || 'user'
       const { data: senderAccount } = await supabase
         .from('tromail_accounts')
-        .select('tromail_address')
+        .select('email_address')
         .eq('user_id', user.id)
         .single()
 
@@ -93,7 +93,7 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
       const { error } = await supabase.rpc('send_tromail_message', {
         p_sender_user_id: user.id,
         p_sender_role: senderRole,
-        p_sender_tromail_address: senderAccount.tromail_address,
+        p_sender_tromail_address: senderAccount.email_address,
         p_subject: subject,
         p_body: body,
         p_is_admin_email: isAdminEmail && canSendAdminEmail(profile),

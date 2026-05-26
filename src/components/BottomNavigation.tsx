@@ -469,10 +469,10 @@ const isActive = false;
     ...(isPresident ? [{ category: 'Social', label: 'President', icon: Crown, path: '/president' }] : []),
     { category: 'Social', label: 'Public Pool', icon: Waves, path: '/pool' },
     { category: 'Social', label: 'Troll Wheel', icon: Gamepad2, path: '/troll-wheel' },
-    // City Registry
-     { category: 'City Registry', label: 'Careers', icon: FileText, path: '/apply' },
-    { category: 'City Registry', label: 'Wallet', icon: Banknote, path: '/wallet' },
-    { category: 'City Registry', label: 'Appeals', icon: Scale, path: '/city-registry' },
+// City Registry
+     { category: 'City Registry', label: 'Careers', icon: FileText, path: '/career' },
+     { category: 'City Registry', label: 'Wallet', icon: Banknote, path: '/wallet' },
+     { category: 'City Registry', label: 'Appeals', icon: Scale, path: '/city-registry' },
   ]
 
     // Government Sector pages - shown to officers, lead, secretary, admin

@@ -124,7 +124,7 @@ export default function SEOLayout({ children, title, description, keywords = [] 
                 <li><Link to="/creators" className="text-slate-400 hover:text-purple-300 transition-colors">Become a Creator</Link></li>
                 <li><Link to="/live" className="text-slate-400 hover:text-purple-300 transition-colors">Go Live</Link></li>
                 <li><Link to="/legal/creator-earnings" className="text-slate-400 hover:text-purple-300 transition-colors">Earnings</Link></li>
-                <li><Link to="/legal/partner-program" className="text-slate-400 hover:text-purple-300 transition-colors">Partner Program</Link></li>
+                <li><Link to="/bonuses" className="text-slate-400 hover:text-purple-300 transition-colors">Coin Bonuses</Link></li>
               </ul>
             </div>
             <div>

@@ -62,7 +62,7 @@ export const AgencyApplicationsTable: React.FC<AgencyApplicationsTableProps> = (
 
       const { data, error } = await supabase
         .from('agency_applications')
-        .select(`*, applicant_profile:user_profiles!applicant_id(username, avatar_url)`)
+        .select(`*, applicant_profile:user_profiles!agency_applications_applicant_id_fkey(username, avatar_url)`)
         .eq('agency_id', agencyId)
         .order('created_at', { ascending: false });
 

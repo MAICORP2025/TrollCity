@@ -431,76 +431,113 @@ export default function AgencyHRDashboard() {
   }, [agencies, feeForm.agency_id])
 
   const approveApplication = async (application: AgencyApplication) => {
-    const applicantId = application.applicant_id
-    if (!application.id || !application.agency_id || !applicantId) {
-      setNotice('This application is missing agency_id or applicant user_id.', 'error')
+    const actorId = profile?.id ?? user?.id
+    const isFamilyConversion = application.content_type === 'family_conversion'
+
+    if (!actorId) {
+      setNotice('You must be signed in to approve applications.', 'error')
+      return
+    }
+
+    if (!application.id) {
+      setNotice('This application is missing an id.', 'error')
       return
     }
 
     try {
       setSaving(true)
 
-      const { error: updateError } = await supabase
-        .from('agency_applications')
-        .update({
-          status: 'approved',
-          reviewed_by: profile?.id,
-          reviewed_at: new Date().toISOString(),
-          
+      if (isFamilyConversion) {
+        const { data, error } = await supabase.rpc('approve_family_agency_conversion', {
+          p_application_id: application.id,
+          p_actor_id: actorId,
+          p_reason: applicationNote.trim() || 'Approved by Agency HR Manager',
         })
-        .eq('id', application.id)
 
-      if (updateError) {
-        const fallback = await supabase
+        if (error) {
+          throw error
+        }
+
+        const result = data as { success?: boolean; message?: string } | null
+        if (!result?.success) {
+          throw new Error(result?.message || 'Family conversion approval failed.')
+        }
+      } else {
+        const applicantId = application.applicant_id
+        if (!application.agency_id || !applicantId) {
+          setNotice('This application is missing agency_id or applicant user_id.', 'error')
+          return
+        }
+
+        const { error: updateError } = await supabase
           .from('agency_applications')
-          .update({ status: 'approved', message: applicationNote || application.message || null })
+          .update({
+            status: 'approved',
+            reviewed_by: actorId,
+            reviewed_at: new Date().toISOString(),
+          })
           .eq('id', application.id)
 
-        if (fallback.error) throw fallback.error
-      }
+        if (updateError) {
+          const fallback = await supabase
+            .from('agency_applications')
+            .update({ status: 'approved', message: applicationNote || application.message || null })
+            .eq('id', application.id)
 
-      const { error: memberError } = await supabase.from('agency_members').upsert(
-        {
-          agency_id: application.agency_id,
-          user_id: applicantId,
-          role: 'member',
-          status: 'active',
-          joined_at: new Date().toISOString(),
-        },
-        { onConflict: 'agency_id,user_id' },
-      )
+          if (fallback.error) throw fallback.error
+        }
 
-      if (memberError) {
-        const fallbackMember = await supabase.from('agency_members').insert({
-          agency_id: application.agency_id,
-          user_id: applicantId,
-          role: 'member',
-          status: 'active',
+        const { error: memberError } = await supabase.from('agency_members').upsert(
+          {
+            agency_id: application.agency_id,
+            user_id: applicantId,
+            role: 'member',
+            status: 'active',
+            joined_at: new Date().toISOString(),
+          },
+          { onConflict: 'agency_id,user_id' },
+        )
+
+        if (memberError) {
+          const fallbackMember = await supabase.from('agency_members').insert({
+            agency_id: application.agency_id,
+            user_id: applicantId,
+            role: 'member',
+            status: 'active',
+          })
+
+          if (fallbackMember.error) throw fallbackMember.error
+        }
+
+        await writeAgencyLog(application.agency_id, 'application_approved', {
+          application_id: application.id,
+          applicant_id: applicantId,
+          approved_by: actorId,
+          note: applicationNote || null,
         })
-
-        if (fallbackMember.error) throw fallbackMember.error
       }
-
-      await writeAgencyLog(application.agency_id, 'application_approved', {
-        application_id: application.id,
-        applicant_id: applicantId,
-        approved_by: profile?.id,
-        note: applicationNote || null,
-      })
 
       setApplicationNote('')
-      setNotice('Application approved and member access was activated.')
+      setNotice(isFamilyConversion ? 'Family conversion approved.' : 'Application approved and member access was activated.')
       await loadDashboard()
     } catch (err) {
       console.error('Failed to approve agency application', err)
-      setNotice('Application approval failed. Check agency_applications, agency_members columns, and RLS.', 'error')
+      setNotice('Application approval failed. Check the backend RPC or agency tables and RLS.', 'error')
     } finally {
       setSaving(false)
     }
   }
 
   const rejectApplication = async (application: AgencyApplication) => {
+    const actorId = profile?.id ?? user?.id
     const reason = applicationNote.trim()
+    const isFamilyConversion = application.content_type === 'family_conversion'
+
+    if (!actorId) {
+      setNotice('You must be signed in to reject applications.', 'error')
+      return
+    }
+
     if (!reason) {
       setNotice('Add a rejection reason before rejecting the application.', 'error')
       return
@@ -508,34 +545,52 @@ export default function AgencyHRDashboard() {
 
     try {
       setSaving(true)
-      const { error: rejectError } = await supabase
-        .from('agency_applications')
-        .update({
-          status: 'rejected',
-          message: reason,
-          reviewed_by: profile?.id,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq('id', application.id)
 
-      if (rejectError) {
-        const fallback = await supabase.from('agency_applications').update({ status: 'rejected', message: reason }).eq('id', application.id)
-        if (fallback.error) throw fallback.error
+      if (isFamilyConversion) {
+        const { data, error } = await supabase.rpc('reject_family_agency_conversion', {
+          p_application_id: application.id,
+          p_actor_id: actorId,
+          p_reason: reason,
+        })
+
+        if (error) {
+          throw error
+        }
+
+        const result = data as { success?: boolean; message?: string } | null
+        if (!result?.success) {
+          throw new Error(result?.message || 'Family conversion rejection failed.')
+        }
+      } else {
+        const { error: rejectError } = await supabase
+          .from('agency_applications')
+          .update({
+            status: 'rejected',
+            message: reason,
+            reviewed_by: actorId,
+            reviewed_at: new Date().toISOString(),
+          })
+          .eq('id', application.id)
+
+        if (rejectError) {
+          const fallback = await supabase.from('agency_applications').update({ status: 'rejected', message: reason }).eq('id', application.id)
+          if (fallback.error) throw fallback.error
+        }
+
+        await writeAgencyLog(application.agency_id, 'application_rejected', {
+          application_id: application.id,
+          applicant_id: application.applicant_id,
+          rejected_by: actorId,
+          reason,
+        })
       }
 
-      await writeAgencyLog(application.agency_id, 'application_rejected', {
-        application_id: application.id,
-        applicant_id: application.applicant_id,
-        rejected_by: profile?.id,
-        reason,
-      })
-
       setApplicationNote('')
-      setNotice('Application rejected.')
+      setNotice(isFamilyConversion ? 'Family conversion rejected.' : 'Application rejected.')
       await loadDashboard()
     } catch (err) {
       console.error('Failed to reject agency application', err)
-      setNotice('Application rejection failed. Check columns and RLS.', 'error')
+      setNotice('Application rejection failed. Check the backend RPC or agency tables and RLS.', 'error')
     } finally {
       setSaving(false)
     }
@@ -612,6 +667,7 @@ export default function AgencyHRDashboard() {
     try {
       setSaving(true)
       const contractBody = buildContractBody()
+      const splitPercent = parseNumber(contractForm.fee_percentage) || 50
       const payload = {
         agency_id: contractForm.agency_id,
         creator_id: contractForm.leader_id || null,
@@ -621,10 +677,17 @@ export default function AgencyHRDashboard() {
         contract_body: contractBody,
         body: contractBody,
         status,
-        fee_percentage: parseNumber(contractForm.fee_percentage),
+        split_percent: splitPercent,
+        fee_percentage: splitPercent,
+        applies_to: 'gifts',
         payout_terms: contractForm.payout_terms || null,
+        agency_responsibilities: contractForm.agency_responsibilities || null,
+        leader_responsibilities: contractForm.leader_responsibilities || null,
+        termination_terms: contractForm.termination_terms || null,
         effective_date: contractForm.effective_date || null,
         expiration_date: contractForm.expiration_date || null,
+        starts_at: contractForm.effective_date || null,
+        ends_at: contractForm.expiration_date || null,
         created_by: profile?.id,
       }
 
@@ -633,8 +696,13 @@ export default function AgencyHRDashboard() {
       if (contractError) {
         const fallback = await supabase.from('agency_contracts').insert({
           agency_id: contractForm.agency_id,
+          creator_id: contractForm.leader_id || null,
+          user_id: contractForm.leader_id || null,
           title: contractForm.title.trim(),
           status,
+          split_percent: splitPercent,
+          fee_percentage: splitPercent,
+          applies_to: 'gifts',
         })
 
         if (fallback.error) throw fallback.error
@@ -1069,19 +1137,24 @@ export default function AgencyHRDashboard() {
                 selectedAgencyApplications.map((application) => {
                   const applicantName = application.applicant_id || 'Unknown applicant'
                   const agencyName = agencies.find((agency) => agency.id === application.agency_id)?.name || 'Unknown agency'
+                  const isFamilyConversion = application.content_type === 'family_conversion'
 
                   return (
                     <div key={application.id} className="rounded-2xl border border-white/10 bg-black/30 p-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-black text-white">{applicantName}</h3>
+                            <h3 className="text-lg font-black text-white">
+                              {isFamilyConversion ? 'Family conversion request' : applicantName}
+                            </h3>
                             <span className={`rounded-full border px-3 py-1 text-xs font-black ${statusTone(application.status)}`}>
                               {application.status || 'pending'}
                             </span>
                           </div>
                           <p className="mt-2 text-sm text-slate-300">Agency: {agencyName}</p>
-                          <p className="text-sm text-slate-400">Requested role: {'member'}</p>
+                          <p className="text-sm text-slate-400">
+                            {isFamilyConversion ? 'Type: Family-to-Agency conversion' : 'Requested role: member'}
+                          </p>
                           <p className="text-xs text-slate-500">Submitted: {safeDate(application.created_at)}</p>
                           {(application.message) && (
                             <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">

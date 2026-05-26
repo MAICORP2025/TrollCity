@@ -315,6 +315,10 @@ profile?.role === 'superadmin' ||
       expandGroup('Government Sector')
     } else if (path.startsWith('/city-registry')) {
       expandGroup('City Registry')
+    } else if (path.startsWith('/career')) {
+      expandGroup('Talent Offices')
+    } else if (path.startsWith('/agencies') || path.startsWith('/agency-dashboard')) {
+      expandGroup('Talent Offices')
     }
   }, [location.pathname, expandGroup])
 
@@ -502,11 +506,13 @@ profile?.role === 'superadmin' ||
                <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Dockets" to="/admin/court-dockets" active={location.pathname.startsWith('/admin/court-dockets')} highlight={isUpdated('/admin/court-dockets')} onClick={() => markAsViewed('/admin/court-dockets')} className="text-pink-300" tone="pink" />
              )}
 
-              <SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
+<SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
              <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Insurance" to="/insurance" active={isActive('/insurance')} highlight={isUpdated('/insurance')} onClick={() => markAsViewed('/insurance')} className="text-cyan-300" tone="cyan" />
              <GridItem collapsed={isSidebarCollapsed} icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} tone="purple" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} highlight={isUpdated('/leaderboard')} onClick={() => markAsViewed('/leaderboard')} tone="purple" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Warehouse} label="Living" to="/living" active={isActive('/living')} highlight={isUpdated('/living')} onClick={() => markAsViewed('/living')} tone="cyan" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Troll Family" to="/family/browse" active={isActive('/family/browse')} highlight={isUpdated('/family/browse')} onClick={() => markAsViewed('/family/browse')} className="text-pink-400" tone="pink" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="My Families" to={isFamilyMember ? "/family/home" : "/family/browse"} active={isActive('/family/home') || isActive('/family/browse')} highlight={isUpdated('/family/home')} onClick={() => markAsViewed('/family/home')} className="text-purple-400" tone="purple" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} highlight={isUpdated('/leaderboard')} onClick={() => markAsViewed('/leaderboard')} tone="purple" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Warehouse} label="Living" to="/living" active={isActive('/living')} highlight={isUpdated('/living')} onClick={() => markAsViewed('/living')} tone="cyan" />
             {canAccessMaiClass && (
               <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Mai Class" to="/mai-class" active={isActive('/mai-class')} highlight={isUpdated('/mai-class')} onClick={() => markAsViewed('/mai-class')} className="text-green-400" glow="green" tone="green" />
             )}
@@ -554,10 +560,11 @@ profile?.role === 'superadmin' ||
                <GridItem collapsed={isSidebarCollapsed} icon={Mail} label="Tromail" to="/tromail" active={isActive('/tromail')} highlight={isUpdated('/tromail')} onClick={() => markAsViewed('/tromail')} className="text-cyan-300" tone="cyan" />
              )}
 
-             <SectionTitle title="Talent Offices" collapsed={isSidebarCollapsed} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
-            {isAgentHRManager && (
+<SectionTitle title="Talent Offices" collapsed={isSidebarCollapsed} />
+             <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
+             <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Careers" to="/career" active={isActive('/career')} highlight={isUpdated('/career')} onClick={() => markAsViewed('/career')} className="text-purple-400" tone="purple" />
+             {isAgentHRManager && (
               <GridItem
                 collapsed={isSidebarCollapsed}
                 icon={Briefcase}

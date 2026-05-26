@@ -40,6 +40,7 @@ export default function FamilyProfilePage() {
   const [uploadingBanner, setUploadingBanner] = useState(false)
   const [userFamilyId, setUserFamilyId] = useState<string | null>(null)
   const [joinLoading, setJoinLoading] = useState(false)
+  const [conversionLoading, setConversionLoading] = useState(false)
 
   const isLeader =
     members.find((m) => m.user_id === user?.id)?.role === 'leader' ||
@@ -189,6 +190,48 @@ export default function FamilyProfilePage() {
     }
   }
 
+  const handleConvertFamilyToAgency = async () => {
+    if (!user) {
+      toast.error('Please sign in to convert this family to a Talent Office.')
+      return
+    }
+
+    if (!family?.id) {
+      toast.error('Family not found.')
+      return
+    }
+
+    if (!isLeader) {
+      toast.error('Only the family leader or co-leader can convert this family to a Talent Office.')
+      return
+    }
+
+    setConversionLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('apply_for_agency_from_family', {
+        p_family_id: family.id,
+        p_message: 'Converted from Troll Family'
+      })
+
+      if (error) {
+        throw error
+      }
+
+      const result = data as { success?: boolean; message?: string }
+      if (!result?.success) {
+        throw new Error(result?.message || 'Failed to submit family conversion request.')
+      }
+
+      toast.success('Your family-to-agency conversion request is pending Agency HR approval.')
+      navigate('/family/home')
+    } catch (err: any) {
+      console.error('Error converting family to agency:', err)
+      toast.error(err?.message || 'Failed to submit family conversion request.')
+    } finally {
+      setConversionLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadFamily()
   }, [familyId, user, loadFamily])
@@ -322,6 +365,19 @@ export default function FamilyProfilePage() {
                 className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors"
               >
                 Join Family
+              </button>
+            </div>
+          )}
+
+          {isLeader && (
+            <div className="mt-4 rounded-2xl border border-cyan-500/20 bg-cyan-900/10 p-4 text-sm text-cyan-100">
+              <p className="mb-3">Convert this Troll Family into a paid Talent Office application for Agency HR approval. A 25,000 Troll Coins startup fee plus the first monthly fee of 10,000 Troll Coins will be charged at submission.</p>
+              <button
+                onClick={handleConvertFamilyToAgency}
+                disabled={conversionLoading}
+                className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition-colors disabled:opacity-60"
+              >
+                {conversionLoading ? 'Submitting...' : 'Convert Troll Family to Agency'}
               </button>
             </div>
           )}

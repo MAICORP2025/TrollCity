@@ -3,6 +3,7 @@ import { COIN_PACKAGES as CONFIG_COIN_PACKAGES, CASHOUT_TIERS } from '../config/
 export const STORE_USD_PER_COIN = 0.01;
 export const COIN_PACKAGES = CONFIG_COIN_PACKAGES;
 export const cashoutTiers = CASHOUT_TIERS;
+export const STATS_COINS_PER_USD = 300;
 
 /**
  * Format a coins value for display.

@@ -150,6 +150,7 @@ const TrollFamilyCity = lazyWithRetry(() => import("./pages/TrollFamilyCity"));
 const FamilyProfilePage = lazyWithRetry(() => import("./pages/FamilyProfilePage"));
 const FamilyChatPage = lazyWithRetry(() => import("./pages/FamilyChatPage"));
 const FamilyWarsPage = lazyWithRetry(() => import("./pages/FamilyWarsPage"));
+const FamilyApplication = lazyWithRetry(() => import("./pages/FamilyApplication"));
 
 // Agency Pages (lazy-loaded)
 const AgenciesPage = lazyWithRetry(() => import("./pages/agencies"));
@@ -188,7 +189,7 @@ const PayoutSetupPage = lazyWithRetry(() => import("./pages/PayoutSetupPage"));
 const AdminLaunchTrial = lazyWithRetry(() => import("./pages/admin/LaunchTrial"));
 const PayoutRequest = lazyWithRetry(() => import("./pages/PayoutRequest"));
 const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
-const EmpirePartnerDashboard = lazyWithRetry(() => import("./pages/EmpirePartnerDashboard"));
+const BonusesPage = lazyWithRetry(() => import("./pages/Bonuses"));
 const CashoutPage = lazyWithRetry(() => import("./pages/CashoutPage"));
 const CashoutRequestPage = lazyWithRetry(() => import("./pages/CashoutRequestPage"));
 const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
@@ -219,7 +220,6 @@ const PayoutPolicyLegal = lazyWithRetry(() => import("./pages/legal/PayoutPolicy
 const SafetyGuidelinesLegal = lazyWithRetry(() => import("./pages/legal/SafetyGuidelines"));
 const CreatorEarnings = lazyWithRetry(() => import("./pages/legal/CreatorEarnings"));
 const GamblingDisclosure = lazyWithRetry(() => import("./pages/legal/GamblingDisclosure"));
-const PartnerProgram = lazyWithRetry(() => import("./pages/legal/PartnerProgram"));
 const OfficerPayrollDashboard = lazyWithRetry(() => import("./pages/officer/OfficerPayrollDashboard"));
 const OfficerDashboard = lazyWithRetry(() => import("./pages/officer/OfficerDashboard"));
 const OfficerOWCDashboard = lazyWithRetry(() => import("./pages/OfficerOWCDashboard"));
@@ -251,7 +251,8 @@ const OfficerShifts = lazyWithRetry(() => import("./pages/admin/OfficerShifts"))
 
 const ReferralBonuses = lazyWithRetry(() => import("./pages/admin/ReferralBonuses"));
 const ControlPanel = lazyWithRetry(() => import("./pages/admin/ControlPanel"));
-const TestDiagnosticsPage = lazyWithRetry(() => import("./pages/admin/TestDiagnosticsPage"));
+ const Career = lazyWithRetry(() => import("./pages/Career"));
+ const TestDiagnosticsPage = lazyWithRetry(() => import("./pages/admin/TestDiagnosticsPage"));
 const ResetMaintenance = lazyWithRetry(() => import("./pages/admin/ResetMaintenance"));
 const Government = lazyWithRetry(() => import("./pages/Government"));
 const GovernmentStreams = lazyWithRetry(() => import("./pages/government/GovernmentStreams"));
@@ -1209,7 +1210,6 @@ function AppContent() {
                 <Route path="/legal/safety" element={<SafetyGuidelinesLegal />} />
                 <Route path="/legal/creator-earnings" element={<CreatorEarnings />} />
                 <Route path="/legal/gambling-disclosure" element={<GamblingDisclosure />} />
-                <Route path="/legal/partner-program" element={<PartnerProgram />} />
                  
                 {/* 🔓 Public Discover & Watch */}
                 <Route path="/explore" element={<ExploreFeed />} />
@@ -1222,10 +1222,16 @@ function AppContent() {
                 <Route path="/safety" element={<Safety />} />
 
 {/* 🏢 Talent Offices (Public) */}
-                 <Route path="/agencies" element={<AgenciesPage />} />
-                 <Route path="/agencies/create" element={<CreateAgencyPage />} />
-                 <Route path="/agency/:agencyId" element={<AgencyProfilePage />} />
+                <Route path="/agencies" element={<AgenciesPage />} />
+                <Route path="/agencies/create" element={<CreateAgencyPage />} />
+                <Route path="/agency/:agencyId" element={<AgencyProfilePage />} />
                 <Route path="/agency-apply/:agencyId" element={<AgencyApplyPage />} />
+
+                {/* Family Application */}
+                <Route path="/apply/family" element={<FamilyApplication />} />
+
+                {/* Careers */}
+                <Route path="/career" element={<Career />} />
 
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
@@ -1390,10 +1396,7 @@ function AppContent() {
                   {/* 🎮 Multi-Box Streaming */}
 
                    
-                  {/* 👥 Empire Partner Program */}
-   
-
-                  {/* 💳 Payment Methods */}
+                  {/*  Payment Methods */}
                   <Route path="/add-card" element={<Navigate to="/profile/setup" replace />} />
                    
                   {/* 📝 Creator Onboarding */}
@@ -1411,7 +1414,7 @@ function AppContent() {
                   <Route path="/payment/callback" element={<PaymentCallback />} />
                    <Route path="/earnings" element={<EarningsDashboard />} />
                   <Route path="/my-earnings" element={<MyEarnings />} />
-                  <Route path="/empire-partner" element={<EmpirePartnerDashboard />} />
+                  <Route path="/bonuses" element={<BonusesPage />} />
                    <Route path="/cashout" element={<CashoutPage />} />
                    <Route path="/cashout-request" element={<CashoutRequestPage />} />
                    <Route path="/withdraw" element={<Withdraw />} />

@@ -4,13 +4,6 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/ui/button';
 
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)+/g, '');
-
 export default function CreateAgencyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -43,38 +36,28 @@ export default function CreateAgencyPage() {
       setSubmitting(true);
       setError(null);
 
-      const agencySlug = `${slugify(name)}-${Date.now().toString(36)}`;
+      const { data, error: rpcError } = await supabase.rpc('apply_for_agency_with_fee', {
+        p_name: name.trim(),
+        p_bio: bio.trim() || null,
+        p_default_split_percent: defaultSplitPercent,
+      });
 
-      const { data: agency, error: agencyError } = await supabase
-        .from('agencies')
-        .insert({
-          owner_id: user.id,
-          name: name.trim(),
-          slug: agencySlug,
-          bio: bio.trim() || null,
-          status: 'pending',
-          visibility: 'public',
-          default_split_percent: defaultSplitPercent,
-          max_split_percent: 15,
-        })
-        .select('id, name, slug')
-        .single();
-
-      if (agencyError) {
-        throw agencyError;
+      if (rpcError) {
+        throw rpcError;
       }
 
-      const { error: memberError } = await supabase
-        .from('agency_members')
-        .insert({
-          agency_id: agency.id,
-          user_id: user.id,
-          role: 'owner',
-          status: 'active',
-        });
+      const result = data as
+        | {
+            success?: boolean;
+            message?: string;
+            agency_id?: string;
+            application_id?: string;
+            application_fee_coins?: number;
+          }
+        | null;
 
-      if (memberError) {
-        throw memberError;
+      if (!result?.success) {
+        throw new Error(result?.message || 'Failed to create Talent Office application.');
       }
 
       navigate('/agency-dashboard');
@@ -97,7 +80,7 @@ export default function CreateAgencyPage() {
             Create Talent Office
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Create your agency application. Admin or Agency HR Manager approval is required before it appears publicly.
+            Create your Talent Office application. A one-time startup fee of 25,000 Troll Coins plus the first monthly fee of 10,000 Troll Coins is charged when submitting the application, and Agency HR reviews approval.
           </p>
         </div>
 
@@ -157,9 +140,9 @@ export default function CreateAgencyPage() {
             </div>
 
             <div className="rounded-xl border border-purple-400/20 bg-purple-500/10 p-4 text-sm text-slate-300">
-              <p className="font-bold text-purple-200">Approval Required</p>
+              <p className="font-bold text-purple-200">Paid application + approval flow</p>
               <p className="mt-1">
-                Your Talent Office will be created as pending. It must be approved before creators can publicly apply.
+                Your application fee is charged immediately to your Troll Coins balance, and the Agency HR Manager reviews the application before the Talent Office is approved.
               </p>
             </div>
 

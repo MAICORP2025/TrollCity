@@ -10,7 +10,7 @@ export interface TromailAccount {
   user_id: string
   role: string
   display_name: string | null
-  tromail_address: string
+  email_address: string
   is_active: boolean
   created_at: string
   updated_at: string
@@ -176,11 +176,11 @@ export const createTromailAccount = async (
     const username = profile?.username || 'user'
     const address = generateTromailAddress(role, username)
 
-    // Check for duplicate
-    const { data: existing } = await supabase
+// Check for duplicate
+     const { data: existing } = await supabase
       .from('tromail_accounts')
       .select('id')
-      .eq('tromail_address', address)
+      .eq('email_address', address)
       .single()
 
     if (existing) {
@@ -190,7 +190,7 @@ export const createTromailAccount = async (
         user_id: userId,
         role,
         display_name: displayName,
-        tromail_address: altAddress,
+        email_address: altAddress,
         is_active: true,
       }).select().single().then(({ data, error }) => {
         if (error) throw error
@@ -204,7 +204,7 @@ export const createTromailAccount = async (
         user_id: userId,
         role,
         display_name: displayName,
-        tromail_address: address,
+        email_address: address,
         is_active: true,
       })
       .select()

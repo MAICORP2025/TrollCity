@@ -29,7 +29,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { createTromailAccount, getUserTromailAccount, canAccessTromail, canSendAdminEmail } from '@/lib/tromail'
-import { div } from 'three/src/nodes/math/OperatorNode.js'
 
 type TromailTab = 'inbox' | 'sent' | 'important' | 'admin' | 'calendar' | 'meetings' | 'directory' | 'compose'
 
@@ -53,7 +52,7 @@ interface TromailAccountInfo {
   user_id: string
   role: string
   display_name: string | null
-  tromail_address: string
+  email_address: string
   is_active: boolean
 }
 
@@ -68,8 +67,9 @@ export default function TromailPage() {
   const [displayName, setDisplayName] = useState(profile?.full_name || profile?.username || '')
   const [tromailAddress, setTromailAddress] = useState('')
 
-  // Compose state
-  const [recipient, setRecipient] = useState('')
+  // Compose state - support multiple recipients
+  const [recipients, setRecipients] = useState<string[]>([])
+  const [recipientInput, setRecipientInput] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [isImportant, setIsImportant] = useState(false)
@@ -113,29 +113,34 @@ export default function TromailPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !profile || !recipient || !subject || !body) {
-      toast.error('Please fill all fields')
+    if (!user || !profile || recipients.length === 0 || !subject || !body) {
+      toast.error('Please fill all fields and add recipients')
       return
     }
 
     setIsSending(true)
     try {
-      // Get recipient's user ID from their Tromail address
-      const { data: recipientAccount } = await supabase
-        .from('tromail_accounts')
-        .select('user_id, role')
-        .eq('tromail_address', recipient)
-        .single()
+      const recipientAccounts = await Promise.all(
+        recipients.map(async (addr) => {
+          const { data } = await supabase
+            .from('tromail_accounts')
+            .select('user_id, role')
+            .eq('email_address', addr)
+            .single()
+          return data
+        })
+      )
 
-      if (!recipientAccount) {
-        toast.error('Recipient not found')
+      const validRecipients = recipientAccounts.filter(Boolean) as { user_id: string; role: string }[]
+      if (validRecipients.length === 0) {
+        toast.error('No valid recipients found')
         return
       }
 
       const senderRole = profile.role || profile.troll_role || 'user'
       const { data: senderAccount } = await supabase
         .from('tromail_accounts')
-        .select('tromail_address')
+        .select('email_address')
         .eq('user_id', user.id)
         .single()
 
@@ -147,13 +152,13 @@ export default function TromailPage() {
       const { error } = await supabase.rpc('send_tromail_message', {
         p_sender_user_id: user.id,
         p_sender_role: senderRole,
-        p_sender_tromail_address: senderAccount.tromail_address,
+        p_sender_tromail_address: senderAccount.email_address,
         p_subject: subject,
         p_body: body,
         p_is_admin_email: isAdminEmail,
         p_is_important: isImportant,
-        p_recipient_user_ids: [recipientAccount.user_id],
-        p_recipient_roles: [recipientAccount.role]
+        p_recipient_user_ids: validRecipients.map(r => r.user_id),
+        p_recipient_roles: validRecipients.map(r => r.role)
       })
 
       if (error) throw error
@@ -161,7 +166,7 @@ export default function TromailPage() {
       toast.success('Message sent!')
       setSubject('')
       setBody('')
-      setRecipient('')
+      setRecipients([])
       setIsImportant(false)
       setIsAdminEmail(false)
       setActiveTab('inbox')
@@ -195,7 +200,7 @@ export default function TromailPage() {
       } else if (activeTab === 'directory') {
         const { data } = await supabase
           .from('tromail_accounts')
-          .select('id, user_id, role, display_name, tromail_address, is_active')
+          .select('id, user_id, role, display_name, email_address, is_active')
           .eq('is_active', true)
           .order('role', { ascending: true })
         result = data || []
@@ -304,12 +309,35 @@ export default function TromailPage() {
             <form onSubmit={handleSendMessage} className="space-y-4">
               <div>
                 <label className="text-xs font-medium uppercase text-gray-400">To</label>
-                <Input
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  placeholder="recipient@tromail.trollcity"
-                  className="mt-1 border-cyan-500/30 bg-slate-900 text-white"
-                />
+                <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-cyan-500/30 bg-slate-900 p-2">
+                  {recipients.map((r) => (
+                    <span key={r} className="flex items-center gap-1 rounded bg-cyan-500/20 px-2 py-1 text-xs">
+                      {r}
+                      <button
+                        type="button"
+                        onClick={() => setRecipients(recipients.filter(rp => rp !== r))}
+                        className="text-gray-400 hover:text-white"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    value={recipientInput}
+                    onChange={(e) => setRecipientInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && recipientInput.trim()) {
+                        e.preventDefault()
+                        if (!recipients.includes(recipientInput.trim())) {
+                          setRecipients([...recipients, recipientInput.trim()])
+                        }
+                        setRecipientInput('')
+                      }
+                    }}
+                    placeholder={recipients.length === 0 ? "recipient@tromail.trollcity (press Enter to add)" : ""}
+                    className="flex-1 border-0 bg-transparent p-1 text-white placeholder-gray-500 outline-none"
+                  />
+                </div>
               </div>
 
               <div>
@@ -412,6 +440,22 @@ export default function TromailPage() {
                       <p className="mt-2 text-xs text-gray-500">
                         {new Date(msg.created_at).toLocaleString()}
                       </p>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setRecipients([msg.sender_tromail_address])
+                            setSubject(`Re: ${msg.subject}`)
+                            setBody(`\n\n-------- Original Message --------\nFrom: ${msg.sender_username || msg.sender_tromail_address}\n${msg.body}`)
+                            setActiveTab('compose')
+                          }}
+                          className="h-7 px-2 text-xs text-cyan-400 hover:text-cyan-300"
+                        >
+                          <Reply className="h-3 w-3 mr-1" />
+                          Reply
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -420,82 +464,107 @@ export default function TromailPage() {
           </div>
         )}
 
-          {/* Calendar Tab */}
-          {activeTab === 'calendar' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
-                <Calendar className="mx-auto mb-3 h-12 w-12 text-cyan-400" />
-                <h3 className="text-lg font-semibold text-white mb-2">Tromail Calendar</h3>
-                <p className="text-sm text-gray-400 mb-4">Schedule and view team meetings and official events.</p>
+        {/* Calendar Tab */}
+        {activeTab === 'calendar' && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
+              <Calendar className="mx-auto mb-3 h-12 w-12 text-cyan-400" />
+              <h3 className="text-lg font-semibold text-white mb-2">Tromail Calendar</h3>
+              <p className="text-sm text-gray-400 mb-4">Schedule and view team meetings and official events.</p>
+              <Button
+                onClick={() => navigate('/admin/meetings')}
+                className="bg-cyan-600 hover:bg-cyan-500"
+              >
+                <Video className="h-4 w-4 mr-2" />
+                Go to Meeting Dashboard
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Team Meetings Tab */}
+        {activeTab === 'meetings' && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
+              <Users className="mx-auto mb-3 h-12 w-12 text-cyan-400" />
+              <h3 className="text-lg font-semibold text-white mb-2">Team Meetings</h3>
+              <p className="text-sm text-gray-400 mb-4">View and manage staff meetings through the Admin Meetings Dashboard.</p>
+              <Button
+                onClick={() => navigate('/admin/meetings')}
+                className="bg-cyan-600 hover:bg-cyan-500"
+              >
+                <Video className="h-4 w-4 mr-2" />
+                Open Meetings Dashboard
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Directory Tab */}
+        {activeTab === 'directory' && (
+          <div className="space-y-3">
+            {recipients.length > 0 && (
+              <div className="flex justify-end">
                 <Button
-                  onClick={() => navigate('/admin/meetings')}
+                  size="sm"
+                  onClick={() => setActiveTab('compose')}
                   className="bg-cyan-600 hover:bg-cyan-500"
                 >
-                  <Video className="h-4 w-4 mr-2" />
-                  Go to Meeting Dashboard
+                  Send to {recipients.length} selected
                 </Button>
               </div>
-            </div>
-          )}
-
-          {/* Team Meetings Tab */}
-          {activeTab === 'meetings' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
-                <Users className="mx-auto mb-3 h-12 w-12 text-cyan-400" />
-                <h3 className="text-lg font-semibold text-white mb-2">Team Meetings</h3>
-                <p className="text-sm text-gray-400 mb-4">View and manage staff meetings through the Admin Meetings Dashboard.</p>
-                <Button
-                  onClick={() => navigate('/admin/meetings')}
-                  className="bg-cyan-600 hover:bg-cyan-500"
-                >
-                  <Video className="h-4 w-4 mr-2" />
-                  Open Meetings Dashboard
-                </Button>
+            )}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-6 w-6 animate-spin text-cyan-400" />
               </div>
-            </div>
-          )}
-
-          {/* Directory Tab */}
-          {activeTab === 'directory' && (
-            <div className="space-y-3">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="h-6 w-6 animate-spin text-cyan-400" />
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="rounded-xl border border-cyan-500/20 bg-slate-800/30 p-8 text-center">
-                  <Users className="mx-auto mb-3 h-12 w-12 text-gray-600" />
-                  <p className="text-gray-400">No users in directory</p>
-                </div>
-              ) : (
-                messages.map((msg: any) => (
-                  <div key={msg.id} className="rounded-lg border border-cyan-500/20 bg-slate-800/50 p-4">
-                    <div className="flex items-center justify-between">
+            ) : messages.length === 0 ? (
+              <div className="rounded-xl border border-cyan-500/20 bg-slate-800/30 p-8 text-center">
+                <Users className="mx-auto mb-3 h-12 w-12 text-gray-600" />
+                <p className="text-gray-400">No users in directory</p>
+              </div>
+            ) : (
+              messages.map((msg: any) => (
+                <div key={msg.id} className="rounded-lg border border-cyan-500/20 bg-slate-800/50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={recipients.includes(msg.email_address)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setRecipients([...recipients, msg.email_address])
+                          } else {
+                            setRecipients(recipients.filter(r => r !== msg.email_address))
+                          }
+                        }}
+                        className="rounded"
+                      />
                       <div>
                         <p className="font-semibold text-white">{msg.role}</p>
-                        <p className="text-xs text-gray-400">{msg.tromail_address}</p>
+                        <p className="text-xs text-gray-400">{msg.email_address}</p>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => { setRecipient(msg.tromail_address); setActiveTab('compose'); }}
-                        className="bg-cyan-600 hover:bg-cyan-500"
-                      >
-                        Message
-                      </Button>
                     </div>
+                    <Button
+                      size="sm"
+                      onClick={() => { setRecipients([msg.email_address]); setActiveTab('compose'); }}
+                      className="bg-cyan-600 hover:bg-cyan-500"
+                    >
+                      Message
+                    </Button>
                   </div>
-                ))
-              )}
-            </div>
-          )}
-          {/* Fallback for unhandled tabs */}
-          {!['inbox', 'sent', 'important', 'admin', 'calendar', 'meetings', 'directory', 'compose'].includes(activeTab) && (
-            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
-              <AlertCircle className="mx-auto mb-3 h-12 w-12 text-gray-600" />
-              <p className="text-gray-400">Tab not implemented: {activeTab}</p>
-            </div>
-          )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+        {/* Fallback for unhandled tabs */}
+        {!['inbox', 'sent', 'important', 'admin', 'calendar', 'meetings', 'directory', 'compose'].includes(activeTab) && (
+          <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
+            <AlertCircle className="mx-auto mb-3 h-12 w-12 text-gray-600" />
+            <p className="text-gray-400">Tab not implemented: {activeTab}</p>
+          </div>
+        )}
       </div>
     </div>
   )

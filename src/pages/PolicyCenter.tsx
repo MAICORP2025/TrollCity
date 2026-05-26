@@ -41,10 +41,10 @@ export default function PolicyCenter() {
       color: 'text-red-400',
     },
     {
-      title: 'Partner Program Terms',
-      description: 'Troll Empire Partner Program rules',
+      title: 'Coin Bonuses & Fees',
+      description: 'How purchase rewards and cashout fees work',
       icon: <Scale className="w-6 h-6" />,
-      path: '/legal/partner-program',
+      path: '/bonuses',
       color: 'text-orange-400',
     },
   ]

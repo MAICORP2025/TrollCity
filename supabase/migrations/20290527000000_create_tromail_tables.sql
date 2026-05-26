@@ -5,6 +5,7 @@
 CREATE TABLE IF NOT EXISTS tromail_accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE UNIQUE,
+  username TEXT NOT NULL,
   role TEXT NOT NULL,
   display_name TEXT,
   tromail_address TEXT NOT NULL UNIQUE,

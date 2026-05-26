@@ -48,3 +48,94 @@ export interface RequestPayoutResponse {
   error?: string
 }
 
+// Universal Earning Event Types
+export interface UserEarningEvent {
+  id: string
+  user_id: string
+  role_key: string
+  role_label: string
+  source_type: string
+  source_id: string | null
+  amount_coins: number
+  percent_rate: number
+  status: 'pending' | 'approved' | 'paid' | 'skipped' | 'failed' | 'cancelled'
+  paid_at: string | null
+  payout_run_id: string | null
+  details: Record<string, any>
+  created_at: string
+}
+
+// Role Earning Rules
+export interface RoleEarningRule {
+  id: string
+  role_key: string
+  role_label: string
+  earning_type: string
+  amount_coins: number
+  percent_rate: number
+  source_type: string | null
+  requirement_text: string | null
+  application_route: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// User Earning Summary
+export interface UserEarningSummary {
+  user_id: string
+  total_earned_coins: number
+  pending_coins: number
+  paid_coins: number
+  week_earned_coins: number
+  month_earned_coins: number
+  last_paid_at: string | null
+  total_events: number
+  pending_events: number
+  paid_events: number
+}
+
+// Agency Earnings
+export interface AgencyEarningsData {
+  agency_id: string
+  agency_name: string
+  agency_role: 'owner' | 'manager' | 'creator' | null
+  contract_status: string | null
+  split_percent: number | null
+  applies_to: string | null
+  pending_agency_earnings: number
+  paid_agency_earnings: number
+  application_fee_status: boolean
+  monthly_agency_fee_status: boolean
+  agency_application_status: string | null
+}
+
+// Family Conversion Data
+export interface FamilyConversionData {
+  family_id: string | null
+  family_name: string | null
+  member_count: number
+  is_leader: boolean
+  conversion_eligible: boolean
+  conversion_status: string | null
+  pending_application: boolean
+}
+
+// Treasury Payout Item
+export interface TreasuryPayoutItem {
+  id: string
+  payout_run_id: string
+  user_id: string
+  role_key: string
+  amount_coins: number
+  status: 'pending' | 'paid' | 'skipped' | 'failed'
+  details: Record<string, any>
+  created_at: string
+  paid_at: string | null
+  run_week_start: string
+  run_week_end: string
+}
+
+// Role Status Types
+export type RoleStatus = 'active' | 'pending' | 'locked' | 'eligible' | 'inactive'
+
