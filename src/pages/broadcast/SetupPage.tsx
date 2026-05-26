@@ -1723,37 +1723,37 @@ export default function SetupPage() {
       }
 
         // Build insert object with optional password protection
-        const insertData: Record<string, unknown> = {
-          id: streamId,
-          user_id: user.id,
-          broadcaster_id: user.id,
-          streamer_id: user.id,
-          owner_id: user.id,
-          title,
-          category,
-          camera_ready: isVideoEnabled,
-          status: 'starting',
-          is_live: false,
-          started_at: null,
-          box_count: categoryConfig.defaultBoxCount,
-          layout_mode: layoutMode,
-          active_theme_url: selectedThemeUrl,
-          broadcast_theme_slug: normalizedSelectedTheme,
-          random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' ? randomBattleQueueEnabled : false,
-          random_battle_queued_at: null,
-          // Store LiveKit room name in both columns for compatibility
-          livekit_room_name: roomName,
-          agora_channel: roomName,
-          // Store category-specific data
-          ...(category === 'spiritual' && { selected_religion: selectedReligion }),
-          ...(category === 'battle' && { 
-            battle_format: universeBattleMode === 'multi' ? selectedMultiBattleFormat : '4v4',
-            battle_mode: universeBattleMode === 'multi' ? 'universal' : 'troll',
-            universe_mode: true,
-            battle_status: 'waiting'
-          }),
-          ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? { battle_mode: 'random_queue' } : {}),
-        };
+         const insertData: Record<string, unknown> = {
+           id: streamId,
+           user_id: user.id,
+           broadcaster_id: user.id,
+           streamer_id: user.id,
+           owner_id: user.id,
+           title,
+           category,
+           camera_ready: isVideoEnabled,
+           status: 'starting',
+           is_live: false,
+           started_at: null,
+           box_count: categoryConfig.defaultBoxCount,
+           layout_mode: layoutMode,
+           active_theme_url: selectedThemeUrl,
+           broadcast_theme_slug: normalizedSelectedTheme,
+           random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' ? randomBattleQueueEnabled : false,
+           random_battle_queued_at: null,
+           // Store LiveKit room name in both columns for compatibility
+           livekit_room_name: roomName,
+           agora_channel: roomName,
+           // Store category-specific data
+           ...(category === 'spiritual' && { selected_religion: selectedReligion }),
+           ...(category === 'battle' && { 
+             battle_format: universeBattleMode === 'multi' ? selectedMultiBattleFormat : '4v4',
+             battle_mode: universeBattleMode === 'multi' ? 'universal' : 'troll',
+             universe_mode: true,
+             battle_status: 'waiting'
+           }),
+           ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? { battle_mode: 'random_queue' } : {}),
+         };
 
       // Add password protection if enabled
       if (isProtected && broadcastPassword.length >= 4) {

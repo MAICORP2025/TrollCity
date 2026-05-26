@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import BottomNavigation from '../BottomNavigation'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
@@ -10,24 +10,38 @@ import { useChatStore } from '../../lib/chatStore'
 import { setupGlobalMessageNotifications, OFFICER_GROUP_CONVERSATION_ID } from '../../lib/supabase'
 import ChatBubble from '../ChatBubble'
 import { useSidebarStore } from '../../stores/useSidebarStore'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface AppLayoutProps {
-  children: React.ReactNode
+  children: ReactNode
   showSidebar?: boolean
   showHeader?: boolean
   showBottomNav?: boolean
+  mobileHeader?: ReactNode
+  mobileTopBanner?: ReactNode
+  mobileFooter?: ReactNode
+  mobileFloatingActionButton?: ReactNode
+  mobileBodyClassName?: string
+  mobileShellClassName?: string
 }
 
 export default function AppLayout({ 
   children, 
   showSidebar = true, 
   showHeader = true, 
-  showBottomNav = true 
+  showBottomNav = true,
+  mobileHeader,
+  mobileTopBanner,
+  mobileFooter,
+  mobileFloatingActionButton,
+  mobileBodyClassName = '',
+  mobileShellClassName = '',
 }: AppLayoutProps) {
   const location = useLocation();
   const showLegacySidebar = useAuthStore((s) => s.showLegacySidebar)
   const user = useAuthStore((s) => s.user)
   const { isCollapsed } = useSidebarStore()
+  const { isMobileWidth } = useIsMobile()
   useChatStore()
    const isAuthPage = location.pathname.startsWith('/auth');
    const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/watch/') || (location.pathname.startsWith('/broadcast/') && !location.pathname.startsWith('/broadcast/setup')) || location.pathname.startsWith('/stream/') || location.pathname === '/live-swipe';
@@ -35,6 +49,7 @@ export default function AppLayout({
    const normalizedPath = location.pathname.toLowerCase();
    const isThemeExemptPage = normalizedPath.includes('court') || normalizedPath.startsWith('/church') || normalizedPath.startsWith('/mai-class');
    const isKeyboardVisible = false;
+   const isMobileLayout = isMobileWidth && !isAuthPage;
 
   // Setup global message notifications - opens chat bubble when message received
   useEffect(() => {
@@ -88,7 +103,7 @@ export default function AppLayout({
 
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
         {/* Header - Sticky or Fixed */}
-        {effectiveShowHeader && (
+        {effectiveShowHeader && !isMobileLayout && (
           <div className="shrink-0 z-20">
             <Header />
           </div>
@@ -99,7 +114,41 @@ export default function AppLayout({
 
         {/* Main Content Area */}
         <main className={`flex-1 w-full h-full relative ${mainOverflowClass} ${mainPaddingClass}`}>
-          {children}
+          {isMobileLayout ? (
+            <div className="mx-auto flex h-full w-full max-w-md flex-col overflow-hidden border-x border-white/5 bg-slate-950/30 backdrop-blur-sm">
+              {mobileHeader ? (
+                <div className="shrink-0 border-b border-white/10 bg-slate-950/50 px-4 pb-3 pt-3">
+                  {mobileHeader}
+                </div>
+              ) : null}
+
+              {mobileTopBanner ? (
+                <div className="shrink-0 px-3 pt-3">
+                  {mobileTopBanner}
+                </div>
+              ) : null}
+
+              <div className={`flex-1 min-h-0 overflow-hidden ${mobileBodyClassName}`}>
+                {children}
+              </div>
+
+              {mobileFooter ? (
+                <div className="shrink-0 border-t border-white/10 bg-slate-950/55">
+                  {mobileFooter}
+                </div>
+              ) : null}
+
+              {mobileFloatingActionButton ? (
+                <div className="pointer-events-none absolute bottom-[calc(var(--bottom-nav-height,64px)+1rem+env(safe-area-inset-bottom,0px))] right-4 z-20">
+                  <div className="pointer-events-auto">
+                    {mobileFloatingActionButton}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            children
+          )}
         </main>
 
         {/* Bottom Navigation Bubble - Always visible on all screen sizes */}

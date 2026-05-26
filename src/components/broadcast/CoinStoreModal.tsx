@@ -99,6 +99,12 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
   };
 
   useEffect(() => {
+    if (isOpen && !user?.id) {
+      toast.error('Sign in to use the coin store.')
+      onClose()
+      return
+    }
+
     if (isOpen) {
       fetchCoinPacks();
       checkNewUserStatus();
@@ -106,9 +112,14 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
       setSelectedPack(null);
       setShowPayPalPayment(false);
     }
-  }, [isOpen, checkNewUserStatus]);
+  }, [isOpen, checkNewUserStatus, onClose, user?.id]);
 
   const handlePackageSelect = (pkg: CoinPackage) => {
+    if (!user?.id) {
+      toast.error('Sign in to use the coin store.')
+      return
+    }
+
     const finalPrice = getFinalPrice(pkg.price);
     const pkgWithTax = {
       ...pkg,
@@ -121,6 +132,11 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
   };
 
   const handleCardCheckout = (pkg: CoinPackage) => {
+    if (!user?.id) {
+      toast.error('Sign in to use the coin store.')
+      return
+    }
+
     const finalPrice = getFinalPrice(pkg.price);
     const pkgWithTax: any = {
       ...pkg,
@@ -162,7 +178,7 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !user?.id) return null;
 
   return (
     <>

@@ -24,6 +24,11 @@ import type { BroadcastGift } from '../../hooks/useBroadcastRealtime'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
+import {
+  getAnonymousDisplayName,
+  isAnonymousDisplayName,
+  reserveAnonymousChatSlot,
+} from '../../lib/anonymousIdentity'
 
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import ErrorBoundary from '../../components/ErrorBoundary'
@@ -915,7 +920,7 @@ function ViewerPage() {
   }, [])
 
   const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
-    if (!username || username === 'Anonymous') return
+    if (!username || isAnonymousDisplayName(username)) return
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -995,9 +1000,10 @@ function ViewerPage() {
 
   const handleLeaveSeat = useCallback(async () => {
     manualStageLeaveRef.current = true
+    await leaveLiveKitRoom().catch(() => {})
     await leaveSeat()
     navigate(location.pathname, { replace: true })
-  }, [leaveSeat, navigate, location.pathname])
+  }, [leaveLiveKitRoom, leaveSeat, navigate, location.pathname])
 
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
 
@@ -1304,6 +1310,7 @@ useStreamRealtime(
         }
       },
     } as any,
+    stream?.battle_id ?? null,
   )
 
   // ── Floating Chat: receive broadcasts ────────────────────────────────────
@@ -1578,7 +1585,7 @@ useStreamRealtime(
                  onShare={handleShare}
                  onEndStream={handleLeave}
                  coinBalance={(profile as any)?.troll_coins ?? 0}
-                 onOpenCoinStore={() => toast.info('Coin Store opens from the viewer action bar.')}
+                 onOpenCoinStore={user?.id ? () => toast.info('Coin Store opens from the viewer action bar.') : undefined}
                  isLive={isActive}
                  streamStartedAt={(stream as any).started_at} />
                {/* Audience Bubble Ticker */}
@@ -1969,9 +1976,15 @@ useStreamRealtime(
                       onSubmit={async (e) => {
                         e.preventDefault()
                         const text = chatInput.trim()
-                        if (!text || !user) return
+                        if (!text) return
 
-                        const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                        if (!user && !reserveAnonymousChatSlot()) {
+                          toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                          navigate('/auth?mode=login')
+                          return
+                        }
+
+                        const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                         const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                         setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))
@@ -2088,9 +2101,15 @@ useStreamRealtime(
               onSubmit={async (e) => {
                 e.preventDefault()
                 const text = chatInput.trim()
-                if (!text || !user) return
+                if (!text) return
 
-                const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                if (!user && !reserveAnonymousChatSlot()) {
+                  toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                  navigate('/auth?mode=login')
+                  return
+                }
+
+                const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                 const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                 setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))

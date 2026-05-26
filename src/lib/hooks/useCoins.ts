@@ -62,105 +62,120 @@ export function useCoins() {
     }
   }, [profile, profile?.troll_coins, profile?.paid_coins, profile?.total_earned_coins, profile?.total_spent_coins, profile?.battle_crowns, profile?.cashout_coins, profile?.cashout_reserved_coins])
 
-  /**
-   * Refresh coin balances from database
-   * Call this after any coin operation to ensure UI is in sync
-   */
-  const refreshCoins = useCallback(async () => {
-    if (!user?.id) return
+   /**
+    * Refresh coin balances from database
+    * Call this after any coin operation to ensure UI is in sync
+    */
+   const refreshCoins = useCallback(async () => {
+     if (!user?.id) return
 
-    setLoading(true)
-    setError(null)
+     setLoading(true)
+     setError(null)
 
-    try {
-      await ensureSupabaseSession(supabase)
+     try {
+       const {
+         data: { session },
+         error: sessionError,
+       } = await supabase.auth.getSession()
 
-      const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('troll_coins, paid_coins, total_earned_coins, total_spent_coins, battle_crowns, cashout_coins, cashout_reserved_coins')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (profileError) {
-        console.error('Error loading profile balances:', profileError)
-      }
-
-      const currentProfile = useAuthStore.getState().profile
-      // Get balance from database first, fall back to local store
-      // This ensures we always use the most recent balance from the database
-      const dbBalance = profileData?.troll_coins ?? null
-      const localBalance = currentProfile?.troll_coins ?? null
-      
-      // Use database balance if available, otherwise use local balance
-      const paidBalance = dbBalance !== null ? dbBalance : (localBalance ?? 0)
-      
-      // Only use optimistic balance if it's less than or equal to the database balance
-      // (optimistic deductions should be reflected immediately)
-      const mergedPaid =
-        optimisticUntil && Date.now() < optimisticUntil && (optimisticTroll ?? 0) > 0 && (optimisticTroll ?? 0) <= paidBalance
-          ? (optimisticTroll as number)
-          : paidBalance
-      
-      console.log('[refreshCoins] Balance sync:', { dbBalance, localBalance, paidBalance, mergedPaid })
-      const nextTotals = {
-        total_earned_coins:
-          profileData?.total_earned_coins ??
-          currentProfile?.total_earned_coins ??
-          0,
-        total_spent_coins:
-          profileData?.total_spent_coins ??
-          currentProfile?.total_spent_coins ??
-          0,
-      }
-
-       const nextBalances = {
-         troll_coins: mergedPaid,
-         paid_coins: profileData?.paid_coins ?? currentProfile?.paid_coins ?? 0,
-         total_earned_coins: nextTotals.total_earned_coins,
-         total_spent_coins: nextTotals.total_spent_coins,
-         battle_crowns: profileData?.battle_crowns ?? currentProfile?.battle_crowns ?? 0,
-         cashout_coins: profileData?.cashout_coins ?? currentProfile?.cashout_coins ?? 0,
-         cashout_reserved_coins: profileData?.cashout_reserved_coins ?? currentProfile?.cashout_reserved_coins ?? 0,
+       if (sessionError) {
+         console.warn('[useCoins] Session check failed:', sessionError)
+         return
        }
 
-      setBalances((prev) => {
-        const isSame =
-          prev.troll_coins === nextBalances.troll_coins &&
-          prev.paid_coins === nextBalances.paid_coins &&
-          prev.total_earned_coins === nextBalances.total_earned_coins &&
-          prev.total_spent_coins === nextBalances.total_spent_coins
+       if (!session?.user?.id) {
+         console.debug('[useCoins] Skipping coin refresh: no session yet')
+         return
+       }
 
-        return isSame ? prev : nextBalances
-      })
+       await ensureSupabaseSession(supabase)
 
-      if (currentProfile) {
-        const profileNeedsUpdate =
-          currentProfile.troll_coins !== mergedPaid ||
-          currentProfile.total_earned_coins !== nextTotals.total_earned_coins ||
-          currentProfile.total_spent_coins !== nextTotals.total_spent_coins
+       const { data: profileData, error: profileError } = await supabase
+         .from('user_profiles')
+         .select('troll_coins, paid_coins, total_earned_coins, total_spent_coins, battle_crowns, cashout_coins, cashout_reserved_coins')
+         .eq('id', user.id)
+         .maybeSingle()
 
-          if (profileNeedsUpdate) {
-            const updatedProfile: UserProfile = {
-              ...currentProfile,
-              troll_coins: mergedPaid as number,
-              total_earned_coins: nextTotals.total_earned_coins,
-              total_spent_coins: nextTotals.total_spent_coins,
-              battle_crowns: profileData?.battle_crowns ?? currentProfile?.battle_crowns ?? 0,
-            }
-            useAuthStore.getState().setProfile(updatedProfile)
-          }
-      }
-      if (optimisticUntil && Date.now() < optimisticUntil && (mergedPaid as number) >= (optimisticTroll ?? 0)) {
-        setOptimisticUntil(null)
-        setOptimisticTroll(null)
-      }
-    } catch (err: any) {
-      console.error('Unexpected error refreshing coins:', err)
-      setError(err.message || 'Failed to refresh coins')
-    } finally {
-      setLoading(false)
-    }
-  }, [user?.id, optimisticUntil, optimisticTroll])
+       if (profileError) {
+         console.error('Error loading profile balances:', profileError)
+       }
+
+       const currentProfile = useAuthStore.getState().profile
+       // Get balance from database first, fall back to local store
+       // This ensures we always use the most recent balance from the database
+       const dbBalance = profileData?.troll_coins ?? null
+       const localBalance = currentProfile?.troll_coins ?? null
+       
+       // Use database balance if available, otherwise use local balance
+       const paidBalance = dbBalance !== null ? dbBalance : (localBalance ?? 0)
+       
+       // Only use optimistic balance if it's less than or equal to the database balance
+       // (optimistic deductions should be reflected immediately)
+       const mergedPaid =
+         optimisticUntil && Date.now() < optimisticUntil && (optimisticTroll ?? 0) > 0 && (optimisticTroll ?? 0) <= paidBalance
+           ? (optimisticTroll as number)
+           : paidBalance
+       
+       console.log('[refreshCoins] Balance sync:', { dbBalance, localBalance, paidBalance, mergedPaid })
+       const nextTotals = {
+         total_earned_coins:
+           profileData?.total_earned_coins ??
+           currentProfile?.total_earned_coins ??
+           0,
+         total_spent_coins:
+           profileData?.total_spent_coins ??
+           currentProfile?.total_spent_coins ??
+           0,
+       }
+
+        const nextBalances = {
+          troll_coins: mergedPaid,
+          paid_coins: profileData?.paid_coins ?? currentProfile?.paid_coins ?? 0,
+          total_earned_coins: nextTotals.total_earned_coins,
+          total_spent_coins: nextTotals.total_spent_coins,
+          battle_crowns: profileData?.battle_crowns ?? currentProfile?.battle_crowns ?? 0,
+          cashout_coins: profileData?.cashout_coins ?? currentProfile?.cashout_coins ?? 0,
+          cashout_reserved_coins: profileData?.cashout_reserved_coins ?? currentProfile?.cashout_reserved_coins ?? 0,
+        }
+
+       setBalances((prev) => {
+         const isSame =
+           prev.troll_coins === nextBalances.troll_coins &&
+           prev.paid_coins === nextBalances.paid_coins &&
+           prev.total_earned_coins === nextBalances.total_earned_coins &&
+           prev.total_spent_coins === nextBalances.total_spent_coins
+
+         return isSame ? prev : nextBalances
+       })
+
+       if (currentProfile) {
+         const profileNeedsUpdate =
+           currentProfile.troll_coins !== mergedPaid ||
+           currentProfile.total_earned_coins !== nextTotals.total_earned_coins ||
+           currentProfile.total_spent_coins !== nextTotals.total_spent_coins
+
+           if (profileNeedsUpdate) {
+             const updatedProfile: UserProfile = {
+               ...currentProfile,
+               troll_coins: mergedPaid as number,
+               total_earned_coins: nextTotals.total_earned_coins,
+               total_spent_coins: nextTotals.total_spent_coins,
+               battle_crowns: profileData?.battle_crowns ?? currentProfile?.battle_crowns ?? 0,
+             }
+             useAuthStore.getState().setProfile(updatedProfile)
+           }
+       }
+       if (optimisticUntil && Date.now() < optimisticUntil && (mergedPaid as number) >= (optimisticTroll ?? 0)) {
+         setOptimisticUntil(null)
+         setOptimisticTroll(null)
+       }
+     } catch (err: any) {
+       console.error('[useCoins] Unexpected error refreshing coins:', err)
+       setError(err.message || 'Failed to refresh coins')
+     } finally {
+       setLoading(false)
+     }
+   }, [user?.id, optimisticUntil, optimisticTroll])
 
   /**
    * Spend coins via secure RPC

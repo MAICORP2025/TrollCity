@@ -302,20 +302,6 @@ export default function LeadOfficerDashboard() {
     }
   }
 
-  const loadJobApplications = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('job_applications')
-        .select('id, user_id, position_id, status, created_at, user_profiles!user_id(username, email)')
-        .in('status', ['submitted', 'under_review', 'rejected'])
-        .order('created_at', { ascending: false })
-        .limit(20)
-
-      if (error) throw error
-      setJobApplications(data || [])
-    } catch (error) {
-      console.error('Error loading job applications:', error)
-    }
   const refreshAll = async () => {
     await Promise.all([
       loadApplicants(),

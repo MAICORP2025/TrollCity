@@ -56,36 +56,10 @@ import { lazyWithRetry } from "./utils/lazyImport";
 
 // Static pages (fast load)
 import LandingHome from "./pages/Home";
-import PublicLandingPage from "./pages/PublicLandingPage";
 
-// Component that redirects authenticated users from / to /home without rendering
-const HomeRedirect = () => {
-  const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
-  const profile = useAuthStore((s) => s.profile);
-  const isLoading = useAuthStore((s) => s.isLoading);
-  const profileRole = profile?.role;
-
-  useEffect(() => {
-    if (!user?.id || !profile) return;
-
-    if (profileRole === 'troll_family') {
-      navigate('/family/home', { replace: true });
-    } else {
-      navigate('/home', { replace: true });
-    }
-  }, [user?.id, profile, profileRole, navigate]);
-
-  // Return null to prevent any flash - the redirect happens in useEffect
-  if (!user || isLoading) return null;
-
-  // This should not be reached, but just in case
-  return null;
-};
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import SessionMonitor from "./components/auth/SessionMonitor";
-import TermsAgreement from "./pages/TermsAgreement";
 import ExitPage from "./pages/ExitPage";
 
 import AboutPage from "./pages/seo/AboutPage";
@@ -299,6 +273,26 @@ const LoadingScreen = () => (
     </div>
   );
 
+const isPublicRoute = (pathname: string) => {
+  if (pathname === '/' || pathname === '/home') {
+    return true
+  }
+
+  if (pathname.startsWith('/watch/')) {
+    return true
+  }
+
+  if (pathname.startsWith('/kick-fee/')) {
+    return true
+  }
+
+  return (
+    pathname.startsWith('/broadcast/') &&
+    !pathname.startsWith('/broadcast/setup') &&
+    !pathname.startsWith('/broadcast/summary')
+  )
+}
+
    // 🔐 Route Guard — prevents flash by overlaying loading state instead of unmounting
    const RequireAuth = () => {
      const user = useAuthStore((s) => s.user);
@@ -324,7 +318,7 @@ const LoadingScreen = () => (
          );
        }
 
-     if (!user) return <Navigate to="/auth" replace />;
+     if (!user && !isPublicRoute(location.pathname)) return <Navigate to="/auth" replace />;
 
     // 🚔 Jail Guard - Exempt admins from jail redirect so they can manage the system
     const isAdminUser = profile?.role === UserRole.ADMIN || profile?.is_admin === true || (profile as any)?.role === 'superadmin';
@@ -362,14 +356,6 @@ const LoadingScreen = () => (
     
     // Do not force profile editing after login. Missing usernames are handled inside profile surfaces.
     
-    if (
-      profile &&
-      profile.role !== "admin" &&
-      (!profile.terms_accepted || !profile.court_recording_consent) &&
-      location.pathname !== "/terms"
-    ) {
-      return <Navigate to="/terms" replace />;
-    }
     if (
       profile && // Add this check
        profile?.application_required &&
@@ -1169,9 +1155,8 @@ function AppContent() {
           <Suspense fallback={null}>
             <Routes>
                 {/* Public Routes */}
-                <Route path="/" element={<PublicLandingPage />} />
                 <Route path="/intro" element={<Navigate to="/" replace />} />
-                <Route path="/landing" element={<PublicLandingPage />} />
+                <Route path="/landing" element={<Navigate to="/" replace />} />
                 
                 {/* Public Navigation Pages */}
                 <Route path="/about" element={<AboutPage />} />
@@ -1185,7 +1170,7 @@ function AppContent() {
                 <Route path="/auth" element={user ? <Navigate to="/home" replace /> : <Auth />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/exit" element={<ExitPage />} />
-                <Route path="/terms" element={<TermsAgreement />} />
+                <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
                 <Route path="/access-denied" element={<AccessDenied />} />
                 <Route path="/terms-of-service" element={<Navigate to="/legal/terms" replace />} />
                 <Route path="/privacy-policy" element={<Navigate to="/legal/privacy" replace />} />
@@ -1226,7 +1211,7 @@ function AppContent() {
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
                   <Route path="/home" element={<LandingHome />} />
-                  <Route path="/" element={<HomeRedirect />} />
+                  <Route path="/" element={<LandingHome />} />
                   <Route path="/broadcast/setup" element={<SetupPage />} />
                   <Route path="/broadcast/:id" element={<BroadcastRouter />} />
                   <Route path="/watch/:id" element={<BroadcastRouter />} />

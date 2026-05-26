@@ -327,7 +327,6 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
    }, [orgName, orgEmail, selectedRole])
 
   const landingForProfile = (prof: any) => {
-    if (!prof?.terms_accepted) return '/terms'
     const userRole = prof?.role || prof?.troll_role
     if (userRole === 'troll_family') return '/family/home'
     if (userRole === 'organization' || userRole === 'org_admin' || prof?.organization_id) return '/organization/dashboard'

@@ -13,10 +13,11 @@ export default function GlobalPresenceTracker() {
   const { user } = useAuthStore();
   const setOnlineCount = usePresenceStore(state => state.setOnlineCount);
   const setOnlineUserIds = usePresenceStore(state => state.setOnlineUserIds);
-  const isVisibleRef = useRef<boolean>(true);
+  const isVisibleRef = useRef<boolean>(!document.hidden);
   const lastOnlineUpdateRef = useRef<number>(0);
   const heartbeatRef = useRef<number>(0);
   const onlineCountRef = useRef<number>(0);
+  const intervalRef = useRef<number | null>(null);
 
   // Update user's online status in database
   const updateOnlineStatus = async (isOnline: boolean) => {
@@ -59,11 +60,17 @@ export default function GlobalPresenceTracker() {
   useEffect(() => {
     if (!user?.id) return;
 
-    // Initial: user is online when app opens
-    updateOnlineStatus(true);
+    const clearSyncInterval = () => {
+      if (intervalRef.current !== null) {
+        window.clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
 
     // Heartbeat & Count fetch - debounced to prevent connection storms
     const syncPresence = async () => {
+      if (document.hidden) return
+
       try {
         // 1. Send heartbeat - debounce to max once per 60 seconds per user
         const now = Date.now();
@@ -71,7 +78,7 @@ export default function GlobalPresenceTracker() {
           heartbeatRef.current = now;
           await supabase.rpc('heartbeat_presence');
         }
-        
+
         // 2. Fetch total online count - debounce to max once per 45 seconds
         if (now - onlineCountRef.current >= 45000) {
           onlineCountRef.current = now;
@@ -81,7 +88,7 @@ export default function GlobalPresenceTracker() {
             .select('user_id', { count: 'exact' })
             .gt('last_seen_at', twoMinutesAgo)
             .limit(1000);
-          
+
           if (!error) {
             if (count !== null) {
               setOnlineCount(count);
@@ -97,23 +104,38 @@ export default function GlobalPresenceTracker() {
       }
     };
 
-    syncPresence();
+    const startSyncLoop = () => {
+      clearSyncInterval()
+      if (document.hidden) return
+      syncPresence()
+      intervalRef.current = window.setInterval(syncPresence, 30000)
+    }
 
-    // Sync every 30 seconds (debounced internally to prevent storms)
-    const interval = setInterval(syncPresence, 30000);
+    const stopSyncLoop = () => {
+      clearSyncInterval()
+    }
+
+    // Initial: user is online when app opens
+    updateOnlineStatus(true)
+
+    if (!document.hidden) {
+      startSyncLoop()
+    }
 
     // Handle visibility changes - update online status when tab becomes visible/hidden
     const handleVisibilityChange = () => {
       const isVisible = !document.hidden;
+      isVisibleRef.current = isVisible;
       console.log('[GlobalPresenceTracker] Visibility changed:', isVisible ? 'visible' : 'hidden');
-      
-      // Only send heartbeat when becoming visible again
-      if (isVisible) {
-        syncPresence();
+
+      if (!isVisible) {
+        stopSyncLoop()
+        void updateOnlineStatus(false)
+        return
       }
-      
-      // Update online status based on visibility
-      updateOnlineStatus(isVisible);
+
+      void updateOnlineStatus(true)
+      startSyncLoop()
     };
 
     // Handle beforeunload - mark as offline but don't logout
@@ -126,7 +148,7 @@ export default function GlobalPresenceTracker() {
           is_online: false,
           last_active: new Date().toISOString()
         });
-        
+
         navigator.sendBeacon(
           `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/user_profiles?id=eq.${user.id}`,
           payload
@@ -136,15 +158,15 @@ export default function GlobalPresenceTracker() {
 
     // Listen for visibility changes
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     // Listen for page close
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      clearInterval(interval);
+      stopSyncLoop()
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      
+
       // Mark as offline when component unmounts (e.g., user navigates away or logs out)
       updateOnlineStatus(false);
     };

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Bell, BellRing, LogOut, UserCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -16,7 +16,6 @@ import GlobalTicker from './header/GlobalTicker'
 const Header = () => {
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
-  const location = useLocation()
 
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [isMaiSwitcherOpen, setIsMaiSwitcherOpen] = useState(false)
@@ -26,8 +25,6 @@ const Header = () => {
     ((profile as any)?.role === 'admin' ||
       (profile as any)?.role === 'ceo' ||
       (profile as any)?.is_admin)
-
-  const isLandingPage = location.pathname === '/home' || location.pathname === '/'
 
   const urlBase64ToUint8Array = (base64String: string) => {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -285,7 +282,7 @@ const Header = () => {
         </div>
 
         <div className="flex-none relative z-10 flex items-center space-x-3 md:space-x-5">
-          {!user && !isLandingPage && (
+          {!user && (
             <div className="hidden md:flex items-center gap-3">
               <button
                 onClick={() => navigate('/auth?mode=login')}

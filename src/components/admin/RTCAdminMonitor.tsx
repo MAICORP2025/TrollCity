@@ -171,6 +171,7 @@ export default function RTCAdminMonitor() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [now, setNow] = useState(() => Date.now());
   const timerRef = useRef<number | null>(null);
+  const { isMobileWidth } = useIsMobile();
 
   const [stats, setStats] = useState<RTCStats>({
     totalMinutes: 0,
@@ -1040,7 +1041,7 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     if (!isStaff) return null;
 
     const renderFloatingButton = () => {
-      const { isMobileWidth } = useIsMobile();
+      if (isMobileWidth) return null;
       
       // Only render on web (not mobile)
       if (isMobileWidth) return null;

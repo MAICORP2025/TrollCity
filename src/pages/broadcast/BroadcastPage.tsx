@@ -13,6 +13,11 @@ import { supabase, UserProfile } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { useStreamStore } from '../../lib/streamStore'
 import { cn } from '../../lib/utils'
+import {
+  getAnonymousDisplayName,
+  isAnonymousDisplayName,
+  reserveAnonymousChatSlot,
+} from '../../lib/anonymousIdentity'
 
 import { useIsMobile } from '../../hooks/useIsMobile'
 
@@ -1951,7 +1956,14 @@ useEffect(() => {
       toast.error(err?.message || 'Failed to update seats')
     }
   }, [seats, setStream, streamId, user?.id])
-  const handleOpenCoinStore = useCallback(() => setIsCoinStoreOpen(true), [])
+  const handleOpenCoinStore = useCallback(() => {
+    if (!user?.id) {
+      toast.error('Sign in to use the coin store.')
+      return
+    }
+
+    setIsCoinStoreOpen(true)
+  }, [user?.id])
   const handleCloseCoinStore = useCallback(() => setIsCoinStoreOpen(false), [])
   const handleOpenAbilityBox = useCallback(() => setIsAbilityBoxOpen(true), [])
   const handleCloseAbilityBox = useCallback(() => setIsAbilityBoxOpen(false), [])
@@ -3542,7 +3554,7 @@ user?.id, // user.id is used for identity
    }, [])
 
    const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
-     if (!username || username === 'Anonymous') return
+     if (!username || isAnonymousDisplayName(username)) return
      try {
        const { data, error } = await supabase
          .from('user_profiles')
@@ -4510,7 +4522,7 @@ const handleLike = useCallback(async () => {
                    onShare={handleOpenShareModal}
                    onEndStream={handleStreamEnd}
                    coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
-                   onOpenCoinStore={handleOpenCoinStore}
+                   onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
                    isLive={stream.status === 'live'}
                    streamStartedAt={stream.started_at}
                  />
@@ -4843,9 +4855,15 @@ const handleLike = useCallback(async () => {
                         onSubmit={async (e) => {
                           e.preventDefault()
                           const text = chatInput.trim()
-                          if (!text || !user) return
+                          if (!text) return
 
-                          const username = profile?.username || (profile as any)?.display_name || user.email?.split('@')?.[0] || 'Anonymous'
+                          if (!user && !reserveAnonymousChatSlot()) {
+                            toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                            navigate('/auth?mode=login')
+                            return
+                          }
+
+                          const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                           const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                           setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
@@ -4993,7 +5011,7 @@ const handleLike = useCallback(async () => {
                 onManageStagePass={handleOpenSeatsModal}
                 onOpenMoreMenu={handleOpenMoreMenu}
                 onEndStream={handleStreamEnd}
-                onOpenCoinStore={handleOpenCoinStore}
+                onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
                 isHost={isHost}
               />
 
