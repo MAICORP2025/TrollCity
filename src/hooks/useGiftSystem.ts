@@ -6,6 +6,7 @@ import { generateUUID } from '../lib/uuid';
 import { OFFICIAL_GIFTS } from '../lib/giftConstants';
 import { notifyGiftReceived } from '../lib/notifications';
 import { useMissionProgress } from './useMissionProgress';
+import useTrollFamilyActivity from './useTrollFamilyActivity';
 import { TROLLMOND_CASHBACK_ENABLED } from '../config/featureFlags';
 import { processGiftXp } from '../lib/xp';
 import { createCityActivityEvent } from '../lib/events/createCityActivityEvent';
@@ -165,6 +166,7 @@ export function useGiftSystem(
   const [giftsDisabledReason, setGiftsDisabledReason] = useState<string | null>(null);
   const { user } = useAuthStore();
   const { trackGiftSent } = useMissionProgress(streamId || '');
+  const { recordGiftSent, recordGiftEarned } = useTrollFamilyActivity();
 
   // Simple client-side circuit breaker
   const circuitRef = useRef<{ openUntil: number }>({ openUntil: 0 });
@@ -391,6 +393,21 @@ if (giftCurrency === 'trollmonds') {
       if (error) throw error;
 
       if (data && data.success) {
+        // Record family activity for gift sent/earned
+        const giftCoins = gift.coinCost * quantity;
+        try {
+          // Record gift sent by the sender
+          await recordGiftSent(giftCoins, finalRecipientId, streamId || undefined, gift.id);
+          
+          // Record gift earned by the receiver (only if not self-send)
+          if (finalRecipientId !== user?.id) {
+            await recordGiftEarned(giftCoins, streamId || undefined, gift.id, user?.id);
+          }
+        } catch (recordErr) {
+          console.warn('[GiftSystem] Failed to record family activity:', recordErr);
+          // Don't fail the gift transaction if recording fails
+        }
+        
         // Get sender's profile for username
         let senderName = 'Someone';
         try {
@@ -606,6 +623,8 @@ if (giftCurrency === 'trollmonds') {
     streamId,
     trackGiftSent,
     user,
+    recordGiftSent,
+    recordGiftEarned,
   ]);
 
   if (!hasStreamId) {

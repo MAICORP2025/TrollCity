@@ -12,6 +12,7 @@ import PresidentCandidatesTab from '@/components/home/PresidentCandidatesTab'
 import LiveAuctionMiniWindow from '@/components/home/LiveAuctionMiniWindow'
 import SupportGoalReminderModal from '@/components/SupportGoalReminderModal'
 import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
+import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import { Radio, Users, Play, Eye, X, ChevronRight, Link2, Sparkles, FileText, Trophy, Vote } from 'lucide-react'
 import LevelSystemShowcase from '@/components/home/LevelSystemShowcase'
 
@@ -260,6 +261,13 @@ export default function Home() {
 
   // Support goal reminder hook
   const { reminder: supportReminder, loading: reminderLoadingState, error: reminderError, refetch: fetchSupportReminder } = useSupportGoalReminder()
+  const { currentElection, currentPresident } = usePresidentSystem()
+
+  const presidentTabLabel = currentElection?.status === 'open'
+    ? 'President Candidates'
+    : currentPresident
+      ? 'President'
+      : 'President Office'
 
   // Wait for auth to load before rendering
   // Auto-scroll to top on page load
@@ -413,7 +421,7 @@ export default function Home() {
   }
 
    return (
-     <div className={`relative h-dvh flex flex-col overflow-hidden ${trollCityTheme.backgrounds.primary}`}>
+     <div className={`relative flex min-h-full w-full flex-col ${trollCityTheme.backgrounds.primary}`}>
        {/* Loading Overlay — appears during auth init without unmounting content */}
        {isLoading && (
          <div className="fixed inset-0 flex items-center justify-center bg-[#0A0814]/80 backdrop-blur-sm z-50">
@@ -429,8 +437,7 @@ export default function Home() {
         <TCNNPopupWidget onRequireAuth={requireAuth} />
       </Suspense>
 
-      {/* Animated Background */}
-      <AnimatedGradient />
+      {/* Animated background removed to avoid duplicate full-screen overlays; AppLayout provides global background */}
 
       {/* PWA Install Prompt - Only on Landing Page */}
       <Suspense fallback={null}>
@@ -439,9 +446,9 @@ export default function Home() {
 
 {/* Content */}
         {/* Content-stage wrapper — glass panel that sits behind the centred content to reinforce the "dashboard" depth */}
-        <div className="relative z-10 flex flex-col flex-1 min-h-0 px-3 md:px-5 pt-2 pb-1 safe-top home-content-stage">
+        <div className="relative z-10 flex flex-col min-h-0 px-3 md:px-5 pt-2 pb-6 safe-top home-content-stage">
           <div
-            className="max-w-7xl mx-auto flex flex-col flex-1 min-h-0 w-full home-inner-stage"
+            className="max-w-7xl mx-auto flex flex-col min-h-0 w-full home-inner-stage"
             style={{
               background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)',
               borderRadius: '1.5rem',
@@ -451,7 +458,7 @@ export default function Home() {
           >
           {/* Header with Tabs */}
           <section 
-            className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-2 flex-shrink-0`}
+            className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-2 flex flex-col min-h-0`}
           >
             {/* Tabs */}
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
@@ -528,13 +535,13 @@ export default function Home() {
                  }`}
                >
                  <Vote className="w-3.5 h-3.5" />
-                 President Candidates
+                 {presidentTabLabel}
                </button>
             </div>
 
             {/* Tab Content - Live */}
             {activeTab === 'live' && (
-              <div className="mt-2 max-h-[40vh] overflow-y-auto custom-scrollbar">
+              <div className="mt-2 w-full space-y-4 pb-6">
                 <div className="flex items-center gap-4 mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
@@ -623,7 +630,7 @@ export default function Home() {
 
             {/* Tab Content - Universe (Universal Battle) */}
             {activeTab === 'universe' && (
-              <div className="mt-2 max-h-[40vh] overflow-y-auto custom-scrollbar">
+              <div className="mt-2 w-full space-y-4 pb-6">
                 <div className="flex items-center gap-4 mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
@@ -677,7 +684,7 @@ export default function Home() {
 
               {/* Tab Content - City Laws & Fees */}
               {activeTab === 'laws-fees' && (
-                <div className="mt-2 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                <div className="mt-2 w-full space-y-4 pb-6">
                   <Suspense fallback={
                     <div className="flex items-center justify-center py-12">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
@@ -690,7 +697,7 @@ export default function Home() {
               
               {/* Tab Content - Leagues */}
               {activeTab === 'leagues' && (
-                <div className="mt-2 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                <div className="mt-2 w-full space-y-4 pb-6">
                   <Suspense fallback={
                     <div className="flex items-center justify-center py-12">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-300 border-t-transparent" />
@@ -703,7 +710,7 @@ export default function Home() {
               
               {/* Tab Content - President Candidates */}
               {activeTab === 'president' && (
-                <div className="mt-2 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                <div className="mt-2 w-full space-y-4 pb-6">
                   <Suspense fallback={
                     <div className="flex items-center justify-center py-12">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-300 border-t-transparent" />
@@ -723,8 +730,8 @@ export default function Home() {
            </div>
            
              {/* Main Content Area */}
-             <div className={`flex-1 min-h-0 mt-1 ${activeTab === 'wall' ? '' : 'hidden'}`}>
-               <div className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-3 h-full">
+             <div className={`${activeTab === 'wall' ? '' : 'hidden'} mt-1 w-full`}>
+               <div className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-3">
                  {liveAuctions.length > 0 ? (
                    <>
                      <div className="col-span-1 md:col-span-6 lg:col-span-8">
@@ -742,8 +749,8 @@ export default function Home() {
                    </>
                  ) : (
                    <>
-                     <div className="col-span-1 md:col-span-8 lg:col-span-10 min-h-0">
-                       <TrollWallFeed onRequireAuth={requireAuth} feedClassName="md:col-span-12 lg:col-span-12" />
+                     <div className="col-span-1 md:col-span-8 lg:col-span-10 min-h-0 w-full">
+                       <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full md:col-span-12 lg:col-span-12" />
                      </div>
                      <div className="hidden md:block md:col-span-4 lg:col-span-2 space-y-2">
                        <LevelSystemShowcase className="mb-4" />
@@ -756,26 +763,8 @@ export default function Home() {
                </div>
              </div>
          </div>
-         <div className="safe-bottom flex-shrink-0" />
+        
 
-           {/* Footer Links */}
-         <div className="flex-shrink-0 px-4 py-6 bg-slate-950/80 border-t border-slate-800">
-           <div className="max-w-7xl mx-auto">
-             <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
-               <Link to="/legal/terms" className="text-slate-400 hover:text-purple-400 transition-colors">Terms of Service</Link>
-               <span className="text-slate-600">•</span>
-               <Link to="/legal/privacy" className="text-slate-400 hover:text-purple-400 transition-colors">Privacy Policy</Link>
-               <span className="text-slate-600">•</span>
-               <Link to="/legal/safety" className="text-slate-400 hover:text-purple-400 transition-colors">Safety Guidelines</Link>
-               <span className="text-slate-600">•</span>
-               <Link to="/support" className="text-slate-400 hover:text-purple-400 transition-colors">Support</Link>
-             </div>
-             <div className="text-center mt-3 text-slate-500 text-xs">
-               © 2026 Mai Troll City. All rights reserved.
-             </div>
-           </div>
-         </div>
-         
          {/* Support Goal Reminder Modal */}
          {supportGoalReminder && (
            <SupportGoalReminderModal

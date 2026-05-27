@@ -125,7 +125,7 @@ export default function AuctionsPage() {
   const featured = auctions.find((auction) => auction.status === 'live' && auction.is_featured) || auctions.find((auction) => auction.status === 'live')
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050714] px-4 pb-10 pt-24 text-white md:px-6">
+    <div className="relative min-h-screen bg-[#050714] px-4 pb-10 pt-24 text-white md:px-6 overflow-y-auto">
       <BackgroundFX />
 
       <main className="relative z-10 mx-auto max-w-7xl space-y-6">

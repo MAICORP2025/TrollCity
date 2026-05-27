@@ -712,7 +712,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   )
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col min-h-full w-full">
       <div className="mb-3 rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-4 shadow-[0_0_30px_rgba(34,211,238,0.08)]">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -729,9 +729,16 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             Live Feed
           </div>
         </div>
-      </div>
+        </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+        <div className={cn("rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-2 shadow-[0_0_30px_rgba(34,211,238,0.08)]", feedClassName)}>
+          <CreatePostComposer
+            onPostCreated={handlePostCreated}
+            onRequireAuth={onRequireAuth}
+          />
+        </div>
+
+        <div className="min-h-0 w-full">
         {loading && posts.length === 0 ? (
           <div className="rounded-3xl border border-cyan-400/10 bg-[#050816]/80 py-10 text-center text-white/50">
             Loading Wall...
@@ -743,7 +750,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           </div>
         ) : (
           <Virtuoso
-            style={{ height: '100%' }}
+            useWindowScroll
             data={posts}
             itemContent={renderPost}
             endReached={() => {
@@ -768,14 +775,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         )}
       </div>
 
-      <div className="mt-2 flex-shrink-0 border-t border-white/10 pt-2">
-        <div className={cn("rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-2 shadow-[0_0_30px_rgba(34,211,238,0.08)]", feedClassName)}>
-          <CreatePostComposer
-            onPostCreated={handlePostCreated}
-            onRequireAuth={onRequireAuth}
-          />
-        </div>
-      </div>
+      
 
       {selectedUserId && selectedUsername && (
         <Suspense fallback={null}>

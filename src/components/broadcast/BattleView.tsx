@@ -10,6 +10,7 @@ import { useAuthStore } from '../../lib/store';
 import { PreflightStore } from '../../lib/preflightStore';
 import { Loader2, Coins, User, MicOff, VideoOff, Plus, Minus, Crown, Flame, ArrowLeft, Skull, Gem, X } from 'lucide-react';
 import { useCoins } from '../../lib/hooks/useCoins';
+import useTrollFamilyActivity from '../../hooks/useTrollFamilyActivity';
 import BattleChat from './BattleChat';
 import MuteHandler from './MuteHandler';
 import GiftTray from './GiftTray';
@@ -611,6 +612,7 @@ const getTrackPublications = (
           isSubscribed: (entry as any).isSubscribed ?? true,
           kind: (entry as any).kind,
           source: (entry as any).source,
+          // FIX 4: Support both sid and trackSid to handle undefined sid cases
           sid: (entry as any).sid ?? (entry as any).trackSid ?? '',
           trackSid: (entry as any).sid ?? (entry as any).trackSid ?? '',
         };
@@ -623,7 +625,13 @@ const getTrackPublications = (
 
   const all = safeValues((participant as any).trackPublications) as RemoteTrackPublication[];
 
-  return all.filter((p) => (kind === 'video' ? p.kind === Track.Kind.Video : p.kind === Track.Kind.Audio));
+  // FIX 4: More robust filtering that handles both kind and track.kind
+  return all.filter((p) => {
+    if (kind === 'video') {
+      return p.kind === Track.Kind.Video || p.track?.kind === Track.Kind.Video;
+    }
+    return p.kind === Track.Kind.Audio || p.track?.kind === Track.Kind.Audio;
+  });
 };
 
 // Extended props for BattleParticipantTile.
@@ -732,7 +740,7 @@ const BattleParticipantTile = ({
           </div>
           <div className="flex items-center gap-2 text-slate-400 text-xs">
             <VideoOff size={14} />
-            <span>{isHost && shouldUseMux ? 'Waiting for Mux feed...' : 'Camera Off'}</span>
+            <span>{isHost && shouldUseMux ? 'Waiting for Mux feed...' : 'Connecting video...'}</span>
           </div>
         </div>
       )}
@@ -849,6 +857,7 @@ interface BattleArenaProps {
   shouldUseMuxPlayback: boolean;
   currentUserProfile?: any;
   onOpenStaffActions?: (participant: BattleParticipant) => void;
+  trackRevision: number;
 }
 
 const BattleArena = ({
@@ -859,6 +868,7 @@ const BattleArena = ({
   localIsCameraEnabled,
   localIsMicEnabled,
   remoteUsers,
+  trackRevision,
   challengerStreamId,
   opponentStreamId,
   challengerHostId,
@@ -1379,7 +1389,7 @@ const BattleArena = ({
     };
 
     fetchParticipantData();
-  }, [remoteUsers, user, localAudioTrack, localVideoTrack, battleId, userIdToLiveKitIdentity, challengerHostId, opponentHostId, shouldUseMuxPlayback]);
+  }, [remoteUsers, battleId, trackRevision, userIdToLiveKitIdentity, challengerHostId, opponentHostId, shouldUseMuxPlayback]);
 
   const categorized = useMemo(() => {
     const teams = {
@@ -1763,7 +1773,12 @@ interface BattleViewProps {
 }
 
 export default function BattleView({ battleId, currentStreamId, viewerId, localTracks: passedLocalTracks, remoteUsers: _passedRemoteUsers, userIdToLiveKitIdentity, onReturnToStream }: BattleViewProps) {
-  logBroadcastLifecycle('BattleView mounted/updated', { battleId, currentStreamId, viewerId });
+  // Track connection phases to avoid repeated renders from track events
+  const [trackRevision, setTrackRevision] = useState(0);
+  const [connectionPhase, setConnectionPhase] = useState<'idle' | 'connecting' | 'room-connected' | 'local-ready' | 'remote-ready'>('idle');
+  const roomConnectedAtRef = useRef<number | null>(null);
+  const preflightSetInBattleRef = useRef(false);
+  
   const [battle, setBattle] = useState<any>(null);
   const [challengerStream, setChallengerStream] = useState<Stream | null>(null);
   const [opponentStream, setOpponentStream] = useState<Stream | null>(null);
@@ -1774,6 +1789,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   
   // Get coin/crown balances for display
   const { troll_coins: userCoins, crowns: userCrowns, trollmonds: userTrollmonds } = useCoins();
+  
+  // Family activity recording
+  const { recordBattleWon, recordBattleLost, recordBattleJoined } = useTrollFamilyActivity();
+  const hasRecordedBattleJoinedRef = useRef(false);
   
   // Explicitly track enabled state to ensure camera stays on during battle
   const [isCameraEnabled, setIsCameraEnabled] = useState(true);
@@ -2030,6 +2049,15 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
             return;
           }
 
+          if (isBroadcaster && battle?.id && !hasRecordedBattleJoinedRef.current) {
+            hasRecordedBattleJoinedRef.current = true;
+            try {
+              await recordBattleJoined(battle.id, currentStreamId);
+            } catch (err) {
+              console.warn('[BattleView] Failed to record battle joined:', err);
+            }
+          }
+
           if (localTracksFromPreflight) {
             // Handle tracks independently - publish whatever is available
             if (localTracksFromPreflight[0]) {
@@ -2151,14 +2179,9 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       });
     };
 
-    // FIX #2: React to Track Updates Properly - handle all track events
-    // Use a simple forceUpdate without refs in callbacks
-    const forceUpdate = () => {
-      setRemoteUsers(prev => [...prev]);
-    };
-
-    // Handle track subscribed - use RoomEvent.TrackSubscribed to get actual track with SID
-    // Note: The callback receives (track, publication, participant) - track is the actual LiveKit track
+    // FIX #2 & #3: Use trackRevision counter instead of forceUpdate
+    // This ensures ArenaComponent only rerenders when tracks actually become available
+    // NOT on every track event (which was causing 20+ rerenders)
     const handleTrackSubscribed = (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
       // Skip if room is disconnected
       if (isRoomDisconnectedRef.current || !client || client.state !== 'connected') {
@@ -2170,7 +2193,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         trackSid: track.sid,
         participantIdentity: participant.identity,
       });
-      forceUpdate();
+      // ONLY increment trackRevision on TrackSubscribed to trigger participant selection
+      setTrackRevision((v) => v + 1);
     };
 
     // Handle track unsubscribed
@@ -2185,7 +2209,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         trackSid: track.sid,
         participantIdentity: participant.identity,
       });
-      forceUpdate();
+      // Track unsubscribed is less common; still increment to trigger reselection
+      setTrackRevision((v) => v + 1);
     };
 
     // Handle track published (local participant published a track)
@@ -2197,11 +2222,11 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       }
       console.log('[BattleView] Track published:', {
         trackKind: publication.kind,
-        trackSid: publication.sid,
+        trackSid: publication.sid || publication.trackSid,
         trackSource: publication.source,
         participantIdentity: participant.identity,
       });
-      forceUpdate();
+      // Don't trigger rerender on TrackPublished - wait for TrackSubscribed
     };
 
     // Handle track unpublished
@@ -2213,11 +2238,11 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       }
       console.log('[BattleView] Track unpublished:', {
         trackKind: publication.kind,
-        trackSid: publication.sid,
+        trackSid: publication.sid || publication.trackSid,
         trackSource: publication.source,
         participantIdentity: participant.identity,
       });
-      forceUpdate();
+      // Don't trigger rerender on unpublished - this is cleanup
     };
 
     client.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
@@ -2231,6 +2256,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     client.on(RoomEvent.Connected, () => {
       console.log('[BattleView] Room connected event');
       setConnectionStatus('connected');
+      setConnectionPhase('room-connected');
+      roomConnectedAtRef.current = Date.now();
       isRoomConnectedRef.current = true;
       isConnectingRef.current = false; // FIX 1: Reset connecting flag
     });
@@ -2306,7 +2333,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       // Do NOT call PreflightStore.clear() - tracks belong to the main broadcast
       // clearTracks();
     };
-  }, [battle?.id, effectiveUserId, resolvedBattleRole, isBroadcaster]);
+  }, [battleId, battle, effectiveUserId, resolvedBattleRole, isBroadcaster]);
 
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showMobileGiftTray, setShowMobileGiftTray] = useState(false);
@@ -2396,8 +2423,12 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     const initBattle = async () => {
       try {
         // Set battle mode flag to hide TrollEngine during battles
-        PreflightStore.setInBattle(true);
-        console.log('[BattleView] Set isInBattle = true');
+        // FIX 7: Only set if not already set to avoid repeated updates
+        if (!preflightSetInBattleRef.current && !PreflightStore.getState().isInBattle) {
+          PreflightStore.setInBattle(true);
+          preflightSetInBattleRef.current = true;
+          console.log('[BattleView] Set isInBattle = true');
+        }
         
         const { data: battleData, error: battleError } = await supabase.from('battles').select('*').eq('id', battleId).maybeSingle();
         if (battleError || !battleData) {
@@ -2491,9 +2522,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       supabase.removeChannel(channel);
       // Clear battle mode flag when leaving battle
       PreflightStore.setInBattle(false);
+      preflightSetInBattleRef.current = false;
       console.log('[BattleView] Set isInBattle = false (cleanup)');
     };
-  }, [battleId, effectiveUserId]);
+  }, [battleId]);
 
   // Participants channel
   useEffect(() => {
@@ -2836,6 +2868,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         setBattle((prev: any) => prev ? { ...prev, status: 'ended', winner_id } : prev);
         setShowResults(true);
         
+        // Record family activity for winner and loser
+        if (winner_id === user?.id) {
+          await recordBattleWon(battle.id, currentStreamId);
+        } else if (winner_id !== null) {
+          // Current user lost
+          await recordBattleLost(battle.id, currentStreamId);
+        }
+        
         // Still try to distribute winnings
         try {
           await supabase.rpc('distribute_battle_winnings', { p_battle_id: battle.id });
@@ -2845,6 +2885,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         
         toast.success('Battle Ended!');
         return;
+      }
+
+      // Record family activity for winner and loser
+      if (winner_id === user?.id) {
+        await recordBattleWon(battle.id, currentStreamId);
+      } else if (winner_id !== null) {
+        // Current user lost
+        await recordBattleLost(battle.id, currentStreamId);
       }
 
       const { error: payoutError } = await supabase.rpc('distribute_battle_winnings', { p_battle_id: battle.id });
@@ -2865,7 +2913,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         console.error('[BattleView] Force-end fallback failed:', fallbackErr);
       }
     }
-  }, [battle, user, challengerStream, opponentStream]);
+  }, [battle, user, challengerStream, opponentStream, recordBattleWon, recordBattleLost, currentStreamId]);
 
   const [leaveLoading, setLeaveLoading] = useState(false);
 
@@ -3374,6 +3422,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                 localIsCameraEnabled={isCameraEnabled}
                 localIsMicEnabled={isMicEnabled}
                 remoteUsers={remoteUsers}
+                trackRevision={trackRevision}
                 challengerStreamId={challengerStream.id}
                 opponentStreamId={opponentStream.id}
                 challengerHostId={challengerStream.user_id}

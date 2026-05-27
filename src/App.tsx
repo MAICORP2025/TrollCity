@@ -136,6 +136,12 @@ const TreasuryDashboard = lazyWithRetry(() => import("./pages/TreasuryDashboard"
 
 // Gift store pages removed
 const ApplicationPage = lazyWithRetry(() => import("./pages/ApplicationPage"));
+const OfficerApplication = lazyWithRetry(() => import("./pages/OfficerApplication"));
+const TrollerApplication = lazyWithRetry(() => import("./pages/TrollerApplication"));
+const AttorneyApplication = lazyWithRetry(() => import("./pages/AttorneyApplication"));
+const ProsecutorApplication = lazyWithRetry(() => import("./pages/ProsecutorApplication"));
+const PastorApplication = lazyWithRetry(() => import("./pages/PastorApplication"));
+const LeadOfficerApplication = lazyWithRetry(() => import("./pages/LeadOfficerApplication"));
 const DistrictTour = lazyWithRetry(() => import("./pages/DistrictTour"));
 const TrollOfficerLounge = lazyWithRetry(() => import("./pages/TrollOfficerLounge"));
 const FoundingOfficerTrial = lazyWithRetry(() => import("./pages/FoundingOfficerTrial"));
@@ -1227,11 +1233,19 @@ function AppContent() {
                 <Route path="/agency/:agencyId" element={<AgencyProfilePage />} />
                 <Route path="/agency-apply/:agencyId" element={<AgencyApplyPage />} />
 
-                {/* Family Application */}
+                {/* Application Routes */}
+                <Route path="/apply" element={<ApplicationPage />} />
+                <Route path="/apply/officer" element={<OfficerApplication />} />
+                <Route path="/apply/troller" element={<TrollerApplication />} />
+                <Route path="/apply/attorney" element={<AttorneyApplication />} />
+                <Route path="/apply/prosecutor" element={<ProsecutorApplication />} />
+                <Route path="/apply/pastor" element={<PastorApplication />} />
+                <Route path="/apply/lead-officer" element={<LeadOfficerApplication />} />
                 <Route path="/apply/family" element={<FamilyApplication />} />
 
                 {/* Careers */}
-                <Route path="/career" element={<Career />} />
+                <Route path="/careers" element={<Career />} />
+                <Route path="/career" element={<Navigate to="/careers" replace />} />
 
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>

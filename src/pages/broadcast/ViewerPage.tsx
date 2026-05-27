@@ -49,9 +49,12 @@ import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '../../hooks/useStreamAudiencePresence'
 import { AudienceBubbleTicker } from '../../components/broadcast/AudienceBubbleTicker'
+import { TopSubscribersBar } from '../../components/broadcast/TopSubscribersBar'
+import { useSubscriberUsernames } from '../../hooks/useCreatorSubscription'
 import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
 import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
 import { awardWatchHypeReward } from '../../lib/hypeRewards'
+import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -408,6 +411,7 @@ function ViewerPage() {
   const location = useLocation()
   const { isMobileWidth, hasMounted } = useIsMobile()
   const isMobileViewer = hasMounted && isMobileWidth
+  const { recordHypeCoinsEarned, recordWatchTime } = useTrollFamilyActivity()
   
   // Mobile layout constants
   const MOBILE_CONTROL_BAR_HEIGHT = 76
@@ -703,6 +707,7 @@ function ViewerPage() {
     `viewer-${streamId}-${user?.id || Math.random().toString(36).slice(2, 9)}`,
   )
   const hypeRewardIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const watchTimeIntervalRef = useRef<number | null>(null)
   const lastHypeRewardAttemptRef = useRef<number>(0)
   const clickTimesRef = useRef<number[]>([])
   const blockedUntilRef = useRef<number | null>(null)
@@ -795,11 +800,12 @@ function ViewerPage() {
     if ((stream as any)?.user_id) fetchMods();
   }, [(stream as any)?.user_id]);
 
-  const isActive = isStreamActive(stream)
-  const hostId = (stream as any)?.user_id || ''
-  const hostName = getDisplayName(broadcasterProfile, 'Broadcaster')
+const isActive = isStreamActive(stream)
+   const hostId = (stream as any)?.user_id || ''
+   const hostName = getDisplayName(broadcasterProfile, 'Broadcaster')
+   const { subscriberUsernames } = useSubscriberUsernames(hostId)
 
-  const roomId = useMemo(() => {
+   const roomId = useMemo(() => {
     return String((stream as any)?.livekit_room_name || `stream-${streamId}` || '')
   }, [stream, streamId])
 
@@ -1112,6 +1118,13 @@ function ViewerPage() {
         if (result.success && (result.earned_amount ?? 0) > 0) {
           setShowHypeCoinPopup(true)
           await refreshHypeCoins()
+          
+          // Record family activity for hype coins earned
+          try {
+            await recordHypeCoinsEarned(result.earned_amount || 0, streamId)
+          } catch (familyActivityError) {
+            console.warn('[ViewerPage] Family activity recording error:', familyActivityError)
+          }
         }
       } catch (error) {
         console.warn('[ViewerPage] Hype reward failed:', error)
@@ -1131,6 +1144,35 @@ function ViewerPage() {
       }
     }
   }, [streamId, user?.id, isStreamLive, hostId, refreshHypeCoins])
+
+  useEffect(() => {
+    if (!streamId || !user?.id || !isStreamLive || hostId === user.id) {
+      if (watchTimeIntervalRef.current) {
+        window.clearInterval(watchTimeIntervalRef.current)
+        watchTimeIntervalRef.current = null
+      }
+      return
+    }
+
+    const recordWatchActivity = async () => {
+      try {
+        await recordWatchTime(60, streamId)
+      } catch (recordErr) {
+        console.warn('[ViewerPage] Failed to record watch time:', recordErr)
+      }
+    }
+
+    watchTimeIntervalRef.current = window.setInterval(() => {
+      void recordWatchActivity()
+    }, 60 * 1000)
+
+    return () => {
+      if (watchTimeIntervalRef.current) {
+        window.clearInterval(watchTimeIntervalRef.current)
+        watchTimeIntervalRef.current = null
+      }
+    }
+  }, [streamId, user?.id, isStreamLive, hostId, recordWatchTime])
 
   useEffect(() => {
     if (!streamId) {
@@ -1588,16 +1630,19 @@ useStreamRealtime(
                  onOpenCoinStore={user?.id ? () => toast.info('Coin Store opens from the viewer action bar.') : undefined}
                  isLive={isActive}
                  streamStartedAt={(stream as any).started_at} />
-               {/* Audience Bubble Ticker */}
-               <div className="flex items-center gap-3 px-4 py-2">
-                 <AudienceBubbleTicker
-                   streamId={streamId}
-                   audience={audience}
-                   currentUserId={user?.id}
-                   maxVisible={8}
-                   className="hidden sm:flex"
-                 />
-               </div>
+{/* Audience Bubble Ticker and Top Subscribers Bar */}
+                <div className="flex items-center gap-3 px-4 py-2">
+                  <AudienceBubbleTicker
+                    streamId={streamId}
+                    audience={audience}
+                    currentUserId={user?.id}
+                    maxVisible={8}
+                    className="hidden sm:flex"
+                  />
+                  {hostId && (
+                    <TopSubscribersBar broadcasterId={hostId} />
+                  )}
+                </div>
              </>
            )}
 
@@ -1749,7 +1794,12 @@ useStreamRealtime(
                         transition={{ duration: 0.65, ease: 'easeOut' }}
                         className="max-w-[84%] rounded-2xl border border-cyan-300/20 bg-black/60 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
                       >
-                        <span className="font-black text-cyan-200">{message.username}:</span>{' '}
+                        <span className="font-black text-cyan-200 inline-flex items-center gap-1">
+                          {message.username}
+                          {subscriberUsernames?.has(message.username) && (
+                            <Crown className="w-3 h-3 text-yellow-400" />
+                          )}
+                        </span>{' '}
                         <span className="text-white/90">{message.content}</span>
                       </motion.div>
                     ))}
@@ -1955,16 +2005,19 @@ useStreamRealtime(
                                  transition={{ duration: 0.4, ease: 'easeOut' }}
                                  className="text-sm leading-relaxed break-words"
                                >
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                                  className="cursor-pointer font-black text-cyan-300 transition-colors hover:text-cyan-100"
-                                  title={`View ${msg.username}'s profile`}
-                                >
-                                  {msg.username}
-                                </button>
-                                <span className="mx-1 text-white/40">:</span>
-                                <span className="text-white/90">{msg.content}</span>
+<button
+                                   type="button"
+                                   onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                                   className="cursor-pointer font-black text-cyan-300 transition-colors hover:text-cyan-100 inline-flex items-center gap-1"
+                                   title={`View ${msg.username}'s profile`}
+                                 >
+                                   {msg.username}
+                                   {subscriberUsernames?.has(msg.username) && (
+                                     <Crown className="w-3 h-3 text-yellow-400" />
+                                   )}
+                                 </button>
+                                 <span className="mx-1 text-white/40">:</span>
+                                 <span className="text-white/90">{msg.content}</span>
                               </motion.div>
                             ))}
                           </AnimatePresence>

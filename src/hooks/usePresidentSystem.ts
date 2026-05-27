@@ -20,6 +20,7 @@ export interface PresidentElection {
 }
 
 export interface PresidentCandidate {
+  [x: string]: string;
   id: string;
   election_id: string;
   user_id: string;
@@ -204,6 +205,33 @@ const fetchCurrentElection = useCallback(async () => {
       } catch (err) {
           console.error('Error fetching VP:', err);
       }
+  }, []);
+
+  const fetchPresidentAppointment = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('president_appointments')
+        .select(`
+          *,
+          appointee:user_profiles!president_appointments_president_user_id_fkey(username, avatar_url)
+        `)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setCurrentPresident({
+          user_id: data.president_user_id,
+          username: data.appointee?.username,
+          avatar_url: data.appointee?.avatar_url,
+        });
+      } else {
+        // Leave currentPresident to other fetch as fallback
+      }
+    } catch (err) {
+      console.error('Error fetching active president appointment:', err);
+    }
   }, []);
   
   const fetchTreasuryBalance = useCallback(async () => {
@@ -615,6 +643,7 @@ const voteWithCoins = async (candidateId: string, amount: number) => {
   useEffect(() => {
     fetchCurrentElection();
     fetchCurrentPresident();
+    fetchPresidentAppointment();
     fetchVicePresident();
     fetchTreasuryBalance();
     fetchProposals();
@@ -637,6 +666,7 @@ const voteWithCoins = async (candidateId: string, amount: number) => {
         await Promise.all([
           fetchCurrentElection(),
           fetchCurrentPresident(),
+          fetchPresidentAppointment(),
           fetchVicePresident(),
           fetchTreasuryBalance(),
           fetchProposals()

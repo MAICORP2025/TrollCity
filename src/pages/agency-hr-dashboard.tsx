@@ -935,7 +935,7 @@ export default function AgencyHRDashboard() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#050507] text-white">
+    <div className="min-h-screen overflow-y-auto bg-[#050507] text-white">
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_30%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(244,114,182,0.15),transparent_28%)]" />

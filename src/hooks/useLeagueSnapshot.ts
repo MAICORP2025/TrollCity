@@ -64,7 +64,10 @@ export function useLeagueSnapshot({
     setError(null)
 
     try {
-      await supabase.rpc('ensure_league_system_ready')
+      const { error: ensureError } = await supabase.rpc('ensure_league_system_ready')
+      if (ensureError && ensureError.code !== 'PGRST104') {
+        console.warn('[useLeagueSnapshot] ensure_league_system_ready failed', ensureError)
+      }
 
       const now = new Date().toISOString()
       const { data: eventData, error: eventError } = await supabase
@@ -80,7 +83,16 @@ export function useLeagueSnapshot({
         throw eventError
       }
 
-      if (!eventData || eventData.length === 0) {
+      let event = Array.isArray(eventData) && eventData.length > 0 ? eventData[0] : null
+      if (!event) {
+        const { data: createdEvent, error: createError } = await supabase.rpc('create_system_league_event')
+        if (createError && createError.code !== 'PGRST104') {
+          throw createError
+        }
+        event = createdEvent as any
+      }
+
+      if (!event) {
         setActiveEvent(null)
         setLeaderboard([])
         setUserRank(null)
@@ -89,7 +101,6 @@ export function useLeagueSnapshot({
         return
       }
 
-      const event = eventData[0]
       setActiveEvent({
         id: event.id,
         name: event.name,

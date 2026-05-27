@@ -87,12 +87,12 @@ export default function AppLayout({
    const effectiveShowSidebar = showSidebar && showLegacySidebar && !isAuthPage && !isLivePage && !isMaiClassPage;
    const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isMaiClassPage;
    const effectiveShowBottomNav = showBottomNav && !isAuthPage && !isLivePage && !isMaiClassPage;
-  const mainOverflowClass = isLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
+  const mainOverflowClass = isLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
   const mainPaddingClass = effectiveShowBottomNav && !isLivePage ? 'pb-[calc(var(--bottom-nav-height,64px)+env(safe-area-inset-bottom,0px))]' : '';
   const appThemeClass = isThemeExemptPage ? 'tc-theme-exempt' : 'tc-app-shell';
 
   return (
-    <div className={`app-viewport ${appThemeClass} w-screen h-screen overflow-hidden text-white flex relative`}>
+    <div className={`app-viewport ${appThemeClass} w-screen h-dvh overflow-hidden text-white flex relative`}>
       {!isAuthPage && <PurchaseRequiredModal />}
   {/* Desktop Sidebar - Hidden on Mobile */}
   {effectiveShowSidebar && (
@@ -101,7 +101,7 @@ export default function AppLayout({
     </div>
   )}
 
-      <div className="flex-1 flex flex-col h-full min-w-0 relative">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 relative">
         {/* Header - Sticky or Fixed */}
         {effectiveShowHeader && !isMobileLayout && (
           <div className="shrink-0 z-20">
@@ -113,9 +113,9 @@ export default function AppLayout({
         {!isAuthPage && <UserCompliancePrompt />}
 
         {/* Main Content Area */}
-        <main className={`flex-1 w-full h-full relative ${mainOverflowClass} ${mainPaddingClass}`}>
+        <main className={`flex-1 w-full min-h-0 relative ${mainOverflowClass} ${mainPaddingClass}`}>
           {isMobileLayout ? (
-            <div className="mx-auto flex h-full w-full max-w-md flex-col overflow-hidden border-x border-white/5 bg-slate-950/30 backdrop-blur-sm">
+            <div className={`mx-auto flex min-h-full w-full flex-col ${mobileShellClassName} bg-slate-950/30 backdrop-blur-sm`}>
               {mobileHeader ? (
                 <div className="shrink-0 border-b border-white/10 bg-slate-950/50 px-4 pb-3 pt-3">
                   {mobileHeader}
@@ -128,7 +128,7 @@ export default function AppLayout({
                 </div>
               ) : null}
 
-              <div className={`flex-1 min-h-0 overflow-hidden ${mobileBodyClassName}`}>
+              <div className={`flex-1 min-h-0 min-w-0 ${mobileBodyClassName}`}>
                 {children}
               </div>
 
@@ -139,7 +139,7 @@ export default function AppLayout({
               ) : null}
 
               {mobileFloatingActionButton ? (
-                <div className="pointer-events-none absolute bottom-[calc(var(--bottom-nav-height,64px)+1rem+env(safe-area-inset-bottom,0px))] right-4 z-20">
+                <div className="pointer-events-none fixed bottom-[calc(var(--bottom-nav-height,64px)+1rem+env(safe-area-inset-bottom,0px))] right-4 z-20">
                   <div className="pointer-events-auto">
                     {mobileFloatingActionButton}
                   </div>

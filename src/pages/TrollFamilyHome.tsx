@@ -20,7 +20,7 @@ import {
   ChevronRight, Activity, Zap, Gift, MessageSquare,
   TrendingUp, Shield, Music, Video, Clock, AlertTriangle,
   CheckCircle, Lock, Plus, Sparkles, RefreshCw, Eye,
-  Settings, LogOut
+  Settings, LogOut, X
 } from 'lucide-react';
 
 // Types for aggregated family data from RPC
@@ -42,6 +42,7 @@ interface FamilyMember {
   id: string;
   user_id: string;
   role: string;
+  approval_status?: 'pending' | 'approved' | 'denied';
   username?: string;
   avatar_url?: string;
   display_name?: string;
@@ -1172,9 +1173,53 @@ function MemberCard({ member, isLeader, onKick, onPromote, onBan }: {
   };
 
   const [showMenu, setShowMenu] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+
+  const handleApprove = async () => {
+    if (!isLeader) return;
+    setIsApproving(true);
+    try {
+      const { data: updatedMember, error } = await supabase
+        .from('family_members')
+        .update({ approval_status: 'approved' })
+        .eq('id', member.id)
+        .single();
+      if (error) throw error;
+      if (!updatedMember) throw new Error('Failed to update member approval');
+      // Trigger refresh via the parent component
+    } catch (err) {
+      console.error('Failed to approve member:', err);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleDeny = async () => {
+    if (!isLeader) return;
+    setIsApproving(true);
+    try {
+      const { data: updatedMember, error } = await supabase
+        .from('family_members')
+        .update({ approval_status: 'denied' })
+        .eq('id', member.id)
+        .single();
+      if (error) throw error;
+      if (!updatedMember) throw new Error('Failed to update member approval');
+      // Trigger refresh via the parent component
+    } catch (err) {
+      console.error('Failed to deny member:', err);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const isPending = member.approval_status === 'pending';
+  const isDenied = member.approval_status === 'denied';
 
   return (
-    <div className="bg-slate-700/30 rounded-lg border border-white/5 p-4 flex items-center gap-3">
+    <div className={`rounded-lg border p-4 flex items-center gap-3 ${
+      isDenied ? 'bg-red-900/20 border-red-500/30' : isPending ? 'bg-amber-900/20 border-amber-500/30' : 'bg-slate-700/30 border-white/5'
+    }`}>
       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
         {member.avatar_url ? (
           <img src={member.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
@@ -1186,11 +1231,43 @@ function MemberCard({ member, isLeader, onKick, onPromote, onBan }: {
         <p className="text-white font-medium truncate">
           {member.display_name || member.username || 'Unknown'}
         </p>
-        <p className={`text-sm capitalize ${roleColors[member.role] || 'text-gray-400'}`}>
-          {member.role?.replace('_', ' ')}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className={`text-sm capitalize ${roleColors[member.role] || 'text-gray-400'}`}>
+            {member.role?.replace('_', ' ')}
+          </p>
+          {isPending && (
+            <span className="text-xs px-2 py-1 rounded bg-amber-500/30 text-amber-400 border border-amber-500/50">
+              Pending Approval
+            </span>
+          )}
+          {isDenied && (
+            <span className="text-xs px-2 py-1 rounded bg-red-500/30 text-red-400 border border-red-500/50">
+              Denied
+            </span>
+          )}
+        </div>
       </div>
-      {isLeader && member.role !== 'leader' && (
+      {isLeader && isPending && (
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleApprove}
+            disabled={isApproving}
+            className="p-2 hover:bg-green-600/50 rounded-lg transition-colors text-green-400 hover:text-green-300 disabled:opacity-50"
+            title="Approve"
+          >
+            <CheckCircle className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={handleDeny}
+            disabled={isApproving}
+            className="p-2 hover:bg-red-600/50 rounded-lg transition-colors text-red-400 hover:text-red-300 disabled:opacity-50"
+            title="Deny"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {isLeader && !isPending && member.role !== 'leader' && (
         <div className="relative">
           <button 
             onClick={() => setShowMenu(!showMenu)}

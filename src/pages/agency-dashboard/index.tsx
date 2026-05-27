@@ -86,7 +86,7 @@ type ActivityLog = {
 
 type UserRole = 'owner' | 'manager' | 'creator' | 'agency_leader' | string | null
 
-const shellClass = 'min-h-screen overflow-hidden bg-[#050507] text-white'
+const shellClass = 'min-h-screen overflow-y-auto bg-[#050507] text-white'
 const glassPanel = 'rounded-[1.75rem] border border-white/10 bg-white/[0.045] shadow-2xl shadow-black/30 backdrop-blur-xl'
 const softPanel = 'rounded-2xl border border-white/10 bg-black/30 backdrop-blur-xl'
 const tabClass =

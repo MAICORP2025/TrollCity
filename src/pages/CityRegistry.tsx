@@ -266,7 +266,7 @@ export default function CityRegistry() {
   const remainingAppeals = weeklyLimit ? weeklyLimit.max_appeals - weeklyLimit.appeals_filled : 5;
 
   return (
-    <div className={`min-h-screen bg-[#0A0814] text-white p-4 pb-20 md:pb-4 md:ml-64`}>
+    <div className={`min-h-screen bg-[#0A0814] text-white p-4 pb-20 md:pb-4 md:ml-64 overflow-y-auto`}>
       <div className="max-w-5xl mx-auto space-y-6">
         
         {/* Header */}

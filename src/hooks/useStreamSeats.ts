@@ -17,6 +17,23 @@ export interface SeatSession {
   updated_at?: string
 }
 
+const SUBSCRIBER_DISCOUNT_PERCENT = 0.10 // 10% discount for subscribers
+
+async function checkIsSubscribedToBroadcaster(userId: string, broadcasterId: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('user_subscriptions')
+      .select('id')
+      .eq('subscriber_id', userId)
+      .eq('broadcaster_id', broadcasterId)
+      .eq('is_active', true)
+      .maybeSingle()
+    return !!data
+  } catch {
+    return false
+  }
+}
+
 export function useStreamSeats(
   _streamId?: string,
   _userId?: string,
@@ -86,11 +103,25 @@ export function useStreamSeats(
     // Optimistically set joining state
     setJoiningSeatId(seatIndex)
 
+    // Check for subscriber discount - get broadcaster ID from stream data
+    const broadcasterId = (_streamData as any)?.user_id
+    let finalPrice = price
+    
+    if (broadcasterId && effectiveUserId !== broadcasterId) {
+      const isSubscribed = await checkIsSubscribedToBroadcaster(effectiveUserId, broadcasterId)
+if (isSubscribed && price > 0) {
+        finalPrice = Math.max(0, Math.floor(price * (1 - SUBSCRIBER_DISCOUNT_PERCENT)))
+        if (finalPrice !== price) {
+          console.log(`[useStreamSeats] Subscriber discount applied: ${price} -> ${finalPrice} coins`)
+        }
+      }
+    }
+
     try {
       const { data, error } = await supabase.rpc('join_seat_atomic', {
         p_stream_id: _streamId,
         p_seat_index: seatIndex,
-        p_price: price,
+        p_price: finalPrice,
         p_user_id: effectiveUserId,
       })
 

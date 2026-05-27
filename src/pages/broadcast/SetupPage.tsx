@@ -572,27 +572,27 @@ export default function SetupPage() {
 
   // Effect to detect available cameras
   useEffect(() => {
-    const enumerateCameras = async () => {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-          console.warn('[SetupPage] enumerateDevices not supported');
-          return;
-        }
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        setHasMultipleCameras(videoDevices.length > 1);
-        setHasRearCamera(videoDevices.some(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('rear')));
-      } catch (err: any) {
-        console.error('Error enumerating devices:', {
-          name: err?.name,
-          message: err?.message,
-          code: err?.code,
-          constraint: err?.constraint,
-        });
-        setHasMultipleCameras(false);
-        setHasRearCamera(false);
-      }
-    };
+     const enumerateCameras = async () => {
+       try {
+         if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') {
+           console.warn('[SetupPage] enumerateDevices not supported');
+           return;
+         }
+         const devices = await navigator.mediaDevices.enumerateDevices();
+         const videoDevices = devices.filter(device => device.kind === 'videoinput');
+         setHasMultipleCameras(videoDevices.length > 1);
+         setHasRearCamera(videoDevices.some(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('rear')));
+       } catch (err: any) {
+         console.error('Error enumerating devices:', {
+           name: err?.name,
+           message: err?.message,
+           code: err?.code,
+           constraint: err?.constraint,
+         });
+         setHasMultipleCameras(false);
+         setHasRearCamera(false);
+       }
+     };
     enumerateCameras();
   }, []); // Run once on mount
 
@@ -1110,16 +1110,20 @@ export default function SetupPage() {
     let currentLocalStream: MediaStream | null = null;
     const isMounted = { current: true };
 
-    navigator.mediaDevices?.enumerateDevices().then(devices => {
-        const videoDevices = devices.filter(d => d.kind === 'videoinput');
-        setHasMultipleCameras(videoDevices.length > 1);
-    }).catch((err: any) => {
-        console.warn('[SetupPage] Failed to enumerate devices during media acquisition:', {
-          name: err?.name,
-          message: err?.message,
-          code: err?.code,
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === 'function') {
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            setHasMultipleCameras(videoDevices.length > 1);
+        }).catch((err: any) => {
+            console.warn('[SetupPage] Failed to enumerate devices during media acquisition:', {
+                name: err?.name,
+                message: err?.message,
+                code: err?.code,
+            });
         });
-    });
+    } else {
+        console.warn('[SetupPage] enumerateDevices not supported during media acquisition');
+    }
 
     async function getInitialMedia() {
       console.log('[SetupPage] getInitialMedia called. Existing stream state:', stream ? 'available' : 'not available');

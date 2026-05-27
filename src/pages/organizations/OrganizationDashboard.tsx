@@ -236,7 +236,9 @@ export default function OrganizationDashboard() {
     setOrganizationStatus,
   } = useOrganizations(requestedOrgId)
 
-  const canAccess = Boolean(profile?.organization_id || isOrgStaffProfile(profile))
+  const canAccess = Boolean(
+    (profile && profile.organization_id) || isOrgStaffProfile(profile)
+  )
 
   const canManageSelected = useMemo(() => {
     if (!selectedOrg) return false

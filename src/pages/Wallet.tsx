@@ -256,7 +256,7 @@ export default function Wallet() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050714] px-4 pb-8 pt-24 text-white md:px-6">
+    <div className="relative min-h-screen bg-[#050714] px-4 pb-8 pt-24 text-white md:px-6 overflow-y-auto">
       <BackgroundFX />
 
       <div className="relative z-10 mx-auto max-w-7xl space-y-6">

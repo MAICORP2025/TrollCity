@@ -46,11 +46,6 @@ interface CareerPositionSettings {
   is_open: boolean
 }
 
-interface ApplicationCountRow {
-  position_id: string
-  count: number
-}
-
 const jobPositions: JobPosition[] = [
   {
     id: 'auctioneer',
@@ -172,7 +167,7 @@ const jobPositions: JobPosition[] = [
     icon: UserCheck,
     color: 'from-teal-500 to-cyan-500',
   },
-  {
+{
     id: 'agency_leader',
     title: 'Agency Leader',
     department: 'Agencies',
@@ -181,16 +176,6 @@ const jobPositions: JobPosition[] = [
     benefits: ['Agency dashboard access', 'Build creator teams', 'Agency leadership badge'],
     icon: Users,
     color: 'from-violet-500 to-purple-500',
-  },
-  {
-    id: 'troll_family_leader',
-    title: 'Troll Family Leader',
-    department: 'Families',
-    description: 'Create and lead a Troll Family, recruit members, participate in family goals, and build a city legacy.',
-    requirements: ['Must be at least Level 10', 'Have at least 1000 Troll Coins', 'Strong leadership and recruitment skills'],
-    benefits: ['Family creation privileges', 'Family management tools', 'Ability to grow a city legacy'],
-    icon: Users,
-    color: 'from-rose-500 to-pink-500',
   },
   {
     id: 'ceo_assistant',

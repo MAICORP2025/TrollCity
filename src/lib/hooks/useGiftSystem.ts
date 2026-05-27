@@ -4,6 +4,7 @@ import { processGiftXp } from '../xp'
 import { useXPStore } from '@/stores/useXPStore'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
+import { useTrollFamilyActivity } from '@/hooks/useTrollFamilyActivity'
 
 export async function quietRefreshGiftProfile(userId: string) {
   const authStore = useAuthStore.getState();
@@ -91,6 +92,7 @@ export function GiftSystemProvider({
   }
 
   const { user, profile } = useAuthStore()
+  const { recordGiftSent, recordGiftEarned } = useTrollFamilyActivity()
   const [isSending, setIsSending] = useState(false)
 
   const sendGift = useCallback(
@@ -177,6 +179,36 @@ export function GiftSystemProvider({
           await xpState.fetchXP(user?.id)
         }
 
+        // Record family activity: gift sent and gift earned
+        const finalCost = (gift.coinCost - discountAmount) * quantity
+        const dedupKey = `gift_${streamId}_${gift.id}_${user.id}_${targetReceiverId}_${Date.now()}`
+        
+        try {
+          // Record for sender (gift_sent)
+          await recordGiftSent(finalCost, targetReceiverId, streamId, gift.id)
+          
+          // Record for receiver (gift_earned) - receiver_id parameter
+          // The RPC will record this for the receiver via the targetReceiverId
+          const { data: receiverData } = await supabase.rpc('record_troll_family_activity', {
+            p_user_id: targetReceiverId,
+            p_event_type: 'broadcast_gift_earned',
+            p_amount: finalCost,
+            p_metadata: {
+              stream_id: streamId,
+              gift_id: gift.id,
+              sender_id: user.id,
+              dedup_key: dedupKey,
+            },
+          })
+          
+          if (receiverData?.success === false) {
+            console.warn('[GiftSystem] Receiver activity not recorded:', receiverData?.message)
+          }
+        } catch (familyActivityError) {
+          console.warn('[GiftSystem] Family activity recording error:', familyActivityError)
+          // Don't fail the gift send if family activity recording fails
+        }
+
         return { success: true, bonus: result }
       } catch (error: any) {
         console.error('[GiftDebugger] Error:', error)
@@ -186,7 +218,7 @@ export function GiftSystemProvider({
         setIsSending(false)
       }
     },
-    [defaultReceiverId, profile, streamId, user]
+    [defaultReceiverId, profile, streamId, user, recordGiftSent, recordGiftEarned]
   )
 
   const contextValue = useMemo(

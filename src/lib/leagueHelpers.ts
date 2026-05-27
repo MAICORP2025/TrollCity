@@ -76,13 +76,13 @@ export const getLevelProgress = (currentXp: number, level: number) => {
 }
 
 export const getNextReward = (level: number) => {
-  if (level >= 2000) return 'Legendary Legacy Badge + 10,000 coins'
-  if (level >= 1500) return 'Legendary City Supply Drop + 7,500 coins'
-  if (level >= 1000) return 'Elite Pulse Reward + 5,000 coins'
-  if (level >= 700) return 'Verified City Package + 3,000 coins'
-  if (level >= 400) return 'Regular League Loot + 2,000 coins'
-  if (level >= 100) return 'Active Citizen Chest + 1,000 coins'
-  return 'Rookie Bonus Pack + 500 coins'
+  if (level >= 2000) return 'Legendary Legacy Badge + 10,000 Trollmonds'
+  if (level >= 1500) return 'Legendary City Supply Drop + 7,500 Trollmonds'
+  if (level >= 1000) return 'Elite Pulse Reward + 5,000 Trollmonds'
+  if (level >= 700) return 'Verified City Package + 3,000 Trollmonds'
+  if (level >= 400) return 'Regular League Loot + 2,000 Trollmonds'
+  if (level >= 100) return 'Active Citizen Chest + 1,000 Trollmonds'
+  return 'Rookie Bonus Pack + 500 Trollmonds'
 }
 
 export const getPaidChatUnlockStatus = (level: number) => {

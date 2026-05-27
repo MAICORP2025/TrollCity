@@ -18,6 +18,7 @@ import { Link } from 'react-router-dom'
 import { formatDistanceToNowStrict, isAfter, isBefore } from 'date-fns'
 import { trollCityTheme } from '@/styles/trollCityTheme'
 import { useLeagueSnapshot } from '@/hooks/useLeagueSnapshot'
+import { useLeagueStandings, useMyFamilyLeagueStanding } from '@/hooks/useFamilyLeagues'
 
 interface LeaguesTabProps {
   streamId?: string | null
@@ -42,7 +43,6 @@ type LeaderboardRow = {
 type LeagueEventLike = {
   id?: string
   name?: string
-  slug?: string
   type?: string
   status?: string
   starts_at?: string
@@ -343,6 +343,23 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
     limit: 10,
   })
 
+  const { standings, season: familySeason } = useLeagueStandings()
+  const { standing: myFamilyStanding } = useMyFamilyLeagueStanding()
+  const familyTopStandings = useMemo(
+    () => (standings || []).slice(0, 4),
+    [standings]
+  )
+
+  const seasonDateRange = familySeason
+    ? `${new Date(familySeason.season_start_date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })} — ${new Date(familySeason.season_end_date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })}`
+    : ''
+
   const [selectedFilter, setSelectedFilter] = useState<'Weekly' | 'Monthly' | 'All-Time'>('Weekly')
 
   const event = activeEvent as LeagueEventLike | null
@@ -571,15 +588,15 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
               <div className="mt-4 space-y-2 text-sm text-slate-300">
                 <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
                   <span>Top 1</span>
-                  <span className="font-black text-white">Crown + 5,000 coins</span>
+                  <span className="font-black text-white">Crown + 5,000 Trollmonds</span>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
                   <span>Top 2–3</span>
-                  <span className="font-black text-white">Medal + 2,500 coins</span>
+                  <span className="font-black text-white">Medal + 2,500 Trollmonds</span>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
                   <span>Top 4–10</span>
-                  <span className="font-black text-white">Badge + 1,000 coins</span>
+                  <span className="font-black text-white">Badge + 1,000 Trollmonds</span>
                 </div>
               </div>
             </div>
@@ -660,33 +677,33 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
 
                     <div className="mt-4 flex items-center justify-between gap-2 text-[12px] text-slate-300">
                       <span>{mission.reward_xp} XP</span>
-                      <span>{mission.reward_coins} coins</span>
+                      <span>{mission.reward_coins} Trollmonds</span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (mission.status !== 'completed') return
-                        await claimMission(mission.id)
-                        refreshLeague()
-                      }}
-                      disabled={mission.status !== 'completed' || isClaimingMission}
-                      className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-black text-white transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {claimingMissionId === mission.id && isClaimingMission ? 'Claiming...' : 'Claim'}
-                    </button>
+                    {mission.status === 'completed' && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await claimMission(mission.id)
+                          refreshLeague()
+                        }}
+                        disabled={isClaimingMission}
+                        className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-black text-white transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {claimingMissionId === mission.id && isClaimingMission ? 'Claiming...' : 'Claim'}
+                      </button>
+                    )}
                   </div>
                 )
-              })
-            ) : (
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                No league missions are available yet. Stay active to receive mission assignments for the current event.
-              </div>
-            )}
+              })) : (
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                  No league missions are available yet. Stay active to receive mission assignments for the current event.
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        {!event && (
+          {!event && (
           <div className="rounded-[1.5rem] border border-purple-300/20 bg-purple-400/10 p-4">
             <div className="flex gap-3">
               <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-purple-200" />

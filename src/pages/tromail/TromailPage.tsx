@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
-import { supabase, UserRole } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import {
@@ -11,49 +11,51 @@ import {
    Star,
    Calendar,
    Users,
-   FileText,
-   Trash2,
-   Archive,
-   Reply,
-   Forward,
-   MoreVertical,
    Plus,
    RefreshCw,
-   Search,
    X,
    Bell,
    AlertCircle,
-   Video,
+   Reply,
+   ChevronLeft,
+   ChevronRight,
+   Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { createTromailAccount, getUserTromailAccount, canAccessTromail, canSendAdminEmail } from '@/lib/tromail'
+import { format, startOfMonth, startOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday } from 'date-fns'
 
 type TromailTab = 'inbox' | 'sent' | 'important' | 'admin' | 'calendar' | 'meetings' | 'directory' | 'compose'
 
 interface TromailMessage {
-  id: string
-  sender_user_id: string
-  sender_role: string
-  sender_tromail_address: string
-  subject: string
-  body: string
-  is_admin_email: boolean
-  is_important: boolean
-  related_meeting_id: string | null
-  created_at: string
-  read_at?: string | null
-  sender_username?: string
+   id: string
+   sender_user_id: string
+   sender_role: string
+   sender_tromail_address: string
+   subject: string
+   body: string
+   is_admin_email: boolean
+   is_important: boolean
+   related_meeting_id: string | null
+   created_at: string
+   read_at?: string | null
+   sender_username?: string
 }
 
-interface TromailAccountInfo {
-  id: string
-  user_id: string
-  role: string
-  display_name: string | null
-  email_address: string
-  is_active: boolean
+interface StaffMeeting {
+   id: string
+   title: string
+   description?: string
+   room_name: string
+   status: 'scheduled' | 'live' | 'ended' | 'cancelled'
+   max_participants: number
+   created_by: string
+   scheduled_at: string
+   started_at?: string
+   ended_at?: string
+   created_at: string
 }
 
 export default function TromailPage() {
@@ -63,7 +65,6 @@ export default function TromailPage() {
   const [messages, setMessages] = useState<TromailMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasTromailAccount, setHasTromailAccount] = useState(false)
-  const [showCreateModal, setShowCreateModal] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.full_name || profile?.username || '')
   const [tromailAddress, setTromailAddress] = useState('')
 
@@ -76,7 +77,14 @@ export default function TromailPage() {
   const [isAdminEmail, setIsAdminEmail] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
-  // Check Tromail access
+  // Calendar/Meetings state
+   const [meetings, setMeetings] = useState<StaffMeeting[]>([])
+   const [calendarMonth, setCalendarMonth] = useState(new Date())
+   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false)
+   const [newMeetingTitle, setNewMeetingTitle] = useState('')
+   const [newMeetingDescription, setNewMeetingDescription] = useState('')
+   const [newMeetingDate, setNewMeetingDate] = useState('')
+   const [newMeetingTime, setNewMeetingTime] = useState('12:00')
   useEffect(() => {
     if (user && profile && !canAccessTromail(profile)) {
       toast.error('Access denied. Tromail requires approved role.')
@@ -104,7 +112,6 @@ export default function TromailPage() {
     if (result.success) {
       toast.success('Tromail account created!')
       setHasTromailAccount(true)
-      setShowCreateModal(false)
       setTromailAddress(result.address || '')
     } else {
       toast.error(result.error || 'Failed to create account')
@@ -218,6 +225,66 @@ export default function TromailPage() {
   useEffect(() => {
     fetchMessages()
   }, [fetchMessages])
+
+  // Fetch meetings for calendar
+  const fetchMeetings = useCallback(async () => {
+    if (!user || !hasTromailAccount) return
+
+    try {
+      const { data, error } = await supabase
+        .from('staff_meetings')
+        .select('*')
+        .eq('status', 'scheduled')
+        .order('scheduled_at', { ascending: true })
+
+      if (error) throw error
+      setMeetings(data || [])
+    } catch (err: any) {
+      console.error('Error fetching meetings:', err)
+    }
+  }, [user, hasTromailAccount])
+
+  useEffect(() => {
+    fetchMeetings()
+  }, [fetchMeetings])
+
+  // Create scheduled meeting
+  const handleCreateScheduleMeeting = async () => {
+    if (!user || !newMeetingTitle.trim() || !newMeetingDate) return
+
+    setIsCreatingMeeting(true)
+    try {
+      const scheduledDateTime = `${newMeetingDate}T${newMeetingTime}:00`
+      const roomName = `staff-meeting-${Date.now()}`
+
+      const { error } = await supabase
+        .from('staff_meetings')
+        .insert([{
+          title: newMeetingTitle.trim(),
+          description: newMeetingDescription.trim() || undefined,
+          room_name: roomName,
+          status: 'scheduled',
+          scheduled_at: scheduledDateTime,
+          max_participants: 9,
+          created_by: user.id
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      toast.success(`Meeting "${newMeetingTitle}" scheduled!`)
+      setNewMeetingTitle('')
+      setNewMeetingDescription('')
+      setNewMeetingDate('')
+      setNewMeetingTime('12:00')
+      fetchMeetings()
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to schedule meeting')
+    } finally {
+      setIsCreatingMeeting(false)
+    }
+  }
 
   // First-time setup modal
   if (!hasTromailAccount) {
@@ -464,38 +531,276 @@ export default function TromailPage() {
           </div>
         )}
 
-        {/* Calendar Tab */}
+        {/* Calendar Tab - Month view for meetings */}
         {activeTab === 'calendar' && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
-              <Calendar className="mx-auto mb-3 h-12 w-12 text-cyan-400" />
-              <h3 className="text-lg font-semibold text-white mb-2">Tromail Calendar</h3>
-              <p className="text-sm text-gray-400 mb-4">Schedule and view team meetings and official events.</p>
-              <Button
-                onClick={() => navigate('/admin/meetings')}
-                className="bg-cyan-600 hover:bg-cyan-500"
-              >
-                <Video className="h-4 w-4 mr-2" />
-                Go to Meeting Dashboard
-              </Button>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <h2 className="text-xl font-semibold text-white">
+                  {format(calendarMonth, 'MMMM yyyy')}
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-4">
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-center text-xs font-medium text-gray-400 py-2">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: 42 }).map((_, i) => {
+                  const monthStart = startOfMonth(calendarMonth)
+                  const startDate = startOfWeek(monthStart)
+                  const day = addDays(startDate, i)
+                  const dayMeetings = meetings.filter(m => isSameDay(new Date(m.scheduled_at), day))
+
+                  return (
+                    <div
+                      key={i}
+                      className={`min-h-24 rounded-lg border p-1.5 ${
+                        isSameMonth(day, calendarMonth)
+                          ? 'border-cyan-500/20 bg-slate-800/30'
+                          : 'border-gray-700/20 bg-gray-800/20'
+                      } ${isToday(day) ? 'border-cyan-400' : ''}`}
+                    >
+                      <div className={`text-xs font-medium mb-1 ${
+                        isSameMonth(day, calendarMonth) ? 'text-white' : 'text-gray-600'
+                      } ${isToday(day) ? 'text-cyan-400' : ''}`}>
+                        {format(day, 'd')}
+                      </div>
+                      {dayMeetings.length > 0 && (
+                        <div className="space-y-1">
+                          {dayMeetings.slice(0, 2).map(m => (
+                            <div
+                              key={m.id}
+                              className="text-[10px] truncate rounded bg-cyan-500/20 px-1 py-0.5 text-cyan-300 cursor-pointer hover:bg-cyan-500/30"
+                              onClick={() => navigate(`/meeting/${m.id}`)}
+                            >
+                              {format(new Date(m.scheduled_at), 'h:mm a')} {m.title}
+                            </div>
+                          ))}
+                          {dayMeetings.length > 2 && (
+                            <div className="text-[10px] text-gray-400">
+                              +{dayMeetings.length - 2} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Team Meetings Tab */}
+        {/* Team Meetings Tab - Full Calendar View */}
         {activeTab === 'meetings' && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-6 text-center">
-              <Users className="mx-auto mb-3 h-12 w-12 text-cyan-400" />
-              <h3 className="text-lg font-semibold text-white mb-2">Team Meetings</h3>
-              <p className="text-sm text-gray-400 mb-4">View and manage staff meetings through the Admin Meetings Dashboard.</p>
+            {/* Calendar Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <h2 className="text-xl font-semibold text-white">
+                  {format(calendarMonth, 'MMMM yyyy')}
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
               <Button
-                onClick={() => navigate('/admin/meetings')}
+                onClick={() => setIsCreatingMeeting(true)}
                 className="bg-cyan-600 hover:bg-cyan-500"
               >
-                <Video className="h-4 w-4 mr-2" />
-                Open Meetings Dashboard
+                <Plus className="h-4 w-4 mr-2" />
+                Schedule Meeting
               </Button>
+            </div>
+
+            {/* Create Meeting Modal */}
+            {isCreatingMeeting && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+              >
+                <div className="w-full max-w-md rounded-xl border border-cyan-500/30 bg-slate-900 p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Schedule New Meeting</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-medium uppercase text-gray-400">Title</label>
+                      <Input
+                        value={newMeetingTitle}
+                        onChange={(e) => setNewMeetingTitle(e.target.value)}
+                        placeholder="Meeting title"
+                        className="mt-1 border-cyan-500/30 bg-slate-800 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium uppercase text-gray-400">Description</label>
+                      <Textarea
+                        value={newMeetingDescription}
+                        onChange={(e) => setNewMeetingDescription(e.target.value)}
+                        placeholder="Optional description"
+                        rows={3}
+                        className="mt-1 border-cyan-500/30 bg-slate-800 text-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-medium uppercase text-gray-400">Date</label>
+                        <Input
+                          type="date"
+                          value={newMeetingDate}
+                          onChange={(e) => setNewMeetingDate(e.target.value)}
+                          className="mt-1 border-cyan-500/30 bg-slate-800 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium uppercase text-gray-400">Time</label>
+                        <Input
+                          type="time"
+                          value={newMeetingTime}
+                          onChange={(e) => setNewMeetingTime(e.target.value)}
+                          className="mt-1 border-cyan-500/30 bg-slate-800 text-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        onClick={handleCreateScheduleMeeting}
+                        disabled={isCreatingMeeting}
+                        className="flex-1 bg-cyan-600 hover:bg-cyan-500"
+                      >
+                        Schedule
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => setIsCreatingMeeting(false)}
+                        className="text-gray-400"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Calendar Grid */}
+            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-4">
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-center text-xs font-medium text-gray-400 py-2">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: 42 }).map((_, i) => {
+                  const monthStart = startOfMonth(calendarMonth)
+                  const startDate = startOfWeek(monthStart)
+                  const day = addDays(startDate, i)
+                  const dayMeetings = meetings.filter(m => isSameDay(new Date(m.scheduled_at), day))
+
+                  return (
+                    <div
+                      key={i}
+                      className={`min-h-24 rounded-lg border p-1.5 ${
+                        isSameMonth(day, calendarMonth)
+                          ? 'border-cyan-500/20 bg-slate-800/30'
+                          : 'border-gray-700/20 bg-gray-800/20'
+                      } ${isToday(day) ? 'border-cyan-400' : ''}`}
+                    >
+                      <div className={`text-xs font-medium mb-1 ${
+                        isSameMonth(day, calendarMonth) ? 'text-white' : 'text-gray-600'
+                      } ${isToday(day) ? 'text-cyan-400' : ''}`}>
+                        {format(day, 'd')}
+                      </div>
+                      {dayMeetings.length > 0 && (
+                        <div className="space-y-1">
+                          {dayMeetings.slice(0, 2).map(m => (
+                            <div
+                              key={m.id}
+                              className="text-[10px] truncate rounded bg-cyan-500/20 px-1 py-0.5 text-cyan-300 cursor-pointer hover:bg-cyan-500/30"
+                              onClick={() => navigate(`/meeting/${m.id}`)}
+                            >
+                              {format(new Date(m.scheduled_at), 'h:mm a')} {m.title}
+                            </div>
+                          ))}
+                          {dayMeetings.length > 2 && (
+                            <div className="text-[10px] text-gray-400">
+                              +{dayMeetings.length - 2} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Scheduled Meetings List */}
+            <div className="rounded-xl border border-cyan-500/30 bg-slate-800/50 p-4">
+              <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Scheduled Meetings
+              </h3>
+              {meetings.length === 0 ? (
+                <p className="text-center text-gray-500 py-4">No scheduled meetings</p>
+              ) : (
+                <div className="space-y-2">
+                  {meetings.map(m => (
+                    <div key={m.id} className="flex items-center justify-between rounded-lg border border-cyan-500/20 bg-slate-800/50 p-3">
+                      <div>
+                        <p className="font-medium text-white">{m.title}</p>
+                        <p className="text-xs text-gray-400">
+                          {format(new Date(m.scheduled_at), 'PPPP p')}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => navigate(`/meeting/${m.id}`)}
+                        className="bg-cyan-600 hover:bg-cyan-500"
+                      >
+                        View
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

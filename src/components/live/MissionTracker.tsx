@@ -330,7 +330,7 @@ function MissionCard({
           {mission.reward_coins > 0 && (
             <span className="flex items-center gap-1 text-[11px] text-yellow-400 font-semibold">
               <Gift className="w-3 h-3" />
-              {mission.reward_coins.toLocaleString()}
+              {mission.reward_coins.toLocaleString()} Trollmonds
             </span>
           )}
           {mission.reward_xp > 0 && (

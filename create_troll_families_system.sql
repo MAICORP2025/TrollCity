@@ -805,6 +805,10 @@ BEGIN
             v_reward_coins := v_reward_coins * LEAST(v_family_size / 5, 2);
             v_bonus_coins := v_bonus_coins * LEAST(v_family_size / 5, 2);
         END IF;
+
+        -- Cap reward coins for now
+        v_reward_coins := LEAST(v_reward_coins, 10);
+        v_bonus_coins := LEAST(v_bonus_coins, 10);
         
         -- Insert goal
         INSERT INTO public.family_goals (
@@ -870,10 +874,11 @@ BEGIN
     DECLARE
         v_total_coins integer;
     BEGIN
-        v_total_coins := v_goal.reward_coins;
+        v_total_coins := LEAST(v_goal.reward_coins, 10);
         IF v_is_early THEN
-            v_total_coins := v_total_coins + v_goal.bonus_coins;
+            v_total_coins := v_total_coins + LEAST(v_goal.bonus_coins, 10);
         END IF;
+        v_total_coins := LEAST(v_total_coins, 10);
         
         -- Award coins
         IF v_total_coins > 0 THEN

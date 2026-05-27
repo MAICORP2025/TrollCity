@@ -20,6 +20,7 @@ import {
 } from '../../lib/anonymousIdentity'
 
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
 
 import { Stream } from '../../types/broadcast'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
@@ -434,7 +435,9 @@ import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueCont
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStreamSeats } from '@/hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '@/hooks/useStreamAudiencePresence'
+import { useSubscriberUsernames } from '@/hooks/useCreatorSubscription'
 import { AudienceBubbleTicker } from '@/components/broadcast/AudienceBubbleTicker'
+import { TopSubscribersBar } from '@/components/broadcast/TopSubscribersBar'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
 import { GiftItem } from '@/lib/giftConstants'
@@ -516,6 +519,7 @@ export function BroadcastPage() {
   const { user, profile } = useAuthStore()
   const { clearTracks, screenTrack, screenAudioTrack, cameraTrack } = useStreamStore()
   const { isMobileWidth, hasMounted } = useIsMobile()
+  const { recordStreamStarted } = useTrollFamilyActivity()
 
   // Add render counter for debugging
   const renderCountRef = useRef(0)
@@ -973,10 +977,11 @@ export function BroadcastPage() {
    const [giftUserPositions, setGiftUserPositions] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({})
     const getGiftUserPositionsRef = useRef<() => Record<string, { top: number; left: number; width: number; height: number }>>(() => ({}))
     const giftNameMapRef = useRef<Record<string, string>>({})
-   const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{user_id: string; sender_username: string; sender_avatar_url: string | null; total_gift_coins: number; last_gift_at: string | null}>>([])
-   const [isAllTimeTopGiftersLoading, setIsAllTimeTopGiftersLoading] = useState(false)
+const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{user_id: string; sender_username: string; sender_avatar_url: string | null; total_gift_coins: number; last_gift_at: string | null}>>([])
+    const [isAllTimeTopGiftersLoading, setIsAllTimeTopGiftersLoading] = useState(false)
+    const { subscriberUsernames } = useSubscriberUsernames(stream?.user_id)
 
-   // ── Floating Chat ─────────────────────────────────────────────────────────
+    // ── Floating Chat ─────────────────────────────────────────────────────────
    interface FloatingMessage {
      id: string
      username: string
@@ -2341,6 +2346,8 @@ useEffect(() => {
     const wasInBattleMode = streamRef.current?.is_battle;
     const isNowInBattleMode = nextStream.is_battle;
     const battleIdChanged = streamRef.current?.battle_id !== nextStream.battle_id;
+    const wasLive = streamRef.current?.status === 'live' || streamRef.current?.is_live;
+    const isNowLive = nextStream.status === 'live' || nextStream.is_live;
 
     setStream((prev: any) => {
       if (!prev) return prev;
@@ -2372,6 +2379,13 @@ useEffect(() => {
         side_b_score: nextStream.side_b_score,
       };
     });
+
+    // Record stream started event if transitioning from not live to live
+    if (!wasLive && isNowLive && streamId) {
+      recordStreamStarted(streamId).catch(err => {
+        console.warn('[BroadcastPage] Failed to record stream started:', err)
+      })
+    }
 
     if (((!wasInBattleMode && isNowInBattleMode) || (battleIdChanged && isNowInBattleMode))) {
       if (import.meta.env.DEV) console.debug('[BroadcastPage] Battle mode activated via stream realtime', {
@@ -3107,7 +3121,10 @@ useEffect(() => {
           if (existingCameraPublication?.track) {
             try {
               await roomToUse.localParticipant.unpublishTrack(existingCameraPublication.track)
-              existingCameraPublication.track.stop()
+              const cameraTrack = existingCameraPublication.track as any
+              if (typeof cameraTrack.stop === 'function') {
+                cameraTrack.stop()
+              }
             } catch (err) {
               console.warn('[BroadcastPage] Failed to replace stale host camera track', err)
             }
@@ -3116,7 +3133,10 @@ useEffect(() => {
           if (existingMicPublication?.track) {
             try {
               await roomToUse.localParticipant.unpublishTrack(existingMicPublication.track)
-              existingMicPublication.track.stop()
+              const audioTrack = existingMicPublication.track as any
+              if (typeof audioTrack.stop === 'function') {
+                audioTrack.stop()
+              }
             } catch (err) {
               console.warn('[BroadcastPage] Failed to replace stale host audio track', err)
             }
@@ -4352,7 +4372,7 @@ const handleLike = useCallback(async () => {
     stream?.battle_mode === 'random_queue' &&
     !!stream?.battle_id &&
     stream?.is_battle === true &&
-    (stream?.battle_status === 'starting' || stream?.battle_status === 'active');
+    (stream?.battle_status === 'ready' || stream?.battle_status === 'starting' || stream?.battle_status === 'active');
 
    function handleMute(userId: string, reason?: string) {
      toast.info(`Mute user ${userId}`);
@@ -4526,16 +4546,19 @@ const handleLike = useCallback(async () => {
                    isLive={stream.status === 'live'}
                    streamStartedAt={stream.started_at}
                  />
-                 {/* Audience Bubble Ticker */}
-                 <div className="flex items-center gap-3 px-4 py-2">
-                   <AudienceBubbleTicker
-                     streamId={streamId}
-                     audience={audience}
-                     currentUserId={user?.id}
-                     maxVisible={8}
-                     className="hidden sm:flex"
-                   />
-                 </div>
+{/* Audience Bubble Ticker and Top Subscribers Bar */}
+                  <div className="flex items-center gap-3 px-4 py-2">
+                    <AudienceBubbleTicker
+                      streamId={streamId}
+                      audience={audience}
+                      currentUserId={user?.id}
+                      maxVisible={8}
+                      className="hidden sm:flex"
+                    />
+                    {stream?.user_id && (
+                      <TopSubscribersBar broadcasterId={stream.user_id} />
+                    )}
+                  </div>
                </>
              )}
 
@@ -4831,7 +4854,7 @@ const handleLike = useCallback(async () => {
                             No messages yet – say something!
                           </div>
                         )}
-                        {floatingMessages.map((msg) => (
+{floatingMessages.map((msg) => (
                           <div
                             key={msg.id}
                             className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
@@ -4839,10 +4862,13 @@ const handleLike = useCallback(async () => {
                           >
                             <button
                               onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                              className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                              className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer inline-flex items-center gap-1"
                               title={`View ${msg.username}'s profile`}
                             >
                               {msg.username}
+                              {subscriberUsernames?.has(msg.username) && (
+                                <Crown className="w-3 h-3 text-yellow-400" />
+                              )}
                             </button>
                             <span className="text-white/40 mx-1">:</span>
                             <span className="text-white/90">{msg.content}</span>

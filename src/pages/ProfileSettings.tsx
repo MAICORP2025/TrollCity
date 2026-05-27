@@ -24,6 +24,11 @@ export default function ProfileSettings() {
   const [isMinor, setIsMinor] = useState(false)
   const [platform, setPlatform] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
+  
+  // Creator Subscription Settings
+  const [creatorSubscriptionEnabled, setCreatorSubscriptionEnabled] = useState(false)
+  const [creatorSubscriptionPrice, setCreatorSubscriptionPrice] = useState(100)
+  const [savingSubscription, setSavingSubscription] = useState(false)
 
   useEffect(() => {
     if (profile) {
@@ -36,6 +41,12 @@ export default function ProfileSettings() {
       }
       if ((profile as any).is_minor !== undefined) {
           setIsMinor((profile as any).is_minor)
+      }
+      if ((profile as any).creator_subscription_enabled !== undefined) {
+          setCreatorSubscriptionEnabled((profile as any).creator_subscription_enabled)
+      }
+      if ((profile as any).creator_subscription_price_coins !== undefined) {
+          setCreatorSubscriptionPrice((profile as any).creator_subscription_price_coins)
       }
     }
   }, [profile])
@@ -200,18 +211,57 @@ export default function ProfileSettings() {
               </button>
             </div>
           </div>
-          <div className="flex justify-end">
-            <button
-              onClick={handleSaveProfile}
-              disabled={savingProfile}
-              className={`px-6 py-2 ${trollCityTheme.gradients.button} rounded-xl font-semibold disabled:opacity-50 transition-colors text-white`}
-            >
-              {savingProfile ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </div>
+<div className="flex justify-end">
+             <button
+               onClick={handleSaveProfile}
+               disabled={savingProfile}
+               className={`px-6 py-2 ${trollCityTheme.gradients.button} rounded-xl font-semibold disabled:opacity-50 transition-colors text-white`}
+             >
+               {savingProfile ? 'Saving...' : 'Save Changes'}
+             </button>
+           </div>
+         </div>
 
-        {/* Family & Minor Settings */}
+         {/* Creator Subscription Settings */}
+         <div className={`${trollCityTheme.components.card} space-y-4`}>
+           <h2 className="text-xl font-semibold flex items-center gap-2">
+             <span>👑</span> Creator Subscription
+           </h2>
+           <p className={`text-xs ${trollCityTheme.text.muted}`}>
+             Allow fans to subscribe to your content. You keep 90% of coins, 10% goes to CEO.
+           </p>
+           <div className="space-y-3">
+             <div className={`flex items-center justify-between p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
+               <div>
+                 <p className="font-medium text-white">Enable Subscriptions</p>
+                 <p className={`text-xs ${trollCityTheme.text.muted}`}>Fans can subscribe to support you</p>
+               </div>
+               <button
+                 onClick={() => setCreatorSubscriptionEnabled(!creatorSubscriptionEnabled)}
+                 className={`w-12 h-6 rounded-full transition-colors relative ${creatorSubscriptionEnabled ? 'bg-cyan-600' : 'bg-gray-700'}`}
+               >
+                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${creatorSubscriptionEnabled ? 'left-7' : 'left-1'}`} />
+               </button>
+             </div>
+             <div className="space-y-2">
+               <label className={`text-sm ${trollCityTheme.text.muted}`}>Subscription Price (Troll Coins)</label>
+               <input
+                 type="number"
+                 min="10"
+                 max="10000"
+                 value={creatorSubscriptionPrice}
+                 onChange={(e) => setCreatorSubscriptionPrice(Math.max(10, Math.min(10000, parseInt(e.target.value) || 100)))}
+                 disabled={!creatorSubscriptionEnabled}
+                 className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors disabled:opacity-50`}
+               />
+               <p className={`text-xs ${trollCityTheme.text.muted}`}>
+                 Subscribers get badge, seat discounts, and instant seat approval.
+               </p>
+             </div>
+           </div>
+         </div>
+
+         {/* Family & Minor Settings */}
         {profile && (
           <div className={`${trollCityTheme.components.card}`}>
             <FamilyMinorSettings 

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
@@ -7,19 +7,32 @@ import { Shield, Users, Skull, Crown, Store, CheckCircle, XCircle, BookOpen, New
 
 type ApplicationType = 'troll_officer' | 'troll_family' | 'troller' | 'lead_officer' | 'seller' | 'pastor' | 'journalist' | 'news_caster' | 'chief_news_caster' | 'troll_station_dj' | 'troll_station_manager' | 'attorney' | 'prosecutor' | null
 
+const positionToApplicationType: Record<string, ApplicationType> = {
+  auctioneer: 'troll_officer',
+  prosecutor: 'prosecutor',
+  attorney: 'attorney',
+  tcnn_news_caster: 'news_caster',
+  secretary: 'troll_officer',
+  tcnn_chief_news_caster: 'chief_news_caster',
+  troll_officer: 'troll_officer',
+  journalist: 'journalist',
+  lead_troll_officer: 'lead_officer',
+  troller: 'troller',
+  agency_hr_manager: 'troll_officer',
+  agency_hr: 'troll_officer',
+  agency_leader: 'troll_officer',
+  ceo_assistant: 'troll_officer',
+  noah_assistant: 'troll_officer',
+}
+
 export default function Application() {
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const positionId = searchParams.get('position')
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth')
-      return
-    }
-  }, [user, navigate])
-
-  const handleApplication = async (type: ApplicationType) => {
+  const handleApplication = useCallback(async (type: ApplicationType) => {
     if (!user || !type) return
 
     setLoading(true)
@@ -101,7 +114,19 @@ export default function Application() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, profile, navigate])
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth')
+      return
+    }
+
+    if (positionId && positionToApplicationType[positionId]) {
+      const appType = positionToApplicationType[positionId]
+      handleApplication(appType)
+    }
+  }, [user, positionId, handleApplication, navigate])
 
   if (!user) {
     return (

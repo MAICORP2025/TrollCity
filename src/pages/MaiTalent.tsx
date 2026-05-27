@@ -75,27 +75,27 @@ function MaiTalentLayout({ children }: { children: React.ReactNode }) {
   mtPaths.push('/mai-talent/shows')
   mtPaths.push('/mai-talent/leaderboard')
   
-  return (
+return (
     <div className="flex min-h-screen" style={{ backgroundColor: COLORS.black }}>
-      <div className={`flex flex-col h-[100dvh] max-h-screen bg-gradient-to-b from-[#1a0a1f] to-[#0d0510] backdrop-blur-2xl border-r border-pink-500/40 shadow-[12px_0_48px_rgba(0,0,0,0.4),0_0_20px_rgba(236,72,153,0.12),inset_0_0_20px_rgba(236,72,153,0.04)] transition-all duration-300 ${mtSidebarCollapsed ? 'w-20' : 'w-64'} fixed left-0 top-0 z-50`}>
-        <div className="p-3 flex items-center justify-between border-b border-pink-500/20 bg-white/[0.02]">
-          {!mtSidebarCollapsed && (
-            <Link to="/mai-talent" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-gradient-to-tr from-pink-600 via-purple-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(236,72,153,0.3)]">
-                <span className="text-xl font-bold text-white">M</span>
-              </div>
-              <span className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white via-pink-200 to-pink-400">
-                Mai Talent
-              </span>
-            </Link>
-          )}
-          <button
-            onClick={() => setMtSidebarCollapsed(!mtSidebarCollapsed)}
-            className={`p-2 hover:bg-white/[0.06] rounded-lg text-pink-300 hover:text-white transition-all duration-200 ${mtSidebarCollapsed ? 'mx-auto' : ''}`}
-          >
-            {mtSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          </button>
-        </div>
+      <div className={`flex flex-col h-full max-h-screen bg-gradient-to-b from-[#1a0a1f] to-[#0d0510] backdrop-blur-2xl border-r border-pink-500/40 shadow transition-all duration-300 ${mtSidebarCollapsed ? 'w-20' : 'w-64'} fixed left-0 top-0 z-50`}>
+         <div className="p-3 flex items-center justify-between border-b border-pink-500/20 bg-white/[0.02]">
+           {!mtSidebarCollapsed && (
+             <Link to="/mai-talent" className="flex items-center gap-2.5">
+               <div className="w-9 h-9 bg-gradient-to-tr from-pink-600 via-purple-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(236,72,153,0.3)]">
+                 <span className="text-xl font-bold text-white">M</span>
+               </div>
+               <span className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white via-pink-200 to-pink-400">
+                 Mai Talent
+               </span>
+             </Link>
+           }
+           <button
+             onClick={() => setMtSidebarCollapsed(!mtSidebarCollapsed)}
+             className={`p-2 hover:bg-white/[0.06] rounded-lg text-pink-300 hover:text-white transition-all duration-200 ${mtSidebarCollapsed ? 'mx-auto' : ''}`}
+           >
+             {mtSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+           </button>
+         </div>
         
         <div className="flex-1 overflow-y-auto py-3 space-y-4 custom-scrollbar min-h-0">
           <div className={`px-4 mb-2 mt-2 ${mtSidebarCollapsed ? 'flex justify-center' : ''}`}>
@@ -191,9 +191,9 @@ function MaiTalentLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       
-      <div className={`flex-1 ${mtSidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300`}>
-        {children}
-      </div>
+<div className={`flex-1 overflow-y-auto ${mtSidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300`}>
+         {children}
+       </div>
     </div>
   )
 }
@@ -570,9 +570,9 @@ export default function MaiTalent() {
   )
 
   return (
-    <MaiTalentLayout>
-      <div className="min-h-screen" style={{ backgroundColor: COLORS.black }}>
-        {renderContent() || renderHome()}
+<MaiTalentLayout>
+       <div className="min-h-screen overflow-y-auto" style={{ backgroundColor: COLORS.black }}>
+         {renderContent() || renderHome()}
 
         <section className="py-12 px-4" style={{ backgroundColor: COLORS.black }}>
           <div className="max-w-6xl mx-auto">

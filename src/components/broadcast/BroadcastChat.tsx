@@ -7,6 +7,7 @@ import { PreflightStore } from '../../lib/preflightStore';
 import { generateUUID } from '../../lib/uuid';
 import { toast } from 'sonner';
 import { useMissionProgress } from '../../hooks/useMissionProgress';
+import useTrollFamilyActivity from '../../hooks/useTrollFamilyActivity';
 import GiftBoxModal from './GiftBoxModal';
 import ModActionsPopup from './ModActionsPopup';
 
@@ -119,6 +120,7 @@ export default function BroadcastChat({
   const { user, profile } = useAuthStore();
   const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
   const { trackChatMessage } = useMissionProgress(streamId);
+  const { recordChatMessage } = useTrollFamilyActivity();
 
   const buildUserProfile = (source: any) => ({
     username:
@@ -1086,6 +1088,10 @@ const fetchMessages = async () => {
         }
 
         trackChatMessage();
+        
+        // Record family activity for chat message
+        await recordChatMessage(content.length, streamId);
+        
         onMessageSent?.();
     } catch (err: any) {
         console.error('BroadcastChat send failed:', err);

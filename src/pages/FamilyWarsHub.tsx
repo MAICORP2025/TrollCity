@@ -520,8 +520,8 @@ const FamilyWarsHub = ({ user: _authUser }: { user?: UserProfile | null }) => {
           <div className="space-y-2 text-zinc-300 text-sm">
             <p>• <strong>Duration:</strong> Wars last 30 minutes to 2 hours</p>
             <p>• <strong>Scoring:</strong> Points earned from member activity during war</p>
-            <p>• <strong>Winner Rewards:</strong> 1,000 family coins + 100 XP</p>
-            <p>• <strong>Participation Bonus:</strong> 500 coins + 25 XP for both families</p>
+            <p>• <strong>Winner Rewards:</strong> 1,000 family Trollmonds + 100 XP</p>
+            <p>• <strong>Participation Bonus:</strong> 500 Trollmonds + 25 XP for both families</p>
             <p>• <strong>Leadership:</strong> Only family leaders and officers can declare wars</p>
             <p>• <strong>Cooldown:</strong> Families can only be in one war at a time</p>
           </div>

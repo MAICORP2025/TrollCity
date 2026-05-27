@@ -514,7 +514,7 @@ export default function TrollCourt() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#090604] p-4 text-white md:p-6">
+    <div className="relative min-h-screen p-4 text-white md:p-6 overflow-y-auto">
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.16),transparent_34%),radial-gradient(circle_at_20%_20%,rgba(127,29,29,0.18),transparent_28%),linear-gradient(135deg,#090604,#11070b_42%,#050308)]" />
         <div className="absolute inset-x-0 top-0 h-72 bg-[linear-gradient(180deg,rgba(251,191,36,0.10),transparent)]" />

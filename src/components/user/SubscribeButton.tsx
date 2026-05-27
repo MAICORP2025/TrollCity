@@ -1,38 +1,87 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
-import { Crown, Heart, Loader2, Check, X } from 'lucide-react';
-import SubscriptionTierSelector from './SubscriptionTierSelector';
+import { Crown, Heart, Loader2, Check } from 'lucide-react';
 
 interface SubscribeButtonProps {
   broadcasterId: string;
   broadcasterUsername: string;
-  currentSubscription?: any;
-  onSubscribe?: (tierId: string) => void;
+  onSubscribe?: () => void;
   onUnsubscribe?: () => void;
-  onProfileClick?: () => void;
 }
 
 const SubscribeButton: React.FC<SubscribeButtonProps> = ({
   broadcasterId,
   broadcasterUsername,
-  currentSubscription,
   onSubscribe,
   onUnsubscribe
 }) => {
   const { user, profile } = useAuthStore();
   const [loading, setLoading] = useState(false);
-  const [showTierSelector, setShowTierSelector] = useState(false);
-  
-  const currentLevel = profile?.level || 0;
-  const isSubscribed = !!currentSubscription;
-  const canSubscribe = user && currentLevel >= 10;
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionPrice, setSubscriptionPrice] = useState<number | null>(null);
+  const [canSubscribe, setCanSubscribe] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    checkCreatorSubscription();
+  }, [user, broadcasterId]);
+
+  const checkCreatorSubscription = async () => {
+    try {
+      // Check if creator has subscriptions enabled and get price
+      const { data: creator } = await supabase
+        .from('user_profiles')
+        .select('creator_subscription_enabled, creator_subscription_price_coins')
+        .eq('id', broadcasterId)
+        .single();
+
+      setCanSubscribe(creator?.creator_subscription_enabled && (profile?.level || 0) >= 10);
+      setSubscriptionPrice(creator?.creator_subscription_price_coins || 100);
+
+      // Check if already subscribed
+      const { data: subscription } = await supabase
+        .from('user_subscriptions')
+        .select('id')
+        .eq('subscriber_id', user.id)
+        .eq('broadcaster_id', broadcasterId)
+        .eq('is_active', true)
+        .single();
+
+      setIsSubscribed(!!subscription);
+    } catch (err) {
+      console.error('[SubscribeButton] Error checking subscription:', err);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    if (!user) return;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('subscribe_to_creator', {
+        p_creator_id: broadcasterId
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Subscription failed');
+
+      toast.success(`Subscribed to ${broadcasterUsername}! (90% to creator, 10% to CEO)`);
+      setIsSubscribed(true);
+      onSubscribe?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleUnsubscribe = async () => {
-    if (!confirm(`Unsubscribe from ${broadcasterUsername}? You'll lose subscriber benefits immediately.`)) {
-      return;
-    }
+    if (!user) return;
+
+    const confirmUnsubscribe = confirm(`Unsubscribe from ${broadcasterUsername}? You'll lose subscriber benefits.`);
+    if (!confirmUnsubscribe) return;
 
     setLoading(true);
     try {
@@ -40,9 +89,10 @@ const SubscribeButton: React.FC<SubscribeButtonProps> = ({
         p_subscriber_id: user.id,
         p_broadcaster_id: broadcasterId
       });
-      
+
       if (error) throw error;
       toast.success(`Unsubscribed from ${broadcasterUsername}`);
+      setIsSubscribed(false);
       onUnsubscribe?.();
     } catch (err: any) {
       toast.error(err.message);
@@ -51,22 +101,7 @@ const SubscribeButton: React.FC<SubscribeButtonProps> = ({
     }
   };
 
-  const handleSubscribeClick = () => {
-    if (!canSubscribe) {
-      if (currentLevel < 10) {
-        toast.error('Subscriptions unlocked at Level 10. Keep engaging to level up!');
-      } else {
-        toast.error('Please log in to subscribe');
-      }
-      return;
-    }
-
-    if (isSubscribed) {
-      handleUnsubscribe();
-    } else {
-      setShowTierSelector(true);
-    }
-  };
+  const currentLevel = profile?.level || 0;
 
   const getButtonStyle = () => {
     if (isSubscribed) {
@@ -80,46 +115,32 @@ const SubscribeButton: React.FC<SubscribeButtonProps> = ({
 
   const getButtonText = () => {
     if (loading) return '...';
-    if (isSubscribed) return `Subscribed ${currentSubscription?.tier?.name ? `(${currentSubscription.tier.name})` : ''} ✓`;
+    if (isSubscribed) return 'Subscribed ✓';
     if (currentLevel < 10) return `Level ${currentLevel}/10 to Subscribe`;
-    return 'Subscribe';
+    return subscriptionPrice ? `Subscribe (${subscriptionPrice} TC)` : 'Subscribe';
   };
 
   return (
-    <>
-      <button
-        onClick={handleSubscribeClick}
-        disabled={loading}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all ${getButtonStyle()}`}
-        title={isSubscribed ? 'Click to unsubscribe' : 'Subscribe to support this creator'}
-      >
-        {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : isSubscribed ? (
-          <>
-            <Crown className="w-4 h-4" />
-            {getButtonText()}
-          </>
-        ) : (
-          <>
-            <Heart className="w-4 h-4" />
-            {getButtonText()}
-          </>
-        )}
-      </button>
-
-      {showTierSelector && (
-        <SubscriptionTierSelector
-          broadcasterId={broadcasterId}
-          broadcasterUsername={broadcasterUsername}
-          onClose={() => setShowTierSelector(false)}
-          onSelect={(tierId) => {
-            setShowTierSelector(false);
-            onSubscribe?.(tierId);
-          }}
-        />
+    <button
+      onClick={isSubscribed ? handleUnsubscribe : handleSubscribe}
+      disabled={loading || !canSubscribe}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all ${getButtonStyle()}`}
+      title={isSubscribed ? 'Click to unsubscribe' : `Subscribe to support ${broadcasterUsername}`}
+    >
+      {loading ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : isSubscribed ? (
+        <>
+          <Crown className="w-4 h-4" />
+          {getButtonText()}
+        </>
+      ) : (
+        <>
+          <Heart className="w-4 h-4" />
+          {getButtonText()}
+        </>
       )}
-    </>
+    </button>
   );
 };
 

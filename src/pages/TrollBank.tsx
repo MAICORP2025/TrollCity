@@ -74,7 +74,7 @@ export default function TrollBank() {
   }, [user?.id])
 
   // Fetch small purchase credit-building trackers
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     fetchSmallPurchases()
     // eslint-enable react-hooks/exhaustive-deps

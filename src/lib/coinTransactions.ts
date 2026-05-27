@@ -539,6 +539,26 @@ export async function addCoins(params: {
             }
           }
 
+          try {
+            const dedupKey = `troll_coin_earned_${type}_${transactionRefId || 'unknown'}_${userId}_${Date.now()}`
+            const { error: familyRecordError } = await sb.rpc('record_troll_family_activity', {
+              p_user_id: userId,
+              p_event_type: 'troll_coin_earned',
+              p_amount: actualCredited,
+              p_metadata: {
+                source: type,
+                ref_id: transactionRefId,
+                dedup_key: dedupKey,
+              },
+            })
+
+            if (familyRecordError) {
+              console.warn('Failed to record family activity for coins earned:', familyRecordError)
+            }
+          } catch (e) {
+            console.warn('addCoins: Failed to record troll coin earned activity', e)
+          }
+
           // Track coin earning for family tasks
           try {
             await trackCoinEarning(userId, amount)

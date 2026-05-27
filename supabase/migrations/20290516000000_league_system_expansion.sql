@@ -284,7 +284,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_league_event_templates_template_key ON pub
 INSERT INTO public.league_event_templates (template_key, name_template, type, description, duration_hours, points_multiplier, theme_key, weight, metadata)
 VALUES
   ('friday_battle_day', 'Friday Battle Day', 'friday_battle_day', 'The city goes wild with weekend battle energy.', 24, 1.2, 'troll_city', 15, '{"emoji":"🔥"}'),
-  ('crown_rush', 'Crown Rush', 'weekly_clash', 'Stack points fast and claim the crown.', 72, 1.1, 'troll_city', 12, '{"emoji":"👑"}'),
+  ('crown_rush', 'Crown Rush', 'weekly_clash', 'Stack points fast and claim the crown.', 168, 1.1, 'troll_city', 12, '{"emoji":"👑"}'),
   ('gift_storm', 'Gift Storm', 'gift_rush', 'Send gifts and push your favorite creators up the leaderboard.', 24, 1.25, 'troll_city', 14, '{"emoji":"🎁"}'),
   ('courtroom_clash', 'Courtroom Clash', 'court_showdown', 'A dramatic league with courtroom-style leaderboard stakes.', 24, 1.15, 'troll_city', 8, '{"emoji":"⚖️"}'),
   ('neighborhood_takeover', 'Neighborhood Takeover', 'neighborhood_war', 'Rally your corner of Troll City for fame and prizes.', 48, 1.1, 'troll_city', 10, '{"emoji":"🌆"}'),
@@ -298,16 +298,16 @@ ON CONFLICT (template_key) DO NOTHING;
 -- 9. Seed mission templates
 INSERT INTO public.mission_templates (mission_key, slug, title_template, description_template, event_type, target_min, target_max, reward_points, reward_xp, reward_coins, difficulty, weight)
 VALUES
-  ('send_3_gifts', 'send_3_gifts', 'Send 3 gift powers', 'Send 3 gifts during live broadcasts to climb the leaderboard.', 'send_gift', 3, 5, 100, 50, 25, 'easy', 12),
-  ('watch_15_minutes', 'watch_15_minutes', 'Watch 15 minutes live', 'Stay in the stream for 15 minutes and keep the city pulse moving.', 'watch_live_10_min', 15, 20, 125, 60, 30, 'easy', 10),
-  ('join_1_seat', 'join_1_seat', 'Enter the Seat', 'Join 1 broadcast seat and stake your presence in the league.', 'join_broadcast_seat', 1, 1, 100, 50, 20, 'easy', 11),
-  ('send_10_messages', 'send_10_messages', 'Send 10 chat messages', 'Send 10 live messages and build your Troll City momentum.', 'send_chat_message', 10, 15, 90, 40, 20, 'easy', 10),
-  ('participate_battle', 'participate_battle', 'Join a Battle', 'Participate in 1 live battle to earn league progression.', 'participate_battle', 1, 1, 150, 90, 40, 'normal', 9),
-  ('win_1_battle', 'win_1_battle', 'Win a Battle', 'Win 1 live battle and prove you rule Troll City.', 'win_battle', 1, 1, 500, 200, 100, 'hard', 6),
+  ('send_3_gifts', 'send_3_gifts', 'Send 3 gift powers', 'Send 3 gifts during live broadcasts to climb the leaderboard.', 'send_gift', 3, 5, 100, 50, 10, 'easy', 12),
+  ('watch_15_minutes', 'watch_15_minutes', 'Watch 15 minutes live', 'Stay in the stream for 15 minutes and keep the city pulse moving.', 'watch_live_10_min', 15, 20, 125, 60, 10, 'easy', 10),
+  ('join_1_seat', 'join_1_seat', 'Enter the Seat', 'Join 1 broadcast seat and stake your presence in the league.', 'join_broadcast_seat', 1, 1, 100, 50, 10, 'easy', 11),
+  ('send_10_messages', 'send_10_messages', 'Send 10 chat messages', 'Send 10 live messages and build your Troll City momentum.', 'send_chat_message', 10, 15, 90, 40, 10, 'easy', 10),
+  ('participate_battle', 'participate_battle', 'Join a Battle', 'Participate in 1 live battle to earn league progression.', 'participate_battle', 1, 1, 150, 90, 10, 'normal', 9),
+  ('win_1_battle', 'win_1_battle', 'Win a Battle', 'Win 1 live battle and prove you rule Troll City.', 'win_battle', 1, 1, 500, 200, 10, 'hard', 6),
   ('visit_coin_store', 'visit_coin_store', 'Visit the Coin Store', 'Open the coin store and keep your economy strong.', 'visit_coin_store', 1, 1, 75, 30, 10, 'easy', 7),
-  ('follow_1_broadcaster', 'follow_1_broadcaster', 'Support the Broadcaster', 'Follow 1 broadcaster and strengthen your city crew.', 'follow_broadcaster', 1, 2, 80, 40, 15, 'easy', 8),
-  ('complete_3_missions', 'complete_3_missions', 'Complete 3 missions', 'Finish 3 league missions to unlock extra progress.', 'mission_progress', 3, 3, 200, 120, 60, 'normal', 7),
-  ('earn_500_points', 'earn_500_points', 'Earn 500 league points', 'Collect 500 league points during the event to rank up.', 'send_gift', 500, 700, 300, 150, 80, 'hard', 5)
+  ('follow_1_broadcaster', 'follow_1_broadcaster', 'Support the Broadcaster', 'Follow 1 broadcaster and strengthen your city crew.', 'follow_broadcaster', 1, 2, 80, 40, 10, 'easy', 8),
+  ('complete_3_missions', 'complete_3_missions', 'Complete 3 missions', 'Finish 3 league missions to unlock extra progress.', 'mission_progress', 3, 3, 200, 120, 10, 'normal', 7),
+  ('earn_500_points', 'earn_500_points', 'Earn 500 league points', 'Collect 500 league points during the event to rank up.', 'send_gift', 500, 700, 300, 150, 10, 'hard', 5)
 ON CONFLICT (mission_key) DO NOTHING;
 
 -- 10. System functions for league lifecycle
@@ -389,7 +389,7 @@ BEGIN
       'Troll City Rush',
       'weekly_clash',
       'A fast city competition to keep the pulse beating.',
-      24,
+      168,
       1,
       'troll_city',
       1,
@@ -402,7 +402,7 @@ BEGIN
   v_slug := lower(regexp_replace(v_event_name || '-' || substring(md5(random()::text) FROM 1 FOR 6), '[^a-z0-9]+', '-', 'g'));
   v_duration := (v_template.duration_hours || ' hours')::interval;
 
-  INSERT INTO public.league_events (
+  RETURN QUERY INSERT INTO public.league_events (
       name,
       slug,
       type,
@@ -425,9 +425,7 @@ BEGIN
       v_template.points_multiplier,
       jsonb_build_object('template_key', v_template.template_key, 'auto_created', true)
   )
-  RETURNING id, name, slug, type, status, starts_at, ends_at, created_by, theme_key, points_multiplier, metadata, created_at, updated_at INTO STRICT id, name, slug, type, status, starts_at, ends_at, created_by, theme_key, points_multiplier, metadata, created_at, updated_at;
-
-  RETURN NEXT;
+  RETURNING id, name, slug, type, status, starts_at, ends_at, created_by, theme_key, points_multiplier, metadata, created_at, updated_at;
 END;
 $$;
 
@@ -638,7 +636,7 @@ BEGIN
           0,
           v_template.reward_points,
           v_template.reward_xp,
-          v_template.reward_coins,
+          LEAST(v_template.reward_coins, 10),
           'active',
           'system',
           v_event.ends_at,
@@ -808,18 +806,15 @@ BEGIN
     );
   END IF;
 
-  IF v_mission.reward_coins > 0 AND EXISTS (
-      SELECT 1 FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name = 'user_troll_coins'
-  ) THEN
+  v_mission.reward_coins := LEAST(v_mission.reward_coins, 10);
+
+  IF v_mission.reward_coins > 0 THEN
     BEGIN
-      EXECUTE format(
-          'UPDATE public.user_troll_coins SET coins = coins + %s WHERE user_id = %L',
-          v_mission.reward_coins,
-          p_user_id::text
-      );
+      UPDATE public.user_profiles
+      SET trollmonds = COALESCE(trollmonds, 0) + v_mission.reward_coins
+      WHERE id = p_user_id;
     EXCEPTION WHEN OTHERS THEN
-      RAISE WARNING 'Unable to award mission coins: %', SQLERRM;
+      RAISE WARNING 'Unable to award mission trollmonds: %', SQLERRM;
     END;
   END IF;
 
@@ -837,7 +832,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.ensure_league_system_ready()
-RETURNS public.league_events
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -845,14 +840,51 @@ DECLARE
   v_event public.league_events%ROWTYPE;
 BEGIN
   PERFORM public.close_expired_league_events();
-  SELECT * INTO v_event FROM public.get_active_league_event();
+
+  SELECT
+      id,
+      name,
+      slug,
+      type,
+      status,
+      starts_at,
+      ends_at,
+      created_by,
+      theme_key,
+      points_multiplier,
+      CASE WHEN pg_typeof(metadata)::text = 'text' THEN to_jsonb(metadata) ELSE metadata END AS metadata,
+      created_at,
+      updated_at
+  INTO v_event
+  FROM public.league_events
+  WHERE status = 'active'
+    AND now() BETWEEN starts_at AND ends_at
+  ORDER BY starts_at DESC
+  LIMIT 1;
+
   IF NOT FOUND THEN
-    SELECT * INTO v_event FROM public.create_system_league_event();
+    SELECT
+        id,
+        name,
+        slug,
+        type,
+        status,
+        starts_at,
+        ends_at,
+        created_by,
+        theme_key,
+        points_multiplier,
+        CASE WHEN pg_typeof(metadata)::text = 'text' THEN to_jsonb(metadata) ELSE metadata END AS metadata,
+        created_at,
+        updated_at
+    INTO v_event
+    FROM public.create_system_league_event();
   END IF;
+
   IF v_event.id IS NOT NULL THEN
     PERFORM public.refresh_league_leaderboard(v_event.id);
   END IF;
-  RETURN v_event;
+  RETURN to_jsonb(v_event);
 END;
 $$;
 

@@ -79,8 +79,12 @@ export function useOrganizations(selectedOrgId?: string | null) {
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (!isStaff) {
+      if (!isStaff && userOrgId) {
         query = query.eq('id', userOrgId)
+      } else if (!isStaff && !userOrgId) {
+        setOrganizations([])
+        setLoading(false)
+        return
       }
 
       const { data, error } = await query

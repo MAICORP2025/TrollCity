@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { Mail, Lock, User, Eye, EyeOff, AlertTriangle, Building2, Phone, Globe, MapPin } from 'lucide-react'
 import InstallButton from '../components/InstallButton';
+import NavBubble from '../components/NavBubble';
 import { trollCityTheme } from '../styles/trollCityTheme';
 import { generateUUID } from '../lib/uuid';
 import { handleConcurrentLogin, resetConcurrentLoginCheck } from '../lib/sessionUtils';
@@ -987,131 +988,9 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
                    </div>
                  )}
 
-                       {/* Role Selection (Signup Only) */}
-                       {!isLogin && (
-                         <div className="relative group">
-                           <select
-                             value={selectedRole}
-                             onChange={(e) => setSelectedRole(e.target.value as 'user' | 'staff' | 'admin' | 'organization')}
-                             className={`w-full pl-12 pr-4 py-3 bg-slate-800/50 border rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)] appearance-none ${
-                               roleEmailError ? 'border-red-500/50' : 'border-white/10'
-                             }`}
-                             required
-                           >
-                             <option value="user">👤 User</option>
-                             <option value="staff">🛡️ Staff</option>
-                             <option value="admin">👑 Admin</option>
-                             <option value="organization">🏢 Organization</option>
-                           </select>
-                           <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                           {roleEmailError && (
-                             <p className="text-red-400 text-xs mt-1 px-1">{roleEmailError}</p>
-                           )}
-                         </div>
-                       )}
-
-                       {/* Organization fields (shown only when role is organization on Sign Up) */}
-                       {!isLogin && selectedRole === 'organization' && (
-                         <div className="space-y-3 mt-2">
-                           <div className="relative group">
-                             <Building2 className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                             <input
-                               type="text"
-                               name="orgName"
-                               value={orgName}
-                               onChange={(e) => setOrgName(e.target.value)}
-                               className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                               placeholder="Organization Name"
-                               required={!isLogin}
-                               disabled={isLogin}
-                             />
-                           </div>
-                           <div className="relative group">
-                             <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                             <input
-                               type="email"
-                               name="orgEmail"
-                               value={orgEmail}
-                               onChange={(e) => setOrgEmail(e.target.value)}
-                               className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                               placeholder={isLogin ? "Business Email" : "Business Email"}
-                               required
-                             />
-                           </div>
-                           <div className="relative group">
-                             <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                             <input
-                               type={showOrgPassword ? "text" : "password"}
-                               name="orgPassword"
-                               value={orgPassword}
-                               onChange={(e) => setOrgPassword(e.target.value)}
-                               className="w-full pl-12 pr-12 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                               placeholder={isLogin ? "Organization Password" : "Organization Password (min 6 characters)"}
-                               required
-                               minLength={6}
-                             />
-                             <button
-                               type="button"
-                               onClick={() => setShowOrgPassword(!showOrgPassword)}
-                               className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-cyan-400 transition-colors"
-                             >
-                               {showOrgPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                             </button>
-                           </div>
-                           {/* Sign Up Only Fields */}
-                           {!isLogin && (
-                             <>
-                               <div className="relative group">
-                                 <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                                 <input
-                                   type="tel"
-                                   name="orgPhone"
-                                   value={orgPhone}
-                                   onChange={(e) => setOrgPhone(e.target.value)}
-                                   className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                                   placeholder="Phone Number (optional)"
-                                 />
-                               </div>
-                               <div className="relative group">
-                                 <Globe className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                                 <input
-                                   type="url"
-                                   name="orgWebsite"
-                                   value={orgWebsite}
-                                   onChange={(e) => setOrgWebsite(e.target.value)}
-                                   className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                                   placeholder="Website (optional)"
-                                 />
-                               </div>
-                               <div className="relative group">
-                                 <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400/60 group-focus-within:text-cyan-400 transition-colors" />
-                                 <input
-                                   type="text"
-                                   name="orgCountry"
-                                   value={orgCountry}
-                                   onChange={(e) => setOrgCountry(e.target.value)}
-                                   className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                                   placeholder="Country"
-                                   required
-                                 />
-                               </div>
-                               <div className="relative group">
-                                 <textarea
-                                   name="orgDescription"
-                                   value={orgDescription}
-                                   onChange={(e) => setOrgDescription(e.target.value)}
-                                   className="w-full pl-4 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/40 focus:bg-slate-800/70 transition-all focus:shadow-[0_0_20px_rgba(34,211,238,0.2)] min-h-[80px] resize-none"
-                                   placeholder="Organization Description"
-                                   required
-                                 />
-                               </div>
-                             </>
-                           )}
-                           {orgError && (
-                             <p className="text-red-400 text-xs mt-1 px-1">{orgError}</p>
-                           )}
-                         </div>
-                       )}
+                       <div className="text-sm text-slate-400 mb-4">
+                         Accounts are created as a User by default. Role approval happens later via application.
+                       </div>
 
                      {/* Terms Acceptance (Sign Up Only) */}
                     {!isLogin && (
@@ -1264,6 +1143,8 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
         </div>
       </div>
     </div>
+
+    <NavBubble />
 
     <style dangerouslySetInnerHTML={{ __html: `
       @keyframes float-particle {

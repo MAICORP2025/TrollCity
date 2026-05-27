@@ -23,9 +23,31 @@ type AgencyApplicationRow = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
-  applicant_profile?: {
+  agency?: {
+    id: string;
+    owner_id: string;
+    name: string;
+    slug: string;
+    status: string;
+    monthly_fee_amount: number;
+    monthly_fee_enabled: boolean;
+    application_fee_amount: number;
+    application_fee_enabled: boolean;
+    billing_status: string;
+    billing_period: string;
+    next_billing_at: string | null;
+    next_monthly_fee_due_at: string | null;
+    last_monthly_fee_paid_at: string | null;
+    monthly_fee_status: string;
+    balance_due: number;
+  } | null;
+  applicant?: {
+    id: string;
     username?: string | null;
+    display_name?: string | null;
     avatar_url?: string | null;
+    role?: string;
+    troll_role?: string;
   } | null;
 };
 
@@ -62,7 +84,35 @@ export const AgencyApplicationsTable: React.FC<AgencyApplicationsTableProps> = (
 
       const { data, error } = await supabase
         .from('agency_applications')
-        .select(`*, applicant_profile:user_profiles!agency_applications_applicant_id_fkey(username, avatar_url)`)
+        .select(`
+          *,
+          agency:agencies!agency_applications_agency_id_fkey (
+            id,
+            owner_id,
+            name,
+            slug,
+            status,
+            monthly_fee_amount,
+            monthly_fee_enabled,
+            application_fee_amount,
+            application_fee_enabled,
+            billing_status,
+            billing_period,
+            next_billing_at,
+            next_monthly_fee_due_at,
+            last_monthly_fee_paid_at,
+            monthly_fee_status,
+            balance_due
+          ),
+          applicant:user_profiles!agency_applications_applicant_id_fkey (
+            id,
+            username,
+            display_name,
+            avatar_url,
+            role,
+            troll_role
+          )
+        `)
         .eq('agency_id', agencyId)
         .order('created_at', { ascending: false });
 
@@ -160,7 +210,7 @@ export const AgencyApplicationsTable: React.FC<AgencyApplicationsTableProps> = (
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-white">
-                        @{application.applicant_profile?.username || 'unknown'}
+                        @{application.applicant?.username || 'unknown'}
                       </span>
                       <Badge
                         variant="outline"

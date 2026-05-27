@@ -484,7 +484,7 @@ const FamilyLounge = ({ user: _authUser }: { user: UserProfile }) => {
           <div className="bg-zinc-900 rounded-xl p-4 border border-yellow-500/30">
             <div className="flex items-center gap-2 mb-2">
               <Coins className="w-5 h-5 text-yellow-400" />
-              <span className="text-sm text-gray-400">Total Coins</span>
+              <span className="text-sm text-gray-400">Total Trollmonds</span>
             </div>
             <p className="text-2xl font-bold text-yellow-400">
               {(familyStats?.total_coins || 0).toLocaleString()}
@@ -494,7 +494,7 @@ const FamilyLounge = ({ user: _authUser }: { user: UserProfile }) => {
           <div className="bg-zinc-900 rounded-xl p-4 border border-blue-500/30">
             <div className="flex items-center gap-2 mb-2">
               <Calendar className="w-5 h-5 text-blue-400" />
-              <span className="text-sm text-gray-400">Weekly Coins</span>
+              <span className="text-sm text-gray-400">Weekly Trollmonds</span>
             </div>
             <p className="text-2xl font-bold text-blue-400">
               {(familyStats?.weekly_coins || 0).toLocaleString()}
@@ -504,7 +504,7 @@ const FamilyLounge = ({ user: _authUser }: { user: UserProfile }) => {
           <div className="bg-zinc-900 rounded-xl p-4 border border-purple-500/30">
             <div className="flex items-center gap-2 mb-2">
               <Star className="w-5 h-5 text-purple-400" />
-              <span className="text-sm text-gray-400">Season Coins</span>
+              <span className="text-sm text-gray-400">Season Trollmonds</span>
             </div>
             <p className="text-2xl font-bold text-purple-400">
               {(familyStats?.season_coins || 0).toLocaleString()}
