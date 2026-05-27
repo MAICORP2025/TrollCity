@@ -468,6 +468,7 @@ function AppContent() {
   const [initialProfileLoaded, setInitialProfileLoaded] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const hasNavigatedRef = useRef(false);
+  const lastVisibilityRefreshRef = useRef(0);
 
 
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
@@ -1078,6 +1079,12 @@ function AppContent() {
  
     const handleVisibilityChange = async () => {
       if (!document.hidden) {
+        const now = Date.now();
+        if (now - lastVisibilityRefreshRef.current < 10000) {
+          return;
+        }
+        lastVisibilityRefreshRef.current = now;
+
         const currentPath = window.location.pathname;
         const isRealtimeRoute = /\/(battle|broadcast|watch|live|broadcasting)(\/|$)/.test(currentPath)
         if (isRealtimeRoute) {

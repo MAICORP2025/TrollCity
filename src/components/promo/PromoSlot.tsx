@@ -19,6 +19,8 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
   const [isHovered, setIsHovered] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rotationTimeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchedPlacementRef = useRef<AdPlacement | null>(null);
+  const hasFetchedRef = useRef(false);
 
   // Fetch active ads for this placement
   const fetchAds = useCallback(async () => {
@@ -137,10 +139,18 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
     };
   }, [ads.length, isHovered, rotateToNext]);
 
-  // Fetch ads on mount
+  // Fetch ads once per placement and avoid repeated fetches from rerenders
   useEffect(() => {
-    fetchAds();
-  }, [fetchAds]);
+    if (fetchedPlacementRef.current !== placement) {
+      fetchedPlacementRef.current = placement
+      hasFetchedRef.current = false
+    }
+
+    if (!hasFetchedRef.current) {
+      fetchAds()
+      hasFetchedRef.current = true
+    }
+  }, [placement, fetchAds]);
 
   // Track impression for current ad when it changes
   useEffect(() => {

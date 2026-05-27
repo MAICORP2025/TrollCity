@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from 'react'
 import {
   Mic,
   MicOff,
@@ -14,41 +14,41 @@ import {
   UserMinus,
   UserCheck,
   Radio,
-  Crown,
   Sparkles,
-} from "lucide-react";
-import { cn } from "../../lib/utils";
+  X,
+} from 'lucide-react'
+import { cn } from '../../lib/utils'
 
 interface MoreControlsDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  isMuted: boolean;
-  isCameraOff: boolean;
-  onToggleMic: () => void;
-  onToggleCamera: () => void;
-  onFlipCamera: () => void;
-  onSettings?: () => void;
-  onLeave?: () => void;
-  isHost?: boolean;
-  /* ── stream-control callbacks ─────────────────── */
-  onGift?: () => void;
-  onShare?: () => void;
-  onEndStream?: () => void;
-  onToggleSeatsLock?: () => void;
-  areSeatsLocked?: boolean;
-  onManageStagePass?: () => void;
-  openStagePassCount?: number;
-  /* Assign broadofficer (host only) */
-  onAssignBroadofficer?: () => void;
-  /* ── RGB effect ───────────────────────────────── */
-  onToggleRGB?: () => void;
-  hasRgbEffect?: boolean;
-  /* ── mod-action callbacks (officers only) ─────── */
-  isOfficer?: boolean;
-  onMuteUser?: (userId: string) => void;
-  onBanUser?: (userId: string) => void;
-  onRemoveFromStage?: (userId: string) => void;
-  onModGift?: (userId: string) => void;
+  isOpen: boolean
+  onClose: () => void
+  isMuted: boolean
+  isCameraOff: boolean
+  onToggleMic: () => void
+  onToggleCamera: () => void
+  onFlipCamera: () => void
+  onSettings?: () => void
+  onLeave?: () => void
+  isHost?: boolean
+
+  onGift?: () => void
+  onShare?: () => void
+  onEndStream?: () => void
+  onToggleSeatsLock?: () => void
+  areSeatsLocked?: boolean
+  onManageStagePass?: () => void
+  openStagePassCount?: number
+
+  onAssignBroadofficer?: () => void
+
+  onToggleRGB?: () => void
+  hasRgbEffect?: boolean
+
+  isOfficer?: boolean
+  onMuteUser?: (userId: string) => void
+  onBanUser?: (userId: string) => void
+  onRemoveFromStage?: (userId: string) => void
+  onModGift?: (userId: string) => void
 }
 
 export default function MoreControlsDrawer({
@@ -59,7 +59,6 @@ export default function MoreControlsDrawer({
   onToggleMic,
   onToggleCamera,
   onFlipCamera,
-  onSettings,
   onLeave,
   onGift,
   onShare,
@@ -78,181 +77,317 @@ export default function MoreControlsDrawer({
   onRemoveFromStage,
   onModGift,
 }: MoreControlsDrawerProps) {
-  const drawerRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null)
 
-  // Lock background scroll when open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = isOpen ? 'hidden' : ''
 
     return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isOpen]);
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
 
-  // Swipe down to close
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) return
 
-    let startY = 0;
+    let startY = 0
 
     const handleTouchStart = (e: TouchEvent) => {
-      startY = e.touches[0].clientY;
-    };
+      startY = e.touches[0].clientY
+    }
 
     const handleTouchMove = (e: TouchEvent) => {
-      const currentY = e.touches[0].clientY;
-      const diff = currentY - startY;
+      const currentY = e.touches[0].clientY
+      const diff = currentY - startY
 
-      if (diff > 120) {
-        onClose();
+      if (diff > 90) {
+        onClose()
       }
-    };
+    }
 
-    const node = drawerRef.current;
-    node?.addEventListener("touchstart", handleTouchStart);
-    node?.addEventListener("touchmove", handleTouchMove);
+    const node = drawerRef.current
+    node?.addEventListener('touchstart', handleTouchStart, { passive: true })
+    node?.addEventListener('touchmove', handleTouchMove, { passive: true })
 
     return () => {
-      node?.removeEventListener("touchstart", handleTouchStart);
-      node?.removeEventListener("touchmove", handleTouchMove);
-    };
-  }, [isOpen, onClose]);
+      node?.removeEventListener('touchstart', handleTouchStart)
+      node?.removeEventListener('touchmove', handleTouchMove)
+    }
+  }, [isOpen, onClose])
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
 
   return (
     <>
-      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[80] animate-fade-in"
+        className="fixed inset-0 z-[80] bg-black/65 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Drawer */}
       <div
         ref={drawerRef}
-        className="fixed bottom-0 left-0 right-0 z-[90]
-                   bg-zinc-900 rounded-t-3xl
-                   border-t border-white/10
-                   max-h-[95vh] overflow-y-auto
-                   p-6 pb-[calc(env(safe-area-inset-bottom)+24px)]
-                   animate-slide-up"
+        className={cn(
+          'fixed z-[90] overflow-hidden border border-cyan-300/15 bg-slate-950/95 text-white shadow-[0_0_40px_rgba(34,211,238,0.20)] backdrop-blur-xl',
+          'bottom-0 left-0 right-0 rounded-t-[26px]',
+          'mx-auto max-h-[78vh] w-full max-w-[520px]',
+          'md:bottom-5 md:right-5 md:left-auto md:w-[360px] md:rounded-[26px]'
+        )}
       >
-        {/* Grab bar */}
-        <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.18),transparent_34%),radial-gradient(circle_at_100%_20%,rgba(168,85,247,0.16),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.92),rgba(2,6,23,0.98))]" />
 
-        {/* ── Mic / Cam / Flip ── */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <ControlButton
-            icon={isMuted ? MicOff : Mic}
-            label={isMuted ? "Unmute" : "Mute"}
-            active={!isMuted}
-            onClick={onToggleMic}
-          />
+        <div className="relative flex max-h-[78vh] flex-col">
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">
+                Troll City Controls
+              </p>
+              <h3 className="mt-1 text-base font-black text-white">
+                More Options
+              </h3>
+            </div>
 
-          <ControlButton
-            icon={isCameraOff ? VideoOff : Video}
-            label={isCameraOff ? "Start Video" : "Stop Video"}
-            active={!isCameraOff}
-            onClick={onToggleCamera}
-          />
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 transition hover:bg-white/10 hover:text-white"
+              aria-label="Close more controls"
+            >
+              <X size={18} />
+            </button>
+          </div>
 
-          <ControlButton icon={Camera} label="Flip" onClick={onFlipCamera} />
+          <div className="overflow-y-auto px-4 py-4 scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent">
+            <SectionTitle label="Camera & Audio" />
+
+            <div className="grid grid-cols-3 gap-2">
+              <ControlButton
+                icon={isMuted ? MicOff : Mic}
+                label={isMuted ? 'Unmute' : 'Mute'}
+                active={!isMuted}
+                onClick={onToggleMic}
+              />
+
+              <ControlButton
+                icon={isCameraOff ? VideoOff : Video}
+                label={isCameraOff ? 'Start Video' : 'Stop Video'}
+                active={!isCameraOff}
+                onClick={onToggleCamera}
+              />
+
+              <ControlButton
+                icon={Camera}
+                label="Flip"
+                onClick={onFlipCamera}
+              />
+            </div>
+
+            {(isHost || isOfficer) && (
+              <>
+                <SectionTitle label="Stream Controls" className="mt-5" />
+
+                <div className="grid grid-cols-3 gap-2">
+                  {onGift && (
+                    <ControlButton
+                      icon={Gift}
+                      label="Gift"
+                      onClick={onGift}
+                    />
+                  )}
+
+                  {onShare && (
+                    <ControlButton
+                      icon={Share2}
+                      label="Share"
+                      onClick={onShare}
+                    />
+                  )}
+
+                  {isHost && onEndStream && (
+                    <ControlButton
+                      icon={Radio}
+                      label="End"
+                      onClick={onEndStream}
+                      danger
+                    />
+                  )}
+
+                  {isHost && onToggleSeatsLock && (
+                    <ControlButton
+                      icon={ShieldAlert}
+                      label={areSeatsLocked ? 'Unlock' : 'Lock Seats'}
+                      onClick={onToggleSeatsLock}
+                      active={areSeatsLocked}
+                    />
+                  )}
+
+                  {isHost && onManageStagePass && (
+                    <ControlButton
+                      icon={UserCheck}
+                      label={`Seats${openStagePassCount ? ` ${openStagePassCount}` : ''}`}
+                      onClick={onManageStagePass}
+                    />
+                  )}
+
+                  {isHost && onAssignBroadofficer && (
+                    <ControlButton
+                      icon={Shield}
+                      label="Officer"
+                      onClick={onAssignBroadofficer}
+                    />
+                  )}
+
+                  {isHost && onToggleRGB && (
+                    <ControlButton
+                      icon={Sparkles}
+                      label={hasRgbEffect ? 'RGB On' : 'RGB Off'}
+                      onClick={onToggleRGB}
+                      active={hasRgbEffect}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+
+            {isOfficer && (
+              <>
+                <SectionTitle label="Officer Actions" className="mt-5" danger />
+
+                <div className="grid grid-cols-3 gap-2">
+                  {onMuteUser && (
+                    <ControlButton
+                      icon={MicOff}
+                      label="Mute User"
+                      onClick={() => {}}
+                      danger
+                    />
+                  )}
+
+                  {onBanUser && (
+                    <ControlButton
+                      icon={Ban}
+                      label="Jail/Ban"
+                      onClick={() => {}}
+                      danger
+                    />
+                  )}
+
+                  {onRemoveFromStage && (
+                    <ControlButton
+                      icon={UserMinus}
+                      label="Remove"
+                      onClick={() => {}}
+                      danger
+                    />
+                  )}
+
+                  {onModGift && (
+                    <ControlButton
+                      icon={Gift}
+                      label="Mod Gift"
+                      onClick={() => {}}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="shrink-0 border-t border-white/10 bg-black/25 p-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">
+            <button
+              type="button"
+              onClick={onLeave}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 text-sm font-black uppercase tracking-[0.12em] text-red-200 shadow-[0_0_22px_rgba(239,68,68,0.12)] transition hover:bg-red-500/15 active:scale-[0.98]"
+            >
+              <LogOut size={18} />
+              {isHost ? 'End Broadcast' : 'Leave Broadcast'}
+            </button>
+          </div>
         </div>
-
-        {/* ── Stream Controls (host / officer) ── */}
-        {(isHost || isOfficer) && (
-          <div className="mb-6">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.18em] mb-3">Stream Controls</p>
-            <div className="grid grid-cols-4 gap-3">
-              {onGift && <ControlButton icon={Gift} label="Gift" onClick={onGift} />}
-              {onShare && <ControlButton icon={Share2} label="Share" onClick={onShare} />}
-              {isHost && onEndStream && (
-                <ControlButton icon={Radio} label="End Stream" onClick={onEndStream} active={false} danger />
-              )}
-              {isHost && onToggleSeatsLock && (
-                <ControlButton
-                  icon={ShieldAlert}
-                  label={areSeatsLocked ? "Unlock Seats" : "Lock Seats"}
-                  onClick={onToggleSeatsLock}
-                  active={areSeatsLocked}
-                />
-              )}
-              {isHost && onManageStagePass && (
-                <ControlButton
-                  icon={UserCheck}
-                  label={`Seats${openStagePassCount ? ` (${openStagePassCount})` : ''}`}
-                  onClick={onManageStagePass}
-                />
-              )}
-              {isHost && onAssignBroadofficer && (
-                <ControlButton
-                  icon={Shield}
-                  label="Assign Officer"
-                  onClick={onAssignBroadofficer}
-                />
-              )}
-              {isHost && onToggleRGB && (
-                <ControlButton
-                  icon={Sparkles}
-                  label={hasRgbEffect ? "RGB On" : "RGB Off"}
-                  onClick={onToggleRGB}
-                  active={hasRgbEffect}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Mod Actions (officers only) ── */}
-        {isOfficer && (
-          <div className="mb-6">
-            <p className="text-[10px] font-black text-red-400/70 uppercase tracking-[0.18em] mb-3">Mod Actions</p>
-            <div className="grid grid-cols-4 gap-3">
-              {onMuteUser && <ControlButton icon={MicOff} label="Mute User" onClick={() => {}} />}
-              {onBanUser && <ControlButton icon={Ban} label="Ban User" onClick={() => {}} />}
-              {onRemoveFromStage && <ControlButton icon={UserMinus} label="Remove Stage" onClick={() => {}} />}
-              {onModGift && <ControlButton icon={Gift} label="Mod Gift" onClick={() => {}} />}
-            </div>
-          </div>
-        )}
-
-        {/* ── Leave / End ── */}
-        <button
-          onClick={onLeave}
-          className="w-full bg-zinc-800 text-red-400 font-bold py-3.5 rounded-xl
-                     flex items-center justify-center gap-2
-                     active:scale-[0.97] transition-transform"
-        >
-          <LogOut size={20} />
-          {isHost ? "End Broadcast" : "Leave Broadcast"}
-        </button>
       </div>
     </>
-  );
+  )
 }
 
-function ControlButton({ icon: Icon, label, active, onClick, danger }: any) {
+function SectionTitle({
+  label,
+  className = '',
+  danger = false,
+}: {
+  label: string
+  className?: string
+  danger?: boolean
+}) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-2">
+    <p
+      className={cn(
+        'mb-2 text-[10px] font-black uppercase tracking-[0.2em]',
+        danger ? 'text-red-300/80' : 'text-cyan-300/80',
+        className
+      )}
+    >
+      {label}
+    </p>
+  )
+}
+
+function ControlButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+  danger,
+}: {
+  icon: React.ComponentType<{ size?: number; className?: string }>
+  label: string
+  active?: boolean
+  onClick?: () => void
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'group flex min-h-[74px] flex-col items-center justify-center gap-1.5 rounded-2xl border px-2 py-2 text-center transition active:scale-[0.97]',
+        danger
+          ? 'border-red-400/25 bg-red-500/10 text-red-200 hover:bg-red-500/15'
+          : active
+            ? 'border-cyan-300/30 bg-cyan-400/15 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.12)]'
+            : 'border-white/10 bg-white/[0.055] text-white/70 hover:border-cyan-300/20 hover:bg-cyan-400/10 hover:text-cyan-100'
+      )}
+    >
       <div
         className={cn(
-          "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-200",
+          'grid h-8 w-8 place-items-center rounded-xl transition',
           danger
-            ? "bg-red-500/15 text-red-400 border border-red-500/25"
+            ? 'bg-red-400/10 text-red-300'
             : active
-              ? "bg-zinc-800 text-white border border-white/10"
-              : "bg-zinc-800/50 text-zinc-400 border border-transparent"
+              ? 'bg-cyan-300/15 text-cyan-200'
+              : 'bg-white/5 text-white/70 group-hover:text-cyan-200'
         )}
       >
-        <Icon size={24} />
+        <Icon size={17} />
       </div>
 
-      <span className={cn("text-xs font-medium", danger ? "text-red-300" : "text-zinc-400")}>{label}</span>
+      <span className="line-clamp-2 text-[10px] font-black leading-tight">
+        {label}
+      </span>
     </button>
-  );
+  )
 }

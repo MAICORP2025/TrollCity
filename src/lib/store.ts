@@ -560,9 +560,16 @@ let initDone = false
 let initialAuthHandled = false
 let profileChannel: any = null
 let creditChannel: any = null
+let subscribedUserId: string | null = null
 
 // Setup realtime subscription for profile changes
 export function setupProfileRealtime(userId: string) {
+  // Prevent duplicate subscription for same user
+  if (subscribedUserId === userId && profileChannel && creditChannel) {
+    console.log('[ProfileRealtime] Already subscribed to user:', userId)
+    return
+  }
+
   // Remove existing subscriptions if any
   if (profileChannel) {
     supabase.removeChannel(profileChannel)
@@ -572,10 +579,11 @@ export function setupProfileRealtime(userId: string) {
     supabase.removeChannel(creditChannel)
     creditChannel = null
   }
+  subscribedUserId = null
 
   // Subscribe to profile changes for real-time balance updates
   profileChannel = supabase
-    .channel(`profile-${userId}`)
+    .channel(`profile-and-credits:${userId}`)
     .on(
       'postgres_changes',
       {
@@ -604,7 +612,12 @@ export function setupProfileRealtime(userId: string) {
             currentProfile.court_recording_consent === true,
         }
 
-        console.log('[ProfileRealtime] Profile updated:', payload.event, {
+        if (areProfilesShallowEqual(currentProfile, updatedProfile)) {
+          console.debug('[ProfileRealtime] Ignoring unchanged profile update')
+          return
+        }
+
+        console.log('[ProfileRealtime] Profile changed, updating:', payload.event, {
           username: updatedProfile.username,
           credit_score: updatedProfile.credit_score,
         })
@@ -613,13 +626,15 @@ export function setupProfileRealtime(userId: string) {
     )
     .subscribe()
 
+  subscribedUserId = userId
+
 // Debounce ref to prevent excessive profile refreshes
 let creditDebounceRef = 0
 const CREDIT_DEBOUNCE_MS = 10000 // 10 seconds minimum between credit-triggered refreshes
 
 // Also subscribe to user_credit table for credit score updates
 creditChannel = supabase
-    .channel(`credit-${userId}`)
+    .channel(`profile-and-credits:${userId}:credit`)
     .on(
       'postgres_changes',
       {
@@ -662,6 +677,7 @@ export function cleanupProfileRealtime() {
     creditChannel = null
     console.log('[ProfileRealtime] Cleaned up credit subscription')
   }
+  subscribedUserId = null
 }
 
 export async function initAuthAndData() {

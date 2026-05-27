@@ -5,29 +5,33 @@ import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import {
-   Mail,
-   Send,
-   Inbox,
-   Star,
-   Calendar,
-   Users,
-   Plus,
-   RefreshCw,
-   X,
-   Bell,
-   AlertCircle,
-   Reply,
-   ChevronLeft,
-   ChevronRight,
-   Clock,
+    Mail,
+    Send,
+    Inbox,
+    Star,
+    Calendar,
+    Users,
+    Plus,
+    RefreshCw,
+    X,
+    Bell,
+    AlertCircle,
+    Reply,
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    FileText,
+    Folder
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { createTromailAccount, getUserTromailAccount, canAccessTromail, canSendAdminEmail } from '@/lib/tromail'
 import { format, startOfMonth, startOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday } from 'date-fns'
+import { ContractCreator } from '@/components/contracts/ContractCreator'
+import { FileCabinet } from '@/components/contracts/FileCabinet'
 
-type TromailTab = 'inbox' | 'sent' | 'important' | 'admin' | 'calendar' | 'meetings' | 'directory' | 'compose'
+type TromailTab = 'inbox' | 'sent' | 'important' | 'admin' | 'calendar' | 'meetings' | 'directory' | 'compose' | 'contracts' | 'file-cabinet'
 
 interface TromailMessage {
    id: string
@@ -340,7 +344,7 @@ export default function TromailPage() {
           </Button>
         </div>
 
-        {/* Tabs */}
+         {/* Tabs */}
         <div className="mb-6 flex flex-wrap gap-2 border-b border-cyan-500/20 pb-4">
           {[
             { id: 'inbox', label: 'Inbox', icon: Inbox },
@@ -350,6 +354,8 @@ export default function TromailPage() {
             { id: 'calendar', label: 'Calendar', icon: Calendar },
             { id: 'meetings', label: 'Team Meetings', icon: Users },
             { id: 'directory', label: 'Role Directory', icon: Users },
+            { id: 'contracts', label: 'Contracts', icon: FileText },
+            { id: 'file-cabinet', label: 'File Cabinet', icon: Folder }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -467,7 +473,7 @@ export default function TromailPage() {
           </motion.div>
         )}
 
-        {/* Messages List - for inbox, sent, important, admin tabs */}
+         {/* Messages List - for inbox, sent, important, admin tabs */}
         {['inbox', 'sent', 'important', 'admin'].includes(activeTab) && (
           <div className="space-y-2">
             {isLoading ? (
@@ -529,6 +535,16 @@ export default function TromailPage() {
               ))
             )}
           </div>
+        )}
+        
+        {/* Contracts Tab */}
+        {activeTab === 'contracts' && (
+          <ContractCreator />
+        )}
+        
+        {/* File Cabinet Tab */}
+        {activeTab === 'file-cabinet' && (
+          <FileCabinet />
         )}
 
         {/* Calendar Tab - Month view for meetings */}

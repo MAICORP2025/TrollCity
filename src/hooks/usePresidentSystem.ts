@@ -56,6 +56,52 @@ export interface TreasuryEntry {
   created_at: string;
 }
 
+const PRESIDENT_CACHE_TTL_MS = 20 * 1000;
+
+let currentElectionCache: { data: PresidentElection | null; fetchedAt: number } = {
+  data: null,
+  fetchedAt: 0,
+};
+let presidentElectionFetchPromise: Promise<void> | null = null;
+
+let currentPresidentCache: { data: { user_id: string; username: string; avatar_url: string } | null; fetchedAt: number } = {
+  data: null,
+  fetchedAt: 0,
+};
+let currentPresidentFetchPromise: Promise<void> | null = null;
+
+let currentVPCache: { data: PresidentAppointment | null; fetchedAt: number } = {
+  data: null,
+  fetchedAt: 0,
+};
+let currentVPFetchPromise: Promise<void> | null = null;
+
+let treasuryBalanceCache: { data: number; fetchedAt: number } = {
+  data: 0,
+  fetchedAt: 0,
+};
+let treasuryBalanceFetchPromise: Promise<void> | null = null;
+
+let proposalsCache: { data: any[]; fetchedAt: number } = {
+  data: [],
+  fetchedAt: 0,
+};
+let proposalsFetchPromise: Promise<void> | null = null;
+
+let allElectionsCache: { data: PresidentElection[]; fetchedAt: number } = {
+  data: [],
+  fetchedAt: 0,
+};
+let allElectionsFetchPromise: Promise<void> | null = null;
+
+const sortIds = (items: string[] = []) => [...items].sort();
+const areIdsEqual = (a: string[] | null, b: string[] | null) => {
+  if (!a || !b || a.length !== b.length) return false;
+  const sortedA = sortIds(a);
+  const sortedB = sortIds(b);
+  return sortedA.every((value, index) => value === sortedB[index]);
+};
+
 export const usePresidentSystem = () => {
   const { user } = useAuthStore();
   const [currentElection, setCurrentElection] = useState<PresidentElection | null>(null);
@@ -66,27 +112,68 @@ export const usePresidentSystem = () => {
   const [allElections, setAllElections] = useState<PresidentElection[]>([]);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const now = Date.now();
+    if (currentElectionCache.data && now - currentElectionCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setCurrentElection(currentElectionCache.data);
+    }
+    if (currentPresidentCache.data && now - currentPresidentCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setCurrentPresident(currentPresidentCache.data);
+    }
+    if (currentVPCache.data && now - currentVPCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setCurrentVP(currentVPCache.data);
+    }
+    if (now - treasuryBalanceCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setTreasuryBalance(treasuryBalanceCache.data);
+    }
+    if (now - proposalsCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setProposals(proposalsCache.data);
+    }
+    if (now - allElectionsCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setAllElections(allElectionsCache.data);
+    }
+  }, []);
+
 const fetchCurrentElection = useCallback(async () => {
-     try {
-       const { data, error } = await supabase
-         .from('president_elections')
-         .select(`
-           *,
-           candidates:president_candidates!president_candidates_election_id_fkey(
+     const now = Date.now();
+     if (currentElectionCache.data && now - currentElectionCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+       setCurrentElection(currentElectionCache.data);
+       return;
+     }
+
+     if (presidentElectionFetchPromise) {
+       await presidentElectionFetchPromise;
+       if (currentElectionCache.data) {
+         setCurrentElection(currentElectionCache.data);
+       }
+       return;
+     }
+
+     presidentElectionFetchPromise = (async () => {
+       try {
+         const { data, error } = await supabase
+           .from('president_elections')
+           .select(`
              *,
-             user:user_profiles(username, avatar_url)
-           )
-         `)
-         .order('created_at', { ascending: false })
-         .limit(1)
-         .maybeSingle();
+             candidates:president_candidates!president_candidates_election_id_fkey(
+               *,
+               user:user_profiles(username, avatar_url)
+             )
+           `)
+           .order('created_at', { ascending: false })
+           .limit(1)
+           .maybeSingle();
 
-       if (error) throw error;
+         if (error) throw error;
 
-       if (data) {
+         if (!data) {
+           currentElectionCache = { data: null, fetchedAt: Date.now() };
+           setCurrentElection(null);
+           return;
+         }
+
          console.log('[President] candidates loaded', data.candidates?.length ?? 0);
 
-         // Transform candidates to flatten user info
          let candidates = data.candidates?.map((c: any) => ({
            ...c,
            username: c.user?.username,
@@ -94,59 +181,89 @@ const fetchCurrentElection = useCallback(async () => {
            is_approved: c.status === 'approved'
          })) || [];
 
-// Fetch vote counts from president_votes for these candidates
-          if (candidates.length > 0) {
-            const candidateIds = candidates.map((c: any) => c.id);
-            console.log('[President] fetching vote counts for candidates:', candidateIds);
+         const candidateIds = candidates.map((c: any) => c.id);
+         const cachedCandidateIds = currentElectionCache.data?.candidates?.map((c) => c.id) || null;
+         const useCachedVoteCounts = currentElectionCache.data && areIdsEqual(candidateIds, cachedCandidateIds);
 
-            const { data: voteRows, error: voteError } = await supabase
-              .from('president_votes')
-              .select('candidate_id')
-              .in('candidate_id', candidateIds);
+         if (candidates.length > 0) {
+           if (useCachedVoteCounts && currentElectionCache.data?.candidates) {
+             const cachedVoteMap = currentElectionCache.data.candidates.reduce<Record<string, number>>((acc, candidate) => {
+               acc[candidate.id] = candidate.vote_count ?? 0;
+               return acc;
+             }, {});
 
-            if (voteError) throw voteError;
-            console.log('[President] vote rows loaded', voteRows?.length ?? 0);
+             candidates = candidates.map((c: any) => ({
+               ...c,
+               vote_count: cachedVoteMap[c.id] ?? c.vote_count ?? c.score ?? 0,
+             }));
+           } else {
+             console.log('[President] fetching vote counts for candidates:', candidateIds);
+             const { data: voteRows, error: voteError } = await supabase
+               .from('president_votes')
+               .select('candidate_id')
+               .in('candidate_id', candidateIds);
 
-            // Count votes per candidate in JS since Supabase JS doesn't support .group()
-            const voteCountMap: Record<string, number> = {};
-            voteRows?.forEach((v: any) => {
-              voteCountMap[v.candidate_id] = (voteCountMap[v.candidate_id] || 0) + 1;
-            });
-            console.log('[President] vote count map', voteCountMap);
+             if (voteError) throw voteError;
+             console.log('[President] vote rows loaded', voteRows?.length ?? 0);
 
-            candidates = candidates.map((c: any) => ({
-              ...c,
-              vote_count: voteCountMap[c.id] ?? c.vote_count ?? c.score ?? 0,
-            }));
-          }
+             const voteCountMap: Record<string, number> = {};
+             voteRows?.forEach((v: any) => {
+               voteCountMap[v.candidate_id] = (voteCountMap[v.candidate_id] || 0) + 1;
+             });
+             console.log('[President] vote count map', voteCountMap);
 
-         setCurrentElection({ ...data, candidates });
+             candidates = candidates.map((c: any) => ({
+               ...c,
+               vote_count: voteCountMap[c.id] ?? c.vote_count ?? c.score ?? 0,
+             }));
+           }
+         }
+
+         const electionWithCandidates = { ...data, candidates };
+         currentElectionCache = { data: electionWithCandidates, fetchedAt: Date.now() };
+         setCurrentElection(electionWithCandidates);
+       } catch (err) {
+         console.error('Error fetching election:', err);
+       } finally {
+         presidentElectionFetchPromise = null;
        }
-     } catch (err) {
-       console.error('Error fetching election:', err);
-     }
+     })();
+
+     await presidentElectionFetchPromise;
    }, []);
 
   const fetchCurrentPresident = useCallback(async () => {
-    try {
-      // Find user with 'president' badge or gold style
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, username, avatar_url')
-        .or('badge.eq.president,username_style.eq.gold')
-        .limit(1)
-        .maybeSingle();
+    const now = Date.now();
+    if (currentPresidentCache.data && now - currentPresidentCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setCurrentPresident(currentPresidentCache.data);
+      return;
+    }
 
-      if (error) throw error;
-      
-      if (data) {
-        setCurrentPresident({
-           user_id: data.id,
-           username: data.username,
-           avatar_url: data.avatar_url
-        });
-      } else {
-        // Fallback: check last finalized election winner
+    if (currentPresidentFetchPromise) {
+      await currentPresidentFetchPromise;
+      if (currentPresidentCache.data) {
+        setCurrentPresident(currentPresidentCache.data);
+      }
+      return;
+    }
+
+    currentPresidentFetchPromise = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url')
+          .or('badge.eq.president,username_style.eq.gold')
+          .limit(1)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+          currentPresidentCache = { data: { user_id: data.id, username: data.username, avatar_url: data.avatar_url }, fetchedAt: Date.now() };
+          setCurrentPresident(currentPresidentCache.data);
+          return;
+        }
+
         const { data: election } = await supabase
           .from('president_elections')
           .select('winner_candidate_id')
@@ -155,37 +272,53 @@ const fetchCurrentElection = useCallback(async () => {
           .limit(1)
           .maybeSingle();
 
-         if (election?.winner_candidate_id) {
-             const { data: candidate } = await supabase
-               .from('president_candidates')
-               .select('user_id')
-               .eq('id', election.winner_candidate_id)
-               .maybeSingle();
-               
-             if (candidate) {
-                const { data: user } = await supabase
-                  .from('user_profiles')
-                  .select('id, username, avatar_url')
-                  .eq('id', candidate.user_id)
-                  .maybeSingle();
-                  
-                if (user) {
-                   setCurrentPresident({
-                     user_id: user.id,
-                     username: user.username,
-                     avatar_url: user.avatar_url
-                   });
-                }
-             }
-         }
+        if (election?.winner_candidate_id) {
+          const { data: candidate } = await supabase
+            .from('president_candidates')
+            .select('user_id')
+            .eq('id', election.winner_candidate_id)
+            .maybeSingle();
+
+          if (candidate) {
+            const { data: user } = await supabase
+              .from('user_profiles')
+              .select('id, username, avatar_url')
+              .eq('id', candidate.user_id)
+              .maybeSingle();
+
+            if (user) {
+              currentPresidentCache = { data: { user_id: user.id, username: user.username, avatar_url: user.avatar_url }, fetchedAt: Date.now() };
+              setCurrentPresident(currentPresidentCache.data);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching president:', err);
+      } finally {
+        currentPresidentFetchPromise = null;
       }
-    } catch (err) {
-      console.error('Error fetching president:', err);
-    }
+    })();
+
+    await currentPresidentFetchPromise;
   }, []);
 
   const fetchVicePresident = useCallback(async () => {
-      try {
+      const now = Date.now();
+      if (currentVPCache.data && now - currentVPCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+        setCurrentVP(currentVPCache.data);
+        return;
+      }
+
+      if (currentVPFetchPromise) {
+        await currentVPFetchPromise;
+        if (currentVPCache.data) {
+          setCurrentVP(currentVPCache.data);
+        }
+        return;
+      }
+
+      currentVPFetchPromise = (async () => {
+        try {
           const { data, error } = await supabase
             .from('president_appointments')
             .select(`
@@ -194,17 +327,24 @@ const fetchCurrentElection = useCallback(async () => {
             `)
             .eq('status', 'active')
             .maybeSingle();
-          
+
           if (error) throw error;
-            
+
           if (data) {
-              setCurrentVP(data as any);
+            currentVPCache = { data: data as PresidentAppointment, fetchedAt: Date.now() };
+            setCurrentVP(currentVPCache.data);
           } else {
-              setCurrentVP(null);
+            currentVPCache = { data: null, fetchedAt: Date.now() };
+            setCurrentVP(null);
           }
-      } catch (err) {
+        } catch (err) {
           console.error('Error fetching VP:', err);
-      }
+        } finally {
+          currentVPFetchPromise = null;
+        }
+      })();
+
+      await currentVPFetchPromise;
   }, []);
 
   const fetchPresidentAppointment = useCallback(async () => {
@@ -235,35 +375,74 @@ const fetchCurrentElection = useCallback(async () => {
   }, []);
   
   const fetchTreasuryBalance = useCallback(async () => {
-      try {
+      const now = Date.now();
+      if (now - treasuryBalanceCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+        setTreasuryBalance(treasuryBalanceCache.data);
+        return;
+      }
+
+      if (treasuryBalanceFetchPromise) {
+        await treasuryBalanceFetchPromise;
+        setTreasuryBalance(treasuryBalanceCache.data);
+        return;
+      }
+
+      treasuryBalanceFetchPromise = (async () => {
+        try {
           const { data } = await supabase
             .from('president_treasury_balance')
             .select('balance_cents')
             .eq('currency', 'USD')
-            .maybeSingle(); // Changed from single() to maybeSingle()
-            
+            .maybeSingle();
+
           if (data) {
-              setTreasuryBalance(data.balance_cents / 100);
+            treasuryBalanceCache = { data: data.balance_cents / 100, fetchedAt: Date.now() };
+            setTreasuryBalance(treasuryBalanceCache.data);
           } else {
-             setTreasuryBalance(0);
+            treasuryBalanceCache = { data: 0, fetchedAt: Date.now() };
+            setTreasuryBalance(0);
           }
-      } catch (err) {
+        } catch (err) {
           console.error(err);
-      }
+        } finally {
+          treasuryBalanceFetchPromise = null;
+        }
+      })();
+
+      await treasuryBalanceFetchPromise;
   }, []);
 
   const fetchProposals = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('president_proposals')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      setProposals(data || []);
-    } catch (err) {
-      console.error('Error fetching proposals:', err);
+    const now = Date.now();
+    if (now - proposalsCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setProposals(proposalsCache.data);
+      return;
     }
+
+    if (proposalsFetchPromise) {
+      await proposalsFetchPromise;
+      setProposals(proposalsCache.data);
+      return;
+    }
+
+    proposalsFetchPromise = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('president_proposals')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        proposalsCache = { data: data || [], fetchedAt: Date.now() };
+        setProposals(proposalsCache.data);
+      } catch (err) {
+        console.error('Error fetching proposals:', err);
+      } finally {
+        proposalsFetchPromise = null;
+      }
+    })();
+
+    await proposalsFetchPromise;
   }, []);
 
   const createElection = async () => {
@@ -350,36 +529,55 @@ const fetchCurrentElection = useCallback(async () => {
   };
 
   const fetchAllElections = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('president_elections')
-        .select(`
-          *,
-          candidates:president_candidates(
-            *,
-            user:user_profiles(username, avatar_url)
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-if (error) throw error;
-
-       if (data) {
-         console.log('[President] all elections loaded', data.length);
-         const formattedElections = data.map((election: any) => ({
-          ...election,
-          candidates: election.candidates?.map((c: any) => ({
-            ...c,
-            username: c.user?.username,
-            avatar_url: c.user?.avatar_url,
-            is_approved: c.status === 'approved'
-          })) || []
-        }));
-        setAllElections(formattedElections);
-      }
-    } catch (err) {
-      console.error('Error fetching all elections:', err);
+    const now = Date.now();
+    if (now - allElectionsCache.fetchedAt < PRESIDENT_CACHE_TTL_MS) {
+      setAllElections(allElectionsCache.data);
+      return;
     }
+
+    if (allElectionsFetchPromise) {
+      await allElectionsFetchPromise;
+      setAllElections(allElectionsCache.data);
+      return;
+    }
+
+    allElectionsFetchPromise = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('president_elections')
+          .select(`
+            *,
+            candidates:president_candidates(
+              *,
+              user:user_profiles(username, avatar_url)
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          console.log('[President] all elections loaded', data.length);
+          const formattedElections = data.map((election: any) => ({
+            ...election,
+            candidates: election.candidates?.map((c: any) => ({
+              ...c,
+              username: c.user?.username,
+              avatar_url: c.user?.avatar_url,
+              is_approved: c.status === 'approved'
+            })) || []
+          }));
+          allElectionsCache = { data: formattedElections, fetchedAt: Date.now() };
+          setAllElections(formattedElections);
+        }
+      } catch (err) {
+        console.error('Error fetching all elections:', err);
+      } finally {
+        allElectionsFetchPromise = null;
+      }
+    })();
+
+    await allElectionsFetchPromise;
   }, []);
 
    const signupCandidate = async (electionId: string, slogan: string, statement: string, bannerPath: string = 'default') => {

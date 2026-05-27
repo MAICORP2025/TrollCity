@@ -1,23 +1,20 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
-import UserNameWithAge from './UserNameWithAge'
 
-interface UserSearchDropdownProps {
+interface UserSearchInputProps {
   query: string
   onSelect: (userId: string, username: string) => void
-  onClose: () => void
   disableNavigation?: boolean
 }
 
-export default function UserSearchDropdown({ query, onSelect, onClose, disableNavigation = false }: UserSearchDropdownProps) {
+export function UserSearchInput({ query, onSelect, disableNavigation }: UserSearchInputProps) {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!query || query.length < 1) {
-      // If query is empty or too short, show all users (limited)
       loadAllUsers()
       return
     }
@@ -25,12 +22,10 @@ export default function UserSearchDropdown({ query, onSelect, onClose, disableNa
     const searchUsers = async () => {
       setLoading(true)
       try {
-        // Search by first 4 characters of username
         const searchQuery = query.substring(0, 4).toLowerCase()
-        
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('id, username, avatar_url, rgb_username_expires_at, glowing_username_color, is_gold, username_style, badge')
+          .select('id, username, avatar_url, display_name')
           .ilike('username', `${searchQuery}%`)
           .limit(20)
           .order('created_at', { ascending: false })
@@ -53,7 +48,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose, disableNa
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url, rgb_username_expires_at, glowing_username_color, is_gold, username_style, badge')
+        .select('id, username, avatar_url, display_name')
         .limit(50)
         .order('created_at', { ascending: false })
 
@@ -67,11 +62,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose, disableNa
   }
 
   if (loading && users.length === 0) {
-    return (
-      <div className="absolute top-full mt-2 w-full bg-[#1A1A1A] border border-purple-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-        <div className="p-4 text-center text-gray-400">Loading...</div>
-      </div>
-    )
+    return <div className="text-gray-400">Loading...</div>
   }
 
   if (users.length === 0) {
@@ -79,13 +70,12 @@ export default function UserSearchDropdown({ query, onSelect, onClose, disableNa
   }
 
   return (
-    <div className="absolute top-full mt-2 w-full bg-[#1A1A1A] border border-purple-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+    <div className="max-h-64 overflow-y-auto">
       {users.map((user) => (
         <div
           key={user.id}
           onClick={() => {
             onSelect(user.id, user.username)
-            onClose()
             if (!disableNavigation) {
               navigate(`/profile/${user.username}`)
             }
@@ -97,11 +87,7 @@ export default function UserSearchDropdown({ query, onSelect, onClose, disableNa
             alt={user.username}
             className="w-10 h-10 rounded-full border border-purple-500"
           />
-          <UserNameWithAge
-            user={user}
-            className="text-white hover:text-purple-400"
-            showBadges={true}
-          />
+          <span className="text-white">{user.display_name || user.username}</span>
         </div>
       ))}
     </div>

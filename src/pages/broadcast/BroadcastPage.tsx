@@ -25,6 +25,8 @@ import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
 import { Stream } from '../../types/broadcast'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
+import AudienceBubbleTicker from '@/components/broadcast/AudienceBubbleTicker'
+import BroadcastOfficerModal from '../../components/broadcast/BroadcastOfficerModal'
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
 import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
@@ -436,8 +438,6 @@ import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStreamSeats } from '@/hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '@/hooks/useStreamAudiencePresence'
 import { useSubscriberUsernames } from '@/hooks/useCreatorSubscription'
-import { AudienceBubbleTicker } from '@/components/broadcast/AudienceBubbleTicker'
-import { TopSubscribersBar } from '@/components/broadcast/TopSubscribersBar'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
 import { GiftItem } from '@/lib/giftConstants'
@@ -447,7 +447,7 @@ import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
 import { useTickerStore } from '@/stores/tickerStore'
 import { AnimatePresence } from 'framer-motion'
-import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, ShieldCheck, Sparkles, Skull, Users } from 'lucide-react'
+import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, ShieldCheck, Sparkles, Skull, Users, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
 import AbilityBox from '@/components/broadcast/AbilityBox'
@@ -4390,34 +4390,14 @@ const handleLike = useCallback(async () => {
      toast.info(`Block user ${userId}`);
    }
 
-  const handleAssignBroadofficer = useCallback(async () => {
+  const [isAssignOfficerModalOpen, setIsAssignOfficerModalOpen] = useState(false)
+
+  const handleAssignBroadofficer = useCallback(() => {
     if (!isHost) {
       toast.error('Only the broadcaster can assign broadofficers');
       return;
     }
-    const entry = window.prompt('Enter username of user to promote to Broadofficer (exact):');
-    if (!entry) return;
-
-    try {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('id, username')
-        .ilike('username', entry)
-        .limit(1)
-        .maybeSingle();
-
-      if (!profile || !profile.id) {
-        toast.error('User not found');
-        return;
-      }
-
-      const { error } = await supabase.rpc('assign_broadofficer', { p_user_id: profile.id });
-      if (error) throw error;
-      toast.success(`${profile.username} is now a Broadofficer`);
-    } catch (err: any) {
-      console.error('Assign broadofficer error:', err);
-      toast.error(err?.message || 'Failed to assign broadofficer');
-    }
+    setIsAssignOfficerModalOpen(true)
   }, [isHost]);
 
   
@@ -4525,42 +4505,36 @@ const handleLike = useCallback(async () => {
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-300/65 to-transparent" />
 
-             {/* TOP HEADER */}
-             {!isMobileViewer && (
-               <>
-                 <BroadcastNeonHeader
-                   stream={stream}
-                   broadcasterProfile={broadcasterProfile ? {
-                     username: broadcasterProfile.username,
-                     avatar_url: broadcasterProfile.avatar_url,
-                     display_name: broadcasterProfile.display_name,
-                   } : null}
-                   isHost={isHost}
-                   liveViewerCount={liveViewerCount}
-                   handleLike={handleLike}
-                   onGift={handleGiftHost}
-                   onShare={handleOpenShareModal}
-                   onEndStream={handleStreamEnd}
-                   coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
-                   onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
-                   isLive={stream.status === 'live'}
-                   streamStartedAt={stream.started_at}
-                 />
-{/* Audience Bubble Ticker and Top Subscribers Bar */}
-                  <div className="flex items-center gap-3 px-4 py-2">
-                    <AudienceBubbleTicker
-                      streamId={streamId}
-                      audience={audience}
-                      currentUserId={user?.id}
-                      maxVisible={8}
-                      className="hidden sm:flex"
-                    />
-                    {stream?.user_id && (
-                      <TopSubscribersBar broadcasterId={stream.user_id} />
-                    )}
-                  </div>
-               </>
-             )}
+{/* TOP HEADER */}
+              {!isMobileViewer && (
+                <>
+                  <BroadcastNeonHeader
+                    stream={stream}
+                    broadcasterProfile={broadcasterProfile}
+                    isHost={isHost}
+                    liveViewerCount={liveViewerCount}
+                    handleLike={handleLike}
+                    onGift={handleGiftHost}
+                    onShare={handleOpenShareModal}
+                    onEndStream={handleStreamEnd}
+                    coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+                    onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
+                    isLive={stream.status === 'live'}
+                    streamStartedAt={stream.started_at}
+                  />
+                  {activeAudience.length > 0 && (
+                    <div className="mx-4 mt-2 rounded-2xl border border-cyan-300/15 bg-black/25 px-3 py-1 backdrop-blur-md">
+                      <AudienceBubbleTicker
+                        streamId={streamId || ''}
+                        audience={activeAudience}
+                        currentUserId={user?.id}
+                        maxVisible={8}
+                        className="h-10"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
 
             {/* ── MAIN CONTENT GRID (3-column) ── */}
             <main
@@ -4720,14 +4694,13 @@ const handleLike = useCallback(async () => {
                       .filter((candidate) => candidate.seatUserId || candidate.seatIdentity)
                       .flatMap((candidate) => [candidate.seatUserId, candidate.seatIdentity])
 
-                    const exactParticipant = findSeatRemoteParticipant(remoteParticipants, seat.seatUserId, seat.seatIdentity)
-                    const fallbackParticipant = !exactParticipant && !seat.isOccupied
-                      ? getFallbackSeatParticipant(remoteParticipants, seat.seatIndex, occupiedSeatIdentities)
-                      : null
-                    const matchedParticipant = exactParticipant || fallbackParticipant
-                    const participantDisplayName = matchedParticipant
-                      ? getParticipantLabel(matchedParticipant, seat.displayName)
-                      : seat.displayName
+                    const matchedParticipant = seat.isOccupied
+  ? findSeatRemoteParticipant(remoteParticipants, seat.seatUserId, seat.seatIdentity)
+  : null
+
+const participantDisplayName = matchedParticipant
+  ? getParticipantLabel(matchedParticipant, seat.displayName)
+  : seat.displayName
 
                     if (import.meta.env.DEV) {
                       console.log('[BroadcastSeatRenderDebug]', {
@@ -4737,7 +4710,6 @@ const handleLike = useCallback(async () => {
                         seatIdentity: seat.seatIdentity,
                         remoteIdentities: Array.from(remoteParticipants.values()).map((p: any) => p.identity),
                         matchedIdentity: matchedParticipant?.identity || null,
-                        matchedByFallback: Boolean(fallbackParticipant),
                         hasVideoTrack: Boolean(getVideoTrackFromRemoteParticipant(matchedParticipant)),
                       })
                     }
@@ -5416,6 +5388,15 @@ const handleLike = useCallback(async () => {
                     hasRgbEffect={!!stream?.has_rgb_effect}
                   />
                 </div>
+              )}
+
+              {isAssignOfficerModalOpen && stream?.id && stream?.user_id && (
+                <BroadcastOfficerModal
+                  streamId={stream.id}
+                  broadcasterId={stream.user_id}
+                  isOpen={isAssignOfficerModalOpen}
+                  onClose={() => setIsAssignOfficerModalOpen(false)}
+                />
               )}
 
         </ErrorBoundary>

@@ -17,6 +17,11 @@ interface XPState {
 
 export const useXPStore = create<XPState>((set) => {
   let channel: any = null;
+  let xpChannelUserId: string | null = null;
+  let xpFetchPromise: Promise<void> | null = null;
+  let lastXPFetchUserId: string | null = null;
+  let lastXPFetchTime = 0;
+  const XP_FETCH_DEBOUNCE_MS = 20 * 1000;
 
   const syncAuthProfile = (level: number, totalXp: number, nextLevelXp: number | null) => {
     const auth = useAuthStore.getState()
@@ -122,97 +127,130 @@ export const useXPStore = create<XPState>((set) => {
     isLoading: false,
 
     fetchXP: async (userId: string) => {
-      set({ isLoading: true })
-      try {
-        console.log('Fetching XP for user:', userId)
-        
-        // Skip XP fetch for guest IDs (non-UUID format like TC-XXXX)
-        if (!userId || userId.startsWith('TC-')) {
-          console.log('Guest user detected, skipping XP fetch');
-          set({
-            xpTotal: 0,
-            level: 1,
-            buyerLevel: 1,
-            streamLevel: 1,
-            xpToNext: 100,
-            progress: 0,
-            isLoading: false
-          });
-          return;
-        }
-        
-        const { data, error } = await supabase
-          .from('user_stats')
-          .select('*')
-          .eq('user_id', userId)
-          .single()
-
-        console.log('user_stats query result:', { data, error })
-        
-        if (error && error.code !== 'PGRST116') throw error
-        
-        if (data) {
-          const { levelValue, totalXp, xpToNext, progressValue, nextLevelAbsolute } = _computeXpState(data);
-
-          set({
-            xpTotal: totalXp,
-            level: levelValue,
-            buyerLevel: levelValue,
-            streamLevel: levelValue,
-            xpToNext: xpToNext,
-            progress: progressValue,
-            isLoading: false
-          });
-          
-          syncAuthProfile(levelValue, totalXp, nextLevelAbsolute);
-        } else {
-            console.log('No user_stats found, initializing...')
-             const { data: _newData, error: insertError } = await supabase
-                .rpc('grant_xp', { 
-                    p_user_id: userId, 
-                    p_amount: 0, 
-                    p_source: 'init', 
-                    p_source_id: `init_${Date.now()}` 
-                })
-            
-            if (!insertError) {
-                 set({
-                    xpTotal: 0,
-                    level: 1,
-                    buyerLevel: 1,
-                    streamLevel: 1,
-                    xpToNext: 100,
-                    progress: 0,
-                    isLoading: false
-                 })
-                 syncAuthProfile(1, 0, 100)
-            } else {
-                set({ isLoading: false })
-            }
-        }
-      } catch (error) {
-        console.error('Error fetching XP:', error)
-        set({ isLoading: false })
+      if (!userId || userId.startsWith('TC-')) {
+        console.log('[XP Store] Guest user detected, skipping XP fetch');
+        set({
+          xpTotal: 0,
+          level: 1,
+          buyerLevel: 1,
+          streamLevel: 1,
+          xpToNext: 100,
+          progress: 0,
+          isLoading: false
+        });
+        return;
       }
+
+      const now = Date.now();
+      if (userId === lastXPFetchUserId && xpFetchPromise) {
+        console.log('[XP Store] XP fetch already in progress for user:', userId);
+        set({ isLoading: true });
+        await xpFetchPromise;
+        return;
+      }
+
+      if (userId === lastXPFetchUserId && now - lastXPFetchTime < XP_FETCH_DEBOUNCE_MS) {
+        console.log('[XP Store] Skipping XP fetch due to cooldown:', userId);
+        set({ isLoading: false });
+        return;
+      }
+
+      lastXPFetchUserId = userId;
+      set({ isLoading: true });
+
+      xpFetchPromise = (async () => {
+        try {
+          console.log('[XP Store] Fetching XP for user:', userId);
+
+          const { data, error } = await supabase
+            .from('user_stats')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+          console.log('[XP Store] user_stats query result:', { data, error });
+
+          if (error && error.code !== 'PGRST116') throw error;
+
+          if (data) {
+            const { levelValue, totalXp, xpToNext, progressValue, nextLevelAbsolute } = _computeXpState(data);
+
+            set({
+              xpTotal: totalXp,
+              level: levelValue,
+              buyerLevel: levelValue,
+              streamLevel: levelValue,
+              xpToNext: xpToNext,
+              progress: progressValue,
+              isLoading: false
+            });
+
+            syncAuthProfile(levelValue, totalXp, nextLevelAbsolute);
+            lastXPFetchTime = Date.now();
+          } else {
+            console.log('[XP Store] No user_stats found, initializing...');
+            const { data: _newData, error: insertError } = await supabase.rpc('grant_xp', {
+              p_user_id: userId,
+              p_amount: 0,
+              p_source: 'init',
+              p_source_id: `init_${Date.now()}`
+            });
+
+            if (!insertError) {
+              set({
+                xpTotal: 0,
+                level: 1,
+                buyerLevel: 1,
+                streamLevel: 1,
+                xpToNext: 100,
+                progress: 0,
+                isLoading: false
+              });
+              syncAuthProfile(1, 0, 100);
+              lastXPFetchTime = Date.now();
+            } else {
+              set({ isLoading: false });
+            }
+          }
+        } catch (error) {
+          console.error('[XP Store] Error fetching XP:', error);
+          set({ isLoading: false });
+        } finally {
+          xpFetchPromise = null;
+        }
+      })();
+
+      await xpFetchPromise;
     },
 
     subscribeToXP: (userId: string) => {
-      // Unsubscribe from any existing channel first
-      if (channel) {
-        supabase.removeChannel(channel)
-        channel = null
-      }
-
-      // Skip guest users
+      // Skip guest users and clear existing subscription when switching away
       if (!userId || userId.startsWith('TC-')) {
+        if (channel) {
+          supabase.removeChannel(channel)
+          channel = null
+          xpChannelUserId = null
+        }
         console.log('[XP Store] Guest user, skipping subscription')
         return
       }
 
+      if (xpChannelUserId === userId && channel) {
+        console.log('[XP Store] Already subscribed to XP for user:', userId)
+        return
+      }
+
+      if (channel) {
+        supabase.removeChannel(channel)
+        channel = null
+        xpChannelUserId = null
+      }
+
+      xpChannelUserId = userId
       console.log('[XP Store] Subscribing to user_stats for user:', userId)
 
-      // Create a unique channel name for this user
-      const channelName = `user_stats_changes_${userId}_${Date.now()}`
+      // Use a stable channel name so we do not resubscribe on rerenders
+      const channelName = `user_stats:${userId}`
       
       channel = supabase
         .channel(channelName)
@@ -283,6 +321,7 @@ export const useXPStore = create<XPState>((set) => {
       if (channel) {
         supabase.removeChannel(channel)
         channel = null
+        xpChannelUserId = null
       }
     }
   }

@@ -3,6 +3,13 @@
 import { supabase } from './supabase'
 import { createNotification } from './notifications'
 import { UserRole } from './supabase'
+import { 
+  TromailContract, 
+  TromailContractTemplate, 
+  OrganizationDocument,
+  ContractFormData,
+  ContractPreviewData
+} from '../types/contracts'
 
 // Type definitions for Tromail
 export interface TromailAccount {
@@ -541,3 +548,475 @@ export const deleteTromailMessage = async (recipientId: string): Promise<void> =
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', recipientId)
 }
+// Contract Template Functions
+export const getContractTemplates = async (): Promise<TromailContractTemplate[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('tromail_contract_templates')
+      .select('*')
+      .eq('is_active', true)
+      .order('role_label');
+
+    if (error) throw error;
+    return data as TromailContractTemplate[];
+  } catch (err: any) {
+    throw new Error(`Failed to fetch contract templates: ${err.message}`);
+  }
+};
+
+export const getContractTemplateById = async (templateId: string): Promise<TromailContractTemplate | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('tromail_contract_templates')
+      .select('*')
+      .eq('id', templateId)
+      .single();
+
+    if (error) throw error;
+    return data as TromailContractTemplate;
+  } catch (err: any) {
+    throw new Error(`Failed to fetch contract template: ${err.message}`);
+  }
+};
+
+// Contract Functions
+export const createContract = async (params: {
+  template_id: string;
+  recipient_user_id: string;
+  recipient_tromail_address: string;
+  role_key: string;
+  role_label: string;
+  title: string;
+  body: string;
+  sent_by: string;
+}): Promise<{ success: boolean; contract_id?: string; error?: string }> => {
+  try {
+    const { data: contract, error: contractError } = await supabase
+      .from('tromail_contracts')
+      .insert({
+        template_id: params.template_id,
+        recipient_user_id: params.recipient_user_id,
+        recipient_tromail_address: params.recipient_tromail_address,
+        role_key: params.role_key,
+        role_label: params.role_label,
+        title: params.title,
+        body: params.body,
+        status: 'draft',
+        sent_by: params.sent_by,
+      })
+      .select()
+      .single();
+
+    if (contractError) throw contractError;
+
+    // Create audit event
+    await supabase.from('contract_audit_events').insert({
+      contract_id: contract.id,
+      actor_user_id: params.sent_by,
+      event_type: 'contract_created',
+      event_note: 'Contract created from template'
+    });
+
+    return { success: true, contract_id: contract.id };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to create contract' };
+  }
+};
+
+export const updateContract = async (contractId: string, updates: Partial<TromailContract>): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data, error } = await supabase
+      .from('tromail_contracts')
+      .update(updates)
+      .eq('id', contractId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Create audit event
+    await supabase.from('contract_audit_events').insert({
+      contract_id: contractId,
+      actor_user_id: updates.sent_by || '',
+      event_type: 'contract_updated',
+      event_note: 'Contract updated with changes'
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to update contract' };
+  }
+};
+
+export const getContractById = async (contractId: string): Promise<TromailContract | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('tromail_contracts')
+      .select('*')
+      .eq('id', contractId)
+      .single();
+
+    if (error) throw error;
+    return data as TromailContract;
+  } catch (err: any) {
+    throw new Error(`Failed to fetch contract: ${err.message}`);
+  }
+};
+
+export const getContractsByRecipient = async (recipientUserId: string): Promise<TromailContract[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('tromail_contracts')
+      .select('*')
+      .eq('recipient_user_id', recipientUserId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data as TromailContract[];
+  } catch (err: any) {
+    throw new Error(`Failed to fetch contracts for recipient: ${err.message}`);
+  }
+};
+
+export const getContractsBySender = async (senderUserId: string): Promise<TromailContract[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('tromail_contracts')
+      .select('*')
+      .eq('sent_by', senderUserId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data as TromailContract[];
+  } catch (err: any) {
+    throw new Error(`Failed to fetch contracts for sender: ${err.message}`);
+  }
+};
+
+export const sendContract = async (contractId: string, recipientUserIds: string[]): Promise<{ success: boolean; message_id?: string; error?: string }> => {
+  try {
+    // Get the contract
+    const contract = await getContractById(contractId);
+    if (!contract) throw new Error('Contract not found');
+
+    // Update contract status to sent
+    const { error: updateError } = await supabase
+      .from('tromail_contracts')
+      .update({ 
+        status: 'sent',
+        sent_at: new Date().toISOString()
+      })
+      .eq('id', contractId);
+
+    if (updateError) throw updateError;
+
+    // Create audit event
+    await supabase.from('contract_audit_events').insert({
+      contract_id: contractId,
+      actor_user_id: contract.sent_by,
+      event_type: 'contract_sent',
+      event_note: `Contract sent to ${recipientUserIds.length} recipient(s)`
+    });
+
+    // Send Tromail notification
+    const { success, message_id, error: sendError } = await sendTromailMessage({
+      sender_user_id: contract.sent_by,
+      sender_role: '', // We'll get this from the user's profile if needed
+      sender_tromail_address: '', // We'll get this from the user's Tromail account
+      subject: `Contract: ${contract.title}`,
+      body: `You have received a contract for the position of ${contract.role_label}. Please review and sign it.`,
+      is_admin_email: true,
+      is_important: true,
+      recipient_user_ids: recipientUserIds,
+      recipient_roles: recipientUserIds.map(() => '') // We'll get actual roles if needed
+    });
+
+    if (sendError) throw sendError;
+
+    return { success: true, message_id };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to send contract' };
+  }
+};
+
+export const viewContract = async (contractId: string, viewerUserId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Update viewed timestamp
+    const { error: updateError } = await supabase
+      .from('tromail_contracts')
+      .update({ viewed_at: new Date().toISOString() })
+      .eq('id', contractId);
+
+    if (updateError) throw updateError;
+
+    // Create audit event
+    await supabase.from('contract_audit_events').insert({
+      contract_id: contractId,
+      actor_user_id: viewerUserId,
+      event_type: 'contract_viewed',
+      event_note: `Contract viewed by user ${viewerUserId}`
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to mark contract as viewed' };
+  }
+};
+
+export const signContract = async (params: {
+  contractId: string;
+  userId: string;
+  legalName: string;
+  signatureText: string;
+}): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Update contract with signature info
+    const { error: updateError } = await supabase
+      .from('tromail_contracts')
+      .update({ 
+        status: 'signed',
+        signed_at: new Date().toISOString(),
+        signed_by_user_id: params.userId,
+        signature_text: params.signatureText,
+        legal_name: params.legalName
+      })
+      .eq('id', params.contractId);
+
+    if (updateError) throw updateError;
+
+    // Create audit event
+    await supabase.from('contract_audit_events').insert({
+      contract_id: params.contractId,
+      actor_user_id: params.userId,
+      event_type: 'contract_signed',
+      event_note: `Contract signed by user ${params.userId}`
+    });
+
+    // Notify sender
+    const contract = await getContractById(params.contractId);
+    if (contract && contract.sent_by) {
+      await createNotification(
+        contract.sent_by,
+        'contract_signed',
+        '📝 Contract Signed',
+        `The contract for ${contract.role_label} has been signed by ${params.legalName}`,
+        { contract_id: params.contractId, action_url: `/tromail/contracts/${params.contractId}` }
+      );
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to sign contract' };
+  }
+};
+
+export const rejectContract = async (params: {
+  contractId: string;
+  userId: string;
+  note?: string;
+}): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Update contract status to rejected
+    const { error: updateError } = await supabase
+      .from('tromail_contracts')
+      .update({ 
+        status: 'rejected',
+        // We could add a rejected_at field if needed
+      })
+      .eq('id', params.contractId);
+
+    if (updateError) throw updateError;
+
+    // Create audit event
+    await supabase.from('contract_audit_events').insert({
+      contract_id: params.contractId,
+      actor_user_id: params.userId,
+      event_type: 'contract_rejected',
+      event_note: `Contract rejected by user ${params.userId}: ${params.note || 'No reason provided'}`
+    });
+
+    // Notify sender
+    const contract = await getContractById(params.contractId);
+    if (contract && contract.sent_by) {
+      await createNotification(
+        contract.sent_by,
+        'contract_rejected',
+        '📝 Contract Rejected',
+        `The contract for ${contract.role_label} has been rejected`,
+        { contract_id: params.contractId, action_url: `/tromail/contracts/${params.contractId}` }
+      );
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to reject contract' };
+  }
+};
+
+// Organization Document Functions
+export const uploadOrganizationDocument = async (params: {
+  user_id: string;
+  uploaded_by: string | null;
+  document_type: OrganizationDocument['document_type'];
+  document_title: string;
+  file_url: string;
+  storage_path: string;
+  source: string;
+  related_contract_id: string | null;
+  visibility: OrganizationDocument['visibility'];
+  metadata?: Record<string, any>;
+}): Promise<{ success: boolean; document_id?: string; error?: string }> => {
+  try {
+    const { data: document, error: documentError } = await supabase
+      .from('organization_documents')
+      .insert({
+        user_id: params.user_id,
+        uploaded_by: params.uploaded_by,
+        document_type: params.document_type,
+        document_title: params.document_title,
+        file_url: params.file_url,
+        storage_path: params.storage_path,
+        source: params.source,
+        related_contract_id: params.related_contract_id,
+        visibility: params.visibility,
+        metadata: params.metadata || {}
+      })
+      .select()
+      .single();
+
+    if (documentError) throw documentError;
+
+    // Create audit event if related to contract
+    if (params.related_contract_id) {
+      await supabase.from('contract_audit_events').insert({
+        contract_id: params.related_contract_id,
+        actor_user_id: params.uploaded_by || '',
+        event_type: 'document_uploaded',
+        event_note: `Document uploaded: ${params.document_title}`
+      });
+    }
+
+    return { success: true, document_id: document.id };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to upload document' };
+  }
+};
+
+export const getUserDocuments = async (userId: string, filters?: {
+  document_type?: OrganizationDocument['document_type'];
+  visibility?: OrganizationDocument['visibility'];
+  status?: string;
+}): Promise<OrganizationDocument[]> => {
+  try {
+    let query = supabase
+      .from('organization_documents')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (filters?.document_type) {
+      query = query.eq('document_type', filters.document_type);
+    }
+    if (filters?.visibility) {
+      query = query.eq('visibility', filters.visibility);
+    }
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data as OrganizationDocument[];
+  } catch (err: any) {
+    throw new Error(`Failed to fetch user documents: ${err.message}`);
+  }
+};
+
+export const getDocumentById = async (documentId: string): Promise<OrganizationDocument | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('organization_documents')
+      .select('*')
+      .eq('id', documentId)
+      .single();
+
+    if (error) throw error;
+    return data as OrganizationDocument;
+  } catch (err: any) {
+    throw new Error(`Failed to fetch document: ${err.message}`);
+  }
+};
+
+// Contract Audit Functions
+export const getContractAuditEvents = async (contractId: string): Promise<ContractAuditEvent[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('contract_audit_events')
+      .select('*')
+      .eq('contract_id', contractId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data as ContractAuditEvent[];
+  } catch (err: any) {
+    throw new Error(`Failed to fetch contract audit events: ${err.message}`);
+  }
+};
+
+export const getUserContractAuditEvents = async (userId: string): Promise<ContractAuditEvent[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('contract_audit_events')
+      .select('*')
+      .eq('actor_user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data as ContractAuditEvent[];
+  } catch (err: any) {
+    throw new Error(`Failed to fetch user contract audit events: ${err.message}`);
+  }
+};
+
+// Helper function to generate contract preview with placeholders replaced
+export const generateContractPreview = (template: TromailContractTemplate, formData: ContractFormData, userProfile: any): ContractPreviewData => {
+  const replacements: Record<string, string> = {
+    '{{user_name}}': userProfile?.display_name || userProfile?.username || 'User',
+    '{{tromail_address}}': formData.recipient_tromail_address || '',
+    '{{role_label}}': formData.role_key ? 
+      (template.role_label || formData.role_key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) : 
+      '',
+    '{{start_date}}': formData.start_date || '',
+    '{{pay_terms}}': formData.pay_terms || '',
+    '{{admin_name}}': 'Troll City Administration', // This could come from the sender's profile
+    '{{company_name}}': 'Troll City / MAI Corp',
+    '{{date}}': new Date().toLocaleDateString(),
+    '{{duties_responsibilities}}': formData.duties_responsibilities || '',
+    '{{confidentiality_clause}}': formData.confidentiality_clause || '',
+    '{{platform_rules}}': formData.platform_rules || '',
+    '{{payout_method_notes}}': formData.payout_method_notes || '',
+    '{{custom_notes}}': formData.custom_notes || ''
+  };
+
+  let body = template.body_template;
+  Object.keys(replacements).forEach(key => {
+    body = body.replace(new RegExp(key, 'g'), replacements[key]);
+  });
+
+  return {
+    user_name: replacements['{{user_name}}'],
+    tromail_address: replacements['{{tromail_address}}'],
+    role_label: replacements['{{role_label}}'],
+    start_date: replacements['{{start_date}}'],
+    pay_terms: replacements['{{pay_terms}}'],
+    admin_name: replacements['{{admin_name}}'],
+    company_name: replacements['{{company_name}}'],
+    date: replacements['{{date}}'],
+    duties_responsibilities: replacements['{{duties_responsibilities}}'],
+    confidentiality_clause: replacements['{{confidentiality_clause}}'],
+    platform_rules: replacements['{{platform_rules}}'],
+    payout_method_notes: replacements['{{payout_method_notes}}'],
+    custom_notes: replacements['{{custom_notes}}']
+  };
+};
