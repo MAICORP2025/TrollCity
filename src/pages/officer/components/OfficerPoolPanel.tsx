@@ -55,16 +55,16 @@ export default function OfficerPoolPanel() {
       
       if (error) throw error;
       
-      if (data && data.success) {
-        toast.success(`Successfully distributed payroll to ${data.officers_paid} officers`);
-        fetchStats(); // Refresh stats
-      } else {
-        toast.error(data?.message || 'Failed to distribute payroll');
-      }
-    } catch (err) {
-      console.error('Error distributing payroll:', err);
-      toast.error('Failed to distribute payroll');
-    } finally {
+if (data && data.success) {
+         toast.success(`Successfully distributed role perks to ${data.officers_paid} officers`);
+         fetchStats(); // Refresh stats
+       } else {
+         toast.error(data?.message || 'Failed to distribute role perks');
+       }
+} catch (err) {
+       console.error('Error distributing role perks:', err);
+       toast.error('Failed to distribute role perks');
+     } finally {
       setDistributing(false);
     }
   };
@@ -75,7 +75,7 @@ export default function OfficerPoolPanel() {
 
   const canDistribute = true; // Assuming component access is already restricted
 
-  if (!stats) return <div className="p-8 text-center text-slate-500">Loading payroll data...</div>;
+  if (!stats) return <div className="p-8 text-center text-slate-500">Loading role perks...</div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -83,9 +83,9 @@ export default function OfficerPoolPanel() {
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
             <Briefcase className="w-6 h-6 text-blue-400" />
-            Officer Payroll Pool
+            Weekly Role Perks Pool
           </h2>
-          <p className="text-slate-400">Funded by Asset Taxes & Purchases</p>
+          <p className="text-slate-400">Funded by Treasury & Asset Taxes</p>
         </div>
         <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading}>

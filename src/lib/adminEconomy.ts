@@ -97,6 +97,9 @@ export function hasRouteAccess(userRole: string, isLeadOfficer: boolean, route: 
     '/shop-partner', '/sell', '/creator-contract',
     '/leaderboard', '/wall', '/go-live',
     '/tromody', '/battles', '/trollifications',
+  ]
+
+  return allowedRoutes.includes(route)
 }
 
 /**

@@ -17,6 +17,8 @@ import GlobalErrorBanner from "./components/GlobalErrorBanner";
 import GlobalGiftBanner from "./components/GlobalGiftBanner";
 import BroadcastAnnouncement from "./components/BroadcastAnnouncement";
 import GlobalPodBanner from './components/GlobalPodBanner';
+import MiniPodcastPlayer from './components/podcast/MiniPodcastPlayer';
+import { usePodcastStore } from './stores/podcastStore';
 import BugAlertPopup from './components/BugAlertPopup';
 
 import { useBugAlertStore } from "./stores/useBugAlertStore";
@@ -42,6 +44,7 @@ import { AnimationsContainer } from "./components/animations";
 import OfficerAlertBanner from "./components/OfficerAlertBanner";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
 import { RTCAdminMonitor } from "./components/admin";
+import { StaffWalkieTalkieProvider } from "./components/StaffWalkieTalkieProvider";
 
 import AdminErrors from "./pages/admin/AdminErrors";
 import ProfileSetupModal from "./components/ProfileSetupModal";
@@ -368,6 +371,8 @@ import LiveStreamOverlay from "./pages/live/LiveStreamOverlay.js";
 import AudioSettings from "./pages/live/AudioSettings.js";
 import TrollCourt from "./pages/TrollCourt.js";
 import AuctionsPage from "./pages/AuctionsPage.js";
+import PodcastCentral from "./pages/PodcastCentral.js";
+import PodcastRoom from "./pages/PodcastRoom.js";
 import AuctionStudio from "./pages/auction/AuctionStudio.js";
 import AuctionStudioLots from "./pages/auction/AuctionStudioLots.js";
 import AuctioneerDashboard from "./pages/auction/AuctioneerDashboard.js";
@@ -1141,30 +1146,30 @@ function AppContent() {
         onRetry={retryLastAction}
       />
 
-      <AppLayout showSidebar={!isMobileUI || isStandalone} showHeader={true} showBottomNav={true}>
-        <GlobalPresenceTracker />
-        {user && <AdminOfficerQuickMenu />}
-        <RTCAdminMonitor />
-
-        <ErrorBoundary>
-          <Suspense fallback={null}>
-            <Routes>
-                {/* Public Routes */}
-                <Route path="/intro" element={<Navigate to="/" replace />} />
-                <Route path="/landing" element={<Navigate to="/" replace />} />
-                
-                
-                {/* Authentication */}
-                <Route path="/auth" element={user ? <Navigate to="/home" replace /> : <Auth />} />
-                <Route path="/auth/callback" element={<AuthCallback />} />
-                <Route path="/exit" element={<ExitPage />} />
-                <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
-                <Route path="/access-denied" element={<AccessDenied />} />
-                <Route path="/terms-of-service" element={<Navigate to="/legal/terms" replace />} />
-                <Route path="/privacy-policy" element={<Navigate to="/legal/privacy" replace />} />
-                <Route path="/payment-terms" element={<Navigate to="/legal/refunds" replace />} />
-                <Route path="/creator-agreement" element={<Navigate to="/legal/creator-earnings" replace />} />
-                <Route path="/reset-password" element={<PasswordReset />} />
+<AppLayout showSidebar={!isMobileUI || isStandalone} showHeader={true} showBottomNav={true}>
+           <GlobalPresenceTracker />
+           {user && <AdminOfficerQuickMenu />}
+           <StaffWalkieTalkieProvider>
+             <RTCAdminMonitor />
+             <ErrorBoundary>
+               <Suspense fallback={null}>
+                 <Routes>
+                 {/* Public Routes */}
+                 <Route path="/intro" element={<Navigate to="/" replace />} />
+                 <Route path="/landing" element={<Navigate to="/" replace />} />
+                 
+                 
+                 {/* Authentication */}
+                 <Route path="/auth" element={user ? <Navigate to="/home" replace /> : <Auth />} />
+                 <Route path="/auth/callback" element={<AuthCallback />} />
+                 <Route path="/exit" element={<ExitPage />} />
+                 <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
+                 <Route path="/access-denied" element={<AccessDenied />} />
+                 <Route path="/terms-of-service" element={<Navigate to="/legal/terms" replace />} />
+                 <Route path="/privacy-policy" element={<Navigate to="/legal/privacy" replace />} />
+                 <Route path="/payment-terms" element={<Navigate to="/legal/refunds" replace />} />
+                 <Route path="/creator-agreement" element={<Navigate to="/legal/creator-earnings" replace />} />
+                 <Route path="/reset-password" element={<PasswordReset />} />
                 <Route path="/tax-onboarding" element={<TaxOnboarding />} />
                 <Route path="/verification" element={<VerificationPage />} />
                 <Route path="/verification/complete" element={<VerificationComplete />} />
@@ -1342,6 +1347,7 @@ function AppContent() {
                     
                     <Route path="/church" element={<ChurchPage />} />
                   <Route path="/church/pastor" element={<PastorDashboard />} />
+                  <Route path="/attorney" element={<AttorneyDashboard />} />
                    {/* 📺 Live Streaming System */}
                   <Route path="/live/command-center/:streamId" element={<LiveCommandCenter />} />
                   <Route path="/live/overlay/:streamId" element={<LiveStreamOverlay />} />
@@ -1372,14 +1378,18 @@ function AppContent() {
                    <Route path="/tromail" element={<TromailPage />} />
 
                    {/* 🎥 Team Meeting Room */}
-                  <Route path="/auctions" element={<AuctionsPage />} />
-                  <Route path="/auctions/studio" element={<AuctionStudio />} />
-                  <Route path="/auctions/studio/:showId/lots" element={<AuctionStudioLots />} />
-                  <Route path="/auctions/studio/:showId/live" element={<AuctioneerDashboard />} />
-                  <Route path="/auctions/my-shows" element={<MyAuctionShows />} />
-                  <Route path="/auctions/reports" element={<AuctionReports />} />
-                  <Route path="/auctions/applications" element={<AdminAuctionApps />} />
-                  <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
+<Route path="/auctions" element={<AuctionsPage />} />
+                   <Route path="/auctions/studio" element={<AuctionStudio />} />
+                   <Route path="/auctions/studio/:showId/lots" element={<AuctionStudioLots />} />
+                   <Route path="/auctions/studio/:showId/live" element={<AuctioneerDashboard />} />
+                   <Route path="/auctions/my-shows" element={<MyAuctionShows />} />
+                   <Route path="/auctions/reports" element={<AuctionReports />} />
+                   <Route path="/auctions/applications" element={<AdminAuctionApps />} />
+                   <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
+                   
+                   {/* 🎙️ Podcast Central */}
+                   <Route path="/podcast" element={<PodcastCentral />} />
+                   <Route path="/podcast/:id" element={<PodcastRoom />} />
                    
                   {/* 🎮 Multi-Box Streaming */}
 
@@ -1970,6 +1980,14 @@ function AppContent() {
                        </RequireRole>
                      }
                    />
+<Route
+                      path="/rtcadminmonitor"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN, UserRole.HR_ADMIN, UserRole.AGENCY_HR_MANAGER, UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, UserRole.SECRETARY, 'ceo' as any, 'officer' as any]}>
+                          <RTCAdminMonitor />
+                        </RequireRole>
+                      }
+                    />
                   <Route path="/rfc" element={<AdminRFC />} />
                   <Route
                     path="/changelog"
@@ -1983,15 +2001,19 @@ function AppContent() {
                 </Route>
 
                 {/* 🔙 Catch-all */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </Suspense>
-              </ErrorBoundary>
-        <GlobalPodBanner />
-        <BugAlertPopup />
-      </AppLayout>
+                 <Route path="*" element={<Navigate to="/" replace />} />
+                   </Routes>
+             </Suspense>
+            </ErrorBoundary>
+            </StaffWalkieTalkieProvider>
+           <GlobalPodBanner />
+           <BugAlertPopup />
+         </AppLayout>
 
-      {/* Profile setup modal */}
+       {/* Mini Podcast Player - persists across navigation */}
+       <MiniPodcastPlayerWrapper />
+        
+       {/* Profile setup modal */}
       <ProfileSetupModal
         isOpen={profileModalOpen}
         onSubmit={() => {}}
@@ -2050,3 +2072,49 @@ function App() {
 }
 
 export default App;
+
+// Mini Podcast Player wrapper component
+function MiniPodcastPlayerWrapper() {
+  const activePodcast = usePodcastStore(state => state.activePodcast)
+  const showMiniPlayer = usePodcastStore(state => state.showMiniPlayer)
+  const isPlaying = usePodcastStore(state => state.isPlaying)
+  const isMuted = usePodcastStore(state => state.isMuted)
+  const volume = usePodcastStore(state => state.volume)
+  const elapsedTime = usePodcastStore(state => state.elapsedTime)
+  const setPlaying = usePodcastStore(state => state.setPlaying)
+  const setMuted = usePodcastStore(state => state.setMuted)
+  const setVolume = usePodcastStore(state => state.setVolume)
+  const setShowMiniPlayer = usePodcastStore(state => state.setShowMiniPlayer)
+
+  if (!activePodcast || !showMiniPlayer) return null
+
+  const handleClose = () => {
+    setShowMiniPlayer(false)
+  }
+
+  const handleExpand = () => {
+    // Navigate to podcast room
+    window.location.href = `/podcast/${activePodcast.id}`
+  }
+
+  return (
+    <MiniPodcastPlayer
+      podcast={{
+        ...activePodcast,
+        description: activePodcast.description || '',
+        started_at: activePodcast.started_at || new Date().toISOString(),
+        listener_count: activePodcast.listener_count || 0,
+        host_user_id: activePodcast.host_user_id || ''
+      }}
+      isPlaying={isPlaying}
+      isMuted={isMuted}
+      volume={volume}
+      elapsedTime={elapsedTime}
+      onPlayPause={() => setPlaying(!isPlaying)}
+      onMuteToggle={() => setMuted(!isMuted)}
+      onVolumeChange={setVolume}
+      onClose={handleClose}
+      onExpand={handleExpand}
+    />
+  )
+}

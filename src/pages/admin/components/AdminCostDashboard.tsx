@@ -6,11 +6,11 @@ const costInsights = [
 ]
 
 const costBreakdown = [
-  { title: 'Live Streaming', detail: 'Servers, encoding & distribution' },
-  { title: 'Support Operations', detail: 'Moderation, incident response, payroll' },
-  { title: 'Payment Processing', detail: 'PayPal + ACH + chargebacks' },
-  { title: 'Infrastructure & Tools', detail: 'Databases, monitoring, tooling' },
-]
+   { title: 'Live Streaming', detail: 'Servers, encoding & distribution' },
+   { title: 'Support Operations', detail: 'Moderation, incident response, role perks' },
+   { title: 'Payment Processing', detail: 'PayPal + ACH + chargebacks' },
+   { title: 'Infrastructure & Tools', detail: 'Databases, monitoring, tooling' },
+ ]
 
 const actionItems = [
   'Stress-test the live stream fleet during low-traffic hours to validate autoscaling levers.',
@@ -84,12 +84,12 @@ export default function AdminCostDashboard() {
         </div>
       </div>
 
-      <div className="bg-[#0B0B13] border border-[#23232D] rounded-2xl p-6 text-sm text-gray-400">
-        <p>
-          Connect this view to KPI feeds (billing, payroll, infrastructure usage) once every metric is
-          available from the new analytics pipeline.
-        </p>
-      </div>
+<div className="bg-[#0B0B13] border border-[#23232D] rounded-2xl p-6 text-sm text-gray-400">
+         <p>
+           Connect this view to KPI feeds (billing, role perks, infrastructure usage) once every metric is
+           available from the new analytics pipeline.
+         </p>
+       </div>
     </div>
   )
 }

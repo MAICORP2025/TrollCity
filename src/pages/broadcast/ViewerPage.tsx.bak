@@ -883,7 +883,10 @@ const isActive = isStreamActive(stream)
     console.log('[ViewerPage] LiveKit mic unmuted after walkie-talkie')
   }, [isUserOnStage, setMicEnabled])
 
-  
+  const remoteParticipants = useMemo(() => {
+    return Array.isArray(remoteUsers) ? remoteUsers : []
+  }, [remoteUsers])
+
   const hostParticipant = useMemo(() => {
     const exactHost = remoteParticipants.find((participant: any) => participantMatchesUser(participant, hostId))
     if (exactHost) return exactHost

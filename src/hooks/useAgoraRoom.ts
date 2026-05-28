@@ -59,6 +59,12 @@ export function useAgoraRoom({
   // Get Agora app ID
   const getAgoraAppId = () => import.meta.env.VITE_AGORA_APP_ID;
 
+  const debugAgora = (...args: unknown[]) => {
+    if (import.meta.env.DEV) {
+      console.log(...args)
+    }
+  }
+
   // Initialize Agora client
   const initAgoraClient = useCallback(async () => {
     try {
@@ -67,35 +73,35 @@ export function useAgoraRoom({
         throw new Error('VITE_AGORA_APP_ID not configured');
       }
 
-      console.log('🔧 Initializing Agora client');
+      debugAgora('🔧 Initializing Agora client');
 
       // Create client
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
       // Event handlers
       client.on('user-joined', (user) => {
-        console.log('👤 User joined:', user.uid);
+        debugAgora('👤 User joined:', user.uid);
         setRemoteUsers(prev => [...prev, user]);
         onUserJoined?.(user);
       });
 
       client.on('user-left', (user) => {
-        console.log('👤 User left:', user.uid);
+        debugAgora('👤 User left:', user.uid);
         setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
         onUserLeft?.(user);
       });
 
       client.on('user-published', async (user, mediaType) => {
-        console.log('📢 User published:', user.uid, mediaType);
+        debugAgora('📢 User published:', user.uid, mediaType);
         await client.subscribe(user, mediaType);
       });
 
       client.on('user-unpublished', (user, mediaType) => {
-        console.log('🔇 User unpublished:', user.uid, mediaType);
+        debugAgora('🔇 User unpublished:', user.uid, mediaType);
       });
 
       client.on('connection-state-change', (curState, revState) => {
-        console.log('🔌 Connection state:', curState, '(was', revState + ')');
+        debugAgora('🔌 Connection state:', curState, '(was', revState + ')');
       });
 
       clientRef.current = client;
@@ -112,7 +118,7 @@ export function useAgoraRoom({
   // Fetch Agora token
   const fetchAgoraToken = useCallback(async (channel: string, uid: UID) => {
     try {
-      console.log('🎫 Fetching Agora token for channel:', channel, 'uid:', uid);
+      debugAgora('🎫 Fetching Agora token for channel:', channel, 'uid:', uid);
 
       const { data, error: tokenError } = await supabase.functions.invoke('agora-token', {
         body: {
@@ -138,7 +144,7 @@ export function useAgoraRoom({
         throw new Error('No token in response: ' + JSON.stringify(data));
       }
 
-      console.log('✅ Agora token received, length:', data.token.length);
+      debugAgora('✅ Agora token received, length:', data.token.length);
       return data.token;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Failed to fetch Agora token';
@@ -169,21 +175,21 @@ export function useAgoraRoom({
     setIsJoining(true);
 
     try {
-      console.log('📍 Joining Agora channel:', channelName);
+      debugAgora('📍 Joining Agora channel:', channelName);
 
       // Initialize client if needed
       let client = clientRef.current;
       if (!client) {
-        console.log('🔧 Initializing Agora client...');
+        debugAgora('🔧 Initializing Agora client...');
         client = await initAgoraClient();
       }
 
       // Get numeric UID
       const uid = getUserUid(userId);
-      console.log('👤 User UID:', uid);
+      debugAgora('👤 User UID:', uid);
 
       // Get token
-      console.log('🎫 Fetching Agora token...');
+      debugAgora('🎫 Fetching Agora token...');
       const appId = getAgoraAppId();
       if (!appId) {
         throw new Error('Agora App ID not configured');
@@ -193,7 +199,7 @@ export function useAgoraRoom({
       if (!token) {
         throw new Error('Failed to get Agora token');
       }
-      console.log('✅ Token received, joining...');
+      debugAgora('✅ Token received, joining...');
 
       // Join channel with 15 second timeout
       const joinPromise = client.join(appId, channelName, token, uid);
@@ -202,14 +208,14 @@ export function useAgoraRoom({
       );
       
       await Promise.race([joinPromise, timeoutPromise]);
-      console.log('✅ Joined Agora channel');
+      debugAgora('✅ Joined Agora channel');
 
       setIsConnected(true);
       joinedRef.current = true;
 
       // Publish audio/video if publisher role
       if (role === 'publisher') {
-        console.log('🎬 Creating local tracks for publisher');
+        debugAgora('🎬 Creating local tracks for publisher');
 
         const videoTrack = await AgoraRTC.createCameraVideoTrack();
         const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
@@ -223,7 +229,7 @@ export function useAgoraRoom({
         setLocalAudioTrack(audioTrack);
         setIsPublishing(true);
 
-        console.log('✅ Published local tracks');
+        debugAgora('✅ Published local tracks');
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Failed to join channel';
@@ -243,7 +249,7 @@ export function useAgoraRoom({
     if (!joinedRef.current || !clientRef.current) return;
 
     try {
-      console.log('👋 Leaving Agora channel');
+      debugAgora('👋 Leaving Agora channel');
 
       // Stop and close local tracks using refs
       if (videoTrackRef.current) {
@@ -267,7 +273,7 @@ export function useAgoraRoom({
       videoTrackRef.current = null;
       audioTrackRef.current = null;
 
-      console.log('✅ Left Agora channel');
+      debugAgora('✅ Left Agora channel');
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Failed to leave channel';
       console.error('❌ Leave error:', errMsg);
@@ -280,7 +286,7 @@ export function useAgoraRoom({
     try {
       if (!videoTrackRef.current) return;
       await videoTrackRef.current.setEnabled(!videoTrackRef.current.enabled);
-      console.log('📹 Camera:', videoTrackRef.current.enabled ? 'on' : 'off');
+      debugAgora('📹 Camera:', videoTrackRef.current.enabled ? 'on' : 'off');
     } catch (err) {
       console.error('❌ Toggle camera error:', err);
     }
@@ -291,7 +297,7 @@ export function useAgoraRoom({
     try {
       if (!audioTrackRef.current) return;
       await audioTrackRef.current.setEnabled(!audioTrackRef.current.enabled);
-      console.log('🎤 Microphone:', audioTrackRef.current.enabled ? 'on' : 'off');
+      debugAgora('🎤 Microphone:', audioTrackRef.current.enabled ? 'on' : 'off');
     } catch (err) {
       console.error('❌ Toggle microphone error:', err);
     }

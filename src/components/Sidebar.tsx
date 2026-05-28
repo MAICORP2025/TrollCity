@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { SafeLink } from '@/hooks/useSafeNavigate'
 import {
    AlertTriangle,
    Banknote,
@@ -377,12 +378,12 @@ profile?.role === 'superadmin' ||
       <div className="relative z-10 border-b border-white/10 bg-white/[0.025] p-3">
         <div className={cx('flex items-center', isSidebarCollapsed ? 'justify-center' : 'justify-between')}>
           {!isSidebarCollapsed && (
-            <Link to="/home" className="group flex min-w-0 items-center gap-3">
+            <SafeLink to="/home" className="group flex min-w-0 items-center gap-3">
               <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-purple-700 via-cyan-500 to-pink-500 shadow-[0_0_28px_rgba(45,212,191,0.25)]">
                 <span className="text-xl font-black text-white drop-shadow">T</span>
                 <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border border-slate-950 bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.85)]" />
               </div>
-              <div className="min-w-0">
+                <div className="min-w-0 text-left">
                 <div className="truncate bg-gradient-to-r from-white via-cyan-100 to-pink-200 bg-clip-text text-lg font-black leading-tight text-transparent">
                   Mai Troll City
                 </div>
@@ -390,7 +391,7 @@ profile?.role === 'superadmin' ||
                   City OS
                 </div>
               </div>
-            </Link>
+              </SafeLink>
           )}
 
           <button
@@ -452,7 +453,7 @@ profile?.role === 'superadmin' ||
           <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
             <div className={isSidebarCollapsed ? 'col-span-1 mb-2' : 'col-span-2 mb-2'}>
               {canBroadcast() ? (
-                <Link
+                <SafeLink
                   to="/broadcast/setup"
                   className={cx(
                     'relative flex w-full items-center justify-center overflow-hidden rounded-2xl border border-cyan-200/35 bg-gradient-to-r from-purple-700 via-cyan-500 to-pink-600 font-black text-white shadow-[0_0_22px_rgba(45,212,191,0.30)] transition-all duration-300 hover:scale-[1.02] hover:from-purple-600 hover:via-cyan-400 hover:to-pink-500',
@@ -468,7 +469,7 @@ profile?.role === 'superadmin' ||
                       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/75">Start Broadcast</div>
                     </div>
                   )}
-                </Link>
+                </SafeLink>
               ) : (
                 <div
                   className={cx(
@@ -518,7 +519,8 @@ profile?.role === 'superadmin' ||
              )}
 
 <SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
-             <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Insurance" to="/insurance" active={isActive('/insurance')} highlight={isUpdated('/insurance')} onClick={() => markAsViewed('/insurance')} className="text-cyan-300" tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Podcast" to="/podcast" active={isActive('/podcast')} highlight={isUpdated('/podcast')} onClick={() => markAsViewed('/podcast')} className="text-purple-400" tone="purple" glow="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Insurance" to="/insurance" active={isActive('/insurance')} highlight={isUpdated('/insurance')} onClick={() => markAsViewed('/insurance')} className="text-cyan-300" tone="cyan" />
              <GridItem collapsed={isSidebarCollapsed} icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} tone="purple" />
              <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Troll Family" to="/family/browse" active={isActive('/family/browse')} highlight={isUpdated('/family/browse')} onClick={() => markAsViewed('/family/browse')} className="text-pink-400" tone="pink" />
              <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="My Families" to={isFamilyMember ? "/family/home" : "/family/browse"} active={isActive('/family/home') || isActive('/family/browse')} highlight={isUpdated('/family/home')} onClick={() => markAsViewed('/family/home')} className="text-purple-400" tone="purple" />
@@ -597,7 +599,7 @@ profile?.role === 'superadmin' ||
       </div>
 
       <div className="relative z-10 border-t border-white/10 bg-slate-950/50 p-3">
-        <Link
+        <SafeLink
           to="/stats"
           className={cx(
             'group flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-slate-400 transition-all duration-200 hover:border-cyan-400/35 hover:bg-white/[0.075] hover:text-white',
@@ -607,7 +609,7 @@ profile?.role === 'superadmin' ||
         >
           <LayoutDashboard size={18} className="group-hover:text-cyan-200" />
           {!isSidebarCollapsed && <span className="text-[13px] font-semibold">Stats</span>}
-        </Link>
+        </SafeLink>
       </div>
 
       {showCourtModal && <CourtEntryModal isOpen={true} onClose={() => setShowCourtModal(false)} />}
@@ -662,7 +664,7 @@ function GridItem({
   const effectiveActive = !isUnderConstruction && active
 
   return (
-    <Link
+    <SafeLink
       to={isUnderConstruction ? '#' : to}
       onClick={handleClick}
       title={collapsed ? label : undefined}
@@ -695,6 +697,6 @@ function GridItem({
           {badge}
         </span>
       )}
-    </Link>
+    </SafeLink>
   )
 }

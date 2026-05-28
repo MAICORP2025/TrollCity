@@ -118,6 +118,36 @@ body.tc-theme-exempt-body {
   background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #020617 100%);
 }
 
+html.tc-battery-reduced,
+html.tc-battery-ultra {
+  color: rgba(250, 250, 250, 0.9);
+}
+
+html.tc-battery-reduced body,
+html.tc-battery-reduced .tc-app-shell,
+html.tc-battery-reduced .tc-page-surface {
+  background-attachment: scroll;
+}
+
+html.tc-battery-reduced *,
+html.tc-battery-ultra * {
+  animation-delay: 0s !important;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+html.tc-battery-ultra body,
+html.tc-battery-ultra .tc-app-shell,
+html.tc-battery-ultra .tc-page-surface {
+  background: #020617 !important;
+}
+
 .tc-theme-exempt.tc-page-surface,
 .tc-theme-exempt .tc-page-surface {
   background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #020617 100%);

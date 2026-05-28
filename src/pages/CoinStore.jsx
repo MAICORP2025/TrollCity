@@ -72,6 +72,46 @@ const SAMPLE_CHAT_SOUNDS = [
   { id: 'sound_10', name: 'Magic Wand', cost: 250, sound_type: 'chat', file_path: '/sounds/wand.mp3' },
 ];
 
+const PROMOTION_TIERS = [
+  { id: '24h', label: '24 Hours', price: 500, hours: 24 },
+  { id: '48h', label: '48 Hours', price: 1000, hours: 48 },
+  { id: '168h', label: '1 Week', price: 2000, hours: 168 },
+];
+
+const FEATURE_PURCHASE_ITEMS = [
+  {
+    id: 'featured_broadcast',
+    title: 'Featured Broadcast',
+    description: 'Schedule your next live stream to appear at the top of LiveNow and receive system promotion via Troll Wall.',
+    category: 'broadcast',
+  },
+  {
+    id: 'troll_wall_spotlight',
+    title: 'Troll Wall Spotlight',
+    description: 'Highlight a system-generated Troll Wall post for your next broadcast or stream update.',
+    category: 'post',
+  },
+  {
+    id: 'podcast_promotion',
+    title: 'Podcast Promotion',
+    description: 'Promote your podcast with premium visibility and a stronger chance to attract live listeners.',
+    category: 'podcast',
+  },
+  {
+    id: 'auction_spotlight',
+    title: 'Live Auction Spotlight',
+    description: 'Feature your auction room and boost visibility for live auction activity.',
+    category: 'auction',
+  },
+];
+
+const formatPromotionDuration = (hours) => {
+  if (hours === 24) return '24h';
+  if (hours === 48) return '48h';
+  if (hours === 168) return '1 week';
+  return `${hours}h`;
+};
+
 const SAMPLE_BROADCAST_THEMES = [
   {
     id: 'ice',
@@ -846,6 +886,62 @@ export default function CoinStore() {
    }
   }
 
+  const buyPromotionFeature = async (item, tier) => {
+    if (!item || !tier) return;
+    const price = Number(tier.price || 0);
+    const hours = Number(tier.hours || 0);
+
+    if (price <= 0 || hours <= 0) {
+      toast.error('Invalid promotion selection');
+      return;
+    }
+
+    if (!useCredit && troll_coins < price) {
+      toast.error(`Not enough Troll Coins. Need ${formatCoins(price)}`);
+      return;
+    }
+    if (useCredit && (creditInfo?.available || 0) < price) {
+      toast.error(`Not enough Credit. Need ${formatCoins(price)}`);
+      return;
+    }
+
+    try {
+      const { success, error: deductError } = await deductCoins({
+        userId: user.id,
+        amount: price,
+        type: 'promotion_purchase',
+        description: `Purchased ${item.title} for ${formatPromotionDuration(hours)}`,
+        metadata: {
+          promotion_id: item.id,
+          promotion_title: item.title,
+          promotion_category: item.category,
+          duration_hours: hours,
+          tier: tier.id,
+        },
+        useCredit,
+        supabaseClient: supabase,
+      });
+
+      if (!success) throw new Error(deductError || 'Payment failed');
+
+      if (item.id === 'featured_broadcast') {
+        const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+        const { error: updateError } = await supabase
+          .from('user_profiles')
+          .update({ featured_broadcaster_until: expiresAt })
+          .eq('id', user.id);
+        if (updateError) throw updateError;
+      }
+
+      toast.success(`${item.title} purchased for ${formatPromotionDuration(hours)}!`);
+      showPurchaseCompleteOverlay();
+      await loadWalletData(false);
+    } catch (err) {
+      console.error('Promotion purchase error:', err);
+      toast.error(err.message || 'Purchase failed');
+    }
+  }
+
   const unlockBroadcastTheme = async (theme) => {
     try {
       setLoadingPackage(theme.id);
@@ -1189,7 +1285,7 @@ export default function CoinStore() {
                 
                 {showStoreDropdown && (
                     <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-purple-500/30 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
-                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='effects' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('effects'); setShowStoreDropdown(false); }}>Entrance Effects</button>
+                                <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='effects' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('effects'); setShowStoreDropdown(false); }}>Featured Promotions</button>
                         <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='perks' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('perks'); setShowStoreDropdown(false); }}>Perks</button>
                         <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
                         <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='themes' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('themes'); setShowStoreDropdown(false); }}>Broadcast Themes</button>
@@ -1227,7 +1323,7 @@ export default function CoinStore() {
                 <option value="bank">Bank</option>
                 <option value="market">Market</option>
                 <option value="portfolio">Portfolio</option>
-                <option value="effects">Entrance Effects</option>
+                <option value="effects">Featured Promotions</option>
                 <option value="perks">Perks</option>
                 <option value="calls">Call Minutes</option>
                 <option value="insurance">Insurance</option>
@@ -1922,80 +2018,42 @@ export default function CoinStore() {
               </div>
           )}
 
-          {/* Effects Tab */}
+          {/* Promotions Tab */}
           {tab === 'effects' && (
             <>
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5 text-purple-400" />
-                Entrance Effects
+                Featured Promotions
               </h2>
-              {effectsNote && (
-                 <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
-                   {effectsNote}
-                 </div>
-              )}
-
-              <div className="mb-6 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-purple-600 scrollbar-track-zinc-800">
-                <div className="flex gap-2">
-                  {['All', ...new Set(effects.map(e => e.category || 'Other').filter(Boolean))].map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setSelectedEffectCategory(cat)}
-                      className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
-                        selectedEffectCategory === cat 
-                          ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' 
-                          : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700 hover:text-gray-200'
-                      }`}
-                    >
-                      {cat === 'female_style' ? 'Female Style' :
-                       cat === 'male_style' ? 'Male Style' :
-                       cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' ')}
-                    </button>
-                  ))}
-                </div>
+              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
+                Purchase feature packs for broadcasts, Troll Wall posts, podcasts, or live auctions.
+                Featured broadcasts will show on LiveNow and receive system-generated Troll Wall coverage.
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {effects
-                  .filter(e => selectedEffectCategory === 'All' || (e.category || 'Other') === selectedEffectCategory)
-                  .map((effect) => (
-                  <div key={effect.id} className={`bg-black/40 p-4 rounded-lg border ${
-                      effect.rarity === 'legendary' ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' :
-                      effect.rarity === 'epic' ? 'border-pink-500/40 shadow-[0_0_15px_rgba(236,72,153,0.1)]' :
-                      effect.rarity === 'rare' ? 'border-blue-500/40' :
-                      'border-purple-500/20'
-                  } hover:border-purple-500/60 transition-all`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="font-semibold text-lg flex items-center gap-2">
-                         {effect.icon && <span className="text-2xl">{effect.icon}</span>}
-                         {effect.name}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {FEATURE_PURCHASE_ITEMS.map((item) => (
+                  <div key={item.id} className="bg-black/40 p-4 rounded-xl border border-white/10">
+                    <div className="flex justify-between items-start gap-3">
+                      <div>
+                        <h3 className="font-semibold text-lg text-white">{item.title}</h3>
+                        <p className="text-sm text-gray-400 mt-2">{item.description}</p>
                       </div>
-                      {effect.rarity && (
-                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                              effect.rarity === 'legendary' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
-                              effect.rarity === 'epic' ? 'bg-pink-500/20 text-pink-300 border border-pink-500/30' :
-                              effect.rarity === 'rare' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
-                              'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-                          }`}>
-                              {effect.rarity}
-                          </span>
-                      )}
+                      <span className="text-xs uppercase tracking-[0.15em] text-purple-300 font-semibold">{item.category}</span>
                     </div>
-                    
-                    <div className="text-sm text-gray-400 mb-2 min-h-[40px]">{effect.description}</div>
-                    
-                    <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/5">
-                      <span className="text-yellow-400 font-bold text-lg">{formatCoins(effect.price_troll_coins || effect.coin_cost)}</span>
-                      <button
-                        onClick={() => buyEffect(effect)}
-                        className={`px-4 py-1.5 rounded text-sm font-bold shadow-lg transition-transform active:scale-95 ${
-                            effect.rarity === 'legendary' ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black' :
-                            effect.rarity === 'epic' ? 'bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white' :
-                            'bg-purple-600 hover:bg-purple-700 text-white'
-                        }`}
-                      >
-                        Buy
-                      </button>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {PROMOTION_TIERS.map((tier) => (
+                        <button
+                          key={tier.id}
+                          onClick={() => buyPromotionFeature(item, tier)}
+                          className="group rounded-2xl border border-white/10 bg-zinc-900/70 p-3 text-left hover:border-purple-500/50 hover:bg-zinc-800 transition"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="text-sm text-gray-300">{tier.label}</span>
+                            <span className="text-yellow-400 font-bold">{formatCoins(tier.price)}</span>
+                          </div>
+                          <p className="text-xs text-gray-500">Features active for {formatPromotionDuration(tier.hours)}</p>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ))}

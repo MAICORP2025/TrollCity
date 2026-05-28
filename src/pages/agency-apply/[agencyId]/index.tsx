@@ -31,7 +31,12 @@ export default function AgencyApplyPage() {
     social_links: '',
     agree_to_split: false
   });
-
+  
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  function isUuid(value) {
+    return typeof value === 'string' && UUID_RE.test(value)
+  }
+  
   useEffect(() => {
     if (!user) {
       navigate('/auth');
@@ -40,60 +45,106 @@ export default function AgencyApplyPage() {
     fetchAgencyAndCheckStatus();
   }, [agencyId, user]);
 
-  const fetchAgencyAndCheckStatus = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch agency info
-      const { data: agencyData, error: agencyError } = await supabase
-        .from('agencies')
-        .select('*')
-        .eq('id', agencyId)
-        .eq('status', 'approved')
-        .single();
-
-      if (agencyError) throw agencyError;
-      if (!agencyData) {
-        setError('Agency not found or not approved');
-        return;
-      }
-      setAgency(agencyData);
-
-      // Check if user is already a member
-      const { data: memberData, error: memberError } = await supabase
-        .from('agency_members')
-        .select('id')
-        .eq('agency_id', agencyId)
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .single();
-
-      if (memberError && memberError.code !== 'PGRST116') { // PGRST116 means no rows returned
-        throw memberError;
-      }
-      setUserIsMember(!!memberData);
-
-      // Check if user has already applied
-      const { data: applicationData, error: applicationError } = await supabase
-        .from('agency_applications')
-        .select('id')
-        .eq('agency_id', agencyId)
-        .eq('applicant_id', user.id)
-        .in('status', ['pending', 'approved'])
-        .single();
-
-      if (applicationError && applicationError.code !== 'PGRST116') {
-        throw applicationError;
-      }
-      setUserHasApplied(!!applicationData);
-
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+   const fetchAgencyAndCheckStatus = async () => {
+     try {
+       setLoading(true);
+       setError(null);
+       setAgency(null);
+       setUserHasApplied(false);
+       setUserIsMember(false);
+ 
+       // Fetch agency info by ID or by slug/agency_code/public_id
+       let agencyData = null;
+       let agencyError = null;
+ 
+       if (isUuid(agencyId)) {
+         // Fetch by UUID
+         const { data, error } = await supabase
+           .from('agencies')
+           .select('*')
+           .eq('id', agencyId)
+           .eq('status', 'approved')
+           .single();
+         agencyData = data;
+         agencyError = error;
+       } else {
+         // Try slug
+         const { data: slugData, error: slugError } = await supabase
+           .from('agencies')
+           .select('*')
+           .eq('slug', agencyId)
+           .eq('status', 'approved')
+           .single();
+         if (!slugError && slugData) {
+           agencyData = slugData;
+         } else {
+           // Try agency_code
+           const { data: codeData, error: codeError } = await supabase
+             .from('agencies')
+             .select('*')
+             .eq('agency_code', agencyId)
+             .eq('status', 'approved')
+             .single();
+           if (!codeError && codeData) {
+             agencyData = codeData;
+           } else {
+             // Try public_id
+             const { data: publicIdData, error: publicIdError } = await supabase
+               .from('agencies')
+               .select('*')
+               .eq('public_id', agencyId)
+               .eq('status', 'approved')
+               .single();
+             if (!publicIdError && publicIdData) {
+               agencyData = publicIdData;
+             } else {
+               agencyError = new Error('Agency not found or not approved');
+             }
+           }
+         }
+       }
+ 
+       if (agencyError) throw agencyError;
+       if (!agencyData) {
+         setError('Agency not found or not approved');
+         return;
+       }
+       setAgency(agencyData);
+ 
+       // Check if user is already a member
+       const { data: memberData, error: memberError } = await supabase
+         .from('agency_members')
+         .select('id')
+         .eq('agency_id', agency.id) // Use the resolved agency UUID
+         .eq('user_id', user.id)
+         .eq('status', 'active')
+         .single();
+ 
+       if (memberError && memberError.code !== 'PGRST116') { // PGRST116 means no rows returned
+         throw memberError;
+       }
+       setUserIsMember(!!memberData);
+ 
+       // Check if user has already applied
+       const { data: applicationData, error: applicationError } = await supabase
+         .from('agency_applications')
+         .select('id')
+         .eq('agency_id', agency.id) // Use the resolved agency UUID
+         .eq('applicant_id', user.id)
+         .in('status', ['pending', 'approved'])
+         .single();
+ 
+       if (applicationError && applicationError.code !== 'PGRST116') {
+         throw applicationError;
+       }
+       setUserHasApplied(!!applicationData);
+ 
+     } catch (err) {
+       setError(err.message);
+     } finally {
+       setLoading(false);
+     }
+   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type, checked } = e.target;
@@ -103,60 +154,66 @@ export default function AgencyApplyPage() {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!user) return;
 
-    try {
-      // If user has already applied or is a member, don't allow submission
-      if (userHasApplied || userIsMember) {
-        setError('You have already applied or are a member of this agency');
-        return;
-      }
+     try {
+       // If user has already applied or is a member, don't allow submission
+       if (userHasApplied || userIsMember) {
+         setError('You have already applied or are a member of this agency');
+         return;
+       }
 
-      // Validate required fields
-      if (!formData.message.trim()) {
-        setError('Please tell us why you want to join this agency');
-        return;
-      }
-      if (!formData.content_type.trim()) {
-        setError('Please tell us what type of content you broadcast');
-        return;
-      }
-      if (!formData.live_schedule.trim()) {
-        setError('Please tell us how often you plan to go live');
-        return;
-      }
-      if (!formData.agree_to_split) {
-        setError('You must agree to the agency split terms');
-        return;
-      }
+       // Validate required fields
+       if (!formData.message.trim()) {
+         setError('Please tell us why you want to join this agency');
+         return;
+       }
+       if (!formData.content_type.trim()) {
+         setError('Please tell us what type of content you broadcast');
+         return;
+       }
+       if (!formData.live_schedule.trim()) {
+         setError('Please tell us how often you plan to go live');
+         return;
+       }
+       if (!formData.agree_to_split) {
+         setError('You must agree to the agency split terms');
+         return;
+       }
 
-      // Insert application
-      const parsedSocialLinks = formData.social_links
-        ? JSON.parse(formData.social_links)
-        : {};
+       // Parse social links
+       const parsedSocialLinks = formData.social_links
+         ? JSON.parse(formData.social_links)
+         : {};
 
-      const { error: insertError } = await supabase
-        .from('agency_applications')
-        .insert({
-          agency_id: agencyId,
-          applicant_id: user.id,
-          message: formData.message,
-          content_type: formData.content_type,
-          live_schedule: formData.live_schedule,
-          battle_interest: formData.battle_interest,
-          social_links: parsedSocialLinks,
-        });
+       // Submit application via RPC
+       const { data, error } = await supabase.rpc('submit_agency_application', {
+         p_agency_ref: agencyId,
+         p_applicant_user_id: user.id,
+         p_role: 'creator',
+         p_answers: {
+           content_type: formData.content_type,
+           live_schedule: formData.live_schedule,
+           battle_interest: formData.battle_interest,
+           social_links: parsedSocialLinks
+         },
+         p_message: formData.message
+       });
 
-      if (insertError) throw insertError;
-      
-      setSuccess(true);
-      // Reset form or show success message
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+       if (error) throw error;
+
+       if (!data.success) {
+         throw new Error(data.message);
+       }
+
+       setSuccess(true);
+       // Reset form or show success message
+     } catch (err) {
+       setError(err.message);
+     }
+   };
 
   if (loading) return <Loader />;
   if (error) return <div className="text-red-400 p-4">{error}</div>;

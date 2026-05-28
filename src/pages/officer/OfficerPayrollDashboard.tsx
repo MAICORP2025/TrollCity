@@ -16,10 +16,10 @@ interface WorkSession {
 }
 
 interface EarningsBreakdown {
-  basePay: number
-  bonusPay: number
-  salaryPaid: number
-  liveEarnings: number
+   basePay: number
+   bonusPay: number
+   rolePerkPaid: number
+   liveEarnings: number
   courtBonuses: number
   otherBonuses: number
   total: number
@@ -38,12 +38,12 @@ interface PayrollLog {
 }
 
 export default function OfficerPayrollDashboard() {
-  const { user, profile } = useAuthStore()
-  const [workSessions, setWorkSessions] = useState<WorkSession[]>([])
-  const [earningsBreakdown, setEarningsBreakdown] = useState<EarningsBreakdown>({
-    basePay: 0,
-    bonusPay: 0,
-    salaryPaid: 0,
+   const { user, profile } = useAuthStore()
+   const [workSessions, setWorkSessions] = useState<WorkSession[]>([])
+   const [earningsBreakdown, setEarningsBreakdown] = useState<EarningsBreakdown>({
+     basePay: 0,
+     bonusPay: 0,
+     rolePerkPaid: 0,
     liveEarnings: 0,
     courtBonuses: 0,
     otherBonuses: 0,
@@ -126,11 +126,11 @@ export default function OfficerPayrollDashboard() {
         console.warn('Payroll logs unavailable:', payrollError.message)
       }
 
-      // Calculate earnings breakdown
-      const payrollRows = (payrollData as PayrollLog[]) || []
-      const basePay = payrollRows.reduce((sum, log) => sum + (log.base_pay || 0), 0)
-      const bonusPay = payrollRows.reduce((sum, log) => sum + (log.bonus_pay || 0), 0)
-      const salaryPaid = payrollRows.reduce((sum, log) => sum + (log.total_paid || 0), 0)
+// Calculate earnings breakdown
+       const payrollRows = (payrollData as PayrollLog[]) || []
+       const basePay = payrollRows.reduce((sum, log) => sum + (log.base_pay || 0), 0)
+       const bonusPay = payrollRows.reduce((sum, log) => sum + (log.bonus_pay || 0), 0)
+       const rolePerkPaid = payrollRows.reduce((sum, log) => sum + (log.total_paid || 0), 0)
 
       // Calculate live streaming earnings from officer streams
       const { data: officerStreams } = await supabase
@@ -162,12 +162,12 @@ export default function OfficerPayrollDashboard() {
 
       const otherBonuses = moderationEvents?.reduce((sum, event) => sum + (event.bonus_coins || 0), 0) || 0
 
-      const total = salaryPaid + liveEarnings + courtBonuses + otherBonuses
+      const total = rolePerkPaid + liveEarnings + courtBonuses + otherBonuses
 
       setEarningsBreakdown({
         basePay,
         bonusPay,
-        salaryPaid,
+        rolePerkPaid,
         liveEarnings,
         courtBonuses,
         otherBonuses,
@@ -204,19 +204,19 @@ export default function OfficerPayrollDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-4xl font-bold mb-2 flex items-center justify-center gap-3">
-            <DollarSign className="w-10 h-10 text-green-400" />
-            OFFICER PAYROLL DASHBOARD
-          </h1>
-          <p className="text-gray-300">Track your earnings and work hours</p>
-          {profile && (
-            <p className="text-green-300 text-sm mt-2">
-              Officer: {profile.username}
-            </p>
-          )}
-        </div>
+{/* Header */}
+         <div className="text-center">
+           <h1 className="text-4xl font-bold mb-2 flex items-center justify-center gap-3">
+             <DollarSign className="w-10 h-10 text-green-400" />
+             WEEKLY ROLE PERKS
+           </h1>
+           <p className="text-gray-300">Track your role perks and activity sessions</p>
+           {profile && (
+             <p className="text-green-300 text-sm mt-2">
+               Officer: {profile.username}
+             </p>
+           )}
+         </div>
 
         {/* Officer Pool Panel */}
         <OfficerPoolPanel />
@@ -260,12 +260,12 @@ export default function OfficerPayrollDashboard() {
           <div className="bg-zinc-900 rounded-xl p-4 border border-emerald-500/30">
             <div className="flex items-center gap-2 mb-2">
               <DollarSign className="w-5 h-5 text-emerald-400" />
-              <span className="text-sm text-gray-400">Salary Paid</span>
+              <span className="text-sm text-gray-400">Role Perk Paid</span>
             </div>
             <p className="text-2xl font-bold text-emerald-400">
-              {earningsBreakdown.salaryPaid.toLocaleString()}
+              {earningsBreakdown.rolePerkPaid.toLocaleString()}
             </p>
-            <p className="text-xs text-gray-500 mt-1">base + bonus</p>
+            <p className="text-xs text-gray-500 mt-1">weekly base + bonus</p>
           </div>
 
           <div className="bg-zinc-900 rounded-xl p-4 border border-purple-500/30">
@@ -297,15 +297,15 @@ export default function OfficerPayrollDashboard() {
             <Target className="w-5 h-5 text-green-400" />
             Earnings Breakdown
           </h2>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b border-zinc-800">
-              <span className="text-gray-300">Base Salary</span>
-              <span className="text-emerald-400 font-semibold">{earningsBreakdown.basePay.toLocaleString()} coins</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b border-zinc-800">
-              <span className="text-gray-300">Salary Bonus</span>
-              <span className="text-emerald-300 font-semibold">{earningsBreakdown.bonusPay.toLocaleString()} coins</span>
-            </div>
+<div className="space-y-3">
+             <div className="flex justify-between items-center py-2 border-b border-zinc-800">
+               <span className="text-gray-300">Weekly Perk Base</span>
+               <span className="text-emerald-400 font-semibold">{earningsBreakdown.basePay.toLocaleString()} coins</span>
+             </div>
+             <div className="flex justify-between items-center py-2 border-b border-zinc-800">
+               <span className="text-gray-300">Perk Bonus</span>
+               <span className="text-emerald-300 font-semibold">{earningsBreakdown.bonusPay.toLocaleString()} coins</span>
+             </div>
             <div className="flex justify-between items-center py-2 border-b border-zinc-800">
               <span className="text-gray-300">Live Streaming Earnings</span>
               <span className="text-purple-400 font-semibold">{earningsBreakdown.liveEarnings.toLocaleString()} coins</span>
@@ -325,12 +325,12 @@ export default function OfficerPayrollDashboard() {
           </div>
         </div>
 
-        {/* Work Sessions */}
-        <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-700">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-400" />
-            Work Sessions ({workSessions.length})
-          </h2>
+{/* Work Sessions */}
+         <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-700">
+           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+             <Calendar className="w-5 h-5 text-blue-400" />
+             Activity Sessions ({workSessions.length})
+           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

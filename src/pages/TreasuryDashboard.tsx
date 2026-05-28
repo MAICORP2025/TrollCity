@@ -397,9 +397,9 @@ export default function TreasuryDashboard() {
               <p className="text-sm uppercase tracking-[0.35em] text-cyan-300">Troll City Treasury</p>
               <div>
                 <h1 className="text-3xl font-semibold text-white sm:text-4xl">Weekly treasury and payout control</h1>
-                <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">
-                  View treasury balances, audit revenue credits, manage President-approved role allocations, and create or process the weekly payout draft.
-                </p>
+<p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">
+                   View treasury balances, audit revenue credits, manage President-approved weekly role perks, and process Treasury distributions.
+                 </p>
               </div>
             </div>
             <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">

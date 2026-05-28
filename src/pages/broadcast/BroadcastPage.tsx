@@ -29,6 +29,7 @@ import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import AudienceBubbleTicker from '@/components/broadcast/AudienceBubbleTicker'
 import BroadcastOfficerModal from '../../components/broadcast/BroadcastOfficerModal'
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
+import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton'
 import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
 
@@ -1099,23 +1100,24 @@ const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{user_id: strin
            if (row?.id) profileMap.set(row.id, row);
          });
 
-         const ranked = senderIds
-           .map((senderId) => {
-             const profileRow = profileMap.get(senderId);
-             const total = totals.get(senderId)!;
+const ranked = senderIds
+            .map((senderId) => {
+              const profileRow = profileMap.get(senderId);
+              const total = totals.get(senderId)!;
 
-             return {
-               user_id: senderId,
-               sender_username:
-                 profileRow?.username ||
-                 profileRow?.display_name ||
-                 profileRow?.email?.split('@')?.[0] ||
-                 'Troll Citizen',
-               sender_avatar_url: profileRow?.avatar_url || null,
-               total_gift_coins: Math.floor(total.total),
-               last_gift_at: total.lastGiftAt,
-             };
-           })
+              return {
+                user_id: senderId,
+                sender_username:
+                  profileRow?.username ||
+                  profileRow?.display_name ||
+                  profileRow?.email?.split('@')?.[0] ||
+                  'Troll Citizen',
+                sender_avatar_url: profileRow?.avatar_url || null,
+                total_gift_coins: Math.floor(total.total),
+                last_gift_at: total.lastGiftAt,
+                sender_id: senderId,
+              }
+            })
            .sort((a, b) => b.total_gift_coins - a.total_gift_coins)
            .slice(0, 10);
 
@@ -3398,9 +3400,9 @@ user?.id, // user.id is used for identity
     }
   }, [cameraFacingMode])
 
-  const toggleMicrophone = useCallback(async () => {
+const toggleMicrophone = useCallback(async () => {
     if (!roomRef.current || !roomRef.current.localParticipant) return
-    
+
     const isEnabled = roomRef.current.localParticipant.isMicrophoneEnabled
     if (isEnabled) {
       await roomRef.current.localParticipant.setMicrophoneEnabled(false)
@@ -3413,20 +3415,48 @@ user?.id, // user.id is used for identity
           .eq('stream_id', stream.id)
           .eq('user_id', user.id)
           .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
-          .maybeSingle();
+          .maybeSingle()
 
         if (activeMute) {
-          const remaining = activeMute.expires_at
-            ? Math.max(1, Math.ceil((new Date(activeMute.expires_at).getTime() - Date.now()) / 60000))
-            : null;
-          toast.error(`You are muted by a moderator.${remaining ? ` Try again in ${remaining} minute(s).` : ''}`);
-          return;
+          const expiresAt = activeMute.expires_at ? new Date(activeMute.expires_at).getTime() : null
+          const now = Date.now()
+          const remaining = expiresAt ? Math.max(1, Math.ceil((expiresAt - now) / 60000)) : null
+          const message = remaining
+            ? `You are muted by a moderator. Try again in ${remaining} minute(s).`
+            : 'You are muted by a moderator.'
+          toast.error(message)
+          return
         }
       }
       await roomRef.current.localParticipant.setMicrophoneEnabled(true)
       setMicEnabled(true)
     }
   }, [stream?.id, user?.id])
+
+  const onLiveKitMicMute = useCallback(async () => {
+    if (!roomRef.current?.localParticipant) return
+    const wasMicEnabled = roomRef.current.localParticipant.isMicrophoneEnabled
+    if (wasMicEnabled) {
+      try {
+        await roomRef.current.localParticipant.setMicrophoneEnabled(false)
+        setMicEnabled(false)
+        console.log('[BroadcastPage] LiveKit mic muted for walkie-talkie')
+      } catch (err) {
+        console.error('[BroadcastPage] Failed to mute LiveKit mic:', err)
+      }
+    }
+  }, [])
+
+  const onLiveKitMicUnmute = useCallback(async () => {
+    if (!roomRef.current?.localParticipant) return
+    try {
+      await roomRef.current.localParticipant.setMicrophoneEnabled(true)
+      setMicEnabled(true)
+      console.log('[BroadcastPage] LiveKit mic unmuted after walkie-talkie')
+    } catch (err) {
+      console.error('[BroadcastPage] Failed to unmute LiveKit mic:', err)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isHost || !hostMicMutedByOfficer || !roomRef.current?.localParticipant) return;
@@ -4550,21 +4580,23 @@ const handleLike = useCallback(async () => {
 {/* TOP HEADER */}
 
             {/* --- HEADER --- */}
-            {!isMobileViewer && (
-              <BroadcastNeonHeader
-                stream={stream}
-                broadcasterProfile={broadcasterProfile}
-                isHost={isHost}
-                handleLike={handleLike}
-                onGift={handleGiftHost}
-                onShare={handleOpenShareModal}
-                onEndStream={handleStreamEnd}
-                coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
-                onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
-                isLive={stream.status === 'live'}
-                streamStartedAt={stream.started_at}
-              />
-            )}
+{!isMobileViewer && (
+               <BroadcastNeonHeader
+                 stream={stream}
+                 broadcasterProfile={broadcasterProfile}
+                 isHost={isHost}
+                 handleLike={handleLike}
+                 onGift={handleGiftHost}
+                 onShare={handleOpenShareModal}
+                 onEndStream={handleStreamEnd}
+                 coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+                 onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
+                 isLive={stream.status === 'live'}
+                 streamStartedAt={stream.started_at}
+                 onLiveKitMicMute={onLiveKitMicMute}
+                 onLiveKitMicUnmute={onLiveKitMicUnmute}
+               />
+             )}
 
              {/* --- AUDIENCE TICKER: full-width, neon style, always visible --- */}
              <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
@@ -5089,6 +5121,8 @@ const handleLike = useCallback(async () => {
                 isMicOn={micEnabled}
                 isCamOn={cameraEnabled}
                 isLive={stream.status === 'live'}
+                liveViewerCount={viewerCount}
+                liveTimer={'00:00'}
                 isGiftTrayOpen={isGiftModalOpen}
                 isOfficerModalOpen={false}
                 onToggleMic={toggleMicrophone}

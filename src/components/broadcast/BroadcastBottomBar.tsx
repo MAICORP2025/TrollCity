@@ -122,8 +122,8 @@ export interface BroadcastBottomBarProps {
   isMicOn: boolean;
   isCamOn: boolean;
   isLive: boolean;
-  liveViewerCount: number;
-  liveTimer: string;
+  liveViewerCount?: number;
+  liveTimer?: string;
   isGiftTrayOpen: boolean;
   isOfficerModalOpen: boolean;
   onToggleMic?: () => void;
@@ -145,8 +145,8 @@ export default function BroadcastBottomBar({
   isMicOn,
   isCamOn,
   isLive,
-  liveViewerCount,
-  liveTimer,
+  liveViewerCount = 0,
+  liveTimer = '00:00',
   isGiftTrayOpen,
   isOfficerModalOpen,
   onToggleMic,

@@ -9,6 +9,7 @@ import { setResetPin } from '@/services/passwordManager'
 import UserInventory from './UserInventory'
 import { trollCityTheme } from '../styles/trollCityTheme'
 import FamilyMinorSettings from '../components/profile/FamilyMinorSettings'
+import BatterySaverToggle from '@/components/BatterySaverToggle'
 
 export default function ProfileSettings() {
   const { user, profile, refreshProfile } = useAuthStore()
@@ -140,6 +141,9 @@ export default function ProfileSettings() {
             >
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${bannerNotifications ? 'left-7' : 'left-1'}`} />
             </button>
+          </div>
+          <div className={`p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
+            <BatterySaverToggle />
           </div>
         </div>
 

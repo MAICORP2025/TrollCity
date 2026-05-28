@@ -33,13 +33,15 @@ const positionToJobPosition: Record<string, { title: string; icon: any; descript
 }
 
 const positionToRoleCheck: Record<string, { field: string; message: string }> = {
+  auctioneer: { field: 'is_auctioneer', message: 'You are already an Auctioneer' },
+  secretary: { field: 'is_secretary', message: 'You are already a Secretary' },
   troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
   lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
   lead_officer: { field: 'is_lead_officer', message: 'You are already a Lead Officer' },
   troller: { field: 'is_troller', message: 'You are already a Troller' },
   journalist: { field: 'is_journalist', message: 'You are already a Journalist' },
-  news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
-  chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
+  tcnn_news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
+  tcnn_chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
   prosecutor: { field: 'is_prosecutor', message: 'You are already a Prosecutor' },
   attorney: { field: 'is_attorney', message: 'You are already an Attorney' },
 }
@@ -53,12 +55,18 @@ export default function Application() {
 
   const checkRoleEligibility = (positionId: string): { eligible: boolean; message?: string } => {
     const check = positionToRoleCheck[positionId]
-    if (!check) return { eligible: true }
-    
-    const roleValue = (profile as any)?.[check.field]
-    if (roleValue) {
-      return { eligible: false, message: check.message }
+    if (check) {
+      const roleValue = (profile as any)?.[check.field]
+      if (roleValue) {
+        return { eligible: false, message: check.message }
+      }
     }
+
+    if ((profile as any)?.role === positionId || (profile as any)?.troll_role === positionId) {
+      const title = positionToJobPosition[positionId]?.title || 'this role'
+      return { eligible: false, message: `You are already a ${title}` }
+    }
+
     return { eligible: true }
   }
 

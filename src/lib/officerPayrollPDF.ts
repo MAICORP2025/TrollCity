@@ -1,23 +1,23 @@
-// Officer Payroll PDF Generator
-// Generates PDF reports for officer monthly payroll
+// Weekly Role Perk PDF Generator
+// Generates PDF reports for officer weekly Treasury perk payments
 
 // Note: You'll need to install jspdf and jspdf-autotable:
 // npm install jspdf jspdf-autotable
 // npm install --save-dev @types/jspdf
 
-interface PayrollReport {
+interface PerkReport {
   officerName: string
   rank: string
   totalEarned: number
-  payPeriod: string
+  perkPeriod: string
   logs: any[]
 }
 
 /**
- * Downloads a PDF payroll report for an officer
- * @param report - The payroll report data
+ * Downloads a PDF report for weekly role perks
+ * @param report - The weekly perk report data
  */
-export async function downloadPayrollPDF(report: PayrollReport) {
+export async function downloadPayrollPDF(report: PerkReport) {
   try {
     // Dynamic import for jspdf
     const jsPDFModule = await import('jspdf')
@@ -30,20 +30,20 @@ export async function downloadPayrollPDF(report: PayrollReport) {
 
     // Title
     doc.setFontSize(18)
-    doc.text('Troll Officer Monthly Payroll Report', 14, 22)
+    doc.text('Troll City Weekly Role Perk Report', 14, 22)
 
     // Officer Information
     doc.setFontSize(12)
     doc.text(`Officer: ${report.officerName}`, 14, 35)
     doc.text(`Rank: ${report.rank}`, 14, 42)
-    doc.text(`Period: ${report.payPeriod}`, 14, 49)
+    doc.text(`Perk Period: ${report.perkPeriod}`, 14, 49)
 
-    // Payroll Summary Table
+    // Perk Summary Table
     autoTable(doc, {
       startY: 60,
       head: [['Metric', 'Value']],
       body: [
-        ['Total Earned (Coins)', Number(report.totalEarned || 0).toLocaleString()],
+        ['Total Perk Coins', Number(report.totalEarned || 0).toLocaleString()],
         ['Log Count', report.logs.length.toString()],
       ],
       theme: 'striped',
@@ -51,14 +51,15 @@ export async function downloadPayrollPDF(report: PayrollReport) {
       styles: { fontSize: 10 }
     })
 
-    // Conversion and payout info
+    // Treasury perk info
     const finalY = (doc as any).lastAutoTable?.finalY || 100
     doc.setFontSize(10)
-    doc.text('Coin Conversion: 100 coins = $1 USD', 14, finalY + 15)
+    doc.text('Weekly perk payments are processed through the Troll City Treasury.', 14, finalY + 15)
+    doc.text('Perks are not hourly wages or employment compensation.', 14, finalY + 22)
     
     const estimatedPayout = (Number(report.totalEarned || 0) * 0.01).toFixed(2)
     doc.setFontSize(12)
-    doc.text(`Estimated Payout: $${estimatedPayout}`, 14, finalY + 25)
+    doc.text(`Estimated Treasury Value: $${estimatedPayout}`, 14, finalY + 32)
     
     // Footer
     doc.setFontSize(8)
@@ -74,7 +75,7 @@ export async function downloadPayrollPDF(report: PayrollReport) {
     )
 
     // Save PDF
-    const filename = `TrollCity_Payroll_${report.officerName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+    const filename = `TrollCity_RolePerk_${report.officerName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
     doc.save(filename)
   } catch (error: any) {
     console.error('[OfficerPayrollPDF] Error generating PDF:', error)

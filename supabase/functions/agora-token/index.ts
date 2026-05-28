@@ -11,6 +11,7 @@ function generateAgoraToken(params: {
   appCertificate: string;
   channelName: string;
   uid: number;
+  role?: 'publisher' | 'subscriber';
   expiration?: number;
 }): string {
   const {
@@ -18,17 +19,19 @@ function generateAgoraToken(params: {
     appCertificate,
     channelName,
     uid,
+    role = 'subscriber',
     expiration = 3600
   } = params;
 
   try {
-    // Use official Agora RTC Token Builder
+    // Use official Agora RTC Token Builder - supports both publisher and subscriber
+    const agoraRole = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER
     const token = RtcTokenBuilder.buildTokenWithUid(
       appId,
       appCertificate,
       channelName,
       uid,
-      RtcRole.PUBLISHER,
+      agoraRole,
       expiration
     );
 
@@ -45,9 +48,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const body = await req.json();
 
-    const channelName = body.channel || body.channelName || 'staff_meeting';
+    const channelName = body.channelName || body.channel || 'staff_meeting';
     const userIdStr = body.userId || body.user_id || body.uid || '0';
     const uid = parseInt(userIdStr as string, 10);
+    const role = body.role || 'subscriber';
+    const podcastId = body.podcastId || null;
 
     const appId = Deno.env.get('VITE_AGORA_APP_ID') || Deno.env.get('AGORA_APP_ID');
     const appCertificate = Deno.env.get('VITE_AGORA_APP_CERTIFICATE') || Deno.env.get('AGORA_APP_CERTIFICATE');
@@ -70,7 +75,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     console.log('[agora-token] Generating token:', {
       channel: channelName,
       uid: uid,
-      appId: appId.substring(0, 8) + '...'
+      appId: appId.substring(0, 8) + '...',
+      role: role,
+      podcastId: podcastId ? podcastId.substring(0, 8) + '...' : null
     });
 
     const token = generateAgoraToken({
@@ -78,16 +85,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
       appCertificate,
       channelName,
       uid,
+      role,
       expiration: 3600
     });
+
+    const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
 
     console.log('[agora-token] ✅ Token generated successfully');
 
     return withCors({
       token,
-      channel: channelName,
+      appId,
+      channelName,
       uid,
-      appId
+      expiresAt,
+      podcastId
     }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

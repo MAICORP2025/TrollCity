@@ -94,7 +94,7 @@ export default function AdminPoliciesDocsPage() {
             • Auto clock-out when inactive for more than 20 minutes.
           </p>
           <p>
-            • Monthly payroll summary available via <code className="text-purple-300">officer_monthly_payroll</code>{' '}
+            • Monthly role perks summary available via <code className="text-purple-300">officer_monthly_role_perks</code>{' '}
             view, with export to PDF.
           </p>
         </DocSection>

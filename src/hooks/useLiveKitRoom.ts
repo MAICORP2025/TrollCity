@@ -683,39 +683,40 @@ export function useLiveKitRoom({
     }
   }, [localVideoTrack, videoPreset]);
 
-   // Toggle microphone - with error handling to prevent disconnects
-   const waitForRoomConnected = useCallback(async (room: Room, timeoutMs = 5000) => {
-     if (room.state === 'connected' || room.connectionState === 'CONNECTED') {
-       return true;
-     }
+// Wait for room to be connected
+    const waitForRoomConnected = useCallback(async (room: Room, timeoutMs = 5000) => {
+      if (room.state === 'connected' || room.connectionState === 'CONNECTED') {
+        return true;
+      }
 
-     return new Promise<boolean>((resolve, reject) => {
-       let resolved = false;
-       const onConnected = () => {
-         if (resolved) return;
-         resolved = true;
-         cleanup();
-         resolve(true);
-       };
+      return new Promise<boolean>((resolve, reject) => {
+        let resolved = false;
+        const onConnected = () => {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
+          resolve(true);
+        };
 
-      const onTimeout = () => {
-        if (resolved) return;
-        resolved = true;
-        cleanup();
-        reject(new Error(`LiveKit room not connected after ${timeoutMs}ms`));
-      };
+        const onTimeout = () => {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
+          reject(new Error(`LiveKit room not connected after ${timeoutMs}ms`));
+        };
 
-       const cleanup = () => {
-         room.off(RoomEvent.Connected, onConnected);
-         window.clearTimeout(timeoutId);
-       };
+        const cleanup = () => {
+          room.off(RoomEvent.Connected, onConnected);
+          window.clearTimeout(timeoutId);
+        };
 
-       const timeoutId = window.setTimeout(onTimeout, timeoutMs);
+        const timeoutId = window.setTimeout(onTimeout, timeoutMs);
 
-       room.on(RoomEvent.Connected, onConnected);
-     });
-   }, []);
+        room.on(RoomEvent.Connected, onConnected);
+      });
+    }, []);
 
+  // Toggle microphone - with error handling to prevent disconnects
   const toggleMicrophone = useCallback(async () => {
     const track = localAudioTrack;
     if (!track) {
@@ -732,56 +733,32 @@ export function useLiveKitRoom({
     } catch (err) {
       console.warn('[useLiveKitRoom] Toggle mic error:', err);
     }
-    return;
+  }, [localAudioTrack]);
 
-    const publishTrack = async (track: LocalAudioTrack) => {
-      if (!room) throw new Error('Room unavailable');
-      await room.localParticipant.publishTrack(track);
-      setIsPublishing(true);
-      console.log('[useLiveKitRoom] Published mic track');
-    };
-
-    // If track exists, toggle it
-    if (localAudioTrack) {
-      try {
-        if (localAudioTrack.isEnabled) {
-          // Muting - disable the track
-          await localAudioTrack.disable();
-          toast.success('Mic muted');
-        } else {
-          // Unmuting - enable the track
-          await localAudioTrack.enable();
-          toast.success('Mic unmuted');
-        }
-      } catch (err) {
-        console.error('[useLiveKitRoom] Error toggling microphone:', err);
-        toast.error('Failed to toggle mic');
+  // Set mic enabled/disabled (for walkie-talkie integration)
+  const setMicEnabled = useCallback(async (enabled: boolean) => {
+    const track = localAudioTrackRef.current;
+    if (!track) return false;
+    
+    try {
+      if (enabled) {
+        await track.enable();
+      } else {
+        await track.disable();
       }
-      return;
+      setLocalAudioTrack(track);
+      return true;
+    } catch (err) {
+      console.error('[useLiveKitRoom] Error setting mic enabled:', err);
+      return false;
     }
+  }, []);
 
-// No track exists - create new one (first time enabling mic)
-     let audioTrack: LocalAudioTrack | null = null;
-     try {
-       audioTrack = await createLocalAudioTrack();
-       await audioTrack.enable();
-       await publishTrack(audioTrack);
-       setLocalAudioTrack(audioTrack);
-       localAudioTrackRef.current = audioTrack;
-       toast.success('Mic enabled!');
-     } catch (err) {
-       console.error('[useLiveKitRoom] Error enabling microphone:', err);
-       if (audioTrack) {
-         try {
-           audioTrack.stop();
-         } catch (stopErr) {
-           console.warn('[useLiveKitRoom] Failed to stop audio track after publish error:', stopErr);
-         }
-       }
-       setLocalAudioTrack(null);
-       localAudioTrackRef.current = null;
-     }
-  }, [localAudioTrack, waitForRoomConnected]);
+  // Get current mic state
+  const getMicEnabled = useCallback(() => {
+    const track = localAudioTrackRef.current;
+    return track?.isEnabled ?? false;
+  }, []);
 
 // Cleanup on unmount
    useEffect(() => {
@@ -829,6 +806,8 @@ export function useLiveKitRoom({
     leaveRoom,
     toggleCamera,
     toggleMicrophone,
+    setMicEnabled,
+    getMicEnabled,
     
     // Room ref for external access
     room: roomRef.current

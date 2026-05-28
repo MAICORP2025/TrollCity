@@ -93,7 +93,7 @@ const jobPositions: JobPosition[] = [
     department: 'City Operations',
     description: 'Official city support role for admin operations, reports, meetings, and city coordination.',
     requirements: ['Strong communication', 'Reliable follow-up', 'Can organize reports and city requests'],
-    benefits: ['Secretary tools access', 'City operations role', 'Official staff pipeline'],
+    benefits: ['Secretary tools access', 'City operations role', 'Potential weekly role perk from Treasury'],
     icon: Briefcase,
     color: 'from-cyan-500 to-blue-500',
   },
@@ -113,7 +113,7 @@ const jobPositions: JobPosition[] = [
     department: 'TCPS',
     description: 'Official city enforcer responsible for reports, moderation, investigations, arrests, and safety response.',
     requirements: ['Previous moderation experience', 'Strong understanding of city rules', 'Good judgment under pressure'],
-    benefits: ['Officer badge', 'Access to officer tools', 'Community recognition'],
+    benefits: ['Officer badge', 'Access to officer tools', 'Potential weekly role perk from Treasury'],
     icon: Shield,
     color: 'from-purple-500 to-pink-500',
   },
@@ -133,7 +133,7 @@ const jobPositions: JobPosition[] = [
     department: 'TCPS Leadership',
     description: 'Senior enforcement role overseeing Troll Officers, cases, escalation, and city safety consistency.',
     requirements: ['Previous Troll Officer experience', 'Leadership skills', 'Ability to train officers'],
-    benefits: ['Leadership role', 'Officer oversight tools', 'Platform-wide influence'],
+    benefits: ['Leadership role', 'Officer oversight tools', 'Potential weekly role perk from Treasury'],
     icon: Crown,
     color: 'from-yellow-500 to-orange-500',
   },
@@ -173,7 +173,7 @@ const jobPositions: JobPosition[] = [
     department: 'Agencies',
     description: 'Lead a Troll City agency, recruit members, manage applications, and grow creator talent.',
     requirements: ['Leadership skills', 'Recruitment ability', 'Strong community standing'],
-    benefits: ['Agency dashboard access', 'Build creator teams', 'Agency leadership badge'],
+    benefits: ['Agency dashboard access', 'Build creator teams', 'Potential weekly role perk from Treasury'],
     icon: Users,
     color: 'from-violet-500 to-purple-500',
   },
@@ -183,7 +183,7 @@ const jobPositions: JobPosition[] = [
     department: 'Executive Office',
     description: 'Assist the CEO with reports, coordination, admin follow-up, and platform operations.',
     requirements: ['Reliable communication', 'Confidentiality', 'Strong organization'],
-    benefits: ['Executive assistant role', 'Treasury-paid staff pipeline', 'Direct CEO support assignment'],
+    benefits: ['Executive assistant role', 'Potential weekly role perk from Treasury', 'Direct CEO support assignment'],
     icon: Crown,
     color: 'from-yellow-400 to-cyan-500',
   },
@@ -193,7 +193,7 @@ const jobPositions: JobPosition[] = [
     department: 'Executive Office',
     description: 'Assist Noah Admin with reports, support tasks, and city operation follow-up.',
     requirements: ['Reliable communication', 'Admin support mindset', 'Strong follow-up'],
-    benefits: ['Admin assistant role', 'Treasury-paid staff pipeline', 'Assigned to Noah Admin support'],
+    benefits: ['Admin assistant role', 'Potential weekly role perk from Treasury', 'Assigned to Noah Admin support'],
     icon: Briefcase,
     color: 'from-purple-500 to-cyan-500',
   },
@@ -318,6 +318,8 @@ export default function OpenPositions() {
   }
 
   const positionToRoleCheck: Record<string, { field: string; message: string }> = {
+  auctioneer: { field: 'is_auctioneer', message: 'You are already an Auctioneer' },
+  secretary: { field: 'is_secretary', message: 'You are already a Secretary' },
   troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
   lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
   troller: { field: 'is_troller', message: 'You are already a Troller' },
@@ -354,6 +356,9 @@ const handleApply = async (position: JobPosition) => {
         toast.error(roleCheck.message)
         return
       }
+    } else if (profile?.role === position.id || profile?.troll_role === position.id) {
+      toast.error(`You are already a ${position.title}`)
+      return
     }
 
     const { data: existingApplication, error } = await supabase

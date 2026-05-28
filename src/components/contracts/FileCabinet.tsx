@@ -55,7 +55,7 @@ export const FileCabinet = () => {
     isLoading: contractsLoading
   } = useGetContractsBySender(userAccountData?.id || '');
 
-  const { uploadDocumentAsync } = useUploadOrganizationDocument();
+  const { mutateAsync: uploadDocumentAsync } = useUploadOrganizationDocument();
 
   useEffect(() => {
     if (documentsData) {

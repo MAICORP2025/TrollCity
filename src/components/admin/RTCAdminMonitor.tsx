@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { usePresenceStore } from '@/lib/presenceStore';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useStaffWalkieTalkieContext } from '../StaffWalkieTalkieProvider';
 import { toast } from 'sonner';
 import {
   Activity,
@@ -17,6 +18,8 @@ import {
   MoreVertical,
   Radio,
   RefreshCw,
+  Send,
+  Pause,
   Search,
   Shield,
   ShieldAlert,
@@ -27,6 +30,7 @@ import {
   X,
 } from 'lucide-react';
 import BugCenterPanel from './BugCenterPanel';
+import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton';
 
 interface LiveStream {
   id: string;
@@ -67,17 +71,18 @@ interface StreamDetail {
    role?: string | null;
  }
 
- interface UserListItem {
-   id: string;
-   username: string;
-   avatar_url: string | null;
-   role: string | null;
-   is_admin?: boolean | null;
-   last_seen_at?: string;
-   created_at?: string;
-   referrer_username?: string | null;
-   referred_by_username?: string | null;
- }
+interface UserListItem {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    role: string | null;
+    is_admin?: boolean | null;
+    last_seen_at?: string;
+    created_at?: string;
+    referrer_username?: string | null;
+    referred_by_username?: string | null;
+    walkie_talkie_page?: number | null;
+}
 
 interface RTCStats {
   totalMinutes: number;
@@ -130,7 +135,21 @@ interface StreamAnalyticsDaily {
   peak_concurrent_viewers: number;
 }
 
-type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'team_meeting' | 'bug_center' | 'tromail';
+type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'team_meeting' | 'bug_center' | 'tromail' | 'walkie_talkie';
+
+interface TromailInboxItem {
+  id: string;
+  message_id: string;
+  sender_user_id: string;
+  sender_role: string;
+  sender_tromail_address: string;
+  sender_username?: string;
+  subject: string;
+  body: string;
+  read_at: string | null;
+  is_important: boolean;
+  created_at: string;
+}
 type UserListType = 'online' | 'all' | null;
 
 function formatDuration(seconds: number): string {
@@ -154,17 +173,30 @@ function StatCard({ label, value, tone, icon }: { label: string; value: React.Re
 }
 
 export default function RTCAdminMonitor() {
-  const { profile } = useAuthStore();
+const { profile } = useAuthStore();
   const navigate = useNavigate();
   const onlineCount = usePresenceStore((state) => state.onlineCount);
+  
+  const {
+    isConnected,
+    isSpeaking,
+    isJoining,
+    remoteUsers,
+    error,
+    joinWalkieTalkie,
+    leaveWalkieTalkie,
+    toggleSpeaking,
+    canAccessWalkieTalkie: contextCanAccessWalkieTalkie,
+  } = useStaffWalkieTalkieContext();
 
- const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager'];
- const isStaff = profile?.is_admin === true || staffRoles.includes(profile?.role || '');
- const isFullAdmin = profile?.is_admin === true || ['admin', 'ceo', 'superadmin'].includes(profile?.role || '');
+  const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin'];
+  const isStaff = profile?.is_admin === true || staffRoles.includes(profile?.role || '');
+  const isFullAdmin = profile?.is_admin === true || ['admin', 'ceo', 'superadmin'].includes(profile?.role || '');
+  const canUseWalkieTalkie = contextCanAccessWalkieTalkie;
 
- const isTargetAdmin = (target: UserListItem | StreamViewer | any): boolean => {
-   return target.role === 'admin' || target.role === 'superadmin' || target.role === 'ceo' || target.is_admin === true;
- };
+  const isTargetAdmin = (target: UserListItem | StreamViewer | any): boolean => {
+    return target.role === 'admin' || target.role === 'superadmin' || target.role === 'ceo' || target.is_admin === true;
+  };
 
   const [isOpen, setIsOpen] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('rtc');
@@ -227,13 +259,32 @@ export default function RTCAdminMonitor() {
   const [cashoutBonusData, setCashoutBonusData] = useState<any[]>([]);
   const [cashoutLoading, setCashoutLoading] = useState(false);
 
-   const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
+const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
    const [streamAnalyticsRows, setStreamAnalyticsRows] = useState<StreamAnalyticsDaily[]>([]);
    const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
-   // Dropdown state for user action menus
-  const [openDropdownUserId, setOpenDropdownUserId] = useState<string | null>(null);
-  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number } | null>(null);
+    // Dropdown state for user action menus
+   const [openDropdownUserId, setOpenDropdownUserId] = useState<string | null>(null);
+   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number } | null>(null);
+
+    // Tromail inbox state
+   const [tromailInbox, setTromailInbox] = useState<TromailInboxItem[]>([]);
+   const [tromailUnreadCount, setTromailUnreadCount] = useState(0);
+   const [tromailLoading, setTromailLoading] = useState(false);
+   const [lastTromailFetch, setLastTromailFetch] = useState<Date>(new Date());
+
+   // Walkie-talkie state for LiveKit mic muting coordination
+   const [walkieTalkieMutedLiveKit, setWalkieTalkieMutedLiveKit] = useState(false);
+
+   // Walkie-talkie allowed roles (same as in StaffWalkieTalkieProvider)
+   const WALKIE_TALKIE_ALLOWED_ROLES = [
+     'admin', 'ceo', 'staff', 'officer', 'broadofficer',
+     'troll_officer', 'lead_troll_officer', 'secretary', 'president',
+     'agency_hr', 'agency_hr_manager', 'agency_leader', 'attorney',
+     'prosecutor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster',
+     'auctioneer', 'pastor', 'org_admin',
+   ];
+  
 
    const streamDetailsWithDuration = useMemo(() => {
     return stats.liveStreamDetails.map((stream) => {
@@ -475,12 +526,12 @@ export default function RTCAdminMonitor() {
     try {
       if (type === 'online') {
         const twoMinutesAgo = new Date(Date.now() - 120000).toISOString();
-         const { data } = await supabase
-           .from('user_presence')
-           .select('user_id, last_seen_at, user_profiles!inner(id, username, avatar_url, role, is_admin)')
-           .gt('last_seen_at', twoMinutesAgo)
-           .order('last_seen_at', { ascending: false })
-           .limit(200);
+        const { data } = await supabase
+            .from('user_presence')
+            .select('user_id, last_seen_at, user_profiles!inner(id, username, avatar_url, role, is_admin, walkie_talkie_page)')
+            .gt('last_seen_at', twoMinutesAgo)
+            .order('last_seen_at', { ascending: false })
+            .limit(200);
 
          setUserList((data || []).map((row: any) => ({
            id: row.user_profiles.id,
@@ -490,10 +541,10 @@ export default function RTCAdminMonitor() {
            is_admin: row.user_profiles.is_admin || false,
            last_seen_at: row.last_seen_at,
          })));
-       } else {
-         const { data } = await supabase.from('user_profiles').select('id, username, avatar_url, role, is_admin').order('created_at', { ascending: false }).limit(200);
-         setUserList((data || []) as UserListItem[]);
-       }
+        } else {
+          const { data } = await supabase.from('user_profiles').select('id, username, avatar_url, role, is_admin, walkie_talkie_page').order('created_at', { ascending: false }).limit(200);
+          setUserList((data || []) as UserListItem[]);
+        }
     } catch (err) {
       console.error('[RTC Monitor] Error fetching user list:', err);
     } finally {
@@ -915,6 +966,101 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     }
   }, [streamActionReason]);
 
+  const fetchTromailInbox = useCallback(async () => {
+    if (!profile?.id) return
+    
+    setTromailLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('get_tromail_inbox', { p_user_id: profile.id })
+      if (error) throw error
+      
+      const messages = (data || []) as TromailInboxItem[]
+      setTromailInbox(messages.slice(0, 10))
+      
+      const unread = messages.filter(m => !m.read_at)
+      setTromailUnreadCount(unread.length)
+      setLastTromailFetch(new Date())
+    } catch (err) {
+      console.error('[RTCAdminMonitor] Tromail fetch error:', err)
+    } finally {
+      setTromailLoading(false)
+    }
+  }, [profile?.id])
+
+  useEffect(() => {
+    if (isOpen && isStaff && activeMainTab === 'tromail') {
+      fetchTromailInbox()
+      const interval = window.setInterval(fetchTromailInbox, 30000)
+      return () => window.clearInterval(interval)
+    }
+  }, [isOpen, isStaff, activeMainTab, fetchTromailInbox])
+
+  useEffect(() => {
+    if (!isStaff || !profile?.id) return
+
+    const channel = supabase
+      .channel(`tromail-inbox:${profile?.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'tromail_recipients',
+          filter: `recipient_user_id=eq.${profile?.id}`,
+        },
+        (payload) => {
+          const newRecipient = payload.new as any
+          if (newRecipient) {
+            supabase
+              .from('tromail_messages')
+              .select('id, sender_user_id, sender_role, sender_tromail_address, subject, body, is_important, created_at')
+              .eq('id', newRecipient.message_id)
+              .single()
+              .then(({ data: msg }) => {
+                if (msg) {
+                  const fullMessage: TromailInboxItem = {
+                    id: newRecipient.id,
+                    message_id: msg.id,
+                    sender_user_id: msg.sender_user_id,
+                    sender_role: msg.sender_role,
+                    sender_tromail_address: msg.sender_tromail_address,
+                    subject: msg.subject,
+                    body: msg.body,
+                    read_at: newRecipient.read_at,
+                    is_important: msg.is_important,
+                    created_at: msg.created_at,
+                  }
+                  
+                  setTromailInbox(prev => [fullMessage, ...prev].slice(0, 10))
+                  if (!newRecipient.read_at) {
+                    setTromailUnreadCount(prev => prev + 1)
+                  }
+                  
+                  toast.info(`New Tromail: ${msg.subject}`, {
+                    action: {
+                      label: 'View',
+                      onClick: () => navigate(`/tromail?messageId=${msg.id}`),
+                    },
+                  })
+                }
+              })
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [isStaff, profile?.id])
+
+  const handleTromailMessageClick = (messageId: string) => {
+    navigate(`/tromail?messageId=${messageId}`)
+    if (isOpen) {
+      setIsOpen(false)
+    }
+  }
+
   useEffect(() => {
     if (!isStaff) return;
 
@@ -1041,51 +1187,63 @@ const openAction = useCallback((user: UserListItem, action: string) => {
 
     if (!isStaff) return null;
 
-    const renderFloatingButton = () => {
+const renderFloatingButton = () => {
       if (isMobileWidth) return null;
       
       // Only render on web (not mobile)
       if (isMobileWidth) return null;
-      
+
       const buttonSize = isOpen ? 'h-10 min-w-[2.5rem]' : 'h-20 min-w-[5rem]';
       const iconSize = isOpen ? 'h-4 w-4' : 'h-8 w-8';
       const badgePx = isOpen ? 'px-1.5' : 'px-3';
       const badgePy = isOpen ? 'py-0.5' : 'py-1';
       const badgeTextSize = isOpen ? 'text-[9px]' : 'text-[18px]';
 
-      return (
-        <button
-          type="button"
-          onClick={() => setIsOpen((open) => !open)}
-          className={`fixed bottom-4 right-4 z-[100] flex ${buttonSize} items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${
-            showSignupFlash ? 'ring-4 ring-blue-500 ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.6)]' : ''
-          }`}
-          style={{
-            backgroundColor: stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
-            boxShadow: `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
-          }}
-          title={`RTC Monitor - ${stats.liveStreams} live streams`}
-        >
-          <Monitor className={`${iconSize} text-white`} />
-          <span className={`inline-flex items-center justify-center rounded-full bg-emerald-300 ${badgePx} ${badgePy} ${badgeTextSize} font-bold leading-none text-black`}>
-            {onlineCount}
-          </span>
-        </button>
-      );
+       return (
+         <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+           <button
+             type="button"
+             onClick={() => setIsOpen((open) => !open)}
+             className={`flex ${buttonSize} items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${
+               showSignupFlash ? 'ring-4 ring-blue-500 ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.6)]' : ''
+             }`}
+             style={{
+               backgroundColor: stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
+               boxShadow: `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
+             }}
+             title={`RTC Monitor - ${stats.liveStreams} live streams`}
+           >
+             <Monitor className={`${iconSize} text-white`} />
+             <span className={`inline-flex items-center justify-center rounded-full bg-emerald-300 ${badgePx} ${badgePy} ${badgeTextSize} font-bold leading-none text-black`}>
+               {onlineCount}
+             </span>
+           </button>
+           {canUseWalkieTalkie && (
+             <div className="hidden group-hover:flex">
+               <StaffWalkieTalkieButton />
+             </div>
+           )}
+         </div>
+       );
     };
 
-  const monitorTabs: Array<{ id: MainTab; label: string; icon: React.ReactNode; adminOnly?: boolean }> = [
-    { id: 'rtc', label: 'RTC Monitor', icon: <Radio className="h-3 w-3" /> },
-    { id: 'mod_actions', label: 'Mod Actions', icon: <Shield className="h-3 w-3" /> },
-    { id: 'signups', label: 'Signups', icon: <UserPlus className="h-3 w-3" />, adminOnly: true },
-    { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="h-3 w-3" />, adminOnly: true },
-    { id: 'cashout', label: 'Cashout Bonus', icon: <Coins className="h-3 w-3" />, adminOnly: true },
-    { id: 'team_meeting', label: 'Team Meeting', icon: <Video className="h-3 w-3" />, adminOnly: true },
-    { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
-    { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
-  ];
+   const monitorTabs: Array<{ id: MainTab; label: string; icon: React.ReactNode; adminOnly?: boolean }> = [
+     { id: 'rtc', label: 'RTC Monitor', icon: <Radio className="h-3 w-3" /> },
+     { id: 'walkie_talkie', label: 'Walkie Talkie', icon: <Radio className="h-3 w-3" /> },
+     { id: 'mod_actions', label: 'Mod Actions', icon: <Shield className="h-3 w-3" /> },
+     { id: 'signups', label: 'Signups', icon: <UserPlus className="h-3 w-3" />, adminOnly: true },
+     { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="h-3 w-3" />, adminOnly: true },
+     { id: 'cashout', label: 'Cashout Bonus', icon: <Coins className="h-3 w-3" />, adminOnly: true },
+     { id: 'team_meeting', label: 'Team Meeting', icon: <Video className="h-3 w-3" />, adminOnly: true },
+     { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
+     { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
+   ];
 
-  const visibleMonitorTabs = monitorTabs.filter((tab) => !tab.adminOnly || isFullAdmin);
+   const visibleMonitorTabs = monitorTabs.filter((tab) => {
+     if (tab.adminOnly) return isFullAdmin;
+     if (tab.id === 'walkie_talkie') return canUseWalkieTalkie;
+     return true;
+   });
   const activeMonitorTab = visibleMonitorTabs.find((tab) => tab.id === activeMainTab) || visibleMonitorTabs[0];
 
   const renderTabNavigation = () => (
@@ -1262,42 +1420,45 @@ const openAction = useCallback((user: UserListItem, action: string) => {
                    <div key={user.id} className="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
                      <div className="flex items-center justify-between gap-2">
                        <div className="min-w-0 flex-1">
-                         {editingUserId === user.id ? (
-                           <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={editUsernameValue}
-                                onChange={(e) => setEditUsernameValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') void handleUsernameSave(user.id, editUsernameValue);
-                                  if (e.key === 'Escape') setEditingUserId(null);
-                                }}
-                                autoFocus
-                                className="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white"
-                                placeholder="Enter new username"
-                              />
+                          {editingUserId === user.id ? (
+                            <div className="flex items-center gap-2">
+                               <input
+                                 type="text"
+                                 value={editUsernameValue}
+                                 onChange={(e) => setEditUsernameValue(e.target.value)}
+                                 onKeyDown={(e) => {
+                                   if (e.key === 'Enter') void handleUsernameSave(user.id, editUsernameValue);
+                                   if (e.key === 'Escape') setEditingUserId(null);
+                                 }}
+                                 autoFocus
+                                 className="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white"
+                                 placeholder="Enter new username"
+                               />
+                               <button
+                                 type="button"
+                                 onClick={() => void handleUsernameSave(user.id, editUsernameValue)}
+                                 disabled={usernameEditLoading || !editUsernameValue.trim()}
+                                 className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-500 disabled:opacity-50"
+                               >
+                                 {usernameEditLoading ? 'Saving...' : 'Save'}
+                               </button>
                               <button
                                 type="button"
-                                onClick={() => void handleUsernameSave(user.id, editUsernameValue)}
-                                disabled={usernameEditLoading || !editUsernameValue.trim()}
-                                className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-500 disabled:opacity-50"
+                                onClick={() => setEditingUserId(null)}
+                                className="rounded bg-slate-600 px-2 py-1 text-xs text-white hover:bg-slate-500"
                               >
-                                {usernameEditLoading ? 'Saving...' : 'Save'}
+                                Cancel
                               </button>
-                             <button
-                               type="button"
-                               onClick={() => setEditingUserId(null)}
-                               className="rounded bg-slate-600 px-2 py-1 text-xs text-white hover:bg-slate-500"
-                             >
-                               Cancel
-                             </button>
-                           </div>
-                         ) : (
-                           <>
-                             <div className="truncate font-medium text-white">@{user.username}</div>
-                             <div className="text-xs capitalize text-gray-400">{user.role || 'user'}</div>
-                           </>
-                         )}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="truncate font-medium text-white">@{user.username}</div>
+                              <div className="text-xs capitalize text-gray-400">{user.role || 'user'}</div>
+                              {user.walkie_talkie_page !== null && user.walkie_talkie_page !== undefined && user.walkie_talkie_page > 0 && (
+                                <div className="text-xs text-blue-400">WP#{user.walkie_talkie_page}</div>
+                              )}
+                            </>
+                          )}
                         </div>
                         <div className="relative">
                           <button
@@ -1421,12 +1582,19 @@ const openAction = useCallback((user: UserListItem, action: string) => {
         <StatCard label="Pending" value={cashoutBonusData.filter((u) => !u.qualifies).length} tone="border-purple-500/20 bg-purple-500/10 text-purple-400" icon={<TrendingUp className="h-3 w-3" />} />
       </div>
       <div className="max-h-[190px] space-y-1 overflow-y-auto border-t border-white/10 pt-2">
-        {cashoutBonusData.length === 0 ? <div className="py-4 text-center text-xs text-gray-500">No early signup data</div> : cashoutBonusData.map((user) => (
-          <div key={user.id} className={`flex items-center justify-between rounded border px-2 py-1.5 ${user.qualifies ? 'border-green-500/20 bg-green-500/10' : 'border-white/5 bg-white/5'}`}>
-            <span className="truncate text-xs text-gray-300">#{user.signupRank} @{user.username}</span>
-            <span className={user.qualifies ? 'text-xs font-bold text-green-400' : 'text-xs text-white'}>{Number(user.paidCoinsReceived || 0).toLocaleString()}c</span>
-          </div>
-        ))}
+       {cashoutBonusData.length === 0 ? <div className="py-4 text-center text-xs text-gray-500">No early signup data</div> : cashoutBonusData.map((user) => (
+            <div key={user.id} className={`flex items-center justify-between rounded border px-2 py-1.5 ${user.qualifies ? 'border-green-500/20 bg-green-500/10' : 'border-white/5 bg-white/5'}`}>
+              <span className="truncate text-xs text-gray-300">#{user.signupRank} @{user.username}</span>
+              <div className="flex items-center gap-2">
+                <span className={user.qualifies ? 'text-xs font-bold text-green-400' : 'text-xs text-white'}>
+                  {Number(user.paidCoinsReceived || 0).toLocaleString()}c
+                </span>
+                {user.walkie_talkie_page !== null && user.walkie_talkie_page !== undefined && user.walkie_talkie_page > 0 && (
+                  <span className="text-xs text-blue-400">WP#{user.walkie_talkie_page}</span>
+                )}
+              </div>
+            </div>
+          ))}
       </div>
     </div>
   );
@@ -1483,33 +1651,89 @@ const openAction = useCallback((user: UserListItem, action: string) => {
   const renderTromailTab = () => (
     <div className="space-y-3">
       <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <Mail className="h-4 w-4 text-cyan-400" />
-          <span className="text-sm font-bold text-cyan-400">Tromail System</span>
+        <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+               <span className="font-medium text-white">Status:</span>
+               <span className="text-gray-400">
+                 {canUseWalkieTalkie ? 'Available' : 'Not Available'}
+               </span>
+             </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400">{lastTromailFetch.toLocaleTimeString()}</span>
+            <button
+              type="button"
+              onClick={fetchTromailInbox}
+              disabled={tromailLoading}
+              className="rounded bg-white/5 p-1 text-gray-300 hover:bg-white/10"
+            >
+              <RefreshCw className={`h-3 w-3 ${tromailLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-gray-400 mb-3">Internal role-based email system for Troll City staff. Send secure messages to approved roles.</p>
-        <button
-          type="button"
-          onClick={() => navigate('/tromail')}
-          className="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-700"
-        >
-          Open Tromail
-        </button>
+        
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">
+            {tromailUnreadCount > 0 ? `${tromailUnreadCount} unread` : 'All caught up'}
+          </span>
+          <button
+            type="button"
+            onClick={() => navigate('/tromail')}
+            className="text-xs text-cyan-400 hover:text-cyan-300"
+          >
+            Open Full Tromail
+          </button>
+        </div>
+
+        {tromailLoading ? (
+          <div className="py-4 text-center text-xs text-gray-400">Loading...</div>
+        ) : tromailInbox.length === 0 ? (
+          <div className="py-4 text-center text-xs text-gray-500">No messages in inbox</div>
+        ) : (
+          <div className="space-y-2">
+            {tromailInbox.map((msg) => (
+              <button
+                key={msg.id}
+                type="button"
+                onClick={() => handleTromailMessageClick(msg.message_id)}
+                className={`w-full rounded-lg border border-white/10 bg-white/5 p-2 text-left hover:bg-white/10 ${
+                  !msg.read_at ? 'border-cyan-500/30 bg-cyan-500/10' : ''
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-xs font-semibold text-white">
+                        {msg.subject}
+                      </span>
+                      {!msg.read_at && (
+                        <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                      )}
+                    </div>
+                    <div className="text-[10px] text-gray-400">
+                      From: {msg.sender_role} • {new Date(msg.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 
-  const renderActiveTab = () => {
-    if (activeMainTab === 'rtc') return renderRtcTab();
-    if (activeMainTab === 'mod_actions') return renderModActionsTab();
-    if (isFullAdmin && activeMainTab === 'signups') return renderSignupsTab();
-    if (isFullAdmin && activeMainTab === 'cashout') return renderCashoutTab();
-    if (isFullAdmin && activeMainTab === 'team_meeting') return renderTeamMeetingTab();
-    if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
-    if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
-    if (activeMainTab === 'tromail') return renderTromailTab();
-    return <div className="rounded-lg bg-white/5 p-4 text-center text-xs text-gray-500">No access to this tab.</div>;
-  };
+   const renderActiveTab = () => {
+     if (activeMainTab === 'rtc') return renderRtcTab();
+     if (activeMainTab === 'walkie_talkie') return <WalkieTalkieTab />;
+     if (activeMainTab === 'mod_actions') return renderModActionsTab();
+     if (isFullAdmin && activeMainTab === 'signups') return renderSignupsTab();
+     if (isFullAdmin && activeMainTab === 'cashout') return renderCashoutTab();
+     if (isFullAdmin && activeMainTab === 'team_meeting') return renderTeamMeetingTab();
+     if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
+     if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
+     if (activeMainTab === 'tromail') return renderTromailTab();
+     return <div className="rounded-lg bg-white/5 p-4 text-center text-xs text-gray-500">No access to this tab.</div>;
+   };
 
    const renderActionModal = () => {
      if (!activeAction || !actionTarget) return null;
@@ -1668,4 +1892,131 @@ const openAction = useCallback((user: UserListItem, action: string) => {
         {isOpen && renderStreamModal()}
       </>
     );
+}
+
+
+
+
+function WalkieTalkieTab() {
+  const {
+    isConnected,
+    isSpeaking,
+    isJoining,
+    remoteUsers,
+    error,
+    joinWalkieTalkie,
+    leaveWalkieTalkie,
+    toggleSpeaking,
+    canAccessWalkieTalkie,
+  } = useStaffWalkieTalkieContext();
+
+  if (error) {
+    return (
+      <div className="rounded-lg bg-white/5 p-4 text-center text-xs text-red-400">
+        Walkie Talkie Error: {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-xs font-bold uppercase tracking-wide text-cyan-300">
+            Staff Walkie Talkie
+          </span>
+          {canAccessWalkieTalkie && (
+            <button
+              type="button"
+              onClick={isConnected || isJoining ? leaveWalkieTalkie : joinWalkieTalkie}
+              disabled={isJoining}
+              className="rounded bg-cyan-600/30 px-2 py-1 text-[11px] font-medium text-cyan-100 hover:bg-cyan-600/45 disabled:opacity-50"
+            >
+              {isJoining ? 'Joining...' : isConnected ? 'Leave' : 'Join'}
+            </button>
+          )}
+        </div>
+        <div className="space-y-1 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="flex w-3 h-3">
+              {isConnected ? (
+                <Radio className="h-3 w-3 text-green-400" />
+              ) : isJoining ? (
+                <Radio className="h-3 w-3 animate-pulse text-yellow-400" />
+              ) : (
+                <Radio className="h-3 w-3 text-gray-400" />
+              )}
+            </span>
+            <span>{isConnected ? 'Connected' : isJoining ? 'Joining...' : 'Disconnected'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="flex w-3 h-3">
+              {isSpeaking ? (
+                <Send className="h-3 w-3 text-green-400" />
+              ) : (
+                <Pause className="h-3 w-3 text-gray-400" />
+              )}
+            </span>
+            <span>{isSpeaking ? 'Speaking' : 'Muted'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wide text-white">
+            Remote Users ({remoteUsers.length})
+          </span>
+        </div>
+        {remoteUsers.length === 0 ? (
+          <div className="rounded bg-black/20 px-3 py-3 text-center text-xs text-gray-400">
+            No other users in walkie talkie
+          </div>
+        ) : (
+          <div className="space-y-1 text-xs">
+            {remoteUsers.map((user, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <span className="flex h-3 w-3">
+                  <Radio className="h-3 w-3 text-blue-300" />
+                </span>
+                <span className="truncate">{user.username || `User ${user.id}`}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wide text-white">
+            Controls
+          </span>
+        </div>
+        {!canAccessWalkieTalkie ? (
+          <div className="text-xs text-gray-400">
+            You do not have access to walkie talkie.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={isConnected || isJoining ? leaveWalkieTalkie : joinWalkieTalkie}
+              disabled={isJoining}
+              className={`w-full rounded bg-${isConnected || isJoining ? 'red-600' : 'cyan-600'}/30 px-3 py-2 text-sm font-medium text-${isConnected || isJoining ? 'red-100' : 'cyan-100'} hover:bg-${isConnected || isJoining ? 'red-600' : 'cyan-600'}/45 disabled:opacity-50`}
+            >
+              {isJoining ? 'Joining...' : isConnected ? 'Leave Walkie' : 'Join Walkie'}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleSpeaking(!isSpeaking)}
+              disabled={!isConnected}
+              className={`w-full rounded bg-${isSpeaking ? 'green-600' : 'white/10'} px-3 py-2 text-sm font-medium text-${isSpeaking ? 'white' : 'gray-300'} hover:bg-${isSpeaking ? 'green-600' : 'white/20'} disabled:opacity-50`}
+            >
+              {isSpeaking ? 'Mute Mic' : 'Unmute Mic'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

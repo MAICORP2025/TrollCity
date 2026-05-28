@@ -12,6 +12,7 @@ import {
   CircleDollarSign,
   Clock,
   Dot,
+  ExternalLink,
   FileText,
   Gift,
   Gavel,
@@ -33,24 +34,7 @@ import { getGlowingTextStyle } from '@/lib/perkEffects'
 import { cn } from '../lib/utils'
 
 type NotificationPriority = 'low' | 'normal' | 'high' | 'critical'
-
 type NotificationSource = 'notifications' | 'jail_notifications'
-
-interface Notification {
-  id: string
-  source?: NotificationSource
-  user_id?: string
-  type: string
-  title: string
-  message: string
-  created_at: string
-  is_read: boolean
-  is_dismissed?: boolean
-  metadata?: any
-  priority?: NotificationPriority
-  admin_copy?: boolean
-  category?: NotificationCategory
-}
 
 type NotificationCategory =
   | 'all'
@@ -64,6 +48,29 @@ type NotificationCategory =
   | 'social'
   | 'system'
 
+interface Notification {
+  id: string
+  source: NotificationSource
+  user_id?: string
+  type: string
+  title: string
+  message: string
+  created_at: string
+  is_read: boolean
+  is_dismissed?: boolean
+  metadata?: Record<string, any>
+  priority: NotificationPriority
+  admin_copy: boolean
+  category: NotificationCategory
+}
+
+interface NotificationDestination {
+  route: string | null
+  label: string
+  external?: boolean
+  openInPanel?: boolean
+}
+
 const MAX_NOTIFICATIONS = 150
 const REGULAR_NOTIFICATION_LIMIT = 120
 const JAIL_NOTIFICATION_LIMIT = 40
@@ -73,16 +80,71 @@ const ADMIN_ROLES = new Set([
   'ceo',
   'owner',
   'super_admin',
+  'superadmin',
+  'staff',
   'moderator',
   'officer',
+  'broadofficer',
   'lead_troll_officer',
   'hr',
   'support',
 ])
 
+const DEFAULT_NOTIFICATION_DETAIL_ROUTE = '/notifications'
+
+function normalizeType(type?: string) {
+  return String(type || 'system').trim()
+}
+
+function normalizeRole(value?: string) {
+  return String(value || '').trim().toLowerCase()
+}
+
 function isAdminProfile(profile: any): boolean {
-  const role = String(profile?.role || profile?.account_type || '').toLowerCase()
+  const role = normalizeRole(profile?.role || profile?.account_type)
   return ADMIN_ROLES.has(role) || profile?.is_admin === true || profile?.is_staff === true
+}
+
+function asString(value: any): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function firstString(...values: any[]): string | null {
+  for (const value of values) {
+    const result = asString(value)
+    if (result) return result
+  }
+  return null
+}
+
+function isExternalUrl(route: string) {
+  return /^https?:\/\//i.test(route)
+}
+
+function toInternalRoute(route?: string | null) {
+  const value = asString(route)
+  if (!value) return null
+
+  if (isExternalUrl(value)) return value
+
+  if (value.startsWith('/')) return value
+
+  return `/${value.replace(/^\/+/, '')}`
+}
+
+function withQuery(baseRoute: string, params: Record<string, any>) {
+  const search = new URLSearchParams()
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      search.set(key, String(value))
+    }
+  })
+
+  const query = search.toString()
+  return query ? `${baseRoute}?${query}` : baseRoute
 }
 
 function isAdminCopy(metadata: any): boolean {
@@ -96,15 +158,16 @@ function isAdminCopy(metadata: any): boolean {
   )
 }
 
-function normalizeType(type?: string) {
-  return String(type || 'system').trim()
-}
-
 function getNotificationPriority(type: string, metadata?: any): NotificationPriority {
-  if (metadata?.priority) return metadata.priority
+  const explicitPriority = normalizeRole(metadata?.priority)
+
+  if (['low', 'normal', 'high', 'critical'].includes(explicitPriority)) {
+    return explicitPriority as NotificationPriority
+  }
 
   const criticalTypes = new Set([
     'security.alert',
+    'security_alert',
     'moderation_alert',
     'report',
     'ban',
@@ -119,6 +182,7 @@ function getNotificationPriority(type: string, metadata?: any): NotificationPrio
     'manual_coin_order',
     'coins.manual_purchase',
     'system.warning',
+    'system_warning',
   ])
 
   const highTypes = new Set([
@@ -129,6 +193,9 @@ function getNotificationPriority(type: string, metadata?: any): NotificationPrio
     'appeal_submitted',
     'court_summon',
     'marketplace_order_fulfillment_required',
+    'team_meeting_scheduled',
+    'contract_assigned',
+    'contract_signature_required',
   ])
 
   if (criticalTypes.has(type)) return 'critical'
@@ -150,6 +217,7 @@ function getNotificationCategory(type: string, metadata?: any): NotificationCate
       'stream.kick',
       'stream.ban',
       'security.alert',
+      'security_alert',
     ].includes(type)
   ) {
     return 'moderation'
@@ -186,6 +254,8 @@ function getNotificationCategory(type: string, metadata?: any): NotificationCate
       'gift_received',
       'coin_received',
       'coin_gifted',
+      'hype_coin_conversion',
+      'cashout_window_open',
     ].includes(type)
   ) {
     return 'finance'
@@ -196,6 +266,8 @@ function getNotificationCategory(type: string, metadata?: any): NotificationCate
       'application_submitted',
       'application_result',
       'trollg_application',
+      'agency_application_submitted',
+      'career_application_submitted',
     ].includes(type)
   ) {
     return 'applications'
@@ -208,16 +280,23 @@ function getNotificationCategory(type: string, metadata?: any): NotificationCate
       'stream_live',
       'broadcast_live',
       'pod_live',
+      'podcast_live',
       'user_live',
       'followed_user_live',
       'join_approved',
       'battle_result',
+      'battle_started',
+      'random_battle_started',
+      'family_battle_started',
+      'live_auction_started',
     ].includes(type)
   ) {
     return 'broadcast'
   }
 
-  if (['new_follower', 'message', 'message_received'].includes(type)) return 'social'
+  if (['new_follower', 'message', 'message_received', 'tromail_message', 'friend_live'].includes(type)) {
+    return 'social'
+  }
 
   return 'system'
 }
@@ -338,6 +417,293 @@ function normalizeJailNotification(row: any, isAdmin: boolean): Notification {
   }
 }
 
+function resolveNotificationDestination(
+  notification: Notification,
+  options: { isAdmin: boolean }
+): NotificationDestination {
+  const { isAdmin } = options
+  const metadata = notification.metadata || {}
+  const type = notification.type
+
+  const explicitRoute = toInternalRoute(
+    firstString(
+      isAdmin ? metadata.admin_route : null,
+      metadata.route,
+      metadata.action_url,
+      metadata.actionUrl,
+      metadata.redirect_to,
+      metadata.redirectTo,
+      metadata.deep_link,
+      metadata.deepLink,
+      metadata.href,
+      metadata.url,
+      metadata.path
+    )
+  )
+
+  if (explicitRoute) {
+    return {
+      route: explicitRoute,
+      label: isExternalUrl(explicitRoute) ? 'Open external link' : 'Open linked page',
+      external: isExternalUrl(explicitRoute),
+    }
+  }
+
+  const streamId = firstString(
+    metadata.stream_id,
+    metadata.broadcast_id,
+    metadata.live_stream_id,
+    metadata.room_id,
+    metadata.streamId
+  )
+
+  const battleId = firstString(metadata.battle_id, metadata.random_battle_id, metadata.family_battle_id)
+  const podcastId = firstString(metadata.podcast_id, metadata.episode_id, metadata.pod_id)
+  const auctionId = firstString(metadata.auction_id, metadata.live_auction_id, metadata.marketplace_auction_id)
+  const orderId = firstString(metadata.order_id, metadata.marketplace_order_id)
+  const payoutId = firstString(metadata.payout_id, metadata.cashout_id)
+  const ticketId = firstString(metadata.ticket_id, metadata.support_ticket_id)
+  const applicationId = firstString(metadata.application_id, metadata.career_application_id, metadata.agency_application_id)
+  const caseId = firstString(metadata.case_id, metadata.moderation_case_id, metadata.court_case_id)
+  const inmateId = firstString(metadata.inmate_id, metadata.jail_id)
+  const targetUserId = firstString(metadata.target_user_id, metadata.user_id, metadata.profile_user_id)
+  const username = firstString(metadata.username, metadata.follower_username, metadata.sender_username, metadata.target_username)
+  const messageId = firstString(metadata.message_id, metadata.tromail_message_id)
+  const meetingId = firstString(metadata.meeting_id, metadata.team_meeting_id)
+  const contractId = firstString(metadata.contract_id, metadata.document_id)
+
+  switch (type) {
+    case 'new_follower':
+      return {
+        route: username ? `/profile/${encodeURIComponent(username)}` : DEFAULT_NOTIFICATION_DETAIL_ROUTE,
+        label: username ? 'Open profile' : 'Open notification',
+        openInPanel: !username,
+      }
+
+    case 'message':
+    case 'message_received':
+      return {
+        route: messageId ? withQuery('/messages', { message: messageId }) : '/messages',
+        label: 'Open messages',
+      }
+
+    case 'tromail_message':
+    case 'tromail_admin_email':
+    case 'admin_email':
+      return {
+        route: messageId ? withQuery('/tromail', { message: messageId }) : '/tromail',
+        label: 'Open Tromail',
+      }
+
+    case 'team_meeting_scheduled':
+    case 'team_meeting_updated':
+    case 'meeting_invite':
+      return {
+        route: meetingId ? withQuery('/rtcadminmonitor', { tab: 'team-meetings', meeting: meetingId }) : '/rtcadminmonitor?tab=team-meetings',
+        label: 'Open team meeting',
+      }
+
+    case 'contract_assigned':
+    case 'contract_signature_required':
+    case 'contract_completed':
+      return {
+        route: contractId ? withQuery('/contracts', { contract: contractId }) : '/contracts',
+        label: 'Open contract',
+      }
+
+    case 'gift_received':
+    case 'coin_received':
+    case 'coin_gifted':
+    case 'hype_coin_conversion':
+    case 'cashout_window_open':
+      return { route: '/wallet', label: 'Open wallet' }
+
+    case 'troll_post_gift':
+      return { route: metadata.post_id ? withQuery('/troll-wall', { post: metadata.post_id }) : '/troll-wall', label: 'Open Troll Wall' }
+
+    case 'stream_live':
+    case 'broadcast_live':
+    case 'user_live':
+    case 'followed_user_live':
+    case 'friend_live':
+    case 'join_approved':
+      return {
+        route: streamId ? `/watch/${streamId}` : '/broadcasts',
+        label: streamId ? 'Open broadcast' : 'Open broadcasts',
+      }
+
+    case 'pod_live':
+    case 'podcast_live':
+      return {
+        route: podcastId ? withQuery('/podcast-central', { podcast: podcastId }) : '/podcast-central',
+        label: 'Open podcast',
+      }
+
+    case 'battle_started':
+    case 'random_battle_started':
+    case 'family_battle_started':
+      return {
+        route: battleId
+          ? withQuery('/battle', { battle: battleId, stream: streamId })
+          : streamId
+            ? `/watch/${streamId}`
+            : '/broadcasts',
+        label: 'Open battle',
+      }
+
+    case 'battle_result':
+    case 'badge_unlocked':
+      return { route: '/profile', label: 'Open profile' }
+
+    case 'live_auction_started':
+    case 'vehicle_auction':
+      return {
+        route: auctionId ? withQuery('/auctions', { auction: auctionId }) : '/auctions',
+        label: 'Open auction',
+      }
+
+    case 'property_purchased':
+      return { route: '/profile?tab=properties', label: 'Open properties' }
+
+    case 'item_purchased':
+    case 'marketplace_order_created':
+    case 'marketplace_order_shipped':
+    case 'marketplace_order_delivered':
+    case 'marketplace_order_updated':
+      return {
+        route: orderId ? withQuery('/my-orders', { order: orderId }) : '/my-orders',
+        label: 'Open order',
+      }
+
+    case 'marketplace_sale':
+    case 'marketplace_order_fulfillment_required':
+      return {
+        route: orderId ? withQuery('/seller/orders', { order: orderId }) : '/seller/orders',
+        label: 'Open seller order',
+      }
+
+    case 'kick':
+    case 'ban':
+    case 'mute':
+    case 'report':
+    case 'moderation_alert':
+    case 'moderation_action':
+    case 'stream.kick':
+    case 'stream.ban':
+    case 'security.alert':
+    case 'security_alert':
+      return {
+        route: caseId
+          ? withQuery('/admin/moderation', { case: caseId })
+          : targetUserId
+            ? withQuery('/admin/users', { id: targetUserId })
+            : '/admin/moderation',
+        label: 'Open moderation',
+      }
+
+    case 'arrest':
+    case 'sentencing':
+    case 'jail_sentence':
+    case 'bond_request':
+    case 'bond_posted':
+    case 'release':
+      return {
+        route: inmateId ? withQuery('/inmates', { inmate: inmateId }) : '/inmates',
+        label: 'Open jail case',
+      }
+
+    case 'court_summon':
+    case 'attorney_hired':
+    case 'court_date':
+    case 'appeal_result':
+    case 'appeal_submitted':
+    case 'appeal_decision':
+      return {
+        route: caseId ? withQuery('/attorney', { case: caseId }) : '/attorney',
+        label: 'Open court case',
+      }
+
+    case 'officer_update':
+    case 'officer_clock_in':
+    case 'officer_clock_out':
+      return { route: '/admin/officers', label: 'Open officer dashboard' }
+
+    case 'payout_status':
+      return {
+        route: payoutId ? withQuery('/wallet', { payout: payoutId }) : '/wallet',
+        label: 'Open payout',
+      }
+
+    case 'payout_request':
+    case 'payout_update':
+      return {
+        route: payoutId ? `/admin/finance?tab=payouts&id=${encodeURIComponent(payoutId)}` : '/admin/finance?tab=payouts',
+        label: 'Open payout request',
+      }
+
+    case 'coins.fast_spend':
+    case 'coins.manual_purchase':
+    case 'manual_coin_order':
+      return {
+        route: orderId ? `/admin/finance?tab=orders&id=${encodeURIComponent(orderId)}` : '/admin/finance?tab=orders',
+        label: 'Open coin order',
+      }
+
+    case 'support_ticket':
+    case 'support_reply':
+      return {
+        route: ticketId ? withQuery('/admin/support', { id: ticketId }) : '/admin/support',
+        label: 'Open support ticket',
+      }
+
+    case 'application_submitted':
+    case 'career_application_submitted':
+      return {
+        route: applicationId ? withQuery('/admin/applications', { id: applicationId }) : '/admin/applications',
+        label: 'Open application',
+      }
+
+    case 'agency_application_submitted':
+      return {
+        route: applicationId ? withQuery('/agency-hr', { application: applicationId }) : '/agency-hr',
+        label: 'Open agency application',
+      }
+
+    case 'application_result':
+    case 'trollg_application':
+      return {
+        route: applicationId ? withQuery('/careers', { application: applicationId }) : '/careers',
+        label: 'Open application status',
+      }
+
+    case 'seller_tier_upgraded':
+    case 'seller_tier_downgraded':
+    case 'new_review_received':
+      return { route: '/marketplace', label: 'Open marketplace' }
+
+    case 'announcement':
+    case 'system_announcement':
+      return { route: '/announcements', label: 'Open announcements' }
+
+    case 'system.warning':
+    case 'system_warning':
+      return { route: '/admin/system', label: 'Open system alerts' }
+
+    case 'profile_update':
+      return {
+        route: username ? `/profile/${encodeURIComponent(username)}` : targetUserId ? withQuery('/admin/users', { id: targetUserId }) : '/profile',
+        label: 'Open profile',
+      }
+
+    default:
+      return {
+        route: null,
+        label: 'Open notification',
+        openInPanel: true,
+      }
+  }
+}
+
 export default function Notifications() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
@@ -345,11 +711,16 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [filter, setFilter] = useState<NotificationCategory>('all')
   const [loading, setLoading] = useState(true)
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
 
   const isAdmin = useMemo(() => isAdminProfile(profile), [profile])
 
   const loadNotifications = useCallback(async () => {
-    if (!profile?.id) return
+    if (!profile?.id) {
+      setNotifications([])
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
 
@@ -383,12 +754,10 @@ export default function Notifications() {
       }
 
       const regularNotifications = (regularRows || []).map(normalizeRegularNotification)
-      const jailNotifications = (jailRows || []).map((row) =>
-        normalizeJailNotification(row, isAdmin)
-      )
+      const jailNotifications = (jailRows || []).map((row) => normalizeJailNotification(row, isAdmin))
 
       const combined = [...regularNotifications, ...jailNotifications]
-        .filter((n) => !n.is_dismissed)
+        .filter((notification) => !notification.is_dismissed)
         .sort((a, b) => {
           const priorityScore: Record<NotificationPriority, number> = {
             critical: 4,
@@ -397,8 +766,7 @@ export default function Notifications() {
             low: 1,
           }
 
-          const priorityDelta =
-            priorityScore[b.priority || 'normal'] - priorityScore[a.priority || 'normal']
+          const priorityDelta = priorityScore[b.priority] - priorityScore[a.priority]
 
           if (priorityDelta !== 0 && !a.is_read && !b.is_read) return priorityDelta
 
@@ -452,10 +820,7 @@ export default function Notifications() {
     return base
   }, [notifications])
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.is_read).length,
-    [notifications]
-  )
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications])
 
   const criticalCount = useMemo(
     () => notifications.filter((n) => !n.is_read && n.priority === 'critical').length,
@@ -467,26 +832,26 @@ export default function Notifications() {
     return notifications.filter((n) => n.category === filter)
   }, [notifications, filter])
 
-  const markAsRead = async (notification: Notification) => {
-    try {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
-      )
+  const markAsRead = useCallback(
+    async (notification: Notification) => {
+      try {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
+        )
 
-      const table = notification.source === 'jail_notifications' ? 'jail_notifications' : 'notifications'
+        const table = notification.source === 'jail_notifications' ? 'jail_notifications' : 'notifications'
 
-      const { error } = await supabase
-        .from(table)
-        .update({ is_read: true })
-        .eq('id', notification.id)
+        const { error } = await supabase.from(table).update({ is_read: true }).eq('id', notification.id)
 
-      if (error) throw error
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error)
-      toast.error('Failed to mark as read')
-      void loadNotifications()
-    }
-  }
+        if (error) throw error
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error)
+        toast.error('Failed to mark as read')
+        void loadNotifications()
+      }
+    },
+    [loadNotifications]
+  )
 
   const markAllAsRead = async () => {
     if (!profile?.id) return
@@ -530,10 +895,7 @@ export default function Notifications() {
         return
       }
 
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('id', notification.id)
+      const { error } = await supabase.from('notifications').delete().eq('id', notification.id)
 
       if (error) throw error
 
@@ -555,19 +917,14 @@ export default function Notifications() {
     if (!confirmed) return
 
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('user_id', profile.id)
+      const { error } = await supabase.from('notifications').delete().eq('user_id', profile.id)
 
       if (error) throw error
 
-      await supabase
-        .from('jail_notifications')
-        .update({ is_read: true })
-        .eq('user_id', profile.id)
+      await supabase.from('jail_notifications').update({ is_read: true }).eq('user_id', profile.id)
 
       setNotifications([])
+      setSelectedNotification(null)
       toast.success('Notifications cleared')
     } catch (error) {
       console.error('Failed to clear notifications:', error)
@@ -575,145 +932,44 @@ export default function Notifications() {
     }
   }
 
-  const getDefaultRouteForType = (type: string, metadata?: any): string => {
-    if (metadata?.route) return metadata.route
-    if (metadata?.action_url) return metadata.action_url
+  const getDestination = useCallback(
+    (notification: Notification) => resolveNotificationDestination(notification, { isAdmin }),
+    [isAdmin]
+  )
 
-    if (isAdminCopy(metadata)) {
-      if (metadata?.admin_route) return metadata.admin_route
-      if (metadata?.inmate_id) return `/inmates?inmate=${metadata.inmate_id}`
-      if (metadata?.target_user_id) return `/admin/users?id=${metadata.target_user_id}`
-    }
+  const openNotificationPanel = useCallback(
+    async (notification: Notification) => {
+      setSelectedNotification(notification)
 
-    switch (type) {
-      case 'new_follower':
-        return metadata?.follower_username ? `/profile/${metadata.follower_username}` : '/profile'
+      if (!notification.is_read) {
+        void markAsRead(notification)
+      }
+    },
+    [markAsRead]
+  )
 
-      case 'gift_received':
-      case 'coin_received':
-      case 'coin_gifted':
-        return '/wallet'
+  const handleNotificationClick = useCallback(
+    async (notification: Notification) => {
+      const destination = getDestination(notification)
 
-      case 'message':
-        return '/messages'
+      if (!notification.is_read) {
+        void markAsRead(notification)
+      }
 
-      case 'message_received':
-        return '/tcps'
+      if (destination.openInPanel || !destination.route) {
+        setSelectedNotification(notification)
+        return
+      }
 
-      case 'stream_live':
-      case 'broadcast_live':
-      case 'pod_live':
-      case 'user_live':
-      case 'followed_user_live':
-        return metadata?.stream_id ? `/broadcast/${metadata.stream_id}` : '/broadcasts'
+      if (destination.external && destination.route) {
+        window.open(destination.route, '_blank', 'noopener,noreferrer')
+        return
+      }
 
-      case 'join_approved':
-        return metadata?.stream_id ? `/broadcast/${metadata.stream_id}` : '/broadcasts'
-
-      case 'vehicle_auction':
-        return '/marketplace'
-
-      case 'property_purchased':
-        return '/profile?tab=properties'
-
-      case 'item_purchased':
-      case 'marketplace_order_created':
-      case 'marketplace_order_shipped':
-      case 'marketplace_order_delivered':
-      case 'marketplace_order_updated':
-        return metadata?.order_id ? `/my-orders?order=${metadata.order_id}` : '/my-orders'
-
-      case 'marketplace_sale':
-      case 'marketplace_order_fulfillment_required':
-        return metadata?.order_id ? `/seller/orders?order=${metadata.order_id}` : '/seller/orders'
-
-      case 'kick':
-      case 'ban':
-      case 'mute':
-      case 'report':
-      case 'moderation_alert':
-      case 'moderation_action':
-      case 'stream.kick':
-      case 'stream.ban':
-      case 'security.alert':
-        return metadata?.case_id
-          ? `/admin/moderation?case=${metadata.case_id}`
-          : '/admin/moderation'
-
-      case 'arrest':
-      case 'sentencing':
-      case 'jail_sentence':
-      case 'bond_request':
-      case 'bond_posted':
-      case 'release':
-        return metadata?.inmate_id ? `/inmates?inmate=${metadata.inmate_id}` : '/inmates'
-
-      case 'court_summon':
-      case 'attorney_hired':
-      case 'court_date':
-      case 'appeal_result':
-      case 'appeal_submitted':
-      case 'appeal_decision':
-        return metadata?.case_id ? `/attorney?case=${metadata.case_id}` : '/attorney'
-
-      case 'officer_update':
-      case 'officer_clock_in':
-      case 'officer_clock_out':
-        return '/admin/officers'
-
-      case 'payout_status':
-      case 'payout_request':
-      case 'payout_update':
-        return metadata?.payout_id
-          ? `/admin/finance?tab=payouts&id=${metadata.payout_id}`
-          : '/admin/finance'
-
-      case 'coins.fast_spend':
-      case 'coins.manual_purchase':
-      case 'manual_coin_order':
-      case 'troll_post_gift':
-        return metadata?.order_id
-          ? `/admin/finance?tab=orders&id=${metadata.order_id}`
-          : '/admin/finance'
-
-      case 'support_ticket':
-      case 'support_reply':
-        return metadata?.ticket_id ? `/admin/support?id=${metadata.ticket_id}` : '/admin/support'
-
-      case 'application_submitted':
-      case 'application_result':
-      case 'trollg_application':
-        return metadata?.application_id
-          ? `/admin/applications?id=${metadata.application_id}`
-          : '/admin/applications'
-
-      case 'seller_tier_upgraded':
-      case 'seller_tier_downgraded':
-      case 'new_review_received':
-        return '/marketplace'
-
-      case 'battle_result':
-      case 'badge_unlocked':
-        return '/profile'
-
-      case 'announcement':
-      case 'system':
-      case 'system.warning':
-      case 'system_announcement':
-      default:
-        return '/'
-    }
-  }
-
-  const handleNotificationClick = async (notification: Notification) => {
-    const route = getDefaultRouteForType(notification.type, notification.metadata)
-
-    if (!notification.is_read) {
-      void markAsRead(notification)
-    }
-
-    navigate(route)
-  }
+      navigate(destination.route)
+    },
+    [getDestination, markAsRead, navigate]
+  )
 
   const getNotificationIcon = (notification: Notification) => {
     const type = notification.type
@@ -729,8 +985,13 @@ export default function Notifications() {
       case 'stream_live':
       case 'broadcast_live':
       case 'pod_live':
+      case 'podcast_live':
       case 'user_live':
       case 'followed_user_live':
+      case 'battle_started':
+      case 'random_battle_started':
+      case 'family_battle_started':
+      case 'live_auction_started':
         return <Video className="h-5 w-5 text-pink-300" />
 
       case 'join_approved':
@@ -766,6 +1027,7 @@ export default function Notifications() {
 
       case 'message':
       case 'message_received':
+      case 'tromail_message':
       case 'support_ticket':
       case 'support_reply':
         return <MessageCircle className="h-5 w-5 text-cyan-300" />
@@ -785,6 +1047,8 @@ export default function Notifications() {
       case 'application_submitted':
       case 'application_result':
       case 'trollg_application':
+      case 'agency_application_submitted':
+      case 'career_application_submitted':
         return <Briefcase className="h-5 w-5 text-emerald-300" />
 
       case 'property_purchased':
@@ -799,10 +1063,13 @@ export default function Notifications() {
       case 'payout_status':
       case 'payout_request':
       case 'payout_update':
+      case 'hype_coin_conversion':
         return <CircleDollarSign className="h-5 w-5 text-green-300" />
 
       case 'security.alert':
+      case 'security_alert':
       case 'system.warning':
+      case 'system_warning':
         return <AlertTriangle className="h-5 w-5 text-red-300" />
 
       default:
@@ -845,6 +1112,7 @@ export default function Notifications() {
     const isCritical = notification.priority === 'critical'
     const isHigh = notification.priority === 'high'
     const isAdminAlert = notification.category === 'admin'
+    const destination = getDestination(notification)
 
     return (
       <div className="pb-3 pr-1">
@@ -863,7 +1131,7 @@ export default function Notifications() {
                     : 'border-cyan-300/25 bg-slate-900/75 shadow-[0_0_24px_rgba(34,211,238,0.08)]'
           )}
         >
-          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.08),transparent_34%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.08),transparent_34%)]" />
 
           {!notification.is_read && (
             <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.85)]" />
@@ -889,12 +1157,7 @@ export default function Notifications() {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <h3
-                      className={cn(
-                        'truncate font-bold',
-                        notification.is_read ? 'text-slate-300' : 'text-white'
-                      )}
-                    >
+                    <h3 className={cn('truncate font-bold', notification.is_read ? 'text-slate-300' : 'text-white')}>
                       {notification.title}
                     </h3>
 
@@ -917,12 +1180,7 @@ export default function Notifications() {
                     )}
                   </div>
 
-                  <p
-                    className={cn(
-                      'line-clamp-2 text-sm leading-relaxed',
-                      notification.is_read ? 'text-slate-500' : 'text-slate-300'
-                    )}
-                  >
+                  <p className={cn('line-clamp-2 text-sm leading-relaxed', notification.is_read ? 'text-slate-500' : 'text-slate-300')}>
                     {renderMessage(notification)}
                   </p>
                 </div>
@@ -933,17 +1191,15 @@ export default function Notifications() {
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs text-cyan-300/85">
-                  <Clock className="h-3.5 w-3.5" />
+                <div className="flex min-w-0 items-center gap-2 text-xs text-cyan-300/85">
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
                   <span>{new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   <span className="text-slate-600">•</span>
-                  <span>Click to open</span>
+                  <span className="truncate">{destination.label}</span>
+                  {destination.external && <ExternalLink className="h-3.5 w-3.5 shrink-0" />}
                 </div>
 
-                <div
-                  className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                   {!notification.is_read && (
                     <button
                       onClick={() => markAsRead(notification)}
@@ -953,6 +1209,14 @@ export default function Notifications() {
                       <Check className="h-4 w-4" />
                     </button>
                   )}
+
+                  <button
+                    onClick={() => openNotificationPanel(notification)}
+                    className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:border-cyan-300/35 hover:bg-cyan-400/10 hover:text-cyan-200"
+                    title="Open notification details"
+                  >
+                    <FileText className="h-4 w-4" />
+                  </button>
 
                   <button
                     onClick={() => dismissNotification(notification)}
@@ -996,8 +1260,7 @@ export default function Notifications() {
 
               {isAdmin && (
                 <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-400/5 px-4 py-3 text-sm text-cyan-100/85">
-                  Admin jail notices are rewritten as staff alerts, so you will not see “you were jailed”
-                  unless your own account was actually jailed.
+                  Admin jail notices are rewritten as staff alerts, so you will not see “you were jailed” unless your own account was actually jailed.
                 </div>
               )}
             </div>
@@ -1063,12 +1326,7 @@ export default function Notifications() {
               >
                 {tab.icon}
                 {tab.label}
-                <span
-                  className={cn(
-                    'rounded-full px-2 py-0.5 text-[11px]',
-                    active ? 'bg-slate-950/15 text-slate-950' : 'bg-white/5 text-slate-500'
-                  )}
-                >
+                <span className={cn('rounded-full px-2 py-0.5 text-[11px]', active ? 'bg-slate-950/15 text-slate-950' : 'bg-white/5 text-slate-500')}>
                   {count}
                 </span>
               </button>
@@ -1092,24 +1350,98 @@ export default function Notifications() {
                 </div>
                 <p className="text-lg font-bold text-slate-300">No notifications found</p>
                 <p className="mt-1 text-sm text-slate-500">
-                  {filter === 'all'
-                    ? 'You are all caught up.'
-                    : `No ${filter} notifications right now.`}
+                  {filter === 'all' ? 'You are all caught up.' : `No ${filter} notifications right now.`}
                 </p>
               </div>
             </div>
           ) : (
             <div className="h-[calc(100vh-360px)] min-h-[420px]">
-              <Virtuoso
-                style={{ height: '100%' }}
-                data={filteredNotifications}
-                itemContent={renderNotification}
-                increaseViewportBy={300}
-              />
+              <Virtuoso style={{ height: '100%' }} data={filteredNotifications} itemContent={renderNotification} increaseViewportBy={300} />
             </div>
           )}
         </section>
       </div>
+
+      {selectedNotification && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm" onClick={() => setSelectedNotification(null)}>
+          <div
+            className="relative w-full max-w-2xl overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-slate-950 p-5 shadow-[0_0_50px_rgba(34,211,238,0.18)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.12),transparent_36%)]" />
+
+            <div className="relative flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                  {getNotificationIcon(selectedNotification)}
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-black text-white">{selectedNotification.title}</h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span>{new Date(selectedNotification.created_at).toLocaleString()}</span>
+                    <Dot className="h-4 w-4" />
+                    <span className="capitalize">{selectedNotification.category}</span>
+                    <Dot className="h-4 w-4" />
+                    <span className="capitalize">{selectedNotification.priority}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedNotification(null)}
+                className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:border-red-300/35 hover:bg-red-400/10 hover:text-red-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="relative mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-relaxed text-slate-300">
+              {renderMessage(selectedNotification)}
+            </div>
+
+            {selectedNotification.metadata && Object.keys(selectedNotification.metadata).length > 0 && (
+              <details className="relative mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                <summary className="cursor-pointer text-sm font-bold text-cyan-200">Notification metadata</summary>
+                <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs text-slate-400">
+                  {JSON.stringify(selectedNotification.metadata, null, 2)}
+                </pre>
+              </details>
+            )}
+
+            <div className="relative mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                onClick={() => setSelectedNotification(null)}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-300 transition hover:border-white/20 hover:text-white"
+              >
+                Close
+              </button>
+
+              {(() => {
+                const destination = getDestination(selectedNotification)
+
+                if (!destination.route || destination.openInPanel) return null
+
+                return (
+                  <button
+                    onClick={() => {
+                      if (destination.external && destination.route) {
+                        window.open(destination.route, '_blank', 'noopener,noreferrer')
+                      } else if (destination.route) {
+                        navigate(destination.route)
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-4 py-2 text-sm font-black text-cyan-100 transition hover:bg-cyan-400/15"
+                  >
+                    {destination.label}
+                    {destination.external && <ExternalLink className="h-4 w-4" />}
+                  </button>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

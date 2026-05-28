@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { SafeLink } from '@/hooks/useSafeNavigate'
 import {
   Home,
   MessageSquare,
@@ -59,7 +60,6 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react'
-import { Link as RouterLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
@@ -624,7 +624,7 @@ export default function BottomNavigation() {
         { category: 'Government', label: 'Moderation', icon: Eye, path: '/officer/moderation' },
         { category: 'Government', label: 'Officer Dashboard', icon: LayoutDashboard, path: '/officer/dashboard' },
         { category: 'Government', label: 'Officer Lounge', icon: Users, path: '/officer/lounge' },
-        { category: 'Government', label: 'Officer Payroll', icon: DollarSign, path: '/officer/payroll' },
+        { category: 'Government', label: 'Weekly Role Perks', icon: DollarSign, path: '/officer/payroll' },
         { category: 'Government', label: 'Officer Scheduling', icon: Calendar, path: '/officer/scheduling' },
         { category: 'Government', label: 'OWC Dashboard', icon: LayoutDashboard, path: '/officer/owc' },
       )
@@ -931,7 +931,7 @@ export default function BottomNavigation() {
                 {!user ? (
                   <div className="mt-4 space-y-4">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <Link
+                      <SafeLink
                         to="/auth"
                         onClick={() => setIsMenuOpen(false)}
                         className="group flex items-center gap-4 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-5 transition hover:bg-cyan-500/15"
@@ -941,9 +941,9 @@ export default function BottomNavigation() {
                           <span className="block text-base font-black text-white">Sign In</span>
                           <span className="text-xs text-slate-400">Already have an account?</span>
                         </div>
-                      </Link>
+                      </SafeLink>
 
-                      <Link
+                      <SafeLink
                         to="/auth?tab=signup"
                         onClick={() => setIsMenuOpen(false)}
                         className="group flex items-center gap-4 rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5 transition hover:bg-purple-500/15"
@@ -953,25 +953,25 @@ export default function BottomNavigation() {
                           <span className="block text-base font-black text-white">Sign Up</span>
                           <span className="text-xs text-slate-400">Create a new account</span>
                         </div>
-                      </Link>
+                      </SafeLink>
                     </div>
 
 <div className="grid grid-cols-2 gap-3">
-                      <Link to="/home" onClick={() => setIsMenuOpen(false)} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center text-sm font-bold text-white">
+                      <SafeLink to="/home" onClick={() => setIsMenuOpen(false)} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center text-sm font-bold text-white">
                         Home
-                      </Link>
+                      </SafeLink>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <Link
+                    <SafeLink
                       to="/broadcast/setup"
                       onClick={() => setIsMenuOpen(false)}
                       className="flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 p-4 text-base font-black text-white shadow-lg transition hover:scale-[1.02]"
                     >
                       <Video size={22} />
                       Go Live
-                    </Link>
+                    </SafeLink>
 
                     <div className="rounded-2xl border border-cyan-300/15 bg-slate-950/70 p-4">
                       <h4 className="mb-3 flex items-center gap-2 text-sm font-black text-cyan-100">
@@ -1020,20 +1020,20 @@ export default function BottomNavigation() {
                     </label>
 
                     <div className="grid grid-cols-3 gap-3">
-                      <Link to="/home" onClick={() => setIsMenuOpen(false)} className="flex flex-col items-center gap-2 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4 text-white">
+                      <SafeLink to="/home" onClick={() => setIsMenuOpen(false)} className="flex flex-col items-center gap-2 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4 text-white">
                         <Home size={24} className="text-blue-300" />
                         <span className="text-sm font-black">Home</span>
-                      </Link>
+                      </SafeLink>
 
-                      <Link to="/search" onClick={() => setIsMenuOpen(false)} className="flex flex-col items-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-white">
+                      <SafeLink to="/search" onClick={() => setIsMenuOpen(false)} className="flex flex-col items-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-white">
                         <Search size={24} className="text-emerald-300" />
                         <span className="text-sm font-black">Search</span>
-                      </Link>
+                      </SafeLink>
 
-                      <Link to="/store" onClick={() => setIsMenuOpen(false)} className="flex flex-col items-center gap-2 rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-4 text-white">
+                      <SafeLink to="/store" onClick={() => setIsMenuOpen(false)} className="flex flex-col items-center gap-2 rounded-2xl border border-yellow-500/25 bg-yellow-500/10 p-4 text-white">
                         <Coins size={24} className="text-yellow-300" />
                         <span className="text-sm font-black">Coins</span>
-                      </Link>
+                      </SafeLink>
                     </div>
 
                     {groupedOptions.map(([category, options]) => (
@@ -1050,7 +1050,7 @@ export default function BottomNavigation() {
                               const active = location.pathname === opt.path
 
                               return (
-                                <Link
+                                <SafeLink
                                   key={`${category}-${opt.label}-${opt.path}`}
                                   to={opt.path}
                                   onClick={() => {
@@ -1077,7 +1077,7 @@ export default function BottomNavigation() {
                                       {opt.badge > 9 ? '9+' : opt.badge}
                                     </span>
                                   )}
-                                </Link>
+                                </SafeLink>
                               )
                             })}
                         </div>

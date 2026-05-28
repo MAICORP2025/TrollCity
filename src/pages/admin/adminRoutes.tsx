@@ -96,12 +96,12 @@ export const systemManagementRoutes: AdminRoute[] = [
     category: 'system'
   },
   {
-    id: 'officer-payroll-reports',
-    title: 'Officer Payroll',
+    id: 'weekly-role-perks',
+    title: 'Weekly Role Perks',
     path: '/admin/officer-payroll',
     component: OfficerPayrollReports,
     roles: [UserRole.ADMIN, UserRole.SECRETARY],
-    description: 'Review weekly payroll payouts and frozen officers',
+    description: 'Review weekly role perk payments and manage Treasury allocations',
     icon: <DollarSign className="w-5 h-5 text-emerald-200" />,
     tileColor: 'text-emerald-200',
     tileBgColor: 'bg-emerald-500/10',

@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
 import { getRoleDisplayName, supabase } from '@/lib/supabase'
 import { isAgencyHRProfile } from '@/lib/staff'
-import { RTCAdminMonitor } from '@/components/admin'
 import {
   Activity,
   AlertTriangle,
@@ -25,7 +24,7 @@ import {
   XCircle,
 } from 'lucide-react'
 
-type DashboardTab = 'overview' | 'applications' | 'contracts' | 'fees' | 'agencies' | 'reports' | 'rtc' | 'audit'
+type DashboardTab = 'overview' | 'applications' | 'contracts' | 'fees' | 'agencies' | 'reports' | 'audit'
 
 type AgencyRow = {
   id: string
@@ -144,15 +143,14 @@ const softButtonClasses =
   'inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50'
 
 const tabs: Array<{ id: DashboardTab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'applications', label: 'Applications' },
-  { id: 'contracts', label: 'Contracts' },
-  { id: 'fees', label: 'Fees' },
-  { id: 'agencies', label: 'Agencies' },
-  { id: 'reports', label: 'Reports' },
-  { id: 'rtc', label: 'RTC Monitor' },
-  { id: 'audit', label: 'Audit Logs' },
-]
+   { id: 'overview', label: 'Overview' },
+   { id: 'applications', label: 'Applications' },
+   { id: 'contracts', label: 'Contracts' },
+   { id: 'fees', label: 'Fees' },
+   { id: 'agencies', label: 'Agencies' },
+   { id: 'reports', label: 'Reports' },
+   { id: 'audit', label: 'Audit Logs' },
+ ]
 
 const parseNumber = (value: string) => {
   const parsed = Number(value)
@@ -1140,7 +1138,7 @@ export default function AgencyHRDashboard() {
           ))}
         </section>
 
-        {(activeTab === 'overview' || activeTab === 'applications' || activeTab === 'contracts' || activeTab === 'fees' || activeTab === 'agencies') && (
+        {(activeTab === 'overview' || activeTab === 'applications' || activeTab === 'contracts' || activeTab === 'fees' || activeTab === 'agencies' || activeTab === 'reports') && (
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {summaryCards.map((card) => {
               const Icon = card.icon
@@ -1676,13 +1674,10 @@ export default function AgencyHRDashboard() {
                         <button type="button" disabled={saving} onClick={() => void updateAgencyStatus(agency, 'approved')} className={primaryButtonClasses}>
                           Reactivate
                         </button>
-                        <button type="button" disabled={saving} onClick={() => void updateAgencyStatus(agency, 'suspended')} className={dangerButtonClasses}>
-                          Suspend
-                        </button>
-                        <button type="button" onClick={() => setActiveTab('rtc')} className={softButtonClasses}>
-                          RTC
-                        </button>
-                      </div>
+<button type="button" disabled={saving} onClick={() => void updateAgencyStatus(agency, 'suspended')} className={dangerButtonClasses}>
+                           Suspend
+                         </button>
+                       </div>
                     </div>
                   </div>
                 ))
@@ -1772,24 +1767,8 @@ export default function AgencyHRDashboard() {
           </section>
         )}
 
-        {activeTab === 'rtc' && (
-          <section className={panelClasses}>
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">Live agency operations</p>
-                <h2 className="mt-2 text-xl font-black text-white">RTC monitor</h2>
-                <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                  Track live streams, moderation activity, and operational health while handling agency workflow.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <RTCAdminMonitor />
-            </div>
-          </section>
-        )}
 
-        {activeTab === 'audit' && (
+          {activeTab === 'audit' && (
           <section className={panelClasses}>
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-100">

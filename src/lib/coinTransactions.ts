@@ -66,6 +66,7 @@ export type CoinTransactionType =
   | 'troll_town_upgrade'
   | 'troll_town_upgrade_task'
   | 'broadcast_theme'
+  | 'promotion_purchase'
   | 'marketplace_sale'
   | 'game'
 

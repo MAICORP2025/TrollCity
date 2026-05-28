@@ -222,6 +222,9 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
       try {
         const response = await originalFetch(input, init);
         if (!response.ok && !isSupabaseFunction) {
+          if (shouldIgnoreNetworkErrorForBugCenter(urlString)) {
+            return response;
+          }
           // Handle HTTP 0 (network/CORS/insecure context/aborted) - classify appropriately
           if (response.status === 0) {
             const errorKey = `http0_${urlString}`;
